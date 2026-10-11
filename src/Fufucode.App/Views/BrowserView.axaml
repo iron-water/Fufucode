@@ -1,0 +1,37 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels" xmlns:views="using:Fufucode.App.Views"
+             x:Class="Fufucode.App.Views.BrowserView" x:DataType="vm:BrowserViewModel" AutomationProperties.Name="内置浏览器">
+  <Grid RowDefinitions="Auto,Auto,*,Auto" Background="{DynamicResource AppWindowBackground}">
+    <Grid Grid.Row="0" RowDefinitions="30,34" ColumnDefinitions="*,Auto" Margin="8" RowSpacing="4">
+      <StackPanel Orientation="Horizontal" Spacing="2">
+        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding BackCommand}" ToolTip.Tip="后退" AutomationProperties.Name="浏览器后退"><PathIcon Data="{StaticResource Icon.ArrowLeft}" Width="16" Height="16"/></Button>
+        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding ForwardCommand}" ToolTip.Tip="前进" AutomationProperties.Name="浏览器前进"><PathIcon Data="{StaticResource Icon.ArrowRight}" Width="16" Height="16"/></Button>
+        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding ReloadCommand}" ToolTip.Tip="刷新" AutomationProperties.Name="浏览器刷新"><PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="16" Height="16"/></Button>
+        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding StopCommand}" ToolTip.Tip="停止" AutomationProperties.Name="浏览器停止"><PathIcon Data="{StaticResource Icon.RecordStop}" Width="16" Height="16"/></Button>
+      </StackPanel>
+      <Button Grid.Column="1" Classes="iconButton" Width="30" Height="30" Click="OpenFile_Click" ToolTip.Tip="打开本地文件" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{StaticResource Icon.Folder}" Width="16" Height="16"/></Button>
+      <TextBox Grid.Row="1" Text="{Binding AddressText}" MinWidth="0" PlaceholderText="地址" KeyDown="Address_KeyDown" AutomationProperties.Name="浏览器地址栏"/>
+      <Button Grid.Row="1" Grid.Column="1" Classes="iconButton" Width="30" Height="30" Command="{Binding NavigateCommand}" ToolTip.Tip="转到地址" AutomationProperties.Name="浏览器转到"><PathIcon Data="{StaticResource Icon.ArrowRight}" Width="16" Height="16"/></Button>
+    </Grid>
+    <ProgressBar Grid.Row="1" Height="3" Minimum="0" Maximum="1" Value="{Binding Progress}" IsIndeterminate="{Binding IsLoading}" IsVisible="{Binding IsLoading}"/>
+    <Grid Grid.Row="2">
+      <views:BrowserViewHost x:Name="Host"/>
+      <Border IsVisible="{Binding HasRuntimeNotice}" Background="{DynamicResource AppCardBackground}" Margin="12" Padding="12">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="bodyStrong" Text="浏览器运行时不可用"/>
+          <TextBlock Classes="caption" Text="{Binding RuntimeMessage}" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption mono" Text="{Binding RuntimeLink}" TextWrapping="Wrap"/>
+          <Button Content="打开下载页" Click="OpenRuntimeDownload_Click"/>
+          <Button Content="复制下载链接" Click="CopyRuntimeLink_Click"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+    <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="8">
+      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="3">
+        <TextBlock Classes="caption" Text="{Binding ModeText}" Margin="0,0,8,0"/>
+        <TextBlock Grid.Column="1" Classes="caption" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}"/>
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="caption" Text="{Binding DocumentTitle}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DocumentTitle}"/>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

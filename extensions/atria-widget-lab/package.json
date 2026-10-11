@@ -1,0 +1,12 @@
+{
+  "name": "@fufucode/atria-widget-lab",
+  "version": "0.1.0",
+  "description": "Fixture extension for the M5 plugin management page: a feature-rich but harmless extension exercising the full ctx.ui surface.",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "index.ts"
+    ]
+  }
+}

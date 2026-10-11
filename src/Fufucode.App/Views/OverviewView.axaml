@@ -1,0 +1,13 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels" x:Class="Fufucode.App.Views.OverviewView" x:DataType="vm:MainViewModel">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="8">
+    <Button Grid.Row="0" Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+            Command="{Binding Sidebar.NewSessionCommand}" Margin="2,4,2,8">
+      <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{StaticResource Icon.Add}" Width="14" Height="14"/><TextBlock Text="新建会话" FontSize="12"/></StackPanel>
+    </Button>
+    <StackPanel x:Name="ManagementToolbar" Grid.Row="1" Spacing="4"/>
+    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel x:Name="ManagementBody" Spacing="3"/>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

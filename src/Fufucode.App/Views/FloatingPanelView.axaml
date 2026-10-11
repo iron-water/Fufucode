@@ -1,0 +1,98 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             x:Class="Fufucode.App.Views.FloatingPanelView"
+             x:DataType="vm:FloatingPanelViewModel"
+             AutomationProperties.Name="浮窗">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.floatingCompleted"><Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/></Style>
+    <Style Selector="TextBlock.floatingFailed"><Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/></Style>
+    <Style Selector="TextBlock.floatingApproval"><Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/></Style>
+  </UserControl.Styles>
+  <Border Classes="overlayPanel">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+      <!-- 头部：拖拽区 + pin + 关闭。取消 pin 后可脱离成独立窗口。 -->
+      <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto,Auto" ColumnSpacing="2" Margin="12,8,8,4"
+            x:Name="HeaderDragArea" Background="Transparent">
+        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+          <TextBlock Classes="bodyStrong" Text="{Binding Title}" VerticalAlignment="Center"/>
+          <Border Classes="badge" IsVisible="{Binding !IsOpen}" VerticalAlignment="Center">
+            <TextBlock Text="已关闭" Classes="caption"/>
+          </Border>
+          <TextBlock Classes="meta" Text="{Binding Center.SummaryText}" VerticalAlignment="Center"/>
+        </StackPanel>
+        <Button Grid.Column="1" Classes="iconButton toolButton" Command="{Binding TogglePinCommand}"
+                ToolTip.Tip="固定：只在应用内部显示；取消固定后可独立成窗" AutomationProperties.Name="固定或取消固定浮窗">
+          <PathIcon Data="{StaticResource Icon.Pin}" Width="14" Height="14"
+                    Classes.active="{Binding Pinned}"/>
+        </Button>
+        <Button Grid.Column="2" Classes="iconButton toolButton" Click="OpenCenter_Click"
+                ToolTip.Tip="打开通知中心" AutomationProperties.Name="打开通知中心">
+          <PathIcon Data="{StaticResource Icon.History}" Width="14" Height="14"/>
+        </Button>
+        <Button Grid.Column="3" Classes="iconButton toolButton" Click="ClosePanel_Click"
+                ToolTip.Tip="关闭浮窗（通知改由浮层投递）" AutomationProperties.Name="关闭浮窗">
+          <PathIcon Data="{StaticResource Icon.Dismiss}" Width="12" Height="12"/>
+        </Button>
+      </Grid>
+
+      <!-- 内容：提醒列表 / 辅助对话 -->
+      <ListBox Grid.Row="1" x:Name="SectionTabs" Margin="8,0,8,4" SelectedIndex="0"
+               Background="Transparent" BorderThickness="0">
+        <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+        <ListBoxItem Content="提醒" Padding="10,4"/><ListBoxItem Content="辅助对话" Padding="10,4"/>
+      </ListBox>
+
+      <Grid Grid.Row="2" MinHeight="80">
+        <!-- 提醒列表 -->
+        <ScrollViewer x:Name="NoticeList" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <TextBlock Classes="meta" Margin="12,4" TextWrapping="Wrap"
+                       Text="完成、失败、连接中断与待处理审批会出现在这里。"/>
+            <TextBlock Classes="caption" Margin="12,12" Text="还没有提醒。" IsVisible="{Binding !Center.HasItems}"/>
+            <ItemsControl ItemsSource="{Binding Center.Items}" Margin="12,0,12,8">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:NotificationItemViewModel">
+                  <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="0,10">
+                    <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
+                      <TextBlock Classes="bodyStrong" Classes.floatingCompleted="{Binding IsCompleted}"
+                                 Classes.floatingFailed="{Binding IsFailed}" Classes.floatingApproval="{Binding IsApproval}"
+                                 Text="{Binding Glyph}" VerticalAlignment="Top"/>
+                      <StackPanel Grid.Column="1" Spacing="5">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                          <TextBlock Text="{Binding Title}" Classes="metaName" TextWrapping="Wrap"/>
+                          <TextBlock Grid.Column="1" Classes="meta" Text="{Binding TimeText}"/>
+                        </Grid>
+                        <TextBlock Classes="caption" Text="{Binding Message}" TextWrapping="Wrap"/>
+                        <TextBlock Classes="meta" Text="需操作" IsVisible="{Binding RequiresAction}"/>
+                        <Button Classes="subtle" Content="{Binding RouteLabel}" Click="Activate_Click"
+                                HorizontalAlignment="Left" MinHeight="28" Padding="6,2"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+
+        <!-- 辅助对话：复用侧边聊天控件，由宿主在浮窗与停靠页之间迁移 -->
+        <ContentControl x:Name="SideChatSlot" IsVisible="False"/>
+      </Grid>
+
+      <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
+        <StackPanel Spacing="6">
+          <!-- 状态行：原状态栏的连接/Shell/活动/Tokエn，收进浮窗常显 -->
+          <WrapPanel x:Name="StatusLine" Orientation="Horizontal" ItemSpacing="12" LineSpacing="2"/>
+          <!-- 快捷动作：用量、调用轨迹、朗读、变更摘要 -->
+          <WrapPanel x:Name="QuickActions" Orientation="Horizontal" ItemSpacing="4" LineSpacing="4"/>
+          <TextBlock Classes="meta" Text="{Binding DeliverySummary}" TextWrapping="Wrap"/>
+          <TextBlock Classes="meta" Text="{Binding WindowsDeliveryStatus}" TextWrapping="Wrap"
+                     IsVisible="{Binding DeliversToWindows}"/>
+          <TextBlock Classes="meta" Text="{Binding SaveError}" TextWrapping="Wrap" IsVisible="{Binding HasSaveError}"
+                     Foreground="{DynamicResource AppCriticalForeground}"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

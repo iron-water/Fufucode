@@ -1,0 +1,86 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             x:Class="Fufucode.App.Views.UsageDetailsView"
+             x:DataType="vm:UsageDetailsViewModel" MaxWidth="680"
+             AutomationProperties.Name="用量详情">
+  <UserControl.Styles>
+    <Style Selector="Button.usageScope">
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    </Style>
+    <Style Selector="Button.usageScope.selected">
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
+    </Style>
+  </UserControl.Styles>
+  <Border Classes="overlayPanel">
+    <Grid RowDefinitions="Auto,Auto,*" MaxHeight="620">
+      <Grid ColumnDefinitions="*,Auto,Auto" Margin="16,12,12,8" ColumnSpacing="8">
+        <TextBlock Classes="sectionTitle" Text="用量详情" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Classes="subtle" Content="刷新" Command="{Binding RefreshCommand}" MinHeight="32"/>
+        <Button Grid.Column="2" Classes="iconButton" Content="×" Width="32" Height="32"
+                Command="{Binding CloseCommand}" AutomationProperties.Name="关闭用量详情"/>
+      </Grid>
+      <StackPanel Grid.Row="1" Margin="16,0,16,12" Spacing="8">
+        <TextBlock Classes="caption" Text="{Binding SourceLabel}"/>
+        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+          <Button Classes="subtle usageScope" Classes.selected="{Binding IsCurrentSession}" Content="会话累计"
+                  Command="{Binding CurrentSessionCommand}" HorizontalAlignment="Stretch" MinHeight="36"/>
+          <Button Grid.Column="1" Classes="subtle usageScope" Classes.selected="{Binding IsCurrentTurn}" Content="本轮"
+                  Command="{Binding CurrentTurnCommand}" HorizontalAlignment="Stretch" MinHeight="36"/>
+          <Button Grid.Column="2" Classes="subtle usageScope" Classes.selected="{Binding IsAllRecorded}" Content="全部记录"
+                  Command="{Binding AllRecordedCommand}" HorizontalAlignment="Stretch" MinHeight="36"/>
+        </Grid>
+        <TextBlock Classes="caption" Text="{Binding ScopeDescription}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="{Binding CompletenessText}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="{Binding CacheShareText}" TextWrapping="Wrap"/>
+        <ProgressBar Height="3" IsIndeterminate="True" IsVisible="{Binding IsLoading}"/>
+        <TextBlock Classes="caption" Text="{Binding QueryError}" IsVisible="{Binding HasQueryError}" TextWrapping="Wrap"/>
+      </StackPanel>
+      <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Margin="16,0,16,16" Spacing="16">
+          <ItemsControl ItemsSource="{Binding Counters}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="vm:UsageCounterViewModel">
+                <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="0,12">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <TextBlock Classes="body" Text="{Binding Label}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Right">
+                      <TextBlock Classes="bodyStrong mono" Text="{Binding ValueText}" TextAlignment="Right"/>
+                      <TextBlock Classes="caption" Text="{Binding KnownSubtotalText}" IsVisible="{Binding HasKnownSubtotal}"
+                                 TextAlignment="Right" TextWrapping="Wrap"/>
+                      <TextBlock Classes="caption" Text="{Binding CountText}" TextAlignment="Right"/>
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <StackPanel IsVisible="{Binding HasTurns}" Spacing="8">
+            <TextBlock Classes="bodyStrong" Text="轮次明细"/>
+            <TextBlock Classes="caption" Text="按最近祖先用户记录分组，不表示历史轮次已经可靠结束。" TextWrapping="Wrap"/>
+            <ItemsControl ItemsSource="{Binding Turns}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:UsageTurnViewModel">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12" Margin="0,8">
+                    <StackPanel Spacing="4">
+                      <TextBlock Classes="body" Text="{Binding Title}"/>
+                      <TextBlock Classes="caption mono" Text="{Binding UserEntryId}" IsVisible="{Binding HasUserEntry}" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Spacing="4">
+                      <TextBlock Classes="body mono" Text="{Binding ValueText}" TextAlignment="Right"/>
+                      <TextBlock Classes="caption" Text="{Binding Detail}" TextAlignment="Right" TextWrapping="Wrap" MaxWidth="280"/>
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <TextBlock Classes="caption" Text="{Binding UpdatedText}"/>
+          <TextBlock Classes="caption" Text="这里统计记录中的 tokens；费用、供应商额度与上下文占用暂无数据。" TextWrapping="Wrap"/>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Border>
+</UserControl>

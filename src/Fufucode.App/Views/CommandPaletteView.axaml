@@ -1,0 +1,62 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             x:Class="Fufucode.App.Views.CommandPaletteView"
+             x:DataType="vm:CommandPaletteViewModel"
+             MaxWidth="640" AutomationProperties.Name="命令面板">
+  <UserControl.Styles>
+    <Style Selector="ListBox.paletteList ListBoxItem">
+      <Setter Property="Padding" Value="12,8"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="MinHeight" Value="44"/>
+    </Style>
+    <Style Selector="TextBlock.paletteUnavailable">
+      <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+    </Style>
+  </UserControl.Styles>
+  <Border Classes="overlayPanel">
+    <Grid RowDefinitions="Auto,Auto,*,Auto" MaxHeight="560">
+      <Grid ColumnDefinitions="*,Auto" Margin="16,12,12,8">
+        <TextBlock Classes="sectionTitle" Text="命令面板" VerticalAlignment="Center"/>
+        <Button Grid.Column="1" Classes="iconButton" Content="×" Width="32" Height="32"
+                Command="{Binding CloseCommand}" AutomationProperties.Name="关闭命令面板"/>
+      </Grid>
+      <TextBox x:Name="SearchBox" Grid.Row="1" Text="{Binding SearchText}" PlaceholderText="搜索应用动作"
+               Margin="16,0,16,8" MinHeight="36" AutomationProperties.Name="搜索应用动作"/>
+      <Grid Grid.Row="2" MinHeight="80">
+        <ListBox x:Name="ActionsList" Classes="paletteList" ItemsSource="{Binding Items}"
+                 SelectedItem="{Binding SelectedItem}" BorderThickness="0" Background="Transparent"
+                 Margin="4,0,4,4" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:CommandPaletteItemViewModel">
+              <StackPanel Spacing="6">
+                <TextBlock Classes="caption" Text="{Binding Group}" IsVisible="{Binding ShowGroupHeader}"
+                           FontWeight="SemiBold" Margin="0,4,0,2"/>
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <TextBlock Classes="bodyStrong" Classes.paletteUnavailable="{Binding !IsEnabled}"
+                             Text="{Binding Title}" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding Shortcut}"
+                             IsVisible="{Binding HasShortcut}" VerticalAlignment="Center"/>
+                </Grid>
+                <TextBlock Classes="caption" Text="{Binding Description}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="{Binding DisabledReason}" IsVisible="{Binding HasDisabledReason}"
+                           TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="此动作会更改现有内容；执行前请查看说明。"
+                           IsVisible="{Binding IsDestructive}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <TextBlock Classes="caption" Text="没有匹配的应用动作" IsVisible="{Binding HasNoMatches}"
+                   Margin="16,16"/>
+      </Grid>
+      <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
+        <StackPanel Spacing="6">
+          <TextBlock Classes="caption" Text="{Binding Feedback}" IsVisible="{Binding HasFeedback}" TextWrapping="Wrap"/>
+          <Button Classes="subtle" Content="执行所选动作" Command="{Binding ExecuteSelectedCommand}"
+                  HorizontalAlignment="Right" MinHeight="32"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </Border>
+</UserControl>

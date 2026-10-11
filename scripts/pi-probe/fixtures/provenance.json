@@ -1,0 +1,7 @@
+{
+  "version": "0.87.1",
+  "generatedUtc": "2026-10-01T17:26:54.019Z",
+  "source": "real Pi RPC with isolated local synthetic model",
+  "report": "tmp/pi-probe-0.87.1-isolated-final",
+  "normalization": "2026-10-08: header cwd and system docs/project_context/cwd replaced with portable synthetic context; protocol identities and non-system messages unchanged"
+}

@@ -1,0 +1,49 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             xmlns:views="using:Fufucode.App.Views"
+             x:Class="Fufucode.App.Views.TerminalDockView"
+             x:DataType="vm:TerminalDockViewModel">
+    <UserControl.Styles>
+        <Style Selector="ListBox.terminalTabs"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/></Style>
+        <Style Selector="ListBox.terminalTabs ListBoxItem"><Setter Property="Padding" Value="10,5"/><Setter Property="Margin" Value="0,0,2,0"/><Setter Property="MinHeight" Value="30"/><Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/></Style>
+        <!-- 终端页签与停靠页签同一观感：选中＝次级底 + 主文字，不铺强调色 -->
+        <Style Selector="ListBox.terminalTabs ListBoxItem:selected /template/ ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+        </Style>
+        <Style Selector="ListBox.terminalTabs ListBoxItem:selected:pointerover /template/ ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+        </Style>
+        <Style Selector="ListBox.terminalTabs ListBoxItem:selected TextBlock">
+          <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        </Style>
+    </UserControl.Styles>
+    <Border Background="{DynamicResource AppDockBackground}">
+        <Grid RowDefinitions="40,*,36">
+            <Grid Grid.Row="0" ColumnDefinitions="0,*,Auto" Margin="6,0">
+                <ListBox Grid.Column="1" x:Name="TerminalTabs" Classes="terminalTabs" FontSize="13" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TerminalTabViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{StaticResource Icon.Terminal}" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/><TextBlock Text="{Binding Title}" VerticalAlignment="Center"/><TextBlock Text="{Binding StatusText}" Classes="meta" VerticalAlignment="Center"/></StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button Classes="iconButton toolButton" Command="{Binding CreateTerminalCommand}" ToolTip.Tip="新建终端" AutomationProperties.Name="新建终端"><PathIcon Data="{StaticResource Icon.Add}" Width="16" Height="16"/></Button>
+                    <Button Classes="iconButton toolButton" Click="CloseTerminal_Click" IsEnabled="{Binding HasTabs}" ToolTip.Tip="终止当前终端进程并关闭（隐藏底区不会终止进程）" AutomationProperties.Name="关闭终端"><PathIcon Data="{StaticResource Icon.RecordStop}" Width="16" Height="16"/></Button>
+                </StackPanel>
+            </Grid>
+            <ScrollViewer Grid.Row="1" x:Name="OutputScroller" Classes="terminalSurface" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <views:TerminalScreenControl x:Name="TerminalSurface" Session="{Binding SelectedTab}"/>
+            </ScrollViewer>
+            <ThemeVariantScope Grid.Row="2" RequestedThemeVariant="Dark">
+                <Grid ColumnDefinitions="*,Auto,Auto" Classes="terminalSurface" Margin="0">
+                    <TextBox Grid.Column="0" x:Name="TerminalInput" Classes="flatInput" Text="{Binding SelectedTab.InputText}" IsEnabled="{Binding SelectedTab.IsRunning}" PlaceholderText="命令" FontFamily="{StaticResource AppMonoFont}" FontSize="13" Foreground="{DynamicResource AppTerminalForeground}" Background="Transparent" BorderThickness="0" Margin="6,0" Padding="4,6"/>
+                    <Button Grid.Column="1" Classes="subtle" Content="运行" Command="{Binding SelectedTab.SendInputCommand}" IsEnabled="{Binding SelectedTab.IsRunning}" FontSize="12" Padding="10,4" Margin="0,2"/>
+                    <Button Grid.Column="2" Content="Ctrl+C" Command="{Binding SelectedTab.InterruptCommand}" IsEnabled="{Binding SelectedTab.IsRunning}" ToolTip.Tip="中断当前 shell 命令" Classes="subtle" FontSize="12" Padding="8,4" Margin="2,2,8,2"/>
+                </Grid>
+            </ThemeVariantScope>
+        </Grid>
+    </Border>
+</UserControl>

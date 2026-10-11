@@ -1,0 +1,126 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:features="using:Fufucode.App.Features.Library"
+             x:Class="Fufucode.App.Features.Library.LibraryPageView"
+             x:DataType="features:LibraryViewModel"
+             Background="{DynamicResource AppWindowBackground}"
+             AutomationProperties.Name="资料库">
+  <Grid RowDefinitions="Auto,Auto,*,Auto">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,16,8" ColumnSpacing="12">
+      <StackPanel Spacing="2">
+        <TextBlock Classes="title" Text="资料库"/>
+        <TextBlock Classes="caption"
+                   Text="收藏本地文件、网页链接与会话片段；删除条目只清理资料库副本，不会删除你的源文件。"
+                   TextWrapping="Wrap"/>
+      </StackPanel>
+      <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+        <ToggleSwitch IsChecked="{Binding ImportAsCopy}" OnContent="副本" OffContent="引用"
+                      ToolTip.Tip="{Binding ImportModeHint}" Margin="0,0,8,4"
+                      AutomationProperties.Name="导入方式"/>
+        <Button Classes="subtle" Content="导入文件…" Command="{Binding ImportFilesCommand}" Margin="0,0,8,4"/>
+        <Button Classes="subtle" Content="导入资料包…" Command="{Binding ImportBundleCommand}" Margin="0,0,8,4"/>
+        <Button Classes="subtle" Content="刷新来源" Command="{Binding RefreshSourcesCommand}" Margin="0,0,8,4"/>
+        <Button Classes="subtle" Content="重建索引" Command="{Binding RebuildIndexCommand}" Margin="0,0,8,4"/>
+        <Button Classes="subtle" Content="导出选中" Command="{Binding ExportCommand}" Margin="0,0,0,4"/>
+      </WrapPanel>
+    </Grid>
+
+    <StackPanel Grid.Row="1" Margin="16,0,16,8" Spacing="6">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding SearchText}" PlaceholderText="搜索标题与全文（支持中文）"
+                 AutomationProperties.Name="资料检索"/>
+        <Button Grid.Column="1" Classes="subtle" Content="搜索" Command="{Binding ReloadCommand}" MinHeight="32"/>
+      </Grid>
+      <TextBlock Classes="caption" Text="{Binding ImportModeHint}" TextWrapping="Wrap"/>
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Classes="caption" Text="标签：" VerticalAlignment="Center"/>
+        <ItemsControl ItemsSource="{Binding Tags}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel/>
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="features:LibraryTagCount">
+              <StackPanel Orientation="Horizontal" Spacing="2" Margin="0,0,6,4">
+                <Button Classes="subtle" Content="{Binding Label}" Tag="{Binding Tag}"
+                        Click="TagChip_Click" MinHeight="28"/>
+                <Button Classes="iconButton" Content="×" Width="28" Height="28" Tag="{Binding Tag}"
+                        Click="RemoveTag_Click" ToolTip.Tip="从选中条目移除该标签"
+                        AutomationProperties.Name="移除标签"/>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Button Classes="subtle" Content="清除筛选" Command="{Binding ClearTagFilterCommand}" MinHeight="28"/>
+      </StackPanel>
+      <TextBlock Classes="caption" Text="{Binding IndexStatusText}" TextWrapping="Wrap"/>
+      <ProgressBar Height="3" IsIndeterminate="True" IsVisible="{Binding IsIndexing}"/>
+    </StackPanel>
+
+    <Grid Grid.Row="2" ColumnDefinitions="340,*" Margin="16,0,16,8" ColumnSpacing="12">
+      <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="6">
+        <Grid RowDefinitions="*,Auto">
+          <ListBox ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
+                   Background="Transparent" AutomationProperties.Name="资料条目列表">
+            <ListBox.ItemTemplate>
+              <DataTemplate x:DataType="features:LibraryEntry">
+                <StackPanel Spacing="2" Margin="0,4">
+                  <TextBlock Classes="bodyStrong" Text="{Binding Title}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Classes="caption" Text="{Binding RowSummary}" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding SourceDisplay}" TextTrimming="CharacterEllipsis"/>
+                </StackPanel>
+              </DataTemplate>
+            </ListBox.ItemTemplate>
+          </ListBox>
+          <TextBlock Grid.Row="1" Classes="caption" Text="{Binding EmptyHint}" Margin="10,6,10,10"
+                     TextWrapping="Wrap" IsVisible="{Binding !HasSelection}"/>
+        </Grid>
+      </Border>
+
+      <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+        <StackPanel Spacing="2">
+          <TextBlock Classes="bodyStrong" Text="{Binding SelectedEntry.Title}" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption" Text="{Binding SelectedEntry.RowSummary}" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption" Text="{Binding SelectedEntry.SourceDisplay}" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption" Text="{Binding SelectedEntry.TagText}" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption" Text="{Binding PreviewNote}" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <WrapPanel Grid.Row="1">
+          <TextBox Text="{Binding NewTag}" PlaceholderText="新标签" Width="120" Margin="0,0,8,4"
+                   AutomationProperties.Name="新标签"/>
+          <Button Classes="subtle" Content="添加标签" Command="{Binding AddTagCommand}" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="同步来源变化" Command="{Binding AcceptChangeCommand}" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="生成引用" Command="{Binding CopyCitationCommand}" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="{Binding DeleteButtonText}" Command="{Binding DeleteSelectedCommand}" Margin="0,0,0,4"/>
+        </WrapPanel>
+
+        <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Spacing="12">
+            <TextBlock Classes="body" Text="{Binding PreviewText}" TextWrapping="Wrap" IsVisible="{Binding HasPreview}"/>
+            <StackPanel Spacing="4" IsVisible="{Binding HasCitation}">
+              <TextBlock Classes="bodyStrong" Text="聊天引用（可插入输入框）"/>
+              <TextBlock Classes="caption mono" Text="{Binding CitationText}" TextWrapping="Wrap"/>
+            </StackPanel>
+            <StackPanel Spacing="4" IsVisible="{Binding HasVersions}">
+              <TextBlock Classes="bodyStrong" Text="版本历史"/>
+              <ItemsControl ItemsSource="{Binding Versions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="features:LibraryVersion">
+                    <TextBlock Classes="caption mono" Text="{Binding Summary}"/>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+
+        <TextBlock Grid.Row="3" Classes="caption" Text="{Binding StatusText}" TextWrapping="Wrap"/>
+      </Grid>
+    </Grid>
+
+    <TextBlock Grid.Row="3" Classes="caption" Margin="16,0,16,12" TextWrapping="Wrap"
+               Text="资料库为本地存储：网页只保存链接或你提供的快照，不联网抓取；未选中的条目不会发送给模型。"/>
+  </Grid>
+</UserControl>

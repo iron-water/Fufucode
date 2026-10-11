@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Fufucode.App.Abstractions</AssemblyName>
+    <RootNamespace>Fufucode.App.Abstractions</RootNamespace>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <!--
+    纯 BCL 契约库：不引用 Avalonia 或任何 UI 框架。
+    目的：轨道 A 的 Fufucode.Core 实现本目录下的 IChatSession 时引用本工程，
+    轨道 C 的 Fufucode.App 外壳也引用本工程；两者互不引用，避免循环依赖。
+    源文件物理上仍位于 src/Fufucode.App/Abstractions/（轨道 C 独占路径），
+    由 Fufucode.App.csproj 显式排除，仅由本工程编译。
+  -->
+
+</Project>

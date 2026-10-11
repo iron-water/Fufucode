@@ -1,0 +1,195 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             xmlns:views="using:Fufucode.App.Views"
+             x:Class="Fufucode.App.Views.WorkspacePanelView"
+             x:DataType="vm:WorkspacePanelViewModel"
+             AutomationProperties.Name="工作视图">
+  <UserControl.Styles>
+    <Style Selector="Border.workspaceTab">
+      <Setter Property="BorderThickness" Value="0,0,0,2"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Border.workspaceTab.selected">
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+      <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    </Style>
+    <Style Selector="TextBlock.addedFlag">
+      <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.deletedFlag">
+      <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Button.scopeChoice">
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    </Style>
+    <Style Selector="Button.scopeChoice.selected">
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
+    </Style>
+    <Style Selector="ListBox.workspaceList ListBoxItem">
+      <Setter Property="Padding" Value="8,8"/>
+      <Setter Property="MinHeight" Value="44"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    </Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource AppMicaPageBackground}">
+    <!-- Persistent tab objects survive close/reopen; disabled capabilities are explicit launcher slots. -->
+    <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+      <DockPanel LastChildFill="True" MinHeight="44">
+        <Button DockPanel.Dock="Right" Classes="iconButton" Content="×" Width="32" Height="32" Margin="0,6,6,6"
+                Command="{Binding HidePanelCommand}" ToolTip.Tip="收起工作视图" AutomationProperties.Name="收起工作视图"/>
+        <Button DockPanel.Dock="Right" Classes="iconButton" Content="+" Width="32" Height="32" Margin="0,6,2,6"
+                ToolTip.Tip="加入工作视图" AutomationProperties.Name="加入工作视图">
+          <Button.Flyout>
+            <Flyout Placement="BottomEdgeAlignedRight">
+              <StackPanel MinWidth="216" Spacing="4">
+                <Button Classes="subtle" Content="文件" Command="{Binding OpenFilesCommand}" HorizontalAlignment="Stretch"/>
+                <Button Classes="subtle" Content="变更" Command="{Binding OpenChangesCommand}" HorizontalAlignment="Stretch"/>
+                <Button Classes="subtle" Content="文件预览" Command="{Binding OpenPreviewCommand}" HorizontalAlignment="Stretch"/>
+              </StackPanel>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+        <ItemsControl ItemsSource="{Binding Tabs}" Margin="4,0,0,0">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:WorkspacePanelTabViewModel">
+              <Border Classes="workspaceTab" Classes.selected="{Binding IsSelected}" IsVisible="{Binding IsOpen}">
+                <StackPanel Orientation="Horizontal" Spacing="0">
+                  <Button Classes="subtle" Content="{Binding Title}" Click="SelectTab_Click" MinHeight="42" Padding="10,4"
+                          AutomationProperties.Name="{Binding Title}"/>
+                  <Button Classes="iconButton" Content="×" Click="CloseTab_Click" Width="24" Height="28" Margin="0,0,4,0"
+                          ToolTip.Tip="关闭此视图，可从 + 重新打开" AutomationProperties.Name="关闭工作视图 tab"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </DockPanel>
+    </Border>
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="12,8,10,8">
+      <TextBlock Classes="caption" Text="{Binding SourceLabel}" VerticalAlignment="Center"/>
+      <Button Grid.Column="1" Classes="subtle" Content="刷新" Padding="8,3" Command="{Binding RefreshCommand}"
+              ToolTip.Tip="重新读取文件目录与当前变更范围"/>
+    </Grid>
+
+    <StackPanel Grid.Row="2" IsVisible="{Binding !HasSelectedTab}" Margin="20,24" Spacing="12">
+      <TextBlock Classes="bodyStrong" Text="已关闭所有工作视图"/>
+      <TextBlock Classes="caption" Text="从 + 加入 Files 或 Changes。" TextWrapping="Wrap"/>
+      <Button Classes="subtle" Content="打开文件列表" Command="{Binding OpenFilesCommand}" HorizontalAlignment="Left"/>
+    </StackPanel>
+
+    <!-- Both content instances stay alive, keeping independent list scrolling and selection. -->
+    <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}" RowDefinitions="Auto,*,Auto">
+      <StackPanel Grid.Row="0" Spacing="6" Margin="12,0,12,8">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Classes="bodyStrong" Text="项目文件" VerticalAlignment="Center"/>
+          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新文件"><PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
+          <Button Grid.Column="2" Classes="subtle" Content="上一级" Command="{Binding GoUpCommand}" IsEnabled="{Binding CanGoUp}" Padding="6,3"/>
+        </Grid>
+        <TextBlock Classes="caption mono" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{Binding CurrentDirectoryText}"/>
+        <TextBox Text="{Binding FileFilter}" PlaceholderText="搜索当前目录" AutomationProperties.Name="搜索当前目录"/>
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsFilesLoading}" Height="3"/>
+        <TextBlock Classes="caption" Text="{Binding FilesError}" IsVisible="{Binding HasFilesError}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="没有匹配文件" IsVisible="{Binding IsFilesEmpty}" Margin="0,8"/>
+        <TextBlock Classes="caption" Text="本层仅显示前 300 项；进入子目录继续浏览。" IsVisible="{Binding IsDirectoryTruncated}" TextWrapping="Wrap"/>
+      </StackPanel>
+      <ListBox x:Name="FilesList" Grid.Row="1" Classes="workspaceList" ItemsSource="{Binding VisibleFiles}" SelectedItem="{Binding SelectedFile}"
+               BorderThickness="0" Background="Transparent" Margin="4,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
+            <Button Classes="subtle" Click="BrowseFile_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                    ToolTip.Tip="{Binding FullPath}" Padding="0" Background="Transparent">
+              <Grid ColumnDefinitions="20,*" ColumnSpacing="6">
+                <PathIcon Data="{StaticResource Icon.Folder}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding IsDirectory}"/>
+                <PathIcon Data="{StaticResource Icon.Document}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding !IsDirectory}"/>
+                <StackPanel Grid.Column="1" Spacing="2">
+                  <TextBlock Classes="body" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Classes="caption" Text="{Binding Detail}"/>
+                </StackPanel>
+              </Grid>
+            </Button>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Border Grid.Row="2" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,10">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="caption mono" Text="{Binding FileSelectionText}" TextWrapping="Wrap"/>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Classes="caption" Text="{Binding FileCountText}" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Classes="subtle" Content="复制路径" Command="{Binding CopyFilePathCommand}" IsEnabled="{Binding HasSelectedFile}" Padding="8,4"/>
+          </Grid>
+          <TextBlock Classes="caption" Text="{Binding CopyFeedback}" TextWrapping="Wrap"/>
+          <Button Classes="subtle" Content="打开预览" Click="PreviewSelectedFile_Click" IsEnabled="{Binding CanPreviewSelectedFile}" HorizontalAlignment="Left"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Grid x:Name="ChangesContent" Grid.Row="2" IsVisible="{Binding IsChangesSelected}" RowDefinitions="Auto,*,*">
+      <StackPanel Grid.Row="0" Spacing="8" Margin="12,0,12,12">
+        <Grid ColumnDefinitions="*,Auto,Auto">
+          <TextBlock Classes="bodyStrong" Text="变更范围" VerticalAlignment="Center"/>
+          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新变更"><PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
+          <TextBlock Grid.Column="2" Classes="caption" Text="{Binding ChangesCountText}" VerticalAlignment="Center"/>
+        </Grid>
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
+          <Button Classes="subtle scopeChoice" Classes.selected="{Binding IsWorkspaceScope}" Content="工作区" Command="{Binding WorkspaceScopeCommand}"
+                  HorizontalAlignment="Stretch" Background="{DynamicResource AppCardBackground}"/>
+          <Button Grid.Column="1" Classes="subtle scopeChoice" Classes.selected="{Binding IsSessionScope}" Content="会话写入" Command="{Binding SessionScopeCommand}"
+                  HorizontalAlignment="Stretch" Background="{DynamicResource AppCardBackground}"/>
+        </Grid>
+        <TextBlock Classes="caption" Text="{Binding ScopeDescription}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption mono" Text="{Binding ChangesRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ChangesRoot}"/>
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsChangesLoading}" Height="3"/>
+        <TextBlock Classes="caption" Text="{Binding ChangesError}" IsVisible="{Binding HasChangesError}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="此范围暂无文件" IsVisible="{Binding IsChangesEmpty}" Margin="0,8"/>
+        <TextBlock Classes="caption" Text="{Binding ExcludedPathsText}" IsVisible="{Binding HasExcludedPaths}" TextWrapping="Wrap"/>
+      </StackPanel>
+      <ListBox x:Name="ChangesList" Grid.Row="1" Classes="workspaceList" ItemsSource="{Binding Changes}" SelectedItem="{Binding SelectedChange}"
+               BorderThickness="0" Background="Transparent" Margin="4,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:WorkspacePanelChangedFileViewModel">
+            <StackPanel Spacing="5" ToolTip.Tip="{Binding FullPath}">
+              <TextBlock Classes="body mono" Text="{Binding Path}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Classes="caption mono" Text="{Binding OldPath}" IsVisible="{Binding HasOldPath}" TextTrimming="CharacterEllipsis"/>
+              <StackPanel Orientation="Horizontal" Spacing="10">
+                <TextBlock Classes="caption addedFlag" Text="+ new" IsVisible="{Binding IsNew}"/>
+                <TextBlock Classes="caption deletedFlag" Text="− deleted" IsVisible="{Binding IsDeleted}"/>
+                <TextBlock Classes="caption" Text="binary" IsVisible="{Binding IsBinary}"/>
+              </StackPanel>
+              <TextBlock Classes="caption" Text="{Binding UnknownFlags}" IsVisible="{Binding HasUnknownFlags}" TextWrapping="Wrap"/>
+              <TextBlock Classes="caption" Text="{Binding StateText}" TextTrimming="CharacterEllipsis"/>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Border Grid.Row="2" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,10">
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="8">
+          <TextBlock Classes="caption mono" Text="{Binding SelectedChange.FullPath}" IsVisible="{Binding HasSelectedChange}" TextWrapping="Wrap"/>
+          <Button Classes="subtle" Content="复制完整路径" Command="{Binding CopyChangePathCommand}" IsEnabled="{Binding HasSelectedChange}" HorizontalAlignment="Left" Padding="8,4"/>
+          <Button Classes="subtle" Content="打开当前文件" Click="PreviewSelectedChange_Click" IsEnabled="{Binding HasSelectedChange}" HorizontalAlignment="Left"/>
+          <TextBlock Classes="caption" Text="{Binding DiffStatus}" TextWrapping="Wrap"/>
+          <TextBox Text="{Binding DiffText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas, Microsoft YaHei" FontSize="11" MinHeight="80" MaxHeight="220" IsVisible="{Binding HasDiff}" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" AutomationProperties.Name="逐行差异"/>
+          <TextBlock Classes="caption" Text="{Binding ChangesUpdatedText}"/>
+          <TextBlock Classes="caption" Text="{Binding CopyFeedback}" TextWrapping="Wrap"/>
+        </StackPanel>
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- E-seam（轨道 E）：内置浏览器宿主。WorkspacePanelViewModel 以 identity+"|preview" 建 Preview tab，
+         选中该 tab 即点亮；Files/Changes 的内容区随之隐藏。
+         x:Name="PreviewBrowser" 是 E 侧声明的调用契约（BrowserView.PreviewControlName，
+         TryPreviewFile 据此定位；E2 常驻自测断言此名）。 -->
+    <views:BrowserView x:Name="PreviewBrowser" Grid.Row="2" IsVisible="{Binding SelectedTab.PanelId, Converter={x:Static vm:BrowserPreviewSeam.Instance}}"/>
+  </Grid>
+</UserControl>

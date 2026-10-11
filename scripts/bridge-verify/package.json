@@ -1,0 +1,7 @@
+{
+  "name": "@fufucode/bridge-verify",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Fake-desktop driver that verifies the Fufucode approval bridge against real Pi (RPC mode)."
+}

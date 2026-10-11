@@ -1,0 +1,12 @@
+{
+  "name": "@fufucode/bridge",
+  "version": "0.1.0",
+  "description": "Fufucode tool-approval bridge: gates Pi tool execution on a desktop approval round-trip.",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "index.ts"
+    ]
+  }
+}

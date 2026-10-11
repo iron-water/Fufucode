@@ -1,0 +1,12 @@
+{
+  "name": "@fufucode/broken-fixture",
+  "version": "0.1.0",
+  "description": "Fixture extension for the M5 plugin management page: intentionally fails at load to exercise the error display path.",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "index.ts"
+    ]
+  }
+}

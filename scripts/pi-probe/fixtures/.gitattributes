@@ -1,0 +1,2 @@
+# Keep recorded JSONL bytes stable for provenance SHA256 on Windows checkouts.
+*.jsonl text eol=lf

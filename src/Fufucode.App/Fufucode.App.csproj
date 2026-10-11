@@ -1,0 +1,72 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>Fufucode.App</AssemblyName>
+    <RootNamespace>Fufucode.App</RootNamespace>
+    <!-- 编译绑定纪律：所有 DataTemplate 必须带 x:DataType -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <!-- G 品牌资产：exe 图标直接引用 assets/（只链接，不复制进 src） -->
+    <ApplicationIcon>..\..\assets\icon\fufucode.ico</ApplicationIcon>
+    <!-- E1 内置浏览器：WebView2 SDK 版本。许可证 BSD-3-Clause。 -->
+    <WebView2Version>1.0.4258.31</WebView2Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\assets\licenses\FLUENT-SYSTEM-ICONS-LICENSE.txt" Link="Licenses\FLUENT-SYSTEM-ICONS-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 品牌/空态资产：Link 引用，不复制不修改 -->
+    <AvaloniaResource Include="..\..\assets\icon\fufucode.ico" Link="Assets\Brand\fufucode.ico" />
+    <AvaloniaResource Include="..\..\assets\icon\icon-256.png" Link="Assets\Brand\icon-256.png" />
+    <AvaloniaResource Include="..\..\assets\icon\icon-small-32.png" Link="Assets\Brand\icon-small-32.png" />
+    <AvaloniaResource Include="..\..\assets\empty\conversation-light@2x.png" Link="Assets\Brand\empty\conversation-light@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\conversation-dark@2x.png" Link="Assets\Brand\empty\conversation-dark@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\extensions-light@2x.png" Link="Assets\Brand\empty\extensions-light@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\extensions-dark@2x.png" Link="Assets\Brand\empty\extensions-dark@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\interrupted-light@2x.png" Link="Assets\Brand\empty\interrupted-light@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\interrupted-dark@2x.png" Link="Assets\Brand\empty\interrupted-dark@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\error-light@2x.png" Link="Assets\Brand\empty\error-light@2x.png" />
+    <AvaloniaResource Include="..\..\assets\empty\error-dark@2x.png" Link="Assets\Brand\empty\error-dark@2x.png" />
+    <AvaloniaResource Include="..\..\assets\titlebar\light\*@2x.png" Link="Assets\Brand\titlebar\light\%(Filename)%(Extension)" />
+    <AvaloniaResource Include="..\..\assets\titlebar\dark\*@2x.png" Link="Assets\Brand\titlebar\dark\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
+    <!-- 无头自测模式（selftest 参数）使用：不依赖交互式桌面会话即可验证界面与 mock 会话 -->
+    <PackageReference Include="Avalonia.Headless" Version="12.1.3" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <!-- E1 内置浏览器：只用 Microsoft.Web.WebView2 的 Core（CoreWebView2Controller + 父窗口 HWND 宿主），
+         不引用 WPF/WinForms 宿主控件，因此目标框架仍是 net10.0，无需切到 net10.0-windows。 -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 契约由独立类库 Abstractions/Fufucode.App.Abstractions.csproj 编译，本工程只引用不重复编译 -->
+    <Compile Remove="Abstractions\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="Abstractions\Fufucode.App.Abstractions.csproj" />
+    <!-- 组合根经 PersistentSessionManager 构建真实会话：App 引用 Core -->
+    <ProjectReference Include="..\Fufucode.Core\Fufucode.Core.csproj" />
+  </ItemGroup>
+
+  <!-- E1：Microsoft.Web.WebView2 的 targets 会把 Core/WPF/WinForms 三个托管程序集一并注入引用。
+       本轨道只用 Core，未使用的 WPF 引用会与 WindowsBase 产生 MSB3277 版本冲突警告，
+       因此在解析程序集引用前剥离，保持 build 0 警告。若将来需要 WPF/WinForms 宿主控件，删除此 Target。 -->
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
+
+</Project>
