@@ -1,0 +1,334 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:imaging="using:Avalonia.Media.Imaging"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             xmlns:anim="using:Fufucode.App.Infrastructure"
+             x:Class="Fufucode.App.Views.ExtensionsPage"
+             x:DataType="{x:Type vm:ExtensionsPageViewModel}"
+             Background="{DynamicResource AppMicaPageBackground}">
+
+  <UserControl.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+          <imaging:Bitmap x:Key="EmptyArt">avares://Fufucode.App/Assets/Brand/empty/extensions-light@2x.png</imaging:Bitmap>
+          <imaging:Bitmap x:Key="EmptyErrorArt">avares://Fufucode.App/Assets/Brand/empty/error-light@2x.png</imaging:Bitmap>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+          <imaging:Bitmap x:Key="EmptyArt">avares://Fufucode.App/Assets/Brand/empty/extensions-dark@2x.png</imaging:Bitmap>
+          <imaging:Bitmap x:Key="EmptyErrorArt">avares://Fufucode.App/Assets/Brand/empty/error-dark@2x.png</imaging:Bitmap>
+        </ResourceDictionary>
+      </ResourceDictionary.ThemeDictionaries>
+    </ResourceDictionary>
+  </UserControl.Resources>
+
+  <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+    <StackPanel MaxWidth="880" Margin="24,16,24,32" Spacing="16"
+                HorizontalAlignment="Stretch">
+
+      <!-- 1. 页头：40px 页图标 + 大标题 + 副标题 + 右侧工具（UniGetUI MainHeader 几何） -->
+      <Grid x:Name="ExtensionsHeader" ColumnDefinitions="56,*,Auto" ColumnSpacing="8"
+            RowSpacing="12" SizeChanged="ExtensionsHeader_SizeChanged">
+        <PathIcon Grid.Column="0" Data="{StaticResource Icon.PuzzlePiece}" Width="40" Height="40"
+                  VerticalAlignment="Center" HorizontalAlignment="Left" Margin="4,0,0,0"
+                  Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+          <TextBlock Classes="title" Text="扩展"/>
+          <TextBlock Classes="caption" Text="{Binding ProjectPath}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource AppTextDim}"/>
+        </StackPanel>
+        <WrapPanel x:Name="ExtensionsHeaderActions" Grid.Column="2" VerticalAlignment="Center">
+          <Button Classes="subtle" Command="{Binding AddExtensionCommand}"
+                  Margin="0,0,8,4"
+                  IsVisible="{Binding !IsMock}">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{StaticResource Icon.Add}" Width="13" Height="13"/>
+              <TextBlock Text="添加扩展…" VerticalAlignment="Center"/>
+            </StackPanel>
+          </Button>
+          <Button Classes="iconButton" Command="{Binding RefreshCommand}"
+                  Margin="0,0,8,4"
+                  IsEnabled="{Binding !IsRefreshing}" ToolTip.Tip="刷新">
+            <PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/>
+          </Button>
+          <Button Command="{Binding RestartCommand}" Padding="12,6"
+                  Margin="0,0,0,4"
+                  CornerRadius="{StaticResource ControlCornerRadius}"
+                  ToolTip.Tip="{Binding RestartDisabledReason}">
+            <TextBlock Text="{Binding RestartButtonText}"/>
+          </Button>
+        </WrapPanel>
+      </Grid>
+      <TextBlock Classes="caption" Text="{Binding RestartDisabledReason}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource AppTextDim}"
+                 IsVisible="{Binding HasRestartDisabledReason}"/>
+
+      <!-- 2. 启动失败（critical）：扩展加载失败会导致 Pi 启动即退出（0.87.1 行为） -->
+      <Border Classes="errorCard" IsVisible="{Binding HasStartupFailure}">
+        <StackPanel Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <PathIcon Data="{StaticResource Icon.ErrorCircle}" Width="15" Height="15"
+                      VerticalAlignment="Top"/>
+            <TextBlock Classes="bodyStrong" Text="会话启动失败" VerticalAlignment="Center"/>
+          </StackPanel>
+          <TextBlock Classes="body" TextWrapping="Wrap"
+                     Text="{Binding LastStartupFailure.Message}"/>
+          <TextBlock Classes="caption" TextWrapping="Wrap"
+                     Text="扩展加载失败会导致 Pi 启动即退出（Pi 0.87.1 行为）。请检查最近添加的扩展后重试。"/>
+          <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}"
+                     Text="{Binding LastStartupFailure.When.LocalDateTime, StringFormat='记录时间 {0:MM-dd HH:mm:ss}'}"/>
+        </StackPanel>
+      </Border>
+
+      <!-- 3. mock 空状态：不造数据 -->
+      <StackPanel IsVisible="{Binding IsMock}" HorizontalAlignment="Center"
+                  VerticalAlignment="Center" Spacing="10" Margin="0,60,0,0">
+        <Image Source="{DynamicResource EmptyArt}" MaxWidth="320" MaxHeight="200" Stretch="Uniform"
+               HorizontalAlignment="Center"/>
+        <TextBlock Classes="subtitle" Text="扩展管理" HorizontalAlignment="Center"/>
+        <TextBlock Classes="body" Text="{Binding MockNotice}"
+                   TextWrapping="Wrap" TextAlignment="Center" MaxWidth="360"
+                   Foreground="{DynamicResource AppTextSecondary}" HorizontalAlignment="Center"/>
+      </StackPanel>
+
+      <!-- 真实内容 -->
+      <StackPanel IsVisible="{Binding !IsMock}" Spacing="16">
+
+        <!-- 4. 常驻说明行 -->
+        <TextBlock Classes="caption" TextWrapping="Wrap"
+                   Foreground="{DynamicResource AppTextSecondary}"
+                   Text="扩展以显式路径加载，变更在安全重启后生效。扩展代码以你的权限运行，只启用你信任的扩展。项目内扩展需要先信任项目。"/>
+        <TextBlock Classes="caption" TextWrapping="Wrap"
+                   Foreground="{DynamicResource AppCriticalForeground}"
+                   IsVisible="{Binding HasAddExtensionHint}" Text="{Binding AddExtensionHint}"/>
+
+        <!-- 待生效变更 InfoBar -->
+        <Border Classes="errorCard info" IsVisible="{Binding HasPendingChanges}">
+          <Grid ColumnDefinitions="*,Auto" SizeChanged="ActionRow_SizeChanged">
+            <Grid Grid.Column="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
+              <PathIcon Data="{StaticResource Icon.Info}" Width="15" Height="15"
+                        VerticalAlignment="Center"/>
+              <TextBlock Grid.Column="1" Classes="body" Text="{Binding PendingChangesText}"
+                         TextWrapping="Wrap"
+                         VerticalAlignment="Center"/>
+            </Grid>
+            <WrapPanel Grid.Column="1">
+              <Button Classes="accent" Content="立即重启"
+                      Margin="0,0,8,0"
+                      Command="{Binding RestartCommand}"/>
+              <Button Classes="subtle" Content="撤销"
+                      Command="{Binding UndoChangesCommand}"/>
+            </WrapPanel>
+          </Grid>
+        </Border>
+
+        <!-- 5. 扩展（内置桥 + 已加载/已发现/手动添加统一列表） -->
+        <StackPanel Spacing="8">
+          <WrapPanel>
+            <TextBlock Classes="sectionCaption" Text="扩展"/>
+            <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}"
+                       Margin="8,0,0,0"
+                       VerticalAlignment="Bottom" Text="{Binding QueriedAtText}"/>
+          </WrapPanel>
+          <TextBox x:Name="ExtensionFilterBox" Text="{Binding ExtensionFilter}"
+                   PlaceholderText="按名称、路径、范围或状态过滤扩展…"/>
+          <StackPanel x:Name="ExtensionEmptyStatePanel" IsVisible="{Binding HasExtensionEmptyState}"
+                      Spacing="8" Margin="0,12,0,20" HorizontalAlignment="Stretch">
+            <Image Source="{DynamicResource EmptyArt}" MaxWidth="320" MaxHeight="200"
+                   Stretch="Uniform" HorizontalAlignment="Center" IsVisible="{Binding !HasQueryError}"/>
+            <Image Source="{DynamicResource EmptyErrorArt}" MaxWidth="320" MaxHeight="200"
+                   Stretch="Uniform" HorizontalAlignment="Center" IsVisible="{Binding HasQueryError}"/>
+            <TextBlock Classes="subtitle" Text="{Binding ExtensionEmptyTitle}"
+                       TextWrapping="Wrap" TextAlignment="Center"/>
+            <TextBlock x:Name="ExtensionEmptyDescription" Classes="body"
+                       Text="{Binding ExtensionEmptyDescription}" TextWrapping="Wrap"
+                       TextAlignment="Center" MaxWidth="520" HorizontalAlignment="Center"
+                       Foreground="{DynamicResource AppTextSecondary}"/>
+            <Button Content="清空筛选" Command="{Binding ClearExtensionFilterCommand}"
+                    IsVisible="{Binding ExtensionFilterHasNoMatches}" HorizontalAlignment="Center"/>
+            <Button Content="重新查询" Command="{Binding RefreshCommand}"
+                    IsVisible="{Binding HasQueryError}" IsEnabled="{Binding !IsRefreshing}"
+                    HorizontalAlignment="Center"/>
+          </StackPanel>
+          <ItemsControl x:Name="ExtensionsList" ItemsSource="{Binding FilteredExtensions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="{x:Type vm:ExtensionItemViewModel}">
+                <Border Classes="card" Padding="12" Margin="0,0,0,8">
+                  <Grid ColumnDefinitions="*,Auto" SizeChanged="ActionRow_SizeChanged">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                      <WrapPanel>
+                        <PathIcon Data="{StaticResource Icon.PuzzlePiece}" Width="16" Height="16"
+                                  Margin="0,0,8,6"
+                                  VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
+                        <TextBlock Classes="bodyStrong" Text="{Binding Name}" VerticalAlignment="Center"
+                                   Margin="0,0,8,6" TextWrapping="Wrap" MaxWidth="360"/>
+                        <Border Classes="badge" VerticalAlignment="Center" Margin="0,0,8,6">
+                          <TextBlock Classes="caption" Text="{Binding ScopeText}"/>
+                        </Border>
+                        <Border Classes="badge" VerticalAlignment="Center" Margin="0,0,8,6"
+                                Classes.success="{Binding StatusIsSuccess}"
+                                Classes.attention="{Binding StatusIsAttention}"
+                                Classes.critical="{Binding StatusIsCritical}"
+                                ToolTip.Tip="{Binding StatusTip}">
+                          <TextBlock Classes="caption" Text="{Binding StatusText}"/>
+                        </Border>
+                        <Border Classes="badge" VerticalAlignment="Center" Margin="0,0,8,6"
+                                IsVisible="{Binding IsApprovalBridge}"
+                                Classes.success="{Binding ApprovalChipIsSuccess}"
+                                ToolTip.Tip="{Binding ApprovalDiagnostic}">
+                          <TextBlock Classes="caption" Text="{Binding ApprovalChipText}"/>
+                        </Border>
+                        <TextBlock Classes="caption"
+                                   Margin="0,0,8,6"
+                                   Foreground="{DynamicResource AppTextDim}"
+                                   Text="{Binding CommandCountText}" VerticalAlignment="Center"/>
+                      </WrapPanel>
+                      <TextBlock Classes="caption mono" Text="{Binding Path}"
+                                 Foreground="{DynamicResource AppTextDim}" TextWrapping="Wrap"/>
+                      <TextBlock Classes="caption" TextWrapping="Wrap"
+                                 Foreground="{DynamicResource AppCriticalForeground}"
+                                 IsVisible="{Binding HasLoadError}" Text="{Binding LoadError}"/>
+                      <TextBlock Classes="caption" TextWrapping="Wrap"
+                                 Foreground="{DynamicResource AppTextSecondary}"
+                                 IsVisible="{Binding ShowTrustWarning}"
+                                 Text="需要先信任项目才能在会话中加载此扩展。"/>
+                    </StackPanel>
+                    <WrapPanel Grid.Column="1"
+                                VerticalAlignment="Center">
+                      <Button x:Name="RemoveExtensionButton" Classes="subtle" Content="移除"
+                              VerticalAlignment="Center" Margin="0,0,16,0"
+                              IsVisible="{Binding IsAdded}"
+                              ToolTip.Tip="移除手动添加记录；若已启用则计入待停用">
+                        <Button.Flyout>
+                          <Flyout Placement="BottomEdgeAlignedRight">
+                            <Border Classes="card" Padding="10" MinWidth="240">
+                              <StackPanel Spacing="8">
+                                <TextBlock Classes="caption" TextWrapping="Wrap"
+                                           Text="移除此手动添加的扩展记录？不会删除磁盘文件。"/>
+                                <StackPanel Orientation="Horizontal" Spacing="8"
+                                            HorizontalAlignment="Right">
+                                  <Button x:Name="ConfirmRemoveButton" Content="移除"
+                                          Padding="10,5"
+                                          Command="{Binding RemoveCommand}"
+                                          Click="RemoveConfirmCancel_Click"
+                                          CornerRadius="{StaticResource ControlCornerRadius}"/>
+                                  <Button Classes="subtle" Content="取消" Padding="10,5"
+                                          Click="RemoveConfirmCancel_Click"/>
+                                </StackPanel>
+                              </StackPanel>
+                            </Border>
+                          </Flyout>
+                        </Button.Flyout>
+                      </Button>
+                      <ToggleSwitch IsChecked="{Binding IsPendingEnabled}"
+                                    IsEnabled="{Binding ToggleIsEnabled}"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="{Binding StatusTip}"/>
+                    </WrapPanel>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- 7. 命令与技能 -->
+        <StackPanel Spacing="8">
+          <TextBlock Classes="sectionCaption" Text="命令与技能"/>
+          <TextBox Text="{Binding CommandFilter}" PlaceholderText="按名称或描述过滤…"/>
+          <ItemsControl ItemsSource="{Binding Commands}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="{x:Type vm:CommandItemViewModel}">
+                <Border Classes="card" Padding="12,8" Margin="0,0,0,6">
+                  <Grid ColumnDefinitions="*,Auto" SizeChanged="ActionRow_SizeChanged">
+                    <Grid ColumnDefinitions="Auto,*">
+                      <Border Classes="badge" VerticalAlignment="Center" Margin="0,0,8,0"
+                              Classes.attention="{Binding IsSkill}"
+                              Classes.success="{Binding IsExtension}">
+                        <TextBlock Classes="caption" Text="{Binding SourceBadgeText}"/>
+                      </Border>
+                      <StackPanel Grid.Column="1" Spacing="2">
+                        <TextBlock Classes="bodyStrong mono" Text="{Binding Invocation}" TextWrapping="Wrap"/>
+                        <TextBlock Classes="caption" Text="{Binding Description}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AppTextSecondary}"/>
+                        <TextBlock Classes="caption" Text="{Binding SourcePath}" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource AppTextDim}"/>
+                      </StackPanel>
+                    </Grid>
+                    <Button Grid.Column="1" Classes="subtle" Content="填入"
+                            Command="{Binding FillCommand}" VerticalAlignment="Center"/>
+                  </Grid>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}"
+                     TextWrapping="Wrap" IsVisible="{Binding HasCommandEmptyState}"
+                     Text="{Binding CommandEmptyText}"/>
+        </StackPanel>
+
+        <!-- 8. 项目信任卡 -->
+        <Border Classes="card" Padding="12">
+          <StackPanel Spacing="8">
+            <WrapPanel>
+              <PathIcon Data="{StaticResource Icon.ShieldCheckmark}" Width="16" Height="16"
+                        Margin="0,0,8,0"
+                        VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
+              <TextBlock Classes="bodyStrong" Text="项目信任" VerticalAlignment="Center" Margin="0,0,8,0"/>
+              <Border Classes="badge" VerticalAlignment="Center">
+                <TextBlock Classes="caption" Text="{Binding TrustDecisionText}"/>
+              </Border>
+            </WrapPanel>
+            <TextBlock Classes="caption" Foreground="{DynamicResource AppTextSecondary}"
+                       Text="{Binding ProtectedResources.Count, StringFormat='受保护资源 {0} 项'}"/>
+            <ItemsControl ItemsSource="{Binding ProtectedResources}"
+                          IsVisible="{Binding HasProtectedResources}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="{x:Type x:String}">
+                  <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6" Margin="0,0,0,3">
+                    <PathIcon Data="{StaticResource Icon.Document}" Width="12" Height="12"
+                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+                    <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding}" TextWrapping="Wrap"
+                               Foreground="{DynamicResource AppTextDim}"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}" TextWrapping="Wrap"
+                       Text="信任不代替逐次工具审批；审批是否可用以页头审批指示为准。项目扩展仍需单独启用。"/>
+            <WrapPanel>
+              <Button Classes="subtle" Content="更改"
+                      Margin="0,0,8,0"
+                      Command="{Binding ChangeTrustCommand}"/>
+              <Button Classes="accent" Content="立即安全重启"
+                      Command="{Binding RestartCommand}"
+                      IsVisible="{Binding TrustRestartPending}"/>
+            </WrapPanel>
+            <TextBlock Classes="caption" Foreground="{DynamicResource AppTextSecondary}"
+                       IsVisible="{Binding TrustRestartPending}"
+                       Text="信任决定已更新，下次会话启动生效。"/>
+          </StackPanel>
+        </Border>
+
+        <!-- 9. RPC 模式不支持的扩展能力（默认收起） -->
+        <Border Classes="card" Padding="12">
+          <Expander ExpandDirection="Down">
+            <Expander.Header>
+              <TextBlock Classes="bodyStrong" Text="RPC 模式不支持的扩展能力"/>
+            </Expander.Header>
+            <StackPanel Spacing="4" Margin="0,8,0,0">
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Foreground="{DynamicResource AppTextSecondary}"
+                         Text="· 不支持 custom()、组件工厂（setWidget/setFooter/setHeader/setEditorComponent）、getEditorText（同步返回空串）、getEditorComponent、原始终端输入 onTerminalInput、工作指示器（setWorkingMessage/setWorkingIndicator/setHiddenThinkingLabel）"/>
+              <TextBlock Classes="caption" TextWrapping="Wrap"
+                         Foreground="{DynamicResource AppTextSecondary}"
+                         Text="· editor 无超时、不支持 opts；select/input/confirm 支持 timeout 与 signal"/>
+            </StackPanel>
+          </Expander>
+        </Border>
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

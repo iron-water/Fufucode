@@ -1,0 +1,178 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
+
+namespace Fufucode.Core;
+
+public static class SettingKeys
+{
+    public const string Model = "selectedModel";
+    public const string ThinkingLevel = "thinkingLevel";
+    public const string Theme = "theme";
+    public const string ProxyUrl = "proxyUrl";
+    public const string Endpoint = "endpoint";
+}
+
+/// <summary>One Pi-compatible OpenAI-completions provider; key material is resolved from the process environment.</summary>
+public sealed record CompatibleEndpoint(string ProviderName, string BaseUrl, string ModelId,
+    string ApiKeyEnvironmentVariable);
+
+public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
+    string? ThinkingLevel = null, string Theme = "system", string? ProxyUrl = null,
+    CompatibleEndpoint? Endpoint = null);
+
+[JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
+[JsonSerializable(typeof(AppSettings))]
+internal partial class AppSettingsJsonContext : JsonSerializerContext;
+
+/// <summary>Atomic JSON settings with a change event. Invalid files are preserved for diagnosis.</summary>
+public sealed class AppSettingsStore
+{
+    private readonly string _path;
+    private readonly object _gate = new();
+    private AppSettings _current;
+    private bool _newerVersion;
+
+    public AppSettingsStore(AppDataLayout layout)
+    {
+        layout.EnsureCreated();
+        _path = Path.Combine(layout.Root, "settings.json");
+        _current = Load();
+    }
+
+    public event Action<AppSettings>? Changed;
+    public string? LastLoadError { get; private set; }
+    public AppSettings Current { get { lock (_gate) return _current; } }
+
+    private AppSettings Load()
+    {
+        if (!File.Exists(_path)) return new AppSettings();
+        try
+        {
+            var json = File.ReadAllText(_path);
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object) throw new JsonException("Settings root must be an object.");
+            var version = document.RootElement.TryGetProperty("version", out var value) ? value.GetInt32() : 0;
+            if (version > 1)
+            {
+                _newerVersion = true;
+                throw new InvalidOperationException("Settings were written by a newer app version.");
+            }
+            if (version == 0)
+            {
+                // Migrate the early flat model/thinking names without rewriting the file until the next edit.
+                var root = document.RootElement;
+                return Validate(new AppSettings(SelectedModel: ReadString(root, "model"),
+                    ThinkingLevel: ReadString(root, "thinking"), Theme: ReadString(root, "theme") ?? "system"));
+            }
+            return Validate(JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings)
+                ?? throw new JsonException("Settings are empty."));
+        }
+        catch (Exception error) when (error is JsonException or IOException or InvalidOperationException or ArgumentException)
+        {
+            LastLoadError = error.GetType().Name;
+            return new AppSettings();
+        }
+    }
+
+    private static string? ReadString(JsonElement root, string name) =>
+        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String ? value.GetString() : null;
+
+    public AppSettings Update(Func<AppSettings, AppSettings> change)
+    {
+        ArgumentNullException.ThrowIfNull(change);
+        AppSettings next;
+        lock (_gate)
+        {
+            if (_newerVersion) throw new InvalidOperationException("A newer settings file cannot be overwritten.");
+            next = Validate(change(_current) with { Version = 1 });
+            if (next == _current) return _current;
+            var temp = _path + ".tmp-" + Guid.NewGuid().ToString("N");
+            try
+            {
+                File.WriteAllText(temp, JsonSerializer.Serialize(next, AppSettingsJsonContext.Default.AppSettings));
+                if (LastLoadError is not null && File.Exists(_path))
+                    File.Copy(_path, _path + ".before-repair-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff") + ".bak");
+                ReplaceSettings(temp);
+            }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
+            _current = next;
+            LastLoadError = null;
+        }
+        Changed?.Invoke(next);
+        return next;
+    }
+
+    private void ReplaceSettings(string temp)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try { File.Move(temp, _path, overwrite: true); return; }
+            catch (IOException error) when (OperatingSystem.IsWindows() && attempt < 4 &&
+                (error.HResult & 0xffff) is 32 or 33)
+            { Thread.Sleep(50 * (attempt + 1)); }
+            catch (UnauthorizedAccessException) when (OperatingSystem.IsWindows() && attempt < 4 &&
+                File.Exists(_path) && (File.GetAttributes(_path) & FileAttributes.ReadOnly) == 0)
+            { Thread.Sleep(50 * (attempt + 1)); }
+        }
+    }
+
+    private static AppSettings Validate(AppSettings settings)
+    {
+        if (settings.Version != 1) throw new ArgumentException("Unsupported settings version.");
+        if (settings.Theme is not ("system" or "light" or "dark")) throw new ArgumentException("Invalid theme.");
+        if (settings.ThinkingLevel is { } level &&
+            level is not ("off" or "minimal" or "low" or "medium" or "high" or "xhigh" or "max"))
+            throw new ArgumentException("Invalid thinking level.");
+        if (settings.ProxyUrl is { } proxy && (!Uri.TryCreate(proxy, UriKind.Absolute, out var uri) ||
+            uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || uri.Query.Length > 0))
+            throw new ArgumentException("Invalid proxy URL.");
+        if (settings.Endpoint is { } endpoint)
+        {
+            if (string.IsNullOrWhiteSpace(endpoint.ProviderName) ||
+                !endpoint.ProviderName.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') ||
+                string.IsNullOrWhiteSpace(endpoint.ModelId) ||
+                !Uri.TryCreate(endpoint.BaseUrl, UriKind.Absolute, out var endpointUri) ||
+                endpointUri.Scheme is not ("http" or "https") || endpointUri.UserInfo.Length > 0 || endpointUri.Query.Length > 0 ||
+                string.IsNullOrWhiteSpace(endpoint.ApiKeyEnvironmentVariable) ||
+                !(char.IsAsciiLetter(endpoint.ApiKeyEnvironmentVariable[0]) || endpoint.ApiKeyEnvironmentVariable[0] == '_') ||
+                !endpoint.ApiKeyEnvironmentVariable.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+                throw new ArgumentException("Invalid compatible endpoint.");
+        }
+        return settings;
+    }
+
+    /// <summary>Builds Pi's models.json shape; no secret values enter settings or this export.</summary>
+    public string? BuildPiModelsJson()
+    {
+        var endpoint = Current.Endpoint;
+        if (endpoint is null) return null;
+        var model = new { providers = new Dictionary<string, object>
+        {
+            [endpoint.ProviderName] = new { baseUrl = endpoint.BaseUrl, api = "openai-completions",
+                apiKey = "$" + endpoint.ApiKeyEnvironmentVariable, models = new[] { new { id = endpoint.ModelId } } }
+        } };
+        return JsonSerializer.Serialize(model);
+    }
+}
+
+public interface ICredentialResolver
+{
+    ValueTask<string?> ResolveAsync(string environmentVariable, CancellationToken cancellationToken = default);
+}
+
+/// <summary>Optional credential mutation capability; secret values never enter AppSettings.</summary>
+public interface ICredentialStore : ICredentialResolver
+{
+    void Save(string environmentVariable, string password);
+    void Delete(string environmentVariable);
+}
+
+/// <summary>Legacy environment credential path, retained for existing Atria configuration.</summary>
+public sealed class EnvironmentCredentialResolver : ICredentialResolver
+{
+    public ValueTask<string?> ResolveAsync(string environmentVariable, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(Environment.GetEnvironmentVariable(environmentVariable));
+    }
+}

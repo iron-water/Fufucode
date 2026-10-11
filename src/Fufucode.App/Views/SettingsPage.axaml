@@ -1,0 +1,484 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.App.ViewModels"
+             xmlns:models="using:Fufucode.App.Integration"
+             xmlns:anim="using:Fufucode.App.Infrastructure"
+             xmlns:views="using:Fufucode.App.Views"
+             x:Class="Fufucode.App.Views.SettingsPage"
+             x:DataType="{x:Type vm:SettingsPageViewModel}"
+             Background="{DynamicResource AppMicaPageBackground}">
+
+  <UserControl.Styles>
+    <!-- 左侧导航（Windows 设置观感）：无边框列表，项高 40，选中＝浅底 + 左侧强调条 -->
+    <Style Selector="Grid.settingsControlRow">
+      <Setter Property="RowSpacing" Value="8"/>
+    </Style>
+    <!-- 选中项：浅底 + 左侧强调竖条（Windows 设置） -->
+    <Style Selector="ListBox.settingsCategories ListBoxItem:selected Border.navAccent">
+      <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="ListBox.settingsCategories ListBoxItem:selected PathIcon">
+      <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    </Style>
+    <Style Selector="ListBox.settingsCategories ListBoxItem PathIcon">
+      <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*">
+    <!-- 页头：Windows 设置布局——返回箭头 + 标题居左；搜索框相对整个窗口居中；右侧留窗控位置 -->
+    <Grid Grid.Row="0" Margin="16,10,16,10">
+      <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
+        <Button x:Name="SettingsBackButton" Grid.Column="0" Classes="iconButton toolButton"
+                Command="{Binding BackOrReturnCommand}" ToolTip.Tip="{Binding BackToolTip}" AutomationProperties.Name="返回">
+          <PathIcon Data="{StaticResource Icon.ArrowLeft}" Width="16" Height="16"/>
+        </Button>
+        <TextBlock Grid.Column="1" Classes="settingsPageTitle" Text="设置" Margin="4,0,0,0"/>
+        <TextBlock Grid.Column="3" Classes="meta" Text="{Binding SearchSummary}" VerticalAlignment="Center" MaxWidth="200"
+                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SearchSummary}"/>
+      </Grid>
+      <Grid Width="440" MaxWidth="440" HorizontalAlignment="Center" VerticalAlignment="Center">
+        <TextBox x:Name="SettingsSearchBox" Text="{Binding SearchText}" PlaceholderText="查找设置"
+                 MinHeight="32" CornerRadius="4" AutomationProperties.Name="搜索设置"/>
+      </Grid>
+    </Grid>
+
+    <Grid x:Name="SettingsBody" Grid.Row="1" ColumnDefinitions="320,*" RowDefinitions="*" ColumnSpacing="8" Margin="12,0,12,0">
+      <!-- 一级导航 -->
+      <ListBox x:Name="SettingsCategoryList" Grid.Column="0" Classes="settingsNav"
+               ItemsSource="{Binding FilteredCategories}" SelectedItem="{Binding SelectedCategory}" Margin="0,0,0,24">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:SettingsCategoryViewModel">
+            <Grid ColumnDefinitions="Auto,Auto,*" ColumnSpacing="10">
+              <Border Grid.Column="0" Classes="navAccent"
+                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
+              <PathIcon Grid.Column="1" Width="16" Height="16" VerticalAlignment="Center"
+                        Data="{Binding Icon, Converter={x:Static views:SettingsIconConverter.Instance}}" Margin="8,0,0,0"
+                        Foreground="{Binding IconColor, Converter={x:Static views:SettingsIconConverter.Brush}}"/>
+              <TextBlock Grid.Column="2" Classes="body" Text="{Binding Title}" VerticalAlignment="Center"/>
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <ListBox x:Name="CompactSettingsCategories" Grid.Column="0" Grid.Row="0" Classes="settingsNav" IsVisible="False"
+               ItemsSource="{Binding FilteredCategories}" SelectedItem="{Binding SelectedCategory}" Margin="0,0,0,12">
+        <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="vm:SettingsCategoryViewModel">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <PathIcon Width="15" Height="15" VerticalAlignment="Center"
+                        Data="{Binding Icon, Converter={x:Static views:SettingsIconConverter.Instance}}"/>
+              <TextBlock Classes="body" Text="{Binding Title}" VerticalAlignment="Center"/>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+
+      <Grid x:Name="SettingsContentArea" Grid.Column="1" RowDefinitions="Auto,*">
+        <!-- 页面标题＝面包屑：Windows 设置把"系统 > 屏幕"直接当标题 -->
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,4,0,4">
+          <Button Classes="crumbLink" Content="{Binding CategoryTitle}" IsVisible="{Binding IsSubPage}"
+                  Command="{Binding BackToCategoryCommand}" AutomationProperties.Name="返回分类首页"/>
+          <TextBlock Classes="breadcrumb" Text="›" IsVisible="{Binding IsSubPage}"/>
+          <TextBlock x:Name="SettingsPageTitle" Classes="settingsPageTitle" Text="{Binding PageTitle}"
+                     AutomationProperties.Name="设置路径"/>
+        </StackPanel>
+
+        <ScrollViewer x:Name="SettingsScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel MaxWidth="880" Margin="4,0,8,32" Spacing="0" HorizontalAlignment="Left">
+            <StackPanel IsVisible="{Binding !HasSearchResults}" Spacing="8" Margin="12,20">
+              <TextBlock Classes="subtitle" Text="没有匹配的设置"/>
+              <TextBlock Classes="caption" Text="试试“主题”“代理”或“通知”。"/>
+            </StackPanel>
+
+            <Border Classes="errorCard info" IsVisible="{Binding HasUnsavedChanges}" Margin="0,0,0,12">
+              <StackPanel Spacing="4">
+                <TextBlock Classes="bodyStrong" Text="有未保存的草稿"/>
+                <TextBlock Classes="caption" Text="{Binding UnsavedChangesText}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="保存各项设置，或返回时选择继续编辑、丢弃草稿。" TextWrapping="Wrap"/>
+              </StackPanel>
+            </Border>
+            <Border Classes="errorCard" IsVisible="{Binding HasAppearanceError}" Margin="0,0,0,12">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <PathIcon Data="{StaticResource Icon.ErrorCircle}" Width="15" Height="15" VerticalAlignment="Top"/>
+                <TextBlock Classes="body" TextWrapping="Wrap" Text="{Binding AppearanceError}"/>
+              </StackPanel>
+            </Border>
+            <Border Classes="errorCard" IsVisible="{Binding HasSettingsLoadError}" Margin="0,0,0,12">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <PathIcon Data="{StaticResource Icon.Warning}" Width="15" Height="15" VerticalAlignment="Top"/>
+                <TextBlock Classes="body" TextWrapping="Wrap"
+                           Text="{Binding SettingsLoadError, StringFormat='settings.json 上次加载失败（{0}），已用默认值继续'}"/>
+              </StackPanel>
+            </Border>
+
+            <!-- ═══ 外观 / 功能 / 配置文件：由分区控件渲染（分组卡 + 行式条目） ═══ -->
+            <views:WorkbenchSectionsView x:Name="WorkbenchSections"
+                                         IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowWorkbenchSection}"
+                                         DataContext="{Binding Customization}"
+                                         Page="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ActivePageId}"
+                                         SearchActive="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).IsSearching}"/>
+
+            <!-- ═══ 模型与思考 ═══ -->
+            <ContentControl IsVisible="{Binding ShowShortcuts}" Content="{Binding ShortcutsContent}"/>
+            <ContentControl IsVisible="{Binding ShowStorage}" Content="{Binding StorageContent}"/>
+            <StackPanel IsVisible="{Binding ShowModels}" Spacing="0">
+              <TextBlock Classes="settingsGroupHeader first" Text="模型"/>
+              <Border Classes="settingsGroup">
+                <StackPanel>
+                  <Border Classes="settingsRow" IsVisible="{Binding ShowModelRow}">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{StaticResource Icon.Sparkle}" Width="18" Height="18"
+                                VerticalAlignment="Center" Classes="meta"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="模型"/>
+                        <TextBlock Classes="settingsRowDesc" Text="{Binding CurrentModelText, StringFormat='当前模型：{0}'}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="iconButton" Command="{Binding RefreshModelsCommand}"
+                                IsVisible="{Binding !IsMock}" ToolTip.Tip="刷新可用模型">
+                          <PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/>
+                        </Button>
+                        <ComboBox MinWidth="200" VerticalAlignment="Center"
+                                  IsEnabled="{Binding CanChangeModel}"
+                                  ItemsSource="{Binding ModelChoices}"
+                                  SelectedItem="{Binding SelectedModel}"
+                                  PlaceholderText="选择模型"
+                                  ToolTip.Tip="空闲时对当前会话立即生效；回合进行中仅保存给新建会话">
+                          <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="{x:Type vm:SettingsPageViewModel+ModelChoice}">
+                              <TextBlock Text="{Binding Label}"/>
+                            </DataTemplate>
+                          </ComboBox.ItemTemplate>
+                        </ComboBox>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow last" IsVisible="{Binding ShowThinkingRow}">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{StaticResource Icon.Brain}" Width="18" Height="18"
+                                VerticalAlignment="Center" Classes="meta"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="思考等级"/>
+                        <TextBlock Classes="settingsRowDesc" Text="「默认」跟随 Pi/模型自身行为"/>
+                      </StackPanel>
+                      <ComboBox Grid.Column="2" MinWidth="200" VerticalAlignment="Center"
+                                IsEnabled="{Binding CanChangeModel}"
+                                ItemsSource="{Binding ThinkingChoices}"
+                                SelectedItem="{Binding SelectedThinking}"
+                                ToolTip.Tip="空闲时对当前会话立即生效；回合进行中仅保存给新建会话">
+                        <ComboBox.Styles><Style Selector="ComboBoxItem" x:DataType="vm:SettingsPageViewModel+ThinkingChoice"><Setter Property="IsEnabled" Value="{Binding IsSupported}"/></Style></ComboBox.Styles>
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate x:DataType="{x:Type vm:SettingsPageViewModel+ThinkingChoice}">
+                            <TextBlock Text="{Binding Label}"/>
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </Border>
+              <StackPanel Spacing="6" Margin="2,8,0,0">
+                <TextBlock Classes="meta" Text="mock 模式没有真实模型；当前无法切换。" IsVisible="{Binding IsMock}" TextWrapping="Wrap"/>
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsModelApplying}" Height="3"/>
+                <TextBlock Classes="meta" Text="{Binding ModelsStateText}" TextWrapping="Wrap"/>
+                <TextBlock Classes="meta" Foreground="{DynamicResource AppCriticalForeground}"
+                           IsVisible="{Binding HasModelsError}" TextWrapping="Wrap" Text="{Binding ModelsError}"/>
+                <TextBlock Classes="meta" IsVisible="{Binding HasModelsInfo}" TextWrapping="Wrap" Text="{Binding ModelsInfo}"/>
+              </StackPanel>
+              <TextBlock Classes="settingsGroupHeader" Text="可用模型" IsVisible="{Binding !IsMock}"/>
+              <Border Classes="settingsGroup" IsVisible="{Binding !IsMock}">
+                <StackPanel Margin="16,12" Spacing="3">
+                  <ItemsControl ItemsSource="{Binding ModelRows}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="{x:Type x:String}">
+                        <TextBlock Classes="meta mono" Text="{Binding}"/>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Classes="meta" IsVisible="{Binding !HasModelRows}" IsEnabled="{Binding !HasModelsError}"
+                             Text="（尚未查询到模型列表）"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- ═══ 网络与端点 ═══ -->
+            <StackPanel IsVisible="{Binding ShowNetwork}" Spacing="0">
+              <Border Classes="errorCard info" IsVisible="{Binding HasRestartNotice}" Margin="0,12,0,0">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                    <PathIcon Data="{StaticResource Icon.Info}" Width="15" Height="15" VerticalAlignment="Center"/>
+                    <TextBlock Classes="body" Text="{Binding RestartNoticeText}" VerticalAlignment="Center"/>
+                  </StackPanel>
+                  <Button Grid.Column="1" Classes="accent" Content="立即重启"
+                          Command="{Binding RestartNowCommand}" IsEnabled="{Binding !IsMock}"/>
+                </Grid>
+              </Border>
+
+              <TextBlock Classes="settingsGroupHeader first" Text="连接"/>
+              <Border Classes="settingsGroup">
+                <StackPanel>
+                  <Border Classes="settingsRow" IsVisible="{Binding ShowProxyRow}">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{StaticResource Icon.Globe}" Width="18" Height="18"
+                                VerticalAlignment="Center" Classes="meta"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="代理"/>
+                        <TextBlock Classes="settingsRowDesc"
+                                   Text="{Binding ProxySummary, StringFormat='当前：{0}；保存后需重启会话生效'}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBox MinWidth="200" VerticalAlignment="Center" Text="{Binding ProxyInput}" PlaceholderText="http://host:port"/>
+                        <Button Classes="subtle" Content="保存" Padding="10,2" MinHeight="28" Command="{Binding SaveProxyCommand}"/>
+                        <Button Classes="subtle" Content="清除" Padding="10,2" MinHeight="28" Command="{Binding ClearProxyCommand}"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow last" IsVisible="{Binding ShowEndpointRow}">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{StaticResource Icon.Key}" Width="18" Height="18"
+                                VerticalAlignment="Center" Classes="meta"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="自定义端点"/>
+                        <TextBlock Classes="settingsRowDesc"
+                                   Text="{Binding EndpointSummary, StringFormat='当前：{0}；保存后需重启会话生效'}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <Button Classes="subtle" Content="移除端点" Padding="10,2" MinHeight="28"
+                                Command="{Binding RemoveEndpointCommand}" IsVisible="{Binding HasEndpoint}"
+                                ToolTip.Tip="移除后 models.json 中的 provider 随下次启动清理；凭据管理器中的密钥不删除（无删除接口），可手动清理"/>
+                        <Button Classes="subtle" Content="配置…" Padding="10,2" MinHeight="28" Command="{Binding ToggleEndpointFormCommand}"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </Border>
+
+              <Border Classes="settingsGroup" Margin="0,8,0,0" IsVisible="{Binding ShowEndpointForm}" IsEnabled="{Binding !IsEndpointSaving}">
+                <StackPanel Spacing="10" Margin="16,12">
+                  <StackPanel Spacing="3">
+                    <TextBlock Classes="settingsRowDesc" Text="提供方名称（字母/数字/-/_/.）"/>
+                    <TextBox Text="{Binding EndpointProviderName}" PlaceholderText="如 my-provider"/>
+                  </StackPanel>
+                  <StackPanel Spacing="3">
+                    <TextBlock Classes="settingsRowDesc" Text="Base URL"/>
+                    <TextBox Text="{Binding EndpointBaseUrl}" PlaceholderText="https://api.example.com/v1"/>
+                  </StackPanel>
+                  <StackPanel Spacing="3">
+                    <TextBlock Classes="settingsRowDesc" Text="模型 ID"/>
+                    <TextBox Text="{Binding EndpointModelId}" PlaceholderText="如 my-model"/>
+                  </StackPanel>
+                  <StackPanel Spacing="4">
+                    <TextBlock Classes="settingsRowDesc" Text="密钥来源"/>
+                    <ComboBox SelectedIndex="{Binding EndpointKeyModeIndex}" MaxWidth="320" HorizontalAlignment="Left">
+                      <ComboBoxItem Content="输入 API Key（存入 Windows 凭据管理器）"/>
+                      <ComboBoxItem Content="使用已有环境变量"/>
+                    </ComboBox>
+                    <StackPanel IsVisible="{Binding EndpointKeyModeIsKey}" Spacing="3">
+                      <TextBox x:Name="EndpointKeyBox" PasswordChar="●" PlaceholderText="API Key（不会保存到配置文件）"/>
+                      <TextBlock Classes="meta" Text="{Binding EndpointKeyTargetText}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <StackPanel IsVisible="{Binding !EndpointKeyModeIsKey}" Spacing="3">
+                      <TextBox Text="{Binding EndpointEnvName}" PlaceholderText="环境变量名，如 FUFUCODE_X_API_KEY"/>
+                      <TextBlock Classes="meta" Text="{Binding EndpointKeyTargetText}" TextWrapping="Wrap"/>
+                    </StackPanel>
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Classes="accent" Content="保存端点" Padding="12,2" MinHeight="28" Click="OnSaveEndpointClick"/>
+                  </StackPanel>
+                  <TextBlock Classes="meta" Foreground="{DynamicResource AppCriticalForeground}"
+                             IsVisible="{Binding HasEndpointError}" TextWrapping="Wrap" Text="{Binding EndpointError}"/>
+                  <TextBlock Classes="meta" Foreground="{DynamicResource AppSuccessForeground}"
+                             IsVisible="{Binding HasEndpointInfo}" TextWrapping="Wrap" Text="{Binding EndpointInfo}"/>
+                </StackPanel>
+              </Border>
+
+              <StackPanel Spacing="6" Margin="2,8,0,0">
+                <TextBlock Classes="meta" Text="{Binding NetworkStateText}" TextWrapping="Wrap"/>
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsEndpointSaving}" Height="3"/>
+              </StackPanel>
+
+              <TextBlock Classes="settingsGroupHeader" Text="模型配置（models.json）" IsVisible="{Binding ShowModelsConfig}"/>
+              <Border Classes="settingsGroup" IsVisible="{Binding ShowModelsConfig}">
+                <StackPanel Spacing="6" Margin="16,12">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Classes="meta" Text="当前生效的配置" VerticalAlignment="Center"/>
+                    <Button Classes="subtle" Content="打开所在文件夹" Command="{Binding OpenFolderCommand}"
+                            CommandParameter="{Binding AgentDirectoryText}" IsEnabled="{Binding CanOpenFolders}" Padding="8,2" MinHeight="24"/>
+                  </StackPanel>
+                  <ItemsControl ItemsSource="{Binding Providers}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="{x:Type models:PiProviderInfo}">
+                        <StackPanel Spacing="1" Margin="0,2">
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Classes="caption bodyStrong" Text="{Binding Name}"/>
+                            <TextBlock Classes="meta mono" Text="{Binding BaseUrl}"/>
+                            <TextBlock Classes="meta" Text="{Binding Api, StringFormat='api: {0}'}"/>
+                          </StackPanel>
+                          <TextBlock Classes="meta" Text="{Binding ModelIds, Converter={x:Static anim:StringJoinConverter.Instance}}"/>
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Classes="meta" Text="{Binding KeyText}"/>
+                            <Border Classes="badge attention" Padding="6,0" MinHeight="16" IsVisible="{Binding KeyIsCaution}"
+                                    ToolTip.Tip="建议改用环境变量引用（$VAR），不要把密钥写进文件">
+                              <TextBlock Classes="caption" Text="建议改用环境变量引用"/>
+                            </Border>
+                          </StackPanel>
+                        </StackPanel>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <TextBlock Classes="meta" TextWrapping="Wrap" IsVisible="{Binding HasModelsConfigStatus}" Text="{Binding ModelsConfigStatus}"/>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- ═══ 通知 ═══ -->
+            <StackPanel IsVisible="{Binding ShowNotifications}" Spacing="0">
+              <TextBlock Classes="settingsGroupHeader first" Text="提醒方式"/>
+              <Border Classes="settingsGroup">
+                <StackPanel>
+                  <Border Classes="settingsRow">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{StaticResource Icon.Info}" Width="18" Height="18"
+                                VerticalAlignment="Center" Classes="meta"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="完成与失败提醒"/>
+                        <TextBlock Classes="settingsRowDesc" Text="选择何时显示主动提示"/>
+                      </StackPanel>
+                      <ComboBox Grid.Column="2" MinWidth="180" VerticalAlignment="Center"
+                                SelectedIndex="{Binding NotificationPreferences.SelectedCompletionPolicyIndex}"
+                                IsEnabled="{Binding HasNotificationPreferences}">
+                        <ComboBoxItem Content="不提醒"/><ComboBoxItem Content="失焦时"/><ComboBoxItem Content="总是"/>
+                      </ComboBox>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow last">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{StaticResource Icon.ShieldCheckmark}" Width="18" Height="18"
+                                VerticalAlignment="Center" Classes="meta"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="权限与问题提醒"/>
+                        <TextBlock Classes="settingsRowDesc" Text="有待处理审批时显示主动提示"/>
+                      </StackPanel>
+                      <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
+                                    IsChecked="{Binding NotificationPreferences.NotifyApprovals}"
+                                    IsEnabled="{Binding HasNotificationPreferences}"/>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </Border>
+              <StackPanel Spacing="4" Margin="2,8,0,0">
+                <TextBlock Classes="meta" Text="策略控制主动提示；会话标记和通知列表仍可查看。系统通知尚未启用。" TextWrapping="Wrap"/>
+                <TextBlock Classes="meta" Text="当前无法修改提醒偏好。" IsVisible="{Binding !HasNotificationPreferences}" TextWrapping="Wrap"/>
+                <TextBlock Classes="meta" Text="{Binding NotificationPreferences.SaveStatusText}" TextWrapping="Wrap"/>
+                <TextBlock Classes="meta" Foreground="{DynamicResource AppCriticalForeground}"
+                           Text="{Binding NotificationPreferences.SaveError}"
+                           IsVisible="{Binding NotificationPreferences.HasSaveError}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </StackPanel>
+
+            <!-- ═══ 工作台模块 ═══ -->
+            <StackPanel IsVisible="{Binding ShowModules}" Spacing="0">
+              <TextBlock Classes="settingsGroupHeader first" Text="内建模块"/>
+              <Border Classes="settingsGroup">
+                <ItemsControl ItemsSource="{Binding BuiltInModules}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:BuiltInModuleViewModel">
+                      <Border Classes="settingsRow">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                          <StackPanel Spacing="2">
+                            <TextBlock Classes="settingsRowTitle" Text="{Binding Title}"/>
+                            <TextBlock Classes="settingsRowDesc" Text="{Binding Status}" TextWrapping="Wrap"/>
+                          </StackPanel>
+                          <ToggleSwitch Grid.Column="1" IsChecked="{Binding IsEnabled, Mode=TwoWay}" VerticalAlignment="Center"
+                                        OnContent="启用" OffContent="停用" AutomationProperties.Name="{Binding Title}"/>
+                        </Grid>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
+            </StackPanel>
+
+            <!-- ═══ 关于 ═══ -->
+            <StackPanel IsVisible="{Binding ShowAbout}" Spacing="0">
+              <TextBlock Classes="settingsGroupHeader first" Text="版本与目录"/>
+              <Border Classes="settingsGroup">
+                <StackPanel>
+                  <Border Classes="settingsRow">
+                    <StackPanel Spacing="10">
+                      <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Image Source="avares://Fufucode.App/Assets/Brand/icon-256.png" Width="44" Height="44"/>
+                        <StackPanel VerticalAlignment="Center" Spacing="2">
+                          <TextBlock Classes="settingsRowTitle" Text="Fufucode"/>
+                          <TextBlock Classes="settingsRowDesc"
+                                     Text="{Binding AppVersion, StringFormat='版本 {0}'}" ToolTip.Tip="{Binding AppVersionTooltip}"/>
+                        </StackPanel>
+                      </StackPanel>
+                      <ItemsControl ItemsSource="{Binding VersionRows}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="{x:Type vm:KeyValueRow}">
+                            <Grid ColumnDefinitions="120,*" Margin="0,1">
+                              <TextBlock Classes="meta" Text="{Binding Key}"/>
+                              <TextBlock Grid.Column="1" Classes="meta" Text="{Binding Value}" TextWrapping="Wrap"/>
+                            </Grid>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="settingsRow">
+                    <StackPanel Spacing="6" x:Name="AboutPaths">
+                      <Grid Classes="settingsPathRow" ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="meta" Text="数据目录" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding DataRootText}" ToolTip.Tip="{Binding DataRootText}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <Button Grid.Column="2" Classes="subtle" Content="打开" Padding="8,2" MinHeight="24"
+                                Command="{Binding OpenFolderCommand}" CommandParameter="{Binding DataRootText}"
+                                IsEnabled="{Binding CanOpenFolders}"/>
+                      </Grid>
+                      <Grid Classes="settingsPathRow" ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="meta" Text="Pi 配置目录" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding AgentDirectoryText}" ToolTip.Tip="{Binding AgentDirectoryText}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <Button Grid.Column="2" Classes="subtle" Content="打开" Padding="8,2" MinHeight="24"
+                                Command="{Binding OpenFolderCommand}" CommandParameter="{Binding AgentDirectoryText}"
+                                IsEnabled="{Binding CanOpenFolders}"/>
+                      </Grid>
+                      <Grid Classes="settingsPathRow" ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Classes="meta" Text="日志目录" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding LogsDirectoryText}" ToolTip.Tip="{Binding LogsDirectoryText}"
+                                   TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <Button Grid.Column="2" Classes="subtle" Content="打开" Padding="8,2" MinHeight="24"
+                                Command="{Binding OpenFolderCommand}" CommandParameter="{Binding LogsDirectoryText}"
+                                IsEnabled="{Binding CanOpenFolders}"/>
+                      </Grid>
+                    </StackPanel>
+                  </Border>
+                  <Border Classes="settingsRow last">
+                    <StackPanel x:Name="AboutActions" Orientation="Horizontal" Spacing="8">
+                      <Button Classes="subtle" Command="{Binding CopyDiagnosticsCommand}">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <PathIcon Data="{StaticResource Icon.Copy}" Width="13" Height="13"/>
+                          <TextBlock Text="复制诊断摘要" VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                      <Button Classes="subtle" Click="OnExportDiagnostics" ToolTip.Tip="导出系统版本和脱敏调用记录，不含凭据或会话正文">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                          <PathIcon Data="{StaticResource Icon.Share}" Width="13" Height="13"/>
+                          <TextBlock Text="导出完整诊断包" VerticalAlignment="Center"/>
+                        </StackPanel>
+                      </Button>
+                      <TextBlock Classes="meta" Foreground="{DynamicResource AppSuccessForeground}"
+                                 VerticalAlignment="Center" IsVisible="{Binding HasCopyStatus}" Text="{Binding CopyStatus}"/>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </StackPanel>
+        </ScrollViewer>
+      </Grid>
+    </Grid>
+  </Grid>
+</UserControl>

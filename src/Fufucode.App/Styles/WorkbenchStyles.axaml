@@ -1,0 +1,340 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 工作台共享组件：停靠容器、页签、分隔条、窗口外框、工具条与空状态。
+       只引用 App* 语义键，主题/强调色/风格预设统一经由令牌生效。 -->
+  <Style Selector="Button.subtle">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+
+  <!-- 外框：标题栏与状态栏同属 chrome 层，与停靠区同底，靠单像素分隔区分 -->
+  <Style Selector="Border.chromeBar">
+    <Setter Property="Background" Value="{DynamicResource AppChromeBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+  </Style>
+  <Style Selector="Border.chromeBar TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+
+  <!-- ===== Windows 设置风格（WinUI 3 Settings 度量）=====
+       Windows 11 设置里每个设置项是独立的一张圆角卡，同组内卡与卡之间留 4px 缝；
+       分组标题在卡片之外。行高：带说明 64，仅标题 52。 -->
+  <Style Selector="Border.settingsRow">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="16,12"/>
+    <Setter Property="MinHeight" Value="64"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
+  </Style>
+  <Style Selector="Border.settingsRow.compact">
+    <Setter Property="MinHeight" Value="52"/>
+  </Style>
+  <Style Selector="Border.settingsRow.clickable">
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="Border.settingsRow.clickable:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.last">
+    <Setter Property="Margin" Value="0,0,0,0"/>
+  </Style>
+  <!-- 分组容器：只负责间距，不再是唯一的卡片 -->
+  <Style Selector="StackPanel.settingsGroupList">
+    <Setter Property="Spacing" Value="0"/>
+  </Style>
+
+  <!-- 左侧导航（Windows 设置度量）：宽 320，项高 40，圆角 4，图标 16，文字 14 -->
+  <Style Selector="ListBox.settingsNav">
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem">
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,0,2"/>
+    <Setter Property="MinHeight" Value="40"/>
+    <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <!-- 选中项左侧强调竖条：3×16 圆角，贴项左缘 -->
+  <Style Selector="Border.navAccent">
+    <Setter Property="Width" Value="3"/>
+    <Setter Property="Height" Value="16"/>
+    <Setter Property="CornerRadius" Value="2"/>
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="HorizontalAlignment" Value="Left"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="IsVisible" Value="False"/>
+  </Style>
+
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected Border.navAccent">
+    <Setter Property="IsVisible" Value="True"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+
+  <!-- 文字层级（Windows 设置：行标题 14 常规、说明 12 次级、分组标题 14 半粗） -->
+  <Style Selector="TextBlock.settingsRowTitle">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+  <Style Selector="TextBlock.settingsRowDesc">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+  <Style Selector="TextBlock.settingsGroupHeader">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Margin" Value="2,24,0,8"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="TextBlock.settingsGroupHeader.first">
+    <Setter Property="Margin" Value="2,4,0,8"/>
+  </Style>
+  <!-- 页面标题：Windows 设置的面包屑用 20px，父级次级色、当前页主色 -->
+  <Style Selector="TextBlock.settingsPageTitle">
+    <Setter Property="FontSize" Value="28"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="TextBlock.breadcrumb">
+    <Setter Property="FontSize" Value="28"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="TextBlock.breadcrumbLink">
+    <Setter Property="FontSize" Value="20"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="TextBlock.breadcrumbLink:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <!-- 面包屑父级：20px 次级文字，悬停转主色，无按钮底 -->
+  <Style Selector="Button.crumbLink">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="FontSize" Value="28"/>
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+  </Style>
+  <Style Selector="Button.crumbLink:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.crumbLink:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.crumbLink:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+
+  <!-- 停靠容器：三区共用同一表面，中央会话区为内容层 -->
+  <Style Selector="Border.dockHost">
+    <Setter Property="Background" Value="{DynamicResource AppDockBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+  </Style>
+  <Style Selector="DockPanel.dockHeader">
+    <Setter Property="Background" Value="{DynamicResource AppDockHeaderBackground}"/>
+  </Style>
+  <Style Selector="Border.dockHeaderRule">
+    <Setter Property="Height" Value="1"/>
+    <Setter Property="VerticalAlignment" Value="Bottom"/>
+    <Setter Property="Background" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="IsHitTestVisible" Value="False"/>
+  </Style>
+
+  <!-- 页签：未选中退为次级文字；选中＝主文字 + 底部 accent 指示条，无额外填充块 -->
+  <Style Selector="Button.dockTab">
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Left"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.dockTab:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.dockTab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.dockTab.selected">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="Grid.dockTabRow Button.dockTabClose">
+    <Setter Property="Opacity" Value="0"/>
+  </Style>
+  <Style Selector="Grid.dockTabRow:pointerover Button.dockTabClose, Grid.dockTabRow:focus-within Button.dockTabClose, Grid.dockTabRow.selected Button.dockTabClose">
+    <Setter Property="Opacity" Value="1"/>
+  </Style>
+  <Style Selector="Border.dockIndicator">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Height" Value="2"/>
+    <Setter Property="Margin" Value="8,0"/>
+    <Setter Property="CornerRadius" Value="1"/>
+  </Style>
+  <Style Selector="Border.dockDropTarget">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+  </Style>
+  <Style Selector="TextBlock.dockEmpty">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+
+  <!-- 区间分隔：静止为 1px 分隔线，悬停/聚焦提示 accent；命中区保持 5px -->
+  <Style Selector="GridSplitter.dockSplitter">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="Transparent">
+          <Border Name="SplitGrip" Background="{TemplateBinding Background}"/>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter[ResizeDirection=Columns] /template/ Border#SplitGrip">
+    <Setter Property="Width" Value="2"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter[ResizeDirection=Rows] /template/ Border#SplitGrip">
+    <Setter Property="Height" Value="2"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter:pointerover, GridSplitter.dockSplitter:focus-visible">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+  </Style>
+
+  <!-- 区域工具条按钮（页签行尾、面板头）：统一 28px 命中区 -->
+  <Style Selector="Button.toolButton">
+    <Setter Property="Width" Value="28"/>
+    <Setter Property="Height" Value="28"/>
+    <Setter Property="MinWidth" Value="28"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="Padding" Value="6"/>
+  </Style>
+  <Style Selector="Button.toolButton.active">
+    <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+  </Style>
+  <Style Selector="Button.toolButton.active PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+  </Style>
+
+  <Style Selector="Button.scopeChoice">
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+  </Style>
+  <Style Selector="Button.scopeChoice.selected">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="ListBox.workspaceList ListBoxItem">
+    <Setter Property="Padding" Value="8"/>
+    <Setter Property="MinHeight" Value="44"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+  </Style>
+  <Style Selector="TextBlock.addedFlag">
+    <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+  </Style>
+  <Style Selector="TextBlock.deletedFlag">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="TextBox.composerInput:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="TextBox.flatInput:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+
+  <!-- 浮层通知：与菜单/弹窗同一表面、描边与阴影 -->
+  <Style Selector="Border.toast">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentToastShadow}"/>
+  </Style>
+  <Style Selector="Border.overlayPanel">
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentFlyoutShadow}"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+
+  <!-- 中央会话：元信息退为三级文字；助手正文不加卡片 -->
+  <Style Selector="TextBlock.meta">
+    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="TextBlock.metaName">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+  <Style Selector="Border.turnSummary">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="2,0,0,0"/>
+    <Setter Property="Padding" Value="12,4,0,4"/>
+    <Setter Property="Margin" Value="0,10,0,0"/>
+  </Style>
+  <Style Selector="Border.toolCard">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+  </Style>
+
+  <!-- 会话标尺：轮次刻度按钮，次级文字、无描边 -->
+  <Style Selector="StackPanel#MessageRuler > Button">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="StackPanel#MessageRuler > Button:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+
+  <!-- 终端：固定深色表面（ANSI 默认色与之对齐），与主题无关 -->
+  <Style Selector="ScrollViewer.terminalSurface">
+    <Setter Property="Background" Value="{DynamicResource AppTerminalBackground}"/>
+  </Style>
+  <Style Selector="Grid.terminalSurface">
+    <Setter Property="Background" Value="{DynamicResource AppTerminalBackground}"/>
+  </Style>
+
+  <!-- 拟物/平面等风格预设只改表面，不改结构；此处为选中强调色色块提供描边 -->
+  <Style Selector="Button.accentSwatch">
+    <Setter Property="BorderThickness" Value="2"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="CornerRadius" Value="15"/>
+  </Style>
+  <Style Selector="Button.accentSwatch.selected">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+</Styles>

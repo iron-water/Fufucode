@@ -1,0 +1,16 @@
+**/bin/
+**/obj/
+node_modules/
+*.user
+logs/
+tmp/
+out/
+runtime/node/node.exe
+runtime/pi/node_modules/
+.vs/
+.idea/
+*.suo
+*.userprefs
+publish/
+.venv/
+__pycache__/

@@ -1,0 +1,811 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avaprimitives="using:Avalonia.Controls.Primitives">
+    <!-- Fufucode 主题：在 WinUI Fluent v2 令牌（FluentTokens.axaml，移植自 UniGetUI/MIT）
+         之上派生 App* 语义键并提供组件样式。App* 键名为既有契约，外部代码按名引用。 -->
+    <Styles.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceInclude Source="avares://Fufucode.App/Styles/FluentTokens.axaml"/>
+                <ResourceInclude Source="avares://Fufucode.App/Styles/Icons.axaml"/>
+            </ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <!-- App* 语义键：值统一派生自 Fluent v2 令牌 -->
+                    <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
+                    <StaticResource x:Key="AppTextPrimary"        ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppTextSecondary"      ResourceKey="TextFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppTextDim"            ResourceKey="TextFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppAccent"             ResourceKey="AccentFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppAccentForeground"   ResourceKey="TextOnAccentFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppAccentText"         ResourceKey="AccentTextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppAccentSubtle"       ResourceKey="AccentTextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppHover"              ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppListSelected"       ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.12"/>
+                    <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppCodeBackground"     ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppCodeBorder"         ResourceKey="CardStrokeColorDefaultBrush"/>
+                    <StaticResource x:Key="AppErrorBackground"    ResourceKey="SystemFillColorCriticalBackgroundBrush"/>
+                    <StaticResource x:Key="AppErrorBorder"        ResourceKey="SystemFillColorCriticalBrush"/>
+                    <StaticResource x:Key="AppInfoBackground"     ResourceKey="SystemFillColorAttentionBackgroundBrush"/>
+                    <StaticResource x:Key="AppInfoForeground"     ResourceKey="SystemFillColorAttentionBrush"/>
+                    <StaticResource x:Key="AppSuccessForeground"  ResourceKey="SystemFillColorSuccessBrush"/>
+                    <StaticResource x:Key="AppCautionForeground"  ResourceKey="SystemFillColorCautionBrush"/>
+                    <StaticResource x:Key="AppCriticalForeground" ResourceKey="SystemFillColorCriticalBrush"/>
+                    <StaticResource x:Key="AppDialogBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
+                    <SolidColorBrush x:Key="AppScrimBackground" Color="#33000000"/>
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF14171D"/>
+                    <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFDEE3EC"/>
+                    <!-- Mica 激活时被窗口层覆盖为透明 -->
+                    <StaticResource x:Key="AppMicaPageBackground" ResourceKey="AppWindowBackground"/>
+                    <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
+                    <!-- ListBoxItem 模板内部按这些键取色：选中态改为 subtle 底 + 主文字色（accent 指示条由模板内 navPill 提供） -->
+                    <StaticResource x:Key="ListBoxItemBackgroundSelected"            ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
+                    <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemForegroundSelectedDisabled"    ResourceKey="TextFillColorDisabledBrush"/>
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
+                    <StaticResource x:Key="AppTextPrimary"        ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppTextSecondary"      ResourceKey="TextFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppTextDim"            ResourceKey="TextFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppAccent"             ResourceKey="AccentFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppAccentForeground"   ResourceKey="TextOnAccentFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppAccentText"         ResourceKey="AccentTextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppAccentSubtle"       ResourceKey="AccentTextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="AppHover"              ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppListSelected"       ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.16"/>
+                    <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+                    <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppCodeBackground"     ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppCodeBorder"         ResourceKey="CardStrokeColorDefaultBrush"/>
+                    <StaticResource x:Key="AppErrorBackground"    ResourceKey="SystemFillColorCriticalBackgroundBrush"/>
+                    <StaticResource x:Key="AppErrorBorder"        ResourceKey="SystemFillColorCriticalBrush"/>
+                    <StaticResource x:Key="AppInfoBackground"     ResourceKey="SystemFillColorAttentionBackgroundBrush"/>
+                    <StaticResource x:Key="AppInfoForeground"     ResourceKey="SystemFillColorAttentionBrush"/>
+                    <StaticResource x:Key="AppSuccessForeground"  ResourceKey="SystemFillColorSuccessBrush"/>
+                    <StaticResource x:Key="AppCautionForeground"  ResourceKey="SystemFillColorCautionBrush"/>
+                    <StaticResource x:Key="AppCriticalForeground" ResourceKey="SystemFillColorCriticalBrush"/>
+                    <StaticResource x:Key="AppDialogBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
+                    <SolidColorBrush x:Key="AppScrimBackground" Color="#4D000000"/>
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF14171D"/>
+                    <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFDEE3EC"/>
+                    <StaticResource x:Key="AppMicaPageBackground" ResourceKey="AppWindowBackground"/>
+                    <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelected"            ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
+                    <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemForegroundSelectedDisabled"    ResourceKey="TextFillColorDisabledBrush"/>
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <FontFamily x:Key="AppFontFamily">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Inter</FontFamily>
+            <FontFamily x:Key="AppMonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
+            <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+        </ResourceDictionary>
+    </Styles.Resources>
+
+    <!-- ================= 全局基线 ================= -->
+    <Style Selector="Window">
+        <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    </Style>
+    <Style Selector="TextBlock">
+        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    </Style>
+    <Style Selector="PathIcon">
+        <Setter Property="Width" Value="16"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    </Style>
+    <Style Selector="ToolTip">
+        <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+    </Style>
+
+    <!-- WinUI 圆角焦点框 -->
+    <Style Selector="avaprimitives|AdornerLayer">
+        <Setter Property="DefaultFocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderBrush="{DynamicResource SystemControlFocusVisualPrimaryBrush}"
+                        BorderThickness="2" CornerRadius="6">
+                    <Border BorderBrush="{DynamicResource SystemControlFocusVisualSecondaryBrush}"
+                            BorderThickness="1" CornerRadius="4"/>
+                </Border>
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+
+    <!-- ================= 字阶 ================= -->
+    <Style Selector="TextBlock.caption">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    </Style>
+    <Style Selector="TextBlock.body">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="LineHeight" Value="20"/>
+    </Style>
+    <Style Selector="TextBlock.bodyStrong">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.subtitle">
+        <Setter Property="FontSize" Value="20"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.title">
+        <Setter Property="FontSize" Value="28"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TextBlock.secondary">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    </Style>
+    <Style Selector="TextBlock.mono">
+        <Setter Property="FontFamily" Value="{StaticResource AppMonoFont}"/>
+    </Style>
+
+    <!-- ================= 侧栏 ================= -->
+    <Style Selector="Border.sidebar">
+        <Setter Property="Background" Value="{DynamicResource AppMicaSidebarBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    </Style>
+    <Style Selector="TextBlock.sectionCaption">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+        <Setter Property="Margin" Value="12,12,8,4"/>
+    </Style>
+
+    <!-- 会话项 / 底部导航项：WinUI NavigationViewItem 观感（4px 圆角 + 左侧选中指示条） -->
+    <Style Selector="ListBox.sessionList">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.sessionList > ListBoxItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="Padding" Value="10,6"/>
+        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="MinHeight" Value="40"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <!-- Fluent 主题的 :selected accent 底色画在模板的 ContentPresenter 上，
+         必须进模板覆盖（同 UniGetUI nav-item 的做法） -->
+    <Style Selector="ListBox.sessionList > ListBoxItem:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+    </Style>
+    <Style Selector="ListBox.sessionList > ListBoxItem:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    </Style>
+    <Style Selector="ListBox.sessionList > ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+    </Style>
+    <Style Selector="ListBox.sessionList > ListBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+    </Style>
+    <Style Selector="Border.navPill">
+        <Setter Property="Width" Value="3"/>
+        <Setter Property="Height" Value="16"/>
+        <Setter Property="CornerRadius" Value="2"/>
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+        <Setter Property="HorizontalAlignment" Value="Left"/>
+        <!-- 项背景有圆角会裁剪子元素，指示条必须留在项边界内 -->
+        <Setter Property="Margin" Value="-7,0,0,0"/>
+        <Setter Property="IsVisible" Value="False"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected Border.navPill">
+        <Setter Property="IsVisible" Value="True"/>
+    </Style>
+    <Style Selector="Button.sessionTailAction">
+        <Setter Property="Opacity" Value="0"/>
+    </Style>
+    <Style Selector="Button.captionButton">
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="Transparent" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
+                    <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" Padding="0"/>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="Button.captionButton:focus-visible">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="ListBoxItem:pointerover Button.sessionTailAction, ListBoxItem:focus-within Button.sessionTailAction, Button.sessionTailAction.menuOpen">
+        <Setter Property="Opacity" Value="1"/>
+    </Style>
+    <Style Selector="ListBoxItem:pointerover TextBlock.sessionTailTime, ListBoxItem:focus-within TextBlock.sessionTailTime">
+        <Setter Property="Opacity" Value="0"/>
+    </Style>
+    <Style Selector="GridSplitter.workspaceSplitter">
+        <Setter Property="Background" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="Template">
+            <ControlTemplate>
+                <Border Background="Transparent">
+                    <Border Name="SplitGrip"
+                            Background="{TemplateBinding Background}"/>
+                </Border>
+            </ControlTemplate>
+        </Setter>
+    </Style>
+    <Style Selector="GridSplitter.workspaceSplitter.vertical /template/ Border#SplitGrip">
+        <Setter Property="Width" Value="2"/>
+        <Setter Property="HorizontalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="GridSplitter.workspaceSplitter.horizontal /template/ Border#SplitGrip">
+        <Setter Property="Height" Value="2"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="GridSplitter.workspaceSplitter:focus-visible, GridSplitter.workspaceSplitter:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    </Style>
+    <!-- 导航项（WinUI NavigationViewItem）：透明面 + 圆角 6，选中态由共享 pill 表达，
+         项自身只叠 SubtleFill 层。图标/文字取主文字色（UniGetUI SvgIcon 同规则）。 -->
+    <Style Selector="Button.navItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="4,2"/>
+        <Setter Property="Margin" Value="0,1"/>
+        <Setter Property="MinHeight" Value="46"/>
+        <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+                <BrushTransition Property="Foreground" Duration="0:0:0.083"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.navItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem:pressed">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem.selected">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem.selected:pointerover">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem:focus-visible">
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource FocusStrokeColorOuterBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem:disabled PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+    </Style>
+    <Style Selector="Button.navItem:disabled TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+    </Style>
+
+    <!-- accent 按钮：前景走 TextOnAccentFillColor* 系列（暗色近黑、亮色白），
+         内部 PathIcon/TextBlock 跟随按钮态，不再各写死 AppAccentForeground -->
+    <Style Selector="Button.accent">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}"/>
+    </Style>
+    <Style Selector="Button.accent PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}"/>
+    </Style>
+    <Style Selector="Button.accent TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}"/>
+    </Style>
+    <Style Selector="Button.accent:pointerover PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}"/>
+    </Style>
+    <Style Selector="Button.accent:pointerover TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}"/>
+    </Style>
+    <Style Selector="Button.accent:pressed PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPressed}"/>
+    </Style>
+    <Style Selector="Button.accent:pressed TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPressed}"/>
+    </Style>
+    <Style Selector="Button.accent:disabled PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundDisabled}"/>
+    </Style>
+    <Style Selector="Button.accent:disabled TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundDisabled}"/>
+    </Style>
+
+    <!-- ================= 通用控件 ================= -->
+    <Style Selector="Button.iconButton">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="Width" Value="32"/>
+        <Setter Property="Height" Value="32"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="HorizontalContentAlignment" Value="Center"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.iconButton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <Style Selector="Button.iconButton:pressed">
+        <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    </Style>
+    <Style Selector="Button.iconButton:disabled PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+    </Style>
+
+  <!-- 顶栏动作按钮：与系统最小化/最大化/关闭按钮同一 46×32 命中区，
+       图标统一 16px，保证横向排列时与右侧三个系统按钮对齐。 -->
+  <Style Selector="Button.captionSlot">
+    <Setter Property="Width" Value="46"/>
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="MinWidth" Value="46"/>
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.captionSlot PathIcon">
+    <Setter Property="Width" Value="16"/>
+    <Setter Property="Height" Value="16"/>
+  </Style>
+
+    <Style Selector="Button.subtle">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="Padding" Value="8,4"/>
+        <Setter Property="Foreground" Value="{DynamicResource HyperlinkForegroundBrush}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.subtle:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+
+    <!-- 命令 Flyout 条目：整行可点的 subtle 按钮 -->
+    <Style Selector="Button.commandFlyoutItem">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.commandFlyoutItem:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <Style Selector="Button.commandFlyoutItem:pressed">
+        <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    </Style>
+
+    <!-- 卡片 / 内凹 well -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+    </Style>
+    <Style Selector="Border.innerWell">
+        <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+    </Style>
+
+    <!-- 页头状态 chip -->
+    <Style Selector="Border.chip">
+        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="10,3"/>
+        <Setter Property="MinHeight" Value="24"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.chip.success PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+    </Style>
+    <Style Selector="Border.chip.critical PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    </Style>
+    <Style Selector="Ellipse.chipDot">
+        <Setter Property="Width" Value="8"/>
+        <Setter Property="Height" Value="8"/>
+        <Setter Property="Fill" Value="{DynamicResource AppTextDim}"/>
+    </Style>
+    <Style Selector="Border.chip.success Ellipse.chipDot">
+        <Setter Property="Fill" Value="{DynamicResource AppSuccessForeground}"/>
+    </Style>
+    <Style Selector="Border.chip.critical Ellipse.chipDot">
+        <Setter Property="Fill" Value="{DynamicResource AppCriticalForeground}"/>
+    </Style>
+    <Style Selector="Border.chip.attention Ellipse.chipDot">
+        <Setter Property="Fill" Value="{DynamicResource SystemFillColorAttentionBrush}"/>
+    </Style>
+    <Style Selector="Border.chip.accent Ellipse.chipDot">
+        <Setter Property="Fill" Value="{DynamicResource AppAccent}"/>
+    </Style>
+
+    <!-- 工具状态徽章 pill -->
+    <Style Selector="Border.badge">
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="Padding" Value="8,1"/>
+        <Setter Property="MinHeight" Value="20"/>
+        <Setter Property="Background" Value="{DynamicResource SystemFillColorNeutralBackgroundBrush}"/>
+    </Style>
+    <Style Selector="Border.badge TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.badge.attention">
+        <Setter Property="Background" Value="{DynamicResource SystemFillColorAttentionBackgroundBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.attention TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.success">
+        <Setter Property="Background" Value="{DynamicResource SystemFillColorSuccessBackgroundBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.success TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.critical">
+        <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBackgroundBrush}"/>
+    </Style>
+    <Style Selector="Border.badge.critical TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+    </Style>
+
+    <!-- ================= 时间线 ================= -->
+    <Style Selector="Border.userBubble">
+        <Setter Property="Background" Value="{DynamicResource AppUserBubble}"/>
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="Padding" Value="12,8"/>
+        <Setter Property="MaxWidth" Value="560"/>
+        <Setter Property="HorizontalAlignment" Value="Right"/>
+    </Style>
+
+    <!-- 代码块卡片 -->
+    <Style Selector="Border.codeCard">
+        <Setter Property="Background" Value="{DynamicResource AppCodeBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCodeBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+    </Style>
+
+    <!-- 思考块（轻量展开器） -->
+    <Style Selector="Border.thinkingBlock">
+        <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+    </Style>
+
+    <!-- 错误 / 提示卡（InfoBar 风格；H1 严重性类保留） -->
+    <Style Selector="Border.errorCard">
+        <Setter Property="Background" Value="{DynamicResource AppErrorBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppErrorBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="Padding" Value="12,10"/>
+    </Style>
+    <Style Selector="Border.errorCard PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    </Style>
+    <Style Selector="Border.errorCard.neutral">
+        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    </Style>
+    <Style Selector="Border.errorCard.neutral PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    </Style>
+    <Style Selector="Border.errorCard.info">
+        <Setter Property="Background" Value="{DynamicResource AppInfoBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppInfoForeground}"/>
+    </Style>
+    <Style Selector="Border.errorCard.info PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AppInfoForeground}"/>
+    </Style>
+
+    <!-- ================= 输入区（composer） ================= -->
+    <Style Selector="Border.composerCard">
+        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="Padding" Value="12,10,12,8"/>
+    </Style>
+    <Style Selector="TextBox.composerInput">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0,4"/>
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="LineHeight" Value="20"/>
+    </Style>
+    <!-- composer 下划线：常驻透明，悬停中性、聚焦 accent（对齐 MegaQueryUnderline） -->
+    <Style Selector="Border.composerUnderline">
+        <Setter Property="Height" Value="2"/>
+        <Setter Property="CornerRadius" Value="1"/>
+        <Setter Property="Opacity" Value="0"/>
+        <Setter Property="Background" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <DoubleTransition Property="Opacity" Duration="0:0:0.12"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.composerCard:pointerover Border.composerUnderline">
+        <Setter Property="Opacity" Value="1"/>
+        <Setter Property="Background" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+    </Style>
+    <!-- focus-within 声明在 pointerover 之后：两者同现时聚焦态（accent）胜出 -->
+    <Style Selector="Border.composerCard:focus-within Border.composerUnderline">
+        <Setter Property="Opacity" Value="1"/>
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+    </Style>
+
+    <!-- 排队条：卡片内顶部 subtle 列表 -->
+    <Style Selector="Border.queueStrip">
+        <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+    <!-- 恢复草稿提示（subtle InfoBar） -->
+    <Style Selector="Border.restoreInfo">
+        <Setter Property="Background" Value="{DynamicResource AppInfoBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="Padding" Value="10,6"/>
+    </Style>
+
+    <!-- “回到最新”浮动 pill -->
+    <Style Selector="Button.backToLatest">
+        <Setter Property="CornerRadius" Value="16"/>
+        <Setter Property="Padding" Value="14,7"/>
+        <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Button.backToLatest:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+
+    <!-- 启动遮罩 -->
+    <Style Selector="Border.startupOverlay">
+        <Setter Property="Background" Value="{DynamicResource AppMicaPageBackground}"/>
+    </Style>
+
+    <!-- 内容页背景（Mica 激活时窗口层覆盖为透明） -->
+    <Style Selector="Border.pageHost">
+        <Setter Property="Background" Value="{DynamicResource AppMicaPageBackground}"/>
+    </Style>
+
+    <!-- ================= Fluent 控件几何补齐（对齐 UniGetUI Styles.Common） ================= -->
+
+    <!-- WinUI 选中面用圆角而非方形高亮 -->
+    <Style Selector="ListBoxItem">
+        <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+
+    <!-- ComboBox：下拉项内缩 4 使悬停填充不碰弹层圆角边框 -->
+    <Style Selector="ComboBox">
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="Margin" Value="4,0"/>
+        <Setter Property="Padding" Value="8,4,8,5"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="VerticalContentAlignment" Value="Center"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
+                     ComboBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ComboBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                     ComboBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+    </Style>
+
+    <!-- WinUI 菜单几何：项内缩、分隔线跨整宽 -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="0,4"/>
+    </Style>
+    <Style Selector="MenuFlyoutPresenter MenuItem">
+        <Setter Property="Margin" Value="4,0"/>
+        <Setter Property="Padding" Value="8,4,8,5"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+    <Style Selector="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="0,4"/>
+    </Style>
+    <Style Selector="ContextMenu MenuItem">
+        <Setter Property="Margin" Value="4,0"/>
+        <Setter Property="Padding" Value="8,4,8,5"/>
+        <Setter Property="MinHeight" Value="32"/>
+        <Setter Property="CornerRadius" Value="4"/>
+    </Style>
+
+    <!-- CheckBox / RadioButton / ToggleSwitch：选中态走 accent 三档 -->
+    <Style Selector="CheckBox:checked /template/ Border#NormalRectangle,
+                     CheckBox:indeterminate /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked:pointerover /template/ Border#NormalRectangle,
+                     CheckBox:indeterminate:pointerover /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked:pressed /template/ Border#NormalRectangle,
+                     CheckBox:indeterminate:pressed /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked:disabled /template/ Border#NormalRectangle,
+                     CheckBox:indeterminate:disabled /template/ Border#NormalRectangle">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked /template/ Path#CheckGlyph,
+                     CheckBox:indeterminate /template/ Path#CheckGlyph,
+                     CheckBox:checked:pointerover /template/ Path#CheckGlyph,
+                     CheckBox:indeterminate:pointerover /template/ Path#CheckGlyph">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked:pressed /template/ Path#CheckGlyph,
+                     CheckBox:indeterminate:pressed /template/ Path#CheckGlyph">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="CheckBox:checked:disabled /template/ Path#CheckGlyph,
+                     CheckBox:indeterminate:disabled /template/ Path#CheckGlyph">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorDisabledBrush}"/>
+    </Style>
+
+    <Style Selector="RadioButton:checked /template/ Ellipse#CheckOuterEllipse">
+        <Setter Property="Fill" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+        <Setter Property="Stroke" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+    </Style>
+    <Style Selector="RadioButton:checked:pointerover /template/ Ellipse#CheckOuterEllipse">
+        <Setter Property="Fill" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+        <Setter Property="Stroke" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="RadioButton:checked:pressed /template/ Ellipse#CheckOuterEllipse">
+        <Setter Property="Fill" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+        <Setter Property="Stroke" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+    </Style>
+    <Style Selector="RadioButton:checked:disabled /template/ Ellipse#CheckOuterEllipse">
+        <Setter Property="Fill" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+        <Setter Property="Stroke" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+    </Style>
+    <Style Selector="RadioButton:checked /template/ Ellipse#CheckGlyph,
+                     RadioButton:checked:pointerover /template/ Ellipse#CheckGlyph">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="RadioButton:checked:pressed /template/ Ellipse#CheckGlyph">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="RadioButton:checked:disabled /template/ Ellipse#CheckGlyph">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorDisabledBrush}"/>
+    </Style>
+
+    <Style Selector="ToggleSwitch:checked /template/ Border#SwitchKnobBounds">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+    </Style>
+    <Style Selector="ToggleSwitch:checked:pointerover /template/ Border#SwitchKnobBounds">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="ToggleSwitch:checked:pressed /template/ Border#SwitchKnobBounds">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+    </Style>
+    <Style Selector="ToggleSwitch:checked:disabled /template/ Border#SwitchKnobBounds">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+    </Style>
+    <Style Selector="ToggleSwitch:checked /template/ Ellipse#SwitchKnobOn,
+                     ToggleSwitch:checked:pointerover /template/ Ellipse#SwitchKnobOn">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}"/>
+    </Style>
+    <Style Selector="ToggleSwitch:checked:pressed /template/ Ellipse#SwitchKnobOn">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="ToggleSwitch:checked:disabled /template/ Ellipse#SwitchKnobOn">
+        <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorDisabledBrush}"/>
+    </Style>
+
+    <Style Selector="ProgressBar">
+        <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+    </Style>
+</Styles>

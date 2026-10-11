@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+<defs>
+<linearGradient id="paper" x1="0" y1="0" x2=".4" y2="1"><stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#EEF1F4"/></linearGradient>
+<radialGradient id="ground"><stop stop-color="#172A3B" stop-opacity=".075"/><stop offset="1" stop-color="#172A3B" stop-opacity="0"/></radialGradient>
+</defs><ellipse cx="161" cy="157" rx="88" ry="14" fill="url(#ground)"/><g transform="rotate(-8 134 90)">
+<rect x="91" y="49" width="88" height="75" rx="8" fill="#CDD4DC"/>
+<rect x="88" y="45" width="88" height="75" rx="8" fill="url(#paper)" stroke="#ABB6C1" stroke-width=".8"/>
+<path d="M103 63H144 M103 73H157 M103 83H144" stroke="#8593A1" stroke-opacity=".55" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M103 99H125" stroke="#387FA9" stroke-width="3" stroke-linecap="round"/>
+</g>
+<g transform="rotate(5 184 111)">
+<path d="M137 73H226Q234 73 234 81V137Q234 145 226 145H165L152 152V145H137Q129 145 129 137V81Q129 73 137 73Z" fill="#CDD4DC"/>
+<path d="M134 69H223Q231 69 231 77V133Q231 141 223 141H163L149 148V141H134Q126 141 126 133V77Q126 69 134 69Z" fill="url(#paper)" stroke="#ABB6C1" stroke-width=".8"/>
+<path d="M127 89H230" stroke="#ABB6C1" stroke-opacity=".5" stroke-width=".8"/>
+<circle cx="139" cy="80" r="2" fill="#387FA9"/><circle cx="147" cy="80" r="2" fill="#8593A1" opacity=".45"/>
+<path d="M143 104L153 112L143 120 M165 120H177" stroke="#387FA9" stroke-width="2.3" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M187 105H213 M187 115H205 M143 130H186" stroke="#8593A1" stroke-opacity=".5" stroke-width="2" stroke-linecap="round"/>
+</g>
+</svg>

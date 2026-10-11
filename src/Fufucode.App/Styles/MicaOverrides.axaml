@@ -1,0 +1,17 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Mica overrides, adapted from UniGetUI (MIT) Styles.WindowsMica.axaml.
+         Merged into the window resources ONLY when ActualTransparencyLevel == Mica,
+         so window/sidebar surfaces go translucent and let the Mica backdrop show.
+         On any fallback (incl. headless) the solid Fluent tokens stay in effect. -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <SolidColorBrush x:Key="AppMicaPageBackground"    Color="Transparent"/>
+            <SolidColorBrush x:Key="AppMicaSidebarBackground" Color="#66FFFFFF"/>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <SolidColorBrush x:Key="AppMicaPageBackground"    Color="Transparent"/>
+            <SolidColorBrush x:Key="AppMicaSidebarBackground" Color="#66262626"/>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

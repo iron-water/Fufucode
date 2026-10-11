@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Fufucode.App.ProjectTrustDialog"
+        Title="项目信任"
+        Width="580" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource AppDialogBackground}">
+  <!-- WinUI ContentDialog 观感：标题（盾图标）/ 正文（受保护资源卡片列表）/ 实色底条按钮区 -->
+  <Grid RowDefinitions="Auto,*,Auto">
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="24,20,24,4">
+      <PathIcon Data="{StaticResource Icon.ShieldCheckmark}" Width="20" Height="20"
+                VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
+      <TextBlock Classes="subtitle" FontSize="17" Text="是否信任此项目？"
+                 VerticalAlignment="Center" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Margin="24,4,24,12" Spacing="10">
+      <TextBlock x:Name="ProjectPathText" Classes="caption mono" TextWrapping="Wrap" />
+
+      <TextBlock Text="检测到以下受保护的项目资源：" Classes="body secondary" />
+      <Border Classes="innerWell" Padding="4">
+        <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+          <ItemsControl x:Name="ResourceList">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="{x:Type x:String}">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,4">
+                  <PathIcon Data="{StaticResource Icon.Document}" Width="14" Height="14"
+                            VerticalAlignment="Center"
+                            Foreground="{DynamicResource AppTextDim}"/>
+                  <TextBlock Text="{Binding}" Classes="caption" VerticalAlignment="Center"/>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </ScrollViewer>
+      </Border>
+
+      <TextBlock Classes="body secondary" TextWrapping="Wrap"
+                 Text="选择「信任」后，Pi 会加载该项目的设置、技能（skills）、提示词（prompts）等同类资源；项目配置也可能请求安装包。项目扩展仍需在插件管理中单独启用。" />
+      <TextBlock Classes="body secondary" TextWrapping="Wrap"
+                 Text="信任不代替逐次工具审批；审批是否可用以状态栏审批指示为准。该决定只保存在本应用中，之后可以更改，并在下一次会话启动时生效。" />
+    </StackPanel>
+
+    <Border Grid.Row="2" Background="{DynamicResource AppDialogFooterBackground}"
+            BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0"
+            Padding="20,12">
+      <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+        <Button Content="不信任此项目" Click="OnDoNotTrust"
+                Padding="14,7" CornerRadius="{StaticResource ControlCornerRadius}"
+                MinWidth="96" HorizontalContentAlignment="Center" />
+        <Button Content="信任此项目" Click="OnTrust" Classes="accent"
+                Padding="14,7" CornerRadius="{StaticResource ControlCornerRadius}"
+                MinWidth="96" HorizontalContentAlignment="Center" />
+      </StackPanel>
+    </Border>
+  </Grid>
+</Window>

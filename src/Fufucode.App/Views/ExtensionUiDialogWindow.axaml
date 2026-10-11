@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Fufucode.App.ExtensionUiDialogWindow"
+        Title="Fufucode 审批"
+        Width="560" MinHeight="180" SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Topmost="True"
+        Background="{DynamicResource AppDialogBackground}">
+  <!-- 非模态弹窗：审批期间主窗口时间线保持可滚动（计划 §11 A02）。
+       内容由代码后置按 method（confirm/select/input/editor）装配，不使用数据绑定。
+       WinUI ContentDialog 观感：标题 / 正文 / 实色底条按钮区。 -->
+  <Grid RowDefinitions="Auto,*,Auto">
+    <TextBlock x:Name="DialogTitle" Classes="subtitle" FontSize="17"
+               TextWrapping="Wrap" Margin="24,18,24,6" />
+
+    <ScrollViewer Grid.Row="1" MaxHeight="340" VerticalScrollBarVisibility="Auto">
+      <StackPanel x:Name="DialogBody" Spacing="8" Margin="24,0,24,12" />
+    </ScrollViewer>
+
+    <Border Grid.Row="2" Background="{DynamicResource AppDialogFooterBackground}"
+            BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0"
+            Padding="20,12">
+      <StackPanel x:Name="DialogButtons" Orientation="Horizontal" Spacing="10"
+                  HorizontalAlignment="Right" />
+    </Border>
+  </Grid>
+</Window>

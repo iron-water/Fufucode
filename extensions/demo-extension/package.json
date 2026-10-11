@@ -1,0 +1,12 @@
+{
+  "name": "@fufucode/demo-extension",
+  "version": "0.1.0",
+  "description": "M5 demo extension: custom gated tool + full ctx.ui surface for interaction-face inventory.",
+  "private": true,
+  "type": "module",
+  "pi": {
+    "extensions": [
+      "index.ts"
+    ]
+  }
+}

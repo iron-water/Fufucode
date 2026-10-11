@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="200" viewBox="0 0 320 200">
+<defs>
+<linearGradient id="paper" x1="0" y1="0" x2=".4" y2="1"><stop stop-color="#505A66"/><stop offset="1" stop-color="#39434F"/></linearGradient>
+<radialGradient id="ground"><stop stop-color="#000000" stop-opacity=".23"/><stop offset="1" stop-color="#000000" stop-opacity="0"/></radialGradient>
+</defs><ellipse cx="161" cy="157" rx="88" ry="14" fill="url(#ground)"/><path d="M88 132L164 156L245 121L169 98Z" fill="#29313B" opacity=".45"/>
+<path d="M88 127L164 151L245 116L169 93Z" fill="url(#paper)" stroke="#697785" stroke-width=".6"/>
+<path d="M108 78L145 90V133L108 121Z" fill="#39434F"/>
+<path d="M145 90L171 76V119L145 133Z" fill="#29313B"/>
+<path d="M108 78L134 64L171 76L145 90Z" fill="#505A66"/>
+<path d="M108 78L145 90L171 76 M145 90V133" stroke="#697785" stroke-width=".8" fill="none"/>
+<path d="M118 103L135 109 M126.5 98V114" stroke="#7DADC6" stroke-width="2" stroke-linecap="round"/>
+<path d="M181 62L211 72V105L181 95Z" fill="#456C82"/>
+<path d="M211 72L231 61V94L211 105Z" fill="#7DADC6" opacity=".85"/>
+<path d="M181 62L201 51L231 61L211 72Z" fill="#456C82"/>
+<path d="M181 62L211 72L231 61 M211 72V105" stroke="#7DADC6" stroke-opacity=".6" stroke-width=".8" fill="none"/>
+<path d="M164 107L190 116V140L164 131Z" fill="#39434F"/>
+<path d="M190 116L208 106V130L190 140Z" fill="#29313B"/>
+<path d="M164 107L182 97L208 106L190 116Z" fill="#505A66"/>
+<path d="M164 107L190 116L208 106 M190 116V140" stroke="#697785" stroke-width=".7" fill="none"/>
+<path d="M159 68L171 64 M173 50V43" stroke="#9CAAB7" stroke-opacity=".5" stroke-linecap="round" stroke-width="1.4"/>
+</svg>
