@@ -31,6 +31,7 @@ public sealed partial class ToolGroupViewModel : ObservableObject
 {
     private readonly List<ToolCallBlockViewModel> _tools = new();
     private bool _isExpanded;
+    private bool _isDetached;
     private ToolGroupState _state = ToolGroupState.Running;
     private string _summaryText = string.Empty;
     private string? _latestHint;
@@ -105,18 +106,20 @@ public sealed partial class ToolGroupViewModel : ObservableObject
     {
         _tools.Add(tool);
         Tools.Add(tool);
-        tool.PropertyChanged += OnToolChanged;
+        if (!_isDetached) tool.PropertyChanged += OnToolChanged;
         Recompute();
     }
 
-    /// <summary>移除订阅，避免组被丢弃后仍收到子工具通知。</summary>
+    /// <summary>移除订阅，避免组被丢弃后仍收到子工具通知。解除后不再重新订阅。</summary>
     public void Detach()
     {
+        _isDetached = true;
         foreach (var tool in _tools) tool.PropertyChanged -= OnToolChanged;
     }
 
     private void OnToolChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (_isDetached) return;
         if (e.PropertyName is nameof(ToolCallBlockViewModel.Status)
             or nameof(ToolCallBlockViewModel.StatusText)
             or nameof(ToolCallBlockViewModel.Output)
