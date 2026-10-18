@@ -21,6 +21,7 @@ public sealed class PluginPackageManager : IAsyncDisposable
     private readonly PluginDependencyStore _dependencyStore;
     private readonly Func<Type, object?>? _serviceResolver;
     private readonly Dictionary<string, (IPluginPackage Package, IPluginToolHandler? Handler, PluginPackageContext Context)> _activePlugins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PluginPageContribution> _pageContributions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AssemblyLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);
     private readonly object _gate = new();
     private bool _changing;
@@ -39,6 +40,15 @@ public sealed class PluginPackageManager : IAsyncDisposable
     public PluginDependencyStore DependencyStore => _dependencyStore;
     public IReadOnlyDictionary<string, string> LoadErrors => _loadErrors;
     private readonly Dictionary<string, string> _loadErrors = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>当前活动插件贡献的工作区页面；宿主据此动态注册/移除页面，不在应用里静态写死。</summary>
+    public IReadOnlyDictionary<string, PluginPageContribution> PageContributions
+    {
+        get { lock (_gate) return new Dictionary<string, PluginPageContribution>(_pageContributions, StringComparer.OrdinalIgnoreCase); }
+    }
+
+    /// <summary>页面贡献集合发生变化（插件激活/停用/更新）。事件可能在非 UI 线程触发。</summary>
+    public event Action? PageContributionsChanged;
 
     public static void RegisterPackageFactory(string pluginId, Func<IPluginPackage> factory)
     {
@@ -273,13 +283,16 @@ public sealed class PluginPackageManager : IAsyncDisposable
         if (loadContext is PackageLoadContext packageContext) packageContext.Directory = directory;
         var context = new PluginPackageContext(id, directory, projectPath, _serviceResolver);
         IPluginToolHandler? handler = null;
+        PluginPageContribution? page = null;
         try
         {
             package.InitializeAsync(context).GetAwaiter().GetResult();
             handler = package.CreateToolHandler(context);
             if (handler is not null) _toolRegistry.Register(handler);
+            page = package.CreatePageContribution(context);
             _activePlugins.Add(id, (package, handler, context));
             if (loadContext is not null) _loadContexts[id] = loadContext;
+            if (page is not null) _pageContributions[id] = page;
         }
         catch (Exception error)
         {
@@ -289,6 +302,7 @@ public sealed class PluginPackageManager : IAsyncDisposable
             finally { loadContext?.Unload(); }
             throw;
         }
+        if (page is not null) PageContributionsChanged?.Invoke();
     }
     private void DeactivatePluginLocked(string id)
     {
@@ -297,7 +311,9 @@ public sealed class PluginPackageManager : IAsyncDisposable
         // Preserve the entry when shutdown fails so a later stop can retry.
         entry.Package.ShutdownAsync().GetAwaiter().GetResult();
         _activePlugins.Remove(id);
+        var hadPage = _pageContributions.Remove(id);
         if (_loadContexts.Remove(id, out var context)) context.Unload();
+        if (hadPage) PageContributionsChanged?.Invoke();
     }
     private (IPluginPackage Package, AssemblyLoadContext? Context) ResolvePackage(string id, string directory)
     {

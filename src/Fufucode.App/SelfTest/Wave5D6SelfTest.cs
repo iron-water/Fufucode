@@ -80,8 +80,7 @@ public static class Wave5D6SelfTest
             Save(window, directory, "02-narrow-1024-drawer.png");
 
             // ③ 抽屉 + 底栏展开：内容带被两头压缩后的最紧态。
-            window.OpenDockPage("terminal", DockZone.Bottom);
-            window.TerminalForTesting.CreateTerminal();
+            window.OpenDockPage("usage", DockZone.Bottom);
             await Task.Delay(220);
             window.UpdateLayout();
             var tightHeader = chat.Bounds.Top + chat.HeaderBandHeight;

@@ -29,6 +29,18 @@ internal sealed class WorkbenchPageRegistry : IDisposable
     public void RegisterOptional(string id, string title, string icon, string moduleId,
         Func<Control> create, Action<Control> release) => Register(id, title, icon, moduleId, true, create, release);
 
+    /// <summary>注册插件贡献的页面；内容已由插件创建，停用时由插件负责释放。</summary>
+    public void RegisterPlugin(string id, string title, string icon, string moduleId, Control content, Action<Control>? release) =>
+        Register(id, title, icon, moduleId, true, () => content, release);
+
+    /// <summary>移除插件页面（插件停用/卸载）。停靠布局由调用方清理。</summary>
+    public void Unregister(string id)
+    {
+        if (!_registrations.Remove(id, out var item)) return;
+        if (item.Page is { } page) item.Release?.Invoke(page.Content);
+        item.Page = null;
+    }
+
     private void Register(string id, string title, string icon, string moduleId, bool optional,
         Func<Control> create, Action<Control>? release)
     {

@@ -1,0 +1,91 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Fufucode.Plugins.Terminal.ViewModels"
+             xmlns:views="using:Fufucode.Plugins.Terminal.Views"
+             x:Class="Fufucode.Plugins.Terminal.Views.TerminalDockView"
+             x:DataType="vm:TerminalDockViewModel">
+    <UserControl.Styles>
+        <Style Selector="ListBox.terminalTabs"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/></Style>
+        <Style Selector="ListBox.terminalTabs ListBoxItem"><Setter Property="Padding" Value="10,5"/><Setter Property="Margin" Value="0,0,2,0"/><Setter Property="MinHeight" Value="30"/><Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/></Style>
+        <!-- 终端页签与停靠页签同一观感：选中＝次级底 + 主文字，不铺强调色 -->
+        <Style Selector="ListBox.terminalTabs ListBoxItem:selected /template/ ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+        </Style>
+        <Style Selector="ListBox.terminalTabs ListBoxItem:selected:pointerover /template/ ContentPresenter">
+          <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+        </Style>
+        <Style Selector="ListBox.terminalTabs ListBoxItem:selected TextBlock">
+          <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        </Style>
+        <!-- 输出查找条：与停靠区其它次级表面一致，沿用现有资源，不新增主题键 -->
+        <Style Selector="Border.terminalFindBar">
+          <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+          <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+          <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        </Style>
+        <!-- 输入法组合预览：与命令条同底，组合中才出现的临时徽标，不改变命令框布局 -->
+        <Style Selector="Border.terminalComposition">
+          <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+          <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+          <Setter Property="BorderThickness" Value="1"/>
+          <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+          <Setter Property="Padding" Value="6,2"/>
+          <Setter Property="Margin" Value="0,0,6,0"/>
+        </Style>
+    </UserControl.Styles>
+    <Border Background="{DynamicResource AppDockBackground}">
+        <Grid RowDefinitions="40,Auto,*,36">
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6,0">
+                <ListBox Grid.Column="0" x:Name="TerminalTabs" Classes="terminalTabs" FontSize="13" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                    <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:TerminalTabViewModel">
+                            <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{DynamicResource Icon.Terminal}" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/><TextBlock Text="{Binding Title}" VerticalAlignment="Center"/><TextBlock Text="{Binding StatusText}" Classes="meta" VerticalAlignment="Center"/></StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+                    <Button x:Name="CopyOutputButton" Classes="iconButton toolButton" Click="CopyOutput_Click" IsEnabled="{Binding HasOutputSelection}" ToolTip.Tip="复制选中的输出（Ctrl+Shift+C）" AutomationProperties.Name="复制选中输出"><PathIcon Data="{DynamicResource Icon.Copy}" Width="15" Height="15"/></Button>
+                    <Button x:Name="FindButton" Classes="iconButton toolButton" Click="ToggleFind_Click" ToolTip.Tip="查找输出（Ctrl+F）" AutomationProperties.Name="查找输出"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
+                    <Button x:Name="ReturnToBottomButton" Classes="iconButton toolButton" Click="ReturnToBottom_Click" ToolTip.Tip="回到最新输出并恢复跟随" AutomationProperties.Name="返回底部"><PathIcon Data="{DynamicResource Icon.ArrowDownload}" Width="15" Height="15"/></Button>
+                    <Button Classes="iconButton toolButton" Command="{Binding CreateTerminalCommand}" ToolTip.Tip="新建终端" AutomationProperties.Name="新建终端"><PathIcon Data="{DynamicResource Icon.Add}" Width="16" Height="16"/></Button>
+                    <Button Classes="iconButton toolButton" Click="CloseTerminal_Click" IsEnabled="{Binding HasTabs}" ToolTip.Tip="终止当前终端进程并关闭（隐藏底区不会终止进程）" AutomationProperties.Name="关闭终端"><PathIcon Data="{DynamicResource Icon.RecordStop}" Width="16" Height="16"/></Button>
+                </StackPanel>
+            </Grid>
+            <Border Grid.Row="1" x:Name="FindBar" Classes="terminalFindBar" IsVisible="{Binding SelectedTab.IsSearchOpen}">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="6,4">
+                    <TextBox Grid.Column="0" x:Name="FindBox" Classes="flatInput" Text="{Binding SelectedTab.SearchQuery, Mode=TwoWay}" PlaceholderText="查找输出" FontSize="12" MinHeight="26" Padding="6,3" VerticalAlignment="Center" AutomationProperties.Name="查找输出文本"/>
+                    <Button Grid.Column="1" x:Name="FindCaseButton" Classes="iconButton toolButton" Click="ToggleFindCase_Click" ToolTip.Tip="区分大小写" AutomationProperties.Name="区分大小写"><TextBlock Text="Aa" FontSize="11" VerticalAlignment="Center"/></Button>
+                    <TextBlock Grid.Column="2" x:Name="FindStatus" Classes="meta" Text="{Binding SelectedTab.SearchStatus}" VerticalAlignment="Center" Margin="6,0" MinWidth="34" TextAlignment="Center"/>
+                    <Button Grid.Column="3" x:Name="FindPreviousButton" Classes="iconButton toolButton" Click="FindPrevious_Click" ToolTip.Tip="上一个匹配" AutomationProperties.Name="上一个匹配"><PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="14" Height="14"/></Button>
+                    <Button Grid.Column="4" x:Name="FindNextButton" Classes="iconButton toolButton" Click="FindNext_Click" ToolTip.Tip="下一个匹配" AutomationProperties.Name="下一个匹配"><PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="14" Height="14"/></Button>
+                    <Button Grid.Column="5" x:Name="CloseFindButton" Classes="iconButton toolButton" Click="CloseFind_Click" ToolTip.Tip="关闭查找并返回输出" AutomationProperties.Name="关闭查找"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="14" Height="14"/></Button>
+                </Grid>
+            </Border>
+            <ScrollViewer Grid.Row="2" x:Name="OutputScroller" Classes="terminalSurface" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <views:TerminalScreenControl x:Name="TerminalSurface" Session="{Binding SelectedTab}">
+                    <views:TerminalScreenControl.ContextMenu>
+                        <ContextMenu x:Name="TerminalContextMenu">
+                            <MenuItem x:Name="ContextCopyItem" Header="复制" Click="ContextCopy_Click"/>
+                            <MenuItem x:Name="ContextPasteItem" Header="粘贴" Click="ContextPaste_Click"/>
+                            <Separator/>
+                            <MenuItem x:Name="ContextClearItem" Header="清屏" Click="ContextClear_Click"/>
+                        </ContextMenu>
+                    </views:TerminalScreenControl.ContextMenu>
+                </views:TerminalScreenControl>
+            </ScrollViewer>
+            <ThemeVariantScope Grid.Row="3" RequestedThemeVariant="Dark">
+                <Grid ColumnDefinitions="*,Auto,Auto" Classes="terminalSurface" Margin="0">
+                    <Grid Grid.Column="0">
+                        <TextBox x:Name="TerminalInput" Classes="flatInput" Text="{Binding SelectedTab.InputText}" IsEnabled="{Binding SelectedTab.IsRunning}" PlaceholderText="命令（↑↓ 浏览历史）" FontFamily="{StaticResource AppMonoFont}" FontSize="13" Foreground="{DynamicResource AppTerminalForeground}" Background="Transparent" BorderThickness="0" Margin="6,0" Padding="4,6"/>
+                        <Border x:Name="CompositionPreview" Classes="terminalComposition" IsVisible="False" IsHitTestVisible="False" HorizontalAlignment="Right" VerticalAlignment="Center" AutomationProperties.Name="输入法组合预览">
+                            <TextBlock x:Name="CompositionPreviewText" Classes="meta" FontSize="12" Text="" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center"/>
+                        </Border>
+                    </Grid>
+                    <Button Grid.Column="1" Classes="subtle" Content="运行" Command="{Binding SelectedTab.SendInputCommand}" IsEnabled="{Binding SelectedTab.IsRunning}" FontSize="12" Padding="10,4" Margin="0,2" ToolTip.Tip="把命令草稿写入当前终端（Enter 同义）" AutomationProperties.Name="运行命令"/>
+                    <Button Grid.Column="2" Content="中断" Command="{Binding SelectedTab.InterruptCommand}" IsEnabled="{Binding SelectedTab.IsRunning}" ToolTip.Tip="中断当前 shell 命令" Classes="subtle" FontSize="12" Padding="8,4" Margin="2,2,8,2" AutomationProperties.Name="中断命令"/>
+                </Grid>
+            </ThemeVariantScope>
+        </Grid>
+    </Border>
+</UserControl>
