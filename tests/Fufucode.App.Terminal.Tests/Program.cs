@@ -674,11 +674,21 @@ internal static class Program
         var previousRoot = Fufucode.App.Program.SelfTestDataRoot;
         try
         {
-            var pluginSource = System.IO.Path.GetDirectoryName(typeof(Fufucode.Plugins.Terminal.TerminalPluginPackage).Assembly.Location)!;
+            var configured = Environment.GetEnvironmentVariable("FUFUCODE_TERMINAL_PLUGIN_DIR");
             var target = System.IO.Path.Combine(root, "plugins", "workspace.terminal");
             System.IO.Directory.CreateDirectory(target);
-            foreach (var file in new[] { "Fufucode.Plugins.Terminal.dll", "manifest.json" })
-                System.IO.File.Copy(System.IO.Path.Combine(pluginSource, file), System.IO.Path.Combine(target, file), true);
+            if (!string.IsNullOrWhiteSpace(configured) && System.IO.Directory.Exists(configured))
+            {
+                // Verify a real (lean, published) plugin payload loaded by the host.
+                foreach (var file in System.IO.Directory.GetFiles(configured))
+                    System.IO.File.Copy(file, System.IO.Path.Combine(target, System.IO.Path.GetFileName(file)), true);
+            }
+            else
+            {
+                var pluginSource = System.IO.Path.GetDirectoryName(typeof(Fufucode.Plugins.Terminal.TerminalPluginPackage).Assembly.Location)!;
+                foreach (var file in new[] { "Fufucode.Plugins.Terminal.dll", "manifest.json" })
+                    System.IO.File.Copy(System.IO.Path.Combine(pluginSource, file), System.IO.Path.Combine(target, file), true);
+            }
             var layout = new Fufucode.Core.AppDataLayout(root);
             new Fufucode.Core.Plugins.PluginStateStore(layout).Install("workspace.terminal");
             Fufucode.App.Program.SelfTestDataRoot = root;
