@@ -816,9 +816,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             return new PureToolResult(call.Id, false, $"进程启动失败：{ex.Message}");
         }
 
-        // 读取有上限：超出后继续排空管道（防止子进程因管道写满而卡死），但不再累计。
-        var stdoutTask = ReadBoundedAsync(process.StandardOutput, 512 * 1024, linkedCts.Token);
-        var stderrTask = ReadBoundedAsync(process.StandardError, 256 * 1024, linkedCts.Token);
+        // 有界读取：只保留头部 32KB 与尾部 32KB，中间内容边读边丢弃（仍需排空管道，防止子进程因管道写满而卡死）。
+        var stdoutTask = ReadHeadTailAsync(process.StandardOutput, CommandOutputHeadChars, CommandOutputTailChars, linkedCts.Token);
+        var stderrTask = ReadHeadTailAsync(process.StandardError, CommandOutputHeadChars, CommandOutputTailChars, linkedCts.Token);
 
         var timedOut = false;
         try
@@ -836,82 +836,195 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         if (ct.IsCancellationRequested) throw new OperationCanceledException(ct);
 
-        var (stdout, stdoutTruncated) = await SafeReadAsync(stdoutTask).ConfigureAwait(false);
-        var (stderr, stderrTruncated) = await SafeReadAsync(stderrTask).ConfigureAwait(false);
+        var stdout = await SafeReadAsync(stdoutTask).ConfigureAwait(false);
+        var stderr = await SafeReadAsync(stderrTask).ConfigureAwait(false);
 
         if (timedOut)
         {
-            var partial = BuildCommandOutput(-1, stdout, stderr, stdoutTruncated, stderrTruncated);
+            var partial = BuildCommandOutput(-1, stdout, stderr);
             return new PureToolResult(call.Id, false,
                 $"命令执行超时（超过 {timeoutSeconds} 秒）已被强行终止。\n" + partial);
         }
 
-        var output = BuildCommandOutput(process.ExitCode, stdout, stderr, stdoutTruncated, stderrTruncated);
+        var output = BuildCommandOutput(process.ExitCode, stdout, stderr);
         return new PureToolResult(call.Id, process.ExitCode == 0, output);
     }
 
-    private static async Task<(string Text, bool Truncated)> ReadBoundedAsync(StreamReader reader, int limit,
+    private const int CommandOutputHeadChars = 32 * 1024;
+    private const int CommandOutputTailChars = 32 * 1024;
+
+    private readonly record struct CapturedOutput(string Head, string Tail, bool Dropped, long TotalChars);
+
+    /// <summary>
+    /// 读取命令输出：头部累积到 headLimit；其后内容进入尾部环形缓冲（tailLimit），溢出时丢弃最旧的尾部字符。
+    /// 只统计总长度，不保留中间内容，内存上限约 headLimit + tailLimit。
+    /// </summary>
+    private static async Task<CapturedOutput> ReadHeadTailAsync(StreamReader reader, int headLimit, int tailLimit,
         CancellationToken ct)
     {
-        var sb = new StringBuilder();
+        var head = new StringBuilder(capacity: Math.Min(headLimit, 8192));
+        var tail = new CircularCharBuffer(tailLimit);
         var buffer = new char[8192];
-        var truncated = false;
+        long total = 0;
         try
         {
             while (true)
             {
                 var read = await reader.ReadAsync(buffer.AsMemory(), ct).ConfigureAwait(false);
                 if (read == 0) break;
-                if (sb.Length + read <= limit) sb.Append(buffer, 0, read);
-                else truncated = true; // 继续排空但丢弃，避免管道阻塞
+                total += read;
+                var toHead = Math.Min(read, headLimit - head.Length);
+                if (toHead > 0) head.Append(buffer, 0, toHead);
+                if (toHead < read) tail.Append(buffer.AsSpan(toHead, read - toHead));
             }
         }
         catch (OperationCanceledException) { }
         catch (IOException) { }
-        return (sb.ToString(), truncated);
+        return new CapturedOutput(head.ToString(), tail.ToString(), total > (long)headLimit + tailLimit, total);
     }
 
-    private static async Task<(string Text, bool Truncated)> SafeReadAsync(Task<(string, bool)> task)
+    private static async Task<CapturedOutput> SafeReadAsync(Task<CapturedOutput> task)
     {
         try { return await task.ConfigureAwait(false); }
-        catch { return (string.Empty, false); }
+        catch { return new CapturedOutput(string.Empty, string.Empty, false, 0); }
     }
 
-    private static string BuildCommandOutput(int exitCode, string stdout, string stderr, bool outTruncated,
-        bool errTruncated)
+    private static string BuildCommandOutput(int exitCode, CapturedOutput stdout, CapturedOutput stderr)
     {
-        var outText = TruncateOutput(stdout, 30 * 1024);
-        var errText = TruncateOutput(stderr, 10 * 1024);
-        if (outTruncated) outText += "\n[标准输出超过 512KB，后续内容已丢弃]";
-        if (errTruncated) errText += "\n[标准错误超过 256KB，后续内容已丢弃]";
+        var outText = FormatCapturedOutput(stdout, 30 * 1024);
+        var errText = FormatCapturedOutput(stderr, 10 * 1024);
+        if (stdout.Dropped) outText += "\n[标准输出超过 64KB，中间内容已丢弃]";
+        if (stderr.Dropped) errText += "\n[标准错误超过 64KB，中间内容已丢弃]";
         var code = exitCode < 0 ? "aborted" : exitCode.ToString();
         return $"ExitCode: {code}\nSTDOUT:\n{outText}\nSTDERR:\n{errText}".Trim();
+    }
+
+    /// <summary>把“头部 + 尾部”的有界快照格式化成与 <see cref="TruncateOutput"/> 相同形状的显示文本。</summary>
+    private static string FormatCapturedOutput(CapturedOutput captured, int maxChars)
+    {
+        // 未超出 head+tail 容量时，两段拼起来就是完整输出。
+        if (captured.TotalChars <= captured.Head.Length + captured.Tail.Length)
+            return TruncateOutput(captured.Head + captured.Tail, maxChars);
+
+        var head = new StringBuilder();
+        var used = 0;
+        foreach (var line in captured.Head.Split('\n').Take(50))
+        {
+            if (used + line.Length + 1 > maxChars * 2 / 3) break;
+            head.Append(line).Append('\n');
+            used += line.Length + 1;
+        }
+
+        var tail = new StringBuilder();
+        used = 0;
+        foreach (var line in captured.Tail.Split('\n').TakeLast(100).Reverse())
+        {
+            if (used + line.Length + 1 > maxChars / 3) break;
+            tail.Insert(0, line + "\n");
+            used += line.Length + 1;
+        }
+
+        // 中部是否还删过环形缓冲之外的字符，无法得知行数；用字符数给出折叠量。
+        var omitted = captured.TotalChars - captured.Head.Length - captured.Tail.Length;
+        return head + $"\n... [中间内容已折叠截断（总输出 {captured.TotalChars} 字符，折叠 {omitted} 字符）] ...\n\n" + tail;
     }
 
     private static string TruncateOutput(string text, int maxChars)
     {
         if (string.IsNullOrEmpty(text) || text.Length <= maxChars) return text;
 
-        var lines = text.Split('\n');
-        if (lines.Length <= 150)
+        // 不切分整串：逐行扫描，先收集头部，再从末尾反向收集尾部。
+        var head = new StringBuilder();
+        var used = 0;
+        var lineCount = 0;
+        var headDone = false;
+        var pos = 0;
+        // 与旧实现一致：只考虑前 50 行（含空行），超出字符预算即停止。
+        while (pos <= text.Length)
+        {
+            var newline = text.IndexOf('\n', pos);
+            var end = newline < 0 ? text.Length : newline;
+            lineCount++;
+            var lineLength = end - pos;
+            if (!headDone)
+            {
+                if (lineCount > 50 || used + lineLength + 1 > maxChars * 2 / 3) headDone = true;
+                else
+                {
+                    head.Append(text, pos, lineLength).Append('\n');
+                    used += lineLength + 1;
+                }
+            }
+            if (newline < 0) break;
+            pos = newline + 1;
+        }
+
+        if (lineCount <= 150)
             return text[..SafeSliceLength(text, maxChars)] + $"\n... [已截断，总长度 {text.Length} 字符] ...";
 
-        var head = new StringBuilder();
-        foreach (var line in lines.Take(50))
-        {
-            if (head.Length + line.Length + 1 > maxChars * 2 / 3) break;
-            head.Append(line).Append('\n');
-        }
-
         var tail = new StringBuilder();
-        foreach (var line in lines.TakeLast(100).Reverse())
+        used = 0;
+        // 与旧实现（Split('\n') 后 TakeLast(100)）一致：以换行结尾时末尾空行也算一行。
+        // 从最后一行向前逐行扫描（不切分整串），先限定最后至多 100 行，再按字符预算保留。
+        var lineStart = text.Length;
+        if (lineStart > 0 && text[^1] != '\n')
         {
-            if (tail.Length + line.Length + 1 > maxChars / 3) break;
-            tail.Insert(0, line + "\n");
+            var lastNewline = text.LastIndexOf('\n');
+            lineStart = lastNewline < 0 ? 0 : lastNewline + 1;
+        }
+        var lineEnd = text.Length;
+        for (var examined = 0; examined < 100; examined++)
+        {
+            var lineLength = lineEnd - lineStart;
+            if (used + lineLength + 1 > maxChars / 3) break;
+            tail.Insert(0, '\n');
+            tail.Insert(0, text.AsSpan(lineStart, lineLength));
+            used += lineLength + 1;
+            if (lineStart == 0) break;
+            var newline = lineStart - 1;
+            lineEnd = newline;
+            lineStart = newline == 0 ? 0 : text.LastIndexOf('\n', newline - 1) + 1;
         }
 
-        var omitted = lines.Length - 150;
+        var omitted = lineCount - 150;
         return head + $"\n... [中间 {omitted} 行已折叠截断（总输出 {text.Length} 字符）] ...\n\n" + tail;
+    }
+
+    /// <summary>固定容量字符环形缓冲：追加 O(1)，溢出时丢弃最旧字符，只保留最近 tailLimit 个字符。</summary>
+    private sealed class CircularCharBuffer(int capacity)
+    {
+        private readonly char[] _buffer = new char[capacity];
+        private int _start;
+        private int _count;
+
+        public void Append(ReadOnlySpan<char> source)
+        {
+            while (!source.IsEmpty)
+            {
+                // 保留最近 capacity 个字符：先丢弃放不下的最旧字符，再写入。
+                var overflow = _count + source.Length - capacity;
+                var drop = overflow > 0 ? Math.Min(overflow, _count) : 0;
+                _start = (_start + drop) % capacity;
+                _count -= drop;
+
+                var take = Math.Min(source.Length, capacity - _count);
+                var write = (_start + _count) % capacity;
+                var first = Math.Min(take, capacity - write);
+                source[..first].CopyTo(_buffer.AsSpan(write, first));
+                if (take > first) source.Slice(first, take - first).CopyTo(_buffer);
+                _count += take;
+                source = source[take..];
+            }
+        }
+
+        public override string ToString()
+        {
+            if (_count == 0) return string.Empty;
+            var first = Math.Min(_count, capacity - _start);
+            return first == _count
+                ? new string(_buffer, _start, _count)
+                : string.Concat(_buffer.AsSpan(_start, first), _buffer.AsSpan(0, _count - first));
+        }
     }
 
     private static int SafeSliceLength(string text, int length)
