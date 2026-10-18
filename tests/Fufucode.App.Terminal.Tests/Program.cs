@@ -43,6 +43,7 @@ internal static class Program
             RunClipboardChecks();
             RunHistoryChecks();
             RunCompositionChecks();
+            RunVtP0Checks();
             Console.WriteLine($"\n全部通过：{_passed} 项断言");
             return 0;
         }
@@ -316,6 +317,118 @@ internal static class Program
             "terminal-ime-preview-clears");
     }
 
+    // ---------- 5. P0：备用屏、DSR/DA 应答、滚动区域与行/字符编辑 ----------
+    private static void RunVtP0Checks()
+    {
+        // DSR/DA: prompt frameworks and full-screen apps wait for these replies.
+        var replies = new TerminalBuffer(20, 6);
+        replies.Append("abc\u001b[2;3H\u001b[6n");
+        Check(replies.TakePendingResponse() == "\u001b[2;3R", "terminal-dsr-cursor-position-reply");
+        replies.Append("\u001b[c");
+        Check(replies.TakePendingResponse() == "\u001b[?1;2c", "terminal-da-primary-reply");
+        replies.Append("\u001b[>c");
+        Check(replies.TakePendingResponse() == "\u001b[>0;276;0c", "terminal-da-secondary-reply");
+        Check(replies.TakePendingResponse().Length == 0, "terminal-replies-drain-once");
+
+        // The view model must answer a DSR query by writing the reply back to the shell.
+        var recording = new RecordingSession();
+        using (var tab = new TerminalTabViewModel(1, isMock: false, recording))
+        {
+            tab.Start(Environment.CurrentDirectory);
+            recording.Emit("\u001b[1;1H\u001b[6n");
+            Check(recording.Writes.Count > 0 && recording.Writes[^1] == "\u001b[1;1R",
+                "terminal-session-writes-dsr-reply");
+        }
+
+        // Alternate screen: full-screen apps get a clean screen, and leaving it restores the primary
+        // content and its scrollback unchanged.
+        var alt = new TerminalBuffer(20, 4);
+        alt.Append("primary-line\r\nsecond");
+        var primaryText = alt.PlainText;
+        var primaryLines = alt.Snapshot().Lines.Length;
+        alt.Append("\u001b[?1049h");
+        Check(alt.AlternateScreen && alt.PlainText.Length == 0, "terminal-alt-screen-starts-empty");
+        alt.Append("\u001b[1;1Hvim-screen\r\nrow2\r\nrow3\r\nrow4\r\nrow5");
+        Check(alt.PlainText.StartsWith("vim-screen", StringComparison.Ordinal), "terminal-alt-screen-renders");
+        alt.Append("\u001b[?1049l");
+        Check(!alt.AlternateScreen && alt.PlainText == primaryText && alt.Snapshot().Lines.Length == primaryLines,
+            "terminal-alt-screen-restores-primary");
+
+        // Scrolling inside an alternate screen must never enter the primary scrollback.
+        var isolation = new TerminalBuffer(12, 3);
+        for (var i = 0; i < 10; i++) isolation.Append($"p{i}\r\n");
+        var isolatedText = isolation.PlainText;
+        var isolatedLines = isolation.Snapshot().Lines.Length;
+        isolation.Append("\u001b[?1049h");
+        for (var i = 0; i < 20; i++) isolation.Append($"a{i}\r\n");
+        isolation.Append("\u001b[?1049l");
+        Check(isolation.PlainText == isolatedText && isolation.Snapshot().Lines.Length == isolatedLines,
+            "terminal-alt-screen-keeps-primary-scrollback");
+
+        // Scroll region (DECSTBM): a line feed at the region bottom scrolls only the region.
+        var region = new TerminalBuffer(12, 6);
+        region.Append("\u001b[1;1HrowA\u001b[2;1HrowB\u001b[3;1HrowC\u001b[4;1HrowD\u001b[5;1HrowE\u001b[6;1HrowF");
+        region.Append("\u001b[3;5r\u001b[5;1H\n");
+        var regionSnapshot = region.Snapshot();
+        Check(RowText(regionSnapshot, 0) == "rowA" && RowText(regionSnapshot, 1) == "rowB" && RowText(regionSnapshot, 5) == "rowF",
+            "terminal-scroll-region-leaves-outside-rows");
+        Check(RowText(regionSnapshot, 2) == "rowD" && RowText(regionSnapshot, 3) == "rowE" && RowText(regionSnapshot, 4).Length == 0
+            && regionSnapshot.Lines.Length == 6,
+            "terminal-scroll-region-scrolls-only-inside");
+
+        // IL/DL: insert and delete whole lines inside the active region.
+        var lines = new TerminalBuffer(10, 4);
+        lines.Append("a\r\nb\r\nc\r\nd");
+        lines.Append("\u001b[2;1H\u001b[L");
+        var inserted = lines.Snapshot();
+        Check(RowText(inserted, 0) == "a" && RowText(inserted, 1).Length == 0 && RowText(inserted, 2) == "b" && RowText(inserted, 3) == "c",
+            "terminal-insert-line");
+        lines.Append("\u001b[2;1H\u001b[M");
+        var deleted = lines.Snapshot();
+        Check(RowText(deleted, 0) == "a" && RowText(deleted, 1) == "b" && RowText(deleted, 2) == "c" && RowText(deleted, 3).Length == 0,
+            "terminal-delete-line");
+
+        // ICH/DCH/ECH: edit characters in place without touching the rest of the row.
+        var chars = new TerminalBuffer(10, 2);
+        chars.Append("abcdef");
+        chars.Append("\u001b[1;3H\u001b[2P");
+        Check(RowText(chars.Snapshot(), 0).StartsWith("abef", StringComparison.Ordinal), "terminal-delete-chars");
+        chars.Append("\u001b[1;3H\u001b[2@");
+        Check(RowText(chars.Snapshot(), 0).StartsWith("ab  ef", StringComparison.Ordinal), "terminal-insert-chars");
+        chars.Append("\u001b[1;4H\u001b[2X");
+        Check(RowText(chars.Snapshot(), 0).StartsWith("ab   f", StringComparison.Ordinal), "terminal-erase-chars");
+
+        // Deferred wrap (xterm semantics): the cursor stays on the last column until the next printable char.        var wrap = new TerminalBuffer(10, 3);
+        wrap.Append("abcdefghij");
+        var filled = wrap.Snapshot();
+        Check(filled.CursorLine == 0 && filled.CursorColumn == 9, "terminal-wrap-pending-cursor-stays-on-last-column");
+        wrap.Append("k");
+        var wrapped = wrap.Snapshot();
+        Check(RowText(wrapped, 0) == "abcdefghij" && RowText(wrapped, 1) == "k" && wrapped.CursorLine == 1,
+            "terminal-wrap-moves-on-next-printable");
+
+        // Resize keeps each line's text (cropping trailing blanks first) and the scrollback stays usable.
+        var shrinking = new TerminalBuffer(20, 4);
+        shrinking.Append("keep-this-text\r\nsecond-line\r\nthird");
+        shrinking.Resize(12, 4);
+        var resized = shrinking.Snapshot();
+        Check(RowText(resized, 0) == "keep-this-te" && RowText(resized, 1) == "second-line" && RowText(resized, 2) == "third"
+            && resized.Lines.All(line => line.Length == 12),
+            "terminal-resize-crops-trailing-blank-cells-first");
+        shrinking.Resize(12, 2);
+        Check(RowText(shrinking.Snapshot(), 0) == "second-line" && RowText(shrinking.Snapshot(), 1) == "third",
+            "terminal-resize-shrinks-into-scrollback");
+
+        // Origin mode (DECOM): cursor addressing is relative to the scroll region.
+        var origin = new TerminalBuffer(12, 6);
+        origin.Append("\u001b[2;5r\u001b[?6h\u001b[1;1Horigin");
+        Check(RowText(origin.Snapshot(), 1).StartsWith("origin", StringComparison.Ordinal), "terminal-origin-mode-addressing");
+    }
+
+    private static string RowText(TerminalSnapshot snapshot, int row) =>
+        row < 0 || row >= snapshot.Lines.Length ? string.Empty
+            : string.Concat(snapshot.Lines[row].Select(cell => cell.Text)).TrimEnd();
+
     private static void Check(bool condition, string name)
     {
         if (!condition) throw new Exception("FAIL " + name);
@@ -466,6 +579,9 @@ internal static class Program
 
         public void Write(string text) => Writes.Add(text);
         public void Resize(int columns, int rows) { }
+
+        /// <summary>Feed bytes as if the shell had produced them (used for DSR/DA reply checks).</summary>
+        public void Emit(string text) => Output?.Invoke(text);
 
         public void Dispose()
         {
