@@ -65,7 +65,7 @@ public sealed class TerminalBuffer
     private string _title = string.Empty;
     private string? _currentLink;
     private readonly StringBuilder _osc = new();
-    private int _lastCellRow = -1, _lastCellColumn = -1;
+    private int _lastCellRow = -1, _lastCellColumn = -1, _lastCellEndColumn = -1;
     private char? _pendingSurrogate;
     private string _lastChar = string.Empty;
     private string _replySequence = string.Empty;   // CSI reply queued by the last escape sequence
@@ -153,7 +153,7 @@ public sealed class TerminalBuffer
             if (character == '\u001b') { _parseState = 1; continue; }
             switch (character)
             {
-                case '\r': _column = 0; _wrapPending = false; continue;
+                case '\r': _column = 0; _wrapPending = false; _lastCellRow = -1; continue;
                 case '\n':
                     if (_newLineMode) _column = 0;
                     LineFeed();
@@ -272,11 +272,11 @@ public sealed class TerminalBuffer
             // Overwriting the continuation cell of a wide glyph must not leave its owner half painted.
             _screen[_row][_column - 1] = BlankCell();
         }
-        if (_lastCellRow == _row && _lastCellColumn == _column &&
-            _pendingSurrogate is null && IsCombining(glyph))
+        if (_lastCellRow == _row && _lastCellEndColumn == _column && IsCombining(glyph))
         {
-            // A combining mark extends the glyph already in this cell instead of taking its own.
-            _screen[_row][_column] = _screen[_row][_column] with { Text = _screen[_row][_column].Text + glyph };
+            // A combining mark extends the glyph of the previous cell instead of taking its own.
+            var owner = _screen[_lastCellRow][_lastCellColumn];
+            _screen[_lastCellRow][_lastCellColumn] = owner with { Text = owner.Text + glyph };
             return;
         }
         _screen[_row][_column] = Styled(glyph);
@@ -285,6 +285,7 @@ public sealed class TerminalBuffer
         _lastCellRow = _row;
         _lastCellColumn = _column;
         _column += wide ? 2 : 1;
+        _lastCellEndColumn = _column;
         if (_column >= Columns)
         {
             _column = Columns - 1;
@@ -309,6 +310,9 @@ public sealed class TerminalBuffer
 
     private void LineFeed()
     {
+        // An explicit cursor move ends the combining-mark run; a combining mark after LF starts a new cell.
+        _lastCellRow = -1;
+        _lastCellEndColumn = -1;
         _wrapPending = false;
         if (_row == _bottom) { ScrollUpRegion(1); return; }
         // A cursor below the scroll region continues toward the bottom of the screen instead of scrolling.
@@ -433,7 +437,10 @@ public sealed class TerminalBuffer
                 break;
             case "8":
                 // OSC 8 ; params ; URI ST text OSC 8 ; ; ST — an empty URI ends the hyperlink.
-                _currentLink = string.IsNullOrEmpty(body) ? null : body;
+                // The body is "params;URI", so the URI is everything after the first separator.
+                var uriStart = body.IndexOf(';');
+                var uri = uriStart < 0 ? string.Empty : body[(uriStart + 1)..];
+                _currentLink = string.IsNullOrEmpty(uri) ? null : uri;
                 break;
             case "4":
                 // OSC 4 ; index ; color — override a palette entry (the first 16 colors).
@@ -488,6 +495,7 @@ public sealed class TerminalBuffer
 
     private void RestoreCursor()
     {
+        _lastCellRow = -1;
         _column = Math.Clamp(_savedColumn, 0, Columns - 1);
         _row = Math.Clamp(_savedRow, 0, Rows - 1);
         _wrapPending = false;
@@ -516,8 +524,8 @@ public sealed class TerminalBuffer
         if (sequence.StartsWith('?')) { ApplyPrivate(sequence, command); return; }
         if (sequence.StartsWith('>')) { if (command == 'c') _replySequence = "\u001b[>0;276;0c"; return; }
 
-        var values = sequence.Length == 0 ? Array.Empty<int>() : sequence.Split(';')
-            .Select(value => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : 0)
+        var values = sequence.Length == 0 ? Array.Empty<int>() : sequence.Trim().Split(';')
+            .Select(value => int.TryParse(value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : 0)
             .ToArray();
         int Value(int index, int fallback = 1) => index >= values.Length || values[index] == 0 ? fallback : values[index];
 
@@ -587,6 +595,7 @@ public sealed class TerminalBuffer
 
     private void MoveCursor(int rowDelta, int columnDelta)
     {
+        _lastCellRow = -1;
         var minRow = _originMode ? _top : 0;
         var maxRow = _originMode ? _bottom : Rows - 1;
         _row = Math.Clamp(_row + rowDelta, minRow, maxRow);
