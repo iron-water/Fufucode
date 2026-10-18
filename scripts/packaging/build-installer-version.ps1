@@ -4,6 +4,8 @@ param(
     # 双渠道：默认全量渠道（Fufucode.iss + out/build）；原生渠道传 Fufucode-Native.iss + out/build-native。
     [string]$IssName = 'Fufucode.iss',
     [string]$PackageRoot,
+    # 原生渠道的载荷目录名（相对 out/）；框架依赖瘦身版用 build-native-slim。
+    [string]$PayloadRoot,
     # 原生渠道的清单文件名与全量渠道不同，且由 package-native.ps1 提前写好，因此跳过热渠道专用的清单重写。
     [switch]$NoManifest
 )
@@ -22,7 +24,9 @@ if (-not $NoManifest) {
     if ($LASTEXITCODE -ne 0) { throw 'integrity manifest generation failed' }
 }
 
-& $iscc $iss "/DAppVersion=$AppVersion" "/DOutName=$OutName"
+$defines = @("/DAppVersion=$AppVersion", "/DOutName=$OutName")
+if (-not [string]::IsNullOrWhiteSpace($PayloadRoot)) { $defines += "/DPayloadRoot=$PayloadRoot" }
+& $iscc $iss @defines
 if ($LASTEXITCODE -ne 0) { throw "installer compilation failed for $AppVersion" }
 
 Write-Host "built $OutName.exe"

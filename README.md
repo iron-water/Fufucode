@@ -20,7 +20,7 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 ## Requirements
 
 - Windows 10+ (x64)
-- .NET 10 SDK (build only; release builds are self-contained)
+- .NET 10 SDK to build. End users need nothing with the self-contained installer; the slim installer requires the **.NET 10 Runtime** (`Microsoft.NETCore.App 10.x`).
 - Optional: Node, Bun, Python, Git Bash, or any backend CLI. Fufucode uses what is already installed and only offers a download for what is missing.
 
 ## Build and run
@@ -55,11 +55,17 @@ fufucode plugins install backend.claude --from backend.claude-1.0.0.zip
 ## Packaging
 
 ```bash
-pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0                     # self-contained
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0 -FrameworkDependent # needs .NET 10
 pwsh scripts/packaging/package-toolchain.ps1 -Id pi
 ```
 
-Outputs to `out/`: `Fufucode-Native-Setup.exe` (~19 MB), `build-native/` (~62 MB installed), `plugins-dist/` and `runtimes/` as separate download assets. Build output is not committed.
+| Installer | Download | Installed | Requires |
+|---|---:|---:|---|
+| `Fufucode-Native-Setup.exe` | 19.45 MB | 62.18 MB | nothing |
+| `Fufucode-Native-Slim-Setup.exe` | 12.2 MB | 37.60 MB | .NET 10 Runtime |
+
+`plugins-dist/` and `runtimes/` are separate download assets. Build output is not committed.
 
 ## Verify
 

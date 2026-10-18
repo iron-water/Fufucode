@@ -14,16 +14,25 @@ PKG-1 原生安装包渠道（零 Node / 零 Pi 运行时的极简 Setup 构建�
 #>
 param(
     [string]$AppVersion = '1.4.0',
-    [string]$OutName = 'Fufucode-Native-Setup',
+    [string]$OutName,
     # 打包目标平台。默认 Windows x64；同一源码可用 win-x64 / linux-x64 / osx-arm64 等
     # 分别产出独立安装包，不把其他平台的载荷塞进单一发布。
-    [string]$RuntimeIdentifier = 'win-x64'
+    [string]$RuntimeIdentifier = 'win-x64',
+    # 框架依赖瘦身版：不携带 .NET 运行时，要求目标机已安装 .NET 10 Runtime。
+    # 用户已有运行时（开发者/已装 .NET）时优先发这个版本；否则用默认自包含版。
+    [switch]$FrameworkDependent
 )
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$packageRoot = Join-Path $root 'out\build-native'
-$zipPath = Join-Path $root 'out\FufucodeNative.zip'
+$packageName = if ($FrameworkDependent) { 'build-native-slim' } else { 'build-native' }
+$packageRoot = Join-Path $root "out\$packageName"
+$zipName = if ($FrameworkDependent) { 'FufucodeNative-Slim.zip' } else { 'FufucodeNative.zip' }
+$zipPath = Join-Path $root "out\$zipName"
+if ([string]::IsNullOrWhiteSpace($OutName)) {
+    $OutName = if ($FrameworkDependent) { 'Fufucode-Native-Slim-Setup' } else { 'Fufucode-Native-Setup' }
+}
+$selfContained = if ($FrameworkDependent) { 'false' } else { 'true' }
 
 # 发布输出必须落在仓库内，避免误删仓库外目录。
 if (-not [IO.Path]::GetFullPath($packageRoot).StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -44,12 +53,12 @@ New-Item -ItemType Directory -Force $cliDir | Out-Null
 # 目录，再只把 CLI 专属文件并入 App 的发布结果。
 $cliStaging = Join-Path $packageRoot '.cli-staging'
 New-Item -ItemType Directory -Force $cliStaging | Out-Null
-Write-Host "Publishing Fufucode.Cli self-contained $RuntimeIdentifier (native channel, trimmed)..."
-dotnet publish (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj') -c Release -r $RuntimeIdentifier --self-contained true -o $cliStaging
+Write-Host "Publishing Fufucode.Cli $RuntimeIdentifier (self-contained=$selfContained)..."
+dotnet publish (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained -o $cliStaging
 if ($LASTEXITCODE -ne 0) { throw "Fufucode.Cli publish failed." }
 
-Write-Host "Publishing Fufucode.App into shared app layout (same RID/trim settings)..."
-dotnet publish (Join-Path $root 'src/Fufucode.App/Fufucode.App.csproj') -c Release -r $RuntimeIdentifier --self-contained true -o $appDir
+Write-Host "Publishing Fufucode.App into shared app layout (self-contained=$selfContained)..."
+dotnet publish (Join-Path $root 'src/Fufucode.App/Fufucode.App.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained -o $appDir
 if ($LASTEXITCODE -ne 0) { throw "Fufucode.App publish failed." }
 
 # 只并入 CLI 入口相关文件；共享框架程序集以 App 的裁剪结果为准。
@@ -77,11 +86,17 @@ try {
     if (Test-Path -LiteralPath $cliProbeData) { Remove-Item -LiteralPath $cliProbeData -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-# 裁剪有效性守卫：Windows 包不得再携带 X11/FreeDesktop/macOS 后端。
-# 若裁剪未生效，宁可打包失败，也不能把整份未裁剪框架发给用户。
+# 平台守卫：
+# - 自包含版依赖裁剪器移除其它平台后端；失败则拒绝打包。
+# - 框架依赖版不裁剪，按 RID 手工移除其它平台托管后端。
+$nonWindowsBackends = @('Avalonia.X11.dll', 'Avalonia.FreeDesktop.dll', 'Avalonia.FreeDesktop.AtSpi.dll',
+    'Avalonia.Native.dll', 'Tmds.DBus.Protocol.dll')
 if ($RuntimeIdentifier -like 'win-*') {
-    foreach ($unused in @('Avalonia.X11.dll', 'Avalonia.FreeDesktop.dll', 'Avalonia.FreeDesktop.AtSpi.dll', 'Avalonia.Native.dll', 'Tmds.DBus.Protocol.dll')) {
-        if (Test-Path -LiteralPath (Join-Path $appDir $unused)) {
+    foreach ($unused in $nonWindowsBackends) {
+        $target = Join-Path $appDir $unused
+        if ($FrameworkDependent) {
+            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+        } elseif (Test-Path -LiteralPath $target) {
             throw "Trimming did not remove non-Windows backend '$unused'; refusing to package an untrimmed payload."
         }
     }
@@ -121,10 +136,11 @@ if ($RuntimeIdentifier -like 'win-*') {
 }
 
 # --- 分离符号文件（PDB）与 SDK 开发文档（XML），不随用户默认安装包发布 ---
-$symbolsDir = Join-Path $root 'out\symbols'
+$symbolsSuffix = if ($FrameworkDependent) { '-Slim' } else { '' }
+$symbolsDir = Join-Path $root "out\symbols$symbolsSuffix"
 if (Test-Path -LiteralPath $symbolsDir) { Remove-Item -LiteralPath $symbolsDir -Recurse -Force }
 New-Item -ItemType Directory -Force $symbolsDir | Out-Null
-$symbolsZip = Join-Path $root 'out\FufucodeNative-Symbols.zip'
+$symbolsZip = Join-Path $root "out\FufucodeNative-Symbols$symbolsSuffix.zip"
 if (Test-Path -LiteralPath $symbolsZip) { Remove-Item -LiteralPath $symbolsZip -Force }
 
 $pdbFiles = Get-ChildItem -Path $packageRoot -Filter *.pdb -Recurse
@@ -230,7 +246,7 @@ Run:
   fufucode <command>        installed CLI (open a new terminal after installation)
 
 Layout:
-  app/              self-contained .NET 10.0 $RuntimeIdentifier publish (Avalonia 12.1.3, trimmed)
+  app/              .NET 10.0 $RuntimeIdentifier publish (Avalonia 12.1.3, $(if ($FrameworkDependent) { 'framework-dependent slim' } else { 'self-contained trimmed' }))
   cli/              PATH launcher (fufucode.exe forwarder + fufucode.cmd)
   integrity-native.sha256.json   SHA256 manifest of every shipped file
 
@@ -286,7 +302,7 @@ Get-ChildItem -Directory $packageRoot | ForEach-Object {
 # --- 6. Inno Setup 编译（仅 Windows；其它 RID 只产出 zip） ---
 if ($RuntimeIdentifier -like 'win-*') {
     & (Join-Path $PSScriptRoot 'build-installer-version.ps1') -AppVersion $AppVersion -OutName $OutName `
-        -IssName 'Fufucode-Native.iss' -PackageRoot $packageRoot -NoManifest
+        -IssName 'Fufucode-Native.iss' -PackageRoot $packageRoot -PayloadRoot $packageName -NoManifest
     if ($LASTEXITCODE -ne 0) { throw 'Native installer build failed.' }
 } else {
     Write-Host "Skipping Inno Setup installer for $RuntimeIdentifier (zip only)."
@@ -356,9 +372,9 @@ foreach ($p in $plugins) {
     Write-Host ("  -> Slimmed package $pluginId-1.0.0.zip: {0:N0} bytes ({1:N2} KB)" -f $zipLen, ($zipLen / 1KB))
 }
 
-# --- 8. 生成官方主程序更新清单（feed.json / update-manifest.json） ---
+# --- 8. 生成官方主程序更新清单（仅默认自包含渠道） ---
 $setupPath = Join-Path $root "out\$OutName.exe"
-if (Test-Path -LiteralPath $setupPath) {
+if (-not $FrameworkDependent -and (Test-Path -LiteralPath $setupPath)) {
     $setupBytes = (Get-Item $setupPath).Length
     $setupSha256 = (Get-FileHash -Path $setupPath -Algorithm SHA256).Hash
     $updateManifest = [ordered]@{
