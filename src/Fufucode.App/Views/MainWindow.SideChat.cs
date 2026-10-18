@@ -130,6 +130,8 @@ public partial class MainWindow
         if (_sideChatPage.DataContext is MainViewModel vm)
         {
             if (_sideSession is { } current && _host is { } host) host.Manager.Metadata.SetDraft(current.Session.Id, vm.Input.DraftText);
+            // 侧边聊天换会话/关闭：解除旧时间线的会话订阅与工具组订阅，避免旧会话继续驱动。
+            vm.Timeline.Dispose();
             vm.WorkspacePanel.Dispose(); vm.Sidebar.Dispose();
         }
         _sideChatPage.DataContext = null;

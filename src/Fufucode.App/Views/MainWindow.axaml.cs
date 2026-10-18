@@ -28,6 +28,8 @@ public partial class MainWindow : Window
     private RealSessionHost? _host;
     private ExtensionUiDialogHost? _dialogHost;
     private DispatcherTimer? _draftDebounce;
+    // 当前挂有草稿防抖 Input.PropertyChanged 订阅的 VM（重建前先解除，避免多份订阅与旧计时器）。
+    private MainViewModel? _draftVm;
     private bool _closed;
     private bool _closeApproved;
     private bool _closingInProgress;
@@ -54,6 +56,9 @@ public partial class MainWindow : Window
     private readonly Views.ExtensionsPage _extensionsPage = new();
     private readonly Views.SettingsPage _settingsPage = new();
     private MainViewModel? _vm;
+    // 已接扩展 UI 的会话对象：同一会话重复 AttachRealSession 时不再叠加订阅
+    // （SessionUiWiring 目前没有解除入口，只能在源头上保证每个会话只接一次）。
+    private IChatSession? _extensionUiWiredSession;
     private AppSettingsStore? _settingsStore;
 
     /// <summary>无参构造保持 mock 会话（无头自测与设计器使用）；真实会话经 <see cref="AppOptions"/> 注入。</summary>
@@ -116,6 +121,16 @@ public partial class MainWindow : Window
     private void AttachSession(IChatSession session, IReadOnlyList<SessionItemViewModel>? sessions,
         SidebarViewModel.Callbacks? callbacks, IPromptSteering? steering = null, AppPage initialPage = AppPage.Chat)
     {
+        // 同一会话对象重复挂接（mock 初始化、重启失败回切等）只需切回页面并刷新侧栏，不重建 VM：
+        // 重建会再挂一份事件/输入订阅，导致重复回放与重复处理（内存与行为双膨胀）。
+        if (_vm is { } existing && ReferenceEquals(existing.Session, session))
+        {
+            existing.CurrentPage = initialPage;
+            if (sessions is not null && callbacks is not null)
+                existing.Sidebar.UpdateSessions(sessions, callbacks.CurrentSessionId, callbacks.CurrentName);
+            return;
+        }
+
         var vm = new MainViewModel(
             session,
             new AvaloniaClipboardService(),
@@ -128,7 +143,11 @@ public partial class MainWindow : Window
         vm.Input.Steering = steering ?? session as IPromptSteering;
         if (_vm is not null)
         {
+            _vm.Timeline.ScrollToEndRequested -= OnScrollToEndRequested;
             _vm.PropertyChanged -= OnVmPropertyChanged;
+            // 旧 VM 的会话/输入订阅：先解除再释放，避免旧会话继续驱动已废弃的 VM。
+            DetachDraftPersistence();
+            _vm.Timeline.Dispose();
             _vm.WorkspacePanel.Dispose();
             _vm.Sidebar.Dispose();
         }
@@ -153,6 +172,10 @@ public partial class MainWindow : Window
         _extensionsPage.DataContext = vm.Extensions;
         _settingsPage.DataContext = vm.Settings;
         UpdatePageHost();
+
+        // 每个新 VM 只允许一条提交接线；旧 VM 的订阅随其输入对象一起丢弃。
+        vm.Input.SubmissionStarting += _notifications.BeginSubmission;
+        vm.Input.SubmissionRejected += _notifications.CancelSubmission;
     }
 
     /// <summary>设置页上下文（W2）：真实模式用 host.Manager.Settings（单一存储，Pi 启动读它）；
@@ -610,8 +633,12 @@ public partial class MainWindow : Window
         _dialogHost!.Attach(host.Chat);
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Attach(host.Chat, host.ProjectPath);
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.LoadHistory(host.CurrentTranscript());
-        SessionUiWiring.AttachExtensionUi(host.Chat, vm.Timeline, vm.Input, vm.StatusBar,
-            title => Title = $"Fufucode — {title}");
+        if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
+        {
+            SessionUiWiring.AttachExtensionUi(host.Chat, vm.Timeline, vm.Input, vm.StatusBar,
+                title => Title = $"Fufucode — {title}");
+            _extensionUiWiredSession = host.Chat;
+        }
 
         // H3/H4 扩展目录：get_commands + 磁盘发现 + 扩展错误订阅；
         // 启停上下文（H4）：pending/active 持久状态与"应用并重启"由 host 提供。
@@ -1000,8 +1027,7 @@ public partial class MainWindow : Window
     /// <summary>草稿防抖落盘：编辑停顿 600ms 后写入 desktop.db（按当前会话隔离）。</summary>
     private void WireDraftPersistence(MainViewModel vm)
     {
-        _draftDebounce?.Stop();
-        _draftDebounce = null;
+        DetachDraftPersistence();
 
         if (_host is null)
         {
@@ -1014,9 +1040,7 @@ public partial class MainWindow : Window
             timer.Stop();
             _host?.SaveDraft(vm.Input.ComposePrompt());
         };
-        vm.Input.PropertyChanged += OnInputPropertyChanged;
-        _draftDebounce = timer;
-
+        // 局部函数在方法内即已确定，DetachDraftPersistence 解绑的是同一委托。
         void OnInputPropertyChanged(object? sender, PropertyChangedEventArgs args)
         {
             if (args.PropertyName is nameof(InputViewModel.DraftText) or nameof(InputViewModel.ReferenceContext))
@@ -1024,6 +1048,29 @@ public partial class MainWindow : Window
                 timer.Stop();
                 timer.Start();
             }
+        }
+
+        vm.Input.PropertyChanged += OnInputPropertyChanged;
+        _draftDebounce = timer;
+        _draftVm = vm;
+    }
+
+    /// <summary>解除草稿防抖：移除旧 VM 的输入订阅并停掉计时器（重建/关闭时调用）。</summary>
+    private void DetachDraftPersistence()
+    {
+        if (_draftVm is not null) _draftVm.Input.PropertyChanged -= OnInputPropertyChanged;
+        _draftVm = null;
+        _draftDebounce?.Stop();
+        _draftDebounce = null;
+    }
+
+    private void OnInputPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(InputViewModel.DraftText) or nameof(InputViewModel.ReferenceContext)
+            && _draftDebounce is { } timer)
+        {
+            timer.Stop();
+            timer.Start();
         }
     }
 
@@ -1091,6 +1138,14 @@ public partial class MainWindow : Window
         if (DataContext is MainViewModel vm && _host is not null)
         {
             _host.SaveDraft(vm.Input.ComposePrompt());
+        }
+
+        // 释放主 VM：解除草稿防抖与时间线的会话订阅（_vm 可能不是 DataContext 绑定的实例，须单独释放）。
+        DetachDraftPersistence();
+        try { _vm?.Timeline.Dispose(); }
+        catch
+        {
+            // 关闭路径尽力而为；异常不阻止退出。
         }
 
         if (_host is not null)
