@@ -14,6 +14,7 @@ public partial class MainWindow
     private PersistentSession? _sideSession;
     private readonly Views.ChatPage _sideChatPage = new();
     private ExtensionUiDialogHost? _sideDialogHost;
+    private IDisposable? _sideExtensionUiWiring;
     private string? _sideProject;
     private Button _sideStart = null!;
     private TextBlock _sideStatus = null!;
@@ -121,12 +122,13 @@ public partial class MainWindow
                 command => { vm.Input.ApplyExternalText(command.Invocation); _sideChatPage.Input.Focus(); });
         _sideDialogHost = new ExtensionUiDialogHost(this);
         _sideDialogHost.Attach(session.Chat);
-        SessionUiWiring.AttachExtensionUi(session.Chat, vm.Timeline, vm.Input, vm.StatusBar, _ => { });
+        _sideExtensionUiWiring = SessionUiWiring.AttachExtensionUi(session.Chat, vm.Timeline, vm.Input, vm.StatusBar, _ => { });
     }
 
     private async Task CloseSideChatAsync()
     {
         _sideDialogHost?.Detach(); _sideDialogHost = null;
+        _sideExtensionUiWiring?.Dispose(); _sideExtensionUiWiring = null;
         if (_sideChatPage.DataContext is MainViewModel vm)
         {
             if (_sideSession is { } current && _host is { } host) host.Manager.Metadata.SetDraft(current.Session.Id, vm.Input.DraftText);

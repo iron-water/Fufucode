@@ -15,15 +15,19 @@ namespace Fufucode.App.Integration;
 /// </summary>
 public static class SessionUiWiring
 {
-    public static void AttachExtensionUi(IChatSession chat, TimelineViewModel timeline,
+    /// <summary>
+    /// 接线扩展 UI 通知。返回句柄用于解除订阅；会话未实现 <see cref="IExtensionUiSession"/> 时返回 null。
+    /// 旧视图模型被替换时必须释放句柄，否则旧时间线/输入框仍会被扩展事件驱动。
+    /// </summary>
+    public static System.IDisposable? AttachExtensionUi(IChatSession chat, TimelineViewModel timeline,
         InputViewModel input, StatusBarViewModel statusBar, System.Action<string>? titleSetter = null)
     {
         if (chat is not IExtensionUiSession extensionUi)
         {
-            return;
+            return null;
         }
 
-        extensionUi.ExtensionUiNotification += notice =>
+        void OnNotification(PiExtensionUiRequestEvent notice)
         {
             switch (notice.Method)
             {
@@ -75,10 +79,31 @@ public static class SessionUiWiring
                     timeline.AddNotification($"扩展通知（{notice.Method}）：{notice.Raw.GetRawText()}");
                     break;
             }
-        };
+        }
 
-        extensionUi.ExtensionError += error =>
+        void OnError(PiExtensionErrorEvent error) =>
             timeline.AddNotification($"扩展错误：{error.ExtensionPath} 在 {error.EventName} 中失败——{error.Error}");
+
+        extensionUi.ExtensionUiNotification += OnNotification;
+        extensionUi.ExtensionError += OnError;
+        return new ExtensionUiWiringHandle(extensionUi, OnNotification, OnError);
+    }
+
+    /// <summary>一次扩展 UI 接线：释放时从会话事件上移除同一对委托（可重复释放）。</summary>
+    private sealed class ExtensionUiWiringHandle(
+        IExtensionUiSession session,
+        System.Action<PiExtensionUiRequestEvent> notification,
+        System.Action<PiExtensionErrorEvent> error) : System.IDisposable
+    {
+        private bool _disposed;
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            session.ExtensionUiNotification -= notification;
+            session.ExtensionError -= error;
+        }
     }
 
     private static string? StringField(JsonElement value, string property) =>
