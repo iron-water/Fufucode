@@ -621,3 +621,5 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 - 瘦身包不裁剪（框架程序集来自系统），打包期按 RID 手工移除 X11/FreeDesktop/macOS 后端。
 - 实测：下载 19.45 → 12.2 MB，安装后 62.18 → 37.60 MB；节省 7.25 MB 下载 / 24.58 MB 安装。代价是目标机必须已安装 Microsoft.NETCore.App 10.x；缺失时 apphost 会给出标准提示。
 - 瘦身包 selftest 与自包含包一致（同一组 11 项既有失败），CLI help/json/runtime、完整性清单、平台后端清理均通过。
+
+2026-10-18 交互终端拆为可选插件决定：用户撤销 2026-10-16 “终端保留内置”的例外，要求终端同样拆成插件。实现：新增 `src/Fufucode.Plugins.Terminal` 项目（插件 ID `workspace.terminal`，manifest 版本 2.0.0，能力 `WorkspacePage`，包类型 `TerminalPluginPackage`）；宿主新增页面贡献机制，插件页面实现 `IPluginWorkspacePage`，由 `PluginWorkspacePageHost` 在插件已安装且已启用时接入停靠区，宿主不再静态引用终端程序集；插件未安装、未启用或加载失败时终端页面不存在（不显示空壳），终端相关全局动作与状态项报告真实原因（如“未安装或未启用交互终端插件”）；`package-native.ps1` 把 `workspace.terminal` 发布到 `out/plugins-dist`，并在默认 App 包校验中禁止包含 `Fufucode.Plugins.Terminal.dll`。同一交付内还落地终端 VT P0 能力：备用屏、DSR/DA 应答、滚动区域、行/字符编辑。本条取代 `docs/tasks/plugin-extraction-scope-2026-10-16.md` 与 `AGENTS.md` 中“终端保留内置”的旧例外，其余内置项（内嵌浏览器、资料库、代码审查、文件预览、Git 变更面板，以及文档提取、系统通知、用量统计、储存诊断、高级界面定制）不变。本条不附验证结果。
