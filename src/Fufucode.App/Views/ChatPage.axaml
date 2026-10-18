@@ -105,7 +105,7 @@
                       VerticalScrollBarVisibility="Auto"
                       ScrollChanged="TimelineScroller_ScrollChanged">
           <ItemsControl x:Name="TimelineItems" ItemsSource="{Binding Timeline.Entries}"
-                        MaxWidth="768" Margin="0" Padding="24,20,24,8"
+                        MaxWidth="768" Margin="0" Padding="24,20,24,32"
                         HorizontalAlignment="Stretch">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
