@@ -399,6 +399,10 @@ public partial class TerminalDockView : UserControl
     {
         ContextCopyItem.IsEnabled = TerminalSurface.HasSelection;
         ContextOpenLinkItem.IsVisible = _contextLink is { Length: > 0 };
+        ContextPasteShellItem.IsEnabled = _dock?.SelectedTab?.IsRunning == true;
+        ContextPasteShellItem.Header = TerminalSurface.DirectPasteNeedsConfirmation
+            ? "粘贴到终端（直接发送…）"
+            : "粘贴到终端（直接发送）";
     }
 
     private string? _contextLink;
@@ -422,6 +426,48 @@ public partial class TerminalDockView : UserControl
     private void ContextCopy_Click(object? sender, RoutedEventArgs e) => _ = TerminalSurface.CopySelectionAsync();
 
     private void ContextPaste_Click(object? sender, RoutedEventArgs e) => _ = TerminalSurface.PasteToDraftAsync();
+
+    private async void ContextPasteShell_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_dock?.SelectedTab is not { IsRunning: true }) return;
+        if (TerminalSurface.DirectPasteNeedsConfirmation)
+        {
+            // Without bracketed paste an embedded newline runs each line immediately; ask first.
+            if (!await ConfirmAsync("直接粘贴到终端", "当前程序未启用括号粘贴。粘贴内容中的换行会立即执行，是否继续？", "取消", "粘贴并发送"))
+                return;
+        }
+        await TerminalSurface.PasteToShellAsync();
+        TerminalSurface.FocusForInput();
+    }
+
+    private Task<bool> ConfirmAsync(string title, string message, string cancelText, string acceptText)
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return Task.FromResult(false);
+        var cancel = new Button { Content = cancelText, MinWidth = 80 };
+        var accept = new Button { Content = acceptText, MinWidth = 110 };
+        var dialog = new Window
+        {
+            Title = title, Width = 420, Height = 190, CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20), Spacing = 16, Children =
+                {
+                    new TextBlock { Text = message, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Children = { cancel, accept }
+                    }
+                }
+            }
+        };
+        cancel.Click += (_, _) => dialog.Close(false);
+        accept.Click += (_, _) => dialog.Close(true);
+        dialog.Opened += (_, _) => cancel.Focus();
+        return Fufucode.App.Views.SkinDialog.ShowAsync<bool>(dialog, owner);
+    }
 
     /// <summary>清屏是纯本地操作：清空屏幕与滚动缓冲并把光标归位，不向 shell 写入任何字节。</summary>
     private void ContextClear_Click(object? sender, RoutedEventArgs e)
