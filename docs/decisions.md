@@ -614,3 +614,10 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 4. 新增 `scripts/packaging/package-toolchain.ps1`，同一脚本为五类运行时出纯净包，并做启动冒烟。实测 zip：pi 18.2 MB、node 33.7 MB、bun 38.9 MB、python 49.3 MB、git-bash 54.3 MB（bash+msys 最小集，不含完整 Git 与 vim/perl 文档）。
 5. 新增 `PluginDistributionService` 与 `fufucode plugins status|install|remove`：把 plugins-dist zip 部署到 `distribution/<id>`，真实载荷驱动插件市场安装；插件停用会同步注销后端会话工厂，禁用后不再回退加载。
 6. 验证：Core/App/CLI/五插件 0 错误；debug 构建 selftest 仍为同一组 11 项既有失败；工具链 status 对 9 个条目全部如实报告；node/bun 安装到临时 data root 后可用，PATH 注入生效；Claude 插件从 distribution 安装、激活、停用、再启用均实际生效。
+
+2026-10-18 框架依赖瘦身安装包决定：
+- `package-native.ps1` 新增 `-FrameworkDependent`。默认仍发自包含包（零前置依赖）；已有 .NET 10 Runtime 的用户可选瘦身包。
+- 瘦身包输出到 `out/build-native-slim`，安装器 `Fufucode-Native-Slim-Setup.exe`；`Fufucode-Native.iss` 增加 `PayloadRoot` 预处理器变量，`build-installer-version.ps1` 透传。
+- 瘦身包不裁剪（框架程序集来自系统），打包期按 RID 手工移除 X11/FreeDesktop/macOS 后端。
+- 实测：下载 19.45 → 12.2 MB，安装后 62.18 → 37.60 MB；节省 7.25 MB 下载 / 24.58 MB 安装。代价是目标机必须已安装 Microsoft.NETCore.App 10.x；缺失时 apphost 会给出标准提示。
+- 瘦身包 selftest 与自包含包一致（同一组 11 项既有失败），CLI help/json/runtime、完整性清单、平台后端清理均通过。
