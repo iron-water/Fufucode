@@ -1,8 +1,8 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:Fufucode.App.ViewModels"
-             xmlns:views="using:Fufucode.App.Views"
-             x:Class="Fufucode.App.Views.TerminalDockView"
+             xmlns:vm="using:Fufucode.Plugins.Terminal.ViewModels"
+             xmlns:views="using:Fufucode.Plugins.Terminal.Views"
+             x:Class="Fufucode.Plugins.Terminal.Views.TerminalDockView"
              x:DataType="vm:TerminalDockViewModel">
     <UserControl.Styles>
         <Style Selector="ListBox.terminalTabs"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/></Style>

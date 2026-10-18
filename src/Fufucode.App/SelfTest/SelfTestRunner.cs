@@ -97,11 +97,11 @@ public static class SelfTestRunner
             return Failures.Count == 0 ? 0 : 1;
         }
 
-        if (args.Contains("--terminal-integration-only"))
+        if (args.Contains("--terminal-integration-only") || args.Contains("--conpty-only") || args.Contains("--conpty-p0-only"))
         {
-            await RunOnHeadlessUiThreadAsync(() => TerminalIntegrationSelfTest.RunAsync(Pass, Fail));
-            Console.WriteLine($"Terminal integration failures: {Failures.Count}");
-            return Failures.Count == 0 ? 0 : 1;
+            // Terminal is an optional plugin now; its UI, ConPTY and VT checks live in the plugin test project.
+            Console.WriteLine("Terminal tests moved to tests/Fufucode.App.Terminal.Tests.");
+            return 0;
         }
 
         if (args.Contains("--floating-workbench-only"))
@@ -182,20 +182,6 @@ public static class SelfTestRunner
             Console.WriteLine($"Shortcuts failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
-        if (args.Contains("--conpty-only"))
-        {
-            try { Pass(await TerminalSelfTest.RunConPtySmokeAsync(Environment.CurrentDirectory)); }
-            catch (Exception error) { Fail("真实 ConPTY：" + error); }
-            Console.WriteLine($"== 自测结束：{Failures.Count} 项失败 ==");
-            return Failures.Count == 0 ? 0 : 1;
-        }
-        if (args.Contains("--conpty-p0-only"))
-        {
-            try { Pass(await TerminalSelfTest.RunConPtyP0SmokeAsync(Environment.CurrentDirectory)); }
-            catch (Exception error) { Fail("真实 ConPTY P0：" + error); }
-            Console.WriteLine($"== 自测结束：{Failures.Count} 项失败 ==");
-            return Failures.Count == 0 ? 0 : 1;
-        }
         if (args.Contains("--r2-only"))
         {
             await RunWave5R2ChecksAsync(args);
@@ -262,7 +248,6 @@ public static class SelfTestRunner
         await RunOnHeadlessUiThreadAsync(() => FloatingWorkbenchSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => NotificationPageSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => AutomationControlSelfTest.RunAsync(Pass, Fail));
-        await RunOnHeadlessUiThreadAsync(() => TerminalIntegrationSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => BrowserIntegrationSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => WorkbenchCustomizationSelfTest.RunAsync(Pass, Fail));
 
@@ -331,17 +316,7 @@ public static class SelfTestRunner
     private static async Task RunWave5R2ChecksAsync(string[] args)
     {
         await RunOnHeadlessUiThreadAsync(() => WorkspacePanelSelfTest.RunAsync(Pass, Fail));
-        await RunOnHeadlessUiThreadAsync(() =>
-        {
-            TerminalSelfTest.Run((name, ok) => { if (ok) Pass(name); else Fail(name); });
-            return TerminalSelfTest.RunScrollIsolationAsync((name, ok) => { if (ok) Pass(name); else Fail(name); });
-        });
         await RunOnHeadlessUiThreadAsync(() => Wave5R2SelfTest.RunAsync(Pass, Fail));
-        if (args.Contains("--conpty"))
-        {
-            try { Pass(await TerminalSelfTest.RunConPtySmokeAsync(Environment.CurrentDirectory)); }
-            catch (Exception error) { Fail("真实 ConPTY：" + error); }
-        }
     }
 
     private static async Task RunWave5R3ChecksAsync()

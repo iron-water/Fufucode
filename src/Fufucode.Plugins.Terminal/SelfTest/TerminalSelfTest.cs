@@ -11,12 +11,12 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
-using Fufucode.App.Features.TerminalExperience;
-using Fufucode.App.Infrastructure;
-using Fufucode.App.ViewModels;
-using Fufucode.App.Views;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.Plugins.Terminal.Infrastructure;
+using Fufucode.Plugins.Terminal.ViewModels;
+using Fufucode.Plugins.Terminal.Views;
 
-namespace Fufucode.App.SelfTest;
+namespace Fufucode.Plugins.Terminal.SelfTest;
 
 public static class TerminalSelfTest
 {

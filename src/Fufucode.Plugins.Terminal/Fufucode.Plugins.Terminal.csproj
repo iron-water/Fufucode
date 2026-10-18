@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Fufucode.Plugins.Terminal</AssemblyName>
+    <RootNamespace>Fufucode.Plugins.Terminal</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+    <IsPackable>false</IsPackable>
+    <!-- 与 Fufucode.App 的 WebView2 版本保持一致，用于剥离未使用的 WPF/WinForms 传递引用。 -->
+    <WebView2Version>1.0.4258.31</WebView2Version>
+  </PropertyGroup>
+
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- UI 与宿主共享程序集一律不复制进插件包：PackageLoadContext 先解析宿主已加载程序集。 -->
+    <PackageReference Include="Avalonia" Version="12.1.3">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 插件实现宿主工作区页面契约；App 在运行时加载本程序集，不静态引用插件。 -->
+    <ProjectReference Include="../Fufucode.App/Fufucode.App.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+    <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

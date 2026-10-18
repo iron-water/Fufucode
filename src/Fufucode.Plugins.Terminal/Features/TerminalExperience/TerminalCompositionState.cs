@@ -1,6 +1,6 @@
 using System;
 
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>
 /// IME 组合（Composition）期间的临时预览状态。视图把输入框模板内 TextPresenter 的真实

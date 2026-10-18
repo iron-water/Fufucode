@@ -9,11 +9,12 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Fufucode.App.Features.TerminalExperience;
 using Fufucode.App.Infrastructure;
-using Fufucode.App.ViewModels;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.Plugins.Terminal.Infrastructure;
+using Fufucode.Plugins.Terminal.ViewModels;
 
-namespace Fufucode.App.Views;
+namespace Fufucode.Plugins.Terminal.Views;
 
 public partial class TerminalDockView : UserControl
 {
@@ -30,6 +31,9 @@ public partial class TerminalDockView : UserControl
 
     /// <summary>输入法组合预览状态；组合未提交时输入条显示临时文本。</summary>
     internal TerminalCompositionState Composition => _composition;
+
+    /// <summary>宿主用于“复制或中断”快捷键判断命令框是否持有文本选区。</summary>
+    internal TextBox CommandInputControl => TerminalInput;
 
     internal Func<string, KeyEventArgs, bool>? ShortcutMatches
     {

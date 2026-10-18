@@ -252,7 +252,7 @@ public partial class MainWindow
     private string StatusText(string id) => id switch
     {
         "status.connection" => _vm?.StatusBar.ConnectionText ?? "未连接",
-        "status.shell" => _terminalDock?.Tabs.Any(tab => tab.IsRunning) == true ? "Shell 已连接" : "Shell 未连接",
+        "status.shell" => _terminalPage is null ? "Shell 插件未启用" : _terminalPage.HasRunningTab ? "Shell 已连接" : "Shell 未连接",
         "status.activity" => _vm?.StatusBar.ActivityText ?? "空闲",
         "status.tokens" => _host is null ? "Token：Mock" : "Token：" + (_host.Current.Coordinator.GetUsage().Session.TotalTokens.Value?.ToString() ?? "未知"),
         "status.duration" => "用时 " + (DateTimeOffset.UtcNow - _turnStarted).ToString(@"hh\:mm\:ss"),

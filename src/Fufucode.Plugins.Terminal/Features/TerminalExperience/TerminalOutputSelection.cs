@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using Fufucode.App.Infrastructure;
+using Fufucode.Plugins.Terminal.Infrastructure;
 
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>One fixed-cell position in a <see cref="TerminalSnapshot"/> (row / column, zero based).</summary>
 public readonly record struct TerminalCellPosition(int Row, int Column);

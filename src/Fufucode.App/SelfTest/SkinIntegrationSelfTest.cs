@@ -299,10 +299,7 @@ internal static class SkinIntegrationSelfTest
             Check(window.Styles.Count==baseStyles && window.Resources.MergedDictionaries.Count==baseDictionaries, "main repeated switching restores resource/style counts");
             Check(!window.FindControl<Border>("CustomStatusBar")!.IsVisible, "skin changes never enable bottom status strip");
             Select("material3"); await Ready();
-            window.OpenDockPage("terminal",DockZone.Bottom); await Ready();
-            var terminal=window.PageForTesting("terminal").GetVisualDescendants().OfType<TerminalScreenControl>().Single();
-            Check(terminal.SurfaceBrush is ISolidColorBrush terminalBrush && terminalBrush.Color==Resource(window,"AppTerminalBackground"),
-                "terminal's actual drawing surface follows skin instead of fixed Fluent RGB");
+            // Terminal surface skinning is verified in the terminal plugin tests (the page is optional).
             c.Preset("reading"); await Ready();
             Check(StoredSkin(c.Current)=="material3" && c.Current.Composer=="reading", "reading preset keeps optional skin while changing layout preferences");
             var reopenedStore=new WorkbenchAppearanceStore(Program.SelfTestDataRoot!);

@@ -355,7 +355,7 @@ public partial class MainWindow
     private Task ShowTaskManagerAsync()
     {
         using var process = Process.GetCurrentProcess();
-        return ShowTextAsync("运行状态与资源", $"Fufucode PID {process.Id}\n内存 {process.WorkingSet64 / 1024 / 1024} MB\nCPU {process.TotalProcessorTime}\n终端实例 {_terminalDock?.Tabs.Count ?? 0}\n当前会话：{CurrentSessionId ?? "Mock"}\n{_vm?.StatusBar.ActivityText}");
+        return ShowTextAsync("运行状态与资源", $"Fufucode PID {process.Id}\n内存 {process.WorkingSet64 / 1024 / 1024} MB\nCPU {process.TotalProcessorTime}\n终端插件 {(_terminalPage is null ? "未安装或未启用" : _terminalPage.HasTabs ? "已打开" : "已就绪")}\n当前会话：{CurrentSessionId ?? "Mock"}\n{_vm?.StatusBar.ActivityText}");
     }
     private Task TogglePerformanceAsync()
     {
