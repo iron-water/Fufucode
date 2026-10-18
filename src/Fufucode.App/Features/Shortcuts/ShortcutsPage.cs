@@ -187,13 +187,11 @@ public sealed class ShortcutsPage : UserControl
         {
             if (_activeGroup is null)
             {
-                foreach (var group in _vm.Rows.GroupBy(row => row.Group))
-                {
-                    var name = group.Key;
-                    var count = group.Count();
-                    var bound = group.Count(row => row.HasBinding);
-                    _list.Children.Add(SettingsLayout.ChevronRow(name, $"{count} 个动作 · {bound} 个已绑定", () => OpenGroup(name), "Keyboard"));
-                }
+                var groups = _vm.Rows.GroupBy(row => row.Group).Select(group =>
+                    (Control)SettingsLayout.ChevronRow(group.Key, $"{group.Count()} 个动作 · {group.Count(row => row.HasBinding)} 个已绑定",
+                        () => OpenGroup(group.Key), "Keyboard")).ToArray();
+                // 一级分组目录也要走 Group() 收进行列节奏：直接塞 _list（Spacing=0）会让行间距塌成 2px。
+                _list.Children.Add(SettingsLayout.Group(groups));
                 _list.Children.Add(SettingsLayout.Note("默认绑定沿袭现有产品行为；「全局」范围在终端输入焦点下自动让路，中文输入法组合期间的按键不参与绑定。"));
                 return;
             }
