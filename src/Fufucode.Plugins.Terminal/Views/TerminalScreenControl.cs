@@ -1,13 +1,17 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Input.Platform;
 using Avalonia.Media;
 using Avalonia.Markup.Xaml.MarkupExtensions;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Fufucode.Plugins.Terminal.Features.TerminalExperience;
 using Fufucode.Plugins.Terminal.Infrastructure;
@@ -47,6 +51,18 @@ public sealed class TerminalScreenControl : Control
     private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.FromArgb(0x5A, 0x61, 0xAF, 0xEF));
     private static readonly IBrush SearchBrush = new SolidColorBrush(Color.FromArgb(0x8C, 0xE5, 0xC0, 0x7B));
     private static readonly FontFamily MonoFont = new("Consolas, Cascadia Mono, Microsoft YaHei");
+    private static readonly IBrush BellFlashBrush = new SolidColorBrush(Color.FromArgb(0x1C, 0xFF, 0xFF, 0xFF));
+    private DateTime _bellFlashUntil;
+
+    /// <summary>Visual bell: a brief surface flash, used when the shell sends BEL and the setting is “visual”.</summary>
+    public void FlashBell()
+    {
+        _bellFlashUntil = DateTime.UtcNow.AddMilliseconds(140);
+        InvalidateVisual();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(170) };
+        timer.Tick += (_, _) => { timer.Stop(); InvalidateVisual(); };
+        timer.Start();
+    }
 
     public static readonly StyledProperty<TerminalTabViewModel?> SessionProperty = AvaloniaProperty.Register<TerminalScreenControl, TerminalTabViewModel?>(nameof(Session));
     public static readonly StyledProperty<IBrush?> SurfaceBrushProperty = AvaloniaProperty.Register<TerminalScreenControl, IBrush?>(nameof(SurfaceBrush));
@@ -96,6 +112,18 @@ public sealed class TerminalScreenControl : Control
         AffectsRender<TerminalScreenControl>(SurfaceBrushProperty, TextBrushProperty, SelectionFillProperty);
     }
 
+    protected override AutomationPeer OnCreateAutomationPeer() => new TerminalAutomationPeer(this);
+
+    private sealed class TerminalAutomationPeer(TerminalScreenControl owner) : ControlAutomationPeer(owner)
+    {
+        protected override string GetClassNameCore() => "Terminal";
+        protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Pane;
+        protected override string GetNameCore() =>
+            owner.Session?.OutputSelection.Text is { Length: > 0 } selected ? selected : "终端输出";
+        protected override string GetHelpTextCore() =>
+            "终端输出面：拖拽选择文本，Ctrl+Shift+C 复制，Ctrl+F 查找。";
+    }
+
     public TerminalScreenControl()
     {
         Focusable = true; ClipToBounds = true;
@@ -137,6 +165,8 @@ public sealed class TerminalScreenControl : Control
     {
         base.Render(context);
         context.FillRectangle(SurfaceBrush ?? Brush(TerminalBuffer.DefaultBackground), new Rect(Bounds.Size));
+        if (_bellFlashUntil > DateTime.UtcNow)
+            context.FillRectangle(BellFlashBrush, new Rect(Bounds.Size));
         if (_snapshot is null) return;
         var scroller = this.FindAncestorOfType<ScrollViewer>();
         var firstRow = scroller is null ? 0 : Math.Max(0, (int)((scroller.Offset.Y - 8) / CellHeight));
@@ -162,26 +192,38 @@ public sealed class TerminalScreenControl : Control
                 context.FillRectangle(SearchBrush, CellRect(row, hit.StartColumn, hit.EndColumn));
             if (resolvedSelection is { } range && TryRowSegment(range, row, line.Length, out var from, out var to))
                 context.FillRectangle(SelectionFill ?? SelectionBrush, CellRect(row, from, to));
-            for (var col = 0; col < line.Length; col++)
+            // Coalesce neighbouring cells with the same style into one text run. This keeps the
+            // per-frame DrawText count proportional to colour changes instead of cell count.
+            for (var col = 0; col < line.Length;)
             {
                 var cell = line[col];
-                if (string.IsNullOrEmpty(cell.Text) || cell.Text == " ") continue;
+                if (string.IsNullOrEmpty(cell.Text) || cell.Text == " " || cell.Conceal) { col++; continue; }
                 var origin = new Point(OriginX + col * CellWidth, OriginY + row * CellHeight);
-                var typeface = TypefaceFor(cell);
-                var foreground = ResolveForeground(cell);
                 if (hoveredLink is not null && cell.Link == hoveredLink)
                 {
                     // Hovered hyperlink: dim cell background + underline makes the target obvious without a cursor change.
                     context.FillRectangle(SelectionFill is { } fill ? fill : SelectionBrush,
                         new Rect(origin.X, origin.Y, Math.Max(CellWidth, cell.Text.Length * CellWidth), CellHeight));
                 }
-                var text = TextFor(cell.Text, ResolveColor(cell), typeface, foreground);
-                if (cell.Conceal) continue;
-                context.DrawText(text, origin);
-                if (cell.Underline || cell.Link is not null)
-                    context.FillRectangle(foreground, new Rect(origin.X, origin.Y + CellHeight - 2, Math.Max(CellWidth, text.Width), 1));
-                if (cell.Strike)
-                    context.FillRectangle(foreground, new Rect(origin.X, origin.Y + CellHeight / 2, Math.Max(CellWidth, text.Width), 1));
+                if (IsWideGlyph(cell.Text))
+                {
+                    DrawRun(context, cell.Text, cell, origin, CellWidth);
+                    col += 2; // wide glyph + its continuation cell
+                    continue;
+                }
+                var start = col;
+                var style = StyleKeyFor(cell);
+                var builder = new StringBuilder(cell.Text);
+                col++;
+                while (col < line.Length && builder.Length < 256)
+                {
+                    var next = line[col];
+                    if (string.IsNullOrEmpty(next.Text) || next.Text == " " || next.Conceal) break;
+                    if (IsWideGlyph(next.Text) || !StyleKeyFor(next).Equals(style)) break;
+                    builder.Append(next.Text);
+                    col++;
+                }
+                DrawRun(context, builder.ToString(), cell, origin, (col - start) * CellWidth);
             }
         }
         if (_snapshot.CursorVisible && Session?.IsRunning == true && !selectionFocusHidesCursor)
@@ -227,6 +269,33 @@ public sealed class TerminalScreenControl : Control
         var color = ResolveColor(cell);
         if (cell.Dim) return new SolidColorBrush(Color.FromArgb(0x9A, (byte)(color >> 16), (byte)(color >> 8), (byte)color));
         return color == TerminalBuffer.DefaultForeground ? TextBrush ?? Brush(color) : Brush(color);
+    }
+
+    private readonly record struct RunStyleKey(int Color, bool Bold, bool Italic, bool Underline, bool Strike, string? Link);
+    private static RunStyleKey StyleKeyFor(TerminalCell cell) =>
+        new(cell.Reverse ? (cell.Background == TerminalBuffer.DefaultBackground ? TerminalBuffer.DefaultBackground : cell.Background) : cell.Foreground,
+            cell.Bold, cell.Italic, cell.Underline || cell.Link is not null, cell.Strike, cell.Link);
+
+    private void DrawRun(DrawingContext context, string text, TerminalCell cell, Point origin, double width)
+    {
+        var typeface = TypefaceFor(cell);
+        var foreground = ResolveForeground(cell);
+        var formatted = TextFor(text, ResolveColor(cell), typeface, foreground);
+        context.DrawText(formatted, origin);
+        if (cell.Underline || cell.Link is not null)
+            context.FillRectangle(foreground, new Rect(origin.X, origin.Y + CellHeight - 2, Math.Max(width, formatted.Width), 1));
+        if (cell.Strike)
+            context.FillRectangle(foreground, new Rect(origin.X, origin.Y + CellHeight / 2, Math.Max(width, formatted.Width), 1));
+    }
+
+    private static bool IsWideGlyph(string glyph)
+    {
+        if (glyph.Length == 0) return false;
+        var codepoint = char.ConvertToUtf32(glyph, 0);
+        return codepoint >= 0x1100 && (codepoint <= 0x115F || codepoint is >= 0x2E80 and <= 0xA4CF
+            || codepoint is >= 0xAC00 and <= 0xD7A3 || codepoint is >= 0xF900 and <= 0xFAFF
+            || codepoint is >= 0xFE10 and <= 0xFE6F || codepoint is >= 0xFF00 and <= 0xFF60
+            || codepoint >= 0x1F300);
     }
 
     private readonly record struct TextKey(string Text, int Color, bool Bold, bool Italic, double Size);
@@ -468,6 +537,10 @@ public sealed class TerminalScreenControl : Control
         if (Matches("terminal.copy", control && shift && e.Key == Key.C)) { e.Handled = true; _ = CopySelectionAsync(); return; }
         if (Matches("terminal.paste", control && e.Key == Key.V || shift && e.Key == Key.Insert)) { e.Handled = true; _ = PasteToDraftAsync(); return; }
         if (Matches("terminal.find", control && e.Key == Key.F)) { e.Handled = true; FindRequested?.Invoke(this, EventArgs.Empty); return; }
+        if (control && shift && e.Key == Key.A) { e.Handled = true; SelectAll(); return; }
+        if (control && e.Key is Key.OemPlus or Key.Add) { e.Handled = true; FontSizeDip += 1; return; }
+        if (control && e.Key is Key.OemMinus or Key.Subtract) { e.Handled = true; FontSizeDip -= 1; return; }
+        if (control && e.Key is Key.D0 or Key.NumPad0) { e.Handled = true; FontSizeDip = 13; return; }
         if (e.Key == Key.Escape && FindActive) { e.Handled = true; FindDismissRequested?.Invoke(this, EventArgs.Empty); return; }
         // With a selection Ctrl+C copies; without one it must still interrupt the running shell command.
         if (Matches("terminal.copy-or-interrupt", e.KeyModifiers == KeyModifiers.Control && e.Key == Key.C))

@@ -53,6 +53,7 @@ public partial class TerminalDockView : UserControl
         _bellVisual = CurrentSettings.Bell == "visual";
         TerminalSurface.InvalidateMeasure();
         TerminalSurface.InvalidateVisual();
+        Dispatcher.UIThread.Post(ResizeTerminal, DispatcherPriority.Loaded);
     }
 
     private bool _bellVisual = true;
@@ -292,9 +293,10 @@ public partial class TerminalDockView : UserControl
             }
             _tab.Buffer.Changed -= OnOutputChanged;
             _tab.PropertyChanged -= OnTabChanged;
+            _tab.BellRequested -= OnBellRequested;
         }
         _tab = _dock?.SelectedTab;
-        if (_tab is not null) { _tab.Buffer.Changed += OnOutputChanged; _tab.PropertyChanged += OnTabChanged; }
+        if (_tab is not null) { _tab.Buffer.Changed += OnOutputChanged; _tab.PropertyChanged += OnTabChanged; _tab.BellRequested += OnBellRequested; }
         _followOutput = _tab?.FollowOutput ?? true;
         // Find bar and output-selection state are per tab; re-project them after every switch.
         SyncFindState();
@@ -317,6 +319,16 @@ public partial class TerminalDockView : UserControl
         if (_dock?.SelectedTab is not { } tab || !tab.IsSearchOpen) return;
         if (tab.Search.Current is { } match) ScrollToRow(match.Row);
     }
+    private void OnBellRequested()
+    {
+        switch (_tab?.Settings.Bell)
+        {
+            case "beep": Console.Beep(880, 90); break;
+            case "none": break;
+            default: TerminalSurface.FlashBell(); break; // “visual”
+        }
+    }
+
     private void OnOutputChanged()
     {
         var targetTab = _tab;
