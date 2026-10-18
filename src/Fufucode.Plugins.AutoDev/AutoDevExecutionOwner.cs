@@ -33,7 +33,7 @@ public sealed class AutoDevExecutionOwner : IExecutionOwner
     public async Task<ExecutionOutcome> ExecuteAsync(ExecutionRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (!SupportsHarness(request.Harness))
+        if (request.Runtime is null && !SupportsHarness(request.Harness))
             return Failed("未登记的 harness：" + request.Harness);
 
         var database = Path.Combine(request.OwnerDataRoot, "projects", request.ProjectId, "automation.db");
@@ -49,7 +49,9 @@ public sealed class AutoDevExecutionOwner : IExecutionOwner
         var worktree = Directory.CreateDirectory(Path.Combine(scratchRoot, runId)).FullName;
 
         // 线程冻结的是实际部署的 harness（runtime.Harness），不是调用方请求的别名。
-        var runtime = _runtimeResolver?.Invoke(request.Harness) ?? ResolveRuntime(request.Harness);
+        // 调用方显式解析的部署优先（例如本地审查复用已登记的 Pi 运行时），
+        // 其次测试/嵌入方注入的解析器，最后才是部署环境变量。
+        var runtime = request.Runtime ?? _runtimeResolver?.Invoke(request.Harness) ?? ResolveRuntime(request.Harness);
         HarnessExecutor executor;
         using (var store = new AutomationStore(database))
         {

@@ -20,9 +20,12 @@ public sealed class LocalReviewHarnessExecutor : ILocalReviewExecutor
     private readonly string _dataRoot;
     private readonly string _projectId;
     private readonly string? _provider;
+    private readonly Fufucode.App.Abstractions.Automation.Harnesses.HarnessRuntime? _runtime;
 
     /// <param name="dataRoot">Module-owned directory for review scratch and evidence.</param>
-    public LocalReviewHarnessExecutor(string dataRoot, string projectId, string model, string? provider = null)
+    /// <param name="runtime">宿主已解析的部署；为空时由执行所有者按环境变量解析。</param>
+    public LocalReviewHarnessExecutor(string dataRoot, string projectId, string model, string? provider = null,
+        Fufucode.App.Abstractions.Automation.Harnesses.HarnessRuntime? runtime = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(dataRoot);
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -30,6 +33,7 @@ public sealed class LocalReviewHarnessExecutor : ILocalReviewExecutor
         _dataRoot = dataRoot;
         _projectId = projectId;
         _provider = provider;
+        _runtime = runtime;
         // The harness backend binds one model per thread; the review model is explicit here so the
         // UI and exports can show what actually ran, and probes never inherit a configuration default.
         Model = model;
@@ -57,7 +61,7 @@ public sealed class LocalReviewHarnessExecutor : ILocalReviewExecutor
             if (owner is null)
                 return Fail(scope, null,
                     "审查执行后端不可用：请在插件市场中安装并启用自动开发工作台（automation.auto-dev）。", finished);
-            if (!owner.SupportsHarness("pi"))
+            if (_runtime is null && !owner.SupportsHarness("pi"))
                 return Fail(scope, null,
                     $"审查执行后端 '{owner.OwnerId}' 未登记 pi harness，无法执行本地审查。", finished);
 
@@ -71,7 +75,7 @@ public sealed class LocalReviewHarnessExecutor : ILocalReviewExecutor
             var payload = LocalReviewPayload.BuildResult(scope, snapshot);
             var outcome = await owner.ExecuteAsync(new ExecutionRequest(
                 _dataRoot, _projectId, "pi", Model, payload.Text, _provider,
-                BaseSha: snapshot.HeadCommit), cancellationToken);
+                BaseSha: snapshot.HeadCommit, Runtime: _runtime), cancellationToken);
 
             var completedAt = DateTimeOffset.UtcNow;
             if (outcome.Status is ExecutionStatus.Unknown or ExecutionStatus.Interrupted)

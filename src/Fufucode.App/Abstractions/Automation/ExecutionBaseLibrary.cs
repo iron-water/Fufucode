@@ -15,7 +15,8 @@ public sealed record ExecutionRequest(
     string Prompt,
     string? Provider = null,
     string? EvidenceDirectory = null,
-    string? BaseSha = null);
+    string? BaseSha = null,
+    Fufucode.App.Abstractions.Automation.Harnesses.HarnessRuntime? Runtime = null);
 
 /// <summary>一次执行结果。Failed 是真实终态；Unknown 只能人工对账，不能自动重发。</summary>
 public sealed record ExecutionOutcome(
