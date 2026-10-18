@@ -552,7 +552,7 @@ public sealed class PersistentSessionManager
                     if (saved.Messages.Count > 0)
                     {
                         chat.RestoreHistory(saved.Messages);
-                        history.ApplyEntriesResponse(BuildNativeEntries(saved.Messages), replace: true);
+                        history.ApplyEntries(NativeEntries.Build(saved.Messages), leaf: NativeEntries.Leaf(saved.Messages), replace: true);
                         interrupted |= saved.Messages[^1].Role == PureAgentRole.User;
                         if (interrupted) chat.MarkInterrupted();
                     }
@@ -621,7 +621,7 @@ public sealed class PersistentSessionManager
 
             var history = new SessionHistory();
             if (result.Messages.Count > 0)
-                history.ApplyEntriesResponse(BuildNativeEntries(result.Messages), replace: true);
+                history.ApplyEntries(NativeEntries.Build(result.Messages), leaf: NativeEntries.Leaf(result.Messages), replace: true);
             result.Coordinator.RestoreHistory(history, result.Interrupted || session.WasActive);
 
             opened = new PersistentSession(session, project, result.Coordinator, history, _metadata, lease, file,
@@ -649,7 +649,8 @@ public sealed class PersistentSessionManager
     {
         try
         {
-            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            using var stream = File.OpenRead(file);
+            using var document = JsonDocument.Parse(stream);
             var root = document.RootElement;
             JsonElement messages;
             string? modelId = null, thinkingLevel = null, executionMode = null;
@@ -674,7 +675,8 @@ public sealed class PersistentSessionManager
                 throw new InvalidDataException("会话文件缺少 messages。");
             }
 
-            var list = JsonSerializer.Deserialize<List<PureAgentMessage>>(messages.GetRawText());
+            // 直接复用已解析的 JsonElement，不再 GetRawText() 生成字符串并二次解析。
+            var list = messages.Deserialize<List<PureAgentMessage>>();
             return list is null ? null : new NativeSessionFile(list, modelId, thinkingLevel, executionMode);
         }
         catch (Exception ex)
@@ -688,58 +690,6 @@ public sealed class PersistentSessionManager
             catch { }
             return null;
         }
-    }
-
-    /// <summary>把 FUMO 消息映射为与 Pi get_entries 同形的条目树，供桌面时间线回放。</summary>
-    private static JsonElement BuildNativeEntries(IReadOnlyList<PureAgentMessage> messages)
-    {
-        var entries = new List<object>();
-        string? parent = null;
-        for (var i = 0; i < messages.Count; i++)
-        {
-            var message = messages[i];
-            var role = message.Role switch
-            {
-                PureAgentRole.User => "user",
-                PureAgentRole.Assistant => "assistant",
-                PureAgentRole.Tool => "toolResult",
-                _ => "system",
-            };
-
-            var content = new List<object>();
-            if (!string.IsNullOrEmpty(message.Content)) content.Add(new { type = "text", text = message.Content });
-            if (message.ToolCalls is { Count: > 0 } calls)
-            {
-                foreach (var call in calls)
-                {
-                    JsonElement? arguments = null;
-                    try
-                    {
-                        using var parsed = JsonDocument.Parse(call.ArgumentsJson);
-                        arguments = JsonSerializer.SerializeToElement(parsed.RootElement);
-                    }
-                    catch (JsonException) { }
-                    content.Add(new { type = "toolCall", id = call.Id, name = call.Name, arguments });
-                }
-            }
-
-            object? usage = message.Usage is { } known
-                ? new
-                {
-                    input = known.InputTokens,
-                    output = known.OutputTokens,
-                    totalTokens = known.TotalTokens,
-                    cacheRead = known.CacheReadTokens,
-                    cacheWrite = known.CacheWriteTokens,
-                }
-                : null;
-
-            var id = $"entry_{i}";
-            entries.Add(new { id, parentId = parent, type = "message", message = new { role, content, usage } });
-            parent = id;
-        }
-
-        return JsonSerializer.SerializeToElement(new { entries, leafId = parent });
     }
 
     private void InstallEndpoint(CompatibleEndpoint? endpoint)
@@ -918,8 +868,15 @@ public sealed class PersistentSession : IAsyncDisposable
     private readonly DiagnosticLog _diagnosticLog;
     private bool _fileRecorded;
     private readonly SemaphoreSlim _historyGate = new(1, 1);
+    // 状态元数据只需保留最新的活跃/故障状态；读取端落后时丢弃旧值，内存有界。
+    private const int MetadataChannelCapacity = 64;
     private readonly Channel<(bool Active, bool Faulted)> _metadataChanges =
-        Channel.CreateUnbounded<(bool, bool)>(new UnboundedChannelOptions { SingleReader = true });
+        Channel.CreateBounded<(bool, bool)>(new BoundedChannelOptions(MetadataChannelCapacity)
+        {
+            SingleReader = true,
+            SingleWriter = false,
+            FullMode = BoundedChannelFullMode.DropOldest,
+        });
     private readonly Task _metadataWriter;
     private readonly object _metadataLock = new();
     private readonly object _enqueueLock = new();
