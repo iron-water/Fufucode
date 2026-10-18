@@ -248,7 +248,8 @@
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="0"/>
-    <Setter Property="Margin" Value="0,0,0,16"/>
+    <!-- 收进 8px 网格：与其它容器尾部一致，不再单独 16。 -->
+    <Setter Property="Margin" Value="0,0,0,8"/>
   </Style>
   <!-- 内容卡：非行式的说明/信息/列表容器（市场说明卡、插件项、可用模型、
        远程配对、关于版本、更新包说明等）。与 settingsRow 同底色同描边，
@@ -259,7 +260,8 @@
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="18,14"/>
-    <Setter Property="Margin" Value="0,0,0,12"/>
+    <!-- 收进 8px 网格：行距/组头间距都以 8 为基准，内容卡尾部也回到 8。 -->
+    <Setter Property="Margin" Value="0,0,0,8"/>
   </Style>
   <Style Selector="Border.settingsPanel.subtle">
     <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
@@ -271,7 +273,9 @@
   <Style Selector="TextBlock.settingsGroupHeader">
     <Setter Property="FontSize" Value="14"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
-    <Setter Property="Margin" Value="0,28,0,10"/>
+    <!-- 组头间距统一成 8px 网格的整数倍：行距 8 + 组头上方 32 = 40px 的固定分组间隔，
+         避免此前 28/12/16 各处叠加造成的忽宽忽窄。 -->
+    <Setter Property="Margin" Value="0,32,0,10"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
   <Style Selector="TextBlock.settingsGroupHeader.first">
