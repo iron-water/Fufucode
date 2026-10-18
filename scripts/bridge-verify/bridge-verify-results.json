@@ -1,0 +1,82 @@
+[
+  {
+    "scenario": "a01-allow",
+    "passed": true,
+    "details": {
+      "target": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-allow-H84TuZ\\project\\out.txt",
+      "executed": true,
+      "uiRequests": 1
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-allow-H84TuZ"
+  },
+  {
+    "scenario": "a01-deny",
+    "passed": true,
+    "details": {
+      "target": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-deny-esoe9o\\project\\out.txt",
+      "written": false,
+      "confirmRequests": 1
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-deny-esoe9o"
+  },
+  {
+    "scenario": "a01-timeout",
+    "passed": true,
+    "details": {
+      "target": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-timeout-WEQski\\project\\out.txt",
+      "written": false,
+      "confirmRequests": 1
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-timeout-WEQski"
+  },
+  {
+    "scenario": "a01-bash-deny",
+    "passed": true,
+    "details": {
+      "marker": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-bash-fhkBf2\\project\\marker.txt",
+      "executed": false,
+      "confirmRequests": 1
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a01-bash-fhkBf2"
+  },
+  {
+    "scenario": "policy-fallback",
+    "passed": true,
+    "details": {
+      "written": false,
+      "fallbackNotify": "fufucode-bridge: 自定义策略解析失败（C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-policy-fallback-4XPXtQ\\agent\\bad-policy.json: Expected property name or '}' in JSON at position 2 (line 1 column 3)），已回退默认 confirm 策略",
+      "confirmRequests": 1,
+      "notifyCount": 1
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-policy-fallback-4XPXtQ"
+  },
+  {
+    "scenario": "a02-nonblocking",
+    "passed": true,
+    "details": {
+      "sideResponseCommands": 31,
+      "confirmRequests": 1
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a02-2zHpHe"
+  },
+  {
+    "scenario": "a03-missing",
+    "passed": true,
+    "details": {
+      "bridgeCommandListed": false,
+      "commandCount": 29
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a03-missing-mqAKQJ",
+    "reported": "审批不可用 (bridge command not listed)"
+  },
+  {
+    "scenario": "a03-broken",
+    "passed": true,
+    "details": {
+      "readyError": "pi did not become ready: pi exited (code=1 signal=null)",
+      "bridgeCommandListed": false
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-bridge-a03-broken-6PGWih",
+    "reported": "审批不可用 (bridge failed to load; pi exited)"
+  }
+]

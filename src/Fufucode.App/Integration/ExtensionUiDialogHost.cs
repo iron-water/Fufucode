@@ -5,16 +5,15 @@ using Avalonia.Controls;
 using Avalonia.Threading;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App.Integration;
 
 /// <summary>
 /// 审批/对话框宿主：把 <see cref="IExtensionUiSession"/> 的待处理请求映射到非模态弹窗。
-/// 非模态保证审批期间主窗口时间线继续滚动；弹窗处理不等待
-/// <c>SendAsync</c> 先完成（扩展命令的 prompt 响应在 handler 完成后才发）。
+/// 非模态保证审批期间主窗口时间线继续滚动（计划 §11 A02）；弹窗处理不等待
+/// <c>SendAsync</c> 先完成（扩展命令的 prompt 响应在 handler 完成后才发，decisions.md [轨道B]）。
 /// 请求失效（超时/停止/断开）经 <see cref="IExtensionUiSession.ExtensionUiRequestClosed"/> 撤下，
-/// 不假设服务端清理本地 UI。
+/// 不假设服务端清理本地 UI（计划 §8.4）。
 /// </summary>
 public sealed class ExtensionUiDialogHost
 {

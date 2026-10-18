@@ -6,12 +6,11 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App;
 
 /// <summary>
-/// 扩展 UI 对话框（冻结清单）：confirm/select/input/editor 四种。
+/// 扩展 UI 对话框（decisions.md [轨道B] 冻结清单）：confirm/select/input/editor 四种。
 /// 关闭按钮（X）一律按取消/拒绝处理（fail-safe）；每个请求只应答一次；
 /// 本地超时或会话断开由 Core 发起 <see cref="IExtensionUiSession.ExtensionUiRequestClosed"/>，
 /// 宿主据此撤下本窗口（不假设服务端清理）。

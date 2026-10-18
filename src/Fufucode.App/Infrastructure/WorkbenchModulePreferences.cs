@@ -4,7 +4,8 @@ using Fufucode.App.Infrastructure.Browser;
 
 namespace Fufucode.App.Infrastructure;
 
-internal sealed record WorkbenchModulePreferences(int Version = 1, bool BrowserEnabled = true, BrowserPageState? BrowserState = null, bool LibraryEnabled = true)
+internal sealed record WorkbenchModulePreferences(int Version = 1, bool BrowserEnabled = true, BrowserPageState? BrowserState = null, bool LibraryEnabled = true,
+    bool LocalReviewEnabled = true, bool AutomationEnabled = true, string? AutomationDatabase = null)
 {
     public string Serialize() => JsonSerializer.Serialize(this);
 

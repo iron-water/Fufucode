@@ -2,10 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Threading;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Media;
+using Avalonia.Media.Transformation;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Fufucode.App.ViewModels;
@@ -21,6 +25,7 @@ public partial class SettingsPage : UserControl
     private bool _restoringScroll;
     private int _scrollGeneration;
     private bool? _compactNavigation;
+    private bool _syncingNav;
 
     private sealed record Position(Control Control, int Column, int Row, int ColumnSpan, int RowSpan,
         Thickness Margin, HorizontalAlignment Alignment);
@@ -30,7 +35,16 @@ public partial class SettingsPage : UserControl
     {
         InitializeComponent();
         EndpointKeyBox.TextChanged += (_, _) => _viewModel?.SetEndpointKeyDraftPresence(!string.IsNullOrEmpty(EndpointKeyBox.Text));
-        Loaded += (_, _) => { AttachViewModel(); UpdateResponsiveLayout(); };
+        // 侧栏选中项不双向绑定：搜索/升降级会重建条目实例，双向绑定会把选中写回成 null。
+        SettingsCategoryList.SelectionChanged += OnNavSelectionChanged;
+        CompactSettingsCategories.SelectionChanged += OnNavSelectionChanged;
+        Loaded += (_, _) =>
+        {
+            AttachViewModel();
+            UpdateResponsiveLayout();
+            // 首帧渲染后才同步选中——Loaded 时 Items 可能尚未 realize，SelectedItem 写入会被吞。
+            Dispatcher.UIThread.Post(SyncNavSelection, DispatcherPriority.Loaded);
+        };
         DataContextChanged += (_, _) => AttachViewModel();
         SizeChanged += (_, _) => UpdateResponsiveLayout();
         SettingsScroller.ScrollChanged += (_, _) =>
@@ -52,6 +66,7 @@ public partial class SettingsPage : UserControl
         {
             _viewModel.PropertyChanged -= OnViewModelChanged;
             _viewModel.DraftsDiscarded -= OnDraftsDiscarded;
+            _viewModel.NavigationRebuilt -= OnNavigationRebuilt;
         }
         _viewModel = DataContext as SettingsPageViewModel;
         _categoryOffsets.Clear();
@@ -63,18 +78,91 @@ public partial class SettingsPage : UserControl
         {
             _viewModel.PropertyChanged += OnViewModelChanged;
             _viewModel.DraftsDiscarded += OnDraftsDiscarded;
+            _viewModel.NavigationRebuilt += OnNavigationRebuilt;
         }
+        SyncNavSelection();
     }
 
     private void OnDraftsDiscarded(object? sender, EventArgs args) => EndpointKeyBox.Text = string.Empty;
+    private void OnNavigationRebuilt(object? sender, EventArgs args) => SyncNavSelection();
+
+    private void OnNavSelectionChanged(object? sender, SelectionChangedEventArgs args)
+    {
+        if (_syncingNav || _viewModel is null) return;
+        if (sender is ListBox { SelectedItem: SettingsCategoryViewModel category })
+            _viewModel.SelectCategory(category.Id);
+    }
+
+    /// <summary>把 VM 的选中分类同步到侧栏列表；条目实例会随搜索/升降级重建，因此按 Id 查找。</summary>
+    private void SyncNavSelection()
+    {
+        if (_viewModel is null) return;
+        _syncingNav = true;
+        try
+        {
+            var id = _viewModel.SelectedCategory?.Id;
+            // 选中「其他」桶里的小功能（不在一级列表）时，回退高亮到「其他」占位项。
+            var selected = FindNavItem(SettingsCategoryList, id);
+            if (id is not null && selected is null)
+                selected = FindNavItem(SettingsCategoryList, SettingsPageViewModel.OtherHubId);
+            SettingsCategoryList.SelectedItem = selected;
+
+            var compactSelected = FindNavItem(CompactSettingsCategories, id);
+            if (id is not null && compactSelected is null)
+                compactSelected = FindNavItem(CompactSettingsCategories, SettingsPageViewModel.OtherHubId);
+            CompactSettingsCategories.SelectedItem = compactSelected;
+        }
+        finally
+        {
+            _syncingNav = false;
+        }
+    }
+
+    private static SettingsCategoryViewModel? FindNavItem(ListBox list, string? id) =>
+        id is null ? null : list.ItemsSource?.OfType<SettingsCategoryViewModel>().FirstOrDefault(item => item.Id == id);
+
+    /// <summary>内容切换动画（Win11 设置：新页淡入+轻微上滑 ~150ms）。
+    /// Opacity 走 DoubleTransition，位移走 TransformOperationsTransition（RenderTransform
+    /// 在样式里初始化为 translate(0,0)，这里先压起始偏移再回 0 触发补间）。</summary>
+    private CancellationTokenSource? _contentAnimCts;
+
+    private void AnimateContentIn()
+    {
+        _contentAnimCts?.Cancel();
+        _contentAnimCts = new CancellationTokenSource();
+        var host = SettingsContentHost;
+        host.Opacity = 0;
+        host.RenderTransform = TransformOperations.Parse("translate(0px,12px)");
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_contentAnimCts.IsCancellationRequested) return;
+            host.Opacity = 1;
+            host.RenderTransform = TransformOperations.Parse("translate(0px,0px)");
+        }, DispatcherPriority.Render);
+    }
+
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)
     {
+        // 进入/退出子页时内容整页更换：滚动位置必须回到顶部，
+        // 否则会停在上一页的偏移处，看起来像一片空白。
+        if (args.PropertyName == nameof(SettingsPageViewModel.ActivePageId))
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                SettingsScroller.Offset = default;
+                AnimateContentIn();
+            }, DispatcherPriority.Loaded);
+            return;
+        }
+
         if (args.PropertyName != nameof(SettingsPageViewModel.SelectedCategory)) return;
+        SyncNavSelection();
         if (!_restoringScroll && _displayedCategory is { } previous) _categoryOffsets[previous] = SettingsScroller.Offset;
         _displayedCategory = _viewModel?.SelectedCategory?.Id;
         var id = _displayedCategory;
         var generation = ++_scrollGeneration;
         _restoringScroll = true;
+        AnimateContentIn();
         Dispatcher.UIThread.Post(() =>
         {
             if (generation != _scrollGeneration) return;
@@ -84,12 +172,16 @@ public partial class SettingsPage : UserControl
         }, DispatcherPriority.Loaded);
     }
 
-    /// <summary>把浮窗 VM 交给功能页，使浮窗开关在设置里可见可改。</summary>
-    internal void AttachFloating(FloatingPanelViewModel floating)
+    /// <summary>三个通知渠道共用一份已持久化偏好。</summary>
+    internal void AttachNotificationDelivery(NotificationDeliveryViewModel delivery)
     {
-        WorkbenchSections.AttachFloating(floating);
+        WorkbenchSections.AttachNotificationDelivery(delivery);
         WorkbenchSections.PageRequested += id => (DataContext as SettingsPageViewModel)?.OpenPage(id);
     }
+
+    /// <summary>浏览器设置真源（BRW-1）：设置页只做投影，真源由组合根创建并落盘。</summary>
+    internal void AttachBrowserSettings(BrowserSettingsViewModel browserSettings)
+        => WorkbenchSections.AttachBrowserSettings(browserSettings);
 
     internal void UpdateResponsiveLayout()
     {
@@ -99,8 +191,9 @@ public partial class SettingsPage : UserControl
         {
             _compactNavigation = compact;
             SettingsCategoryList.IsVisible = !compact;
+            SettingsSearchBox.IsVisible = !compact;
             CompactSettingsCategories.IsVisible = compact;
-            SettingsBody.ColumnDefinitions = new ColumnDefinitions(compact ? "*" : "248,*");
+            SettingsBody.ColumnDefinitions = new ColumnDefinitions(compact ? "*" : "300,*");
             SettingsBody.RowDefinitions = new RowDefinitions(compact ? "Auto,*" : "*");
             Grid.SetColumn(SettingsContentArea, compact ? 0 : 1);
             Grid.SetRow(SettingsContentArea, compact ? 1 : 0);
@@ -157,6 +250,32 @@ public partial class SettingsPage : UserControl
     }
 
     /// <summary>保存端点：密钥从密码框读出后即清空，绝不进入 VM 字符串属性。</summary>
+    /// <summary>「模型与思考」首页的提供商行：与其它行一致，用行级点击而不是内部按钮。</summary>
+    internal void OnOpenProvidersPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not SettingsPageViewModel vm) return;
+        if (!e.GetCurrentPoint(sender as Control).Properties.IsLeftButtonPressed) return;
+        vm.OpenProviderListCommand.Execute(null);
+    }
+
+    /// <summary>预设行：点击用该预设建立提供商并进入编辑页。</summary>
+    internal void OnPresetPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not SettingsPageViewModel vm) return;
+        if (!e.GetCurrentPoint(sender as Control).Properties.IsLeftButtonPressed) return;
+        if (sender is not Control { Tag: ProviderPreset preset }) return;
+        vm.ChoosePresetCommand.Execute(preset);
+    }
+
+    /// <summary>提供商列表行：点击进入该提供商的模型选择页。</summary>
+    internal void OnEditProviderPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is not SettingsPageViewModel vm) return;
+        if (!e.GetCurrentPoint(sender as Control).Properties.IsLeftButtonPressed) return;
+        if (sender is not Control { Tag: EndpointProviderItem provider }) return;
+        vm.EditProviderCommand.Execute(provider);
+    }
+
     internal async void OnSaveEndpointClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not SettingsPageViewModel vm)

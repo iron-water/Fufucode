@@ -2,7 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fufucode.App.ViewModels"
              x:Class="Fufucode.App.Views.UsageDetailsView"
-             x:DataType="vm:UsageDetailsViewModel" MaxWidth="680"
+             x:DataType="vm:UsageDetailsViewModel"
              AutomationProperties.Name="用量详情">
   <UserControl.Styles>
     <Style Selector="Button.usageScope">
@@ -15,23 +15,23 @@
     </Style>
   </UserControl.Styles>
   <Border Classes="overlayPanel">
-    <Grid RowDefinitions="Auto,Auto,*" MaxHeight="620">
+    <Grid RowDefinitions="Auto,Auto,*">
       <Grid ColumnDefinitions="*,Auto,Auto" Margin="16,12,12,8" ColumnSpacing="8">
         <TextBlock Classes="sectionTitle" Text="用量详情" VerticalAlignment="Center"/>
         <Button Grid.Column="1" Classes="subtle" Content="刷新" Command="{Binding RefreshCommand}" MinHeight="32"/>
-        <Button Grid.Column="2" Classes="iconButton" Content="×" Width="32" Height="32"
+        <Button Grid.Column="2" x:Name="ClosePageButton" Classes="iconButton" Content="×" Width="32" Height="32"
                 Command="{Binding CloseCommand}" AutomationProperties.Name="关闭用量详情"/>
       </Grid>
       <StackPanel Grid.Row="1" Margin="16,0,16,12" Spacing="8">
         <TextBlock Classes="caption" Text="{Binding SourceLabel}"/>
-        <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8">
+        <WrapPanel Orientation="Horizontal">
           <Button Classes="subtle usageScope" Classes.selected="{Binding IsCurrentSession}" Content="会话累计"
-                  Command="{Binding CurrentSessionCommand}" HorizontalAlignment="Stretch" MinHeight="36"/>
-          <Button Grid.Column="1" Classes="subtle usageScope" Classes.selected="{Binding IsCurrentTurn}" Content="本轮"
-                  Command="{Binding CurrentTurnCommand}" HorizontalAlignment="Stretch" MinHeight="36"/>
-          <Button Grid.Column="2" Classes="subtle usageScope" Classes.selected="{Binding IsAllRecorded}" Content="全部记录"
-                  Command="{Binding AllRecordedCommand}" HorizontalAlignment="Stretch" MinHeight="36"/>
-        </Grid>
+                  Command="{Binding CurrentSessionCommand}" MinWidth="96" MinHeight="36" Margin="0,0,4,4"/>
+          <Button Classes="subtle usageScope" Classes.selected="{Binding IsCurrentTurn}" Content="本轮"
+                  Command="{Binding CurrentTurnCommand}" MinWidth="96" MinHeight="36" Margin="0,0,4,4"/>
+          <Button Classes="subtle usageScope" Classes.selected="{Binding IsAllRecorded}" Content="全部记录"
+                  Command="{Binding AllRecordedCommand}" MinWidth="96" MinHeight="36" Margin="0,0,4,4"/>
+        </WrapPanel>
         <TextBlock Classes="caption" Text="{Binding ScopeDescription}" TextWrapping="Wrap"/>
         <TextBlock Classes="caption" Text="{Binding CompletenessText}" TextWrapping="Wrap"/>
         <TextBlock Classes="caption" Text="{Binding CacheShareText}" TextWrapping="Wrap"/>
@@ -78,7 +78,9 @@
             </ItemsControl>
           </StackPanel>
           <TextBlock Classes="caption" Text="{Binding UpdatedText}"/>
-          <TextBlock Classes="caption" Text="这里统计记录中的 tokens；费用、供应商额度与上下文占用暂无数据。" TextWrapping="Wrap"/>
+          <Expander Header="统计范围" IsExpanded="False">
+            <TextBlock Classes="caption" Text="仅统计记录中的 tokens。费用、供应商额度与上下文占用暂无数据。" TextWrapping="Wrap"/>
+          </Expander>
         </StackPanel>
       </ScrollViewer>
     </Grid>

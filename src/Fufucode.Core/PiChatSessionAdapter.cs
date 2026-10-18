@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
 using Fufucode.App.Abstractions;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -45,10 +44,10 @@ public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IE
         return adapter;
     }
 
-    public static async Task<PiChatSessionAdapter> ConnectAsync(PiRpcOptions options,
-        CancellationToken cancellationToken = default)
+    public static async Task<PiChatSessionAdapter> ConnectAsync(IRpcClientFactory factory, BackendId backend,
+        RpcSessionOptions? options = null, CancellationToken cancellationToken = default)
     {
-        var adapter = new PiChatSessionAdapter(new ChatSessionCoordinator(options));
+        var adapter = new PiChatSessionAdapter(new ChatSessionCoordinator(factory, backend, options));
         try
         {
             await adapter._session.StartAsync(cancellationToken);
@@ -77,7 +76,10 @@ public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IE
     public string BackendId => BackendCapabilities.StorageId(_session.Backend);
     public string BackendName => _session.Capabilities.Name;
     public SessionActivity Activity => Map(_session.Snapshot.Activity);
-    public SessionOutcome? LastOutcome => _hasOutcome ? Map(_session.Snapshot.LastResult) : null;
+    public SessionOutcome? LastOutcome
+    {
+        get { lock (_gate) return _hasOutcome ? Map(_snapshot.LastResult) : null; }
+    }
     public string? CurrentModel => _currentModel;
     public bool CanSend => Connection == SessionConnection.Connected && Activity != SessionActivity.Cancelling &&
         _session.CanSendPrompt;
@@ -126,7 +128,17 @@ public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IE
         await _session.SendPromptAsync(text, delivery, cancellationToken: cancellationToken);
     }
 
-    public Task StopAsync(CancellationToken cancellationToken = default) => _session.StopAsync(cancellationToken);
+    public async Task StopAsync(CancellationToken cancellationToken = default)
+    {
+        await _session.StopAsync(cancellationToken);
+        lock (_gate)
+        {
+            // The abort acknowledgement can precede the event pump's terminal notification.
+            // Publish the confirmed result without fabricating an event or reviving an older turn.
+            if (_snapshot.Activity == ActivityState.Idle && _snapshot.LastResult == TaskResult.Interrupted)
+                _hasOutcome = true;
+        }
+    }
 
     public bool CanSendImages => _supportsImages;
     public Task SendWithImagesAsync(string text, IReadOnlyList<ChatImage> images, CancellationToken cancellationToken = default)
@@ -149,11 +161,15 @@ public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IE
     private void OnSnapshot(SessionSnapshot next)
     {
         SessionSnapshot previous;
-        lock (_gate) { previous = _snapshot; _snapshot = next; }
-        if (previous.Activity == ActivityState.Idle && next.Activity == ActivityState.Running)
+        lock (_gate)
         {
-            _terminalPublished = false;
-            _hasOutcome = false;
+            previous = _snapshot;
+            _snapshot = next;
+            if (previous.Activity == ActivityState.Idle && next.Activity == ActivityState.Running)
+            {
+                _terminalPublished = false;
+                _hasOutcome = false;
+            }
         }
         if (previous.Connection != next.Connection) Emit(new SessionEvent.ConnectionChanged(Map(next.Connection)));
         if (previous.Activity != next.Activity) Emit(new SessionEvent.ActivityChanged(Map(next.Activity)));
@@ -216,12 +232,15 @@ public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IE
                 EmitTool(tool);
                 break;
             case PiOtherEvent { Type: "agent_settled" }:
-            case PiOtherEvent { Type: "session_settled" } when _session.Backend == Fufucode.Pi.BackendId.Omp:
-            case PiOtherEvent { Type: "prompt_result" } result when _session.Backend == Fufucode.Pi.BackendId.Omp &&
+            case PiOtherEvent { Type: "session_settled" } when _session.Backend == Fufucode.Core.BackendId.Omp:
+            case PiOtherEvent { Type: "prompt_result" } result when _session.Backend == Fufucode.Core.BackendId.Omp &&
                 result.Raw.TryGetProperty("sessionSettled", out var settled) && settled.ValueKind == JsonValueKind.True:
-                if (_session.Backend == Fufucode.Pi.BackendId.Omp && _terminalPublished) break;
-                _terminalPublished = true;
-                _hasOutcome = true;
+                lock (_gate)
+                {
+                    if (_session.Backend == Fufucode.Core.BackendId.Omp && _terminalPublished) break;
+                    _terminalPublished = true;
+                    _hasOutcome = true;
+                }
                 Emit(new SessionEvent.TurnSettled(Map(_session.Snapshot.LastResult), _session.Snapshot.LastError));
                 break;
         }

@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -19,18 +18,18 @@ public sealed record ThinkingLevelAvailability(IReadOnlyList<string> Levels, str
     public bool IsEmpty => Levels.Count == 0;
 
     /// <summary>Reads the get_available_thinking_levels response and the level Pi reports as active.</summary>
-    public static ThinkingLevelAvailability Parse(PiRpcResponse response, string? model = null)
+    public static ThinkingLevelAvailability Parse(RpcResponse response, string? model = null)
     {
         ArgumentNullException.ThrowIfNull(response);
         if (!response.Success || response.Data is not { ValueKind: JsonValueKind.Object } data)
-            throw new PiRpcException($"Pi get_available_thinking_levels failed: {response.Error}");
+            throw new RpcException($"Pi get_available_thinking_levels failed: {response.Error}");
         if (!data.TryGetProperty("levels", out var levels) || levels.ValueKind != JsonValueKind.Array)
-            throw new PiRpcException("Pi get_available_thinking_levels returned no level list.");
+            throw new RpcException("Pi get_available_thinking_levels returned no level list.");
         var values = new List<string>();
         foreach (var item in levels.EnumerateArray())
         {
             if (item.ValueKind != JsonValueKind.String || item.GetString() is not { Length: > 0 } value)
-                throw new PiRpcException("Pi get_available_thinking_levels returned a non-string level.");
+                throw new RpcException("Pi get_available_thinking_levels returned a non-string level.");
             values.Add(value);
         }
         var current = data.TryGetProperty("level", out var level) && level.ValueKind == JsonValueKind.String

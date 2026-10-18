@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Fufucode.App.Aero.Tests</AssemblyName>
+    <RootNamespace>Fufucode.App.Aero.Tests</RootNamespace>
+    <!-- 与 Fufucode.App 的 WebView2Version 保持一致：仅用于下面的传递引用剥离。 -->
+    <WebView2Version>1.0.4258.31</WebView2Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.App/Fufucode.App.csproj" />
+  </ItemGroup>
+  <!-- RealCaptionProbe 是独立可执行探针（自己的 csproj/入口），不属于本工程的编译树。 -->
+  <ItemGroup>
+    <Compile Remove="RealCaptionProbe/**/*.cs" />
+    <None Remove="RealCaptionProbe/**" />
+    <AvaloniaXaml Remove="RealCaptionProbe/**" />
+  </ItemGroup>
+  <!-- Fufucode.App 经 Microsoft.Web.WebView2 把 WPF/WinForms 宿主程序集传递到本测试工程，
+       与 net10.0 的 WindowsBase 产生 MSB3277 版本冲突警告。皮肤测试只用 Avalonia/Skia，
+       不需要这两个宿主程序集：按 App 工程既有 StripUnusedWebView2ManagedRefs 的做法在
+       ResolveAssemblyReferences 前按项标识移除引用（修原因，不用 NoWarn 掩盖）。
+       项标识确为 `buildTransitive\..\\lib_manual\...`（WebView2 包 Common.targets 的原样写法），
+       少一个反斜杠则不匹配、剥离失效。 -->
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
+</Project>

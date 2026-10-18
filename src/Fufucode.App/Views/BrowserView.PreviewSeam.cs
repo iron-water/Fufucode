@@ -7,7 +7,7 @@ namespace Fufucode.App.ViewModels;
 /// <summary>
 /// E-seam 接线用的可见性判定：右栏当前 tab 的 PanelId 以 "|preview" 结尾时点亮内置浏览器。
 /// 放在 Fufucode.App.ViewModels 命名空间，是为了复用 WorkspacePanelView.axaml 已有的 vm: 前缀，
-/// 从而不需要修改工作区面板的视图模型。
+/// 从而不需要修改 D 轨拥有的 WorkspacePanelViewModel（协调项见 docs/archive/progress/progress-e.md）。
 /// 只依赖 PanelId 字符串约定，不依赖 D 轨类型，合并冲突面最小。
 /// </summary>
 public sealed class BrowserPreviewSeam : IValueConverter

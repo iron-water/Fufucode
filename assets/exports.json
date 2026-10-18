@@ -1,0 +1,9170 @@
+[
+  {
+    "path": "icon/icon.svg",
+    "size": [
+      96,
+      96
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-small.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-48.png",
+    "size": [
+      48,
+      48
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-64.png",
+    "size": [
+      64,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-128.png",
+    "size": [
+      128,
+      128
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-256.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-small-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/fufucode.ico",
+    "sizes": [
+      16,
+      20,
+      24,
+      32,
+      48,
+      64,
+      128,
+      256
+    ],
+    "kind": "ico",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-light.svg",
+    "size": [
+      96,
+      96
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-light-96.png",
+    "size": [
+      96,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-light-192.png",
+    "size": [
+      192,
+      192
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-light-288.png",
+    "size": [
+      288,
+      288
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-light.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-light.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-light@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-light@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-dark.svg",
+    "size": [
+      96,
+      96
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-dark-96.png",
+    "size": [
+      96,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-dark-192.png",
+    "size": [
+      192,
+      192
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/icon-dark-288.png",
+    "size": [
+      288,
+      288
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-dark.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-dark.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-dark@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "icon/preview-dark@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-light.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-light.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-light@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-light@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-dark.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-dark.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-dark@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/conversation-dark@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-light.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-light.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-light@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-light@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-dark.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-dark.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-dark@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/extensions-dark@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-light.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-light.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-light@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-light@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-dark.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-dark.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-dark@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/interrupted-dark@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-light.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-light.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-light@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-light@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-dark.svg",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-dark.png",
+    "size": [
+      320,
+      200
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-dark@2x.png",
+    "size": [
+      640,
+      400
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "empty/error-dark@3x.png",
+    "size": [
+      960,
+      600
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/new-session-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/new-session-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/new-session-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/expand-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/expand-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/expand-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/collapse-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/collapse-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/collapse-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/pause-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/pause-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/pause-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/resume-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/resume-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/resume-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/stop-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/stop-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/stop-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-minimize-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-minimize-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-minimize-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-maximize-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-maximize-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-maximize-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-restore-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-restore-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-restore-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-16.svg",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-16.png",
+    "size": [
+      16,
+      16
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-20.svg",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-20.png",
+    "size": [
+      20,
+      20
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-24.svg",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-24.png",
+    "size": [
+      24,
+      24
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/window-close-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/light/window-close-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-normal-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-hover-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-pressed-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-32.svg",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "actions/dark/window-close-disabled-32.png",
+    "size": [
+      32,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/minimize-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/minimize-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/minimize-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/maximize-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/maximize-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/maximize-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/restore-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/restore-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/restore-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/light/close-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/close-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-normal.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-normal.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-normal@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-normal@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-hover.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-hover.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-hover@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-hover@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-pressed.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-pressed.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-pressed@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-pressed@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-disabled.svg",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-disabled.png",
+    "size": [
+      46,
+      32
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-disabled@2x.png",
+    "size": [
+      92,
+      64
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "titlebar/dark/close-disabled@3x.png",
+    "size": [
+      138,
+      96
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-light.svg",
+    "size": [
+      330,
+      630
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-light.png",
+    "size": [
+      330,
+      630
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-light@2x.png",
+    "size": [
+      660,
+      1260
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-light@3x.png",
+    "size": [
+      990,
+      1890
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side.svg",
+    "size": [
+      330,
+      630
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side.png",
+    "size": [
+      330,
+      630
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side@2x.png",
+    "size": [
+      660,
+      1260
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side@3x.png",
+    "size": [
+      990,
+      1890
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-light.svg",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-light.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-light@2x.png",
+    "size": [
+      512,
+      512
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-light@3x.png",
+    "size": [
+      768,
+      768
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small.svg",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small@2x.png",
+    "size": [
+      512,
+      512
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small@3x.png",
+    "size": [
+      768,
+      768
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-light.svg",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-light.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-light@2x.png",
+    "size": [
+      512,
+      512
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-light@3x.png",
+    "size": [
+      768,
+      768
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete.svg",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete@2x.png",
+    "size": [
+      512,
+      512
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete@3x.png",
+    "size": [
+      768,
+      768
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-dark.svg",
+    "size": [
+      330,
+      630
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-dark.png",
+    "size": [
+      330,
+      630
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-dark@2x.png",
+    "size": [
+      660,
+      1260
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-side-dark@3x.png",
+    "size": [
+      990,
+      1890
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-dark.svg",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-dark.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-dark@2x.png",
+    "size": [
+      512,
+      512
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/wizard-small-dark@3x.png",
+    "size": [
+      768,
+      768
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-dark.svg",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "svg",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-dark.png",
+    "size": [
+      256,
+      256
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-dark@2x.png",
+    "size": [
+      512,
+      512
+    ],
+    "kind": "png",
+    "origin": "original"
+  },
+  {
+    "path": "installer/complete-dark@3x.png",
+    "size": [
+      768,
+      768
+    ],
+    "kind": "png",
+    "origin": "original"
+  }
+]

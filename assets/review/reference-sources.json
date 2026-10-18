@@ -1,0 +1,78 @@
+{
+  "LICENSE": {
+    "bytes": 1092,
+    "sha256": "af553fac575bec517f32631bb97e1f0e76a37dc56b7a1af496e8ba61308422b2"
+  },
+  "UniGetUI.iss": {
+    "bytes": 14818,
+    "sha256": "793ecddbfd4b4b54d2da27adb2f7db84cdddbe4374f163b2304807757ef74c8d"
+  },
+  "media/UniGetUI_1.png": {
+    "bytes": 378067,
+    "sha256": "1bc0a60eb121d48f8b8b78fd8dcb7860b0a7dfe77790b1122394c622e9d22bb9"
+  },
+  "media/UniGetUI_2.png": {
+    "bytes": 323944,
+    "sha256": "d67dfd36cc528451ffc72917f952bbd5b38dcfcc85accdfeba0882e6081c2f09"
+  },
+  "media/UniGetUI_8.png": {
+    "bytes": 284301,
+    "sha256": "2ddcf36fb1f07913a6cf8c244f0ee5dd73dd55edbe535a29e921e7ce720190a1"
+  },
+  "media/assets/devolutions-unigetui-icon.svg": {
+    "bytes": 2957,
+    "sha256": "224475dac9cfdce0d99b5e7f80ec76b039f19f8b13f6eb67ba259158663ce682"
+  },
+  "media/assets/splash-light.png": {
+    "bytes": 18691,
+    "sha256": "5f8b881b41424495e5dc054ec439dc2ba5394c9a9e0dcdbc95388a0e5d956a7c"
+  },
+  "media/assets/splash-dark.png": {
+    "bytes": 18644,
+    "sha256": "b208946dd810a5f5759d9ae0bcfd3bf4a6d1ab9a615e63edc03b80ac1f55b0b6"
+  },
+  "src/SharedAssets/Assets/Symbols/add_to.svg": {
+    "bytes": 1379,
+    "sha256": "cb895d28d43eb18746bf3d7db7db8d5db37e7e0d3a3c35368b904e001d96d8d1"
+  },
+  "src/SharedAssets/Assets/Symbols/expand.svg": {
+    "bytes": 450,
+    "sha256": "dd5ef7a839f6fff4bd81563948cd8f43accc145c32fb8d71a2b44f79b2fef301"
+  },
+  "src/SharedAssets/Assets/Symbols/collapse.svg": {
+    "bytes": 397,
+    "sha256": "c3095e9811694e2f2adc4e76a43b1d847a7b9a2eb6f7c1857f3488e4c9a0ed9d"
+  },
+  "src/SharedAssets/Assets/Images/alert_laptop.png": {
+    "bytes": 3422,
+    "sha256": "cee0f48fea25a924b3bc4dbf21c078d5d8ee32e00d5d3a4546499d616ead2088"
+  },
+  "src/UniGetUI.Avalonia/Assets/Images/Empty_inbox.png": {
+    "bytes": 254385,
+    "sha256": "2926c8c29797b63b0c32d09f981500c6ffb5cb5e015ea0b25d78a228602a3271"
+  },
+  "src/UniGetUI.Avalonia/Views/MainWindow.axaml": {
+    "bytes": 53384,
+    "sha256": "990d0ca6945eadf88e1037cdddab1b17d7ba1c471500b282b76c6bb86dd7ec8a"
+  },
+  "src/UniGetUI.Avalonia/Views/SoftwarePages/AbstractPackagesPage.axaml": {
+    "bytes": 84844,
+    "sha256": "46ecca57d9d3884553360fc11011c63aaa3d31c9905322efd505f2c9b8d42ba6"
+  },
+  "src/UniGetUI.Avalonia/Views/SoftwarePages/PackageBundlesPage.cs": {
+    "bytes": 31737,
+    "sha256": "6051d04c35446a91e4bb23001daef17de9363952658dc0ab8cefb4583be9ffc3"
+  },
+  "src/UniGetUI.Avalonia/Assets/Styles/Styles.Common.axaml": {
+    "bytes": 78724,
+    "sha256": "128cefe5f27eff3c7d51f6b7ecfd44239e2b6ac377c223f1c89b04ee3f2c2d9f"
+  },
+  "InstallerExtras/installer-banner.png": {
+    "bytes": 11464,
+    "sha256": "e573d7dfc95f76cf60e403d89a98ffb0cfaacac47780fb1b0665c79ba6f3b200"
+  },
+  "InstallerExtras/unigetui-256.png": {
+    "bytes": 11065,
+    "sha256": "25b81688e16c94ace82a4b014e60f7998eb47ab17dd6275ec97120dfae4f2634"
+  }
+}

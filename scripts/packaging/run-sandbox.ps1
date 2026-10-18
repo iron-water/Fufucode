@@ -28,6 +28,13 @@ Write-Host "Sandbox evidence: $($evidence.FullName)"
 $cli = Get-Command wsb.exe -ErrorAction SilentlyContinue
 try {
 if ($cli) {
+    # wsb talks to its local gRPC endpoint over HTTP/2. An inherited HTTP(S)_PROXY
+    # (local proxy tools) turns that into a CONNECT request that the proxy cannot
+    # service, and every wsb call fails with "unable to establish HTTP/2 connection".
+    # Bypass the proxy for loopback only; other traffic is untouched.
+    $loopback = @('localhost', '127.0.0.1')
+    $currentNoProxy = @($Env:NO_PROXY -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    $Env:NO_PROXY = (($currentNoProxy + $loopback | Select-Object -Unique) -join ',')
     $id = [Guid]::NewGuid().ToString()
     & $cli.Source start --id $id --config $xml.OuterXml --raw
     if ($LASTEXITCODE -ne 0) { throw 'Windows Sandbox CLI start failed.' }

@@ -165,6 +165,15 @@ public partial class ChatPage : UserControl
     // Tunnel 阶段调用（见构造函数注释）：先于 TextBox 自身处理。
     private void InputBox_KeyDown(object? sender, KeyEventArgs e)
     {
+        // UI-1 CJK 输入法双重互锁，第二重：VK 229 在 Avalonia 里映射为 Key.ImeProcessed
+        // （对齐 Web 侧 keyCode === 229）。合成键不进入发送分支，直接吞掉——即使它一旦
+        // 被归一化成 Enter 也不会误发。
+        if (e.Key == Key.ImeProcessed)
+        {
+            e.Handled = true;
+            return;
+        }
+
         if (e.Key != Key.Enter)
         {
             return;
@@ -176,7 +185,9 @@ public partial class ChatPage : UserControl
             return;
         }
 
-        // 计划 §9：中文输入法组合期间 Enter 不误发送（见 ImeEnterGuard）
+        // 计划 §9 + UI-1，第一重：组合态（preedit 时间窗）命中时 Enter 不发送。
+        // 此处 key 已排除 229（第二重已在上面返回），故 isComposing 由 PreeditText 时间窗
+        // 等价表达，调用组合态判定即可；纯逻辑组合等价于 ShouldSwallowEnter(keyCode, isComposing)。
         if (_imeGuard.ShouldSwallowEnter())
         {
             e.Handled = true;

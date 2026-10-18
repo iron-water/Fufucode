@@ -1,0 +1,226 @@
+[
+  {
+    "asset": "brand-main",
+    "title": "应用标识 · 原创折页代码图形",
+    "comparison": "review/compare/brand-main.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\assets\\devolutions-unigetui-icon.svg",
+    "note": "同一图标槽位；未复用 UniGetUI 路径"
+  },
+  {
+    "asset": "brand-small",
+    "title": "小尺寸标识 · 原生像素与 3×近邻放大",
+    "comparison": "review/compare/brand-small.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\assets\\devolutions-unigetui-icon.svg",
+    "note": "原生 16 / 20 / 24 / 32；参考列由 SVG 渲染，非全部尺寸的原有 ICO 层"
+  },
+  {
+    "asset": "brand-preview-light",
+    "title": "品牌与留白 · light",
+    "comparison": "review/compare/brand-preview-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\assets\\splash-light.png",
+    "note": "主题独立校准；参考为实际 Splash 资产"
+  },
+  {
+    "asset": "brand-preview-dark",
+    "title": "品牌与留白 · dark",
+    "comparison": "review/compare/brand-preview-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\assets\\splash-dark.png",
+    "note": "主题独立校准；参考为实际 Splash 资产"
+  },
+  {
+    "asset": "empty-conversation-light",
+    "title": "空态 · conversation · light",
+    "comparison": "review/compare/empty-conversation-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Assets\\Images\\Empty_inbox.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-conversation-dark",
+    "title": "空态 · conversation · dark",
+    "comparison": "review/compare/empty-conversation-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Assets\\Images\\Empty_inbox.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-extensions-light",
+    "title": "空态 · extensions · light",
+    "comparison": "review/compare/empty-extensions-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Assets\\Images\\Empty_inbox.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-extensions-dark",
+    "title": "空态 · extensions · dark",
+    "comparison": "review/compare/empty-extensions-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Assets\\Images\\Empty_inbox.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-interrupted-light",
+    "title": "空态 · interrupted · light",
+    "comparison": "review/compare/empty-interrupted-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\SharedAssets\\Assets\\Images\\alert_laptop.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-interrupted-dark",
+    "title": "空态 · interrupted · dark",
+    "comparison": "review/compare/empty-interrupted-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\SharedAssets\\Assets\\Images\\alert_laptop.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-error-light",
+    "title": "空态 · error · light",
+    "comparison": "review/compare/empty-error-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\SharedAssets\\Assets\\Images\\alert_laptop.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "empty-error-dark",
+    "title": "空态 · error · dark",
+    "comparison": "review/compare/empty-error-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\SharedAssets\\Assets\\Images\\alert_laptop.png",
+    "note": "透明 SVG/PNG；参考是空态槽位/错误语义对应，非逐页运行截图"
+  },
+  {
+    "asset": "installer-wizard-side-light",
+    "title": "安装器素材 · wizard-side · light",
+    "comparison": "review/compare/installer-wizard-side-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\InstallerExtras\\installer-banner.png",
+    "note": "透明原图；独立 light/dark 校准；PNG 1x / 2x / 3x"
+  },
+  {
+    "asset": "installer-wizard-side-dark",
+    "title": "安装器素材 · wizard-side · dark",
+    "comparison": "review/compare/installer-wizard-side-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\InstallerExtras\\installer-banner.png",
+    "note": "透明原图；独立 light/dark 校准；PNG 1x / 2x / 3x"
+  },
+  {
+    "asset": "installer-wizard-small-light",
+    "title": "安装器素材 · wizard-small · light",
+    "comparison": "review/compare/installer-wizard-small-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\InstallerExtras\\unigetui-256.png",
+    "note": "透明原图；独立 light/dark 校准；PNG 1x / 2x / 3x"
+  },
+  {
+    "asset": "installer-wizard-small-dark",
+    "title": "安装器素材 · wizard-small · dark",
+    "comparison": "review/compare/installer-wizard-small-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\InstallerExtras\\unigetui-256.png",
+    "note": "透明原图；独立 light/dark 校准；PNG 1x / 2x / 3x"
+  },
+  {
+    "asset": "installer-complete-light",
+    "title": "安装器素材 · complete · light",
+    "comparison": "review/compare/installer-complete-light.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\InstallerExtras\\installer-banner.png",
+    "note": "透明原图；独立 light/dark 校准；PNG 1x / 2x / 3x"
+  },
+  {
+    "asset": "installer-complete-dark",
+    "title": "安装器素材 · complete · dark",
+    "comparison": "review/compare/installer-complete-dark.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\InstallerExtras\\installer-banner.png",
+    "note": "透明原图；独立 light/dark 校准；PNG 1x / 2x / 3x"
+  },
+  {
+    "asset": "action-new-session",
+    "title": "动作图标 · new-session",
+    "comparison": "review/compare/action-new-session.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_1.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-expand",
+    "title": "动作图标 · expand",
+    "comparison": "review/compare/action-expand.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_8.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-collapse",
+    "title": "动作图标 · collapse",
+    "comparison": "review/compare/action-collapse.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_8.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-pause",
+    "title": "动作图标 · pause",
+    "comparison": "review/compare/action-pause.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_8.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-resume",
+    "title": "动作图标 · resume",
+    "comparison": "review/compare/action-resume.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_8.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-stop",
+    "title": "动作图标 · stop",
+    "comparison": "review/compare/action-stop.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_8.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-window-minimize",
+    "title": "动作图标 · window-minimize",
+    "comparison": "review/compare/action-window-minimize.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_1.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-window-maximize",
+    "title": "动作图标 · window-maximize",
+    "comparison": "review/compare/action-window-maximize.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_1.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-window-restore",
+    "title": "动作图标 · window-restore",
+    "comparison": "review/compare/action-window-restore.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_1.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "action-window-close",
+    "title": "动作图标 · window-close",
+    "comparison": "review/compare/action-window-close.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\media\\UniGetUI_1.png",
+    "note": "16 / 20 / 24 / 32 px · light / dark · 四态；第三列注明同位参考边界"
+  },
+  {
+    "asset": "titlebar-minimize",
+    "title": "窗口按钮 · minimize",
+    "comparison": "review/compare/titlebar-minimize.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Views\\MainWindow.axaml",
+    "note": "参考源：MainWindow.axaml 的 caption 样式与几何路径；截图只证明常规态"
+  },
+  {
+    "asset": "titlebar-maximize",
+    "title": "窗口按钮 · maximize",
+    "comparison": "review/compare/titlebar-maximize.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Views\\MainWindow.axaml",
+    "note": "参考源：MainWindow.axaml 的 caption 样式与几何路径；截图只证明常规态"
+  },
+  {
+    "asset": "titlebar-restore",
+    "title": "窗口按钮 · restore",
+    "comparison": "review/compare/titlebar-restore.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Views\\MainWindow.axaml",
+    "note": "参考源：MainWindow.axaml 的 caption 样式与几何路径；截图只证明常规态"
+  },
+  {
+    "asset": "titlebar-close",
+    "title": "窗口按钮 · close",
+    "comparison": "review/compare/titlebar-close.png",
+    "reference": "C:\\Projects\\Fufucode\\reference\\UniGetUI\\src\\UniGetUI.Avalonia\\Views\\MainWindow.axaml",
+    "note": "参考源：MainWindow.axaml 的 caption 样式与几何路径；截图只证明常规态"
+  }
+]

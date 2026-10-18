@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.VisualTree;
 
 namespace Fufucode.App.Views;
@@ -37,7 +38,8 @@ internal static class SettingsLayout
         countText.Classes.Add("meta");
 
         var content = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 8 };
-        var title = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center, FontSize = 14, FontWeight = FontWeight.SemiBold };
+        var title = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0) };
+        title.Classes.Add("settingsGroupHeader");
         content.Children.Add(title);
         Grid.SetColumn(countText, 1); content.Children.Add(countText);
         Grid.SetColumn(chevron, 2); content.Children.Add(chevron);
@@ -66,8 +68,7 @@ internal static class SettingsLayout
     private static readonly IBrush? Transparent = null;
     private static void TryGeometry(string key, PathIcon icon)
     {
-        if (Application.Current?.TryGetResource(key, null, out var value) == true && value is Geometry geometry)
-            icon.Data = geometry;
+        icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension(key));
     }
 
     /// <summary>
@@ -116,8 +117,8 @@ internal static class SettingsLayout
         {
             if (!e.GetCurrentPoint(row).Properties.IsLeftButtonPressed) return;
             // 点在开关自身时不重复切换（控件已处理）。
-            if (e.Source is ToggleSwitch) return;
-            if (e.Source is Visual visual && visual.GetVisualAncestors().Any(a => a is ToggleSwitch)) return;
+            if (e.Source is ToggleSwitch or Button) return;
+            if (e.Source is Visual visual && visual.GetVisualAncestors().Any(a => a is ToggleSwitch or Button)) return;
             toggle.IsChecked = toggle.IsChecked != true;
         };
         return row;
@@ -127,8 +128,7 @@ internal static class SettingsLayout
     public static Border ChevronRow(string title, string? description, Action open, string? iconKey = null)
     {
         var chevron = new PathIcon { Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center };
-        if (Application.Current?.TryGetResource("Icon.ChevronRight", null, out var geometry) == true)
-            chevron.Data = geometry as Geometry;
+        TryGeometry("Icon.ChevronRight", chevron);
         chevron.Classes.Add("meta");
         var row = Build(title, description, chevron, iconKey, open);
         AutomationProperties.SetName(row, "打开：" + title);
@@ -143,9 +143,10 @@ internal static class SettingsLayout
         text.Children.Add(titleBlock);
         if (!string.IsNullOrEmpty(description))
         {
+            // Win11 设置：描述直接以次级文字渲染在标题下方——唯一的提示方式。
             var desc = new TextBlock { Text = description };
             desc.Classes.Add("settingsRowDesc");
-            ToolTip.SetTip(desc, description);
+            desc.TextTrimming = TextTrimming.None;
             text.Children.Add(desc);
         }
 
@@ -153,8 +154,7 @@ internal static class SettingsLayout
         if (iconKey is not null)
         {
             var icon = new PathIcon { Width = 18, Height = 18, VerticalAlignment = VerticalAlignment.Center };
-            if (Application.Current?.TryGetResource("Icon." + iconKey, null, out var geometry) == true)
-                icon.Data = geometry as Geometry;
+            TryGeometry("Icon." + iconKey, icon);
             icon.Classes.Add("meta");
             grid.Children.Add(icon);
         }
@@ -167,6 +167,7 @@ internal static class SettingsLayout
 
         var row = new Border { Child = grid };
         row.Classes.Add("settingsRow");
+        // Win11 行高：带说明 64，仅标题 52。compact 只给无说明行。
         if (string.IsNullOrEmpty(description)) row.Classes.Add("compact");
         if (open is not null) row.Classes.Add("clickable");
         if (open is not null)

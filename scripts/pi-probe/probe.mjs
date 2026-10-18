@@ -1,3 +1,4 @@
+// Pi backend plugin diagnostic — not part of the default native package.
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, copyFileSync, readdirSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -175,7 +176,7 @@ await item('07', 'explicit extension load fail-closed and extension_error event'
   const ws = workspace('errors');
   const broken = join(ws.base, 'broken.ts'); writeFileSync(broken, "throw new Error('probe intentional load failure');\n");
   const event = join(ws.base, 'event.ts'); writeFileSync(event, "export default function(pi) { pi.on('agent_start', () => { throw new Error('probe intentional event failure'); }); }\n");
-  // A broken explicitly supplied extension must fail closed at startup (PiStartupFailure).
+  // docs/verification.md: PiStartupFailure for a broken explicitly supplied extension.
   await assert.rejects(start(ws, [], { extensions: [broken] }), /pi exited \(code=1/);
   const loadEvidence = JSON.parse(readFileSync(join(ws.base, readdirSync(ws.base).find(f => /^rpc-/.test(f))), 'utf8'));
   assert.match(loadEvidence.stderr, /probe intentional load failure/);

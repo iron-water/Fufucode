@@ -23,15 +23,14 @@ using Fufucode.App.Integration;
 using Fufucode.App.Mock;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
-using Fufucode.Pi;
 using AbstractionsTextBlock = Fufucode.App.Abstractions.TextBlock;
 
 namespace Fufucode.App.SelfTest;
 
 /// <summary>
-/// 无头自测（--selftest）：不依赖交互式桌面会话，验证验收点。
+/// 无头自测（--selftest）：不依赖交互式桌面会话，验证任务书验收点。
 /// 默认只跑 mock 段（无 Pi 环境保持全绿）；--realpi 追加真实 Pi 集成段（隔离数据目录）。
-/// 全部断言结果输出到 stdout 与返回码。
+/// 全部断言结果输出到 stdout 与返回码；证据由人工摘录到 docs/archive/progress/progress-d.md。
 /// </summary>
 public static class SelfTestRunner
 {
@@ -53,6 +52,64 @@ public static class SelfTestRunner
         // 设置存储隔离：任何窗口创建前指向临时根，避免读写真实 %LOCALAPPDATA%/Fufucode/settings.json。
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
+
+        if (args.Contains("--automation-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => AutomationControlSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Automation page failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
+        if (args.Contains("--plugin-reconciliation-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginReconciliationSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Plugin reconciliation failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+        if (args.Contains("--local-plugins-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginIntegrationSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginStartupSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginReceiptSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginInFlightSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginCallbackJournalSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginReconciliationSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Local plugin integration failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+        if (args.Contains("--local-plugins-real-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginRealSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Real plugin shell failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+        if (args.Contains("--local-plugins-cancel-real-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => LocalPluginCancellationSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Real plugin cancellation failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
+        if (args.Contains("--notification-page-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => NotificationPageSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Notification page failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
+        if (args.Contains("--terminal-integration-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => TerminalIntegrationSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Terminal integration failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
+        if (args.Contains("--floating-workbench-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => FloatingWorkbenchSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Floating workbench failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
 
         Dispatcher.UIThread.UnhandledException += (_, args) =>
         {
@@ -88,11 +145,30 @@ public static class SelfTestRunner
             Console.WriteLine($"Tabs failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
+        if (args.Contains("--browser-integration-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => BrowserIntegrationSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Browser integration failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
         if (args.Contains("--r05-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => WorkbenchCustomizationSelfTest.RunAsync(Pass, Fail));
             Console.WriteLine($"R05 failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
+        }
+        if (args.Contains("--skins-integration-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => SkinIntegrationSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Skin integration failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+        if (args.Contains("--workbuddy-only"))
+        {
+            // WorkBuddy 皮肤已归档（它是手机遥控配套 App 的设计规范，非桌面皮肤）；
+            // 保留该入口避免 CI/脚本 404，但不再有其专属测试。
+            Console.WriteLine("WorkBuddy selftest archived: skin removed from catalog.");
+            return 0;
         }
         if (args.Contains("--settings-destination-only"))
         {
@@ -176,7 +252,14 @@ public static class SelfTestRunner
 
         await RunOnHeadlessUiThreadAsync(() => WorkbenchDemoSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => WorkbenchTabsSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => FloatingWorkbenchSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => NotificationPageSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => AutomationControlSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => TerminalIntegrationSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => BrowserIntegrationSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => WorkbenchCustomizationSelfTest.RunAsync(Pass, Fail));
+
+        await RunOnHeadlessUiThreadAsync(() => SkinIntegrationSelfTest.RunAsync(Pass, Fail));
 
         await RunOnHeadlessUiThreadAsync(() => SessionOrganizationSelfTest.RunAsync(Pass, Fail));
 
@@ -184,6 +267,12 @@ public static class SelfTestRunner
         await RunOnHeadlessUiThreadAsync(() => ShortcutManagerSelfTest.RunAsync(Pass, Fail));
 
         // H3 扩展管理页：get_commands 解析、发现扫描、填入规则、安全重启守卫
+        await RunOnHeadlessUiThreadAsync(() => LocalPluginIntegrationSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => LocalPluginStartupSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => LocalPluginReceiptSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => LocalPluginInFlightSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => LocalPluginCallbackJournalSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => LocalPluginReconciliationSelfTest.RunAsync(Pass, Fail));
         TestExtensionCatalogParsing();
         TestExtensionDiscoveryScan();
         await RunOnHeadlessUiThreadAsync(TestCommandFillRuleAsync);
@@ -220,8 +309,6 @@ public static class SelfTestRunner
             await RunOnHeadlessUiThreadAsync(TestRealPiIntegrationAsync);
             await RunOnHeadlessUiThreadAsync(TestRealPiExtensionsAsync);
             await RunOnHeadlessUiThreadAsync(TestRealPiProjectSwitchAsync);
-            await RunOnHeadlessUiThreadAsync(TestRealModelAtriaAsync);
-            await RunOnHeadlessUiThreadAsync(TestRealPiSettingsAsync);
         }
 
         Console.WriteLine();
@@ -1838,458 +1925,6 @@ public static class SelfTestRunner
         }
     }
 
-    // ── Atria 真实模型验收（--realpi 且 FUFUCODE_ATRIA_API_KEY 可用）：
-    //    M2 多轮对话、A01 允许/拒绝写盘、真实运行中停止、含内容的关闭重开恢复。
-    //    key 读用户级环境变量注入本进程（子进程继承），不落盘、不入库（[协调] 测试模型端点约定）。
-    //    端点不可用/配额与代码缺陷分开记录：模型调用失败时后续模型段跳过并说明。 ──
-    private static async Task TestRealModelAtriaAsync()
-    {
-        Console.WriteLine("[Atria 真实模型验收]");
-        if (!EnsureAtriaKey())
-        {
-            Console.WriteLine("  SKIP: FUFUCODE_ATRIA_API_KEY 未设置（进程级与用户级均无），真实模型验收跳过");
-            return;
-        }
-
-        string node;
-        string cli;
-        try
-        {
-            (node, cli) = RealSessionBootstrap.ResolveRuntime(
-                new AppOptions(AppSessionMode.Real, null, null, null, null));
-        }
-        catch (FileNotFoundException ex)
-        {
-            Console.WriteLine("  SKIP: " + ex.Message);
-            return;
-        }
-
-        var root = Path.Combine(Path.GetTempPath(), "fufucode-atria-" + Guid.NewGuid().ToString("N")[..8]);
-        var project = Path.Combine(root, "project");
-        Directory.CreateDirectory(project);
-        var layout = new AppDataLayout(Path.Combine(root, "appdata"));
-        layout.EnsureCreated();
-
-        // 与产品配置同形的 models.json：apiKey 只写 $FUFUCODE_ATRIA_API_KEY 插值引用。
-        File.WriteAllText(Path.Combine(layout.AgentDirectory, "models.json"), """
-            {
-              "providers": {
-                "atria": {
-                  "baseUrl": "https://api.atria-asi.ai/v1",
-                  "api": "openai-completions",
-                  "apiKey": "$FUFUCODE_ATRIA_API_KEY",
-                  "models": [ { "id": "Atria-Dawn-Preview" } ]
-                }
-              }
-            }
-            """);
-
-        var manager = new PersistentSessionManager(node, cli, layout);
-        try
-        {
-            var session = await manager.CreateAsync(project);
-            var chat = session.Chat;
-            var clipboard = new RecordingClipboardService();
-            var timeline = new TimelineViewModel(chat, SynchronousRefreshScheduler.Instance, clipboard);
-            var statusBar = new StatusBarViewModel(chat);
-            var input = new InputViewModel(chat);
-            var dialogHost = new ExtensionUiDialogHost(owner: null);
-            dialogHost.Attach(chat);
-            SessionUiWiring.AttachExtensionUi(chat, timeline, input, statusBar);
-            Console.WriteLine($"  信息：模型文本=\"{statusBar.ModelText}\" 审批文本=\"{statusBar.ApprovalText}\"");
-
-            string? sendFailure = null;
-            input.OperationFailed += message => sendFailure = message;
-            int AssistantCount() => timeline.Entries.OfType<AssistantMessageViewModel>().Count();
-
-            // 1) M2 多轮对话（真实模型，经 UI 链路）
-            var modelHealthy = true;
-            var assistantsBefore = AssistantCount();
-            input.DraftText = "用一句中文回答：1+1 等于几？";
-            input.SendCommand.Execute(null);
-            var turn1 = await WaitForRealTurnAsync(chat, () => sendFailure is not null,
-                assistantsBefore, AssistantCount, chat.LastOutcome, 240);
-            await DrainUiQueueAsync();
-            if (sendFailure is not null || !turn1 || chat.LastOutcome != SessionOutcome.Completed ||
-                AssistantCount() <= assistantsBefore)
-            {
-                modelHealthy = false;
-                var turn1Error = timeline.Entries.OfType<ErrorEntryViewModel>().LastOrDefault()?.Message;
-                Console.WriteLine($"  SKIP（端点不可用或模型异常，非代码缺陷判定）：第 1 轮未收敛到 Completed" +
-                                  $"（failure={sendFailure} outcome={chat.LastOutcome} 错误={turn1Error}）");
-            }
-            else
-            {
-                Pass("M2：真实模型第 1 轮对话完成（流式渲染经时间线）");
-            }
-
-            if (modelHealthy)
-            {
-                assistantsBefore = AssistantCount();
-                input.DraftText = "把上一轮的答案乘以 3，用一句中文回答。";
-                input.SendCommand.Execute(null);
-                var turn2 = await WaitForRealTurnAsync(chat, () => sendFailure is not null,
-                    assistantsBefore, AssistantCount, chat.LastOutcome, 240);
-                await DrainUiQueueAsync();
-                if (sendFailure is null && turn2 && chat.LastOutcome == SessionOutcome.Completed &&
-                    AssistantCount() > assistantsBefore)
-                {
-                    Pass("M2：真实模型多轮对话完成（上下文连续）");
-                }
-                else
-                {
-                    var errorText = timeline.Entries.OfType<ErrorEntryViewModel>().LastOrDefault()?.Message;
-                    Fail($"M2：多轮对话第 2 轮异常（failure={sendFailure} outcome={chat.LastOutcome} 错误={errorText}）");
-                }
-            }
-
-            // 2) A01 允许：审批请求真实到达，批准才写盘
-            if (modelHealthy)
-            {
-                dialogHost.AutoResponder = _ => Pi.PiExtensionUiResponse.Confirm(true);
-                var allowPrompt = "请使用 write 工具在项目目录下创建文件 allow-probe.txt，" +
-                                  "内容正好是 fufucode-allow 这串字符。完成后用一句话确认。";
-                var autoBefore = dialogHost.AutoAnsweredCount;
-                assistantsBefore = AssistantCount();
-                input.DraftText = allowPrompt;
-                input.SendCommand.Execute(null);
-                await WaitForRealTurnAsync(chat, () => sendFailure is not null,
-                    assistantsBefore, AssistantCount, chat.LastOutcome, 240);
-                await DrainUiQueueAsync();
-                var allowPath = Path.Combine(project, "allow-probe.txt");
-                var allowAsked = dialogHost.AutoAnsweredCount > autoBefore;
-                if (allowAsked && File.Exists(allowPath))
-                {
-                    Pass($"A01：审批请求真实到达，批准后写盘生效（内容={File.ReadAllText(allowPath).Trim()}）");
-                }
-                else if (!allowAsked && !File.Exists(allowPath))
-                {
-                    Console.WriteLine("  信息：模型未发起写工具调用，A01 允许路径本次未触发（端点行为，不计失败）");
-                }
-                else
-                {
-                    Fail($"A01：允许路径异常（审批到达={allowAsked} 文件存在={File.Exists(allowPath)}）");
-                }
-
-                // 3) A01 拒绝：拒绝/取消按拒绝处理，无写盘副作用
-                dialogHost.AutoResponder = _ => Pi.PiExtensionUiResponse.Confirm(false);
-                autoBefore = dialogHost.AutoAnsweredCount;
-                assistantsBefore = AssistantCount();
-                input.DraftText = "请使用 write 工具在项目目录下创建文件 deny-probe.txt，" +
-                                  "内容正好是 fufucode-deny 这串字符。完成后用一句话确认。";
-                input.SendCommand.Execute(null);
-                await WaitForRealTurnAsync(chat, () => sendFailure is not null,
-                    assistantsBefore, AssistantCount, chat.LastOutcome, 240);
-                await DrainUiQueueAsync();
-                var denyPath = Path.Combine(project, "deny-probe.txt");
-                var denyAsked = dialogHost.AutoAnsweredCount > autoBefore;
-                if (denyAsked && !File.Exists(denyPath))
-                {
-                    Pass("A01：拒绝审批后无写盘副作用");
-                }
-                else if (!denyAsked && !File.Exists(denyPath))
-                {
-                    Console.WriteLine("  信息：模型未发起写工具调用，A01 拒绝路径本次未触发（端点行为，不计失败）");
-                }
-                else
-                {
-                    Fail($"A01：拒绝路径异常（审批到达={denyAsked} 文件存在={File.Exists(denyPath)}）");
-                }
-
-                // 4) 真实运行中停止：Interrupted 终态，停止后不自动继续
-                dialogHost.AutoResponder = _ => Pi.PiExtensionUiResponse.Confirm(false);
-                input.DraftText = "从 1 数到 200，每个数字单独一行，不要省略。";
-                input.SendCommand.Execute(null);
-                var streamDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(60);
-                while (DateTime.UtcNow < streamDeadline && chat.Activity == SessionActivity.Idle &&
-                       sendFailure is null)
-                {
-                    await Task.Delay(100);
-                }
-
-                if (chat.Activity == SessionActivity.Idle)
-                {
-                    Console.WriteLine("  信息：停止测试的运行未启动（端点行为，不计失败）");
-                }
-                else
-                {
-                    await DrainUiQueueAsync();
-                    var errorsBeforeStop = timeline.Entries.OfType<ErrorEntryViewModel>()
-                        .Where(entry => entry.IsError)
-                        .Select(entry => $"{entry.KindText}: {entry.Message}")
-                        .ToList();
-                    // 记录停止期间的事件序列，供诊断"停止窗口"归一的命中情况。
-                    var stopEvents = new List<string>();
-                    chat.Event += (_, ev) =>
-                    {
-                        switch (ev)
-                        {
-                            case SessionEvent.ActivityChanged a:
-                                lock (stopEvents) stopEvents.Add($"act={a.Activity}");
-                                break;
-                            case SessionEvent.SessionError er:
-                                lock (stopEvents) stopEvents.Add($"err={er.Kind}:{er.Message}");
-                                break;
-                        }
-                    };
-                    await chat.StopAsync();
-                    var stopDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(30);
-                    while (DateTime.UtcNow < stopDeadline &&
-                           (chat.Activity != SessionActivity.Idle || chat.LastOutcome is null))
-                    {
-                        await Task.Delay(100);
-                    }
-
-                    await DrainUiQueueAsync();
-                    if (chat.LastOutcome == SessionOutcome.Interrupted)
-                    {
-                        Pass("真实运行中停止：收敛到 Interrupted 终态");
-                    }
-                    else
-                    {
-                        Fail($"真实运行中停止终态异常：{chat.LastOutcome}");
-                    }
-
-                    var entriesAtStop = timeline.Entries.Count;
-                    await Task.Delay(3000);
-                    await DrainUiQueueAsync();
-                    var errorsAfterStop = timeline.Entries.OfType<ErrorEntryViewModel>()
-                        .Where(entry => entry.IsError)
-                        .Select(entry => $"{entry.KindText}: {entry.Message}")
-                        .ToList();
-                    var addedErrors = errorsAfterStop.Except(errorsBeforeStop).ToArray();
-                    if (addedErrors.Length == 0)
-                    {
-                        Pass("停止未新增错误级条目（用户中止按中性「已中断」展示）");
-                    }
-                    else
-                    {
-                        Fail($"停止新增错误级条目（{errorsBeforeStop.Count} → {errorsAfterStop.Count}）："
-                             + string.Join(" | ", addedErrors)
-                             + "；事件序列=" + string.Join(", ", stopEvents));
-                    }
-
-                    if (timeline.Entries.Count == entriesAtStop)
-                    {
-                        Pass("停止后不自动继续（时间线无新增）");
-                    }
-                    else
-                    {
-                        Fail($"停止后仍有新增条目（{entriesAtStop} → {timeline.Entries.Count}）");
-                    }
-                }
-            }
-
-            // 5) P2-17：运行中插入（steer）——Running 且已出现工具调用后投递，
-            //    断言被接受（无错误、QueueChanged 含该文本）且回合正常 settle。
-            if (modelHealthy)
-            {
-                File.WriteAllText(Path.Combine(project, "steer-a.txt"), "alpha 文件内容");
-                File.WriteAllText(Path.Combine(project, "steer-b.txt"), "beta 文件内容");
-                File.WriteAllText(Path.Combine(project, "steer-c.txt"), "gamma 文件内容");
-                input.Steering = new RealPromptSteering(session.Coordinator);
-                sendFailure = null;
-                assistantsBefore = AssistantCount();
-                // 诊断记录：本回合的 SessionError 与时间线错误条目（仅事件文本，不含环境变量值）。
-                var steerErrors = new List<string>();
-                EventHandler<SessionEvent> steerErrorTap = (_, ev) =>
-                {
-                    if (ev is SessionEvent.SessionError error)
-                    {
-                        lock (steerErrors)
-                        {
-                            steerErrors.Add($"{error.Kind}: {error.Message}");
-                        }
-                    }
-                };
-                chat.Event += steerErrorTap;
-                input.DraftText = "请依次使用 read 工具读取项目目录下的 steer-a.txt、steer-b.txt、" +
-                                  "steer-c.txt 三个文件，全部读完后用一段中文总结三者内容。";
-                input.SendCommand.Execute(null);
-
-                // 等待 Running 且至少出现一次工具调用
-                var toolDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(120);
-                var sawToolCall = false;
-                while (DateTime.UtcNow < toolDeadline)
-                {
-                    await DrainUiQueueAsync();
-                    if (timeline.Entries.OfType<AssistantMessageViewModel>()
-                        .SelectMany(m => m.Blocks).OfType<ToolCallBlockViewModel>().Any())
-                    {
-                        sawToolCall = true;
-                        break;
-                    }
-
-                    if (chat.Activity == SessionActivity.Idle && chat.LastOutcome is not null)
-                    {
-                        break;
-                    }
-
-                    await Task.Delay(300);
-                }
-
-                if (!sawToolCall || chat.Activity == SessionActivity.Idle)
-                {
-                    chat.Event -= steerErrorTap;
-                    Console.WriteLine("  信息：steer 前条件未达成（无工具调用或回合已结束，端点行为，不计失败）" +
-                                      $"（activity={chat.Activity} outcome={chat.LastOutcome}）");
-                }
-                else
-                {
-                    const string steerText = "另外请在总结末尾加上 STEER-OK";
-                    input.DraftText = steerText;
-                    input.SteerCommand.Execute(null);
-                    var queueDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(15);
-                    var queued = false;
-                    while (DateTime.UtcNow < queueDeadline)
-                    {
-                        await DrainUiQueueAsync();
-                        if (input.QueuedTexts.Contains(steerText))
-                        {
-                            queued = true;
-                            break;
-                        }
-
-                        await Task.Delay(200);
-                    }
-
-                    if (sendFailure is null && queued)
-                    {
-                        Pass("P2-17：运行中 steer 被接受（无错误、QueueChanged 含该文本）");
-                    }
-                    else
-                    {
-                        Fail($"P2-17：steer 未被接受（failure={sendFailure} queued={queued} " +
-                             $"queue=[{string.Join(" | ", input.QueuedTexts)}]）");
-                    }
-
-                    var steerBadge = input.QueuedPreview
-                        .FirstOrDefault(item => item.Text == steerText);
-                    if (steerBadge is { IsSteer: true })
-                    {
-                        Pass("P2-17：steer 项在排队条标「插入」徽章");
-                    }
-                    else
-                    {
-                        Fail($"P2-17：steer 徽章异常（badge={steerBadge?.BadgeText}）");
-                    }
-
-                    var steerTurn = await WaitForRealTurnAsync(chat, () => sendFailure is not null,
-                        assistantsBefore, AssistantCount, chat.LastOutcome, 300);
-                    chat.Event -= steerErrorTap;
-                    await DrainUiQueueAsync();
-                    if (sendFailure is null && steerTurn
-                        && chat.LastOutcome == SessionOutcome.Completed)
-                    {
-                        Pass("P2-17：steer 后回合正常 settle（Completed）");
-                    }
-                    else
-                    {
-                        // 诊断原文：本回合 SessionError（Kind+Message）+ 时间线错误条目
-                        // + 最后一个助手消息的收尾文本。均为协议/UI 文本，不含环境变量值。
-                        string[] tapped;
-                        lock (steerErrors)
-                        {
-                            tapped = steerErrors.ToArray();
-                        }
-
-                        var timelineErrors = timeline.Entries.OfType<ErrorEntryViewModel>()
-                            .Select(entry => $"{entry.KindText}: {entry.Message}").ToArray();
-                        var lastAssistantText = timeline.Entries.OfType<AssistantMessageViewModel>()
-                            .LastOrDefault()?.Blocks.OfType<TextBlockViewModel>()
-                            .SelectMany(block => block.Segments).OfType<PlainSegmentViewModel>()
-                            .Select(segment => segment.Text);
-                        Fail($"P2-17：steer 后回合未正常收敛（failure={sendFailure} " +
-                             $"outcome={chat.LastOutcome}）；SessionError=[{string.Join(" | ", tapped)}]；" +
-                             $"时间线错误=[{string.Join(" | ", timelineErrors)}]；" +
-                             $"末条助手文本=\"{(lastAssistantText is null ? "(无)" : string.Concat(lastAssistantText))}\"");
-                    }
-
-                    var steerReply = timeline.Entries.OfType<AssistantMessageViewModel>()
-                        .LastOrDefault()?.Blocks.OfType<TextBlockViewModel>()
-                        .SelectMany(block => block.Segments).OfType<PlainSegmentViewModel>()
-                        .Select(segment => segment.Text);
-                    if (steerReply is not null && string.Concat(steerReply).Contains("STEER-OK"))
-                    {
-                        Pass("P2-17：最终回复包含 STEER-OK（steer 真实送达模型）");
-                    }
-                    else
-                    {
-                        Console.WriteLine("  信息：最终回复未含 STEER-OK（模型行为，不强断言）");
-                    }
-                }
-            }
-
-            // 6) 含内容的关闭重开恢复（真实对话历史）。
-            // 恢复正确性与模型健康度无关：只要本轮产生了持久化内容，恢复就必须完整回放。
-            var sessionId = session.Session.Id;
-            await session.DisposeAsync();
-            var reopened = await manager.ResumeAsync(sessionId);
-            var restored = HistoryMapper.MapTranscript(
-                reopened.History.CurrentBranchMessages, reopened.Chat.CurrentModel);
-            var restoredTimeline = new TimelineViewModel(reopened.Chat, SynchronousRefreshScheduler.Instance, clipboard);
-            restoredTimeline.LoadHistory(restored);
-            await DrainUiQueueAsync();
-            if (restored.Count > 0 && restoredTimeline.Entries.Count > 0)
-            {
-                Pass($"含内容的关闭重开恢复（历史消息 {restored.Count} 条，时间线 {restoredTimeline.Entries.Count} 条）");
-                var hasTurn1 = restored.Any(message => message.Blocks.OfType<AbstractionsTextBlock>()
-                    .Any(block => block.Text.Contains("1+1", StringComparison.Ordinal)));
-                if (hasTurn1)
-                {
-                    Pass("恢复历史包含第 1 轮用户消息原文");
-                }
-                else
-                {
-                    Console.WriteLine("  信息：恢复历史未检出第 1 轮原文（本轮模型段可能未成功，如实记录）");
-                }
-            }
-            else if (restored.Count == 0)
-            {
-                Console.WriteLine("  信息：模型段未产生历史，含内容恢复本次未触发（不计失败）");
-            }
-            else
-            {
-                Fail($"关闭重开恢复异常（历史 {restored.Count} 条，时间线 {restoredTimeline.Entries.Count} 条）");
-            }
-
-            await reopened.DisposeAsync();
-        }
-        catch (Exception ex)
-        {
-            Fail("Atria 真实模型验收异常：" + ex.GetBaseException().Message);
-        }
-        finally
-        {
-            try
-            {
-                Directory.Delete(root, recursive: true);
-            }
-            catch
-            {
-                // 临时目录清理失败不掩盖测试结果
-            }
-        }
-    }
-
-    /// <summary>确保 FUFUCODE_ATRIA_API_KEY 在本进程可用；进程级缺失时读用户级注入（不落盘）。</summary>
-    private static bool EnsureAtriaKey()
-    {
-        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("FUFUCODE_ATRIA_API_KEY")))
-        {
-            return true;
-        }
-
-        var userLevel = Environment.GetEnvironmentVariable("FUFUCODE_ATRIA_API_KEY", EnvironmentVariableTarget.User);
-        if (string.IsNullOrEmpty(userLevel))
-        {
-            return false;
-        }
-
-        Environment.SetEnvironmentVariable("FUFUCODE_ATRIA_API_KEY", userLevel);
-        return true;
-    }
-
     /// <summary>等待一轮真实模型运行收敛：先等运行开始，再等 Idle 且有新助手条目（或终态变化/发送被拒）。</summary>
     private static async Task<bool> WaitForRealTurnAsync(IChatSession session, Func<bool> sendFailed,
         int assistantEntriesBefore, Func<int> assistantEntriesCount, SessionOutcome? previousOutcome,
@@ -2348,7 +1983,7 @@ public static class SelfTestRunner
     }
 
     /// <summary>
-    /// 排空 UI 队列（线程同步约定）：后台线程先把终态事件 Post 到 UI 线程、
+    /// 排空 UI 队列（decisions.md [轨道C] 线程同步约定）：后台线程先把终态事件 Post 到 UI 线程、
     /// 之后才把 Activity 置回 Idle；观察到 Idle 后须让已入队回调先跑完再断言。
     /// </summary>
     private static async Task DrainUiQueueAsync()
@@ -3380,14 +3015,14 @@ public static class SelfTestRunner
                 SetModel = (p, m, _) =>
                 {
                     setModelCalls.Add($"{p}/{m}");
-                    return Task.FromResult(new PiRpcResponse("1", "set_model", true, null, null));
+                    return Task.FromResult(new RpcResponse("1", "set_model", true, null, null));
                 },
                 SetThinkingLevel = (l, _) =>
                 {
                     setThinkingCalls.Add(l);
-                    return Task.FromResult(new PiRpcResponse("1", "set_thinking_level", true, null, null));
+                    return Task.FromResult(new RpcResponse("1", "set_thinking_level", true, null, null));
                 },
-                QueryState = _ => Task.FromResult(new PiRpcResponse("1", "get_state", true,
+                QueryState = _ => Task.FromResult(new RpcResponse("1", "get_state", true,
                     JsonDocument.Parse("""{"model":{"provider":"openai","id":"gpt-x"}}""").RootElement, null)),
                 SaveCredential = (n, k) => savedCredentials.Add((n, k)),
                 ResolveCredential = _ => ValueTask.FromResult<string?>(resolveResult),
@@ -3595,7 +3230,7 @@ public static class SelfTestRunner
             {
                 IsTurnActive = () => false,
                 SetModel = (_, _, _) => Task.FromResult(
-                    new PiRpcResponse("1", "set_model", false, null, "model not found")),
+                    new RpcResponse("1", "set_model", false, null, "model not found")),
             });
             var failing = new SettingsPageViewModel.ModelChoice("bad/m", "bad/m");
             vm.ModelChoices.Add(failing);
@@ -3623,12 +3258,12 @@ public static class SelfTestRunner
             vm.Attach(MockSettingsContext(store) with
             {
                 IsMock = false,
-                QueryModels = _ => Task.FromResult(new PiRpcResponse(
+                QueryModels = _ => Task.FromResult(new RpcResponse(
                     "1", "get_available_models", true, modelsDoc.RootElement.Clone(), null)),
                 SetModel = (m, _, _) =>
                 {
                     autoSetModelCalls.Add(m);
-                    return Task.FromResult(new PiRpcResponse("1", "set_model", true, null, null));
+                    return Task.FromResult(new RpcResponse("1", "set_model", true, null, null));
                 },
             });
             for (var i = 0; i < 100 && vm.ModelChoices.Count < 3; i++)
@@ -3917,11 +3552,11 @@ public static class SelfTestRunner
             SessionUiWiring.AttachExtensionUi(demoChat, demoTimeline, demoInput, demoStatusBar);
             dialogHost.AutoResponder = request => request.Method switch
             {
-                "select" => Pi.PiExtensionUiResponse.WithValue("banana"),
-                "confirm" => Pi.PiExtensionUiResponse.Confirm(true),
-                "input" => Pi.PiExtensionUiResponse.WithValue("fufucode"),
-                "editor" => Pi.PiExtensionUiResponse.WithValue("edited by selftest"),
-                _ => Pi.PiExtensionUiResponse.Cancel(),
+                "select" => PiExtensionUiResponse.WithValue("banana"),
+                "confirm" => PiExtensionUiResponse.Confirm(true),
+                "input" => PiExtensionUiResponse.WithValue("fufucode"),
+                "editor" => PiExtensionUiResponse.WithValue("edited by selftest"),
+                _ => PiExtensionUiResponse.Cancel(),
             };
 
             string? demoSendFailure = null;
@@ -4794,275 +4429,6 @@ public static class SelfTestRunner
         {
             try { window.Close(); } catch { }
             try { Directory.Delete(root, recursive: true); } catch { }
-        }
-    }
-
-    /// <summary>
-    /// W2 设置应用链路 realpi：隔离 AppDataRoot + 全新 agent 目录（无 models.json = 全新安装）。
-    /// 经设置页 VM 配端点（环境变量 FUFUCODE_ATRIA_API_KEY，不写凭据管理器）→ 重启 →
-    /// get_available_models/页头模型/真实 prompt/思考等级 get_state → 代理观察（如实记录，
-    /// 不因 Node 可能忽略 HTTP_PROXY 而写死断言）→ 清代理恢复 → 移除端点后 models.json 清理。
-    /// </summary>
-    private static async Task TestRealPiSettingsAsync()
-    {
-        Console.WriteLine("[设置应用链路 realpi]");
-        // 产品路径只认进程环境/凭据管理器；仅用户级存在的密钥由测试注入进程级并在结束时恢复。
-        var priorAtriaKey = Environment.GetEnvironmentVariable("FUFUCODE_ATRIA_API_KEY");
-        if (!EnsureAtriaKey())
-        {
-            Console.WriteLine("  SKIP: FUFUCODE_ATRIA_API_KEY 未设置（进程级与用户级均无）");
-            return;
-        }
-
-        string node;
-        string cli;
-        try
-        {
-            (node, cli) = RealSessionBootstrap.ResolveRuntime(
-                new AppOptions(AppSessionMode.Real, null, null, null, null));
-        }
-        catch (FileNotFoundException ex)
-        {
-            Console.WriteLine("  SKIP: " + ex.Message);
-            return;
-        }
-
-        var root = Path.Combine(Path.GetTempPath(),
-            "fufucode-w2-set-" + Guid.NewGuid().ToString("N")[..8]);
-        var project = Path.Combine(root, "项目");
-        var appdata = Path.Combine(root, "appdata");
-        Directory.CreateDirectory(project);
-        // 全新安装场景：不预写 models.json。
-
-        var window = new MainWindow(new AppOptions(
-            AppSessionMode.Real, project, null, node, cli, appdata));
-        try
-        {
-            window.Show();
-            async Task<MainViewModel> WaitReadyAsync(string stage)
-            {
-                var deadline = DateTime.Now + TimeSpan.FromSeconds(90);
-                while (window.FindControl<Border>("StartupOverlay")!.IsVisible &&
-                       DateTime.Now < deadline)
-                {
-                    await Task.Delay(300);
-                }
-
-                await DrainUiQueueAsync();
-                var vm = (MainViewModel)window.DataContext!;
-                if (vm.Session.Connection != SessionConnection.Connected)
-                {
-                    throw new InvalidOperationException($"{stage}：会话未连接（{vm.Session.Connection}）");
-                }
-
-                return vm;
-            }
-
-            var vm = await WaitReadyAsync("初始启动");
-            var agentDir = new AppDataLayout(appdata).AgentDirectory;
-            Pass("全新安装启动成功（无 models.json）");
-
-            // 1) 经设置页 VM 配置端点（环境变量模式，不写凭据管理器）
-            vm.Settings.EndpointProviderName = "atria-w2";
-            vm.Settings.EndpointBaseUrl = "https://api.atria-asi.ai/v1";
-            vm.Settings.EndpointModelId = "Atria-Dawn-Preview";
-            vm.Settings.EndpointKeyModeIndex = 1;
-            vm.Settings.EndpointEnvName = "FUFUCODE_ATRIA_API_KEY";
-            await vm.Settings.SaveEndpointAsync(null);
-            if (vm.Settings.HasEndpointError)
-            {
-                Fail("端点保存失败：" + vm.Settings.EndpointError);
-                return;
-            }
-
-            if (vm.Settings.HasRestartNotice)
-            {
-                Pass("端点保存成功并提示重启生效");
-            }
-            else
-            {
-                Fail("端点保存后未出现重启提示");
-            }
-
-            // 2) 立即重启 → get_available_models 含 atria-w2/Atria-Dawn-Preview
-            await vm.Settings.RestartNowCommand.ExecuteAsync(null);
-            vm = await WaitReadyAsync("端点重启");
-            await vm.Settings.RefreshModelsCommand.ExecuteAsync(null);
-            if (vm.Settings.ModelChoices.Any(c => c.Value == "atria-w2/Atria-Dawn-Preview"))
-            {
-                Pass("重启后 get_available_models 含 atria-w2/Atria-Dawn-Preview");
-            }
-            else
-            {
-                Fail("可用模型缺少 atria-w2：" +
-                     string.Join(" | ", vm.Settings.ModelChoices.Select(c => c.Label)));
-            }
-
-            // 3) 重启后按已存模型应用到当前空闲会话 + 页头刷新
-            var modelDeadline = DateTime.Now + TimeSpan.FromSeconds(30);
-            while (DateTime.Now < modelDeadline &&
-                   !(vm.StatusBar.ModelText.Contains("atria-w2") &&
-                     vm.Settings.CurrentModelText.Contains("Atria-Dawn-Preview")))
-            {
-                await Task.Delay(300);
-            }
-
-            await DrainUiQueueAsync();
-            if (vm.StatusBar.ModelText == "atria-w2/Atria-Dawn-Preview" &&
-                vm.Settings.CurrentModelText.Contains("Atria-Dawn-Preview"))
-            {
-                Pass("已存模型应用到当前会话且页头/当前模型刷新");
-            }
-            else
-            {
-                Fail($"模型应用异常：header=\"{vm.StatusBar.ModelText}\" " +
-                     $"current=\"{vm.Settings.CurrentModelText}\" err={vm.Settings.ModelsError}");
-            }
-
-            // 4) 真实 prompt 得到回复
-            string? sendFailure = null;
-            vm.Input.OperationFailed += message => sendFailure = message;
-            int AssistantCount() => vm.Timeline.Entries.OfType<AssistantMessageViewModel>().Count();
-            var before = AssistantCount();
-            vm.Input.DraftText = "用一句中文回答：1+1 等于几？";
-            vm.Input.SendCommand.Execute(null);
-            var settled = await WaitForRealTurnAsync(vm.Session, () => sendFailure is not null,
-                before, AssistantCount, vm.Session.LastOutcome, 240);
-            await DrainUiQueueAsync();
-            var modelHealthy = sendFailure is null && settled &&
-                vm.Session.LastOutcome == SessionOutcome.Completed && AssistantCount() > before;
-            if (modelHealthy)
-            {
-                Pass("端点配置后真实 prompt 得到回复");
-            }
-            else
-            {
-                Console.WriteLine($"  SKIP（端点/模型异常，记录不判失败）：failure={sendFailure} " +
-                                  $"outcome={vm.Session.LastOutcome}");
-            }
-
-            // 5) 思考等级切换 → get_state 反映所选等级
-            //    Pi 对非 reasoning 模型把可用等级钳到 ["off"]（setThinkingLevel → _clampThinkingLevel）：
-            //    先读 get_available_models 的 reasoning 标志，能力内选等级；不支持时如实记录并验证保存路径。
-            var modelInfo = vm.Settings.AttachedContext!.QueryModels is { } queryModels
-                ? await queryModels(CancellationToken.None)
-                : null;
-            var reasoning = modelInfo is { Success: true, Data: { } md } &&
-                md.TryGetProperty("models", out var mArr) && mArr.ValueKind == JsonValueKind.Array &&
-                mArr.EnumerateArray().Any(m =>
-                    m.TryGetProperty("id", out var mid) && mid.GetString() == "Atria-Dawn-Preview" &&
-                    m.TryGetProperty("reasoning", out var r) && r.ValueKind == JsonValueKind.True);
-            Console.WriteLine($"  信息：atria-w2/Atria-Dawn-Preview reasoning={reasoning}");
-
-            // 固定选择 low：reasoning 模型 get_state 应为 low；非 reasoning 模型 Pi 钳到 off（如实）。
-            var expectedState = reasoning ? "low" : "off";
-            var choice = vm.Settings.ThinkingChoices.FirstOrDefault(c => c.Value == "low");
-            vm.Settings.SelectedThinking = choice;
-            var thinkDeadline = DateTime.Now + TimeSpan.FromSeconds(30);
-            string? actualThinking = null;
-            while (DateTime.Now < thinkDeadline)
-            {
-                var state = await vm.Settings.AttachedContext!.QueryState!(CancellationToken.None);
-                if (state.Success && state.Data is { } sd &&
-                    sd.TryGetProperty("thinkingLevel", out var tl) &&
-                    tl.ValueKind == JsonValueKind.String)
-                {
-                    actualThinking = tl.GetString();
-                    if (actualThinking == expectedState)
-                    {
-                        break;
-                    }
-                }
-
-                await Task.Delay(500);
-            }
-
-            var savedLevel = new AppSettingsStore(new AppDataLayout(appdata)).Current.ThinkingLevel;
-            if (actualThinking != expectedState || vm.Settings.HasModelsError)
-            {
-                Fail($"思考等级未生效：state={actualThinking} expected={expectedState} " +
-                     $"saved={savedLevel} err={vm.Settings.ModelsError} info={vm.Settings.ModelsInfo}");
-            }
-            else if (savedLevel != "low")
-            {
-                Fail($"思考等级保存异常：saved={savedLevel} state={actualThinking}");
-            }
-            else if (reasoning)
-            {
-                Pass("思考等级 set_thinking_level 生效并保存（get_state=low）");
-            }
-            else
-            {
-                Pass("思考等级：非 reasoning 模型被 Pi 钳到 off（如实），已存 low 供支持模型的新建会话");
-            }
-
-            // 6) 代理观察：127.0.0.1:9 → 重启 → 发 prompt，如实记录是否失败（不写死断言）
-            vm.Settings.ProxyInput = "http://127.0.0.1:9";
-            vm.Settings.SaveProxyCommand.Execute(null);
-            await vm.Settings.RestartNowCommand.ExecuteAsync(null);
-            vm = await WaitReadyAsync("代理重启");
-            string? proxyFailure = null;
-            vm.Input.OperationFailed += m => proxyFailure = m;
-            var proxyBefore = AssistantCount();
-            vm.Input.DraftText = "用一句话介绍你自己";
-            vm.Input.SendCommand.Execute(null);
-            var proxySettled = await WaitForRealTurnAsync(vm.Session, () => proxyFailure is not null,
-                proxyBefore, AssistantCount, vm.Session.LastOutcome, 90);
-            await DrainUiQueueAsync();
-            var proxyOutcome = vm.Session.LastOutcome;
-            var proxyNote = $"代理观察：proxy=http://127.0.0.1:9 sendFailure={proxyFailure} " +
-                            $"outcome={proxyOutcome} settled={proxySettled} " +
-                            $"reply={AssistantCount() > proxyBefore}";
-            // 观察项：Node/Pi 可能忽略 HTTP_PROXY 环境变量，成功/失败都如实记录不判失败。
-            Console.WriteLine("  信息：" + proxyNote);
-            Pass("代理观察已记录（PASS/INFO）：" + proxyNote);
-
-            // 7) 清代理 → 重启 → 恢复
-            vm.Settings.ClearProxyCommand.Execute(null);
-            await vm.Settings.RestartNowCommand.ExecuteAsync(null);
-            vm = await WaitReadyAsync("清代理重启");
-            if (vm.Session.Connection == SessionConnection.Connected)
-            {
-                Pass("清除代理并重启后会话恢复连接");
-            }
-            else
-            {
-                Fail("清代理重启后未恢复连接");
-            }
-
-            // 8) 移除端点 → 重启 → models.json 中 atria-w2 被清理
-            vm.Settings.RemoveEndpointCommand.Execute(null);
-            if (vm.Settings.HasEndpointError)
-            {
-                Fail("移除端点失败：" + vm.Settings.EndpointError);
-            }
-
-            await vm.Settings.RestartNowCommand.ExecuteAsync(null);
-            vm = await WaitReadyAsync("移除端点重启");
-            var modelsPath = Path.Combine(agentDir, "models.json");
-            var modelsText = File.Exists(modelsPath) ? File.ReadAllText(modelsPath) : string.Empty;
-            if (!modelsText.Contains("atria-w2"))
-            {
-                Pass("移除端点后 models.json 中 atria-w2 已清理");
-            }
-            else
-            {
-                Fail("models.json 仍含 atria-w2：" + modelsText);
-            }
-        }
-        catch (Exception ex)
-        {
-            Fail("设置应用链路 realpi 异常：" + ex.GetBaseException().Message);
-        }
-        finally
-        {
-            try { window.Close(); } catch { }
-            try { Directory.Delete(root, recursive: true); } catch { }
-            // 恢复进程级密钥（本测试注入的用户级值不外溢）。
-            if (priorAtriaKey is null)
-            {
-                Environment.SetEnvironmentVariable("FUFUCODE_ATRIA_API_KEY", null);
-            }
         }
     }
 

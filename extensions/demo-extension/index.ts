@@ -3,7 +3,7 @@
  *
  * Purpose: exercise the full extension_ui_request surface in RPC mode so the
  * host contract (which methods need a response, field semantics, timeout
- * behaviour) can be pinned down for the desktop shell and the Core adapter.
+ * behaviour) can be frozen in docs/decisions.md for tracks A and C.
  *
  * Contents:
  *  - `demo_write_note` tool: writes a file under the session cwd. Not listed in

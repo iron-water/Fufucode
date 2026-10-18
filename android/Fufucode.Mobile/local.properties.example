@@ -1,0 +1,2 @@
+# 本机 Android SDK 路径示例；实际的 local.properties 不入库。
+sdk.dir=C\:\\Users\\<you>\\AppData\\Local\\Android\\Sdk

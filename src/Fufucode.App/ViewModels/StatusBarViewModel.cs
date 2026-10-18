@@ -52,7 +52,7 @@ public sealed partial class StatusBarViewModel : ViewModelBase
 
     private readonly Dictionary<string, string> _extensionStatuses = new(StringComparer.Ordinal);
 
-    /// <summary>扩展 setStatus 通知（免答类）：按键覆盖展示，空文本撤下。</summary>
+    /// <summary>扩展 setStatus 通知（decisions.md [轨道B] 免答类）：按键覆盖展示，空文本撤下。</summary>
     public void SetExtensionStatus(string key, string text)
     {
         if (string.IsNullOrEmpty(text))
@@ -166,7 +166,7 @@ public sealed partial class StatusBarViewModel : ViewModelBase
         };
         OutcomeTone = StatusColors.ForOutcome(_session.LastOutcome);
 
-        // 审批桥接状态：只在 Verified 时显示"已验证"；
+        // 审批桥接状态（decisions.md [轨道A]）：只在 Verified 时显示"已验证"；
         // 不可用时透出诊断，解释 CanSend=false 的原因。mock 会话无此接口，不显示。
         if (_session is Fufucode.Core.IExtensionUiSession extensionUi)
         {

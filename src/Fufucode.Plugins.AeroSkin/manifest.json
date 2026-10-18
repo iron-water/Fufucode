@@ -1,0 +1,8 @@
+{
+  "id": "skin.aero",
+  "name": "Windows Aero 玻璃皮肤",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.AeroSkin.dll",
+  "packageType": "Fufucode.Plugins.AeroSkin.AeroSkinPluginPackage",
+  "category": "Theme"
+}

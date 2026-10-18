@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:Fufucode.App.ViewModels" xmlns:views="using:Fufucode.App.Views"
+        xmlns:infra="using:Fufucode.App.Infrastructure"
         xmlns:imaging="using:Avalonia.Media.Imaging"
         x:Class="Fufucode.App.MainWindow" x:DataType="vm:MainViewModel"
         Title="Fufucode" Icon="avares://Fufucode.App/Assets/Brand/fufucode.ico"
@@ -13,15 +14,17 @@
     </ResourceDictionary.ThemeDictionaries></ResourceDictionary>
   </Window.Resources>
   <Grid x:Name="ChromeRoot" RowDefinitions="48,*,26">
-    <Border x:Name="CustomCaption" Classes="chromeBar" BorderThickness="0,0,0,1">
+    <Border x:Name="CustomCaption" Classes="chromeBar" Background="Transparent" PointerPressed="CaptionDrag_PointerPressed">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <ScrollViewer MaxWidth="540" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopLeft" Orientation="Horizontal" Spacing="3" Margin="8,0" VerticalAlignment="Center"/></ScrollViewer>
         <Grid Grid.Column="1">
-          <!-- 品牌与当前会话：拖拽区，占满中间列 -->
-          <Border Background="Transparent" ClipToBounds="True" PointerPressed="CaptionDrag_PointerPressed">
-            <StackPanel Orientation="Horizontal" Spacing="9" Margin="12,0" VerticalAlignment="Center">
-              <Image Source="avares://Fufucode.App/Assets/Brand/icon-small-32.png" Width="20" Height="20"/>
-              <TextBlock Text="{Binding Sidebar.SelectedSession.Title}" MaxWidth="180" TextTrimming="CharacterEllipsis" FontSize="12" Foreground="{DynamicResource AppTextDim}" VerticalAlignment="Center"/>
+          <!-- 品牌与当前会话：拖拽区，居中弱化为三级文字，不再与左右按钮竞争视觉 -->
+          <Border Background="Transparent" ClipToBounds="True">
+            <StackPanel Orientation="Horizontal" Spacing="6" Margin="12,0" VerticalAlignment="Center"
+                        HorizontalAlignment="Center">
+              <Image Source="avares://Fufucode.App/Assets/Brand/icon-small-32.png" Width="14" Height="14" Opacity="0.8"/>
+              <TextBlock Text="{Binding Sidebar.SelectedSession.Title}" MaxWidth="200" TextTrimming="CharacterEllipsis"
+                         FontSize="12" Foreground="{DynamicResource AppTextDim}" VerticalAlignment="Center"/>
             </StackPanel>
           </Border>
           <!-- 顶栏中间：用户自选功能的常驻区，窗口水平居中 -->
@@ -31,16 +34,16 @@
           </ScrollViewer>
         </Grid>
         <StackPanel x:Name="LegacyCaptionActions" Grid.Column="2" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0" IsVisible="False">
-          <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" ToolTip.Tip="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{StaticResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" ToolTip.Tip="左区"><PathIcon Data="{StaticResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTerminal_Click" ToolTip.Tip="底区 · Ctrl+J"><PathIcon Data="{StaticResource Icon.PanelBottom}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleRightDock_Click" ToolTip.Tip="右区"><PathIcon Data="{StaticResource Icon.PanelRight}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavChatButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回对话"><PathIcon Data="{StaticResource Icon.Chat}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" ToolTip.Tip="Pi 扩展"><PathIcon Data="{StaticResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" ToolTip.Tip="明暗主题"><PathIcon Data="{StaticResource Icon.Color}" Width="16" Height="16"/></Button>
-          <Button x:Name="CaptionUsage" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="用量"><PathIcon Data="{StaticResource Icon.Info}" Width="16" Height="16"/></Button>
-          <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="通知"><PathIcon Data="{StaticResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}" ToolTip.Tip="设置"><PathIcon Data="{StaticResource Icon.Settings}" Width="16" Height="16"/></Button>
+          <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" ToolTip.Tip="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{DynamicResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" ToolTip.Tip="左区"><PathIcon Data="{DynamicResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTerminal_Click" ToolTip.Tip="底区 · Ctrl+J"><PathIcon Data="{DynamicResource Icon.PanelBottom}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleRightDock_Click" ToolTip.Tip="右区"><PathIcon Data="{DynamicResource Icon.PanelRight}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavChatButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回对话"><PathIcon Data="{DynamicResource Icon.Chat}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" ToolTip.Tip="扩展"><PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" ToolTip.Tip="明暗主题"><PathIcon Data="{DynamicResource Icon.Color}" Width="16" Height="16"/></Button>
+          <Button x:Name="CaptionUsage" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="用量"><PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16"/></Button>
+          <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="通知"><PathIcon Data="{DynamicResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}" ToolTip.Tip="设置"><PathIcon Data="{DynamicResource Icon.Settings}" Width="16" Height="16"/></Button>
         </StackPanel>
         <ScrollViewer Grid.Column="2" MaxWidth="420" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopRight" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0"/></ScrollViewer>
         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
@@ -51,27 +54,28 @@
       </Grid>
     </Border>
     <Grid x:Name="ShellGrid" Grid.Row="1" ColumnDefinitions="224,5,*">
-      <Border x:Name="SidebarBorder" Classes="dockHost" BorderThickness="0,0,1,0"><views:DockRegionView x:Name="LeftDock"/></Border>
-      <GridSplitter x:Name="LeftPanelSplitter" Grid.Column="1" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Cursor="SizeWestEast" Classes="dockSplitter"/>
+      <Border x:Name="SidebarBorder" Classes="dockHost dockLeft"><views:DockRegionView x:Name="LeftDock"/></Border>
+      <infra:DeadZoneGridSplitter x:Name="LeftPanelSplitter" Grid.Column="1" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Cursor="SizeWestEast" Classes="dockSplitter"/>
       <Grid x:Name="WorkspaceShell" Grid.Column="2" ColumnDefinitions="*,5,345" RowDefinitions="*,5,190">
         <Grid RowDefinitions="Auto,*">
           <Border x:Name="WorkspaceReturnBar" IsVisible="{Binding IsExtensionsPage}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="12,6">
             <Button x:Name="WorkspaceReturnButton" Classes="subtle" HorizontalAlignment="Left" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回工作区">
-              <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{StaticResource Icon.ArrowLeft}"/><TextBlock Text="返回工作区"/></StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{DynamicResource Icon.ArrowLeft}"/><TextBlock Text="返回工作区"/></StackPanel>
             </Button>
           </Border>
           <TransitioningContentControl x:Name="PageHost" Grid.Row="1"/>
         </Grid>
-        <GridSplitter x:Name="RightPanelSplitter" Grid.Column="1" Grid.RowSpan="3" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" KeyboardIncrement="10" Cursor="SizeWestEast" Classes="dockSplitter"/>
-        <Border x:Name="RightPanelBorder" Grid.Column="2" Grid.RowSpan="3" ClipToBounds="True" Classes="dockHost" BorderThickness="1,0,0,0"><views:DockRegionView x:Name="RightDock"/></Border>
-        <GridSplitter x:Name="TerminalSplitter" Grid.Row="1" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" KeyboardIncrement="10" Cursor="SizeNorthSouth" Classes="dockSplitter"/>
-        <Border x:Name="TerminalBorder" Grid.Row="2" Classes="dockHost" BorderThickness="0,1,0,0"><views:DockRegionView x:Name="BottomDock"/></Border>
+        <infra:DeadZoneGridSplitter x:Name="RightPanelSplitter" Grid.Column="1" Grid.RowSpan="3" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" KeyboardIncrement="10" Cursor="SizeWestEast" Classes="dockSplitter"/>
+        <Border x:Name="RightPanelBorder" Grid.Column="2" Grid.RowSpan="3" ClipToBounds="True" Classes="dockHost dockRight"><views:DockRegionView x:Name="RightDock"/></Border>
+        <infra:DeadZoneGridSplitter x:Name="TerminalSplitter" Grid.Row="1" ResizeDirection="Rows" ResizeBehavior="PreviousAndNext" KeyboardIncrement="10" Cursor="SizeNorthSouth" Classes="dockSplitter"/>
+        <Border x:Name="TerminalBorder" Grid.Row="2" Classes="dockHost dockBottom"><views:DockRegionView x:Name="BottomDock"/></Border>
         <Button x:Name="RightDrawerScrim" Grid.ColumnSpan="3" ZIndex="11" IsVisible="False" Background="{DynamicResource AppScrimBackground}" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Click="CloseRightDrawer_Click">
           <Button.Template><ControlTemplate><Border Background="{TemplateBinding Background}"/></ControlTemplate></Button.Template>
         </Button>
       </Grid>
       <Border x:Name="StartupOverlay" Grid.ColumnSpan="3" Background="{DynamicResource AppMicaPageBackground}" IsVisible="False" ZIndex="20">
-        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="520">
+        <Grid>
+        <StackPanel x:Name="StartupSummary" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="520">
           <Image x:Name="StartupArt" Source="{DynamicResource StartupArtBitmap}" Width="200" Height="125" IsVisible="False"/>
           <TextBlock Text="Fufucode" Classes="subtitle" HorizontalAlignment="Center"/>
           <ProgressBar x:Name="StartupProgress" IsIndeterminate="True" Width="240"/>
@@ -83,10 +87,21 @@
           <Button x:Name="StartupRetryButton" Content="重试" IsVisible="False" Click="StartupRetryButton_Click"/>
           <Button x:Name="StartupDisableExtensionButton" Content="停用该扩展并重启" IsVisible="False" Click="StartupDisableExtensionButton_Click"/>
           <Button x:Name="StartupOpenOtherButton" Content="打开其他项目" IsVisible="False" Click="StartupOpenOther_Click"/>
+          <Button x:Name="StartupLocalPluginsButton" Classes="subtle" Content="管理本地插件" IsVisible="False" Click="StartupLocalPlugins_Click"/>
         </StackPanel>
+        <Grid x:Name="StartupPluginPanel" IsVisible="False" RowDefinitions="Auto,*" Margin="24,12">
+          <StackPanel Spacing="8" Margin="0,0,0,12">
+            <Button x:Name="StartupPluginReturnButton" Classes="subtle" HorizontalAlignment="Left" Content="返回启动页" Click="StartupPluginReturn_Click"/>
+            <TextBlock Classes="caption" Text="会话尚未就绪。可以预览和导入本地插件；应用版本需等待 Pi 会话连接。" TextWrapping="Wrap"/>
+          </StackPanel>
+          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+            <ContentControl x:Name="StartupPluginHost" MaxWidth="880" HorizontalAlignment="Stretch"/>
+          </ScrollViewer>
+        </Grid>
+        </Grid>
       </Border>
     </Grid>
-    <Border x:Name="CustomStatusBar" Grid.Row="2" Classes="chromeBar" BorderThickness="0,1,0,0">
+    <Border x:Name="CustomStatusBar" Grid.Row="2" Classes="chromeBar statusStrip">
       <Grid ColumnDefinitions="*,*" Margin="10,0" ColumnSpacing="12">
         <ScrollViewer HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomStatusLeft" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"/></ScrollViewer>
         <ScrollViewer Grid.Column="1" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomStatusRight" Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right" VerticalAlignment="Center"/></ScrollViewer>
@@ -96,7 +111,7 @@
     <Border x:Name="NotificationPrompt" Grid.Row="1" ZIndex="20" IsVisible="False" x:DataType="vm:NotificationItemViewModel" Classes="toast" HorizontalAlignment="Right" VerticalAlignment="Top" Width="360" Margin="16" Padding="16,12">
       <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
         <TextBlock Text="{Binding Title}" Classes="bodyStrong"/>
-        <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{StaticResource Icon.Dismiss}" Width="12" Height="12"/></Button>
+        <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
         <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Message}" TextWrapping="Wrap" Classes="caption"/>
         <Button Grid.Row="2" Classes="subtle" Padding="0,2" Content="{Binding RouteLabel}" Click="NotificationPromptOpen_Click"/>
       </Grid>

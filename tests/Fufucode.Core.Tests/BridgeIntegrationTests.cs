@@ -50,7 +50,7 @@ internal static class BridgeIntegrationTests
         var absentWork = Path.Combine(scratch, "absent");
         var absentAgent = Path.Combine(absentWork, "agent");
         Directory.CreateDirectory(absentAgent);
-        await using (var absent = new ChatSessionCoordinator(new PiRpcOptions(node,
+        await using (var absent = PiSessions.Coordinator(new PiRpcOptions(node,
             [cli, "--mode", "rpc", "--no-session", "--no-extensions"], absentWork,
             EnvironmentVariables: new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] = absentAgent },
             RequireApprovalBridge: true)))
@@ -67,12 +67,12 @@ internal static class BridgeIntegrationTests
 
         var broken = Path.Combine(scratch, "broken.ts");
         File.WriteAllText(broken, "throw new Error('intentional bridge load failure');\n");
-        await using (var failed = new ChatSessionCoordinator(new PiRpcOptions(node,
+        await using (var failed = PiSessions.Coordinator(new PiRpcOptions(node,
             [cli, "--mode", "rpc", "--no-session", "--no-extensions", "--extension", broken], absentWork,
             EnvironmentVariables: new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] = absentAgent })))
         {
             try { await failed.StartAsync(); throw new Exception("Broken extension unexpectedly loaded."); }
-            catch (PiRpcException) { }
+            catch (RpcException) { }
             Check(failed.ApprovalAvailability == ApprovalAvailability.Unavailable &&
                 failed.Snapshot.Connection == ConnectionState.Faulted &&
                 failed.ApprovalDiagnostic is { Length: > 0 },
@@ -109,7 +109,7 @@ internal static class BridgeIntegrationTests
             var options = new PiRpcOptions(node,
                 [cli, "--mode", "rpc", "--no-session", "--no-extensions", "--model", "fff-stub/fff-stub-model",
                     "--extension", bridge], work, EnvironmentVariables: env, RequireApprovalBridge: true);
-            await using var session = new ChatSessionCoordinator(options);
+            await using var session = PiSessions.Coordinator(options);
             var dialogs = new ConcurrentQueue<ExtensionUiRequest>();
             session.ExtensionUiRequestReceived += dialogs.Enqueue;
             await session.StartAsync();

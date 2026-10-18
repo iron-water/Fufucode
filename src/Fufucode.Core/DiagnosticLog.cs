@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading.Channels;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -10,7 +9,7 @@ namespace Fufucode.Core;
 internal partial class DiagnosticJsonContext : JsonSerializerContext;
 
 /// <summary>Bounded, asynchronous application diagnostics. Only the safe PiDiagnosticEvent schema is persisted.</summary>
-public sealed class DiagnosticLog : IPiDiagnosticSink, IAsyncDisposable
+public sealed class DiagnosticLog : IBackendDiagnosticSink, IAsyncDisposable
 {
     private readonly Channel<PiDiagnosticEvent> _entries = Channel.CreateBounded<PiDiagnosticEvent>(
         new BoundedChannelOptions(2048) { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest });

@@ -49,7 +49,7 @@ internal static class MockScenario
         emit(new SessionEvent.BlockFinished(messageId, 0, finalBlocks[^1]));
 
         // --- 文本块（含代码块，演示代码块渲染与复制） ---
-        const string intro = "我先看一下工程结构：\n\n```text\nFufucode/\n  src/\n    Fufucode.App/\n    Fufucode.Core/\n```\n\n接下来读取 README.md。";
+        const string intro = "我先看一下工程结构：\n\n```text\nFufucode/\n  src/\n    Fufucode.App/\n  docs/\n```\n\n接下来读取 README.md。";
         emit(new SessionEvent.BlockStarted(messageId, 1, MessageBlockKind.Text, null, null));
         foreach (var chunk in ChunkText(intro))
         {
@@ -71,7 +71,7 @@ internal static class MockScenario
         const string readmeOutput =
             "# Fufucode\n\n基于 Pi 官方 RPC 的 Windows 优先 Avalonia coding agent 客户端。\n\n" +
             "- 不移植 Agent 内核，全部由 Pi 执行\n- 桌面只负责消息时间线、工具卡片与审批入口\n" +
-            "- 详见仓库 README.md\n（mock 演示输出，非真实文件内容）";
+            "- 详细计划见 docs/AI_DEVELOPMENT_PLAN.md\n（mock 演示输出，非真实文件内容）";
         var readmeBlock = new ToolCallBlock(toolCallId1, "read_file", inputJson1,
             ToolCallStatus.Completed, "已读取 7 行", readmeOutput, false);
         finalBlocks.Add(readmeBlock);

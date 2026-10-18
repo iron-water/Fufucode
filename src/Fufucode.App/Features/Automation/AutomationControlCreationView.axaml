@@ -1,0 +1,78 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:a="using:Fufucode.App.Features.Automation" x:Class="Fufucode.App.Features.Automation.AutomationControlCreationView"
+             x:DataType="a:AutomationControlViewModel" AutomationProperties.Name="工作台创建表单">
+  <StackPanel Spacing="8">
+    <WrapPanel>
+      <Button Content="任务规范…" Command="{Binding BeginCreationCommand}" CommandParameter="package" Margin="0,0,8,4"/>
+      <Button Content="知识提案…" Command="{Binding BeginCreationCommand}" CommandParameter="knowledge" Margin="0,0,8,4"/>
+      <Button Content="定向问题…" Command="{Binding BeginCreationCommand}" CommandParameter="question" Margin="0,0,8,4"/>
+      <Button Content="并行关系…" Command="{Binding BeginCreationCommand}" CommandParameter="relation" Margin="0,0,8,4"/>
+      <Button Content="单项替代…" Command="{Binding BeginCreationCommand}" CommandParameter="restructure" Margin="0,0,8,4"/>
+    </WrapPanel>
+    <Border IsVisible="{Binding CreationVisible}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" Padding="8" CornerRadius="{DynamicResource AppCornerCard}">
+      <StackPanel Spacing="8">
+        <TextBlock Text="{Binding CreationTitle}" FontWeight="SemiBold"/>
+        <TextBlock Text="{Binding CreationVersionText}" TextWrapping="Wrap"/>
+        <TextBlock Text="本次输入以打开时的版本为准。状态改变后请重新打开并核对；不会启动执行者。" Classes="caption" TextWrapping="Wrap"/>
+        <StackPanel IsVisible="{Binding ShowSourcePackage}" Spacing="4">
+          <TextBlock Text="原规范 / 提问方（新任务无需选择）"/>
+          <ComboBox x:Name="CreationFromInput" ItemsSource="{Binding CreationPackages}" SelectedItem="{Binding CreationFrom, Mode=TwoWay}" HorizontalAlignment="Stretch" PlaceholderText="选择明确的原规范" AutomationProperties.Name="原规范或提问方">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="a:AutomationPackageOption"><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding IsPackageCreation}" Spacing="4">
+          <TextBlock Text="规范ID"/><TextBox x:Name="PackageIdInput" Text="{Binding PackageDraft.Id, Mode=TwoWay}" IsReadOnly="{Binding IsPackageEditing}" AutomationProperties.Name="规范ID"/>
+          <TextBlock Text="标题"/><TextBox x:Name="PackageTitleInput" Text="{Binding PackageDraft.Title, Mode=TwoWay}" AutomationProperties.Name="规范标题"/>
+          <TextBlock Text="目标"/><TextBox x:Name="PackageGoalInput" Text="{Binding PackageDraft.Goal, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" AutomationProperties.Name="规范目标"/>
+          <TextBlock Text="允许范围（每行一项）"/><TextBox Text="{Binding PackageDraft.Scope, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" AutomationProperties.Name="允许范围"/>
+          <TextBlock Text="验收条件（每行一项）"/><TextBox Text="{Binding PackageDraft.Acceptance, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="64" AutomationProperties.Name="验收条件"/>
+          <TextBlock Text="执行后端"/><ComboBox ItemsSource="{Binding HarnessOptions}" SelectedItem="{Binding PackageDraft.Harness, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="规范执行后端"/>
+          <TextBlock Text="模型ID"/><TextBox Text="{Binding PackageDraft.Model, Mode=TwoWay}" AutomationProperties.Name="规范模型ID"/>
+          <TextBlock Text="成果类型（evidence为证据，code为代码）"/><ComboBox ItemsSource="{Binding ArtifactOptions}" SelectedItem="{Binding PackageDraft.Artifact, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="成果类型"/>
+          <TextBlock Text="前置规范ID（可选，每行一项）"/><TextBox Text="{Binding PackageDraft.Dependencies, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" AutomationProperties.Name="前置规范"/>
+          <TextBlock Text="知识key（可选，每行一项）"/><TextBox Text="{Binding PackageDraft.Knowledge, Mode=TwoWay}" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="48" AutomationProperties.Name="知识引用"/>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding IsKnowledgeCreation}" Spacing="4">
+          <TextBlock Text="知识key"/><TextBox x:Name="KnowledgeKeyInput" Text="{Binding CreationKey, Mode=TwoWay}" AutomationProperties.Name="提案知识key"/>
+          <TextBlock Text="提案原文"/><TextBox x:Name="KnowledgeTextInput" Text="{Binding CreationText, Mode=TwoWay}" AcceptsReturn="True" MinHeight="80" TextWrapping="Wrap" AutomationProperties.Name="知识提案原文"/>
+          <TextBlock Text="来源依据"/><TextBox x:Name="KnowledgeSourceInput" Text="{Binding CreationSource, Mode=TwoWay}" TextWrapping="Wrap" AutomationProperties.Name="知识提案来源"/>
+          <TextBlock Text="保存的是待审提案；发布和任务采用需分别决定。" Classes="caption" TextWrapping="Wrap"/>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding IsQuestionCreation}" Spacing="4">
+          <TextBlock Text="回答方规范"/>
+          <ComboBox x:Name="CreationToInput" ItemsSource="{Binding CreationPackages}" SelectedItem="{Binding CreationTo, Mode=TwoWay}" HorizontalAlignment="Stretch" PlaceholderText="选择另一个规范" AutomationProperties.Name="回答方规范">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="a:AutomationPackageOption"><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBlock Text="问题"/><TextBox x:Name="QuestionTextInput" Text="{Binding CreationText, Mode=TwoWay}" AcceptsReturn="True" MinHeight="80" TextWrapping="Wrap" AutomationProperties.Name="定向问题内容"/>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding IsRelationCreation}" Spacing="4">
+          <TextBlock Text="关系ID"/><TextBox Text="{Binding CreationKey, Mode=TwoWay}" AutomationProperties.Name="关系ID"/>
+          <ComboBox ItemsSource="{Binding RelationOptions}" SelectedItem="{Binding CreationRelation, Mode=TwoWay}" HorizontalAlignment="Stretch" AutomationProperties.Name="关系类型">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="a:AutomationRelationOption"><TextBlock Text="{Binding Label}"/></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBlock Text="至少两个未批准、未执行的规范；已有关系变更使用正式重组。" Classes="caption" TextWrapping="Wrap"/>
+          <ScrollViewer MaxHeight="180"><ItemsControl ItemsSource="{Binding CreationPackages}">
+            <ItemsControl.ItemTemplate><DataTemplate x:DataType="a:AutomationPackageOption"><CheckBox Tag="{Binding Package.Spec.Id}" IsChecked="{Binding IsMember, Mode=TwoWay}"><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/></CheckBox></DataTemplate></ItemsControl.ItemTemplate>
+          </ItemsControl></ScrollViewer>
+          <StackPanel IsVisible="{Binding IsCompetitionCreation}" Spacing="4">
+            <TextBlock Text="共同Git基准SHA"/><TextBox Text="{Binding RelationBaseline, Mode=TwoWay}" AutomationProperties.Name="竞争基准SHA"/>
+            <TextBlock Text="共同比较依据（每行一项）"/><TextBox Text="{Binding RelationCriteria, Mode=TwoWay}" AcceptsReturn="True" MinHeight="64" TextWrapping="Wrap" AutomationProperties.Name="竞争比较依据"/>
+          </StackPanel>
+          <StackPanel IsVisible="{Binding IsPipelineCreation}" Spacing="4">
+            <TextBlock Text="先后顺序（每行一个ID，须恰好包含勾选成员）" TextWrapping="Wrap"/>
+            <TextBox Text="{Binding RelationOrder, Mode=TwoWay}" AcceptsReturn="True" MinHeight="64" TextWrapping="Wrap" AutomationProperties.Name="流水线成员顺序"/>
+          </StackPanel>
+        </StackPanel>
+        <StackPanel IsVisible="{Binding IsRestructureCreation}" Spacing="4">
+          <TextBlock Text="目标保留与替代理由"/><TextBox Text="{Binding CreationReason, Mode=TwoWay}" AcceptsReturn="True" MinHeight="64" TextWrapping="Wrap" AutomationProperties.Name="替代理由"/>
+          <SelectableTextBlock Text="{Binding CreationPreview}" TextWrapping="Wrap"/>
+          <TextBlock Text="提交单来源→单后继待审方案；相关关系按上方预览保留。复杂拆合方案仍由主控提出，批准入口支持其完整映射。" Classes="caption" TextWrapping="Wrap"/>
+        </StackPanel>
+        <WrapPanel>
+          <Button x:Name="CreationSave" Content="提交待审" Command="{Binding CreateCommand}" Margin="0,0,8,4"/>
+          <Button Content="取消表单" Command="{Binding CloseCreationCommand}" Margin="0,0,8,4"/>
+        </WrapPanel>
+      </StackPanel>
+    </Border>
+  </StackPanel>
+</UserControl>

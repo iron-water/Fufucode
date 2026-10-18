@@ -17,14 +17,14 @@ public sealed record QueuedItemViewModel(string Text, string BadgeText, bool IsL
     /// <summary>steer 投递的项（徽章高亮）。</summary>
     public bool IsSteer => BadgeText == "插入";
 
-    /// <summary>只有仍由界面持有的项才能改写/删除；已进入 Pi 队列的项界面无权单独操作。</summary>
+    /// <summary>只有仍由界面持有的项才能改写/删除；已进入后端队列的项界面无权单独操作。</summary>
     public bool CanEdit => IsLocallyOwned;
 
     public bool CanDelete => IsLocallyOwned;
 
     public string BlockedReason => IsLocallyOwned
         ? string.Empty
-        : "该条已在 Pi 的待发队列里，界面无法单独改写或删除。要改内容请按「停止」（整列清空并退回输入框可再编辑）；" +
+        : "该条已在后端的待发队列里，界面无法单独改写或删除。要改内容请按「停止」（整列清空并退回输入框可再编辑）；" +
           "单条操作需要 Core 提供队列单条接口。";
 }
 
@@ -83,6 +83,9 @@ public sealed partial class InputViewModel : ViewModelBase
     public bool HasAttachments => Attachments.Count > 0;
     public bool SupportsImages => _session is IChatAttachments { CanSendImages: true };
     public string ExecutionMode { get; private set; } = "manual";
+    /// <summary>当前会话是否暴露执行模式控件；不支持的后端不显示死下拉。</summary>
+    public bool ShowsExecutionMode => _session is IExecutionModeSession { SupportsExecutionModes: true };
+
     public bool CanChangeExecutionMode => _session is IExecutionModeSession { SupportsExecutionModes: true } && !IsTurnActive;
     public async Task SetExecutionModeAsync(string mode)
     {

@@ -11,7 +11,7 @@ internal static class CliTests
         var work = Path.Combine(root, "tmp", "cli-fake-pi");
         Directory.CreateDirectory(work);
         PiRpcOptions Options() => new(dotnet, [fake], work);
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(Options()))
+        await using (var chat = await PiSessions.ConnectAsync(Options()))
         {
             using var output = new StringWriter();
             var result = await CliChatRunner.RunAsync(chat, chat, "stream", json: false,
@@ -22,7 +22,7 @@ internal static class CliTests
             Console.WriteLine("PASS CLI chat runner streams FakePi text and waits for settled outcome");
         }
 
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(Options()))
+        await using (var chat = await PiSessions.ConnectAsync(Options()))
         {
             using var output = new StringWriter();
             var result = await CliChatRunner.RunAsync(chat, chat, "stream", json: true,
@@ -37,6 +37,7 @@ internal static class CliTests
         await TestSessionsAsync(root, fake, dotnet);
         await CliSettingsTests.RunAsync(root, fake, dotnet);
         await CliMaintenanceTests.RunAsync(root, fake, dotnet);
+        await CliHostTests.RunAsync();
         await TestDispatchAsync();
         // The headless UI group drives the App; it is skipped when the App cannot render in this environment.
         if (Environment.GetEnvironmentVariable("FUFUCODE_SKIP_UI_GROUP") != "1") await RunUiAsync(root);
@@ -56,7 +57,7 @@ internal static class CliTests
         {
             var marker = Path.Combine(options().WorkingDirectory, "approved-" + Guid.NewGuid().ToString("N"));
             var fixture = options() with { Arguments = options().Arguments.Concat(["--approval-path", marker]).ToArray() };
-            await using var chat = await PiChatSessionAdapter.ConnectAsync(fixture);
+            await using var chat = await PiSessions.ConnectAsync(fixture);
             using var output = new StringWriter(); using var errors = new StringWriter();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var result = await CliChatRunner.RunAsync(chat, chat, "cli_approval", json, output,
@@ -72,7 +73,7 @@ internal static class CliTests
                     "CLI JSON approval records contain data only");
             }
         }
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(options()))
+        await using (var chat = await PiSessions.ConnectAsync(options()))
         {
             using var output = new StringWriter(); using var errors = new StringWriter();
             var result = await CliChatRunner.RunAsync(chat, chat, "cli_approval", true, output,
@@ -80,14 +81,14 @@ internal static class CliTests
             Check(result.Outcome == SessionOutcome.Failed && result.Error is not null && errors.ToString().Length > 0,
                 "CLI approve reject reports an approval failure");
         }
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(options()))
+        await using (var chat = await PiSessions.ConnectAsync(options()))
         {
             var result = await CliChatRunner.RunAsync(chat, chat, "cli_approval", true, TextWriter.Null,
                 new StringReader("approve reject approval-1 extra\n"), diagnostics: TextWriter.Null);
             Check(result.Outcome == SessionOutcome.Failed && result.FailureExitCode == 2,
                 "CLI malformed approval commands retain the usage-error exit code instead of succeeding");
         }
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(options()))
+        await using (var chat = await PiSessions.ConnectAsync(options()))
         {
             using var output = new StringWriter();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -96,7 +97,7 @@ internal static class CliTests
             Check(result.Outcome == SessionOutcome.Failed && result.Error!.Contains("EOF"),
                 "CLI unattended EOF terminates instead of waiting on approval");
         }
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(options()))
+        await using (var chat = await PiSessions.ConnectAsync(options()))
         {
             using var source = new GateReader();
             using var input = new CliInputReader(source);
@@ -107,7 +108,7 @@ internal static class CliTests
             Check(result.Outcome == SessionOutcome.Failed && result.Error!.Contains("expired"),
                 "CLI approval deadline terminates a still-open stdin pipe without waiting for further input");
         }
-        await using (var chat = await PiChatSessionAdapter.ConnectAsync(options()))
+        await using (var chat = await PiSessions.ConnectAsync(options()))
         {
             using var output = new StringWriter();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
@@ -126,7 +127,7 @@ internal static class CliTests
             "CLI REPL preserves empty quoted values and Windows paths");
         foreach (var prompt in new[] { "handled", "/slow.ui" })
         {
-            await using var chat = await PiChatSessionAdapter.ConnectAsync(options());
+            await using var chat = await PiSessions.ConnectAsync(options());
             using var output = new StringWriter();
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
             var result = await CliChatRunner.RunAsync(chat, chat, prompt, true, output,

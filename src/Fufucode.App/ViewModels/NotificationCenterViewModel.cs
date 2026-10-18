@@ -85,6 +85,7 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
     public NotificationCenterViewModel(NotificationPreferencesViewModel preferences)
     {
         Preferences = preferences;
+        Items.CollectionChanged += (_, _) => NotifyCounts();
         _consumer = Task.Run(ConsumeAsync);
     }
     public NotificationPreferencesViewModel Preferences { get; }
@@ -104,8 +105,9 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
 
     public void SetWindowFocused(bool focused)
     {
-        lock (_gate) _windowFocused = focused;
-        if (focused) LatestPrompt = null;
+        bool becameFocused;
+        lock (_gate) { becameFocused = focused && !_windowFocused; _windowFocused = focused; }
+        if (becameFocused) LatestPrompt = null;
     }
     public void Attach(string sessionId, Guid generation, IChatSession session)
     {

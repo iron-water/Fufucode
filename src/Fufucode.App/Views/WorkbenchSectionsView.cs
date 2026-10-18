@@ -10,8 +10,10 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Fufucode.App.Features.SettingsExperience;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Features.Plugins;
 
 namespace Fufucode.App.Views;
 
@@ -25,7 +27,8 @@ public sealed class WorkbenchSectionsView : UserControl
 {
     private bool _refreshing;
     private WorkbenchCustomizationViewModel? _vm;
-    private FloatingPanelViewModel? _floating;
+    private NotificationDeliveryViewModel? _delivery;
+    private ViewModels.BrowserSettingsViewModel? _browserSettings;
     private StackPanel? _rows;
     private string? _builtPage;
     private readonly List<Action<WorkbenchAppearance>> _bindings = new();
@@ -50,19 +53,28 @@ public sealed class WorkbenchSectionsView : UserControl
     /// <summary>搜索关键词（小写），用于按行过滤。</summary>
     public string SearchText { get; set; } = "";
 
-    /// <summary>由设置页注入浮窗 VM；未注入时功能页只显示说明。</summary>
-    public void AttachFloating(FloatingPanelViewModel? floating)
+    /// <summary>保留旧分类ID兼容导航，内容已迁移为独立通知渠道。</summary>
+    public void AttachNotificationDelivery(NotificationDeliveryViewModel? delivery)
     {
-        _floating = floating;
-        if (floating is not null)
+        _delivery = delivery;
+        if (delivery is not null)
         {
-            floating.HostChanged += () => Dispatcher.UIThread.Post(Refresh);
-            floating.PropertyChanged += (_, args) =>
+            delivery.Changed += () => Dispatcher.UIThread.Post(Refresh);
+            delivery.PropertyChanged += (_, args) =>
             {
-                if (args.PropertyName == nameof(FloatingPanelViewModel.WindowsDeliveryStatus)) Dispatcher.UIThread.Post(Refresh);
+                if (args.PropertyName == nameof(NotificationDeliveryViewModel.WindowsDeliveryStatus)) Dispatcher.UIThread.Post(Refresh);
             };
         }
         if (Page.StartsWith("functions", StringComparison.Ordinal)) Render();
+    }
+
+    /// <summary>浏览器设置真源（BRW-1）：卡片从这里取值并回写 browser-settings.json。</summary>
+    public void AttachBrowserSettings(ViewModels.BrowserSettingsViewModel? browserSettings)
+    {
+        _browserSettings = browserSettings;
+        if (browserSettings is not null)
+            browserSettings.Changed += _ => Dispatcher.UIThread.Post(Refresh);
+        if (string.Equals(Page, "browser", StringComparison.Ordinal)) Render();
     }
 
     /// <summary>二级页跳转请求（分类首页的入口行点击时触发）。</summary>
@@ -105,6 +117,7 @@ public sealed class WorkbenchSectionsView : UserControl
             case "functions": RenderConversation(vm, rows); break;
             case "functions.names": RenderNames(vm, rows); break;
             case "functions.floating": RenderFloating(vm, rows); break;
+            case "browser": RenderBrowserSettings(vm, rows); break;
             default: RenderConfig(vm, rows); break;
         }
         _rows = rows;
@@ -132,25 +145,44 @@ public sealed class WorkbenchSectionsView : UserControl
     {
         var settings = vm.Current;
 
+        var skinNote = new TextBlock { Classes = { "secondary" }, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 8) };
+        _bindings.Add(current => { skinNote.IsVisible = current.SkinResolution.FellBack; skinNote.Text = current.SkinResolution.Reason; });
+
         Group(rows, "主题与风格",
             ChoiceRow(vm, "主题", null, new[] { "跟随系统", "浅色", "深色" }, s => s.Theme, (s, v) => s with { Theme = v }, "Color", "system", "light", "dark"),
-            ChoiceRow(vm, "视觉风格", "液态玻璃需要系统合成器支持，不支持时自动退回实色", new[] { "当前风格", "液态玻璃", "纯平面", "拟物" }, s => s.Surface, (s, v) => s with { Surface = v }, "Sparkle", "fluent", "glass", "flat", "classic"),
+            ChoiceRow(vm, "皮肤", "Fluent 为默认；其他皮肤使用各自的颜色与控件形状。", Features.Skins.SkinCatalog.All.Select(s => s.DisplayName).ToArray(), s => s.SkinResolution.Definition.StorageKey, (s, v) => s with { Skin = v }, "Color", Features.Skins.SkinCatalog.All.Select(s => s.StorageKey).ToArray()),
+            skinNote,
+            // “视觉风格”旧轴已下线：flat/classic 由 Metro/Luna 真皮肤覆盖，glass（iOS 液态玻璃）是未做的新皮肤，
+            // 不再以半成品占位。Surface 字段保留读取以兼容旧配置。
             CustomChoiceRow("预设", "一次性套用一组取值，之后仍可单独微调", new[] { "标准", "紧凑", "阅读" }, PresetOf, value => vm.Preset(value), "ArrowClockwise", "standard", "compact", "reading"));
 
+        var colorGroupStart = rows.Children.Count;
         Group(rows, "颜色",
-            ToggleRow("跟随系统强调色", "关闭后可自选任意颜色", s => s.Accent == "system",
-                value => vm.Change(s => s with { Accent = value ? "system" : Hex(s.EffectiveAccent) })),
-            SwatchRow(vm),
-            ColorPickerRow(vm));
+            FluentOnly(ToggleRow("跟随系统强调色", "Fluent 使用此选项；Metro 与 Material 3 使用各自固定强调色。", s => s.Accent == "system",
+                value => vm.Change(s => s with { Accent = value ? "system" : Hex(s.EffectiveAccent) }))),
+            FluentOnly(SwatchRow(vm)),
+            FluentOnly(ColorPickerRow(vm)));
+        var colorGroup = rows.Children.Skip(colorGroupStart).ToArray();
+        _bindings.Add(current =>
+        {
+            foreach (var control in colorGroup) control.IsVisible = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
+        });
 
         Group(rows, "字体与密度",
             ChoiceRow(vm, "字号", null, new[] { "11", "12", "13", "14", "16", "18", "20", "24" },
                 s => ((int)Math.Round(s.FontSize)).ToString(), (s, v) => s with { FontSize = double.Parse(v) }, "Document", "11", "12", "13", "14", "16", "18", "20", "24"),
             ChoiceRow(vm, "密度", "行高与列表间距", new[] { "紧凑", "舒适", "宽松" }, s => s.Density, (s, v) => s with { Density = v }, "AppsList", "compact", "cozy", "airy"),
-            ChoiceRow(vm, "圆角", null, new[] { "无", "中", "大" }, s => s.Radius, (s, v) => s with { Radius = v }, "PanelRight", "none", "mid", "high"),
+            FluentOnly(ChoiceRow(vm, "圆角", null, new[] { "无", "中", "大" }, s => s.Radius, (s, v) => s with { Radius = v }, "PanelRight", "none", "mid", "high")),
             ChoiceRow(vm, "阅读宽度", "正文的最大阅读宽度；代码与表格不受限", new[] { "窄", "标准", "自由" }, s => s.ReadingWidth, (s, v) => s with { ReadingWidth = v }, "Document", "narrow", "standard", "free"));
         Group(rows, "",
             SettingsLayout.ChevronRow("前端功能排布", "区域显隐、页面位置、辅助栏与入口位置", () => PageRequested?.Invoke("appearance.arrange"), "PanelLeft"));
+
+        Control FluentOnly(Control row)
+        {
+            _bindings.Add(current => row.IsVisible = row.IsEnabled = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent);
+            ToolTip.SetTip(row, "此项用于 Fluent；当前皮肤使用自己的颜色和形状。原设置会保留。");
+            return row;
+        }
     }
 
     private void RenderArrangement(WorkbenchCustomizationViewModel vm, StackPanel rows)
@@ -166,7 +198,6 @@ public sealed class WorkbenchSectionsView : UserControl
             CustomChoiceRow("会话管理", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("overview"), value => MovePage(vm, "overview", value), null, "0", "1", "2", "3"),
             CustomChoiceRow("文件", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("files"), value => MovePage(vm, "files", value), null, "0", "1", "2", "3"),
             CustomChoiceRow("变更", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("changes"), value => MovePage(vm, "changes", value), null, "0", "1", "2", "3"),
-            CustomChoiceRow("文件预览", "无模块依赖的核心页，默认可用", new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("preview"), value => MovePage(vm, "preview", value), null, "0", "1", "2", "3"),
             CustomChoiceRow("浏览器", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("browser"), value => MovePage(vm, "browser", value), null, "0", "1", "2", "3"),
             CustomChoiceRow("终端", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("terminal"), value => MovePage(vm, "terminal", value), null, "0", "1", "2", "3"),
             CustomChoiceRow("侧边聊天", "独立会话；向主会话传递内容需要显式操作", new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("sidechat"), value => MovePage(vm, "sidechat", value), null, "0", "1", "2", "3"),
@@ -184,10 +215,7 @@ public sealed class WorkbenchSectionsView : UserControl
         rows.Children.Add(entryBody);
     }
 
-    /// <summary>
-    /// 辅助栏：逐个功能选择出现在左辅助、右辅助，或不显示。
-    /// 只处理能进辅助栏的动作；页面位置与顺序仍由"前端功能排布"的完整清单控制。
-    /// </summary>
+    /// <summary>辅助栏页：逐个功能选左辅助/右辅助/不显示。</summary>
     private void RenderAuxiliary(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
         var choices = new[] { "左辅助", "右辅助", "不显示" };
@@ -282,19 +310,129 @@ public sealed class WorkbenchSectionsView : UserControl
     private void RenderFloating(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
         _ = vm;
-        if (_floating is not { } floating)
+        if (_delivery is not { } delivery)
         {
-            Group(rows, "浮窗", SettingsLayout.Row("浮窗尚未就绪", "会话建立后可用", null));
+            Group(rows, "通知提示", SettingsLayout.Row("通知提示尚未就绪", "会话建立后可用", null));
             return;
         }
-        Group(rows, "浮窗",
-            HostToggleRow("显示浮窗", "关闭后提醒改由浮层投递，通知列表仍可查看", () => floating.IsOpen, value => floating.IsOpen = value),
-            HostToggleRow("固定到应用内", "固定时只在应用内显示；取消固定后可脱离成独立窗口", () => floating.Pinned, value => floating.Pinned = value));
         Group(rows, "提醒渠道",
-            HostToggleRow("在浮层提醒", "应用内浮层提示", () => floating.DeliversToToast, value => floating.DeliversToToast = value),
-            HostToggleRow("在浮窗提醒", "事件写入浮窗列表", () => floating.DeliversToFloating, value => floating.DeliversToFloating = value),
-            HostToggleRow("Windows 系统通知", floating.WindowsDeliveryStatus + "；失败自动回退应用内提醒", () => floating.DeliversToWindows, value => floating.DeliversToWindows = value));
-        rows.Children.Add(SettingsLayout.Note(floating.DeliverySummary));
+            HostToggleRow("应用内提示", "短时浮层提示", () => delivery.DeliversToToast, value => delivery.DeliversToToast = value),
+            HostToggleRow("通知页提示", "显示最新提醒和页签未读标记；页面可随辅助栏浮动", () => delivery.DeliversToPage, value => delivery.DeliversToPage = value),
+            HostToggleRow("Windows 系统通知", delivery.WindowsDeliveryStatus + "；失败自动回退应用内提示", () => delivery.DeliversToWindows, value => delivery.DeliversToWindows = value));
+        rows.Children.Add(SettingsLayout.Note(delivery.DeliverySummary));
+        if (delivery.SaveError is { } error) rows.Children.Add(SettingsLayout.Note("提醒设置未保存：" + error));
+    }
+
+    private void RenderBrowserSettings(WorkbenchCustomizationViewModel vm, StackPanel rows)
+    {
+        var browser = _browserSettings;
+        if (browser is null)
+        {
+            Group(rows, "浏览器", SettingsLayout.Row("浏览器设置尚未就绪", "会话建立后可用", null));
+            return;
+        }
+
+        // ── 顶部卡片：让智能体控制内置浏览器（主开关） ──
+        Group(rows, "",
+            HostToggleRow("让智能体控制内置浏览器",
+                "允许 AI 会话中的模型直接驱动内置浏览器浏览、分析网页并提取数据；关闭后浏览器仍可手动使用。",
+                () => browser.BrowserUseEnabled, value => browser.BrowserUseEnabled = value, "Globe"));
+
+        // ── 常规 ──
+        Group(rows, "常规",
+            HostChoiceRow("网页链接打开位置", "聊天与消息中的网页链接默认在何处打开",
+                new[] { "内置浏览器", "系统默认浏览器" }, () => browser.WebUrlOpenTargetIndex, v => browser.WebUrlOpenTargetIndex = v, "Globe"),
+            HostChoiceRow("本地文件打开位置", "本地 HTML 与项目预览默认在何处打开",
+                new[] { "内置浏览器", "系统默认浏览器" }, () => browser.LocalUrlOpenTargetIndex, v => browser.LocalUrlOpenTargetIndex = v, "Document"),
+            HostToggleRow("显示完整网址", "在地址栏中显示完整协议、路径与查询参数；关闭时只显示主机名",
+                () => browser.ShowFullUrl, value => browser.ShowFullUrl = value, "Search"),
+            HostChoiceRow("截图策略", "向模型提供网页上下文时的截图策略",
+                new[] { "始终包含", "询问", "从不" }, () => browser.ScreenshotModeIndex, v => browser.ScreenshotModeIndex = v, "Document"),
+            BuildBrowserClearRow(browser),
+            BuildBrowserHistoryRow(browser));
+
+        // ── 下载 ──
+        Group(rows, "下载",
+            HostTextFieldRow("默认下载位置", "留空时沿用 WebView2 默认下载目录；输入绝对路径即写入配置",
+                () => browser.DefaultDownloadDirectory, v => browser.DefaultDownloadDirectory = v),
+            HostToggleRow("下载前询问保存位置", "对内置浏览器发起的下载弹出文件保存对话框",
+                () => browser.PromptDownloadLocation, value => browser.PromptDownloadLocation = value, "ArrowDownload"),
+            HostToggleRow("记录下载历史", "把真实发生的下载写入 browser-downloads.json",
+                () => browser.DownloadHistoryEnabled, value => browser.DownloadHistoryEnabled = value, "History"),
+            BuildBrowserDownloadHistoryRow(browser));
+
+        // ── 权限与智能体控制 ──
+        Group(rows, "权限与智能体控制",
+            HostToggleRow("启用站点工具（WebMCP）", "允许智能体发现并调用公开网页的扩展能力与 WebMCP",
+                () => browser.EnableSiteTools, value => browser.EnableSiteTools = value, "PuzzlePiece"),
+            HostChoiceRow("智能体浏览权限", "智能体访问外部站点时的默认授权策略",
+                new[] { "需要批准", "始终允许", "禁止访问" }, () => browser.DefaultBrowsePermissionIndex, v => browser.DefaultBrowsePermissionIndex = v, "ShieldCheckmark"),
+            HostChoiceRow("智能体下载权限", "智能体通过网页下载外部文件时的默认权限",
+                new[] { "需要批准", "始终允许", "禁止下载" }, () => browser.DefaultDownloadPermissionIndex, v => browser.DefaultDownloadPermissionIndex = v, "ArrowDownload"),
+            BuildBrowserSitesRow(browser));
+
+        // ── 开发者模式 ──
+        Group(rows, "开发者模式",
+            BuildCdpRow(vm),
+            SettingsLayout.Note("完整 CDP 访问权限允许智能体调用任意 Chrome DevTools Protocol 方法，可读写页面 DOM、网络与存储；仅在信任当前页面与模型时开启。"));
+
+        if (browser.HasLoadError)
+            rows.Children.Add(SettingsLayout.Note("browser-settings.json 加载失败：" + browser.LoadError + "；已用默认值，原文件未覆盖。", warning: true));
+        rows.Children.Add(SettingsLayout.Note(browser.Status));
+        rows.Children.Add(SettingsLayout.Note("配置文件：" + browser.SettingsPath));
+    }
+
+    /// <summary>CDP 行：开关取真源 browser-settings.json；插件未装时禁用并注明原因，不渲染假开关。</summary>
+    private Control BuildCdpRow(WorkbenchCustomizationViewModel vm)
+    {
+        var browser = _browserSettings;
+        var toggle = new ToggleSwitch
+        {
+            OnContent = "", OffContent = "", VerticalAlignment = VerticalAlignment.Center, IsEnabled = false,
+        };
+        AutomationProperties.SetAutomationId(toggle, "settings-browser-cdp-toggle");
+        var applying = false;
+        toggle.IsCheckedChanged += (_, _) =>
+        {
+            if (_refreshing || applying || !toggle.IsEnabled) return;
+            if (browser is null) return;
+            applying = true;
+            try { browser.EnableFullCdpAccess = toggle.IsChecked == true; }
+            finally { applying = false; }
+        };
+
+        var state = new TextBlock { VerticalAlignment = VerticalAlignment.Center, MinWidth = 20 };
+        state.Classes.Add("settingsRowDesc");
+        var note = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0),
+        };
+        note.Classes.Add("settingsRowDesc");
+        AutomationProperties.SetAutomationId(note, "settings-browser-cdp-note");
+
+        void Sync()
+        {
+            var enabled = PluginAccess.AdvancedControlEnabled(vm);
+            toggle.IsEnabled = enabled;
+            applying = true;
+            try { toggle.IsChecked = enabled && (browser?.EnableFullCdpAccess == true); }
+            finally { applying = false; }
+            state.Text = enabled ? (browser?.EnableFullCdpAccess == true ? "开" : "关") : "不可用";
+            note.Text = PluginAccess.Status(vm);
+            note.IsVisible = !enabled;
+        }
+
+        _bindings.Add(_ => Sync());
+        Sync();
+
+        var host = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
+        host.Children.Add(state);
+        host.Children.Add(toggle);
+        var layout = new StackPanel();
+        layout.Children.Add(SettingsLayout.Row("启用完整 CDP 访问权限 (Chrome DevTools Protocol)",
+            "允许 Agent 通过 CDP 深入探测并调试浏览器内部 DOM、网络与性能", host));
+        layout.Children.Add(note);
+        return layout;
     }
 
     private void RenderConfig(WorkbenchCustomizationViewModel vm, StackPanel rows)
@@ -326,8 +464,8 @@ public sealed class WorkbenchSectionsView : UserControl
                 await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, vm.Json);
         };
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8), Children = { apply, copy } };
-        var card = new Border { Child = new StackPanel { Children = { json, actions } }, Padding = new Thickness(16, 12) };
-        card.Classes.Add("settingsGroup");
+        var card = new Border { Child = new StackPanel { Children = { json, actions } } };
+        card.Classes.Add("settingsPanel");
         rows.Children.Add(card);
     }
 
@@ -442,10 +580,11 @@ public sealed class WorkbenchSectionsView : UserControl
 
     private Control SwatchRow(WorkbenchCustomizationViewModel vm)
     {
-        var colors = new WrapPanel();
+        var colors = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
         foreach (var hex in new[] { "#0078D4", "#087E66", "#B14670", "#7B51B5", "#B15B00", "#6B7075" })
         {
-            var swatch = new Button { Width = 30, Height = 30, Margin = new Thickness(0, 0, 6, 0), Background = new SolidColorBrush(Color.Parse(hex)) };
+            var swatch = new Button { Width = 22, Height = 22, Margin = new Thickness(4), Padding = new Thickness(0),
+                Background = new SolidColorBrush(Color.Parse(hex)), CornerRadius = new CornerRadius(11) };
             swatch.Classes.Add("accentSwatch");
             ToolTip.SetTip(swatch, hex); AutomationProperties.SetName(swatch, "强调色 " + hex);
             swatch.Click += (_, _) => vm.Change(s => s with { Accent = hex });
@@ -516,6 +655,158 @@ public sealed class WorkbenchSectionsView : UserControl
         AutomationProperties.SetAutomationId(button, automationId);
         button.Click += (_, _) => action();
         return SettingsLayout.Row(label, description, button);
+    }
+
+    // ================= 浏览器设置行（BRW-1：真源为 BrowserSettingsViewModel） =================
+
+    private Control HostToggleRow(string label, string? description, Func<bool> get, Action<bool> set, string? icon)
+    {
+        var control = new ToggleSwitch { OnContent = "", OffContent = "", VerticalAlignment = VerticalAlignment.Center };
+        var applying = false;
+        control.IsCheckedChanged += (_, _) =>
+        {
+            if (_refreshing || applying) return;
+            applying = true;
+            try { set(control.IsChecked == true); }
+            finally { applying = false; }
+        };
+        _bindings.Add(_ =>
+        {
+            applying = true;
+            try { control.IsChecked = get(); }
+            finally { applying = false; }
+        });
+        return SettingsLayout.ToggleRow(label, description, control, icon);
+    }
+
+    private Control HostChoiceRow(string label, string? description, string[] labels,
+        Func<int> get, Action<int> set, string? icon)
+    {
+        var combo = new ComboBox { ItemsSource = labels, MinWidth = 160, MaxWidth = 220, VerticalAlignment = VerticalAlignment.Center };
+        var applying = false;
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (_refreshing || applying || combo.SelectedIndex < 0) return;
+            applying = true;
+            try { set(combo.SelectedIndex); }
+            finally { applying = false; }
+        };
+        _bindings.Add(_ =>
+        {
+            var index = Math.Clamp(get(), 0, labels.Length - 1);
+            applying = true;
+            try { if (combo.SelectedIndex != index) combo.SelectedIndex = index; }
+            finally { applying = false; }
+        });
+        return SettingsLayout.Row(label, description, combo, icon);
+    }
+
+    private Control HostTextFieldRow(string label, string? description, Func<string> get, Action<string> set, int width = 220)
+    {
+        var input = new TextBox { Width = width, MaxWidth = 320, VerticalAlignment = VerticalAlignment.Center };
+        input.KeyDown += (_, e) => { if (e.Key != Key.Enter) return; Commit(); e.Handled = true; };
+        input.LostFocus += (_, _) => Commit();
+        void Commit()
+        {
+            var value = (input.Text ?? "").Trim();
+            if (string.Equals(value, get(), StringComparison.Ordinal)) return;
+            set(value);
+        }
+        _bindings.Add(_ => { if (!input.IsFocused && input.Text != get()) input.Text = get(); });
+        return SettingsLayout.Row(label, description, input);
+    }
+
+    /// <summary>清除浏览数据：每个范围一个真实按钮，结果来自实际删除报告。</summary>
+    private Control BuildBrowserClearRow(ViewModels.BrowserSettingsViewModel browser)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 0) };
+        status.Classes.Add("settingsRowDesc");
+        AutomationProperties.SetAutomationId(status, "browser-clear-status");
+        void UpdateStatus()
+        {
+            status.Text = browser.ClearDataStatus;
+            status.IsVisible = browser.HasClearDataStatus;
+        }
+        void Add(string text, Action action, string automationId)
+        {
+            var button = new Button { Content = text, Padding = new Thickness(10, 4), VerticalAlignment = VerticalAlignment.Center };
+            AutomationProperties.SetAutomationId(button, automationId);
+            button.Click += (_, _) => { action(); UpdateStatus(); };
+            panel.Children.Add(button);
+        }
+        Add("缓存", browser.ClearCache, "browser-clear-cache");
+        Add("Cookie", browser.ClearCookies, "browser-clear-cookies");
+        Add("网站数据", browser.ClearSiteData, "browser-clear-sitedata");
+        Add("全部", browser.ClearAll, "browser-clear-all");
+        _bindings.Add(_ => UpdateStatus());
+        UpdateStatus();
+
+        var layout = new StackPanel();
+        layout.Children.Add(SettingsLayout.Row("清除浏览数据", "清除内置浏览器缓存、Cookie 与 LocalStorage 网站数据；被页面占用的文件会如实报告失败", panel, "History"));
+        layout.Children.Add(status);
+        return layout;
+    }
+
+    /// <summary>浏览历史管理：真实读取下载历史文件，提供刷新与清理已失效条目。</summary>
+    private Control BuildBrowserHistoryRow(ViewModels.BrowserSettingsViewModel browser)
+    {
+        var summary = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        summary.Classes.Add("settingsRowDesc");
+        AutomationProperties.SetAutomationId(summary, "browser-history-status");
+
+        var host = new StackPanel { Spacing = 4 };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        var refresh = new Button { Content = "刷新", Padding = new Thickness(10, 4) };
+        AutomationProperties.SetAutomationId(refresh, "browser-history-refresh");
+        refresh.Click += (_, _) => { browser.RefreshDownloadHistory(); Update(); };
+        var forget = new Button { Content = "清理失效条目", Padding = new Thickness(10, 4) };
+        AutomationProperties.SetAutomationId(forget, "browser-history-prune");
+        forget.Click += (_, _) => { browser.RefreshDownloadHistory(); Update(); };
+        buttons.Children.Add(refresh); buttons.Children.Add(forget);
+        host.Children.Add(buttons);
+        host.Children.Add(summary);
+
+        void Update() => summary.Text = browser.DownloadHistoryStatus;
+        _bindings.Add(_ => Update());
+        Update();
+        return SettingsLayout.Row("浏览历史管理", "真实读取 browser-downloads.json；删除条目不删除磁盘文件", host, "History");
+    }
+
+    private Control BuildBrowserSitesRow(ViewModels.BrowserSettingsViewModel browser)
+    {
+        var editor = new TextBox
+        {
+            AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, MinHeight = 64, MaxHeight = 140,
+            Width = 260, MaxWidth = 320, VerticalAlignment = VerticalAlignment.Center,
+            PlaceholderText = "example.com = approval",
+        };
+        AutomationProperties.SetAutomationId(editor, "browser-site-allowlist");
+        editor.LostFocus += (_, _) => Commit();
+        editor.KeyDown += (_, e) => { if (e.Key != Key.Enter || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return; Commit(); e.Handled = true; };
+        void Commit()
+        {
+            var value = editor.Text ?? "";
+            if (string.Equals(value, browser.AllowedSitesText, StringComparison.Ordinal)) return;
+            browser.AllowedSitesText = value;
+        }
+        _bindings.Add(_ => { if (!editor.IsFocused) editor.Text = browser.AllowedSitesText; });
+        return SettingsLayout.Row("智能体网站白名单与权限例外",
+            "每行一个站点，格式“主机名 = approval|allow|block”；留空表示全部站点沿用全局默认权限", editor, "ShieldCheckmark");
+    }
+
+    /// <summary>下载历史行：真实读取 browser-downloads.json。</summary>
+    private Control BuildBrowserDownloadHistoryRow(ViewModels.BrowserSettingsViewModel browser)
+    {
+        var count = new TextBlock { VerticalAlignment = VerticalAlignment.Center };
+        count.Classes.Add("settingsRowDesc");
+        AutomationProperties.SetAutomationId(count, "browser-download-history");
+        _bindings.Add(_ =>
+        {
+            browser.RefreshDownloadHistory();
+            count.Text = browser.DownloadHistoryStatus;
+        });
+        return SettingsLayout.Row("下载历史记录", "记录真实发生的下载；只保存文件名与路径，不保存内容", count, "ArrowDownload");
     }
 
     private Control ResetControls(WorkbenchCustomizationViewModel vm)
@@ -618,7 +909,7 @@ public sealed class WorkbenchSectionsView : UserControl
         };
         try
         {
-            if (TopLevel.GetTopLevel(this) is Window parent) await dialog.ShowDialog(parent);
+            if (TopLevel.GetTopLevel(this) is Window parent) await Fufucode.App.Views.SkinDialog.ShowAsync(dialog, parent);
             else dialog.Show();
         }
         catch (InvalidOperationException) { return; }

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.Claude/Fufucode.Claude.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
+  </ItemGroup>
+</Project>

@@ -6,6 +6,8 @@ namespace Fufucode.App.Views;
 
 public partial class UsageDetailsView : UserControl
 {
+    internal void SetCloseAllowed(bool allowed)
+    { ClosePageButton.IsEnabled = allowed; ToolTip.SetTip(ClosePageButton, allowed ? "关闭用量页" : "请先取消固定页签"); }
     public UsageDetailsView()
     {
         InitializeComponent();

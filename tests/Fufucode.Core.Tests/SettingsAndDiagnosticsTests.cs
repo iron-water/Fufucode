@@ -100,7 +100,7 @@ internal static class SettingsAndDiagnosticsTests
                 state.GetProperty("proxy").GetString() == "http://localhost:7890" &&
                 state.GetProperty("fixtureKeyPresent").GetBoolean(),
                 "M6 new session applies model, thinking, proxy and resolved endpoint key");
-            var models = File.ReadAllText(Path.Combine(sessionLayout.AgentDirectory, "models.json"));
+            var models = File.ReadAllText(Path.Combine(sessionLayout.LegacyPiAgentDirectory, "models.json"));
             Check(models.Contains("$FUFUCODE_TEST_KEY", StringComparison.Ordinal) &&
                 !models.Contains("private-fixture-key", StringComparison.Ordinal),
                 "M6 Pi models file references the process variable without writing its value");
@@ -115,7 +115,7 @@ internal static class SettingsAndDiagnosticsTests
         manager.Settings.Update(s => s with { SelectedModel = null, ThinkingLevel = null, Endpoint = null });
         await using (var withoutEndpoint = await manager.CreateAsync(projectPath))
         {
-            var models = File.ReadAllText(Path.Combine(sessionLayout.AgentDirectory, "models.json"));
+            var models = File.ReadAllText(Path.Combine(sessionLayout.LegacyPiAgentDirectory, "models.json"));
             using var parsed = JsonDocument.Parse(models);
             Check(!parsed.RootElement.GetProperty("providers").TryGetProperty("fixture", out _) &&
                 !File.Exists(Path.Combine(sessionLayout.AgentDirectory, "fufucode-provider.txt")),

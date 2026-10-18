@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Fufucode.App.Features.TerminalExperience;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 
@@ -17,6 +18,7 @@ namespace Fufucode.App.Views;
 public partial class TerminalDockView : UserControl
 {
     private readonly ImeEnterGuard _imeGuard = new();
+    private readonly TerminalCompositionState _composition = new();
     private TerminalDockViewModel? _dock;
     private TerminalTabViewModel? _tab;
     private bool _preeditHooked;
@@ -25,6 +27,29 @@ public partial class TerminalDockView : UserControl
     private long _scrollGeneration;
     private bool _confirmingClose;
     internal Func<TerminalTabViewModel, Task<bool>>? ConfirmCloseForTesting { get; set; }
+
+    /// <summary>输入法组合预览状态；组合未提交时输入条显示临时文本。</summary>
+    internal TerminalCompositionState Composition => _composition;
+
+    internal Func<string, KeyEventArgs, bool>? ShortcutMatches
+    {
+        get => TerminalSurface.ShortcutMatches;
+        set => TerminalSurface.ShortcutMatches = value;
+    }
+    internal Task PasteToDraftAsync() => TerminalSurface.PasteToDraftAsync();
+    internal void UpdateShortcutLabels(Func<string, string> binding)
+    {
+        ToolTip.SetTip(CopyOutputButton, Label("复制选中的输出", "terminal.copy"));
+        ToolTip.SetTip(FindButton, Label("查找输出", "terminal.find"));
+        string Label(string text, string id) => string.IsNullOrEmpty(binding(id)) ? text : text + "（" + binding(id) + "）";
+    }
+    internal void FindOutput() => OpenFind();
+    internal Task CopyOrInterruptAsync()
+    {
+        if (TerminalInput.IsFocused) { _dock?.SelectedTab?.Interrupt(); return Task.CompletedTask; }
+        if (TerminalSurface.HasSelection) return TerminalSurface.CopySelectionAsync();
+        _dock?.SelectedTab?.Interrupt(); return Task.CompletedTask;
+    }
 
     private async void CloseTerminal_Click(object? sender, RoutedEventArgs e) => await CloseSelectedAsync();
     internal async Task CloseSelectedAsync()
@@ -57,7 +82,7 @@ public partial class TerminalDockView : UserControl
         cancel.Click += (_, _) => dialog.Close(false);
         close.Click += (_, _) => dialog.Close(true);
         dialog.Opened += (_, _) => cancel.Focus();
-        return dialog.ShowDialog<bool>(owner);
+        return Fufucode.App.Views.SkinDialog.ShowAsync<bool>(dialog, owner);
     }
 
     public TerminalDockView()
@@ -65,6 +90,19 @@ public partial class TerminalDockView : UserControl
         InitializeComponent();
         TerminalInput.AddHandler(InputElement.KeyDownEvent, OnInputKeyDown, RoutingStrategies.Tunnel);
         TerminalInput.TemplateApplied += (_, _) => HookPreedit();
+        FindBox.AddHandler(InputElement.KeyDownEvent, OnFindKeyDown, RoutingStrategies.Tunnel);
+        // 焦点确立与字符捕获原子同步：字符先到、焦点后到时由输出面在同一个处理里接手，
+        // 快速输入不会丢首字符；命令框/查找框自己的文本输入不受影响。
+        AddHandler(InputElement.TextInputEvent, OnDockTextInput, RoutingStrategies.Tunnel);
+        // 点击停靠页空白处（页签条留白、面板底）同样把键盘焦点交给输出面，
+        // 使“点击终端面板后立刻输入”不因焦点停留在别处而丢首字符。
+        AddHandler(InputElement.PointerPressedEvent, OnDockPointerPressed, RoutingStrategies.Tunnel);
+        TerminalSurface.SelectionChanged += (_, _) => { _dock?.RefreshOutputSelection(); TerminalSurface.InvalidateVisual(); };
+        TerminalSurface.FindRequested += (_, _) => OpenFind();
+        TerminalSurface.FindDismissRequested += (_, _) => CloseFind();
+        TerminalSurface.PasteCompleted += (_, _) => TerminalInput.Focus();
+        _composition.Changed += UpdateCompositionPreview;
+        TerminalContextMenu.Opening += (_, _) => SyncContextMenuState();
         Loaded += (_, _) => { HookPreedit(); ResizeTerminal(); };
         SizeChanged += (_, _) => ResizeTerminal();
         OutputScroller.SizeChanged += (_, _) => ResizeTerminal();
@@ -98,7 +136,7 @@ public partial class TerminalDockView : UserControl
             _tab.FollowOutput = _followOutput;
         }
         if (_dock is not null) _dock.PropertyChanged -= OnDockChanged;
-        if (_tab is not null) _tab.Buffer.Changed -= OnOutputChanged;
+        if (_tab is not null) { _tab.Buffer.Changed -= OnOutputChanged; _tab.PropertyChanged -= OnTabChanged; }
         _dock = null; _tab = null;
     }
     private void OnDockChanged(object? sender, PropertyChangedEventArgs e)
@@ -116,10 +154,14 @@ public partial class TerminalDockView : UserControl
                 _tab.FollowOutput = _followOutput;
             }
             _tab.Buffer.Changed -= OnOutputChanged;
+            _tab.PropertyChanged -= OnTabChanged;
         }
         _tab = _dock?.SelectedTab;
-        if (_tab is not null) _tab.Buffer.Changed += OnOutputChanged;
+        if (_tab is not null) { _tab.Buffer.Changed += OnOutputChanged; _tab.PropertyChanged += OnTabChanged; }
         _followOutput = _tab?.FollowOutput ?? true;
+        // Find bar and output-selection state are per tab; re-project them after every switch.
+        SyncFindState();
+        _dock?.RefreshOutputSelection();
         _restoringScroll = true;
         var targetTab = _tab;
         var generation = ++_scrollGeneration;
@@ -131,6 +173,12 @@ public partial class TerminalDockView : UserControl
             else OutputScroller.Offset = new Vector(0, targetTab?.ScrollOffsetY ?? 0);
             _restoringScroll = false;
         }, DispatcherPriority.Loaded);
+    }
+    private void OnTabChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(TerminalTabViewModel.SearchStatus)) return;
+        if (_dock?.SelectedTab is not { } tab || !tab.IsSearchOpen) return;
+        if (tab.Search.Current is { } match) ScrollToRow(match.Row);
     }
     private void OnOutputChanged()
     {
@@ -154,8 +202,63 @@ public partial class TerminalDockView : UserControl
         if (presenter is null) return;
         _preeditHooked = true;
         _imeGuard.OnPreeditChanged(presenter.PreeditText);
-        presenter.PropertyChanged += (_, e) => { if (e.Property == TextPresenter.PreeditTextProperty) _imeGuard.OnPreeditChanged(e.NewValue as string); };
+        _composition.Update(presenter.PreeditText);
+        presenter.PropertyChanged += (_, e) =>
+        {
+            if (e.Property != TextPresenter.PreeditTextProperty) return;
+            var preedit = e.NewValue as string;
+            _imeGuard.OnPreeditChanged(preedit);
+            _composition.Update(preedit);
+        };
     }
+
+    /// <summary>
+    /// 终端输入接收端的捕获路径：字符到达时输出面还不是焦点元素（焦点仍在停靠条按钮、
+    /// 页签或尚未提交的焦点切换中）时，在同一步里聚焦输出面并写入该字符。
+    /// 命令框/查找框的文本输入与输出面自己已聚焦的情况一律放行，避免重复写入或抢占编辑器。
+    /// </summary>
+    private void OnDockTextInput(object? sender, TextInputEventArgs e)
+    {
+        if (e.Handled || string.IsNullOrEmpty(e.Text)) return;
+        if (e.Source is TextBox) return;
+        if (TerminalSurface.IsFocused) return;
+        if (TerminalSurface.CaptureInput(e.Text)) e.Handled = true;
+    }
+
+    /// <summary>
+    /// 停靠页空白处的左键点击把键盘焦点交给输出面。命令框、查找框、按钮与页签保留自己的
+    /// 焦点语义（编辑器、键盘可达性、页签切换），不在此处抢占。
+    /// </summary>
+    private void OnDockPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        if (e.Source is not Visual source) return;
+        if (source is TextBox || source.FindAncestorOfType<TextBox>() is not null) return;
+        if (source is Button || source.FindAncestorOfType<Button>() is not null) return;
+        if (source is ListBoxItem || source.FindAncestorOfType<ListBoxItem>() is not null) return;
+        TerminalSurface.FocusForInput();
+    }
+
+    private void UpdateCompositionPreview()
+    {
+        CompositionPreview.IsVisible = _composition.IsComposing;
+        CompositionPreviewText.Text = _composition.IsComposing ? "组合中：" + _composition.PreviewText : string.Empty;
+    }
+
+    /// <summary>右键菜单开启时同步“复制”的可用性（无选区时不可用）。</summary>
+    internal void SyncContextMenuState() => ContextCopyItem.IsEnabled = TerminalSurface.HasSelection;
+
+    private void ContextCopy_Click(object? sender, RoutedEventArgs e) => _ = TerminalSurface.CopySelectionAsync();
+
+    private void ContextPaste_Click(object? sender, RoutedEventArgs e) => _ = TerminalSurface.PasteToDraftAsync();
+
+    /// <summary>清屏是纯本地操作：清空屏幕与滚动缓冲并把光标归位，不向 shell 写入任何字节。</summary>
+    private void ContextClear_Click(object? sender, RoutedEventArgs e)
+    {
+        _dock?.SelectedTab?.Buffer.Append(TerminalControlSequences.ClearScreen);
+        TerminalSurface.FocusForInput();
+    }
+
     private void OnInputKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Enter)
@@ -163,9 +266,119 @@ public partial class TerminalDockView : UserControl
             e.Handled = true;
             if (!_imeGuard.ShouldSwallowEnter()) _dock?.SelectedTab?.SendInput();
         }
-        else if (e.Key == Key.C && e.KeyModifiers.HasFlag(KeyModifiers.Control) && string.IsNullOrEmpty(TerminalInput.SelectedText))
+        else if ((ShortcutMatches?.Invoke("terminal.copy-or-interrupt", e) ??
+            (e.Key == Key.C && e.KeyModifiers == KeyModifiers.Control)) && string.IsNullOrEmpty(TerminalInput.SelectedText))
         {
             _dock?.SelectedTab?.Interrupt(); e.Handled = true;
         }
+        else if (e.Key is Key.Up or Key.Down && _dock?.SelectedTab is { } tab)
+        {
+            HandleHistoryKey(e, tab);
+        }
+    }
+    private void HandleHistoryKey(KeyEventArgs e, TerminalTabViewModel tab)
+    {
+        // Only the command draft browses local history; the surface still forwards arrows to the shell.
+        // Multi-line drafts keep caret movement unless the caret already sits on the first/last line.
+        var text = tab.InputText ?? string.Empty;
+        var caret = Math.Clamp(TerminalInput.CaretIndex, 0, text.Length);
+        var onFirstLine = text.AsSpan(0, caret).IndexOf('\n') < 0;
+        var onLastLine = text.AsSpan(caret).IndexOf('\n') < 0;
+        var handled = e.Key == Key.Up ? onFirstLine && tab.HistoryPrevious() : onLastLine && tab.HistoryNext();
+        if (!handled) return;
+        TerminalInput.CaretIndex = TerminalInput.Text?.Length ?? 0;
+        e.Handled = true;
+    }
+
+    private void CopyOutput_Click(object? sender, RoutedEventArgs e) => _ = TerminalSurface.CopySelectionAsync();
+    internal Task CopySelectionAsync() => TerminalSurface.CopySelectionAsync();
+
+    private void ToggleFind_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_dock?.SelectedTab is not { } tab) return;
+        if (tab.IsSearchOpen) CloseFind(); else OpenFind();
+    }
+
+    private void OpenFind()
+    {
+        if (_dock?.SelectedTab is not { } tab) return;
+        tab.IsSearchOpen = true;
+        SyncFindState();
+        if (tab.SearchQuery.Length > 0) { tab.RunSearch(); if (tab.Search.Current is { } match) ScrollToRow(match.Row); }
+        Dispatcher.UIThread.Post(() => { if (tab.IsSearchOpen) { FindBox.Focus(); FindBox.SelectAll(); } }, DispatcherPriority.Loaded);
+    }
+
+    private void CloseFind()
+    {
+        if (_dock?.SelectedTab is { } tab)
+        {
+            tab.IsSearchOpen = false;
+            tab.Search.Clear();
+            tab.SearchStatus = string.Empty;
+        }
+        SyncFindState();
+        TerminalSurface.InvalidateVisual();
+        TerminalSurface.Focus();
+    }
+
+    private void SyncFindState()
+    {
+        var tab = _dock?.SelectedTab;
+        var open = tab?.IsSearchOpen == true;
+        TerminalSurface.FindActive = open;
+        FindButton.Classes.Set("active", open);
+        FindCaseButton.Classes.Set("active", tab?.SearchMatchCase == true);
+    }
+
+    private void CloseFind_Click(object? sender, RoutedEventArgs e) => CloseFind();
+
+    private void ToggleFindCase_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_dock?.SelectedTab is not { } tab) return;
+        tab.SearchMatchCase = !tab.SearchMatchCase;
+        SyncFindState();
+        if (tab.Search.Current is { } match) ScrollToRow(match.Row);
+        TerminalSurface.InvalidateVisual();
+    }
+
+    private void FindPrevious_Click(object? sender, RoutedEventArgs e) => FindStep(-1);
+    private void FindNext_Click(object? sender, RoutedEventArgs e) => FindStep(1);
+
+    private void FindStep(int direction)
+    {
+        if (_dock?.SelectedTab is not { } tab || !tab.IsSearchOpen) return;
+        var match = tab.MoveSearch(direction);
+        if (match is { } hit) ScrollToRow(hit.Row);
+        TerminalSurface.InvalidateVisual();
+    }
+
+    private void OnFindKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape) { e.Handled = true; CloseFind(); return; }
+        if (e.Key != Key.Enter) return;
+        e.Handled = true;
+        FindStep(e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -1 : 1);
+    }
+
+    private void ReturnToBottom_Click(object? sender, RoutedEventArgs e) => ReturnToBottom();
+
+    internal void ReturnToBottom()
+    {
+        var tab = _dock?.SelectedTab ?? _tab;
+        if (tab is not null) tab.FollowOutput = true;
+        _followOutput = true;
+        OutputScroller.ScrollToEnd();
+        if (tab is not null) tab.ScrollOffsetY = OutputScroller.Offset.Y;
+        TerminalSurface.InvalidateVisual();
+    }
+
+    /// <summary>Scroll a fixed-cell row into view; programmatic scrolling never re-enables follow output.</summary>
+    internal void ScrollToRow(int row)
+    {
+        var centered = 8 + row * TerminalScreenControl.CellHeight - Math.Max(0, (OutputScroller.Viewport.Height - TerminalScreenControl.CellHeight) / 2);
+        var max = Math.Max(0, OutputScroller.Extent.Height - OutputScroller.Viewport.Height);
+        OutputScroller.Offset = new Vector(0, Math.Clamp(centered, 0, max));
+        if (_tab is not null) _tab.ScrollOffsetY = OutputScroller.Offset.Y;
+        TerminalSurface.InvalidateVisual();
     }
 }

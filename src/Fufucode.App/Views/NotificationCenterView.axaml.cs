@@ -7,6 +7,15 @@ namespace Fufucode.App.Views;
 
 public partial class NotificationCenterView : UserControl
 {
+    internal bool HasChannelPromptForTesting => ChannelPrompt.IsVisible;
+    internal string? ChannelPromptForTesting => ChannelPromptText.Text;
+    internal void SetCloseAllowed(bool allowed)
+    { ClosePageButton.IsEnabled = allowed; ToolTip.SetTip(ClosePageButton, allowed ? "关闭通知页" : "请先取消固定页签"); }
+    internal void ShowChannelPrompt(NotificationItemViewModel? notice)
+    {
+        ChannelPrompt.IsVisible = notice is not null;
+        ChannelPromptText.Text = notice is null ? "" : notice.Title + "\n" + notice.Message;
+    }
     public NotificationCenterView()
     {
         InitializeComponent();

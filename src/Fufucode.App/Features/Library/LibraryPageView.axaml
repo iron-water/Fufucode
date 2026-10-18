@@ -6,14 +6,14 @@
              Background="{DynamicResource AppWindowBackground}"
              AutomationProperties.Name="资料库">
   <Grid RowDefinitions="Auto,Auto,*,Auto">
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,16,8" ColumnSpacing="12">
-      <StackPanel Spacing="2">
+    <Grid x:Name="HeaderGrid" Grid.Row="0" ColumnDefinitions="*,Auto" Margin="16,12,16,8" ColumnSpacing="12">
+      <StackPanel x:Name="HeaderTitle" Spacing="2">
         <TextBlock Classes="title" Text="资料库"/>
-        <TextBlock Classes="caption"
-                   Text="收藏本地文件、网页链接与会话片段；删除条目只清理资料库副本，不会删除你的源文件。"
-                   TextWrapping="Wrap"/>
+        <Expander Header="资料库使用说明" IsExpanded="False">
+          <TextBlock Classes="caption" Text="可收藏文件、链接与会话片段。删除条目只清理资料库副本，不删除源文件。" TextWrapping="Wrap"/>
+        </Expander>
       </StackPanel>
-      <WrapPanel Grid.Column="1" VerticalAlignment="Center">
+      <WrapPanel x:Name="HeaderActions" Grid.Column="1" VerticalAlignment="Center">
         <ToggleSwitch IsChecked="{Binding ImportAsCopy}" OnContent="副本" OffContent="引用"
                       ToolTip.Tip="{Binding ImportModeHint}" Margin="0,0,8,4"
                       AutomationProperties.Name="导入方式"/>
@@ -31,7 +31,6 @@
                  AutomationProperties.Name="资料检索"/>
         <Button Grid.Column="1" Classes="subtle" Content="搜索" Command="{Binding ReloadCommand}" MinHeight="32"/>
       </Grid>
-      <TextBlock Classes="caption" Text="{Binding ImportModeHint}" TextWrapping="Wrap"/>
       <StackPanel Orientation="Horizontal" Spacing="6">
         <TextBlock Classes="caption" Text="标签：" VerticalAlignment="Center"/>
         <ItemsControl ItemsSource="{Binding Tags}">
@@ -58,8 +57,8 @@
       <ProgressBar Height="3" IsIndeterminate="True" IsVisible="{Binding IsIndexing}"/>
     </StackPanel>
 
-    <Grid Grid.Row="2" ColumnDefinitions="340,*" Margin="16,0,16,8" ColumnSpacing="12">
-      <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="6">
+    <Grid x:Name="EntriesGrid" Grid.Row="2" ColumnDefinitions="340,*" Margin="16,0,16,8" ColumnSpacing="12">
+      <Border x:Name="EntryListHost" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource AppCornerCard}">
         <Grid RowDefinitions="*,Auto">
           <ListBox ItemsSource="{Binding Entries}" SelectedItem="{Binding SelectedEntry}"
                    Background="Transparent" AutomationProperties.Name="资料条目列表">
@@ -78,13 +77,13 @@
         </Grid>
       </Border>
 
-      <Grid Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
-        <StackPanel Spacing="2">
+      <Grid x:Name="EntryDetail" Grid.Column="1" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="8">
+        <StackPanel x:Name="DetailHeader" Spacing="2">
           <TextBlock Classes="bodyStrong" Text="{Binding SelectedEntry.Title}" TextWrapping="Wrap"/>
           <TextBlock Classes="caption" Text="{Binding SelectedEntry.RowSummary}" TextWrapping="Wrap"/>
-          <TextBlock Classes="caption" Text="{Binding SelectedEntry.SourceDisplay}" TextWrapping="Wrap"/>
+          <TextBlock x:Name="DetailSource" Classes="caption" Text="{Binding SelectedEntry.SourceDisplay}" TextWrapping="Wrap"/>
           <TextBlock Classes="caption" Text="{Binding SelectedEntry.TagText}" TextWrapping="Wrap"/>
-          <TextBlock Classes="caption" Text="{Binding PreviewNote}" TextWrapping="Wrap"/>
+          <TextBlock x:Name="DetailNote" Classes="caption" Text="{Binding PreviewNote}" TextWrapping="Wrap"/>
         </StackPanel>
 
         <WrapPanel Grid.Row="1">

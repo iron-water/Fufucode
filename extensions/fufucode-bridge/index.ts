@@ -5,7 +5,7 @@
  * decision through the official `ctx.ui.confirm` RPC round-trip
  * (extension_ui_request / extension_ui_response).
  *
- * Decision semantics:
+ * Decision semantics (任务书 §2):
  *   allow    -> let the tool run
  *   deny     -> block the tool; the model receives an error tool result
  *   cancel / dialog timeout / lost connection -> treated as deny

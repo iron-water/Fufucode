@@ -1,6 +1,5 @@
 using System.Text.Json;
 using System.Diagnostics;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -17,7 +16,7 @@ public sealed record SessionSnapshot(Guid? Generation, ConnectionState Connectio
     ApprovalAvailability ApprovalAvailability, string? ApprovalDiagnostic);
 
 /// <summary>Owns a single Pi connection. Command acknowledgement and run completion remain separate.</summary>
-public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposable
+public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSession
 {
     private const string BridgeProbeCommand = "fufucode-bridge.status";
     private sealed record PendingUi(ExtensionUiRequest Request, CancellationTokenSource Deadline);
@@ -25,7 +24,10 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     private static readonly TimeSpan MaxUiTimeout = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan DefaultPromptAcknowledgementTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan DefaultExtensionCommandAcknowledgementTimeout = TimeSpan.FromMinutes(5);
-    private readonly PiRpcOptions _options;
+    private readonly IRpcClientFactory _clientFactory;
+    private readonly BackendId _backend;
+    private readonly RpcSessionOptions _rpcOptions;
+    private readonly bool _requireApprovalBridge;
     private readonly object _stateLock = new();
     private readonly SemaphoreSlim _commands = new(1, 1);
     private readonly SemaphoreSlim _closeGate = new(1, 1);
@@ -33,7 +35,8 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     private readonly List<string> _recoverableQueue = [];
     private readonly List<string> _queuedTexts = [];
     private readonly Dictionary<string, PendingUi> _pendingUi = new(StringComparer.Ordinal);
-    private PiRpcClient? _client;
+    private IRpcClient? _client;
+    private RpcProcessExit? _lastProcessExit;
     private Task? _eventPump;
     private ConnectionState _connection = ConnectionState.Stopped;
     private ActivityState _activity = ActivityState.Idle;
@@ -49,12 +52,22 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     private string? _approvalDiagnostic;
     private string _executionMode = "manual";
     private bool _supportsExecutionModes;
+    private bool _idleMaintenance;
+    public bool IsInIdleMaintenance { get { lock (_stateLock) return _idleMaintenance; } }
     public string ExecutionMode { get { lock (_stateLock) return _executionMode; } }
     public bool SupportsExecutionModes { get { lock (_stateLock) return _supportsExecutionModes; } }
 
-    public ChatSessionCoordinator(PiRpcOptions options) => _options = options;
-    public BackendId Backend => _options.Backend;
+    public ChatSessionCoordinator(IRpcClientFactory clientFactory, BackendId backend, RpcSessionOptions? options = null)
+    {
+        _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
+        _backend = backend;
+        _rpcOptions = options ?? new RpcSessionOptions();
+        _requireApprovalBridge = _rpcOptions.RequireApprovalBridge;
+    }
+    public BackendId Backend => _backend;
     public BackendCapabilities Capabilities => BackendCapabilities.For(Backend);
+    /// <summary>Actual exit observed during the last completed close; not proof that a new generation exited.</summary>
+    public RpcProcessExit? LastProcessExit => Volatile.Read(ref _lastProcessExit);
     public event Action<SessionSnapshot>? SnapshotChanged;
     public event Action<PiSessionEvent>? ProtocolEvent;
     public event Action<ExtensionUiRequest>? ExtensionUiRequestReceived;
@@ -68,21 +81,47 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     /// <summary>Completed messages in the live branch; provisional cumulative usage is excluded.</summary>
     public SessionUsageReport GetUsage() { lock (_stateLock) return _timeline.GetUsage(); }
     public string? ApprovalDiagnostic { get { lock (_stateLock) return _approvalDiagnostic; } }
-    public bool CanSendPrompt { get { lock (_stateLock) return !_options.RequireApprovalBridge ||
-        _approvalAvailability == ApprovalAvailability.Verified; } }
+    public bool CanSendPrompt { get { lock (_stateLock) return !_idleMaintenance && (!_requireApprovalBridge ||
+        _approvalAvailability == ApprovalAvailability.Verified); } }
+
+    /// <summary>原子保留空闲连接供安全重启；期间所有新prompt（含steer/follow-up）拒绝，不中断已在运行的任务。</summary>
+    public IDisposable BeginIdleMaintenance()
+    {
+        lock (_stateLock)
+        {
+            if (_idleMaintenance || _connection != ConnectionState.Connected || _activity != ActivityState.Idle ||
+                _queuedTexts.Count != 0 || _pendingUi.Count != 0)
+                throw new InvalidOperationException("会话未空闲或有排队/审批/维护操作，不能安全重启。");
+            _idleMaintenance = true;
+        }
+        Publish();
+        return new IdleMaintenanceLease(this);
+    }
+
+    private sealed class IdleMaintenanceLease(ChatSessionCoordinator owner) : IDisposable
+    {
+        private ChatSessionCoordinator? _owner = owner;
+        public void Dispose()
+        {
+            var current = Interlocked.Exchange(ref _owner, null);
+            if (current is null) return;
+            lock (current._stateLock) current._idleMaintenance = false;
+            current.Publish();
+        }
+    }
 
     public SessionSnapshot Snapshot
     {
         get { lock (_stateLock) return MakeSnapshot(); }
     }
 
-    public Task<PiRpcResponse> QueryStateAsync(CancellationToken cancellationToken = default) =>
+    public Task<RpcResponse> QueryStateAsync(CancellationToken cancellationToken = default) =>
         RequireClient().RequestAsync("get_state", null, TimeSpan.FromSeconds(10), cancellationToken);
 
-    public Task<PiRpcResponse> QueryAvailableModelsAsync(CancellationToken cancellationToken = default) =>
+    public Task<RpcResponse> QueryAvailableModelsAsync(CancellationToken cancellationToken = default) =>
         RequireClient().RequestAsync("get_available_models", null, TimeSpan.FromSeconds(10), cancellationToken);
 
-    public Task<PiRpcResponse> SetModelAsync(string provider, string modelId, CancellationToken cancellationToken = default)
+    public Task<RpcResponse> SetModelAsync(string provider, string modelId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(provider);
         ArgumentException.ThrowIfNullOrWhiteSpace(modelId);
@@ -90,7 +129,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
             TimeSpan.FromSeconds(10), cancellationToken);
     }
 
-    public Task<PiRpcResponse> SetThinkingLevelAsync(string level, CancellationToken cancellationToken = default)
+    public Task<RpcResponse> SetThinkingLevelAsync(string level, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(level);
         return RequireClient().RequestAsync("set_thinking_level", JsonSerializer.SerializeToElement(new { level }),
@@ -98,30 +137,30 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     }
 
     /// <summary>Levels the current model supports. A successful set_thinking_level may still be clamped.</summary>
-    public Task<PiRpcResponse> QueryAvailableThinkingLevelsAsync(CancellationToken cancellationToken = default) =>
+    public Task<RpcResponse> QueryAvailableThinkingLevelsAsync(CancellationToken cancellationToken = default) =>
         RequireClient().RequestAsync("get_available_thinking_levels", null, TimeSpan.FromSeconds(10), cancellationToken);
 
     public async Task<ThinkingLevelAvailability> QueryThinkingLevelsAsync(CancellationToken cancellationToken = default) =>
         ThinkingLevelAvailability.Parse(await QueryAvailableThinkingLevelsAsync(cancellationToken));
 
     /// <summary>Branches at an entry. Pi rebinds the same process to a new session file on success.</summary>
-    public Task<PiRpcResponse> ForkAsync(string entryId, CancellationToken cancellationToken = default)
+    public Task<RpcResponse> ForkAsync(string entryId, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(entryId);
         return RequireClient().RequestAsync("fork", JsonSerializer.SerializeToElement(new { entryId }),
             TimeSpan.FromSeconds(30), cancellationToken);
     }
 
-    public Task<PiRpcResponse> QueryCommandsAsync(CancellationToken cancellationToken = default) =>
+    public Task<RpcResponse> QueryCommandsAsync(CancellationToken cancellationToken = default) =>
         RequireClient().RequestAsync(CommandsQuery, null, TimeSpan.FromSeconds(10), cancellationToken);
 
     private string CommandsQuery => Backend == BackendId.Omp ? "get_available_commands" : "get_commands";
 
-    public Task<PiRpcResponse> QueryEntriesAsync(string? since = null, CancellationToken cancellationToken = default) =>
+    public Task<RpcResponse> QueryEntriesAsync(string? since = null, CancellationToken cancellationToken = default) =>
         RequireClient().RequestAsync("get_entries", since is null ? null : JsonSerializer.SerializeToElement(new { since }),
             TimeSpan.FromSeconds(30), cancellationToken);
 
-    public Task<PiRpcResponse> SetSessionNameAsync(string name, CancellationToken cancellationToken = default)
+    public Task<RpcResponse> SetSessionNameAsync(string name, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         return RequireClient().RequestAsync("set_session_name", JsonSerializer.SerializeToElement(new { name }),
@@ -143,7 +182,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     /// <summary>Bounded extension-UI audit trail: method, dialog id and how the dialog was answered.</summary>
     private void RecordUi(string eventType, string? requestId, string? method, string? outcome, long? durationMs = null)
     {
-        try { _options.DiagnosticSink?.Record(new PiDiagnosticEvent(DateTimeOffset.UtcNow, eventType,
+        try { _rpcOptions.DiagnosticSink?.Record(new PiDiagnosticEvent(DateTimeOffset.UtcNow, eventType,
             requestId, method, durationMs, null, null, outcome)); }
         catch { /* Diagnostics must never interrupt protocol transport. */ }
     }
@@ -156,10 +195,10 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
             _connection = ConnectionState.Starting;
         }
         Publish();
-        PiRpcClient? client = null;
+        IRpcClient? client = null;
         try
         {
-            client = await PiRpcClient.StartAsync(_options, cancellationToken);
+            client = await _clientFactory.StartAsync(cancellationToken);
             lock (_stateLock)
             {
                 _client = client;
@@ -199,7 +238,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         }
     }
 
-    private async Task ProbeApprovalBridgeAsync(PiRpcClient client, CancellationToken cancellationToken)
+    private async Task ProbeApprovalBridgeAsync(IRpcClient client, CancellationToken cancellationToken)
     {
         string? diagnostic = null;
         bool verified = false;
@@ -272,12 +311,13 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         await _commands.WaitAsync(cancellationToken);
         try
         {
-            PiRpcClient client;
+            IRpcClient client;
             long priorEvents;
             lock (_stateLock)
             {
                 client = RequireClient();
-                if (_options.RequireApprovalBridge && _approvalAvailability != ApprovalAvailability.Verified)
+                if (_idleMaintenance) throw new InvalidOperationException("会话正在安全维护，未发送新请求。");
+                if (_requireApprovalBridge && _approvalAvailability != ApprovalAvailability.Verified)
                     throw new InvalidOperationException(_approvalDiagnostic ?? "Approval bridge is unavailable; prompt submission is disabled.");
                 if (_activity == ActivityState.Cancelling) throw new InvalidOperationException("Stop is in progress.");
                 if (_activity != ActivityState.Idle && delivery == PromptDelivery.Immediate)
@@ -306,10 +346,10 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
                 // Pi acknowledges slash commands only after the extension handler returns. A dialog
                 // can outlive the ordinary prompt acknowledgement window while stdout remains live.
                 var timeout = acknowledgementTimeout ?? (message.StartsWith("/", StringComparison.Ordinal)
-                    ? _options.ExtensionCommandAcknowledgementTimeout ?? DefaultExtensionCommandAcknowledgementTimeout
-                    : _options.PromptAcknowledgementTimeout ?? DefaultPromptAcknowledgementTimeout);
+                    ? _rpcOptions.ExtensionCommandAcknowledgementTimeout ?? DefaultExtensionCommandAcknowledgementTimeout
+                    : _rpcOptions.PromptAcknowledgementTimeout ?? DefaultPromptAcknowledgementTimeout);
                 var response = await client.RequestAsync("prompt", fields, timeout, cancellationToken);
-                if (!response.Success) throw new PiRpcException($"Pi rejected prompt: {response.Error}");
+                if (!response.Success) throw new RpcException($"Pi rejected prompt: {response.Error}");
                 if (delivery != PromptDelivery.Immediate)
                 {
                     lock (_stateLock) _queuedTexts.Add(message);
@@ -344,7 +384,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         finally { _commands.Release(); }
     }
 
-    private async Task ReconcileAcceptedPromptAsync(PiRpcClient client, long priorEvents)
+    private async Task ReconcileAcceptedPromptAsync(IRpcClient client, long priorEvents)
     {
         // OMP acknowledges before dispatch; an idle query can race the accepted run.
         // Only its prompt_result/session_settled frames can finish accepted work.
@@ -392,7 +432,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     {
         // An extension command may withhold its prompt acknowledgement until the dialog is answered.
         // Reject dialogs before waiting for the prompt command gate.
-        PiRpcClient? pendingClient;
+        IRpcClient? pendingClient;
         IReadOnlyList<ExtensionUiRequest> rejected;
         lock (_stateLock)
         {
@@ -408,7 +448,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         await _commands.WaitAsync(cancellationToken);
         try
         {
-            PiRpcClient client;
+            IRpcClient client;
             lock (_stateLock)
             {
                 client = RequireClient();
@@ -420,7 +460,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
             {
                 var cleared = await client.RequestAsync(Backend == BackendId.Omp ? "abort_and_restore_queue" : "clear_queue",
                     null, TimeSpan.FromSeconds(15), cancellationToken);
-                if (!cleared.Success) throw new PiRpcException($"Pi refused clear_queue: {cleared.Error}");
+                if (!cleared.Success) throw new RpcException($"Pi refused clear_queue: {cleared.Error}");
                 var recovered = ParseClearedQueue(cleared.Data, Backend);
                 lock (_stateLock)
                 {
@@ -431,7 +471,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
                 if (Backend == BackendId.Pi)
                 {
                     var aborted = await client.RequestAsync("abort", null, TimeSpan.FromSeconds(15), cancellationToken);
-                    if (!aborted.Success) throw new PiRpcException($"Pi refused abort: {aborted.Error}");
+                    if (!aborted.Success) throw new RpcException($"Pi refused abort: {aborted.Error}");
                 }
                 lock (_stateLock)
                 {
@@ -455,7 +495,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         await _closeGate.WaitAsync();
         try
         {
-            PiRpcClient? client;
+            IRpcClient? client;
             IReadOnlyList<ExtensionUiRequest> closed;
             lock (_stateLock)
             {
@@ -468,7 +508,11 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
             Publish();
             foreach (var request in closed) InvokeObservers(ExtensionUiRequestClosed, request);
             await CancelDialogsAsync(client, closed);
-            if (client is not null) await client.DisposeAsync();
+            if (client is not null)
+            {
+                await client.DisposeAsync();
+                if (client.ProcessExit is { } exited) Volatile.Write(ref _lastProcessExit, exited);
+            }
             if (_eventPump is not null) await _eventPump;
             await _commands.WaitAsync();
             try
@@ -481,7 +525,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         finally { _closeGate.Release(); }
     }
 
-    private async Task CancelDialogsAsync(PiRpcClient? client, IReadOnlyList<ExtensionUiRequest> requests)
+    private async Task CancelDialogsAsync(IRpcClient? client, IReadOnlyList<ExtensionUiRequest> requests)
     {
         if (client is null) return;
         foreach (var request in requests)
@@ -494,7 +538,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
         }
     }
 
-    private async Task PumpEventsAsync(PiRpcClient client)
+    private async Task PumpEventsAsync(IRpcClient client)
     {
         try
         {
@@ -570,7 +614,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
                     {
                         if (ui.Method is "select" or "confirm" or "input" or "editor")
                         {
-                            if (_pendingUi.ContainsKey(ui.Id)) throw new PiRpcException($"Duplicate extension UI request ID: {ui.Id}.");
+                            if (_pendingUi.ContainsKey(ui.Id)) throw new RpcException($"Duplicate extension UI request ID: {ui.Id}.");
                             var timeout = UiTimeout(ui.Raw);
                             dialog = new ExtensionUiRequest(ui.Generation, ui.Id, ui.Method, ui.Raw.Clone(),
                                 DateTimeOffset.UtcNow, timeout);
@@ -664,7 +708,7 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     /// <summary>Records who answered a dialog before the reply leaves the process.</summary>
     private async Task CompleteUiRequestAsync(ExtensionUiRequest request, PiExtensionUiResponse response, string outcome)
     {
-        PiRpcClient client;
+        IRpcClient client;
         lock (_stateLock)
         {
             client = RequireClient();
@@ -711,13 +755,13 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
     {
         if (!request.TryGetProperty("timeout", out var timeout))
         {
-            var fallback = _options.UiDefaultTimeout ?? DefaultUiTimeout;
-            if (fallback <= TimeSpan.Zero) throw new PiRpcException("Extension UI default timeout must be positive.");
+            var fallback = _rpcOptions.UiDefaultTimeout ?? DefaultUiTimeout;
+            if (fallback <= TimeSpan.Zero) throw new RpcException("Extension UI default timeout must be positive.");
             return fallback < MaxUiTimeout ? fallback : MaxUiTimeout;
         }
         if (timeout.ValueKind != JsonValueKind.Number || !timeout.TryGetDouble(out var milliseconds) ||
             !double.IsFinite(milliseconds) || milliseconds < 0)
-            throw new PiRpcException("Extension UI timeout is invalid.");
+            throw new RpcException("Extension UI timeout is invalid.");
         return TimeSpan.FromMilliseconds(Math.Min(milliseconds, MaxUiTimeout.TotalMilliseconds));
     }
 
@@ -748,25 +792,25 @@ public sealed class ChatSessionCoordinator : IExtensionUiSession, IAsyncDisposab
 
     private static IReadOnlyList<string> ParseClearedQueue(JsonElement? data, BackendId backend)
     {
-        if (data is not { ValueKind: JsonValueKind.Object } value) throw new PiRpcException("clear_queue lacks data.");
+        if (data is not { ValueKind: JsonValueKind.Object } value) throw new RpcException("clear_queue lacks data.");
         var result = new List<string>();
         if (backend == BackendId.Omp && value.TryGetProperty("truncated", out var truncated) && truncated.ValueKind == JsonValueKind.True)
-            throw new PiRpcException("OMP stopped, but the recovered queue was truncated; inspect session history before resubmitting.");
+            throw new RpcException("OMP stopped, but the recovered queue was truncated; inspect session history before resubmitting.");
         foreach (var name in new[] { "steering", "followUp" })
         {
             if (!value.TryGetProperty(name, out var list) || list.ValueKind != JsonValueKind.Array)
-                throw new PiRpcException($"clear_queue lacks {name} array.");
+                throw new RpcException($"clear_queue lacks {name} array.");
             foreach (var item in list.EnumerateArray())
             {
                 var text = backend == BackendId.Omp && item.ValueKind == JsonValueKind.Object && item.TryGetProperty("text", out var content) ? content : item;
-                if (text.ValueKind != JsonValueKind.String) throw new PiRpcException("clear_queue contains non-text item.");
+                if (text.ValueKind != JsonValueKind.String) throw new RpcException("clear_queue contains non-text item.");
                 result.Add(text.GetString()!);
             }
         }
         return result;
     }
 
-    private PiRpcClient RequireClient()
+    private IRpcClient RequireClient()
     {
         lock (_stateLock)
             return _connection == ConnectionState.Connected && _client is { } client

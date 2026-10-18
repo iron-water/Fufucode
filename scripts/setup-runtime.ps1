@@ -1,3 +1,10 @@
+<#
+Dev-only: produces runtime/node + runtime/pi used only by the Pi backend plugin.
+
+警告：这是开发期工具，用于在本机拉取受管 Node 与 Pi 依赖（供 pi-probe 探针、
+Pi 后端插件调试等场景）。生产默认包（scripts/packaging/package.ps1 与
+package-native.ps1）均不依赖、也不打包 runtime/pi 或 runtime/node。
+#>
 $ErrorActionPreference = 'Stop'
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $nodeCommand = Get-Command node -ErrorAction Stop

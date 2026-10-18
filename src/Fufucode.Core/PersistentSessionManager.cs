@@ -1,7 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Threading.Channels;
-using Fufucode.Pi;
+using Fufucode.Core.Backend;
+using Fufucode.Core.Plugins;
 
 namespace Fufucode.Core;
 
@@ -11,39 +12,153 @@ public sealed class PersistentSessionManager
     private readonly string _nodePath;
     private readonly string _cliPath;
     private readonly string? _ompExecutablePath;
+    private readonly string? _claudeExecutablePath;
+    private readonly string? _codexExecutablePath;
+    private readonly string? _dshExecutablePath;
     private readonly string? _approvalBridgePath;
     private readonly bool _requireApprovalBridge;
     private readonly AppDataLayout _layout;
     private readonly DesktopMetadataStore _metadata;
     private readonly AppSettingsStore _settings;
     private readonly ICredentialResolver _credentials;
+    private readonly Func<BackendProcessSpec, IRpcClientFactory?>? _clientFactoryFactory;
     private readonly object _extensionLock = new();
     private string[] _userExtensionPaths = [];
 
     public PersistentSessionManager(string nodePath, string cliPath, AppDataLayout? layout = null,
         string? approvalBridgePath = null, bool requireApprovalBridge = true,
-        ICredentialResolver? credentialResolver = null, string? ompExecutablePath = null)
+        ICredentialResolver? credentialResolver = null, string? ompExecutablePath = null,
+        Func<BackendProcessSpec, IRpcClientFactory?>? clientFactoryFactory = null,
+        string? claudeExecutablePath = null,
+        string? codexExecutablePath = null,
+        string? dshExecutablePath = null)
     {
-        _nodePath = Path.GetFullPath(nodePath);
-        _cliPath = Path.GetFullPath(cliPath);
-        _ompExecutablePath = ompExecutablePath is null ? null : Path.GetFullPath(ompExecutablePath);
-        // The managed runtime layout keeps the built-in bridge beside runtime/.
-        // A packaged app may supply its own absolute bridge path explicitly.
-        var candidate = approvalBridgePath ?? Path.Combine(Path.GetDirectoryName(_nodePath)!, "..", "..",
-            "extensions", "fufucode-bridge");
-        candidate = Path.GetFullPath(candidate);
-        _approvalBridgePath = File.Exists(Path.Combine(candidate, "index.ts")) ? candidate : null;
+        _nodePath = string.IsNullOrWhiteSpace(nodePath) ? string.Empty : Path.GetFullPath(nodePath);
+        _cliPath = string.IsNullOrWhiteSpace(cliPath) ? string.Empty : Path.GetFullPath(cliPath);
+        var runtimeLayout = layout ?? new AppDataLayout();
+        // 五个后端同一解析顺序：显式参数 > 用户按需安装的 runtime/<id> > 系统安装。
+        _ompExecutablePath = ompExecutablePath is null
+            ? ResolveFromCatalog(BackendId.Omp, runtimeLayout)
+            : (string.IsNullOrWhiteSpace(ompExecutablePath) ? null : Path.GetFullPath(ompExecutablePath));
+        _claudeExecutablePath = claudeExecutablePath is null
+            ? ResolveClaudeExecutable(runtimeLayout)
+            : (string.IsNullOrWhiteSpace(claudeExecutablePath) ? null : Path.GetFullPath(claudeExecutablePath));
+        _codexExecutablePath = codexExecutablePath is null
+            ? ResolveCodexExecutable(runtimeLayout)
+            : (string.IsNullOrWhiteSpace(codexExecutablePath) ? null : Path.GetFullPath(codexExecutablePath));
+        _dshExecutablePath = dshExecutablePath is null
+            ? ResolveDshExecutable(runtimeLayout)
+            : (string.IsNullOrWhiteSpace(dshExecutablePath) ? null : Path.GetFullPath(dshExecutablePath));
+        // 只有显式给出 Pi 运行时路径时才探测审批桥；FUMO 默认路径不触碰任何 Pi 文件。
+        _approvalBridgePath = null;
+        if (_nodePath.Length > 0)
+        {
+            var candidate = approvalBridgePath ?? Path.Combine(Path.GetDirectoryName(_nodePath)!, "..", "..",
+                "extensions", "fufucode-bridge");
+            candidate = Path.GetFullPath(candidate);
+            if (File.Exists(Path.Combine(candidate, "index.ts"))) _approvalBridgePath = candidate;
+        }
         _requireApprovalBridge = requireApprovalBridge;
         _layout = layout ?? new AppDataLayout();
         _metadata = new DesktopMetadataStore(_layout);
         _settings = new AppSettingsStore(_layout);
         _credentials = credentialResolver ?? (OperatingSystem.IsWindows() ?
             new WindowsPasswordVaultCredentialResolver() : new EnvironmentCredentialResolver());
+        _clientFactoryFactory = clientFactoryFactory;
     }
 
     public AppDataLayout Layout => _layout;
     public DesktopMetadataStore Metadata => _metadata;
     public AppSettingsStore Settings => _settings;
+
+    /// <summary>
+    /// 组合根提供的插件工具注册表（Browser Use / Seep 等）。FUMO 会话打开时读取，
+    /// 安装/卸载插件后下一次请求立即反映；未接线时只暴露内置工具。
+    /// </summary>
+    public Func<IReadOnlyList<IPureToolDispatcher>>? NativePluginToolProviders { get; set; }
+
+    /// <summary>组合根提供的插件人格片段（如 Seep 作战协议）；未接线时为 null。</summary>
+    public IPluginSystemPromptProvider? NativeSystemPromptProvider { get; set; }
+
+    /// <summary>全局默认后端（backend.json）；缺省 FUMO 原生内核。</summary>
+    public BackendId PreferredBackend => BackendCapabilities.FromEngineId(
+        new Backend.BackendPreferenceStore(_layout).DefaultBackend) ?? BackendId.NativeCSharp;
+
+    /// <summary>检查指定后端对应的可执行文件与运行时是否存在于当前机器上。</summary>
+    public bool IsBackendAvailable(BackendId backend) => backend switch
+    {
+        BackendId.Pi => File.Exists(_nodePath) && File.Exists(_cliPath),
+        BackendId.Omp => _ompExecutablePath is not null && File.Exists(_ompExecutablePath),
+        BackendId.Codex => _codexExecutablePath is not null && File.Exists(_codexExecutablePath),
+        BackendId.Dsh => _dshExecutablePath is not null && File.Exists(_dshExecutablePath),
+        BackendId.Claude => _claudeExecutablePath is not null && File.Exists(_claudeExecutablePath),
+        BackendId.NativeCSharp => true,
+        _ => false,
+    };
+
+    /// <summary>
+    /// 自动在系统与常见全局包管理器路径中查找官方 Claude Code CLI 可执行文件。
+    /// 未找到时返回 null，调用方据此判断该后端不可用，不伪造可用性。
+    /// </summary>
+    /// <summary>
+    /// Claude Code CLI：显式参数 > 系统安装 > 用户按需安装的 runtime/claude（统一运行时表）。
+    /// </summary>
+    public static string? ResolveClaudeExecutable(AppDataLayout? layout = null) =>
+        ResolveFromCatalog(BackendId.Claude, layout);
+
+    /// <summary>
+    /// 自动在系统与常见全局路径中查找官方 Codex CLI 可执行文件。
+    /// </summary>
+    /// <summary>Codex CLI：显式参数 > 系统安装 > runtime/codex（统一运行时表）。</summary>
+    public static string? ResolveCodexExecutable(AppDataLayout? layout = null) =>
+        ResolveFromCatalog(BackendId.Codex, layout);
+
+    /// <summary>
+    /// 自动在系统与常见全局路径中查找官方 DeepSeek Harness (DSH) CLI 可执行文件。
+    /// </summary>
+    /// <summary>DSH CLI：显式参数 > 系统安装 > runtime/dsh（统一运行时表）。</summary>
+    public static string? ResolveDshExecutable(AppDataLayout? layout = null) =>
+        ResolveFromCatalog(BackendId.Dsh, layout);
+
+    /// <summary>统一运行时探测：所有后端走 ToolchainCatalog，不再各自维护查找路径。</summary>
+    private static string? ResolveFromCatalog(BackendId backend, AppDataLayout? layout)
+    {
+        var detection = Runtimes.ToolchainCatalog.Detect(layout ?? new AppDataLayout(),
+            BackendCapabilities.StorageId(backend));
+        // 与组合根一致：用户安装到 Fufucode 的运行时优先，系统安装兜底。
+        return detection.ManagedPath ?? detection.SystemPath;
+    }
+
+    private static string? FindBinaryOnPath(string[] binaryNames)
+    {
+        var pathEnv = Environment.GetEnvironmentVariable("PATH");
+        if (pathEnv is null) return null;
+
+        foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = dir.Trim();
+            if (string.IsNullOrEmpty(trimmed) || !Directory.Exists(trimmed)) continue;
+            foreach (var name in binaryNames)
+            {
+                try
+                {
+                    var candidate = Path.Combine(trimmed, name);
+                    if (File.Exists(candidate)) return Path.GetFullPath(candidate);
+                }
+                catch { }
+            }
+        }
+
+        return null;
+    }
+
+    private static string ResolveDotnetHost()
+    {
+        var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var standard = Path.Combine(pf, "dotnet", OperatingSystem.IsWindows() ? "dotnet.exe" : "dotnet");
+        if (File.Exists(standard)) return standard;
+        return "dotnet";
+    }
 
     /// <summary>Explicit user-selected extensions for future Pi processes. Changing this never mutates a running session.</summary>
     public IReadOnlyList<string> UserExtensionPaths
@@ -123,13 +238,15 @@ public sealed class PersistentSessionManager
     }
 
     public async Task<PersistentSession> CreateAsync(string projectPath, string? name = null,
-        CancellationToken cancellationToken = default, BackendId backend = BackendId.Pi)
+        CancellationToken cancellationToken = default, BackendId? backend = null)
     {
-        RequireBackend(backend);
+        // 不指定时使用全局默认后端；默认安装下是 FUMO，而不是硬编码 Pi。
+        var resolved = backend ?? PreferredBackend;
+        RequireBackend(resolved);
         var project = _metadata.GetOrCreateProject(projectPath);
-        var userExtensions = backend == BackendId.Pi ? ValidateUserExtensions() : [];
+        var userExtensions = resolved == BackendId.Pi ? ValidateUserExtensions() : [];
         var trust = RequireTrustDecision(project, userExtensions);
-        var session = _metadata.CreateSession(project, name, backend);
+        var session = _metadata.CreateSession(project, name, resolved);
         return await OpenAsync(project, session, trust, userExtensions, createNew: true, cancellationToken);
     }
 
@@ -162,7 +279,7 @@ public sealed class PersistentSessionManager
         var parentDigest = parentFile is { Length: > 0 } && File.Exists(parentFile) ? Sha256(parentFile) : null;
 
         var response = await session.Coordinator.ForkAsync(entryId, cancellationToken);
-        if (!response.Success) throw new PiRpcException($"Pi fork failed: {response.Error}");
+        if (!response.Success) throw new RpcException($"Pi fork failed: {response.Error}");
         if (response.Data is { ValueKind: JsonValueKind.Object } data &&
             data.TryGetProperty("cancelled", out var cancelled) && cancelled.ValueKind == JsonValueKind.True)
             throw new InvalidOperationException("Pi cancelled the fork.");
@@ -172,7 +289,7 @@ public sealed class PersistentSessionManager
         var project = session.Project;
         var sessionDirectory = _layout.ProjectSessionsDirectory(project.Id);
         if (piId == parent.Id || !AppDataLayout.IsUnderDirectory(piFile, sessionDirectory))
-            throw new PiRpcException("Pi did not open a forked session.");
+            throw new RpcException("Pi did not open a forked session.");
         var unchanged = parentDigest is not null && File.Exists(parentFile) && Sha256(parentFile) == parentDigest;
 
         // Lock handoff: the child lease is taken before the parent's is released, so no other process
@@ -194,7 +311,7 @@ public sealed class PersistentSessionManager
             history.ApplyEntriesResponse(RequireData(await session.Coordinator.QueryEntriesAsync(
                 cancellationToken: cancellationToken), "get_entries"), replace: true);
             session.Coordinator.RestoreHistory(history, false);
-            var adapter = PiChatSessionAdapter.AttachConnected(session.Coordinator, state);
+            var adapter = PiChatSessionAdapter.AttachConnected((ChatSessionCoordinator)session.Coordinator, state);
             // Hand Pi ownership to the child; disposing the parent afterwards must not kill the process.
             await session.TransferOwnershipAsync();
             var opened = new PersistentSession(child, project, session.Coordinator, history, _metadata, childLease,
@@ -252,12 +369,25 @@ public sealed class PersistentSessionManager
         ProjectTrustStatus trust, IReadOnlyList<string> userExtensions, bool createNew,
         CancellationToken cancellationToken, string? forkSource = null)
     {
-        var sessionDirectory = session.Backend == BackendId.Pi ? _layout.ProjectSessionsDirectory(project.Id) :
-            Path.Combine(_layout.ProjectSessionsDirectory(project.Id), "omp");
+        var sessionDirectory = session.Backend switch
+        {
+            BackendId.Omp => Path.Combine(_layout.ProjectSessionsDirectory(project.Id), "omp"),
+            BackendId.NativeCSharp => Path.Combine(_layout.ProjectSessionsDirectory(project.Id), "fumo"),
+            BackendId.Claude => Path.Combine(_layout.ProjectSessionsDirectory(project.Id), "claude"),
+            BackendId.Codex => Path.Combine(_layout.ProjectSessionsDirectory(project.Id), "codex"),
+            BackendId.Dsh => Path.Combine(_layout.ProjectSessionsDirectory(project.Id), "dsh"),
+            _ => _layout.ProjectSessionsDirectory(project.Id),
+        };
         Directory.CreateDirectory(sessionDirectory);
         if (session.FilePath is { } previous && !AppDataLayout.IsUnderDirectory(previous, sessionDirectory))
-            throw new InvalidOperationException("Stored Pi session path is outside its project directory.");
+            throw new InvalidOperationException("Stored session path is outside its project directory.");
         var lease = SessionLease.Acquire(sessionDirectory, session.Id);
+        if (session.Backend == BackendId.NativeCSharp)
+            return await OpenNativeAsync(project, session, sessionDirectory, lease, cancellationToken)
+                .ConfigureAwait(false);
+        if (session.Backend is BackendId.Claude or BackendId.Codex or BackendId.Dsh)
+            return await OpenProtocolPluginAsync(project, session, sessionDirectory, lease, createNew, cancellationToken)
+                .ConfigureAwait(false);
         ChatSessionCoordinator? coordinator = null;
         DiagnosticLog? diagnosticLog = null;
         try
@@ -294,7 +424,7 @@ public sealed class PersistentSessionManager
             else if (!createNew && session.BackendSessionId is not null)
                 throw new FileNotFoundException("The OMP session file was not persisted; refusing to start a replacement conversation.");
             var environment = new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] =
-                session.Backend == BackendId.Pi ? _layout.AgentDirectory : Path.Combine(_layout.Root, "omp-agent") };
+                session.Backend == BackendId.Pi ? _layout.LegacyPiAgentDirectory : Path.Combine(_layout.Root, "omp-agent") };
             if (settings.Endpoint is { } endpoint)
             {
                 var key = await _credentials.ResolveAsync(endpoint.ApiKeyEnvironmentVariable, cancellationToken);
@@ -307,11 +437,14 @@ public sealed class PersistentSessionManager
                 environment["HTTP_PROXY"] = proxy;
                 environment["HTTPS_PROXY"] = proxy;
             }
-            var options = new PiRpcOptions(session.Backend == BackendId.Pi ? _nodePath : _ompExecutablePath!, args, project.Path,
-                EnvironmentVariables: environment,
-                RequireApprovalBridge: _requireApprovalBridge,
-                DiagnosticSink: diagnosticLog, Backend: session.Backend);
-            coordinator = new ChatSessionCoordinator(options);
+            var rpcOptions = new RpcSessionOptions(RequireApprovalBridge: _requireApprovalBridge, DiagnosticSink: diagnosticLog);
+            var spec = new BackendProcessSpec(session.Backend == BackendId.Pi ? _nodePath : _ompExecutablePath!, args,
+                project.Path, environment, session.Backend);
+            var factory = (_clientFactoryFactory ?? BackendPluginLoader.CreateRpcFactory)(spec)
+                ?? throw new InvalidOperationException(
+                    $"后端 '{session.Backend}' 的插件未安装或无法加载（缺少 Fufucode.Pi.dll）；" +
+                    "请安装对应后端插件，或改用默认的 FUMO 原生内核。");
+            coordinator = new ChatSessionCoordinator(factory, session.Backend, rpcOptions);
             try { await coordinator.StartAsync(cancellationToken); }
             catch (Exception error)
             {
@@ -332,7 +465,7 @@ public sealed class PersistentSessionManager
                 !AppDataLayout.IsUnderDirectory(piFile, sessionDirectory) ||
                 (session.FilePath is not null && !Path.GetFullPath(session.FilePath).Equals(piFile,
                     OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
-                throw new PiRpcException("Pi opened a different session than requested.");
+                throw new RpcException("Pi opened a different session than requested.");
             _metadata.BindBackendSession(session.Id, piId);
             session = session with { BackendSessionId = piId };
             if (File.Exists(piFile)) _metadata.UpdateSessionFile(session.Id, piFile);
@@ -348,7 +481,7 @@ public sealed class PersistentSessionManager
             if (createNew && session.Backend == BackendId.Omp && session.Name is { Length: > 0 } ompName)
             {
                 var rename = await coordinator.SetSessionNameAsync(ompName, cancellationToken);
-                if (!rename.Success) throw new PiRpcException($"OMP refused session name: {rename.Error}");
+                if (!rename.Success) throw new RpcException($"OMP refused session name: {rename.Error}");
                 if (File.Exists(piFile)) _metadata.UpdateSessionFile(session.Id, piFile);
             }
             return new PersistentSession(session, project, coordinator, history, _metadata, lease, piFile,
@@ -363,12 +496,258 @@ public sealed class PersistentSessionManager
         }
     }
 
+    /// <summary>
+    /// FUMO 原生内核的会话打开路径：不启动外部进程、不写 Pi 配置。
+    /// 会话历史由桌面元数据记录；原生引擎通过设置页端点访问模型。
+    /// </summary>
+    private async Task<PersistentSession> OpenNativeAsync(ProjectRecord project, SessionRecord session,
+        string sessionDirectory, SessionLease lease, CancellationToken cancellationToken)
+    {
+        var diagnosticLog = new DiagnosticLog(_layout);
+        try
+        {
+            var file = NativeSessionFactory.SessionFilePath(_layout, project.Id, session.Id);
+            var endpoint = _settings.Current.Endpoint;
+            var apiKey = endpoint is null
+                ? null
+                : await _credentials.ResolveAsync(endpoint.ApiKeyEnvironmentVariable, cancellationToken)
+                    .ConfigureAwait(false);
+
+            var supportsImages = true;
+            if (endpoint is not null)
+            {
+                var resolvedModel = string.IsNullOrWhiteSpace(endpoint.ModelId)
+                    ? _settings.Current.SelectedModel
+                    : endpoint.ModelId;
+                var probed = await ModelCapabilityProbe.SupportsImageInputAsync(
+                    endpoint.BaseUrl, apiKey, resolvedModel ?? string.Empty, cancellationToken).ConfigureAwait(false);
+                if (probed is { } known) supportsImages = known;
+            }
+
+            var chat = (NativeCSharpChatSession)NativeSessionFactory.Create(
+                _settings, session.Id, project.Path, persistFilePath: file, apiKey: apiKey,
+                systemPromptProvider: NativeSystemPromptProvider,
+                pluginProviders: NativePluginToolProviders,
+                supportsImages: supportsImages);
+            var coordinator = new NativeSessionCoordinator(chat, settings: _settings, endpointApiKey: apiKey);
+            await coordinator.StartAsync(cancellationToken).ConfigureAwait(false);
+            _metadata.BindBackendSession(session.Id, session.Id);
+            session = session with { BackendSessionId = session.Id };
+            _metadata.UpdateSessionFile(session.Id, file);
+            _metadata.SetSessionActive(session.Id, false);
+
+            var history = new SessionHistory();
+            var interrupted = session.WasActive;
+            if (File.Exists(file))
+            {
+                var saved = LoadNativeMessages(file);
+                if (saved is not null)
+                {
+                    // 恢复会话级选择：模型、思考等级与执行模式。
+                    if (!string.IsNullOrWhiteSpace(saved.ModelId)) chat.SetModel(saved.ModelId);
+                    chat.SetThinkingLevel(saved.ThinkingLevel ?? "off");
+                    if (saved.ExecutionMode is "manual" or "auto" or "full" or "plan")
+                        await chat.SetExecutionModeAsync(saved.ExecutionMode, cancellationToken).ConfigureAwait(false);
+
+                    if (saved.Messages.Count > 0)
+                    {
+                        chat.RestoreHistory(saved.Messages);
+                        history.ApplyEntriesResponse(BuildNativeEntries(saved.Messages), replace: true);
+                        interrupted |= saved.Messages[^1].Role == PureAgentRole.User;
+                        if (interrupted) chat.MarkInterrupted();
+                    }
+                }
+            }
+
+            coordinator.RestoreHistory(history, interrupted);
+
+            var opened = new PersistentSession(session, project, coordinator, history, _metadata, lease, file,
+                chat, diagnosticLog);
+            return opened;
+        }
+        catch
+        {
+            await diagnosticLog.DisposeAsync().ConfigureAwait(false);
+            lease.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Claude/Codex/DSH 等协议适配插件的统一打开路径。插件通过 IBackendSessionFactory 提供会话；
+    /// 未安装或协议未实现时由插件返回明确诊断，不落回 Pi/OMP 的 RPC 路径。
+    /// </summary>
+    private async Task<PersistentSession> OpenProtocolPluginAsync(ProjectRecord project, SessionRecord session,
+        string sessionDirectory, SessionLease lease, bool createNew, CancellationToken cancellationToken)
+    {
+        var diagnosticLog = new DiagnosticLog(_layout);
+        try
+        {
+            Directory.CreateDirectory(sessionDirectory);
+            var factory = BackendPluginLoader.GetSessionFactory(session.Backend)
+                ?? throw new InvalidOperationException(
+                    $"后端插件 '{session.Backend}' 未安装或未启用。请先从插件市场安装，或改用 FUMO 原生内核。");
+            var file = Path.Combine(sessionDirectory, session.Id + ".json");
+
+            PersistentSession? opened = null;
+            var result = await factory.OpenAsync(new BackendSessionOpenRequest(
+                session.Id,
+                project.Path,
+                sessionDirectory,
+                file,
+                createNew,
+                session.WasActive,
+                createNew ? null : session.BackendSessionId,
+                session.Backend switch
+                {
+                    BackendId.Claude => _claudeExecutablePath ?? string.Empty,
+                    BackendId.Codex => _codexExecutablePath ?? string.Empty,
+                    BackendId.Dsh => _dshExecutablePath ?? string.Empty,
+                    _ => string.Empty,
+                },
+                _settings,
+                diagnosticLog,
+                backendSessionId =>
+                {
+                    if (string.IsNullOrWhiteSpace(backendSessionId)) return;
+                    _metadata.BindBackendSession(session.Id, backendSessionId);
+                    opened?.UpdateBackendSessionId(backendSessionId);
+                }), cancellationToken).ConfigureAwait(false);
+
+            if (!string.IsNullOrEmpty(result.BackendSessionId))
+                _metadata.BindBackendSession(session.Id, result.BackendSessionId);
+            _metadata.UpdateSessionFile(session.Id, file);
+            _metadata.SetSessionActive(session.Id, false);
+
+            var history = new SessionHistory();
+            if (result.Messages.Count > 0)
+                history.ApplyEntriesResponse(BuildNativeEntries(result.Messages), replace: true);
+            result.Coordinator.RestoreHistory(history, result.Interrupted || session.WasActive);
+
+            opened = new PersistentSession(session, project, result.Coordinator, history, _metadata, lease, file,
+                result.Chat, diagnosticLog);
+            if (!string.IsNullOrEmpty(result.BackendSessionId))
+                opened.UpdateBackendSessionId(result.BackendSessionId);
+            return opened;
+        }
+        catch
+        {
+            await diagnosticLog.DisposeAsync().ConfigureAwait(false);
+            lease.Dispose();
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// 读取 FUMO 会话文件：支持带版本的信封与旧的裸数组。解析失败时把原文件改名为
+    /// .corrupt-时间戳 保留现场（绝不在下一次回合覆盖掉唯一副本），并按空历史启动。
+    /// </summary>
+    private sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
+        string? ThinkingLevel, string? ExecutionMode);
+
+    private static NativeSessionFile? LoadNativeMessages(string file)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(File.ReadAllText(file));
+            var root = document.RootElement;
+            JsonElement messages;
+            string? modelId = null, thinkingLevel = null, executionMode = null;
+
+            if (root.ValueKind == JsonValueKind.Array)
+            {
+                messages = root;
+            }
+            else if (root.ValueKind == JsonValueKind.Object &&
+                     root.TryGetProperty("messages", out var stored))
+            {
+                messages = stored;
+                if (root.TryGetProperty("modelId", out var model) && model.ValueKind == JsonValueKind.String)
+                    modelId = model.GetString();
+                if (root.TryGetProperty("thinkingLevel", out var thinking) && thinking.ValueKind == JsonValueKind.String)
+                    thinkingLevel = thinking.GetString();
+                if (root.TryGetProperty("executionMode", out var mode) && mode.ValueKind == JsonValueKind.String)
+                    executionMode = mode.GetString();
+            }
+            else
+            {
+                throw new InvalidDataException("会话文件缺少 messages。");
+            }
+
+            var list = JsonSerializer.Deserialize<List<PureAgentMessage>>(messages.GetRawText());
+            return list is null ? null : new NativeSessionFile(list, modelId, thinkingLevel, executionMode);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Trace.TraceWarning("Failed to restore FUMO session history: {0}", ex);
+            try
+            {
+                var backup = file + ".corrupt-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
+                File.Move(file, backup, overwrite: true);
+            }
+            catch { }
+            return null;
+        }
+    }
+
+    /// <summary>把 FUMO 消息映射为与 Pi get_entries 同形的条目树，供桌面时间线回放。</summary>
+    private static JsonElement BuildNativeEntries(IReadOnlyList<PureAgentMessage> messages)
+    {
+        var entries = new List<object>();
+        string? parent = null;
+        for (var i = 0; i < messages.Count; i++)
+        {
+            var message = messages[i];
+            var role = message.Role switch
+            {
+                PureAgentRole.User => "user",
+                PureAgentRole.Assistant => "assistant",
+                PureAgentRole.Tool => "toolResult",
+                _ => "system",
+            };
+
+            var content = new List<object>();
+            if (!string.IsNullOrEmpty(message.Content)) content.Add(new { type = "text", text = message.Content });
+            if (message.ToolCalls is { Count: > 0 } calls)
+            {
+                foreach (var call in calls)
+                {
+                    JsonElement? arguments = null;
+                    try
+                    {
+                        using var parsed = JsonDocument.Parse(call.ArgumentsJson);
+                        arguments = JsonSerializer.SerializeToElement(parsed.RootElement);
+                    }
+                    catch (JsonException) { }
+                    content.Add(new { type = "toolCall", id = call.Id, name = call.Name, arguments });
+                }
+            }
+
+            object? usage = message.Usage is { } known
+                ? new
+                {
+                    input = known.InputTokens,
+                    output = known.OutputTokens,
+                    totalTokens = known.TotalTokens,
+                    cacheRead = known.CacheReadTokens,
+                    cacheWrite = known.CacheWriteTokens,
+                }
+                : null;
+
+            var id = $"entry_{i}";
+            entries.Add(new { id, parentId = parent, type = "message", message = new { role, content, usage } });
+            parent = id;
+        }
+
+        return JsonSerializer.SerializeToElement(new { entries, leafId = parent });
+    }
+
     private void InstallEndpoint(CompatibleEndpoint? endpoint)
     {
-        var target = Path.Combine(_layout.AgentDirectory, "models.json");
-        var ownership = Path.Combine(_layout.AgentDirectory, "fufucode-provider.txt");
+        var target = Path.Combine(_layout.LegacyPiAgentDirectory, "models.json");
+        var ownership = Path.Combine(_layout.LegacyPiAgentDirectory, "fufucode-provider.txt");
         if (endpoint is null && !File.Exists(ownership)) return;
-        Directory.CreateDirectory(_layout.AgentDirectory);
+        Directory.CreateDirectory(_layout.LegacyPiAgentDirectory);
         JsonObject root;
         if (File.Exists(target))
         {
@@ -428,11 +807,23 @@ public sealed class PersistentSessionManager
     private void RequireBackend(BackendId backend)
     {
         _ = BackendCapabilities.For(backend);
-        if (backend == BackendId.Pi && (!File.Exists(_nodePath) || !File.Exists(_cliPath)))
+        if (backend == BackendId.NativeCSharp) return;
+        if (_clientFactoryFactory is not null) return;
+        if (backend == BackendId.Claude && (_claudeExecutablePath is null || !File.Exists(_claudeExecutablePath)))
+            throw new FileNotFoundException("Claude runtime missing. Install Claude Code CLI or configure --claude-exe with the verified claude executable.", _claudeExecutablePath);
+        if (backend == BackendId.Codex && (_codexExecutablePath is null || !File.Exists(_codexExecutablePath)))
+            throw new FileNotFoundException("Codex runtime missing. Install Codex CLI or configure --codex-exe with the verified codex executable.", _codexExecutablePath);
+        if (backend == BackendId.Dsh && (_dshExecutablePath is null || !File.Exists(_dshExecutablePath)))
+            throw new FileNotFoundException("DSH runtime missing. Install DeepSeek Harness CLI or configure --dsh-exe with the verified dsh executable.", _dshExecutablePath);
+        if (backend == BackendId.Pi && (_nodePath.Length == 0 || !File.Exists(_nodePath) || !File.Exists(_cliPath)))
             throw new FileNotFoundException("Pi runtime missing. Configure --pi-node and --pi-cli with the managed runtime paths.");
         if (backend == BackendId.Omp && (_ompExecutablePath is null || !File.Exists(_ompExecutablePath)))
             throw new FileNotFoundException("OMP runtime missing. Configure --omp-exe with the verified OMP 18.8.5 executable.", _ompExecutablePath);
     }
+
+    private static bool PiPluginAvailable() =>
+        BackendPluginLoader.CreateRpcFactory(new BackendProcessSpec(string.Empty, [], string.Empty,
+            new Dictionary<string, string>(), BackendId.Pi)) is not null;
 
     private void InstallOmpEndpoint(CompatibleEndpoint? endpoint)
     {
@@ -466,12 +857,12 @@ public sealed class PersistentSessionManager
             if (separator < 1 || separator == selected.Length - 1)
                 throw new InvalidOperationException("Selected model must have provider/modelId form.");
             var response = await coordinator.SetModelAsync(selected[..separator], selected[(separator + 1)..], cancellationToken);
-            if (!response.Success) throw new PiRpcException($"Pi set_model failed: {response.Error}");
+            if (!response.Success) throw new RpcException($"Pi set_model failed: {response.Error}");
         }
         if (settings.ThinkingLevel is { } level)
         {
             var response = await coordinator.SetThinkingLevelAsync(level, cancellationToken);
-            if (!response.Success) throw new PiRpcException($"Pi set_thinking_level failed: {response.Error}");
+            if (!response.Success) throw new RpcException($"Pi set_thinking_level failed: {response.Error}");
             // Pi clamps a level the current model does not support and still reports success.
             // Ask what is actually offered before setting, so the refusal names the real cause.
             availableThinkingLevels = await TryReadThinkingLevelsAsync(coordinator, cancellationToken);
@@ -483,14 +874,14 @@ public sealed class PersistentSessionManager
              !actual.TryGetProperty("provider", out var provider) ||
              !actual.TryGetProperty("id", out var id) ||
              model != provider.GetString() + "/" + id.GetString()))
-            throw new PiRpcException("Pi did not select the requested model.");
+            throw new RpcException("Pi did not select the requested model.");
         if (settings.ThinkingLevel is { } thinking && ThinkingLevelAvailability.ReadCurrentLevel(refreshed) != thinking)
         {
             // A model without reasoning support silently clamps; name the supported levels so the
             // caller can tell "rejected" from "not offered by this model".
             var known = availableThinkingLevels is { IsEmpty: false } listed ? listed : null;
             var offered = known is null ? "unknown" : string.Join(", ", known.Levels);
-            throw new PiRpcException(known is not null && !known.Supports(thinking)
+            throw new RpcException(known is not null && !known.Supports(thinking)
                 ? $"Pi does not offer the thinking level '{thinking}' for this model; available levels: {offered}."
                 : $"Pi did not select the requested thinking level '{thinking}'; available levels: {offered}.");
         }
@@ -505,16 +896,16 @@ public sealed class PersistentSessionManager
         catch (Exception) { return null; }
     }
 
-    internal static JsonElement RequireData(PiRpcResponse response, string command)
+    internal static JsonElement RequireData(RpcResponse response, string command)
     {
         if (!response.Success || response.Data is not { ValueKind: JsonValueKind.Object } data)
-            throw new PiRpcException($"Pi {command} failed: {response.Error}");
+            throw new RpcException($"Pi {command} failed: {response.Error}");
         return data;
     }
 
     private static string RequiredString(JsonElement data, string name) =>
         data.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String && field.GetString() is { Length: > 0 } value
-            ? value : throw new PiRpcException($"get_state lacks {name}.");
+            ? value : throw new RpcException($"get_state lacks {name}.");
 }
 
 /// <summary>Ready-to-use session. History is loaded before this object becomes available to callers.</summary>
@@ -523,7 +914,7 @@ public sealed class PersistentSession : IAsyncDisposable
     private readonly DesktopMetadataStore _metadata;
     private readonly SessionLease _lease;
     private readonly string _sessionFile;
-    private readonly PiChatSessionAdapter _chat;
+    private readonly Fufucode.App.Abstractions.IChatSession _chat;
     private readonly DiagnosticLog _diagnosticLog;
     private bool _fileRecorded;
     private readonly SemaphoreSlim _historyGate = new(1, 1);
@@ -537,9 +928,9 @@ public sealed class PersistentSession : IAsyncDisposable
     private bool _disposed;
     private bool _transferred;
 
-    internal PersistentSession(SessionRecord session, ProjectRecord project, ChatSessionCoordinator coordinator,
+    internal PersistentSession(SessionRecord session, ProjectRecord project, ISessionCoordinator coordinator,
         SessionHistory history, DesktopMetadataStore metadata, SessionLease lease, string sessionFile,
-        PiChatSessionAdapter chat, DiagnosticLog diagnosticLog)
+        Fufucode.App.Abstractions.IChatSession chat, DiagnosticLog diagnosticLog)
     {
         Session = File.Exists(sessionFile) ? session with { FilePath = sessionFile } : session;
         Project = project;
@@ -556,8 +947,13 @@ public sealed class PersistentSession : IAsyncDisposable
     }
 
     public SessionRecord Session { get; private set; }
+
+    internal void UpdateBackendSessionId(string backendSessionId)
+    {
+        Session = Session with { BackendSessionId = backendSessionId };
+    }
     public ProjectRecord Project { get; }
-    public ChatSessionCoordinator Coordinator { get; }
+    public ISessionCoordinator Coordinator { get; }
     public SessionHistory History { get; }
     public Fufucode.App.Abstractions.IChatSession Chat => _chat;
 
@@ -565,7 +961,10 @@ public sealed class PersistentSession : IAsyncDisposable
     internal DiagnosticLog Diagnostics => _diagnosticLog;
     public string DiagnosticFilePath => _diagnosticLog.FilePath;
 
-    internal void ApplyConfirmedState(JsonElement state) => _chat.ReadModel(state);
+    internal void ApplyConfirmedState(JsonElement state)
+    {
+        if (_chat is PiChatSessionAdapter pi) pi.ReadModel(state);
+    }
 
     /// <summary>
     /// Ends this object's bookkeeping without touching the Pi process, the diagnostics log or the lease.
@@ -585,7 +984,7 @@ public sealed class PersistentSession : IAsyncDisposable
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         var response = await Coordinator.SetSessionNameAsync(name, cancellationToken);
-        if (!response.Success) throw new PiRpcException($"Pi refused session name: {response.Error}");
+        if (!response.Success) throw new RpcException($"Pi refused session name: {response.Error}");
         _metadata.SetSessionName(Session.Id, name);
         Session = Session with { Name = name };
         RecordFileIfCreated();
@@ -658,7 +1057,7 @@ public sealed class PersistentSession : IAsyncDisposable
         Coordinator.SnapshotChanged -= OnSnapshot;
         try
         {
-            await _chat.DisposeAsync();
+            if (_chat is IAsyncDisposable disposableChat) await disposableChat.DisposeAsync();
             _metadataChanges.Writer.TryComplete();
             await _metadataWriter;
             RecordFileIfCreated();

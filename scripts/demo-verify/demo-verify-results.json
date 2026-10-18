@@ -1,0 +1,189 @@
+[
+  {
+    "scenario": "tool-allow",
+    "passed": true,
+    "details": {
+      "written": true,
+      "approved": true,
+      "confirmRequests": 1,
+      "commandListed": true
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-tool-allow-I1DKcs"
+  },
+  {
+    "scenario": "tool-deny",
+    "passed": true,
+    "details": {
+      "written": false,
+      "approved": false,
+      "confirmRequests": 1,
+      "commandListed": true
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-tool-deny-cIdpu6"
+  },
+  {
+    "scenario": "command-tour-answer",
+    "passed": true,
+    "details": {
+      "allFourDialogs": true,
+      "selectHasTimeoutField": true,
+      "editorHasNoTimeoutField": true,
+      "results": {
+        "mode": "rpc",
+        "hasUI": true,
+        "timeoutMs": 15000,
+        "fired": [
+          "notify",
+          "setStatus",
+          "setWidget",
+          "setTitle",
+          "setEditorText"
+        ],
+        "select": "banana",
+        "confirm": true,
+        "input": "typed text",
+        "editor": "edited content"
+      },
+      "methodsSeen": [
+        "select",
+        "confirm",
+        "input",
+        "editor"
+      ]
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-command-tour-answer-5Gjvis"
+  },
+  {
+    "scenario": "command-tour-cancel",
+    "passed": true,
+    "details": {
+      "allFourDialogs": true,
+      "selectHasTimeoutField": true,
+      "editorHasNoTimeoutField": true,
+      "results": {
+        "mode": "rpc",
+        "hasUI": true,
+        "timeoutMs": 0,
+        "fired": [
+          "notify",
+          "setStatus",
+          "setWidget",
+          "setTitle",
+          "setEditorText"
+        ],
+        "confirm": false
+      },
+      "methodsSeen": [
+        "select",
+        "confirm",
+        "input",
+        "editor"
+      ]
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-command-tour-cancel-JMAfWI"
+  },
+  {
+    "scenario": "command-tour-timeout",
+    "passed": true,
+    "details": {
+      "allFourDialogs": true,
+      "selectHasTimeoutField": true,
+      "editorHasNoTimeoutField": true,
+      "results": {
+        "mode": "rpc",
+        "hasUI": true,
+        "timeoutMs": 1500,
+        "fired": [
+          "notify",
+          "setStatus",
+          "setWidget",
+          "setTitle",
+          "setEditorText"
+        ],
+        "confirm": false
+      },
+      "methodsSeen": [
+        "select",
+        "confirm",
+        "input",
+        "editor"
+      ]
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-command-tour-timeout-M02p1a"
+  },
+  {
+    "scenario": "fire-forget-arrive",
+    "passed": true,
+    "details": {
+      "notify": {
+        "message": "demo.ui-tour started",
+        "notifyType": "info"
+      },
+      "setStatus": {
+        "statusKey": "demoStatus",
+        "statusText": "touring"
+      },
+      "setWidget": {
+        "widgetKey": "demoWidget",
+        "widgetLines": [
+          "demo widget line 1",
+          "demo widget line 2"
+        ]
+      },
+      "setTitle": {
+        "title": "fufucode demo tour"
+      },
+      "setEditorText": {
+        "text": "// demo set_editor_text payload"
+      }
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-fire-forget-4smj4F"
+  },
+  {
+    "scenario": "dead-lock-free",
+    "passed": true,
+    "details": {
+      "sideCommands": 20,
+      "editorId": "028f3354-f1c6-4b37-aadd-367a689777a9"
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-deadlock-4HCjwo"
+  },
+  {
+    "scenario": "fixture-atria",
+    "passed": true,
+    "details": {
+      "listed": true,
+      "tourOk": true,
+      "toolOk": true,
+      "gated": false,
+      "confirmRequests": 0,
+      "sessionStartSignal": true,
+      "statusFrames": 3
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-fixture-atria-SRlEbj"
+  },
+  {
+    "scenario": "fixture-atria-gated",
+    "passed": true,
+    "details": {
+      "listed": true,
+      "tourOk": true,
+      "toolOk": true,
+      "gated": true,
+      "confirmRequests": 1,
+      "sessionStartSignal": true,
+      "statusFrames": 3
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-fixture-atria-gated-YrrCHt"
+  },
+  {
+    "scenario": "fixture-broken",
+    "passed": true,
+    "details": {
+      "exitCode": 1,
+      "sawLoadError": true,
+      "stderrSnippet": "Error: Failed to load extension \"C:\\Projects\\Fufucode\\extensions\\broken-fixture\\index.ts\": Failed to load extension: broken-fixture: intentional load failure for management-page acceptance\nHint: Start without extensions using \"pi -ne\".\n"
+    },
+    "evidence": "C:\\Users\\mio\\AppData\\Local\\Temp\\fff-demo-fixture-broken-iTWbTK"
+  }
+]

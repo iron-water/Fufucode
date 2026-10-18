@@ -39,6 +39,7 @@ public partial class MainWindow
         _statusTimer.Tick += CheckSchedules;
         _statusTimer.Start();
         Closed += (_, _) => _statusTimer.Stop();
+        Closed += (_, _) => ReleaseWindowSkin(this);
         if (Application.Current?.PlatformSettings is { } platform)
         {
             platform.ColorValuesChanged += SystemColorsChanged;
@@ -72,17 +73,22 @@ public partial class MainWindow
     }
     private void ApplyCustomization(WorkbenchAppearance settings)
     {
+        if (_closed) return;
+        ReleaseWindowSkin(this);
         if (settings.Layout is not null && settings.Layout.Serialize() != _dockLayout.Serialize())
         {
             _dockLayout = WorkbenchLayoutState.Restore(settings.Layout.Serialize(), _workbenchPages.KnownPageIds);
             RenderDockPages();
         }
         RequestedThemeVariant = SettingsPageViewModel.ThemeVariantFor(settings.Theme);
-        TransparencyLevelHint = settings.Surface switch
+        // Surface 旧轴下线后：皮肤自己管理材质；Fluent 保留 Mica 基线；
+        // LiquidGlass 请求 AcrylicBlur/Blur 让窗后桌面透出（玻璃面折射窗内内容，两者互补）；
+        // 其余皮肤不再受 Surface 影响。
+        TransparencyLevelHint = settings.SkinResolution.Skin switch
         {
-            "glass" => [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Mica, WindowTransparencyLevel.None],
-            "fluent" => [WindowTransparencyLevel.Mica, WindowTransparencyLevel.None],
-            _ => [WindowTransparencyLevel.None]
+            Features.Skins.SkinId.Fluent => [WindowTransparencyLevel.Mica, WindowTransparencyLevel.None],
+            Features.Skins.SkinId.LiquidGlass => [WindowTransparencyLevel.AcrylicBlur, WindowTransparencyLevel.Blur, WindowTransparencyLevel.None],
+            _ => [WindowTransparencyLevel.None],
         };
         var accent = settings.EffectiveAccent;
         var palette = new ColorPaletteResources { Accent = accent };
@@ -115,32 +121,20 @@ public partial class MainWindow
         Add(s => s.OfType<SelectableTextBlock>().Class("body"), TextBlock.FontSizeProperty, settings.FontSize);
         Add(s => s.OfType<Button>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         foreach (var buttonClass in new[] { "iconButton", "subtle", "accent", "dockTab" })
-            Add(s => s.OfType<Button>().Class(buttonClass), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Surface == "flat" ? 0 : settings.Corner));
+            Add(s => s.OfType<Button>().Class(buttonClass), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<TextBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<ComboBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<Border>().Class("userBubble"), Border.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<Button>().Class("dockTab"), TemplatedControl.MinHeightProperty, settings.RowHeight - 2);
         Add(s => s.OfType<Button>().Class("dockTab"), TemplatedControl.HeightProperty, settings.RowHeight - 2);
         Add(s => s.OfType<ListBoxItem>(), TemplatedControl.MinHeightProperty, settings.RowHeight);
-        if (settings.Surface == "flat")
-        {
-            Add(s => s.OfType<Button>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(0));
-            Add(s => s.OfType<TextBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(0));
-            Add(s => s.OfType<ComboBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(0));
-        }
-        if (settings.Surface == "classic")
-        {
-            var dark = RequestedThemeVariant == ThemeVariant.Dark;
-            var brush = new LinearGradientBrush { StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative), EndPoint = new RelativePoint(0, 1, RelativeUnit.Relative),
-                GradientStops = new GradientStops { new(dark ? Color.Parse("#484848") : Color.Parse("#FFFFFF"), 0), new(dark ? Color.Parse("#303030") : Color.Parse("#E4E7E6"), 1) } };
-            Add(s => s.OfType<Button>().Class("iconButton"), TemplatedControl.BackgroundProperty, brush);
-            Add(s => s.OfType<ComboBox>(), TemplatedControl.BackgroundProperty, brush);
-        }
         Styles.Add(_customStyles);
+        ApplyWindowSkin(this, settings);
         CustomStatusBar.IsVisible = settings.ShowStatusBar;
         ChromeRoot.RowDefinitions[2].Height = new GridLength(settings.ShowStatusBar ? 26 : 0);
         _chatPage.ApplyAppearance(settings);
         foreach (var dock in Docks()) dock.ApplyAppearance(settings);
+        RenderFloatingWindows();
         var identity = settings.UseNamesInPrompt && (settings.UserName != "你" || settings.AssistantName != "Fufucode")
             ? $"用户希望称呼为 {settings.UserName}。助手显示名称为 {settings.AssistantName}。" : "";
         if (_vm is not null) _vm.Input.IdentityContext = identity;
@@ -257,7 +251,7 @@ public partial class MainWindow
     }
     private string StatusText(string id) => id switch
     {
-        "status.connection" => _vm?.StatusBar.ConnectionText ?? "Pi 未连接",
+        "status.connection" => _vm?.StatusBar.ConnectionText ?? "未连接",
         "status.shell" => _terminalDock?.Tabs.Any(tab => tab.IsRunning) == true ? "Shell 已连接" : "Shell 未连接",
         "status.activity" => _vm?.StatusBar.ActivityText ?? "空闲",
         "status.tokens" => _host is null ? "Token：Mock" : "Token：" + (_host.Current.Coordinator.GetUsage().Session.TotalTokens.Value?.ToString() ?? "未知"),

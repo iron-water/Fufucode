@@ -24,6 +24,10 @@ public sealed class RealSessionHost : IAsyncDisposable
     // 安全重启“先放后开”：旧进程已释放而新进程未就绪时 host 处于无活动会话态，
     // 不得把已释放对象当作活会话继续服务（Send/Rename 等）。
     private bool _sessionReleased;
+    // 关闭不能在扩展恢复仍运行时提前释放旧对象、再漏掉迟到的新进程。
+    private readonly SemaphoreSlim _extensionApplyGate = new(1, 1);
+    // 确定性竞争测试：真实Pi已就绪、持久选定尚未提交。产品中始终为null。
+    internal Func<Task>? ExtensionsResumedForTesting;
 
     private RealSessionHost(PersistentSessionManager manager, ProjectRecord project, PersistentSession current)
     {
@@ -36,13 +40,28 @@ public sealed class RealSessionHost : IAsyncDisposable
     public static async Task<RealSessionHost> OpenAsync(AppOptions options, CancellationToken cancellationToken,
         AppDataLayout? layout = null)
     {
-        var (node, cli) = RealSessionBootstrap.ResolveRuntime(options, required: false);
         var projectPath = AppDataLayout.NormalizeProjectPath(options.ProjectPath ?? Environment.CurrentDirectory);
+        var appDataLayout = layout ?? new AppDataLayout(options.AppDataRootOverride);
 
-        // 产品路径默认要求审批桥接 Verified 才能提交 prompt（桥接探针）。
+        // FUMO 原生内核（默认）不需要 Node/Pi，因此只在显式要外部后端时才解析运行时。
+        var backendPreference = new Fufucode.Core.Backend.BackendPreferenceStore(appDataLayout).DefaultBackend;
+        var wantsExternal = options.Backend is { } explicitBackend
+            ? explicitBackend is BackendId.Pi or BackendId.Omp or BackendId.Claude or BackendId.Codex or BackendId.Dsh
+            : backendPreference is Fufucode.Core.Backend.EngineId.Pi or Fufucode.Core.Backend.EngineId.Omp or Fufucode.Core.Backend.EngineId.Claude or Fufucode.Core.Backend.EngineId.Codex or Fufucode.Core.Backend.EngineId.Dsh;
+        var (node, cli) = wantsExternal
+            ? RealSessionBootstrap.ResolveRuntime(options, required: false)
+            : (string.Empty, string.Empty);
+
+        // 产品路径默认要求审批桥接 Verified 才能提交 prompt（decisions.md [轨道A] 桥接探针）。
         // 数据根：显式 layout 优先；否则尊重 AppDataRootOverride（自测隔离），产品参数为默认根。
-        var manager = new PersistentSessionManager(node, cli,
-            layout ?? new AppDataLayout(options.AppDataRootOverride), ompExecutablePath: RealSessionBootstrap.ResolveOmpRuntime(options));
+        var manager = new PersistentSessionManager(node, cli, appDataLayout,
+            ompExecutablePath: wantsExternal ? RealSessionBootstrap.ResolveOmpRuntime(options) : null,
+            clientFactoryFactory: BackendPluginLoader.CreateRpcFactory,
+            claudeExecutablePath: RealSessionBootstrap.ResolveClaudeRuntime(options),
+            codexExecutablePath: RealSessionBootstrap.ResolveCodexRuntime(options),
+            dshExecutablePath: RealSessionBootstrap.ResolveDshRuntime(options));
+        manager.NativePluginToolProviders = NativeBackendWiring.ToolProviders;
+        manager.NativeSystemPromptProvider = NativeBackendWiring.SystemPromptProvider;
         var project = manager.Metadata.GetOrCreateProject(projectPath);
 
         // H4：按项目持久化的启用列表 → 过滤掉磁盘已不存在的路径（仍留在持久列表，
@@ -64,7 +83,13 @@ public sealed class RealSessionHost : IAsyncDisposable
             var existing = manager.Metadata.ListSessions(project.Id).Where(s => options.Backend is null || s.Backend == options.Backend).ToArray();
             if (existing.Length == 0)
             {
-                session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: options.Backend ?? Fufucode.Pi.BackendId.Pi);
+                var preferredBackend = options.Backend ?? manager.PreferredBackend;
+                if (!manager.IsBackendAvailable(preferredBackend))
+                {
+                    diagnostic = $"默认后端 {BackendCapabilities.For(preferredBackend).Name} 不可用，已回退到 FUMO 原生内核。";
+                    preferredBackend = BackendId.NativeCSharp;
+                }
+                session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: preferredBackend);
             }
             else
             {
@@ -78,9 +103,13 @@ public sealed class RealSessionHost : IAsyncDisposable
                                               and not OperationCanceledException)
                 {
                     // 例如会话被另一进程持有（SessionLease）或文件缺失：如实记录后新建，不冒充恢复成功。
-                    // Keep the stored backend even after a failed restore; never silently turn OMP into Pi.
-                    diagnostic = $"恢复最近会话失败（{error.GetBaseException().Message}），已新建同后端会话。";
-                    session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: existing[0].Backend);
+                    // 原后端不可用时回退到 FUMO 原生内核；不再按 Pi→OMP→Pi 猜测。
+                    var fallbackBackend = manager.IsBackendAvailable(existing[0].Backend)
+                        ? existing[0].Backend
+                        : BackendId.NativeCSharp;
+
+                    diagnostic = $"恢复最近会话失败（{error.GetBaseException().Message}），已新建会话。";
+                    session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: fallbackBackend);
                 }
             }
         }
@@ -91,7 +120,7 @@ public sealed class RealSessionHost : IAsyncDisposable
         {
             Diagnostic = diagnostic,
             EnabledExtensionPaths = enabled,
-            ActiveExtensionPaths = session.Session.Backend == Fufucode.Pi.BackendId.Pi ? existingPaths : [],
+            ActiveExtensionPaths = session.Session.Backend == BackendId.Pi ? existingPaths : [],
             SkippedMissingExtensionPaths = missingPaths,
         };
     }
@@ -100,14 +129,14 @@ public sealed class RealSessionHost : IAsyncDisposable
     public static void SaveTrustDecision(AppOptions options, ProjectTrustStatus status,
         ProjectTrustDecision decision, AppDataLayout? layout = null)
     {
-        var (node, cli) = RealSessionBootstrap.ResolveRuntime(options, required: false);
-        var manager = new PersistentSessionManager(node, cli,
+        // 信任决定只写元数据，不需要任何后端运行时；不触发 Pi 解析。
+        var manager = new PersistentSessionManager(string.Empty, string.Empty,
             layout ?? new AppDataLayout(options.AppDataRootOverride));
         manager.SetProjectTrustDecision(status.ProjectPath, decision);
     }
 
     /// <summary>是否有活动会话；重启/恢复失败时为 false（旧进程已释放）。</summary>
-    public bool HasLiveSession => !_sessionReleased;
+    public bool HasLiveSession => !_disposed && !_sessionReleased;
 
     // ── H4 扩展启用管理 ──
 
@@ -160,8 +189,7 @@ public sealed class RealSessionHost : IAsyncDisposable
     public static void DisableExtension(AppOptions options, string extensionPath,
         AppDataLayout? layout = null)
     {
-        var (node, cli) = RealSessionBootstrap.ResolveRuntime(options, required: false);
-        var manager = new PersistentSessionManager(node, cli,
+        var manager = new PersistentSessionManager(string.Empty, string.Empty,
             layout ?? new AppDataLayout(options.AppDataRootOverride));
         var projectPath = AppDataLayout.NormalizeProjectPath(
             options.ProjectPath ?? Environment.CurrentDirectory);
@@ -185,9 +213,19 @@ public sealed class RealSessionHost : IAsyncDisposable
     public async Task<ExtensionApplyFailure?> ApplyExtensionsAndRestartAsync(
         IReadOnlyList<string> newEnabled, CancellationToken cancellationToken = default)
     {
+        await _extensionApplyGate.WaitAsync(cancellationToken);
+        try { return await ApplyExtensionsCoreAsync(newEnabled, cancellationToken); }
+        finally { _extensionApplyGate.Release(); }
+    }
+
+    private async Task<ExtensionApplyFailure?> ApplyExtensionsCoreAsync(
+        IReadOnlyList<string> newEnabled, CancellationToken cancellationToken)
+    {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        if (_current.Session.Backend != Fufucode.Pi.BackendId.Pi)
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_current.Session.Backend != BackendId.Pi)
             throw new System.NotSupportedException("此扩展管理入口仅支持 Pi；OMP 扩展兼容与管理尚未接入。");
+        using var maintenance = !_sessionReleased ? _current.Coordinator.BeginIdleMaintenance() : null;
         var sessionId = _current.Session.Id;
         var active = ActiveExtensionPaths;
         var (existing, missing) = FilterExisting(newEnabled);
@@ -212,6 +250,20 @@ public sealed class RealSessionHost : IAsyncDisposable
         {
             _current = await _manager.ResumeAsync(sessionId, cancellationToken);
             _sessionReleased = false;
+            try
+            {
+                if (ExtensionsResumedForTesting is { } resumed) await resumed();
+                // Resume已返回不代表用户仍接受此次变更。关闭/取消到达时还未发布，
+                // 释放这条真实候选连接，保原配置供明确恢复，不能偷偷提交候选。
+                cancellationToken.ThrowIfCancellationRequested();
+                ObjectDisposedException.ThrowIf(_disposed, this);
+            }
+            catch
+            {
+                _sessionReleased = true;
+                await _current.DisposeAsync();
+                throw;
+            }
             ActiveExtensionPaths = existing;
             SkippedMissingExtensionPaths = missing;
             // 持久列表存完整期望集合（含缺失路径，UI 显示"路径缺失"）；
@@ -232,6 +284,13 @@ public sealed class RealSessionHost : IAsyncDisposable
             _current = await _manager.ResumeAsync(sessionId, cancellationToken);
             _sessionReleased = false;
             return failure;
+        }
+        catch
+        {
+            // 取消/未确认的启动不能把候选留在Manager，导致“重试”偷偷应用它。
+            // 不在已取消的窗口后自动再开进程；明确重试恢复旧列表与原session。
+            _manager.UserExtensionPaths = active;
+            throw;
         }
     }
 
@@ -294,7 +353,7 @@ public sealed class RealSessionHost : IAsyncDisposable
 
     /// <summary>新建会话并切换过去（旧会话在新会话就绪后才释放）。</summary>
     public async Task NewSessionAsync(string? name = null, CancellationToken cancellationToken = default,
-        Fufucode.Pi.BackendId backend = Fufucode.Pi.BackendId.Pi)
+        BackendId backend = BackendId.NativeCSharp)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var next = await _manager.CreateAsync(_project.Path, name, cancellationToken, backend);
@@ -361,7 +420,7 @@ public sealed class RealSessionHost : IAsyncDisposable
         var previous = _current;
         _current = next;
         _sessionReleased = false;
-        ActiveExtensionPaths = next.Session.Backend == Fufucode.Pi.BackendId.Pi ? _manager.UserExtensionPaths : [];
+        ActiveExtensionPaths = next.Session.Backend == BackendId.Pi ? _manager.UserExtensionPaths : [];
         Diagnostic = null;
         await previous.DisposeAsync();
     }
@@ -374,6 +433,8 @@ public sealed class RealSessionHost : IAsyncDisposable
         }
 
         _disposed = true;
-        await _current.DisposeAsync();
+        await _extensionApplyGate.WaitAsync();
+        try { await _current.DisposeAsync(); }
+        finally { _extensionApplyGate.Release(); }
     }
 }

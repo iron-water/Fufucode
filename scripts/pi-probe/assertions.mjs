@@ -1,3 +1,4 @@
+// Pi backend plugin diagnostic — not part of the default native package.
 import assert from 'node:assert/strict';
 
 export function stateContract(state, models) {

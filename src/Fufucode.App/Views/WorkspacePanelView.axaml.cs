@@ -10,14 +10,13 @@ public partial class WorkspacePanelView : UserControl
 {
     public event Action? PreviewRequested;
 
-    internal (Control Files, Control Changes, BrowserView Preview) TakeDockPages()
+    internal (Control Files, Control Changes) TakeDockPages()
     {
         var root = (Grid)Content!;
         root.Children.Remove(FilesContent);
         root.Children.Remove(ChangesContent);
-        root.Children.Remove(PreviewBrowser);
-        FilesContent.IsVisible = ChangesContent.IsVisible = PreviewBrowser.IsVisible = true;
-        return (FilesContent, ChangesContent, PreviewBrowser);
+        FilesContent.IsVisible = ChangesContent.IsVisible = true;
+        return (FilesContent, ChangesContent);
     }
 
     internal void SetDockContext(WorkspacePanelViewModel vm)
@@ -60,7 +59,12 @@ public partial class WorkspacePanelView : UserControl
         vm.BrowseFileCommand.Execute(file);
         if (file.IsDirectory) return;
         if (!ArmPreview(file)) return;
-        if (reopen) { vm.OpenPreviewCommand.Execute(null); PreviewRequested?.Invoke(); }
+        if (reopen)
+        {
+            vm.OpenFilePreview(file.FullPath);
+            PreviewBrowser.PreviewFile(file.FullPath);
+            PreviewRequested?.Invoke();
+        }
     }
 
     /// <summary>
@@ -77,14 +81,27 @@ public partial class WorkspacePanelView : UserControl
 
     private void PreviewSelectedFile_Click(object? sender, RoutedEventArgs args)
     {
-        if (DataContext is WorkspacePanelViewModel { SelectedFile: { IsDirectory: false } file } && ArmPreview(file))
+        if (DataContext is WorkspacePanelViewModel { SelectedFile: { IsDirectory: false } file } vm && ArmPreview(file))
+        {
+            vm.OpenFilePreview(file.FullPath);
+            PreviewBrowser.PreviewFile(file.FullPath);
             PreviewRequested?.Invoke();
+        }
     }
 
     private void PreviewSelectedChange_Click(object? sender, RoutedEventArgs args)
     {
-        if (DataContext is WorkspacePanelViewModel { SelectedChange: { } file } && BrowserView.TryPreviewFile(this, file.FullPath))
+        if (DataContext is WorkspacePanelViewModel { SelectedChange: { } file } vm)
+        {
+            var item = new WorkspacePanelFileItemViewModel(System.IO.Path.GetFileName(file.FullPath), file.Path, file.FullPath, false, false);
+            if (ArmPreview(item))
+            {
+                vm.OpenFilePreview(file.FullPath);
+                PreviewBrowser.PreviewFile(file.FullPath);
+                vm.OpenFilesCommand.Execute(null);
             PreviewRequested?.Invoke();
+            }
+        }
     }
 
     private WorkspacePanelFileItemViewModel? SelectedFileItem() =>
@@ -92,5 +109,5 @@ public partial class WorkspacePanelView : UserControl
             as WorkspacePanelFileItemViewModel;
 
     private bool ArmPreview(WorkspacePanelFileItemViewModel? file) =>
-        file is { IsDirectory: false } && BrowserView.TryPreviewFile(this, file.FullPath);
+        file is { IsDirectory: false } && (BrowserView.TryPreviewFile(this, file.FullPath) || BrowserView.TryPreviewFile(FilesContent, file.FullPath));
 }

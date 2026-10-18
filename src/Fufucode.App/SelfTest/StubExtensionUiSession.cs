@@ -4,7 +4,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App.SelfTest;
 

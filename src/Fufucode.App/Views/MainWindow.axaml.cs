@@ -15,6 +15,7 @@ using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
+using Fufucode.Core.Backend;
 using Avalonia.VisualTree;
 
 namespace Fufucode.App;
@@ -70,8 +71,21 @@ public partial class MainWindow : Window
         InitializeCaption();
         InitializeGlobalWorkspace();
         InitializeCustomization();
+        // BRW-1：在 _customization 就绪后创建浏览器设置，便于一次性迁移旧偏好。
+        InitializeBrowserSettings();
         InitializeShortcuts();
         InitializeStorage();
+        InitializeLocalPlugins();
+        // SEEP-1：Seep 逆向工作台插件的组合根接线（未安装时不启动任何子进程）。
+        InitializeReverseLabPlugin();
+
+        // 把已安装插件的工具与人格接入 FUMO 原生会话。延迟读取，安装/卸载后立即生效。
+        NativeBackendWiring.ToolProviders = () => new IPureToolDispatcher?[]
+        {
+            _browserToolRegistry,
+            _reverseLabToolRegistry
+        }.OfType<IPureToolDispatcher>().ToArray();
+        NativeBackendWiring.SystemPromptProvider = _reverseLabPromptProvider;
         AddHandler(GotFocusEvent, (_, e) => { if (e.Source is TextBox text) _lastTextFocus = text; }, Avalonia.Interactivity.RoutingStrategies.Bubble);
 
         // Mica：仅当系统实际启用了 Mica 才把页面/侧栏背景换为透明层，其余（含无头）保持实色。
@@ -100,7 +114,7 @@ public partial class MainWindow : Window
     }
 
     private void AttachSession(IChatSession session, IReadOnlyList<SessionItemViewModel>? sessions,
-        SidebarViewModel.Callbacks? callbacks, IPromptSteering? steering = null)
+        SidebarViewModel.Callbacks? callbacks, IPromptSteering? steering = null, AppPage initialPage = AppPage.Chat)
     {
         var vm = new MainViewModel(
             session,
@@ -108,6 +122,8 @@ public partial class MainWindow : Window
             new DispatcherRefreshScheduler(TimeSpan.FromMilliseconds(33)),
             sessions,
             callbacks);
+        // Set before binding PageHost; session rebuild must not briefly mount a different page.
+        vm.CurrentPage = initialPage;
         // P2-17：steer 旁路——真实会话由 AttachRealSession 显式注入；mock 会话自身实现 IPromptSteering。
         vm.Input.Steering = steering ?? session as IPromptSteering;
         if (_vm is not null)
@@ -230,7 +246,12 @@ public partial class MainWindow : Window
         if (e.PropertyName == nameof(MainViewModel.IsRightPanelOpen))
         {
             if (!_syncingDockState && _vm is { } viewModel)
-                _dockLayout.Hidden[DockZone.Right] = !viewModel.IsRightPanelOpen;
+            {
+                // 页签被关空的区域重开时回填默认页，否则面板永远打不开（Pages 空+Hidden=false 的死态）。
+                if (viewModel.IsRightPanelOpen && EnsureDockHasPages(DockZone.Right))
+                { _dockLayout.Hidden[DockZone.Right] = false; RenderDockPages(); SaveWorkspaceDimensions(); }
+                else _dockLayout.Hidden[DockZone.Right] = !viewModel.IsRightPanelOpen;
+            }
             if (_vm?.IsRightPanelOpen == true)
             {
                 _rightReturnFocus = FocusManager?.GetFocusedElement() as Control;
@@ -307,7 +328,7 @@ public partial class MainWindow : Window
         try
         {
             StartupRetryButton.IsVisible = false;
-            ShowStartup("正在启动 Pi 子进程并恢复会话…", inProgress: true);
+            ShowStartup("正在启动会话…", inProgress: true);
             var host = await ProjectTrustFlow.RunAsync(
                 () => OpenHostForTesting is { } testOpen
                     ? testOpen(_bootstrapCts.Token)
@@ -417,7 +438,7 @@ public partial class MainWindow : Window
     /// <summary>运行中切换项目（先开后放：新项目打开成功才释放旧 host，失败/放弃旧会话原样保留）。</summary>
     private async Task SwitchProjectAsync(string path)
     {
-        if (_switching || _closed || _host is null)
+        if (_switching || _restarting || _closed || _host is null)
         {
             return;
         }
@@ -543,15 +564,17 @@ public partial class MainWindow : Window
     private async Task<ProjectTrustDecision?> AskTrustDialogAsync(ProjectTrustStatus status)
     {
         var dialog = new ProjectTrustDialog(status);
-        return await dialog.ShowDialog<ProjectTrustDecision?>(this);
+        return await Fufucode.App.Views.SkinDialog.ShowAsync<ProjectTrustDecision?>(dialog, this);
     }
 
     /// <summary>按宿主当前会话重建视图模型：历史回放、草稿恢复、审批弹窗与通知接线。</summary>
-    private void AttachRealSession()
+    private void AttachRealSession(bool preservePage = false)
     {
         // 会话成功打开/重启/切换后，此前的启动失败记录已过时。
         _lastStartupFailure = null;
         var host = _host!;
+        // Read the current page at attachment time, so navigation during maintenance wins.
+        var page = preservePage ? _vm?.CurrentPage ?? AppPage.Chat : AppPage.Chat;
         var current = host.Current.Session;
         var callbacks = new SidebarViewModel.Callbacks(
             SwitchRequested: id => SwitchSessionAsync(id),
@@ -565,10 +588,11 @@ public partial class MainWindow : Window
             RecentProjects: ProjectPreferences.LoadRecent(host.Manager.Metadata));
 
         AttachSession(host.Chat, BuildSessionItems(host), callbacks,
-            new RealPromptSteering(host));
+            new RealPromptSteering(host), page);
         RenderOverview();
         var vm = (MainViewModel)DataContext!;
         vm.Timeline.LoadHistory(host.CurrentTranscript());
+        vm.RemoteHistory = host.CurrentTranscript;
         if (host.Diagnostic is { } diagnostic)
         {
             vm.Timeline.AddNotification(diagnostic);
@@ -584,6 +608,8 @@ public partial class MainWindow : Window
         WireDraftPersistence(vm);
 
         _dialogHost!.Attach(host.Chat);
+        Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Attach(host.Chat, host.ProjectPath);
+        Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.LoadHistory(host.CurrentTranscript());
         SessionUiWiring.AttachExtensionUi(host.Chat, vm.Timeline, vm.Input, vm.StatusBar,
             title => Title = $"Fufucode — {title}");
 
@@ -596,7 +622,7 @@ public partial class MainWindow : Window
             AddedPaths: host.AddedExtensionPaths,
             MissingPaths: host.SkippedMissingExtensionPaths,
             LoadErrors: host.ExtensionLoadErrors,
-            ApplyAsync: ApplyExtensionsAsync,
+            ApplyAsync: (paths, ct) => ApplyExtensionsAsync(paths, ct),
             PickExtensionAsync: PickExtensionFolderAsync,
             AddExtension: host.AddExtensionPath,
             RemoveAddedExtension: host.RemoveAddedExtensionPath);
@@ -607,6 +633,8 @@ public partial class MainWindow : Window
             () => _host?.TrustStatus,
             FillCommand,
             manage: manage);
+        _localPluginViewModel.NotifyHostChanged();
+        _ = _localPluginViewModel.RefreshHostAsync();
     }
 
     /// <summary>“添加扩展…”文件夹选择（Pi 目录入口：index.ts/index.js 或 package.json pi.extensions）。</summary>
@@ -626,40 +654,52 @@ public partial class MainWindow : Window
     /// 信任拒绝且旧会话仍存活时隐藏遮罩并重抛给 VM（VM 保留 pending）。
     /// </summary>
     private async Task<ExtensionApplyFailure?> ApplyExtensionsAsync(
-        IReadOnlyList<string> pending, CancellationToken cancellationToken)
+        IReadOnlyList<string> pending, CancellationToken cancellationToken, RealSessionHost? expectedHost = null)
     {
         if (_restarting || _closed || _host is null)
         {
             return new ExtensionApplyFailure(string.Empty, "重启进行中", string.Empty);
         }
 
+        var target = _host;
+        if (expectedHost is not null && !ReferenceEquals(expectedHost, target))
+            return new ExtensionApplyFailure(string.Empty, "原项目/会话已改变，未应用扩展。", string.Empty);
+        var options = _options;
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _bootstrapCts.Token);
+
         _restarting = true;
         if (DataContext is MainViewModel preVm && _host.HasLiveSession)
         {
-            _host.SaveDraft(preVm.Input.ComposePrompt());
+            target.SaveDraft(preVm.Input.ComposePrompt());
         }
 
         try
         {
             ShowStartup("正在应用扩展变更并重启会话…", inProgress: true);
             var failure = await ProjectTrustFlow.RunAsync(
-                async () => await _host.ApplyExtensionsAndRestartAsync(pending, _bootstrapCts.Token),
+                async () =>
+                {
+                    if (!ReferenceEquals(target, _host) || _closed) throw new InvalidOperationException("原会话已改变，未应用扩展。");
+                    return await target.ApplyExtensionsAndRestartAsync(pending, linked.Token);
+                },
                 AskTrustAsync,
-                (status, decision) => RealSessionHost.SaveTrustDecision(_options, status, decision));
+                (status, decision) => RealSessionHost.SaveTrustDecision(options, status, decision));
 
             if (_closed)
             {
-                return null;
+                return new ExtensionApplyFailure(string.Empty, "窗口已关闭，应用结果未确认。", string.Empty);
             }
 
             if (failure is not null)
             {
                 // 已回滚到旧启用列表：会话恢复可用，隐藏遮罩，把失败明细还给 VM 行展示。
+                // 旧Chat已在安全重启中释放；必须重新接恢复后的真实连接，不能留指向已退出进程的VM。
+                if (ReferenceEquals(target, _host) && target.HasLiveSession) AttachRealSession(preservePage: true);
                 StartupOverlay.IsVisible = false;
                 return failure;
             }
 
-            AttachRealSession();
+            AttachRealSession(preservePage: true);
             StartupOverlay.IsVisible = false;
             ScrollToEnd();
             _startupRetry = null;
@@ -667,7 +707,7 @@ public partial class MainWindow : Window
         }
         catch (ProjectTrustDeclinedException)
         {
-            if (_host.HasLiveSession)
+            if (target.HasLiveSession)
             {
                 // 信任预检在释放前抛出：旧会话仍然存活，仅提示并保留 pending。
                 StartupOverlay.IsVisible = false;
@@ -685,10 +725,29 @@ public partial class MainWindow : Window
 
             throw;
         }
+        catch (OperationCanceledException)
+        {
+            if (!_closed && ReferenceEquals(target, _host))
+            {
+                if (target.HasLiveSession)
+                {
+                    AttachRealSession(preservePage: true);
+                    StartupOverlay.IsVisible = false;
+                }
+                else
+                {
+                    ShowStartup("扩展应用已取消。可重试恢复原会话与原启用列表。", inProgress: false);
+                    StartupRetryButton.IsVisible = true;
+                    StartupOpenOtherButton.IsVisible = true;
+                    _startupRetry = RetryRestartAsync;
+                }
+            }
+            throw;
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _lastStartupFailure = ex.GetBaseException().Message;
-            if (_host.HasLiveSession)
+            if (target.HasLiveSession)
             {
                 // 未走到释放阶段的失败：会话仍可用，不盖遮罩。
                 StartupOverlay.IsVisible = false;
@@ -710,6 +769,7 @@ public partial class MainWindow : Window
         finally
         {
             _restarting = false;
+            _localPluginViewModel.NotifyHostChanged();
         }
     }
 
@@ -820,7 +880,7 @@ public partial class MainWindow : Window
         {
             var isCurrent = record.Id == currentId;
             var title = record.Name ?? record.Id[..Math.Min(8, record.Id.Length)];
-            var subtitle = Fufucode.Pi.BackendCapabilities.For(record.Backend).Name + " · " +
+            var subtitle = BackendCapabilities.For(record.Backend).Name + " · " +
                 (isCurrent ? "当前活跃会话" : record.LastOpened.LocalDateTime.ToString("MM-dd HH:mm"));
             var item = new SessionItemViewModel(
                 title: title,
@@ -839,7 +899,7 @@ public partial class MainWindow : Window
     /// <summary>切换（或新建）会话：先落当前草稿，换会话后整体重建视图模型。</summary>
     private async Task SwitchSessionAsync(string? sessionId)
     {
-        if (_switching || _host is null || _closed)
+        if (_switching || _restarting || _host is null || _closed)
         {
             return;
         }
@@ -969,8 +1029,10 @@ public partial class MainWindow : Window
 
     private void ShowStartup(string message, bool inProgress)
     {
+        ReturnStartupPlugins();
         StartupText.Text = message;
         StartupProgress.IsVisible = inProgress;
+        StartupLocalPluginsButton.IsVisible = !inProgress;
         // 失败态（非进行中）显示 interrupted 空态插画；进行中保持原标识。
         StartupArt.IsVisible = !inProgress;
         // 进行中态不显示“打开其他项目…”；失败态由各自 catch 分支决定。
@@ -997,13 +1059,17 @@ public partial class MainWindow : Window
             return;
         }
         _closed = true;
+        Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Stop();
         _speech.Dispose();
+        // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
+        await ShutdownReverseLabAsync();
         await CloseSideChatAsync();
         _bootstrapCts.Cancel();
 
         _dialogHost?.Detach();
         _draftDebounce?.Stop();
         SaveWorkspaceDimensions();
+        DisposeFloatingDocks();
         try { SaveModulePreferences(); }
         catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
         { LayoutStateText.Text = "模块状态保存失败：" + error.Message; }
@@ -1014,6 +1080,7 @@ public partial class MainWindow : Window
         _actions.Changed -= OnShortcutCapabilitiesChanged;
         _shortcuts.Changed -= UpdateShortcutLabels;
         _storageManager.Dispose();
+        _extensionsPage.ReleaseLocalPlugins();
         _libraryService?.Dispose();
         _palette.Dispose();
         _usage.Dispose();

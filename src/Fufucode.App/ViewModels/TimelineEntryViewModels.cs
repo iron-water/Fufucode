@@ -50,11 +50,34 @@ public sealed class UserMessageViewModel : TimelineEntryViewModel
     }
 }
 
+public enum TurnPhase
+{
+    Streaming,
+    Completed,
+    Failed,
+    Cancelled,
+}
+
+/// <summary>
+/// 一个 Agent 回合的展示模型。
+///
+/// 与旧实现的关键区别：它不再对应"一条 API 消息"，而是对应"一次用户提交到 TurnSettled"。
+/// 同一回合里连续的多条 assistant 消息、思考块、工具调用、中间文字、最终回答都合并到这里，
+/// 因此整个回合只渲染一个头像。
+///
+/// 块的身份使用 (MessageId, contentIndex) 复合键：不同消息的 contentIndex 会重复，
+/// 只用索引会让后一条消息覆盖前一条的块。工具调用额外用 ToolCallId 做组内定位。
+/// </summary>
 public sealed class AssistantMessageViewModel : TimelineEntryViewModel
 {
     private readonly IClipboardService _clipboard;
-    private readonly Dictionary<int, BlockViewModel> _blocks = new();
+    private readonly Dictionary<(string MessageId, int Index), BlockViewModel> _blocks = new();
+    private readonly List<(string MessageId, int Index)> _blockOrder = new();
+    private readonly List<ToolGroupViewModel> _groups = new();
+    private readonly List<string> _messageOrder = new();
     private string? _model;
+    private TurnPhase _phase = TurnPhase.Streaming;
+    private bool _isComplete;
 
     public AssistantMessageViewModel(IClipboardService clipboard)
     {
@@ -64,11 +87,112 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     public string? Model
     {
         get => _model;
-        set => SetProperty(ref _model, value);
+        set
+        {
+            if (!SetProperty(ref _model, value)) return;
+            OnPropertyChanged(nameof(HasModel));
+            OnPropertyChanged(nameof(ModelText));
+        }
     }
 
-    /// <summary>按 contentIndex 稳定维护块 VM：流式刷新时保留各块的展开/折叠状态。</summary>
+    public bool HasModel => !string.IsNullOrWhiteSpace(Model);
+    /// <summary>模型短名：去掉 provider/ 前缀，与竞品一致只显示模型本身。</summary>
+    public string ModelText => Model is { Length: > 0 } model
+        ? model[(model.LastIndexOf('/') + 1)..]
+        : string.Empty;
+
+    private UsageInfo? _usage;
+    /// <summary>本回合的 token 用量；未知时为 null（不显示占位）。</summary>
+    public UsageInfo? Usage
+    {
+        get => _usage;
+        set
+        {
+            if (!SetProperty(ref _usage, value)) return;
+            OnPropertyChanged(nameof(HasUsage));
+            OnPropertyChanged(nameof(UsageText));
+        }
+    }
+
+    public bool HasUsage => _usage is { } usage && (usage.InputTokens is not null || usage.OutputTokens is not null);
+
+    /// <summary>用量文本："输入 1.2K · 输出 3.4K"；有费用时追加。</summary>
+    public string UsageText
+    {
+        get
+        {
+            if (_usage is not { } usage) return string.Empty;
+            var parts = new List<string>();
+            if (usage.InputTokens is { } input) parts.Add("输入 " + FormatTokens(input));
+            if (usage.OutputTokens is { } output) parts.Add("输出 " + FormatTokens(output));
+            if (usage.TotalCost is { } cost) parts.Add("$" + cost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture));
+            return string.Join(" · ", parts);
+        }
+    }
+
+    private static string FormatTokens(int value) => value switch
+    {
+        >= 1_000_000 => (value / 1_000_000d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "M",
+        >= 1_000 => (value / 1_000d).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "K",
+        _ => value.ToString(System.Globalization.CultureInfo.InvariantCulture),
+    };
+
+    private long? _durationMs;
+    /// <summary>本回合耗时（毫秒）；未知时为 null。</summary>
+    public long? DurationMs
+    {
+        get => _durationMs;
+        set
+        {
+            if (!SetProperty(ref _durationMs, value)) return;
+            OnPropertyChanged(nameof(HasDuration));
+            OnPropertyChanged(nameof(DurationText));
+        }
+    }
+
+    public bool HasDuration => _durationMs is > 0;
+    public string DurationText => _durationMs is not { } ms ? string.Empty
+        : ms < 1000 ? $"{ms} ms"
+        : ms < 60_000 ? $"{ms / 1000d:0.#} s"
+        : $"{(int)(ms / 60_000)} min {(int)(ms % 60_000 / 1000)} s";
+
+    /// <summary>回合阶段。流式期间不显示底部元信息卡。</summary>
+    public TurnPhase Phase
+    {
+        get => _phase;
+        private set
+        {
+            if (!SetProperty(ref _phase, value)) return;
+            OnPropertyChanged(nameof(IsStreaming));
+            OnPropertyChanged(nameof(ShowMetaCard));
+            OnPropertyChanged(nameof(HeaderStatusText));
+        }
+    }
+
+    public bool IsStreaming => Phase == TurnPhase.Streaming;
+    public bool IsComplete => _isComplete;
+
+    /// <summary>输出结束后才出现底部卡片（用量/模型/时间/操作）。</summary>
+    public bool ShowMetaCard => !IsStreaming;
+
+    public string HeaderStatusText => Phase switch
+    {
+        TurnPhase.Completed => "已完成",
+        TurnPhase.Failed => "已失败",
+        TurnPhase.Cancelled => "已中断",
+        _ when _groups.Any(group => group.IsActive) => "正在使用工具",
+        _ => "正在撰写",
+    };
+
+    /// <summary>源数据：按 (MessageId, contentIndex) 稳定维护，流式刷新保留折叠状态。</summary>
     public ObservableCollection<BlockViewModel> Blocks { get; } = new();
+
+    /// <summary>
+    /// 渲染投影：相邻工具调用合并为 <see cref="ToolGroupViewModel"/>，其余块原样保留。
+    /// 折叠只改投影的展示状态，不动源数据。
+    /// </summary>
+    public ObservableCollection<object> DisplayBlocks { get; } = new();
+
     private string _changeSummary = "", _artifactSummary = "";
     public string ChangeSummary { get => _changeSummary; set { if (SetProperty(ref _changeSummary, value)) OnPropertyChanged(nameof(HasChangeSummary)); } }
     public string ArtifactSummary { get => _artifactSummary; set { if (SetProperty(ref _artifactSummary, value)) OnPropertyChanged(nameof(HasArtifactSummary)); } }
@@ -89,30 +213,78 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     public string SummaryToggleLabel => SummaryExpanded ? "折叠摘要" : "摘要";
     public void ToggleSummary() => SummaryExpanded = !SummaryExpanded;
 
-    public void UpdateFrom(ChatMessage message)
+    /// <summary>
+    /// 合并一条 assistant 消息到本回合。按 (MessageId, index) upsert 块，
+    /// 不重建已有块，因此流式刷新与展开状态都不会丢。
+    /// </summary>
+    public void MergeMessage(ChatMessage message)
     {
         Model = message.Model;
+        if (message.CumulativeUsage is { } usage) Usage = usage;
+
+        if (!_messageOrder.Contains(message.Id)) _messageOrder.Add(message.Id);
 
         var alive = new HashSet<int>();
         for (var index = 0; index < message.Blocks.Count; index++)
         {
             var snapshot = message.Blocks[index];
             alive.Add(index);
-            if (!_blocks.TryGetValue(index, out var vm))
+            var key = (message.Id, index);
+            if (!_blocks.TryGetValue(key, out var vm))
             {
                 vm = CreateBlock(snapshot);
-                _blocks[index] = vm;
-                InsertBlockInOrder(index, vm);
+                _blocks[key] = vm;
+                InsertBlockInOrder(key, vm);
             }
             ApplySnapshot(vm, snapshot);
         }
 
-        foreach (var index in _blocks.Keys.Where(k => !alive.Contains(k)).ToArray())
+        foreach (var key in _blocks.Keys.Where(k => k.MessageId == message.Id && !alive.Contains(k.Index)).ToArray())
         {
-            Blocks.Remove(_blocks[index]);
-            _blocks.Remove(index);
+            var vm = _blocks[key];
+            Blocks.Remove(vm);
+            _blocks.Remove(key);
+            _blockOrder.Remove(key);
         }
+
+        RebuildDisplayBlocks();
+        DetectFinalAnswer(message);
     }
+
+    private bool _finalAnswerStarted;
+
+    /// <summary>
+    /// 最终回答开始的乐观判定：工具都已结束时，出现一条"只有正文、没有工具"的助手消息，
+    /// 就把它当作最终总结，立即折叠上方过程并在其上继续流式。
+    ///
+    /// 若之后又出现工具调用，说明这段文字只是中间总结；已折叠的组保持折叠不回溯，
+    /// 避免视口跳动（与 Claude Code / DSH 的行为一致）。
+    /// </summary>
+    private void DetectFinalAnswer(ChatMessage message)
+    {
+        if (_finalAnswerStarted || _groups.Count == 0) return;
+        if (_groups.Any(group => group.IsActive)) return;
+
+        var hasText = message.Blocks.Any(block => block is TextBlock text && !string.IsNullOrWhiteSpace(text.Text));
+        var hasTool = message.Blocks.Any(block => block is ToolCallBlock);
+        if (!hasText || hasTool) return;
+
+        _finalAnswerStarted = true;
+        foreach (var group in _groups) group.CollapseOnTurnSettled();
+        foreach (var thinking in Blocks.OfType<ThinkingBlockViewModel>()) thinking.IsLive = false;
+
+        var lastText = Blocks.OfType<TextBlockViewModel>().LastOrDefault();
+        foreach (var text in Blocks.OfType<TextBlockViewModel>())
+        {
+            text.IsFinal = ReferenceEquals(text, lastText);
+            text.IsAbsorbed = !text.IsFinal;
+        }
+
+        OnPropertyChanged(nameof(HeaderStatusText));
+    }
+
+    /// <summary>兼容旧调用：一条消息即一次合并。</summary>
+    public void UpdateFrom(ChatMessage message) => MergeMessage(message);
 
     private BlockViewModel CreateBlock(MessageBlock snapshot)
     {
@@ -140,18 +312,94 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         }
     }
 
-    private void InsertBlockInOrder(int index, BlockViewModel vm)
+    /// <summary>块的全序：先按消息到达顺序，再按消息内 contentIndex。</summary>
+    private long OrderOf((string MessageId, int Index) key)
     {
+        var messageIndex = _messageOrder.IndexOf(key.MessageId);
+        return (long)Math.Max(0, messageIndex) * 100_000 + key.Index;
+    }
+
+    private void InsertBlockInOrder((string MessageId, int Index) key, BlockViewModel vm)
+    {
+        var order = OrderOf(key);
         var insertAt = 0;
-        foreach (var existingIndex in _blocks.Keys.Where(k => k != index).OrderBy(k => k))
+        for (; insertAt < _blockOrder.Count; insertAt++)
         {
-            if (existingIndex > index)
-            {
-                break;
-            }
-            insertAt++;
+            if (OrderOf(_blockOrder[insertAt]) > order) break;
         }
+        _blockOrder.Insert(insertAt, key);
         Blocks.Insert(insertAt, vm);
+    }
+
+    /// <summary>把相邻工具调用折叠成组；文本/思考/错误会断开分组。</summary>
+    private void RebuildDisplayBlocks()
+    {
+        DisplayBlocks.Clear();
+        ToolGroupViewModel? openGroup = null;
+        var groupIndex = 0;
+        foreach (var block in Blocks)
+        {
+            if (block is ToolCallBlockViewModel tool)
+            {
+                openGroup ??= NewGroup(tool, groupIndex++);
+                openGroup.Add(tool);
+                continue;
+            }
+
+            openGroup = null;
+            DisplayBlocks.Add(block);
+        }
+
+        // 收起不再出现在投影里的组，避免继续订阅子工具。
+        var live = DisplayBlocks.OfType<ToolGroupViewModel>().ToHashSet();
+        foreach (var group in _groups.Where(group => !live.Contains(group)).ToArray())
+        {
+            group.Detach();
+            _groups.Remove(group);
+        }
+
+        OnPropertyChanged(nameof(HeaderStatusText));
+    }
+
+    private ToolGroupViewModel NewGroup(ToolCallBlockViewModel tool, int ordinal)
+    {
+        var groupId = string.IsNullOrWhiteSpace(tool.ToolCallId)
+            ? $"{Id}:group:{ordinal}"
+            : tool.ToolCallId;
+        var group = new ToolGroupViewModel(groupId);
+        _groups.Add(group);
+        DisplayBlocks.Add(group);
+        return group;
+    }
+
+    /// <summary>
+    /// 回合结束：定阶段、记耗时、收起未手动展开的工具组与思考块，
+    /// 并把最后一个文本块标记为最终总结（上方过程内容弱化但不删除）。
+    /// </summary>
+    public void FinalizeTurn(SessionOutcome outcome, TimeSpan elapsed)
+    {
+        if (_isComplete) return;
+        _isComplete = true;
+
+        Phase = outcome switch
+        {
+            SessionOutcome.Completed => TurnPhase.Completed,
+            SessionOutcome.Failed => TurnPhase.Failed,
+            SessionOutcome.Interrupted => TurnPhase.Cancelled,
+            _ => TurnPhase.Completed,
+        };
+
+        if (elapsed > TimeSpan.Zero) DurationMs = (long)elapsed.TotalMilliseconds;
+
+        foreach (var group in _groups) group.CollapseOnTurnSettled();
+        foreach (var thinking in Blocks.OfType<ThinkingBlockViewModel>()) thinking.IsLive = false;
+
+        var lastText = Blocks.OfType<TextBlockViewModel>().LastOrDefault();
+        foreach (var text in Blocks.OfType<TextBlockViewModel>())
+        {
+            text.IsFinal = ReferenceEquals(text, lastText);
+            text.IsAbsorbed = !text.IsFinal;
+        }
     }
 }
 

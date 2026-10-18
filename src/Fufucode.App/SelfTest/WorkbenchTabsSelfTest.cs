@@ -71,8 +71,11 @@ internal static class WorkbenchTabsSelfTest
             await Until(() => workspace.CurrentDirectory == project && !workspace.IsFilesLoading);
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "tracked.txt" })); await Ready();
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "打开预览")); await Ready();
-            var preview = (BrowserView)window.PageForTesting("preview");
-            Check(window.DockLayoutForTesting.Selected[DockZone.Right] == "preview" && preview.ViewModel.CurrentFilePath == file, "file preview button opens the actual selected file");
+            var previewBrowser = files.GetVisualDescendants().OfType<BrowserView>().Single(b => b.Name == BrowserView.PreviewControlName);
+            Check(workspace.IsFilePreviewOpen && previewBrowser.ViewModel.CurrentFilePath == file, "file preview button opens the actual selected file in-place");
+            var backButton = files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "← 返回列表");
+            Click(backButton); await Ready();
+            Check(!workspace.IsFilePreviewOpen, "returning from in-place file preview restores file list");
             File.WriteAllText(Path.Combine(project, "refresh.txt"), "refresh\n");
             window.OpenDockPage("files", DockZone.Right); await Ready();
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => Avalonia.Automation.AutomationProperties.GetName(b) == "刷新文件"));
@@ -88,7 +91,8 @@ internal static class WorkbenchTabsSelfTest
             await Until(() => workspace.HasDiff);
             Check(workspace.DiffText.Contains("-original") && workspace.DiffText.Contains("+updated") && !workspace.DiffText.Contains("-staged"), "selected native change row loads HEAD-to-current diff including staged changes");
             Click(changes.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "打开当前文件")); await Ready();
-            Check(window.DockLayoutForTesting.Selected[DockZone.Right] == "preview" && preview.ViewModel.CurrentFilePath == file, "changes and preview share selected file context");
+            Check(workspace.IsFilePreviewOpen && previewBrowser.ViewModel.CurrentFilePath == file, "changes open-current-file opens in-place file preview");
+            Click(backButton); await Ready();
             workspace.SelectedChange = workspace.Changes.Single(c => c.Path == "new.txt");
             await Until(() => workspace.HasDiff);
             Check(workspace.DiffText.Contains("+new marker"), "untracked file shows actual added lines rather than empty diff");
@@ -131,60 +135,44 @@ internal static class WorkbenchTabsSelfTest
                 Check(vm.IsChatPage, page + " returns by Escape");
             }
             await ((Mock.MockChatSession)vm.Session).GenerateLongConversationAsync(20);
-            window.OpenDockPage("preview", DockZone.Right); await Ready();
-            var previewPage = window.PageForTesting("preview");
-            Check(previewPage.IsEffectivelyVisible && window.DockLayoutForTesting.Find("preview") == DockZone.Right,
-                "file preview is a core page that stays available without any module");
+            Check(!window.PageAvailableForTesting("preview") && window.DockLayoutForTesting.Find("preview") is null,
+                "file preview is not an independent dock page and stays in-place in workspace panel");
             window.Width = 800; await Ready();
             window.OpenDockPage("outline", DockZone.Right); await Ready();
             Check(!window.FindControl<Border>("RightPanelBorder")!.IsVisible && vm.IsChatPage,
                 "the narrow drawer collapses instead of crowding the conversation");
-            // 浮窗：四类事件提醒 + pin 形态 + 渠道开关 + 辅助对话槽位
-            var floating = window.FloatingForTesting;
-            Check(!floating.Pinned == false && floating.IsOpen && floating.DeliversToToast && floating.DeliversToFloating &&
-                !floating.DeliversToWindows,
-                "floating panel defaults to pinned, open, delivering to toast and floating with Windows channel opt-in");
+            // 旧Pin/专用浮窗断言已被用户新F1语义取代；保留并加强独立渠道与同一控件生命周期门。
+            var delivery = window.NotificationDeliveryForTesting;
+            Check(delivery.DeliversToToast && delivery.DeliversToPage && !delivery.DeliversToWindows,
+                "notification delivery defaults to in-app and page prompts with Windows opt-in");
             window.OpenNotificationCenterOverlay(); await Ready();
             Check(vm.CurrentPage == AppPage.Chat && window.NotificationCenterVisibleForTesting,
-                "opening the notification center from the floating panel keeps the workspace page");
+                "opening the notification function page keeps the workspace page");
             window.KeyPress(Key.Escape, RawInputModifiers.None, PhysicalKey.Escape, null); await Ready();
-            Check(!window.NotificationCenterVisibleForTesting, "Escape closes the notification center overlay");
-            floating.DeliversToToast = false; await Ready();
-            Check(!floating.DeliversToToast && floating.DeliversToFloating &&
+            Check(!window.NotificationCenterVisibleForTesting, "Escape closes the notification function page");
+            delivery.DeliversToToast = false; await Ready();
+            Check(!delivery.DeliversToToast && delivery.DeliversToPage &&
                 !window.FindControl<Border>("NotificationPrompt")!.IsVisible,
-                "turning the toast channel off stops the in-app toast without disabling the floating panel");
-            floating.DeliversToToast = true; await Ready();
-            floating.DeliversToToast = false; floating.DeliversToWindows = true;
+                "turning toast off preserves the independent notification page channel");
+            delivery.DeliversToToast = true; await Ready();
+            delivery.DeliversToToast = false; delivery.DeliversToWindows = true;
             window.NotificationsForTesting.LatestPrompt = new NotificationItemViewModel("toast-fallback-test", "mock", Guid.NewGuid(), 1,
                 AppNotificationKind.Completed, "Finished", "Safe message", null, true);
             await Ready();
-            Check(window.FindControl<Border>("NotificationPrompt")!.IsVisible && floating.WindowsDeliveryStatus.Contains("回退", StringComparison.Ordinal),
+            Check(window.FindControl<Border>("NotificationPrompt")!.IsVisible && delivery.WindowsDeliveryStatus.Contains("回退", StringComparison.Ordinal),
                 "failed Windows delivery falls back to in-app prompt even when toast preference is off");
             window.NotificationsForTesting.LatestPrompt = null;
-            floating.DeliversToWindows = false; floating.DeliversToToast = true; await Ready();
-            // 空列表时浮窗不常驻；用"显示浮窗"动作手动唤出（真实用户路径）。
-            await window.ActionsForTesting.ExecuteAsync("floating.toggle"); await Ready();
-            var floatingView = window.FloatingViewForTesting;
-            Check(floatingView is not null && !window.FloatingDetachedForTesting, "pinned floating panel is hosted inside the main window rather than a separate window");
-            using (var frame = window.CaptureRenderedFrame())
-                frame?.Save(Path.Combine(root, "floating-pinned.png"), PngBitmapEncoderOptions.Default);
-            floatingView!.ShowSideChatSection(); await Ready();
-            using (var frame = window.CaptureRenderedFrame())
-                frame?.Save(Path.Combine(root, "floating-sidechat.png"), PngBitmapEncoderOptions.Default);
-            Check(floatingView.SideChatVisibleForTesting && ReferenceEquals(floatingView.SideChatHost.Content, window.SideChatHostForTesting),
-                "the floating panel reuses the same side-chat control instead of creating a second conversation");
-            floating.Pinned = false; await Ready();
-            Check(window.FloatingDetachedForTesting, "unpinning detaches the floating panel into an independent window");
-            if (window.FloatingWindowForTesting is { } detached)
-            {
-                using var frame = detached.CaptureRenderedFrame();
-                frame?.Save(Path.Combine(root, "floating-detached.png"), PngBitmapEncoderOptions.Default);
-            }
-            floating.Pinned = true; await Ready();
-            Check(!window.FloatingDetachedForTesting, "pinning brings the floating panel back inside the main window");
-            floating.IsOpen = false; await Ready();
-            Check(window.FloatingPinnedVisibleForTesting == false, "closing the floating panel hides it");
-            floating.IsOpen = true; await Ready();
+            delivery.DeliversToWindows = false; delivery.DeliversToToast = true; await Ready();
+            Check(!window.ActionsForTesting.Actions.Any(action => action.Id.StartsWith("floating.", StringComparison.Ordinal)),
+                "dedicated floating-window actions are retired");
+            window.OpenDockPage("sidechat", DockZone.Right); await Ready();
+            var sideHost = window.SideChatHostForTesting;
+            var floatingId = window.FloatDockPage("sidechat")!; await Ready();
+            Check(ReferenceEquals(TopLevel.GetTopLevel(sideHost), window.FloatingDockWindowForTesting(floatingId)),
+                "auxiliary chat floats in its generic page without a second conversation host");
+            window.DockFloatingRegion(floatingId); await Ready();
+            Check(ReferenceEquals(window.SideChatHostForTesting, sideHost) && ReferenceEquals(TopLevel.GetTopLevel(sideHost), window),
+                "redocking auxiliary chat returns the original host");
             Console.WriteLine("Tabs evidence: " + root);
         }
         finally { window.Close(); await Task.Delay(150); Program.SelfTestDataRoot = previous; }

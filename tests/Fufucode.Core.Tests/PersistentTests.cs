@@ -100,7 +100,7 @@ internal static class PersistentTests
             var startupFlags = state.GetProperty("startupArgs").EnumerateArray().Select(value => value.GetString()).ToArray();
             Check(!manager.GetProjectTrustStatus(work).RequiresDecision && startupFlags.Contains("--no-approve"),
                 "resource-free project needs no prompt and still starts with a deny override");
-            Check(state.GetProperty("agentDirectory").GetString() == layout.AgentDirectory &&
+            Check(state.GetProperty("agentDirectory").GetString() == layout.LegacyPiAgentDirectory &&
                 savedFile.StartsWith(layout.ProjectSessionsDirectory(project.Id) + Path.DirectorySeparatorChar,
                     StringComparison.OrdinalIgnoreCase) &&
                 File.Exists(savedFile), "persistent launch uses private Pi config and session directory");
@@ -144,7 +144,7 @@ internal static class PersistentTests
         {
             crashId = crashed.Session.Id;
             try { await crashed.Coordinator.SendPromptAsync("persist_crash"); }
-            catch (PiRpcException) { }
+            catch (RpcException) { }
             await WaitFor(() => crashed.Coordinator.Snapshot.Connection == ConnectionState.Faulted);
         }
         await using (var recovered = await manager.ResumeAsync(crashId))
@@ -162,7 +162,7 @@ internal static class PersistentTests
         {
             toolCrashId = crashed.Session.Id;
             try { await crashed.Coordinator.SendPromptAsync("persist_crash_after_assistant"); }
-            catch (PiRpcException) { }
+            catch (RpcException) { }
             await WaitFor(() => crashed.Coordinator.Snapshot.Connection == ConnectionState.Faulted);
             Check(manager.Metadata.GetSession(toolCrashId).WasActive,
                 "process crash preserves durable active marker after assistant tool call");
@@ -246,7 +246,7 @@ internal static class PersistentTests
         if (Environment.GetEnvironmentVariable("FUFUCODE_TEST_SHUSHENG_API_KEY") is { Length: > 0 })
         {
             Directory.CreateDirectory(manager.Layout.AgentDirectory);
-            File.WriteAllText(Path.Combine(manager.Layout.AgentDirectory, "models.json"),
+            File.WriteAllText(Path.Combine(manager.Layout.LegacyPiAgentDirectory, "models.json"),
                 System.Text.Json.JsonSerializer.Serialize(new
                 {
                     providers = new Dictionary<string, object>
@@ -298,7 +298,7 @@ internal static class PersistentTests
                     Check(File.Exists(sessionFile) && session.History.CurrentBranchMessages.Count >= 2,
                         "real Pi wrote a recoverable conversation file");
                 }
-                catch (PiRpcException error) when (error.Message.Contains("No API key found", StringComparison.Ordinal))
+                catch (RpcException error) when (error.Message.Contains("No API key found", StringComparison.Ordinal))
                 {
                     Console.WriteLine("SKIP real persistent model turn: private Pi config has no API key");
                 }

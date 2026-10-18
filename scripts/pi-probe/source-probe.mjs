@@ -1,3 +1,4 @@
+// Pi backend plugin diagnostic — not part of the default native package.
 // Executed with the tested runtime. Reports actual loader output, not a regex assumption.
 import { pathToFileURL } from 'node:url';
 import { join } from 'node:path';

@@ -17,6 +17,22 @@ public sealed class TextBlockViewModel : BlockViewModel
 {
     private readonly IClipboardService _clipboard;
     private string _text = string.Empty;
+    private bool _isFinal;
+    private bool _isAbsorbed;
+
+    /// <summary>是否是回合的最终总结。最终总结保持完整颜色与展开。</summary>
+    public bool IsFinal
+    {
+        get => _isFinal;
+        set => SetProperty(ref _isFinal, value);
+    }
+
+    /// <summary>回合结束后被最终总结弱化的中间过程文字；内容仍保留，可展开查看。</summary>
+    public bool IsAbsorbed
+    {
+        get => _isAbsorbed;
+        set => SetProperty(ref _isAbsorbed, value);
+    }
 
     public TextBlockViewModel(IClipboardService clipboard)
     {
@@ -62,7 +78,8 @@ public sealed class TextBlockViewModel : BlockViewModel
 public sealed partial class ThinkingBlockViewModel : BlockViewModel
 {
     private string _text = string.Empty;
-    private bool _isExpanded = true;
+    private bool _userExpanded = true;
+    private bool _isLive = true;
 
     public string Text
     {
@@ -70,23 +87,38 @@ public sealed partial class ThinkingBlockViewModel : BlockViewModel
         set => SetProperty(ref _text, value);
     }
 
-    /// <summary>思考块默认展开，流式期间可见；用户可折叠。</summary>
-    public bool IsExpanded
+    /// <summary>思考仍在生成：强制展开，且不允许折叠（与 Claude Desktop 一致）。</summary>
+    public bool IsLive
     {
-        get => _isExpanded;
+        get => _isLive;
         set
         {
-            if (SetProperty(ref _isExpanded, value))
-            {
-                OnPropertyChanged(nameof(IsCollapsed));
-            }
+            if (!SetProperty(ref _isLive, value)) return;
+            OnPropertyChanged(nameof(IsExpanded));
+            OnPropertyChanged(nameof(IsCollapsed));
+            OnPropertyChanged(nameof(CanToggle));
         }
     }
+
+    /// <summary>运行中强制展开；结束后回到用户选择（默认折叠）。</summary>
+    public bool IsExpanded => _isLive || _userExpanded;
+
+    /// <summary>生成过程中不允许折叠，避免把正在输出的推理藏起来。</summary>
+    public bool CanToggle => !_isLive;
 
     public bool IsCollapsed => !IsExpanded;
 
     [RelayCommand]
-    private void ToggleExpanded() => IsExpanded = !IsExpanded;
+    private void ToggleExpanded()
+    {
+        if (!CanToggle) return;
+        _userExpanded = !_userExpanded;
+        OnPropertyChanged(nameof(IsExpanded));
+        OnPropertyChanged(nameof(IsCollapsed));
+    }
+
+    /// <summary>回合结束：停止 live，并按默认折叠（除非用户之前手动展开过）。</summary>
+    public void Settle() => IsLive = false;
 }
 
 public sealed partial class ToolCallBlockViewModel : BlockViewModel
@@ -96,6 +128,7 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     private const double CollapsedOutputHeight = 160;
 
+    private string _toolCallId = string.Empty;
     private string _toolName = string.Empty;
     private string _inputJson = string.Empty;
     private string? _statusText;
@@ -104,6 +137,13 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     private bool _isErrorOutput;
     private bool _outputExpanded;
     private int _outputLineCount;
+
+    /// <summary>工具调用 id：工具组用它做稳定身份与结果回填。</summary>
+    public string ToolCallId
+    {
+        get => _toolCallId;
+        set => SetProperty(ref _toolCallId, value);
+    }
 
     public string ToolName
     {
@@ -194,6 +234,7 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     /// <summary>应用一次终态快照（BlockFinished 或 MessageFinished 的工具块）。</summary>
     public void ApplySnapshot(ToolCallBlock block)
     {
+        ToolCallId = block.ToolCallId;
         ToolName = block.ToolName;
         InputJson = block.InputJson;
         Status = block.Status;

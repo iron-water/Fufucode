@@ -1,0 +1,321 @@
+{
+  "status": "PASS",
+  "scope": "Asset files only; not an application or installer acceptance test",
+  "counts": {
+    "svg": 441,
+    "png": 576,
+    "ico": 1
+  },
+  "production_bytes": 1575492,
+  "native_pause_stroke_width_px": {
+    "16": 1.0,
+    "20": 1.255,
+    "24": 1.502,
+    "32": 2.0
+  },
+  "native_icon_bounds": {
+    "new-session-16": [
+      2,
+      3,
+      15,
+      13
+    ],
+    "expand-16": [
+      2,
+      3,
+      13,
+      13
+    ],
+    "collapse-16": [
+      2,
+      3,
+      13,
+      13
+    ],
+    "pause-16": [
+      5,
+      4,
+      11,
+      12
+    ],
+    "resume-16": [
+      4,
+      3,
+      13,
+      13
+    ],
+    "stop-16": [
+      4,
+      4,
+      12,
+      12
+    ],
+    "window-minimize-16": [
+      4,
+      8,
+      12,
+      9
+    ],
+    "window-maximize-16": [
+      2,
+      3,
+      13,
+      13
+    ],
+    "window-restore-16": [
+      2,
+      3,
+      13,
+      13
+    ],
+    "window-close-16": [
+      3,
+      4,
+      12,
+      12
+    ],
+    "new-session-20": [
+      2,
+      4,
+      19,
+      16
+    ],
+    "expand-20": [
+      4,
+      4,
+      17,
+      17
+    ],
+    "collapse-20": [
+      3,
+      3,
+      17,
+      17
+    ],
+    "pause-20": [
+      6,
+      4,
+      14,
+      16
+    ],
+    "resume-20": [
+      6,
+      4,
+      16,
+      16
+    ],
+    "stop-20": [
+      5,
+      5,
+      16,
+      16
+    ],
+    "window-minimize-20": [
+      5,
+      9,
+      15,
+      11
+    ],
+    "window-maximize-20": [
+      4,
+      4,
+      16,
+      16
+    ],
+    "window-restore-20": [
+      3,
+      3,
+      17,
+      17
+    ],
+    "window-close-20": [
+      4,
+      4,
+      16,
+      16
+    ],
+    "new-session-24": [
+      3,
+      4,
+      23,
+      20
+    ],
+    "expand-24": [
+      4,
+      4,
+      20,
+      20
+    ],
+    "collapse-24": [
+      4,
+      4,
+      20,
+      20
+    ],
+    "pause-24": [
+      7,
+      5,
+      17,
+      19
+    ],
+    "resume-24": [
+      8,
+      5,
+      20,
+      19
+    ],
+    "stop-24": [
+      6,
+      6,
+      18,
+      18
+    ],
+    "window-minimize-24": [
+      6,
+      11,
+      18,
+      13
+    ],
+    "window-maximize-24": [
+      5,
+      5,
+      19,
+      19
+    ],
+    "window-restore-24": [
+      4,
+      4,
+      20,
+      20
+    ],
+    "window-close-24": [
+      5,
+      5,
+      19,
+      19
+    ],
+    "new-session-32": [
+      4,
+      6,
+      30,
+      26
+    ],
+    "expand-32": [
+      6,
+      6,
+      26,
+      26
+    ],
+    "collapse-32": [
+      5,
+      5,
+      27,
+      27
+    ],
+    "pause-32": [
+      10,
+      7,
+      22,
+      25
+    ],
+    "resume-32": [
+      11,
+      7,
+      26,
+      25
+    ],
+    "stop-32": [
+      8,
+      8,
+      24,
+      24
+    ],
+    "window-minimize-32": [
+      8,
+      15,
+      24,
+      17
+    ],
+    "window-maximize-32": [
+      7,
+      7,
+      25,
+      25
+    ],
+    "window-restore-32": [
+      5,
+      5,
+      27,
+      27
+    ],
+    "window-close-32": [
+      7,
+      7,
+      25,
+      25
+    ]
+  },
+  "ico_sizes": [
+    [
+      16,
+      16
+    ],
+    [
+      20,
+      20
+    ],
+    [
+      24,
+      24
+    ],
+    [
+      32,
+      32
+    ],
+    [
+      48,
+      48
+    ],
+    [
+      64,
+      64
+    ],
+    [
+      128,
+      128
+    ],
+    [
+      256,
+      256
+    ]
+  ],
+  "ico_native_frames_match_png": true,
+  "state_contrast_ratios": {
+    "light": {
+      "normal": 13.99,
+      "hover": 13.93,
+      "pressed": 7.35,
+      "disabled": 2.57,
+      "hover_surface": 1.114,
+      "pressed_surface": 1.272
+    },
+    "dark": {
+      "normal": 14.04,
+      "hover": 11.9,
+      "pressed": 6.18,
+      "disabled": 3.44,
+      "hover_surface": 1.369,
+      "pressed_surface": 1.726
+    }
+  },
+  "previous_files_preserved": 81,
+  "comparison_boards": 32,
+  "errors": [],
+  "unverified": [
+    "User aesthetic acceptance",
+    "D runtime integration",
+    "F installer integration",
+    "UniGetUI runtime hover/pressed/disabled captures",
+    "Unavailable exact semantic references"
+  ]
+}

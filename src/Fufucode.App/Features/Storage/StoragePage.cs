@@ -53,13 +53,14 @@ public sealed class StoragePage : UserControl
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*") };
 
         var header = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 12) };
-        header.Children.Add(new TextBlock { Text = "存储与数据", FontSize = 24, FontWeight = FontWeight.SemiBold });
-        header.Children.Add(new TextBlock
-        {
-            Text = "查看应用数据各目录的实际占用，按保留策略生成清理预览并记录实际结果。计量可取消；" +
-                "默认只清理可重建缓存与过期日志，不搬迁数据根、不动会话、配置、认证与资料。",
-            TextWrapping = TextWrapping.Wrap, Opacity = .78,
-        });
+        var title = new TextBlock { Text = "存储与数据" };
+        title.Classes.Add("settingsPageTitle");
+        header.Children.Add(title);
+        var help = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 0, 0) };
+        help.Classes.Add("settingsRowDesc");
+        help.Text = "查看应用数据各目录的实际占用，按保留策略生成清理预览并记录实际结果。计量可取消；" +
+            "默认只清理可重建缓存与过期日志，不搬迁数据根、不动会话、配置、认证与资料。";
+        header.Children.Add(help);
         Grid.SetRow(header, 0);
         root.Children.Add(header);
 
@@ -67,7 +68,9 @@ public sealed class StoragePage : UserControl
         actions.Children.Add(BuildButton("重新计量", () => _ = _vm.MeasureAsync(), nameof(StorageManagerViewModel.CanMeasure), icon: "ArrowUndo"));
         actions.Children.Add(BuildButton("取消计量", _vm.CancelMeasure, nameof(StorageManagerViewModel.CanCancelMeasure)));
 
-        actions.Children.Add(new TextBlock { Text = "日志保留（天）", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Opacity = .78 });
+        var retentionLabel = new TextBlock { Text = "日志保留（天）", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
+        retentionLabel.Classes.Add("settingsRowDesc");
+        actions.Children.Add(retentionLabel);
         var retention = new NumericUpDown
         {
             Minimum = StorageRetentionPolicy.MinLogRetentionDays,

@@ -1,3 +1,5 @@
+using Fufucode.Core;
+
 namespace Fufucode.Pi;
 
 public sealed record PiRpcOptions(

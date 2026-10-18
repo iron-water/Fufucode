@@ -44,7 +44,7 @@ export function assertRuntime(paths, repoRoot) {
 			throw new Error(
 				`${name} not found: ${p}\n` +
 				`  repo root: ${repoRoot}\n` +
-				`  (this worktree likely has no runtime/ — set FFF_PI_RUNTIME to a checkout that has it, e.g. FFF_PI_RUNTIME=<repo>/runtime)`,
+				`  (this worktree likely has no runtime/ — set FFF_PI_RUNTIME to a checkout that has it, e.g. FFF_PI_RUNTIME=C:\\Projects\\Fufucode\\runtime)`,
 			);
 		}
 	}

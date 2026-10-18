@@ -7,7 +7,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 
 namespace Fufucode.App.Views;
@@ -15,8 +17,14 @@ namespace Fufucode.App.Views;
 internal sealed class DockRegionView : UserControl
 {
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal };
+    private readonly ScrollViewer _tabScroll = new()
+    {
+        HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+    };
+    private string? _selectedId;
     private readonly Grid _pages = new();
-    private readonly TextBlock _empty = new() { Text = "此区域没有打开的页面。点击右上角“+”打开功能页，或把其他区域的页签拖到这里。", Margin = new Thickness(14, 12), IsVisible = false };
+    private readonly TextBlock _empty = new() { Text = "暂无页面", Margin = new Thickness(14, 12), IsVisible = false };
     private readonly Border _dropTarget = new() { BorderThickness = new Thickness(2), IsVisible = false, IsHitTestVisible = false };
     private readonly Border _headerRule = new();
     private readonly Dictionary<string, (Grid Row, Button Tab)> _buttons = new();
@@ -24,7 +32,40 @@ internal sealed class DockRegionView : UserControl
     private readonly DockPanel _header = new() { Height = 40, LastChildFill = true };
     private readonly Grid _root = new() { RowDefinitions = new RowDefinitions("40,*") };
     private double _rowHeight = 40;
-    public DockZone Zone { get; set; }
+    private readonly MenuItem _floatRegionItem = new() { Header = "浮动整栏" };
+    private Button? _hideButton;
+    private DockZone _zone;
+    public DockZone Zone
+    {
+        get => _zone;
+        set
+        {
+            _zone = value;
+            // 收起键指向折叠方向：左区 ←、右区 →、底区 ↓（此前统一 ChevronDown，
+            // 左/右区点击后视觉上仍朝下，语义错位）。
+            var icon = value switch
+            {
+                DockZone.Left => "ChevronLeft",
+                DockZone.Right => "ChevronRight",
+                _ => "ChevronDown",
+            };
+            if (_hideButton?.Content is PathIcon path)
+            {
+                if (Application.Current?.TryGetResource("Icon." + icon, null, out var geometry) == true)
+                    path.Data = geometry as Geometry;
+                path.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + icon));
+            }
+        }
+    }
+    public string? FloatingId { get; set; }
+    public Func<string, string?>? BadgeText { get; set; }
+    private string Label(WorkbenchPage page) => BadgeText?.Invoke(page.Id) is { Length: > 0 } badge ? page.Title + " · " + badge : page.Title;
+    internal void RefreshBadges()
+    {
+        foreach (var page in Catalog)
+            if (_buttons.TryGetValue(page.Id, out var entry))
+            { entry.Tab.Content = Label(page); ToolTip.SetTip(entry.Tab, Label(page)); }
+    }
     public IReadOnlyCollection<WorkbenchPage> Catalog { get; set; } = Array.Empty<WorkbenchPage>();
     public event Action<string, DockZone>? OpenRequested;
     public event Action<string, DockZone>? MoveRequested;
@@ -35,15 +76,33 @@ internal sealed class DockRegionView : UserControl
     public event Action<string, Point>? PageDragged;
     public event Action<Point?>? DragPositionChanged;
     public event Action<string, int>? ReorderRequested;
+    public event Action<string>? FloatPageRequested;
+    public event Action? FloatRegionRequested;
 
     public DockRegionView()
     {
         _empty.Classes.Add("dockEmpty");
+        ToolTip.SetTip(_empty, "点击 + 打开功能页，也可以把页签拖到这里。");
         _dropTarget.Classes.Add("dockDropTarget");
         _header.Classes.Add("dockHeader");
         _headerRule.Classes.Add("dockHeaderRule");
         var add = WorkbenchUi.IconButton("Add", "打开功能页");
         var hide = WorkbenchUi.IconButton("ChevronDown", "隐藏此区域（页面与进程保留）");
+        _hideButton = hide;
+        var regionMenu = new ContextMenu();
+        _floatRegionItem.Click += (_, _) => FloatRegionRequested?.Invoke();
+        regionMenu.Items.Add(_floatRegionItem);
+        // Resolve the hit row explicitly. A parent ContextMenu can otherwise intercept the
+        // child's context request and open the region menu even over a page title.
+        _header.AddHandler(ContextRequestedEvent, (_, e) =>
+        {
+            var source = e.Source as Visual;
+            var ancestors = source?.GetVisualAncestors().Prepend(source).ToArray() ?? [];
+            var entry = _buttons.Values.FirstOrDefault(item => ancestors.Contains(item.Row));
+            if (entry.Tab is not null) entry.Tab.ContextMenu!.Open(entry.Tab);
+            else regionMenu.Open(_header);
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
         add.Classes.Add("toolButton"); hide.Classes.Add("toolButton");
         add.Margin = new Thickness(0, 0, 2, 0); hide.Margin = new Thickness(0, 0, 6, 0);
         add.VerticalAlignment = hide.VerticalAlignment = VerticalAlignment.Center;
@@ -51,9 +110,14 @@ internal sealed class DockRegionView : UserControl
         var header = _header;
         DockPanel.SetDock(hide, Dock.Right); header.Children.Add(hide);
         DockPanel.SetDock(add, Dock.Right); header.Children.Add(add);
-        header.Children.Add(new ScrollViewer { Content = _tabs,
-            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled });
+        _tabScroll.Content = _tabs;
+        AutomationProperties.SetName(_tabScroll, "页签栏，可用滚轮横向浏览");
+        _tabScroll.AddHandler(PointerWheelChangedEvent, (_, e) =>
+        {
+            var delta = e.Delta.X != 0 ? e.Delta.X : e.Delta.Y;
+            if (ScrollTabs(delta)) e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+        header.Children.Add(_tabScroll);
         var root = _root;
         root.Children.Add(header); root.Children.Add(_headerRule); Grid.SetRow(_pages, 1); root.Children.Add(_pages);
         Grid.SetRow(_empty, 1); root.Children.Add(_empty);
@@ -64,9 +128,10 @@ internal sealed class DockRegionView : UserControl
             var menu = new MenuFlyout();
             foreach (var page in Catalog)
             {
-                var item = new MenuItem { Header = page.Title };
-                if (Application.Current?.TryGetResource("Icon." + page.Icon, ActualThemeVariant, out var icon) == true && icon is Geometry geometry)
-                    item.Icon = new PathIcon { Data = geometry, Width = 16, Height = 16 };
+                var item = new MenuItem { Header = Label(page) };
+                var icon = new PathIcon { Width = 16, Height = 16 };
+                icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + page.Icon));
+                item.Icon = icon;
                 item.Click += (_, _) => OpenRequested?.Invoke(page.Id, Zone);
                 menu.Items.Add(item);
             }
@@ -75,6 +140,15 @@ internal sealed class DockRegionView : UserControl
     }
 
     internal bool IsDropTarget => _dropTarget.IsVisible;
+    internal ScrollViewer TabScrollForTesting => _tabScroll;
+    internal bool ScrollTabs(double delta)
+    {
+        var maximum = Math.Max(0, _tabScroll.Extent.Width - _tabScroll.Viewport.Width);
+        if (maximum <= 0 || delta == 0) return false;
+        // DESK-1：一次滚轮/触摸格步进从 48 提到 72（约 6 个字宽），长页签列表不用反复滚。
+        _tabScroll.Offset = new Vector(Math.Clamp(_tabScroll.Offset.X - delta * 72, 0, maximum), 0);
+        return true;
+    }
     internal void SetDropTarget(bool active) => _dropTarget.IsVisible = active;
 
     internal bool CancelDrag()
@@ -87,9 +161,14 @@ internal sealed class DockRegionView : UserControl
     public void ReleasePages(WorkbenchLayoutState state)
     {
         foreach (var control in _pages.Children.ToArray())
-            if (!Catalog.Any(page => ReferenceEquals(page.Content, control) && state.Pages[Zone].Contains(page.Id)))
+            if (!Catalog.Any(page => ReferenceEquals(page.Content, control) && PageIds(state).Contains(page.Id)))
                 _pages.Children.Remove(control);
     }
+
+    private List<string> PageIds(WorkbenchLayoutState state) => FloatingId is null ? state.Pages[Zone] :
+        state.Floating.FirstOrDefault(item => item.Id == FloatingId)?.Pages ?? [];
+    private string? SelectedPage(WorkbenchLayoutState state) => FloatingId is null ? state.Selected[Zone] :
+        state.Floating.FirstOrDefault(item => item.Id == FloatingId)?.Selected;
 
     internal void DetachPage(Control content) => _pages.Children.Remove(content);
     internal void ApplyAppearance(WorkbenchAppearance settings)
@@ -104,9 +183,10 @@ internal sealed class DockRegionView : UserControl
     public void Render(WorkbenchLayoutState state)
     {
         _state = state;
-        var ids = state.Pages[Zone].Where(id => Catalog.Any(page => page.Id == id)).ToList();
+        _floatRegionItem.Header = FloatingId is null ? "浮动整栏" : "停靠回原栏";
+        var ids = PageIds(state).Where(id => Catalog.Any(page => page.Id == id)).ToList();
         _empty.IsVisible = ids.Count == 0;
-        var selected = ids.Contains(state.Selected[Zone]!) ? state.Selected[Zone] : ids.FirstOrDefault();
+        var selected = ids.Contains(SelectedPage(state)!) ? SelectedPage(state) : ids.FirstOrDefault();
         foreach (var id in _buttons.Keys.Except(ids).ToArray())
         { _tabs.Children.Remove(_buttons[id].Row); _buttons.Remove(id); }
         for (var index = 0; index < ids.Count; index++)
@@ -115,9 +195,11 @@ internal sealed class DockRegionView : UserControl
             var page = Catalog.First(p => p.Id == id);
             if (!_buttons.TryGetValue(id, out var entry))
             {
-                var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,26"), MinWidth = 82, MaxWidth = 180 };
+                // DESK-1：关闭按钮瘦身后列宽同步收紧（28→22），页签更紧凑、滑动手感更顺。
+                var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,22"), MinWidth = 76, MaxWidth = 180 };
                 row.Classes.Add("dockTabRow");
-                var tab = new DockTabButton { Content = page.Title, Height = _rowHeight - 2, MinHeight = _rowHeight - 2,
+                var tab = new DockTabButton { Content = Label(page), Height = _rowHeight - 2, MinHeight = _rowHeight - 2,
+                    VerticalAlignment = VerticalAlignment.Center,
                     Padding = new Thickness(12, 4, 4, 4), FontSize = 12 };
                 tab.Classes.Add("subtle"); tab.Classes.Add("dockTab");
                 AutomationProperties.SetName(tab, "选择" + page.Title);
@@ -128,6 +210,8 @@ internal sealed class DockRegionView : UserControl
                 var menu = new ContextMenu();
                 var pin = new MenuItem();
                 pin.Click += (_, _) => PinRequested?.Invoke(id); menu.Items.Add(pin);
+                var floatPage = new MenuItem { Header = "浮动此页", Tag = "dock-float" };
+                floatPage.Click += (_, _) => FloatPageRequested?.Invoke(id); menu.Items.Add(floatPage);
                 foreach (var target in Enum.GetValues<DockZone>())
                 {
                     var destination = target;
@@ -139,7 +223,7 @@ internal sealed class DockRegionView : UserControl
                 {
                     var delta = offset;
                     var reorder = new MenuItem { Header = offset < 0 ? "向前排列" : "向后排列" };
-                    reorder.Click += (_, _) => ReorderRequested?.Invoke(id, _state!.Pages[Zone].IndexOf(id) + delta);
+                    reorder.Click += (_, _) => ReorderRequested?.Invoke(id, PageIds(_state!).IndexOf(id) + delta);
                     menu.Items.Add(reorder);
                 }
                 var closeItem = new MenuItem { Header = "关闭页签", Tag = "dock-close" };
@@ -147,11 +231,15 @@ internal sealed class DockRegionView : UserControl
                 menu.Items.Add(closeItem); tab.ContextMenu = menu;
                 var close = WorkbenchUi.IconButton("Dismiss", "关闭页签：" + page.Title);
                 close.Classes.Add("dockTabClose");
-                close.Width = close.MinWidth = close.Height = close.MinHeight = 22; close.Padding = new Thickness(5);
-                close.VerticalAlignment = VerticalAlignment.Center; close.Margin = new Thickness(0, 0, 4, 0);
+                // DESK-1：关闭按钮从 24 粗大笨重缩到 16 轻量圆形，图标 10，
+                // 命中区靠皮肤样式保证不缩到不可点；悬停只在皮肤层加高亮与危险色。
+                close.Width = close.MinWidth = close.Height = close.MinHeight = 16; close.Padding = new Thickness(3);
+                if (close.Content is PathIcon closeIcon) closeIcon.Width = closeIcon.Height = 10;
+                close.VerticalAlignment = VerticalAlignment.Center; close.Margin = new Thickness(0, 0, 3, 0);
+                AutomationProperties.SetAutomationId(close, "dock-close-" + id);
                 close.Click += (_, _) => CloseRequested?.Invoke(id);
                 row.Children.Add(tab); Grid.SetColumn(close, 1); row.Children.Add(close);
-                var indicator = new Border { Height = 2, VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
+                var indicator = new Border { VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
                 indicator.Classes.Add("dockIndicator"); Grid.SetColumnSpan(indicator, 2); row.Children.Add(indicator);
                 entry = (row, tab); _buttons.Add(id, entry);
                 _tabs.Children.Insert(index, row);
@@ -164,17 +252,22 @@ internal sealed class DockRegionView : UserControl
             ((MenuItem)entry.Tab.ContextMenu!.Items[0]!).Header = pinned ? "取消固定页签" : "固定页签";
             entry.Tab.ContextMenu.Items.OfType<MenuItem>().Single(item => item.Tag as string == "dock-close").IsEnabled = !pinned;
             entry.Row.Children.OfType<Button>().Single(button => Grid.GetColumn(button) == 1).IsEnabled = !pinned;
-            ToolTip.SetTip(entry.Tab, pinned ? page.Title + " · 已固定" : page.Title);
+            entry.Tab.Content = Label(page);
+            ToolTip.SetTip(entry.Tab, pinned ? Label(page) + " · 已固定" : Label(page));
             entry.Row.Children.OfType<Border>().Single().IsVisible = id == selected;
-            if (id == selected) Dispatcher.UIThread.Post(() => entry.Tab.BringIntoView(), DispatcherPriority.Loaded);
+            if (id == selected && selected != _selectedId)
+                Dispatcher.UIThread.Post(() => entry.Row.BringIntoView(), DispatcherPriority.Loaded);
             if (!_pages.Children.Contains(page.Content)) _pages.Children.Add(page.Content);
             page.Content.IsVisible = id == selected;
         }
+        _selectedId = selected;
     }
 
     private sealed class DockTabButton : Button
     {
+        protected override Type StyleKeyOverride => typeof(Button);
         private Point? _start;
+        private Point _lastReported;
         private bool _dragging;
         private bool _suppressClick;
         public event Action<Point>? Dropped;
@@ -202,9 +295,19 @@ internal sealed class DockRegionView : UserControl
             base.OnPointerMoved(e);
             if (_start is not { } start) return;
             var point = e.GetPosition(TopLevel.GetTopLevel(this));
-            if (Math.Abs(point.X - start.X) + Math.Abs(point.Y - start.Y) > 8)
-            { _dragging = true; _suppressClick = true; Cursor = new Cursor(StandardCursorType.SizeAll); }
-            if (_dragging) DragPositionChanged?.Invoke(point);
+            if (!_dragging)
+            {
+                // UI-1：统一 4px 拖拽死区（切比雪夫度量），位移 < 4px 绝不起拖，过滤单击微颤。
+                if (!DragDeadZone.HasStarted(start, point)) return;
+                _dragging = true; _suppressClick = true;
+                Cursor = new Cursor(StandardCursorType.SizeAll);
+                _lastReported = start;
+            }
+            // UI-1：浮动页签拖动卡顿的根因是每帧都上报位置、触发全量命中测试与重排。
+            // 累计位移不到 4px 就不上报，拖拽中的无谓重布局被压掉，同时抑制微晃动。
+            if (!DragDeadZone.ShouldReport(_lastReported, point)) return;
+            _lastReported = point;
+            DragPositionChanged?.Invoke(point);
         }
         protected override void OnPointerReleased(PointerReleasedEventArgs e)
         {
@@ -231,9 +334,11 @@ internal static class WorkbenchUi
     public static Button IconButton(string icon, string title, double size)
     {
         object? geometry = null;
-        Application.Current?.TryGetResource("Icon." + icon, null, out geometry);
-        if (geometry is null) Application.Current?.TryGetResource("Icon.AppsList", null, out geometry);
+        var resourceKey = "Icon." + icon;
+        Application.Current?.TryGetResource(resourceKey, null, out geometry);
+        if (geometry is null) { resourceKey = "Icon.AppsList"; Application.Current?.TryGetResource(resourceKey, null, out geometry); }
         var path = new PathIcon { Data = geometry as Geometry, Width = 16, Height = 16 };
+        path.Bind(PathIcon.DataProperty, new DynamicResourceExtension(resourceKey));
         var button = new Button { Width = size, Height = size, MinWidth = size, MinHeight = size, Padding = new Thickness(6),
             Content = path };
         button.Classes.Add("iconButton");

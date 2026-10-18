@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -49,7 +48,7 @@ public sealed class MessageTimeline
         switch (ev)
         {
             case PiMessageEvent { Type: "message_start" } start:
-                if (_activeIndex is not null) throw new PiRpcException("A message started before the previous message ended.");
+                if (_activeIndex is not null) throw new RpcException("A message started before the previous message ended.");
                 _activeIndex = _messages.Count;
                 _activeBase = start.Message;
                 _currentUsage = start.Message.Usage;
@@ -79,19 +78,19 @@ public sealed class MessageTimeline
     private void ApplyUpdate(PiMessageUpdateEvent ev)
     {
         if (_activeIndex is not { } index || _activeBase is null || _activeBase.Role != "assistant")
-            throw new PiRpcException("Assistant content update arrived without an active assistant message.");
+            throw new RpcException("Assistant content update arrived without an active assistant message.");
         if (ev.Usage is not null) _currentUsage = ev.Usage; // Provider reports cumulative usage; it is never summed.
         var update = ev.Update;
         if (update.ContentIndex is { } contentIndex)
         {
-            if (contentIndex < 0 || contentIndex > 10000) throw new PiRpcException("Invalid contentIndex.");
+            if (contentIndex < 0 || contentIndex > 10000) throw new RpcException("Invalid contentIndex.");
             if (!_blocks.TryGetValue(contentIndex, out var block)) _blocks[contentIndex] = block = new DraftBlock();
             var expected = update.Type.StartsWith("text_", StringComparison.Ordinal) ? "text" :
                 update.Type.StartsWith("thinking_", StringComparison.Ordinal) ? "thinking" :
                 update.Type.StartsWith("toolcall_", StringComparison.Ordinal) ? "toolCall" : "";
             if (expected.Length != 0)
             {
-                if (block.Type.Length != 0 && block.Type != expected) throw new PiRpcException("Content block type changed at one index.");
+                if (block.Type.Length != 0 && block.Type != expected) throw new RpcException("Content block type changed at one index.");
                 block.Type = expected;
             }
             if (update.Type.EndsWith("_start", StringComparison.Ordinal))
@@ -100,9 +99,9 @@ public sealed class MessageTimeline
                 block.Name = update.ToolName ?? block.Name;
             }
             if (update.Type.EndsWith("_delta", StringComparison.Ordinal))
-                block.Text.Append(update.Delta ?? throw new PiRpcException("Content delta lacks text."));
+                block.Text.Append(update.Delta ?? throw new RpcException("Content delta lacks text."));
             if (update.Type.EndsWith("_end", StringComparison.Ordinal))
-                block.Final = update.CompletedBlock ?? throw new PiRpcException("Content end lacks a final block.");
+                block.Final = update.CompletedBlock ?? throw new RpcException("Content end lacks a final block.");
         }
         _messages[index] = _activeBase with { Content = _blocks.Values.Select(ToBlock).ToArray(), Usage = _currentUsage };
     }

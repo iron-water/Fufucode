@@ -1,3 +1,4 @@
+// Pi backend plugin diagnostic — not part of the default native package.
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
