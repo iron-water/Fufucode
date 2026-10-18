@@ -49,6 +49,7 @@ internal static class Program
             RunCompositionChecks();
             RunVtP0Checks();
             RunPluginPageChecks();
+            RunEnhancementChecks();
             RunHostWithoutTerminalPlugin();
             RunMainWindowPluginIntegration();
             Console.WriteLine($"\n全部通过：{_passed} 项断言");
@@ -433,6 +434,108 @@ internal static class Program
         var origin = new TerminalBuffer(12, 6);
         origin.Append("\u001b[2;5r\u001b[?6h\u001b[1;1Horigin");
         Check(RowText(origin.Snapshot(), 1).StartsWith("origin", StringComparison.Ordinal), "terminal-origin-mode-addressing");
+    }
+
+    // ---------- 5b. 增强：SGR、标题、链接、设置、选择 ----------
+    private static void RunEnhancementChecks()
+    {
+        // SGR attributes survive into the snapshot and reset correctly.
+        var sgr = new TerminalBuffer(20, 3);
+        sgr.Append("\u001b[4;3;9mA\u001b[0mB\u001b[7mC\u001b[27mD");
+        var line = sgr.Snapshot().Lines[0];
+        Check(line[0].Underline && line[0].Italic && line[0].Strike, "terminal-sgr-underline-italic-strike");
+        Check(!line[1].Underline && !line[1].Italic, "terminal-sgr-reset-clears-attributes");
+        Check(line[2].Reverse && !line[3].Reverse, "terminal-sgr-reverse-toggle");
+        var dim = new TerminalBuffer(10, 2);
+        dim.Append("\u001b[2;8mE");
+        Check(dim.Snapshot().Lines[0][0].Dim && dim.Snapshot().Lines[0][0].Conceal, "terminal-sgr-dim-conceal");
+
+        // OSC title and hyperlink.
+        var osc = new TerminalBuffer(20, 3);
+        osc.Append("\u001b]2;Build · 构建\a\u001b]8;;https://example.com/x\u001b\\link\u001b]8;;\u001b\\ tail");
+        var oscSnapshot = osc.Snapshot();
+        Check(oscSnapshot.Title == "Build · 构建", "terminal-osc-title");
+        Check(oscSnapshot.Lines[0][0].Link == "https://example.com/x", "terminal-osc8-link-attached");
+        Check(oscSnapshot.Lines[0].Skip(4).All(cell => cell.Link is null), "terminal-osc8-link-ended");
+
+        // Modes and cursor shape are reported to the page.
+        var modes = new TerminalBuffer(20, 3);
+        modes.Append("\u001b[?2004h\u001b[?1000h\u001b[3 q");
+        var modesSnapshot = modes.Snapshot();
+        Check(modesSnapshot.BracketedPaste && modesSnapshot.MouseTracking && modesSnapshot.CursorStyle == 3,
+            "terminal-modes-and-cursor-style");
+
+        // BEL raises the bell event.
+        var bell = 0;
+        var bellBuffer = new TerminalBuffer(10, 2);
+        bellBuffer.Bell += () => bell++;
+        bellBuffer.Append("a\ab");
+        Check(bell == 1, "terminal-bel-event");
+
+        // Combining marks stay in the owning cell; overwriting a wide continuation clears the owner.
+        var combining = new TerminalBuffer(10, 2);
+        combining.Append("é");
+        Check(combining.Snapshot().Lines[0][0].Text == "é" && combining.Snapshot().Lines[0][1].Text.Trim().Length == 0,
+            "terminal-combining-mark-joins-cell");
+        var wide = new TerminalBuffer(10, 2);
+        wide.Append("你");
+        wide.Append("\u001b[1;2Hx");
+        Check(wide.Snapshot().Lines[0][0].Text == " " && wide.Snapshot().Lines[0][1].Text == "x",
+            "terminal-overwrite-wide-continuation-clears-owner");
+
+        // Palette override (OSC 4) affects SGR 31 output.
+        var palette = new TerminalBuffer(10, 2);
+        palette.Append("\u001b]4;1;#123456\u001b\\\u001b[31mR");
+        Check(palette.Snapshot().Lines[0][0].Foreground == 0x123456, "terminal-osc4-palette-override");
+
+        // Selection helpers: select-all, double-click word, triple-click row.
+        var text = new TerminalBuffer(20, 3);
+        text.Append("alpha beta gamma\r\nsecond line");
+        var textSnapshot = text.Snapshot();
+        var selection = new TerminalOutputSelection();
+        Check(selection.SelectAll(textSnapshot) && selection.Text.Contains("alpha beta gamma", StringComparison.Ordinal)
+            && selection.Text.Contains("second line", StringComparison.Ordinal), "terminal-selection-select-all");
+        var word = new TerminalOutputSelection();
+        Check(word.SelectWord(textSnapshot, new TerminalCellPosition(0, 7)) && word.Text == "beta", "terminal-selection-double-click-word");
+        var row = new TerminalOutputSelection();
+        Check(row.SelectRow(textSnapshot, 1) && row.Text == "second line", "terminal-selection-triple-click-row");
+
+        // Settings normalize unknown values and round-trip through the plugin store.
+        var normalized = (TerminalSettings.Default with
+        {
+            ShellProfile = "no-such-shell", FontSize = 999, ScrollbackLines = -4, Bell = "loud"
+        }).Normalize();
+        Check(normalized.ShellProfile == "cmd" && normalized.FontSize == 28 && normalized.ScrollbackLines == 0 && normalized.Bell == "visual",
+            "terminal-settings-normalize");
+        var settingsRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-settings-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new TerminalSettingsStore(settingsRoot);
+            Check(store.Load() == TerminalSettings.Default, "terminal-settings-default-when-missing");
+            store.Save(TerminalSettings.Default with { ShellProfile = "powershell", FontSize = 16, ConfirmClose = false });
+            var loaded = store.Load();
+            Check(loaded.ShellProfile == "powershell" && loaded.FontSize == 16 && !loaded.ConfirmClose, "terminal-settings-round-trip");
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(settingsRoot)) System.IO.Directory.Delete(settingsRoot, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        // A shell that cannot be resolved produces an explicit start error, not a silent cmd fallback.
+        var profile = ShellProfiles.Find("definitely-not-installed");
+        Check(profile is null, "terminal-unknown-shell-profile-is-null");
+        var unavailable = new UnavailableSession("所选 shell 不可用：测试");
+        using var unavailableTab = new TerminalTabViewModel(1, isMock: false, unavailable);
+        unavailableTab.Start(Environment.CurrentDirectory);
+        Check(!unavailableTab.IsRunning && unavailableTab.Buffer.PlainText.Contains("所选 shell 不可用", StringComparison.Ordinal),
+            "terminal-unavailable-shell-reports-reason");
+
+        // Scrollback limit is configurable per buffer.
+        var bounded = new TerminalBuffer(10, 3) { ScrollbackLimit = 5 };
+        for (var i = 0; i < 40; i++) bounded.Append($"r{i}\r\n");
+        Check(bounded.Snapshot().Lines.Length <= 8, "terminal-scrollback-limit-configurable");
     }
 
     // ---------- 6. 插件页面契约：插件包 → 宿主页面 → 项目级状态 ----------
