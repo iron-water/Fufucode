@@ -56,6 +56,7 @@ fun DeviceScreen(
     onDisconnect: () -> Unit,
     onReconnect: () -> Unit,
     onDismissNotice: () -> Unit,
+    onOpenRemoteDesktop: () -> Unit = {},
 ) {
     val server = state.server
     Column(modifier = Modifier.fillMaxSize().background(MobileColors.Background)) {
@@ -83,6 +84,12 @@ fun DeviceScreen(
         ) {
             state.notice?.let { InfoBanner(message = it, tone = PillTone.Info, onDismiss = onDismissNotice) }
 
+            ActionTile(
+                asset = "drawer-computer-428.svg",
+                label = "远程桌面 · UU",
+                onClick = onOpenRemoteDesktop,
+                modifier = Modifier.fillMaxWidth(),
+            )
             MobileCard(modifier = Modifier.fillMaxWidth()) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
