@@ -406,6 +406,15 @@
         </Border>
       </Grid>
 
+      <!-- 沉浸式：输入区收起后只留一个小的向上按钮，点击恢复输入区。 -->
+      <Button x:Name="ComposerRevealButton" Grid.Row="0" Classes="iconButton composerReveal"
+              Width="30" Height="30" VerticalAlignment="Bottom" HorizontalAlignment="Center"
+              Margin="0,0,0,10" IsVisible="False"
+              ToolTip.Tip="展开输入框" AutomationProperties.Name="展开输入框">
+        <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="14" Height="14"
+                  Foreground="{DynamicResource AppTextSecondary}"/>
+      </Button>
+
       <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
       <Border x:Name="ComposerCard" Grid.Row="1" Classes="composerCard" MaxWidth="880"
               CornerRadius="0" BorderThickness="0,1,0,0" Margin="0" HorizontalAlignment="Stretch">
