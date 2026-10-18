@@ -47,6 +47,8 @@
   除既有的模型默认值断言外通过。
 - `tests/Fufucode.App.Automation.SelfTests`：插件页面已挂载；其余为迁移前即存在的 3 项
   焦点/文本绑定断言失败（主检出同样失败）。
+- 独立探针（不引用插件程序集）：把插件 DLL + manifest 安装到隔离数据根，宿主经可回收
+  `PackageLoadContext` 从物理载荷加载，页面贡献与 XAML 成功挂载（`Controller` 非空）。
 
 ## 基线说明
 
