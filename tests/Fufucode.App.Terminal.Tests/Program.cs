@@ -532,6 +532,26 @@ internal static class Program
         Check(!unavailableTab.IsRunning && unavailableTab.Buffer.PlainText.Contains("所选 shell 不可用", StringComparison.Ordinal),
             "terminal-unavailable-shell-reports-reason");
 
+        // The plugin page persists settings and applies display values.
+        var pageRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-page-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var page = new Fufucode.Plugins.Terminal.TerminalDockPage(pageRoot);
+            page.ApplySettings(TerminalSettings.Default with { FontSize = 18, ScrollbackLines = 42, ShellProfile = "powershell" });
+            var persisted = new TerminalSettingsStore(pageRoot).Load();
+            Check(persisted.FontSize == 18 && persisted.ScrollbackLines == 42 && persisted.ShellProfile == "powershell",
+                "terminal-page-persists-settings");
+            page.SetProject(Environment.CurrentDirectory, useMock: true);
+            page.CreateTerminal();
+            Check(page.HasTabs, "terminal-page-uses-settings-for-new-tab");
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(pageRoot)) System.IO.Directory.Delete(pageRoot, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
         // Scrollback limit is configurable per buffer.
         var bounded = new TerminalBuffer(10, 3) { ScrollbackLimit = 5 };
         for (var i = 0; i < 40; i++) bounded.Append($"r{i}\r\n");

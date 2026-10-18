@@ -28,7 +28,8 @@ public sealed record TerminalSnapshot(
     string Title = "",
     bool BracketedPaste = false,
     bool MouseTracking = false,
-    int CursorStyle = 0);
+    int CursorStyle = 0,
+    int MouseMode = 0);
 
 /// <summary>
 /// Bounded VT screen plus scrollback. Escape sequences are interpreted, never shown as raw control text.
@@ -60,6 +61,7 @@ public sealed class TerminalBuffer
     private bool _bold, _underline, _italic, _reverse, _dim, _conceal, _strike;
     private bool _cursorVisible = true, _wrapPending, _autoWrap = true, _originMode, _insertMode, _newLineMode;
     private bool _bracketedPaste, _mouseTracking;
+    private int _mouseMode;
     private int _cursorStyle, _scrollbackLimit = DefaultScrollbackLimit;
     private readonly int[] _palette = (int[])Palette.Clone();
     private string _title = string.Empty;
@@ -84,6 +86,8 @@ public sealed class TerminalBuffer
     public string Title => _title;
     public bool BracketedPaste => _bracketedPaste;
     public bool MouseTracking => _mouseTracking;
+    /// <summary>Mouse tracking DEC mode last enabled (1000/1002/1003/1006); 0 when disabled.</summary>
+    public int MouseMode => _mouseMode;
     /// <summary>DECSCUSR: 0/1 blinking block, 2 steady block, 3/4 underline, 5/6 bar.</summary>
     public int CursorStyle => _cursorStyle;
     public int ScrollbackLimit
@@ -237,7 +241,8 @@ public sealed class TerminalBuffer
         _title,
         _bracketedPaste,
         _mouseTracking,
-        _cursorStyle);
+        _cursorStyle,
+        _mouseMode);
 
     public string PlainText => string.Join("\n", _history.Concat(_screen).Select(line => string.Concat(line.Select(cell => cell.Text)).TrimEnd())).TrimEnd();
 
@@ -507,7 +512,7 @@ public sealed class TerminalBuffer
         _foreground = DefaultForeground; _background = DefaultBackground; _bold = false;
         _cursorVisible = true; _autoWrap = true; _originMode = false; _insertMode = false; _newLineMode = false;
         ResetAttributes();
-        _bracketedPaste = false; _mouseTracking = false; _cursorStyle = 0; _currentLink = null;
+        _bracketedPaste = false; _mouseTracking = false; _mouseMode = 0; _cursorStyle = 0; _currentLink = null;
         Array.Copy(Palette, _palette, Palette.Length);
         for (var i = 0; i < Rows; i++) _screen[i] = BlankLine();
         _top = 0; _bottom = Rows - 1; _row = 0; _column = 0; _wrapPending = false;
@@ -628,7 +633,11 @@ public sealed class TerminalBuffer
                     else { LeaveAlternateScreen(); RestoreCursor(); }
                     break;
                 case 2004: _bracketedPaste = set; break;
-                case 1000: case 1002: case 1003: case 1006: _mouseTracking = set; break;
+                case 1000: case 1002: case 1003: case 1006:
+                    _mouseTracking = set;
+                    if (set) _mouseMode = mode;
+                    else if (_mouseMode == mode) _mouseMode = 0;
+                    break;
                 case 1: case 3: case 12: case 1004: case 1005: case 1015:
                     break; // cursor-key/blink modes and focus events change input, not the rendered screen
             }

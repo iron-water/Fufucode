@@ -36,6 +36,8 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
             _settingsStore = new TerminalSettingsStore(dataRoot);
             _settings = _settingsStore.Load();
         }
+        _view.ApplyDisplaySettings(_settings);
+        _view.SettingsChanged += ApplySettings;
     }
 
     /// <summary>当前设置；页面据此构造新会话并应用显示选项。</summary>
@@ -120,6 +122,7 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
         _disposed = true;
         if (_current is not null) _current.PropertyChanged -= OnCurrentChanged;
         _current = null;
+        _view.SettingsChanged -= ApplySettings;
         _view.DataContext = null;
         foreach (var project in _projects.Values) project.Dispose();
         _projects.Clear();
