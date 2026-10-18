@@ -38,17 +38,90 @@ public partial class TerminalDockView : UserControl
     /// <summary>宿主用于“复制或中断”快捷键判断命令框是否持有文本选区。</summary>
     internal TextBox CommandInputControl => TerminalInput;
 
+    /// <summary>当前设置（由插件页面注入并持久化）；设置对话框从这里取值。</summary>
+    public TerminalSettings CurrentSettings { get; private set; } = TerminalSettings.Default;
+
+    /// <summary>设置对话框点击“应用”后触发；插件页面负责持久化。</summary>
+    public event Action<TerminalSettings>? SettingsChanged;
+
     /// <summary>应用插件设置中的显示项（字号、闪烁光标、响铃）。</summary>
     public void ApplyDisplaySettings(TerminalSettings settings)
     {
-        TerminalSurface.FontSizeDip = settings.FontSize;
-        TerminalSurface.BlinkCursor = settings.BlinkCursor;
-        _bellVisual = settings.Bell == "visual";
+        CurrentSettings = settings.Normalize();
+        TerminalSurface.FontSizeDip = CurrentSettings.FontSize;
+        TerminalSurface.BlinkCursor = CurrentSettings.BlinkCursor;
+        _bellVisual = CurrentSettings.Bell == "visual";
         TerminalSurface.InvalidateMeasure();
         TerminalSurface.InvalidateVisual();
     }
 
     private bool _bellVisual = true;
+
+    private async void Settings_Click(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+        var profiles = ShellProfiles.All;
+        var shell = new ComboBox
+        {
+            ItemsSource = profiles.Select(profile => ShellProfiles.Resolve(profile) is null
+                ? profile.DisplayName + "（未安装）"
+                : profile.DisplayName).ToArray(),
+            SelectedIndex = Math.Max(0, profiles.ToList().FindIndex(profile => profile.Id == CurrentSettings.ShellProfile)),
+            MinWidth = 300
+        };
+        var overrideBox = new TextBox { Text = CurrentSettings.CommandOverride, PlaceholderText = "留空使用所选 shell 的默认命令" };
+        var font = new NumericUpDown { Minimum = 9, Maximum = 28, Value = (decimal)CurrentSettings.FontSize, Increment = 1 };
+        var scrollback = new NumericUpDown { Minimum = 0, Maximum = 100000, Value = CurrentSettings.ScrollbackLines, Increment = 500 };
+        var bell = new ComboBox
+        {
+            ItemsSource = TerminalSettings.BellModes,
+            SelectedItem = CurrentSettings.Bell
+        };
+        var blink = new CheckBox { Content = "光标闪烁", IsChecked = CurrentSettings.BlinkCursor };
+        var links = new CheckBox { Content = "Ctrl+Click 打开 OSC 8 链接", IsChecked = CurrentSettings.OpenLinks };
+        var confirm = new CheckBox { Content = "关闭运行中的终端前确认", IsChecked = CurrentSettings.ConfirmClose };
+        var cancel = new Button { Content = "取消", MinWidth = 80 };
+        var apply = new Button { Content = "应用", MinWidth = 80, IsDefault = true };
+        var dialog = new Window
+        {
+            Title = "终端设置", Width = 460, Height = 470, CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20), Spacing = 10, Children =
+                {
+                    new TextBlock { Text = "默认 shell（新终端生效）" }, shell, overrideBox,
+                    new TextBlock { Text = "字号（DIP）" }, font,
+                    new TextBlock { Text = "回滚行数" }, scrollback,
+                    new TextBlock { Text = "响铃" }, bell,
+                    blink, links, confirm,
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Children = { cancel, apply }
+                    }
+                }
+            }
+        };
+        cancel.Click += (_, _) => dialog.Close(false);
+        apply.Click += (_, _) => dialog.Close(true);
+        if (!await Fufucode.App.Views.SkinDialog.ShowAsync<bool>(dialog, owner)) return;
+        var selected = profiles[Math.Clamp(shell.SelectedIndex, 0, profiles.Count - 1)];
+        var settings = (CurrentSettings with
+        {
+            ShellProfile = selected.Id,
+            CommandOverride = overrideBox.Text ?? string.Empty,
+            FontSize = (double)(font.Value ?? 13),
+            ScrollbackLines = (int)(scrollback.Value ?? 1500),
+            Bell = bell.SelectedItem as string ?? "visual",
+            BlinkCursor = blink.IsChecked == true,
+            OpenLinks = links.IsChecked == true,
+            ConfirmClose = confirm.IsChecked == true
+        }).Normalize();
+        ApplyDisplaySettings(settings);
+        SettingsChanged?.Invoke(settings);
+    }
 
     internal Func<string, KeyEventArgs, bool>? ShortcutMatches
     {
@@ -68,6 +141,43 @@ public partial class TerminalDockView : UserControl
         if (TerminalInput.IsFocused) { _dock?.SelectedTab?.Interrupt(); return Task.CompletedTask; }
         if (TerminalSurface.HasSelection) return TerminalSurface.CopySelectionAsync();
         _dock?.SelectedTab?.Interrupt(); return Task.CompletedTask;
+    }
+
+    private void RestartTab_Click(object? sender, RoutedEventArgs e)
+    {
+        if (TerminalTabs.SelectedItem is TerminalTabViewModel tab) tab.RestartSessionCommand.Execute(null);
+    }
+
+    private async void RenameTab_Click(object? sender, RoutedEventArgs e)
+    {
+        if (TerminalTabs.SelectedItem is not TerminalTabViewModel tab) return;
+        if (TopLevel.GetTopLevel(this) is not Window owner) return;
+        var box = new TextBox { Text = tab.Title, MinWidth = 260 };
+        var cancel = new Button { Content = "取消", MinWidth = 80 };
+        var apply = new Button { Content = "重命名", MinWidth = 96, IsDefault = true };
+        var dialog = new Window
+        {
+            Title = "重命名终端页签", Width = 380, Height = 170, CanResize = false,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            Content = new StackPanel
+            {
+                Margin = new Thickness(20), Spacing = 14, Children =
+                {
+                    box,
+                    new StackPanel
+                    {
+                        Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 8,
+                        HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right,
+                        Children = { cancel, apply }
+                    }
+                }
+            }
+        };
+        cancel.Click += (_, _) => dialog.Close(false);
+        apply.Click += (_, _) => dialog.Close(true);
+        dialog.Opened += (_, _) => { box.Focus(); box.SelectAll(); };
+        if (await Fufucode.App.Views.SkinDialog.ShowAsync<bool>(dialog, owner) && !string.IsNullOrWhiteSpace(box.Text))
+            tab.Title = box.Text.Trim();
     }
 
     private void RestartTerminal_Click(object? sender, RoutedEventArgs e)

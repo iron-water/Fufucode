@@ -106,6 +106,7 @@ public sealed class TerminalScreenControl : Control
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
         PointerReleased += OnPointerReleased;
+        PointerWheelChanged += OnPointerWheelChanged;
         PointerCaptureLost += (_, _) => SelectionChanged?.Invoke(this, EventArgs.Empty);
         KeyDown += OnTerminalKeyDown;
     }
@@ -174,7 +175,7 @@ public sealed class TerminalScreenControl : Control
                     context.FillRectangle(SelectionFill is { } fill ? fill : SelectionBrush,
                         new Rect(origin.X, origin.Y, Math.Max(CellWidth, cell.Text.Length * CellWidth), CellHeight));
                 }
-                var text = new FormattedText(cell.Text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, _fontSizeDip, foreground);
+                var text = TextFor(cell.Text, ResolveColor(cell), typeface, foreground);
                 if (cell.Conceal) continue;
                 context.DrawText(text, origin);
                 if (cell.Underline || cell.Link is not null)
@@ -214,16 +215,36 @@ public sealed class TerminalScreenControl : Control
         return cell.Background;
     }
 
+    private int ResolveColor(TerminalCell cell)
+    {
+        if (cell.Reverse)
+            return cell.Background == TerminalBuffer.DefaultBackground ? TerminalBuffer.DefaultBackground : cell.Background;
+        return cell.Foreground;
+    }
+
     private IBrush ResolveForeground(TerminalCell cell)
     {
-        var color = cell.Foreground;
-        if (cell.Reverse) color = cell.Background == TerminalBuffer.DefaultBackground ? TerminalBuffer.DefaultBackground : cell.Background;
-        var brush = color == TerminalBuffer.DefaultForeground ? TextBrush ?? Brush(color) : Brush(color);
-        if (!cell.Dim) return brush;
-        return cell.Foreground == TerminalBuffer.DefaultForeground
-            ? new SolidColorBrush(Color.FromArgb(0x9A, 0xDE, 0xE3, 0xEC))
-            : new SolidColorBrush(Color.FromArgb(0x9A,
-                (byte)(color >> 16), (byte)(color >> 8), (byte)color));
+        var color = ResolveColor(cell);
+        if (cell.Dim) return new SolidColorBrush(Color.FromArgb(0x9A, (byte)(color >> 16), (byte)(color >> 8), (byte)color));
+        return color == TerminalBuffer.DefaultForeground ? TextBrush ?? Brush(color) : Brush(color);
+    }
+
+    private readonly record struct TextKey(string Text, int Color, bool Bold, bool Italic, double Size);
+
+    private readonly Dictionary<TextKey, FormattedText> _textCache = new();
+
+    /// <summary>
+    /// Cached <see cref="FormattedText"/> per (text, color, style, size). Static output and scrollback reuse
+    /// the same objects across frames instead of allocating one per cell per repaint.
+    /// </summary>
+    private FormattedText TextFor(string text, int color, Typeface typeface, IBrush brush)
+    {
+        var key = new TextKey(text, color, typeface.Weight == FontWeight.Bold, typeface.Style == FontStyle.Italic, _fontSizeDip);
+        if (_textCache.TryGetValue(key, out var cached)) return cached;
+        if (_textCache.Count >= 4096) _textCache.Clear();
+        var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, _fontSizeDip, brush);
+        _textCache[key] = formatted;
+        return formatted;
     }
 
     private Typeface TypefaceFor(TerminalCell cell) =>
@@ -315,6 +336,13 @@ public sealed class TerminalScreenControl : Control
         if (Session is not { } tab || _snapshot is null) return;
         var point = e.GetCurrentPoint(this);
         if (!point.Properties.IsLeftButtonPressed) return;
+        // Applications that enabled mouse tracking receive the click; Shift keeps text selection available.
+        if (_snapshot.MouseTracking && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) &&
+            TrySendMouse(point.Position, button: 0, release: false, wheel: 0))
+        {
+            e.Handled = true;
+            return;
+        }
         // Double/triple click select a word/row; dragging afterwards extends the same selection.
         if (e.ClickCount >= 2 && CellAt(point.Position) is { } clicked)
         {
@@ -344,6 +372,13 @@ public sealed class TerminalScreenControl : Control
         UpdateHoverLink(position);
         // Capture is only taken by a left-button press, so a captured move is always a drag.
         if (!ReferenceEquals(e.Pointer.Captured, this) || Session is not { } tab || _snapshot is null) return;
+        // Drag beyond the viewport scrolls one row per event so long scrollback is reachable while selecting.
+        if (this.FindAncestorOfType<ScrollViewer>() is { } scroller)
+        {
+            var maximum = Math.Max(0, scroller.Extent.Height - scroller.Viewport.Height);
+            if (position.Y < OriginY) scroller.Offset = new Vector(0, Math.Max(0, scroller.Offset.Y - CellHeight));
+            else if (position.Y > Bounds.Height - OriginY) scroller.Offset = new Vector(0, Math.Min(maximum, scroller.Offset.Y + CellHeight));
+        }
         if (CellAt(position) is not { } cell) return;
         if (!tab.OutputSelection.Extend(_snapshot, cell)) return;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
@@ -365,12 +400,45 @@ public sealed class TerminalScreenControl : Control
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
     {
+        if (_snapshot?.MouseTracking == true && !e.KeyModifiers.HasFlag(KeyModifiers.Shift) &&
+            TrySendMouse(e.GetCurrentPoint(this).Position, button: 0, release: true, wheel: 0))
+        {
+            e.Handled = true;
+            return;
+        }
         if (!ReferenceEquals(e.Pointer.Captured, this)) return;
         if (Session is { } tab && _snapshot is not null && CellAt(e.GetCurrentPoint(this).Position) is { } cell)
             tab.OutputSelection.Extend(_snapshot, cell);
         e.Pointer.Capture(null);
         SelectionChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
+    }
+
+    private void OnPointerWheelChanged(object? sender, PointerWheelEventArgs e)
+    {
+        if (Session is not { } tab || _snapshot?.MouseTracking != true || e.KeyModifiers.HasFlag(KeyModifiers.Shift)) return;
+        // Wheel up = 64, wheel down = 65 in both X10 and SGR encodings.
+        if (TrySendMouse(e.GetPosition(this), button: 0, release: false, wheel: e.Delta.Y > 0 ? 64 : 65)) e.Handled = true;
+    }
+
+    private bool TrySendMouse(Point position, int button, bool release, int wheel)
+    {
+        if (Session is not { IsRunning: true } tab || _snapshot is null) return false;
+        var cell = CellAt(position);
+        if (cell is null) return false;
+        var x = Math.Clamp(cell.Value.Column + 1, 1, 999);
+        var y = Math.Clamp(cell.Value.Row + 1, 1, 999);
+        if (_snapshot.MouseMode == 1006)
+        {
+            var code = wheel != 0 ? wheel : button;
+            tab.SendRaw($"\u001b[<{code};{x};{y}{(release ? 'm' : 'M')}");
+        }
+        else
+        {
+            var code = wheel != 0 ? wheel : release ? 3 : button;
+            tab.SendRaw($"\u001b[M{(char)(32 + code)}{(char)(32 + x)}{(char)(32 + y)}");
+        }
+        return true;
     }
 
     private TerminalCellPosition? CellAt(Point position)

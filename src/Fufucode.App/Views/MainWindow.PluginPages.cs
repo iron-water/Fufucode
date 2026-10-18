@@ -19,6 +19,7 @@ public partial class MainWindow
         var root = Program.SelfTestMode
             ? Program.SelfTestDataRoot ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-selftest-appdata")
             : _options.CreateAppDataLayout().Root;
+        if (Program.SelfTestMode) SelfTest.SelfTestTerminalPlugin.EnsureInstalled(root);
         _pluginPageHost = new PluginWorkspacePageHost(root, _workbenchPages,
             () => _options.Mode == AppSessionMode.Mock);
         _pluginPageHost.PagesChanged += OnPluginPagesChanged;
