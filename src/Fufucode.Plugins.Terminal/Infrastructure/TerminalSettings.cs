@@ -83,9 +83,15 @@ public static class ShellProfiles
         }
         if (Path.IsPathRooted(profile.FileName))
             return File.Exists(profile.FileName) ? profile.FileName : null;
+        if (profile.Id == "powershell")
+        {
+            // Windows PowerShell lives in its versioned System32 subdirectory, not in System32 itself.
+            var legacy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
+                "WindowsPowerShell", "v1.0", "powershell.exe");
+            if (File.Exists(legacy)) return legacy;
+        }
         var system = Path.Combine(Environment.SystemDirectory, profile.FileName);
         if (File.Exists(system)) return system;
-        // PowerShell/pwsh 也可能在 PATH 上；不做 shell 展开，只查已知目录。
         foreach (var root in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) })
         {
             if (string.IsNullOrEmpty(root)) continue;

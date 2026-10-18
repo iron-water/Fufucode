@@ -46,7 +46,7 @@
 实际执行：
 
 - `dotnet build Fufucode.sln`：36 工程，0 错误，0 警告。
-- `tests/Fufucode.App.Terminal.Tests`：98 项断言全部通过，覆盖 VT P0/P1、备用屏、DSR/DA、滚动区域、SGR、OSC、模式、组合字符、调色板、选择、设置、插件页面契约，以及真实 `MainWindow` 有/无插件两条路径。
+- `tests/Fufucode.App.Terminal.Tests`：101 项断言全部通过，覆盖 VT P0/P1、备用屏、DSR/DA、滚动区域、SGR、OSC、模式、组合字符、调色板、选择、设置、插件页面契约，以及真实 `MainWindow` 有/无插件两条路径。
 - `dotnet run --project src/Fufucode.App -- --selftest --r2-only`：0 失败。
 - `--floating-workbench-only`：0 失败。
 - 真实 ConPTY 冒烟（在测试工程/自测入口中）：光标报告应答可见；主屏提示符保留。
