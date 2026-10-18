@@ -171,13 +171,24 @@ internal static class Program
         Check(harness.Tab.InputText == "keep-me\npaste-😀\nline2" && session.Writes.Count == 1,
             "terminal-ctrl-v-pastes-into-draft-only");
 
+        // Direct paste to the shell: without bracketed paste line breaks become CR; with bracketed paste
+        // the text is wrapped so interactive programs receive it as one paste.
+        var writesBeforeDirect = session.Writes.Count;
+        harness.ClipboardReader = () => "line1\nline2";
+        Check(harness.Surface.PasteToShellAsync().GetAwaiter().GetResult() &&
+              session.Writes[^1] == "line1\rline2", "terminal-direct-paste-sends-to-shell");
+        harness.Tab.Buffer.Append("\u001b[?2004h");
+        harness.Surface.PasteToShellAsync().GetAwaiter().GetResult();
+        Check(session.Writes[^1] == "\u001b[200~line1\nline2\u001b[201~", "terminal-direct-paste-honors-bracketed-paste");
+        Check(session.Writes.Count == writesBeforeDirect + 2, "terminal-direct-paste-count");
+
         // Shift+Insert 同义。
         harness.ClipboardReader = () => "shift-insert";
         harness.Surface.Focus();
         harness.Ready();
         harness.Press(Key.Insert, RawInputModifiers.Shift, PhysicalKey.Insert);
         harness.Ready();
-        Check(harness.Tab.InputText.EndsWith("shift-insert", StringComparison.Ordinal) && session.Writes.Count == 1,
+        Check(harness.Tab.InputText.EndsWith("shift-insert", StringComparison.Ordinal) && session.Writes.Count == writesBeforeDirect + 2,
             "terminal-shift-insert-pastes-into-draft");
 
         // 复制 → 粘贴往返：粘贴内容与冻结选区文本逐字一致。
@@ -195,11 +206,12 @@ internal static class Program
         Check(harness.Tab.InputText == captured && harness.Tab.OutputSelection.Text == captured,
             "terminal-copy-paste-round-trip");
 
-        // 右键菜单结构：复制/粘贴/全选/打开链接/清屏。
+        // 右键菜单结构：复制/粘贴草稿/直接粘贴/全选/打开链接/清屏。
         var items = harness.ContextMenu.Items.OfType<Control>().ToArray();
-        Check(items.Length == 6 && items[0] is MenuItem { Header: "复制" } && items[1] is MenuItem { Header: "粘贴" } &&
-              items[2] is MenuItem { Header: "全选" } && items[3] is MenuItem { Header: "打开链接" } &&
-              items[4] is Separator && items[5] is MenuItem { Header: "清屏" },
+        Check(items.Length == 7 && items[0] is MenuItem { Header: "复制" } &&
+              items[1] is MenuItem { Header: "粘贴到命令草稿" } && items[2] is MenuItem { Header: "粘贴到终端（直接发送）" } &&
+              items[3] is MenuItem { Header: "全选" } && items[4] is MenuItem { Header: "打开链接" } &&
+              items[5] is Separator && items[6] is MenuItem { Header: "清屏" },
             "terminal-context-menu-has-copy-paste-clear");
         Check(harness.CopyItem.Header?.ToString() == "复制" && harness.ClearItem.Header?.ToString() == "清屏",
             "terminal-context-menu-items-named");
