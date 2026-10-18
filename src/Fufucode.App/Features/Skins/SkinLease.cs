@@ -159,6 +159,14 @@ public sealed class SkinLease : IDisposable
                 {
                     window.Opened += lease.OnWindowOpened;
                     window.PropertyChanged += lease.OnWindowPropertyChanged;
+                    // 系统高对比/透明度偏好变化（iOS "Reduce Transparency/Contrast" 对应物）
+                    // → 重新 SyncFrom 调弱玻璃面，不然用户切了辅助设置皮肤不回读。
+                    if (Application.Current?.PlatformSettings is { } platform)
+                    {
+                        lease._platformColorValuesChanged = (_, _) => lease.SyncGlass();
+                        platform.ColorValuesChanged += lease._platformColorValuesChanged;
+                        lease._platformColorValuesSource = platform;
+                    }
                 }
             }
             catch { lease.Dispose(); throw; }
@@ -265,6 +273,8 @@ public sealed class SkinLease : IDisposable
     }
 
     private bool _glassFallbackInstalled;
+    private Avalonia.Platform.IPlatformSettings? _platformColorValuesSource;
+    private EventHandler<Avalonia.Platform.PlatformColorValues>? _platformColorValuesChanged;
 
     private void OnWindowOpened(object? sender, EventArgs e)
     {
@@ -302,6 +312,12 @@ public sealed class SkinLease : IDisposable
         _captions.Clear();
         foreach (var adapter in _glassAdapters) adapter.Dispose();
         _glassAdapters.Clear();
+        if (_platformColorValuesSource is not null && _platformColorValuesChanged is not null)
+        {
+            _platformColorValuesSource.ColorValuesChanged -= _platformColorValuesChanged;
+            _platformColorValuesChanged = null;
+            _platformColorValuesSource = null;
+        }
         // 我安装的窗底回落条目（令牌未删 AppMicaPageBackground，本地条目遮蔽令牌值）—— 拿走后还原令牌。
         if (_glassFallbackInstalled) _target.Resources.Remove("AppMicaPageBackground");
         _glassFallbackInstalled = false;
