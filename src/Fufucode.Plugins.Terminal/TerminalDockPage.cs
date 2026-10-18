@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Fufucode.App.Features.Plugins;
+using Fufucode.Plugins.Terminal.Infrastructure;
 using Fufucode.Plugins.Terminal.ViewModels;
 using Fufucode.Plugins.Terminal.Views;
 
@@ -24,9 +25,29 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
     private bool _useMock;
     private bool _disposed;
 
-    public TerminalDockPage()
+    private readonly TerminalSettingsStore? _settingsStore;
+    private TerminalSettings _settings = TerminalSettings.Default;
+
+    /// <summary>插件页面由宿主创建；设置文件位于插件自己的数据目录。</summary>
+    public TerminalDockPage(string? dataRoot = null)
     {
-        _view.DataContextChanged += (_, _) => { };
+        if (!string.IsNullOrWhiteSpace(dataRoot))
+        {
+            _settingsStore = new TerminalSettingsStore(dataRoot);
+            _settings = _settingsStore.Load();
+        }
+    }
+
+    /// <summary>当前设置；页面据此构造新会话并应用显示选项。</summary>
+    public TerminalSettings Settings => _settings;
+
+    /// <summary>替换设置并持久化；新终端生效，现有终端保留自己的设置直到关闭。</summary>
+    public void ApplySettings(TerminalSettings settings)
+    {
+        _settings = settings.Normalize();
+        _settingsStore?.Save(_settings);
+        _view.ApplyDisplaySettings(_settings);
+        StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     public string PageId => "terminal";
@@ -54,7 +75,7 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
         if (_current is not null) _current.PropertyChanged -= OnCurrentChanged;
         if (!_projects.TryGetValue(key, out var next))
         {
-            next = new TerminalDockViewModel(useMock, string.IsNullOrEmpty(key) ? null : key);
+            next = new TerminalDockViewModel(useMock, string.IsNullOrEmpty(key) ? null : key, settings: _settings);
             _projects[key] = next;
         }
         _current = next;

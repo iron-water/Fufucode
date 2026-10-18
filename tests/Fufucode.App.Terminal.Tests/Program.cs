@@ -181,10 +181,11 @@ internal static class Program
         Check(harness.Tab.InputText == captured && harness.Tab.OutputSelection.Text == captured,
             "terminal-copy-paste-round-trip");
 
-        // 右键菜单结构：复制/粘贴/清屏。
+        // 右键菜单结构：复制/粘贴/全选/打开链接/清屏。
         var items = harness.ContextMenu.Items.OfType<Control>().ToArray();
-        Check(items.Length == 4 && items[0] is MenuItem { Header: "复制" } && items[1] is MenuItem { Header: "粘贴" } &&
-              items[2] is Separator && items[3] is MenuItem { Header: "清屏" },
+        Check(items.Length == 6 && items[0] is MenuItem { Header: "复制" } && items[1] is MenuItem { Header: "粘贴" } &&
+              items[2] is MenuItem { Header: "全选" } && items[3] is MenuItem { Header: "打开链接" } &&
+              items[4] is Separator && items[5] is MenuItem { Header: "清屏" },
             "terminal-context-menu-has-copy-paste-clear");
         Check(harness.CopyItem.Header?.ToString() == "复制" && harness.ClearItem.Header?.ToString() == "清屏",
             "terminal-context-menu-items-named");
@@ -680,8 +681,8 @@ internal static class Program
         {
             var x = column == int.MaxValue
                 ? Math.Max(TerminalScreenControl.OriginX, Surface.Bounds.Width - 2)
-                : TerminalScreenControl.OriginX + column * TerminalScreenControl.CellWidth + 2;
-            var y = TerminalScreenControl.OriginY + row * TerminalScreenControl.CellHeight + 8;
+                : TerminalScreenControl.OriginX + column * Surface.CellWidth + 2;
+            var y = TerminalScreenControl.OriginY + row * Surface.CellHeight + 8;
             return Surface.TranslatePoint(new Point(x, y), Window) ?? new Point(x, y);
         }
 

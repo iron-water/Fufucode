@@ -48,6 +48,7 @@
                     <Button x:Name="CopyOutputButton" Classes="iconButton toolButton" Click="CopyOutput_Click" IsEnabled="{Binding HasOutputSelection}" ToolTip.Tip="复制选中的输出（Ctrl+Shift+C）" AutomationProperties.Name="复制选中输出"><PathIcon Data="{DynamicResource Icon.Copy}" Width="15" Height="15"/></Button>
                     <Button x:Name="FindButton" Classes="iconButton toolButton" Click="ToggleFind_Click" ToolTip.Tip="查找输出（Ctrl+F）" AutomationProperties.Name="查找输出"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
                     <Button x:Name="ReturnToBottomButton" Classes="iconButton toolButton" Click="ReturnToBottom_Click" ToolTip.Tip="回到最新输出并恢复跟随" AutomationProperties.Name="返回底部"><PathIcon Data="{DynamicResource Icon.ArrowDownload}" Width="15" Height="15"/></Button>
+                    <Button x:Name="RestartTerminalButton" Classes="iconButton toolButton" Click="RestartTerminal_Click" IsEnabled="{Binding !SelectedTab.IsRunning}" ToolTip.Tip="重启已退出的终端 shell" AutomationProperties.Name="重启终端"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="15" Height="15"/></Button>
                     <Button Classes="iconButton toolButton" Command="{Binding CreateTerminalCommand}" ToolTip.Tip="新建终端" AutomationProperties.Name="新建终端"><PathIcon Data="{DynamicResource Icon.Add}" Width="16" Height="16"/></Button>
                     <Button Classes="iconButton toolButton" Click="CloseTerminal_Click" IsEnabled="{Binding HasTabs}" ToolTip.Tip="终止当前终端进程并关闭（隐藏底区不会终止进程）" AutomationProperties.Name="关闭终端"><PathIcon Data="{DynamicResource Icon.RecordStop}" Width="16" Height="16"/></Button>
                 </StackPanel>
@@ -68,6 +69,8 @@
                         <ContextMenu x:Name="TerminalContextMenu">
                             <MenuItem x:Name="ContextCopyItem" Header="复制" Click="ContextCopy_Click"/>
                             <MenuItem x:Name="ContextPasteItem" Header="粘贴" Click="ContextPaste_Click"/>
+                            <MenuItem x:Name="ContextSelectAllItem" Header="全选" Click="ContextSelectAll_Click"/>
+                            <MenuItem x:Name="ContextOpenLinkItem" Header="打开链接" Click="ContextOpenLink_Click"/>
                             <Separator/>
                             <MenuItem x:Name="ContextClearItem" Header="清屏" Click="ContextClear_Click"/>
                         </ContextMenu>
