@@ -132,7 +132,14 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
             Buffer.Append("\u001b[31m终端启动失败：" + error.Message + "\u001b[0m\r\n");
         }
     }
-    private void OnOutput(string text) => Dispatch(() => { if (!_disposed) Buffer.Append(text); });
+    private void OnOutput(string text) => Dispatch(() =>
+    {
+        if (_disposed) return;
+        Buffer.Append(text);
+        // Answer DSR/DA queries (for example CSI 6n) so prompt frameworks and full-screen apps do not wait.
+        var reply = Buffer.TakePendingResponse();
+        if (reply.Length > 0) SendRaw(reply);
+    });
     private void OnExited(int? code, string? diagnostic) => Dispatch(() =>
     {
         if (_disposed) return;
