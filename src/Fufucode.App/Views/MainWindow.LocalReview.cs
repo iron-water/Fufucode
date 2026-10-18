@@ -13,8 +13,6 @@ using Fufucode.App.Features.LocalReview;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.Core;
-using Fufucode.Core.Automation;
-using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Features.LocalReview;
 
 namespace Fufucode.App;
@@ -80,18 +78,9 @@ public partial class MainWindow
                 return Failure(scope, "审查目录与当前项目不同，请先打开该项目。");
             try
             {
-                var (node, cli) = RealSessionBootstrap.ResolveRuntime(window._options);
-                var manifest = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(cli)!, "..", "..", "package.json"));
-                using var package = JsonDocument.Parse(await File.ReadAllTextAsync(manifest, cancellationToken));
-                var version = package.RootElement.GetProperty("version").GetString() ?? throw new InvalidDataException("Pi version missing");
-                // The payload contains the frozen bytes and patch. Disable every tool, extensions,
-                // skills and MCP rather than treating a different cwd as filesystem isolation.
-                var runtime = new HarnessRuntime("desktop-local-review-pi", "pi", node, [cli, "--no-tools"], version,
-                    new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] = host.AgentDirectory });
+                // 执行后端由已启用的自动开发插件提供（唯一后台）；未安装时执行器返回明确原因。
                 var projectId = host.Current.Session.ProjectId;
-                var database = Path.Combine(root, "projects", projectId, "automation.db");
-                var executor = new LocalReviewHarnessExecutor(() => new AutomationStore(database), runtime,
-                    root, projectId, model);
+                var executor = new LocalReviewHarnessExecutor(root, projectId, model);
                 return await executor.ReviewAsync(scope, cancellationToken);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)

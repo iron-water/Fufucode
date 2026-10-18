@@ -266,6 +266,7 @@ internal static class IntegrationChecks
     private static async Task<(int Exit, string Text)> Cli(params string[] args)
     {
         var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+        start.Environment["FUFUCODE_DATA_ROOT"] = ArchiveChecks.CliDataRoot;
         start.ArgumentList.Add(typeof(Fufucode.Cli.CliOptions).Assembly.Location); foreach (var arg in args) start.ArgumentList.Add(arg);
         using var process = Process.Start(start)!; var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); var text = await output; var detail = await error;

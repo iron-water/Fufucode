@@ -2,11 +2,17 @@ using System.Diagnostics;
 using System.Text;
 using System.Security.Cryptography;
 using System.Text.Json;
+using Fufucode.App.Abstractions.Automation;
 using Fufucode.Core;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Features.LocalReview;
 using Fufucode.LocalReview.Tests;
+using Fufucode.Plugins.AutoDev;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
+
+// 执行所有者（插件）在测试内注册；夹具 runtime 由本进程提供。
+BatchHarnessAdapters.Register();
 
 // E1 本地 Git 工作树与审查模块定向测试（独立入口，未注册到全量自测，不改共享 sln）：
 //   dotnet run --project tests/Fufucode.LocalReview.Tests
@@ -336,9 +342,9 @@ try
         ("garbage", LocalReviewRunStatus.InvalidResponse, 0),
     })
     {
+        ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime(scenario)));
         var executor = new LocalReviewHarnessExecutor(
-            () => new AutomationStore(Path.Combine(root, scenario + ".db")),
-            FixtureRuntime(scenario), Path.Combine(root, "data", scenario), "review-project", "devin/swe-2");
+            Path.Combine(root, "data", scenario), "review-project", "devin/swe-2");
         var result = await executor.ReviewAsync(cleanScope);
         Check(result.Status == expect, "夹具 " + scenario + "：终态分类正确（实际 " + result.Status + "）");
         Check(result.Findings.Count == findings, "夹具 " + scenario + "：发现项计数与严格解析一致");
@@ -351,9 +357,9 @@ try
         var headBefore = (await GitRunner.Run(repo, "rev-parse", "HEAD")).Trim();
         var beforeHash = Convert.ToHexString(SHA256.HashData(
             File.ReadAllBytes(Path.Combine(repo, "src", "main.cs"))));
+        ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("good")));
         var executor = new LocalReviewHarnessExecutor(
-            () => new AutomationStore(Path.Combine(root, "readonly.db")),
-            FixtureRuntime("good"), Path.Combine(root, "data", "readonly"), "review-project", "devin/swe-2");
+            Path.Combine(root, "data", "readonly"), "review-project", "devin/swe-2");
         _ = await executor.ReviewAsync(cleanScope);
         var afterHash = Convert.ToHexString(SHA256.HashData(
             File.ReadAllBytes(Path.Combine(repo, "src", "main.cs"))));
@@ -367,9 +373,9 @@ try
 
     // 12) 取消：已投递的运行进入未知状态，绝不当完成，也不自动重发。
     {
+        ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("hang")));
         var cancelExecutor = new LocalReviewHarnessExecutor(
-            () => new AutomationStore(Path.Combine(root, "cancel.db")),
-            FixtureRuntime("hang"), Path.Combine(root, "data", "cancel"), "review-project", "devin/swe-2");
+            Path.Combine(root, "data", "cancel"), "review-project", "devin/swe-2");
         using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
         var cancelled = await cancelExecutor.ReviewAsync(cleanScope, cts.Token);
         Check(cancelled.Status == LocalReviewRunStatus.Cancelled,
@@ -380,9 +386,9 @@ try
     // 13) 审查期间的仓库变化：标过期而不是当作当前精确定位。
     {
         var racingScope = await LocalReviewScopeResolver.ResolveAsync(repo, LocalReviewScopeKind.Workspace);
+        ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("good")));
         var racingExecutor = new LocalReviewHarnessExecutor(
-            () => new AutomationStore(Path.Combine(root, "stale.db")),
-            FixtureRuntime("good"), Path.Combine(root, "data", "stale"), "review-project", "devin/swe-2");
+            Path.Combine(root, "data", "stale"), "review-project", "devin/swe-2");
         var task = racingExecutor.ReviewAsync(racingScope);
         await File.AppendAllTextAsync(Path.Combine(repo, "src", "main.cs"), "// raced\n", new UTF8Encoding(false));
         var raced = await task;
@@ -393,9 +399,9 @@ try
     }
 
     // ---------- 导出与历史 ----------
+    ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("good")));
     var exportExecutor = new LocalReviewHarnessExecutor(
-        () => new AutomationStore(Path.Combine(root, "export.db")),
-        FixtureRuntime("good"), Path.Combine(root, "data", "export"), "review-project", "devin/swe-2");
+        Path.Combine(root, "data", "export"), "review-project", "devin/swe-2");
     var exportResult = await exportExecutor.ReviewAsync(cleanScope);
     var markdown = LocalReviewExport.ToMarkdown(exportResult);
     var json = LocalReviewExport.ToJson(exportResult);

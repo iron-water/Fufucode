@@ -8,4 +8,8 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj" />
+    <Using Include="Fufucode.App.Abstractions.Automation.Harnesses" />
+  </ItemGroup>
 </Project>

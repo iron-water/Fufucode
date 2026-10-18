@@ -418,7 +418,7 @@ try
     string[] forbidden = ["Apply", "Dispatch", "Send", "Execute", "Start", "Run", "Retry", "Reconcile", "Migrate", "Approve", "Integrate", "Consumer"];
     var offending = publicMembers.Where(name => forbidden.Any(word => name.Contains(word, StringComparison.OrdinalIgnoreCase))).ToArray();
     Check(offending.Length == 0, "公共 API 不含执行/发送/派发/迁移类动作（未知请求无法被本模块自动执行）· 命中：" + string.Join(",", offending));
-    var moduleSources = Directory.GetFiles(Path.Combine(repoRoot, "src", "Fufucode.App", "Features", "Automation", "Persistence"), "*.cs", SearchOption.AllDirectories);
+    var moduleSources = Directory.GetFiles(Path.Combine(repoRoot, "src", "Fufucode.Plugins.AutoDev", "Ui", "Automation", "Persistence"), "*.cs", SearchOption.AllDirectories);
     Check(moduleSources.Length >= 8, "模块源文件清单（" + moduleSources.Length + " 个 .cs）");
     var coreHits = moduleSources.Where(path => File.ReadAllText(path).Contains("Fufucode.Core", StringComparison.Ordinal)).ToArray();
     Check(coreHits.Length == 0, "模块源码不引用 Fufucode.Core（不调用 Core、不启动 harness）· 命中：" + string.Join(",", coreHits));
