@@ -19,15 +19,34 @@ namespace Fufucode.Plugins.Terminal.Views;
 public sealed class TerminalScreenControl : Control
 {
     internal Func<string, KeyEventArgs, bool>? ShortcutMatches { get; set; }
-    public const double CellWidth = 7.8;
-    public const double CellHeight = 18;
     public const double OriginX = 10;
     public const double OriginY = 8;
+
+    /// <summary>Glyph size in DIP; the fixed cell advances scale with it (monospace metrics).</summary>
+    public double FontSizeDip
+    {
+        get => _fontSizeDip;
+        set
+        {
+            var next = Math.Clamp(value, 9, 28);
+            if (Math.Abs(next - _fontSizeDip) < 0.01) return;
+            _fontSizeDip = next;
+            InvalidateMeasure(); InvalidateVisual();
+        }
+    }
+    private double _fontSizeDip = 13;
+    /// <summary>Cell advance for the current font size (Consolas is 0.6 em wide).</summary>
+    public double CellWidth => Math.Round(_fontSizeDip * 0.6, 2);
+    public double CellHeight => Math.Round(_fontSizeDip * 1.385, 2);
+
+    /// <summary>Cursor blink; the style comes from the shell's DECSCUSR, this only stops the animation.</summary>
+    public bool BlinkCursor { get; set; } = true;
 
     // The terminal surface is a fixed dark palette independent of the app theme (see WorkbenchStyles),
     // so the interaction highlights are tuned against that surface rather than against theme resources.
     private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.FromArgb(0x5A, 0x61, 0xAF, 0xEF));
     private static readonly IBrush SearchBrush = new SolidColorBrush(Color.FromArgb(0x8C, 0xE5, 0xC0, 0x7B));
+    private static readonly FontFamily MonoFont = new("Consolas, Cascadia Mono, Microsoft YaHei");
 
     public static readonly StyledProperty<TerminalTabViewModel?> SessionProperty = AvaloniaProperty.Register<TerminalScreenControl, TerminalTabViewModel?>(nameof(Session));
     public static readonly StyledProperty<IBrush?> SurfaceBrushProperty = AvaloniaProperty.Register<TerminalScreenControl, IBrush?>(nameof(SurfaceBrush));
@@ -53,6 +72,9 @@ public sealed class TerminalScreenControl : Control
 
     /// <summary>Raised after clipboard text was merged into the current tab's command draft.</summary>
     public event EventHandler? PasteCompleted;
+
+    /// <summary>Raised on Ctrl+Click over an OSC 8 hyperlink with its URI.</summary>
+    public event EventHandler<string>? LinkActivated;
 
     /// <summary>Set by the dock so Escape only stops reaching the shell while the find bar is open.</summary>
     public bool FindActive { get; set; }
@@ -124,14 +146,16 @@ public sealed class TerminalScreenControl : Control
         var resolvedSelection = activeSelection?.ResolvedRange;
         var search = Session?.Search;
         var searchMatch = search is not null && search.IsCurrent(_snapshot) ? search.Current : null;
+        var hoveredLink = Session?.HoveredLink;
         for (var row = firstRow; row < lastRow; row++)
         {
             var line = _snapshot.Lines[row];
             for (var col = 0; col < line.Length; col++)
             {
                 var cell = line[col];
-                if (cell.Background != TerminalBuffer.DefaultBackground)
-                    context.FillRectangle(Brush(cell.Background), new Rect(OriginX + col * CellWidth, OriginY + row * CellHeight, CellWidth, CellHeight));
+                var background = ResolveBackground(cell);
+                if (background != TerminalBuffer.DefaultBackground)
+                    context.FillRectangle(Brush(background), new Rect(OriginX + col * CellWidth, OriginY + row * CellHeight, CellWidth, CellHeight));
             }
             if (searchMatch is { } hit && hit.Row == row)
                 context.FillRectangle(SearchBrush, CellRect(row, hit.StartColumn, hit.EndColumn));
@@ -142,20 +166,72 @@ public sealed class TerminalScreenControl : Control
                 var cell = line[col];
                 if (string.IsNullOrEmpty(cell.Text) || cell.Text == " ") continue;
                 var origin = new Point(OriginX + col * CellWidth, OriginY + row * CellHeight);
-                var typeface = new Typeface(new FontFamily("Consolas, Cascadia Mono, Microsoft YaHei"), FontStyle.Normal, cell.Bold ? FontWeight.Bold : FontWeight.Normal);
-                var foreground = cell.Foreground == TerminalBuffer.DefaultForeground ? TextBrush ?? Brush(cell.Foreground) : Brush(cell.Foreground);
-                var text = new FormattedText(cell.Text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, 13, foreground);
+                var typeface = TypefaceFor(cell);
+                var foreground = ResolveForeground(cell);
+                if (hoveredLink is not null && cell.Link == hoveredLink)
+                {
+                    // Hovered hyperlink: dim cell background + underline makes the target obvious without a cursor change.
+                    context.FillRectangle(SelectionFill is { } fill ? fill : SelectionBrush,
+                        new Rect(origin.X, origin.Y, Math.Max(CellWidth, cell.Text.Length * CellWidth), CellHeight));
+                }
+                var text = new FormattedText(cell.Text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, typeface, _fontSizeDip, foreground);
+                if (cell.Conceal) continue;
                 context.DrawText(text, origin);
+                if (cell.Underline || cell.Link is not null)
+                    context.FillRectangle(foreground, new Rect(origin.X, origin.Y + CellHeight - 2, Math.Max(CellWidth, text.Width), 1));
+                if (cell.Strike)
+                    context.FillRectangle(foreground, new Rect(origin.X, origin.Y + CellHeight / 2, Math.Max(CellWidth, text.Width), 1));
             }
         }
-        if (_snapshot.CursorVisible && Session?.IsRunning == true)
+        if (_snapshot.CursorVisible && Session?.IsRunning == true && !selectionFocusHidesCursor)
         {
-            var origin = new Point(OriginX + Math.Min(_snapshot.CursorColumn, (Session.Buffer.Columns - 1)) * CellWidth, OriginY + _snapshot.CursorLine * CellHeight + CellHeight - 2);
-            context.FillRectangle(TextBrush ?? Brush(TerminalBuffer.DefaultForeground), new Rect(origin, new Size(CellWidth, 2)));
+            var cursorColumn = Math.Min(_snapshot.CursorColumn, (Session.Buffer.Columns - 1));
+            var cursorRect = new Rect(OriginX + cursorColumn * CellWidth, OriginY + _snapshot.CursorLine * CellHeight, CellWidth, CellHeight);
+            var cursorBrush = TextBrush ?? Brush(TerminalBuffer.DefaultForeground);
+            switch (_snapshot.CursorStyle)
+            {
+                case 3: case 4: // underline
+                    context.FillRectangle(cursorBrush, new Rect(cursorRect.X, cursorRect.Bottom - 2, CellWidth, 2));
+                    break;
+                case 5: case 6: // vertical bar
+                    context.FillRectangle(cursorBrush, new Rect(cursorRect.X, cursorRect.Y, 2, CellHeight));
+                    break;
+                case 2: // steady block: hollow block so text stays readable
+                    context.DrawRectangle(null, new Pen(cursorBrush, 1), cursorRect.Deflate(0.5));
+                    break;
+                default: // blinking block, drawn hollow like the steady variant
+                    context.DrawRectangle(null, new Pen(cursorBrush, 1), cursorRect.Deflate(0.5));
+                    break;
+            }
         }
     }
 
-    private static Rect CellRect(int row, int fromColumn, int toColumn) =>
+    private bool selectionFocusHidesCursor => Session?.OutputSelection.HasRange == true;
+
+    private int ResolveBackground(TerminalCell cell)
+    {
+        if (cell.Reverse) return cell.Foreground == TerminalBuffer.DefaultForeground ? TerminalBuffer.DefaultForeground : cell.Foreground;
+        return cell.Background;
+    }
+
+    private IBrush ResolveForeground(TerminalCell cell)
+    {
+        var color = cell.Foreground;
+        if (cell.Reverse) color = cell.Background == TerminalBuffer.DefaultBackground ? TerminalBuffer.DefaultBackground : cell.Background;
+        var brush = color == TerminalBuffer.DefaultForeground ? TextBrush ?? Brush(color) : Brush(color);
+        if (!cell.Dim) return brush;
+        return cell.Foreground == TerminalBuffer.DefaultForeground
+            ? new SolidColorBrush(Color.FromArgb(0x9A, 0xDE, 0xE3, 0xEC))
+            : new SolidColorBrush(Color.FromArgb(0x9A,
+                (byte)(color >> 16), (byte)(color >> 8), (byte)color));
+    }
+
+    private Typeface TypefaceFor(TerminalCell cell) =>
+        new(new FontFamily("Consolas, Cascadia Mono, Microsoft YaHei"),
+            cell.Italic ? FontStyle.Italic : FontStyle.Normal,
+            cell.Bold ? FontWeight.Bold : FontWeight.Normal);
+
+    private Rect CellRect(int row, int fromColumn, int toColumn) =>
         new(OriginX + fromColumn * CellWidth, OriginY + row * CellHeight, Math.Max(CellWidth, (toColumn - fromColumn + 1) * CellWidth), CellHeight);
 
     private static bool TryRowSegment((TerminalCellPosition Start, TerminalCellPosition End) range, int row, int lineLength, out int from, out int to)
@@ -166,6 +242,16 @@ public sealed class TerminalScreenControl : Control
         var last = Math.Max(0, lineLength - 1);
         from = Math.Clamp(row == start.Row ? start.Column : 0, 0, last);
         to = Math.Clamp(row == end.Row ? end.Column : last, from, last);
+        return true;
+    }
+
+    /// <summary>Select the whole snapshot (screen + scrollback) for “全选”.</summary>
+    public bool SelectAll()
+    {
+        if (Session is not { } tab || _snapshot is null) return false;
+        if (!tab.OutputSelection.SelectAll(_snapshot)) return false;
+        SelectionChanged?.Invoke(this, EventArgs.Empty);
+        InvalidateVisual();
         return true;
     }
 
@@ -229,6 +315,22 @@ public sealed class TerminalScreenControl : Control
         if (Session is not { } tab || _snapshot is null) return;
         var point = e.GetCurrentPoint(this);
         if (!point.Properties.IsLeftButtonPressed) return;
+        // Double/triple click select a word/row; dragging afterwards extends the same selection.
+        if (e.ClickCount >= 2 && CellAt(point.Position) is { } clicked)
+        {
+            if (e.ClickCount >= 3) tab.OutputSelection.SelectRow(_snapshot, clicked.Row);
+            else tab.OutputSelection.SelectWord(_snapshot, clicked);
+            e.Pointer.Capture(this);
+            SelectionChanged?.Invoke(this, EventArgs.Empty);
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+        if (LinkAt(point.Position) is { Length: > 0 } link)
+        {
+            // Ctrl+Click opens an OSC 8 hyperlink; a plain click keeps selecting text.
+            if (e.KeyModifiers.HasFlag(KeyModifiers.Control)) { LinkActivated?.Invoke(this, link); e.Handled = true; return; }
+        }
         if (CellAt(point.Position) is not { } cell) return;
         tab.OutputSelection.Begin(_snapshot, cell);
         e.Pointer.Capture(this);
@@ -238,13 +340,28 @@ public sealed class TerminalScreenControl : Control
 
     private void OnPointerMoved(object? sender, PointerEventArgs e)
     {
+        var position = e.GetCurrentPoint(this).Position;
+        UpdateHoverLink(position);
         // Capture is only taken by a left-button press, so a captured move is always a drag.
         if (!ReferenceEquals(e.Pointer.Captured, this) || Session is not { } tab || _snapshot is null) return;
-        if (CellAt(e.GetCurrentPoint(this).Position) is not { } cell) return;
+        if (CellAt(position) is not { } cell) return;
         if (!tab.OutputSelection.Extend(_snapshot, cell)) return;
         SelectionChanged?.Invoke(this, EventArgs.Empty);
         InvalidateVisual();
     }
+
+    /// <summary>Track the OSC 8 hyperlink under the pointer; the renderer highlights it.</summary>
+    private void UpdateHoverLink(Point position)
+    {
+        var link = CellAt(position) is { } cell && _snapshot is not null ? _snapshot.Lines[cell.Row][cell.Column].Link : null;
+        if (Session is not { } tab || string.Equals(tab.HoveredLink, link, StringComparison.Ordinal)) return;
+        tab.HoveredLink = link;
+        InvalidateVisual();
+    }
+
+    /// <summary>The OSC 8 link at a position, or null when the cell has none.</summary>
+    public string? LinkAt(Point position) =>
+        CellAt(position) is { } cell && _snapshot is not null ? _snapshot.Lines[cell.Row][cell.Column].Link : null;
 
     private void OnPointerReleased(object? sender, PointerReleasedEventArgs e)
     {

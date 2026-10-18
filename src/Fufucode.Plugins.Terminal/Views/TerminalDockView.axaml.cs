@@ -29,11 +29,26 @@ public partial class TerminalDockView : UserControl
     private bool _confirmingClose;
     internal Func<TerminalTabViewModel, Task<bool>>? ConfirmCloseForTesting { get; set; }
 
+    /// <summary>Ctrl+Click on an OSC 8 hyperlink; the host decides whether to open it.</summary>
+    public event Action<string>? LinkActivated;
+
     /// <summary>输入法组合预览状态；组合未提交时输入条显示临时文本。</summary>
     internal TerminalCompositionState Composition => _composition;
 
     /// <summary>宿主用于“复制或中断”快捷键判断命令框是否持有文本选区。</summary>
     internal TextBox CommandInputControl => TerminalInput;
+
+    /// <summary>应用插件设置中的显示项（字号、闪烁光标、响铃）。</summary>
+    public void ApplyDisplaySettings(TerminalSettings settings)
+    {
+        TerminalSurface.FontSizeDip = settings.FontSize;
+        TerminalSurface.BlinkCursor = settings.BlinkCursor;
+        _bellVisual = settings.Bell == "visual";
+        TerminalSurface.InvalidateMeasure();
+        TerminalSurface.InvalidateVisual();
+    }
+
+    private bool _bellVisual = true;
 
     internal Func<string, KeyEventArgs, bool>? ShortcutMatches
     {
@@ -53,6 +68,12 @@ public partial class TerminalDockView : UserControl
         if (TerminalInput.IsFocused) { _dock?.SelectedTab?.Interrupt(); return Task.CompletedTask; }
         if (TerminalSurface.HasSelection) return TerminalSurface.CopySelectionAsync();
         _dock?.SelectedTab?.Interrupt(); return Task.CompletedTask;
+    }
+
+    private void RestartTerminal_Click(object? sender, RoutedEventArgs e)
+    {
+        _dock?.SelectedTab?.RestartSessionCommand.Execute(null);
+        TerminalSurface.FocusForInput();
     }
 
     private async void CloseTerminal_Click(object? sender, RoutedEventArgs e) => await CloseSelectedAsync();
@@ -105,8 +126,10 @@ public partial class TerminalDockView : UserControl
         TerminalSurface.FindRequested += (_, _) => OpenFind();
         TerminalSurface.FindDismissRequested += (_, _) => CloseFind();
         TerminalSurface.PasteCompleted += (_, _) => TerminalInput.Focus();
+        TerminalSurface.LinkActivated += (_, uri) => LinkActivated?.Invoke(uri);
         _composition.Changed += UpdateCompositionPreview;
-        TerminalContextMenu.Opening += (_, _) => SyncContextMenuState();
+        TerminalContextMenu.Opening += OnContextMenuOpening;
+        TerminalSurface.PointerPressed += (_, e) => _surfacePointer = e.GetPosition(TerminalSurface);
         Loaded += (_, _) => { HookPreedit(); ResizeTerminal(); };
         SizeChanged += (_, _) => ResizeTerminal();
         OutputScroller.SizeChanged += (_, _) => ResizeTerminal();
@@ -197,7 +220,7 @@ public partial class TerminalDockView : UserControl
     private void ResizeTerminal()
     {
         if (_dock?.IsVisible != true || Bounds.Width < 100 || Bounds.Height < 100) return;
-        _dock.SelectedTab?.Resize((int)Math.Max(10, OutputScroller.Viewport.Width / TerminalScreenControl.CellWidth), (int)Math.Max(3, OutputScroller.Viewport.Height / TerminalScreenControl.CellHeight));
+        _dock.SelectedTab?.Resize((int)Math.Max(10, OutputScroller.Viewport.Width / TerminalSurface.CellWidth), (int)Math.Max(3, OutputScroller.Viewport.Height / TerminalSurface.CellHeight));
     }
     private void HookPreedit()
     {
@@ -249,8 +272,30 @@ public partial class TerminalDockView : UserControl
         CompositionPreviewText.Text = _composition.IsComposing ? "组合中：" + _composition.PreviewText : string.Empty;
     }
 
-    /// <summary>右键菜单开启时同步“复制”的可用性（无选区时不可用）。</summary>
-    internal void SyncContextMenuState() => ContextCopyItem.IsEnabled = TerminalSurface.HasSelection;
+    /// <summary>右键菜单开启时同步各项可用性：无选区不可复制，链接菜单只在链节上出现。</summary>
+    internal void SyncContextMenuState()
+    {
+        ContextCopyItem.IsEnabled = TerminalSurface.HasSelection;
+        ContextOpenLinkItem.IsVisible = _contextLink is { Length: > 0 };
+    }
+
+    private string? _contextLink;
+
+    /// <summary>记录右键位置上的 OSC 8 链接：菜单打开时按输出面自己的坐标解析。</summary>
+    private void OnContextMenuOpening(object? sender, CancelEventArgs e)
+    {
+        _contextLink = TerminalSurface.LinkAt(_surfacePointer);
+        SyncContextMenuState();
+    }
+
+    private Point _surfacePointer;
+
+    private void ContextSelectAll_Click(object? sender, RoutedEventArgs e) => TerminalSurface.SelectAll();
+
+    private void ContextOpenLink_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_contextLink is { Length: > 0 } link) LinkActivated?.Invoke(link);
+    }
 
     private void ContextCopy_Click(object? sender, RoutedEventArgs e) => _ = TerminalSurface.CopySelectionAsync();
 
@@ -379,7 +424,7 @@ public partial class TerminalDockView : UserControl
     /// <summary>Scroll a fixed-cell row into view; programmatic scrolling never re-enables follow output.</summary>
     internal void ScrollToRow(int row)
     {
-        var centered = 8 + row * TerminalScreenControl.CellHeight - Math.Max(0, (OutputScroller.Viewport.Height - TerminalScreenControl.CellHeight) / 2);
+        var centered = 8 + row * TerminalSurface.CellHeight - Math.Max(0, (OutputScroller.Viewport.Height - TerminalSurface.CellHeight) / 2);
         var max = Math.Max(0, OutputScroller.Extent.Height - OutputScroller.Viewport.Height);
         OutputScroller.Offset = new Vector(0, Math.Clamp(centered, 0, max));
         if (_tab is not null) _tab.ScrollOffsetY = OutputScroller.Offset.Y;

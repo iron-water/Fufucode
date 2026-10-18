@@ -456,7 +456,7 @@ public static class TerminalSelfTest
             await Task.Delay(60);
             var snapshot = tab.Snapshot;
             var targetRow = FindRow(snapshot, "drag-target");
-            check("terminal-drag-target-visible", targetRow >= 0 && TerminalScreenControl.OriginY + targetRow * TerminalScreenControl.CellHeight < surface.Bounds.Height);
+            check("terminal-drag-target-visible", targetRow >= 0 && TerminalScreenControl.OriginY + targetRow * surface.CellHeight < surface.Bounds.Height);
 
             // Mouse drag over the real surface selects the frozen row and enables the copy entry.
             var rowStart = ToWindow(surface, window, targetRow, 0);
@@ -733,8 +733,8 @@ public static class TerminalSelfTest
     {
         var x = column == int.MaxValue
             ? Math.Max(TerminalScreenControl.OriginX, surface.Bounds.Width - 2)
-            : TerminalScreenControl.OriginX + column * TerminalScreenControl.CellWidth + 2;
-        var y = TerminalScreenControl.OriginY + row * TerminalScreenControl.CellHeight + 8;
+            : TerminalScreenControl.OriginX + column * surface.CellWidth + 2;
+        var y = TerminalScreenControl.OriginY + row * surface.CellHeight + 8;
         return surface.TranslatePoint(new Point(x, y), window) ?? new Point(x, y);
     }
 
