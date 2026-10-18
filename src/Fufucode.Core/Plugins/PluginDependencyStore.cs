@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 
 namespace Fufucode.Core.Plugins;
 
@@ -27,6 +28,12 @@ public sealed class SharedDependenciesManifest
 /// <summary>按包、版本和文件分别跟踪共享依赖；同进程的多个市场实例共用写锁。</summary>
 public sealed class PluginDependencyStore
 {
+    /// <summary>
+    /// 同进程多实例共用的写锁表。正常情况下条目数等于不同插件目录的数量（很少），
+    /// 但测试/频繁切换根目录时会累积。设上限，超出时只淘汰当前无人持有的锁；
+    /// 已被淘汰目录上的单实例操作仍由它持有的锁对象串行化（只影响跨实例互斥）。
+    /// </summary>
+    private const int MaxGates = 256;
     private static readonly ConcurrentDictionary<string, object> Gates = new(StringComparer.OrdinalIgnoreCase);
     private readonly string _sharedPoolDir;
     private readonly string _manifestPath;
@@ -37,9 +44,31 @@ public sealed class PluginDependencyStore
         ArgumentException.ThrowIfNullOrWhiteSpace(pluginsDirectory);
         _sharedPoolDir = PluginPathGuard.Within(pluginsDirectory, ".shared-packages");
         _manifestPath = Path.Combine(_sharedPoolDir, "dependencies.json");
-        _gate = Gates.GetOrAdd(_sharedPoolDir, _ => new object());
+        _gate = GetGate(_sharedPoolDir);
     }
     public string SharedPoolDirectory => _sharedPoolDir;
+
+    private static object GetGate(string key)
+    {
+        var gate = Gates.GetOrAdd(key, _ => new object());
+        if (Gates.Count > MaxGates) TrimGates(key);
+        return gate;
+    }
+
+    private static void TrimGates(string keepKey)
+    {
+        foreach (var item in Gates)
+        {
+            if (Gates.Count <= MaxGates) break;
+            if (string.Equals(item.Key, keepKey, StringComparison.OrdinalIgnoreCase)) continue;
+            // 仅淘汰未被持有的锁；TryRemove 以值匹配，避免误删并发替换的新锁。
+            if (Monitor.TryEnter(item.Value))
+            {
+                try { Gates.TryRemove(new KeyValuePair<string, object>(item.Key, item.Value)); }
+                finally { Monitor.Exit(item.Value); }
+            }
+        }
+    }
 
     private static string FileName(PluginDependencyDeclaration dep)
     {
