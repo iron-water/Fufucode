@@ -14,10 +14,11 @@ public static class MessageBlockMapper
         var index = 0;
         foreach (var message in messages)
         {
+            // 先确定 id 再构造，避免用 with 复制整棵消息树（块数组）。
             var mapped = MapMessage(message, currentModel, $"history-{index + 1}");
             if (mapped is null) continue;
             index++;
-            result.Add(mapped with { Id = $"history-{index}" });
+            result.Add(mapped);
         }
 
         return result;
