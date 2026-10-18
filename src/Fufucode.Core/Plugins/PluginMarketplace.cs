@@ -135,6 +135,12 @@ public static class PluginMarketplaceCatalog
             SystemPromptFragment = SeepReverseLabAssets.SystemPromptFragment,
         },
 
+        // ── 工作区页面插件（默认未安装，按需从市场安装） ──
+        new("workspace.terminal", "交互终端", PluginCategory.ToolExtension,
+            "项目级交互式终端：ConPTY 原生 shell、备用屏与全屏 TUI、滚动区域、查找、选中复制、IME 与命令历史。",
+            "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         // ── 后台服务插件 ──
         new("service.remote-control", "手机远程控制服务", PluginCategory.Service,
             "提供局域网配对与远程会话管理服务，支持 WorkBuddy 手机客户端通过动态配对码连接操控桌面 Agent。",

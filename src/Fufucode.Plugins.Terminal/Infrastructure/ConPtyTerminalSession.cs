@@ -8,7 +8,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 using Microsoft.Win32.SafeHandles;
 
-namespace Fufucode.App.Infrastructure;
+namespace Fufucode.Plugins.Terminal.Infrastructure;
 
 public interface ITerminalSession : IDisposable
 {

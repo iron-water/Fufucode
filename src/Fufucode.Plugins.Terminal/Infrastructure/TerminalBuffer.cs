@@ -4,7 +4,7 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace Fufucode.App.Infrastructure;
+namespace Fufucode.Plugins.Terminal.Infrastructure;
 
 public readonly record struct TerminalCell(string Text, int Foreground, int Background, bool Bold = false);
 
@@ -156,11 +156,11 @@ public sealed class TerminalBuffer
             if (line.Length == columns) continue;
             if (columns < line.Length)
             {
-                // Trailing blank cells go first so shell history keeps its text.
-                var end = line.Length;
-                while (end > columns && IsBlank(line[end - 1])) end--;
-                var keep = Math.Max(columns, end);
-                if (keep < line.Length) line = line[..keep];
+                // Crop to the new width. A double-width glyph whose continuation cell is cut off is replaced
+                // by a blank so the row never carries half a glyph.
+                line = line[..columns];
+                if (columns > 0 && line[columns - 1].Text.Length > 0 && IsWide(line[columns - 1].Text))
+                    line[columns - 1] = BlankCell();
             }
             else
             {

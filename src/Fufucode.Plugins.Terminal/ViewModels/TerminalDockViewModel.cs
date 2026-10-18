@@ -4,10 +4,11 @@ using System.IO;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Fufucode.App.Features.TerminalExperience;
-using Fufucode.App.Infrastructure;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.App.ViewModels;
+using Fufucode.Plugins.Terminal.Infrastructure;
 
-namespace Fufucode.App.ViewModels;
+namespace Fufucode.Plugins.Terminal.ViewModels;
 
 /// <summary>Static project-owned terminal container for H-S09; agent tool jobs have no ownership claim here.</summary>
 public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable

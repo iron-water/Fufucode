@@ -1,4 +1,4 @@
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>终端本地控制序列：只作用于本机输出缓冲区，不写回 shell。</summary>
 public static class TerminalControlSequences

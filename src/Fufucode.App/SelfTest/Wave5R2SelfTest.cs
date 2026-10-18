@@ -74,18 +74,17 @@ public static class Wave5R2SelfTest
             vm.SetRightPanelOpen(false); vm.SetRightPanelOpen(true);
             Check(ReferenceEquals(chosenTab, vm.WorkspacePanel.SelectedTab) && vm.Input.DraftText == "保留中文草稿", "收起重开保tab与草稿");
 
-            window.OpenDockPage("terminal", DockZone.Bottom); window.TerminalForTesting.CreateTerminal();
+            window.OpenDockPage("usage", DockZone.Bottom);
             await Task.Delay(180); window.UpdateLayout();
-            var dock = window.TerminalForTesting;
-            var original = dock.SelectedTab; var output = original!.Buffer.PlainText;
+            var usagePage = window.PageForTesting("usage");
             var terminalBounds = window.FindControl<Border>("TerminalBorder")!.Bounds;
-            Check(dock.Tabs.Count == 2 && terminalBounds.Height == window.DockLayoutForTesting.BottomHeight && terminalBounds.Height <= window.FindControl<Grid>("WorkspaceShell")!.Bounds.Height - 360,
-                $"底栏双实例与高度限幅 actual={terminalBounds.Height} preferred={window.DockLayoutForTesting.BottomHeight} shell={window.FindControl<Grid>("WorkspaceShell")!.Bounds.Height}");
+            Check(terminalBounds.Height == window.DockLayoutForTesting.BottomHeight && terminalBounds.Height <= window.FindControl<Grid>("WorkspaceShell")!.Bounds.Height - 360,
+                $"底栏高度限幅 actual={terminalBounds.Height} preferred={window.DockLayoutForTesting.BottomHeight} shell={window.FindControl<Grid>("WorkspaceShell")!.Bounds.Height}");
             Save("bottom-open.png");
-            dock.Hide(); dock.Show();
-            await Task.Delay(80);
-            Check(ReferenceEquals(original, dock.SelectedTab) && output == original.Buffer.PlainText && original.IsRunning,
-                "底栏隐藏重开同尺寸保实例与输出");
+            window.CloseDockPageForTesting("usage"); await Task.Delay(80);
+            window.OpenDockPage("usage", DockZone.Bottom); await Task.Delay(80);
+            Check(ReferenceEquals(usagePage, window.PageForTesting("usage")),
+                "底栏关闭重开保持同一页面实例");
 
             foreach (var width in new[] { 1200d, 800d, 1600d })
             {
@@ -97,10 +96,7 @@ public static class Wave5R2SelfTest
                 if (width == 800) Check(!window.FindControl<Border>("SidebarBorder")!.IsVisible, "800DIP自动收会话栏且不缩字号");
                 Save("layout-" + width + ".png");
             }
-            var closeTarget = dock.Tabs[0]; dock.CloseTerminal(closeTarget);
-            Check(!closeTarget.IsRunning && original.IsRunning, "关闭仅结束目标终端");
             window.Close(); await Task.Delay(80);
-            Check(!original.IsRunning, "关闭窗口释放终端生命周期");
         }
         finally { window.Close(); Program.SelfTestDataRoot = previousRoot; }
 

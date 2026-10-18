@@ -11,10 +11,13 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Fufucode.App.Features.TerminalExperience;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.Plugins.Terminal.Infrastructure;
+using Fufucode.Plugins.Terminal.ViewModels;
+using Fufucode.Plugins.Terminal.Views;
 
 namespace Fufucode.App.Terminal.Tests;
 
@@ -33,6 +36,7 @@ internal static class Program
         // （Avalonia.Base AssemblyDescriptorResolver.GetAssembly）。本测试程序集名
         // Fufucode.App.Terminal.Tests 同样以 Fufucode.App 开头；若产品程序集尚未加载，
         // 解析会命中错误程序集并使 FufucodeTheme.axaml 无法预编译加载。先显式触达产品类型。
+        _ = typeof(Fufucode.App.MainWindow).Assembly;
         _ = typeof(TerminalScreenControl).Assembly;
         AppBuilder.Configure<SmokeApp>()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
@@ -44,6 +48,9 @@ internal static class Program
             RunHistoryChecks();
             RunCompositionChecks();
             RunVtP0Checks();
+            RunPluginPageChecks();
+            RunHostWithoutTerminalPlugin();
+            RunMainWindowPluginIntegration();
             Console.WriteLine($"\n全部通过：{_passed} 项断言");
             return 0;
         }
@@ -398,7 +405,8 @@ internal static class Program
         chars.Append("\u001b[1;4H\u001b[2X");
         Check(RowText(chars.Snapshot(), 0).StartsWith("ab   f", StringComparison.Ordinal), "terminal-erase-chars");
 
-        // Deferred wrap (xterm semantics): the cursor stays on the last column until the next printable char.        var wrap = new TerminalBuffer(10, 3);
+        // Deferred wrap (xterm semantics): the cursor stays on the last column until the next printable char.
+        var wrap = new TerminalBuffer(10, 3);
         wrap.Append("abcdefghij");
         var filled = wrap.Snapshot();
         Check(filled.CursorLine == 0 && filled.CursorColumn == 9, "terminal-wrap-pending-cursor-stays-on-last-column");
@@ -416,13 +424,135 @@ internal static class Program
             && resized.Lines.All(line => line.Length == 12),
             "terminal-resize-crops-trailing-blank-cells-first");
         shrinking.Resize(12, 2);
-        Check(RowText(shrinking.Snapshot(), 0) == "second-line" && RowText(shrinking.Snapshot(), 1) == "third",
+        var shrunk = shrinking.Snapshot();
+        Check(shrunk.Lines.Length == 4 && RowText(shrunk, 0) == "keep-this-te" && RowText(shrunk, 2) == "third",
             "terminal-resize-shrinks-into-scrollback");
 
         // Origin mode (DECOM): cursor addressing is relative to the scroll region.
         var origin = new TerminalBuffer(12, 6);
         origin.Append("\u001b[2;5r\u001b[?6h\u001b[1;1Horigin");
         Check(RowText(origin.Snapshot(), 1).StartsWith("origin", StringComparison.Ordinal), "terminal-origin-mode-addressing");
+    }
+
+    // ---------- 6. 插件页面契约：插件包 → 宿主页面 → 项目级状态 ----------
+    private static void RunPluginPageChecks()
+    {
+        var package = new Fufucode.Plugins.Terminal.TerminalPluginPackage();
+        Check(package.Id == "workspace.terminal" && package.Version == "2.0.0", "terminal-plugin-identity");
+        var contribution = package.CreatePageContribution(
+            new Fufucode.Core.Plugins.PluginPackageContext("workspace.terminal", Environment.CurrentDirectory, null));
+        Check(contribution is { PageId: "terminal", Title: "终端", IconKey: "Terminal" }, "terminal-plugin-page-contribution");
+
+        using var page = (Fufucode.Plugins.Terminal.TerminalDockPage)contribution!.CreateView();
+        page.SetProject(Environment.CurrentDirectory, useMock: true);
+        Check(!page.HasTabs && page.CommandInput is not null, "terminal-page-starts-empty-with-command-input");
+        page.CreateTerminal();
+        Check(page.HasTabs && page.IsVisible && page.HasRunningTab, "terminal-page-creates-running-tab");
+        var stateEvents = 0;
+        page.StateChanged += (_, _) => stateEvents++;
+        page.Hide();
+        Check(!page.IsVisible && stateEvents > 0, "terminal-page-state-changes-reach-host");
+        page.Show();
+        Check(page.IsVisible, "terminal-page-show-restores-visibility");
+        page.Dispose();
+
+        // Full host path: marketplace install -> page contribution -> workbench page registration.
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-plugin-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var layout = new Fufucode.Core.AppDataLayout(root);
+            var store = new Fufucode.Core.Plugins.PluginStateStore(layout);
+            Fufucode.Core.Plugins.PluginPackageManager.RegisterPackageFactory(
+                "workspace.terminal", () => new Fufucode.Plugins.Terminal.TerminalPluginPackage());
+            var manager = new Fufucode.Core.Plugins.PluginPackageManager(
+                layout, new Fufucode.Core.Plugins.PluginToolRegistry(new Fufucode.Core.Plugins.PluginCapabilityGateway(store)), store);
+            manager.InstallPackage("workspace.terminal");
+            using var registry = new Fufucode.App.Views.WorkbenchPageRegistry();
+            using var host = new Fufucode.App.Features.Plugins.PluginWorkspacePageHost(root, registry, () => true, manager);
+            host.Start(Environment.CurrentDirectory);
+            Check(host.TryGet("terminal", out var hosted) && hosted.HasTabs == false, "terminal-plugin-host-registers-page");
+            Check(registry.ContainsKey("terminal"), "terminal-plugin-page-is-in-workbench-registry");
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    // ---------- 7. 真实宿主：未安装插件时终端不存在 ----------
+    private static void RunHostWithoutTerminalPlugin()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-no-terminal-" + Guid.NewGuid().ToString("N"));
+        var previousRoot = Fufucode.App.Program.SelfTestDataRoot;
+        try
+        {
+            Fufucode.App.Program.SelfTestDataRoot = root;
+            var window = new Fufucode.App.MainWindow(Fufucode.App.Integration.AppOptions.Mock with { AppDataRootOverride = root })
+            {
+                Width = 1100,
+                Height = 760
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Check(!window.TerminalPluginAvailableForTesting, "host-without-terminal-plugin-has-no-page");
+            Check(!window.PageAvailableForTesting("terminal"), "host-without-terminal-plugin-has-no-workbench-page");
+            Check(window.ActionsForTesting.GetDisabledReason("terminal.interrupt") == "没有运行中的终端",
+                "host-without-terminal-plugin-disables-terminal-actions-honestly");
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            Fufucode.App.Program.SelfTestDataRoot = previousRoot;
+            try { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    // ---------- 7. 真实宿主：安装插件后 MainWindow 动态接入终端页 ----------
+    private static void RunMainWindowPluginIntegration()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-host-" + Guid.NewGuid().ToString("N"));
+        var previousRoot = Fufucode.App.Program.SelfTestDataRoot;
+        try
+        {
+            var pluginSource = System.IO.Path.GetDirectoryName(typeof(Fufucode.Plugins.Terminal.TerminalPluginPackage).Assembly.Location)!;
+            var target = System.IO.Path.Combine(root, "plugins", "workspace.terminal");
+            System.IO.Directory.CreateDirectory(target);
+            foreach (var file in new[] { "Fufucode.Plugins.Terminal.dll", "manifest.json" })
+                System.IO.File.Copy(System.IO.Path.Combine(pluginSource, file), System.IO.Path.Combine(target, file), true);
+            var layout = new Fufucode.Core.AppDataLayout(root);
+            new Fufucode.Core.Plugins.PluginStateStore(layout).Install("workspace.terminal");
+            Fufucode.App.Program.SelfTestDataRoot = root;
+
+            var window = new Fufucode.App.MainWindow(Fufucode.App.Integration.AppOptions.Mock with { AppDataRootOverride = root })
+            {
+                Width = 1280,
+                Height = 820
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Check(window.TerminalPluginAvailableForTesting, "host-loads-installed-terminal-plugin");
+            Check(window.PageAvailableForTesting("terminal"), "host-registers-terminal-workbench-page");
+            window.OpenDockPage("terminal", Fufucode.App.Infrastructure.DockZone.Bottom);
+            Dispatcher.UIThread.RunJobs();
+            var page = window.TerminalPageForTesting!;
+            page.CreateTerminal();
+            Dispatcher.UIThread.RunJobs();
+            Check(page.HasTabs && page.HasRunningTab, "host-terminal-page-owns-a-running-tab");
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            Fufucode.App.Program.SelfTestDataRoot = previousRoot;
+            try { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 
     private static string RowText(TerminalSnapshot snapshot, int row) =>

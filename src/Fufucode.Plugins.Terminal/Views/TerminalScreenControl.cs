@@ -9,11 +9,11 @@ using Avalonia.Input.Platform;
 using Avalonia.Media;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.VisualTree;
-using Fufucode.App.Features.TerminalExperience;
-using Fufucode.App.Infrastructure;
-using Fufucode.App.ViewModels;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.Plugins.Terminal.Infrastructure;
+using Fufucode.Plugins.Terminal.ViewModels;
 
-namespace Fufucode.App.Views;
+namespace Fufucode.Plugins.Terminal.Views;
 
 /// <summary>Native fixed-cell terminal surface. It renders the PTY's interpreted screen and bounded scrollback.</summary>
 public sealed class TerminalScreenControl : Control
