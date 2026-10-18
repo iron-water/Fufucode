@@ -71,8 +71,11 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
     [RelayCommand] public void CreateTerminal()
     {
         if (_disposed) return;
+        // Set visibility before the tab selection event: the host reacts to SelectedTab and must see
+        // the page as visible, otherwise it would close the dock page it is currently opening.
+        IsVisible = true;
         var tab = new TerminalTabViewModel(++_nextNumber, _useMock, _factory(), _settings);
-        Tabs.Add(tab); SelectedTab = tab; IsVisible = true;
+        Tabs.Add(tab); SelectedTab = tab;
         OnPropertyChanged(nameof(HasTabs));
         tab.Start(WorkspacePath);
     }
@@ -102,7 +105,7 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
     public TerminalTabViewModel(int number, bool isMock, ITerminalSession session, TerminalSettings? settings = null)
     {
         TerminalSessionId = Guid.NewGuid().ToString("N");
-        Title = $"终端 {number}";
+        _title = $"终端 {number}";
         IsMock = isMock;
         _session = session;
         Settings = (settings ?? TerminalSettings.Default).Normalize();
@@ -121,7 +124,8 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
     private void OnBell() { if (Settings.Bell != "none") Dispatch(() => BellRequested?.Invoke()); }
 
     public string TerminalSessionId { get; }
-    public string Title { get; }
+    /// <summary>User-visible tab title; starts as “终端 N” and can be renamed in place.</summary>
+    [ObservableProperty] private string _title = "终端";
     public bool IsMock { get; }
     /// <summary>True once this tab has been closed; pending asynchronous work must not touch it.</summary>
     public bool IsDisposed => _disposed;
