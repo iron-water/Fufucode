@@ -15,6 +15,8 @@ public interface ITerminalSession : IDisposable
     event Action<string>? Output;
     event Action<int?, string?>? Exited;
     bool IsRunning { get; }
+    /// <summary>命令行/配置错误（例如所选 shell 不存在）；空表示默认 shell 可用。</summary>
+    string? StartError => null;
     void Start(string workingDirectory, int columns, int rows);
     void Write(string text);
     void Resize(int columns, int rows);
@@ -31,9 +33,19 @@ public sealed class ConPtyTerminalSession : ITerminalSession
     private IntPtr _pseudoConsole;
     private bool _disposed;
     private int _running;
+    private string? _commandLine;
     public event Action<string>? Output;
     public event Action<int?, string?>? Exited;
     public bool IsRunning => Volatile.Read(ref _running) == 1;
+    public string? StartError => null;
+
+    public ConPtyTerminalSession() { }
+
+    /// <summary>以显式命令行启动（设置里选择的 shell）；为空时使用 cmd.exe。</summary>
+    public ConPtyTerminalSession(string? commandLine)
+    {
+        _commandLine = string.IsNullOrWhiteSpace(commandLine) ? null : commandLine.Trim();
+    }
 
     public void Start(string workingDirectory, int columns, int rows)
     {
@@ -61,7 +73,7 @@ public sealed class ConPtyTerminalSession : ITerminalSession
             // parent pipes from bypassing the pseudoconsole (also used by Windows Terminal).
             startup.StartupInfo.Flags = 0x00000100;
             startup.AttributeList = attributes;
-            var command = new StringBuilder($"\"{Path.Combine(Environment.SystemDirectory, "cmd.exe")}\" /Q /K chcp 65001");
+            var command = new StringBuilder(_commandLine ?? $"\"{Path.Combine(Environment.SystemDirectory, "cmd.exe")}\" /Q /K chcp 65001 >nul");
             Check(CreateProcess(null, command, IntPtr.Zero, IntPtr.Zero, false, 0x00080000 | 0x00000004, IntPtr.Zero, workingDirectory, ref startup, out var processInfo));
             _process = new SafeFileHandle(processInfo.Process, true);
             using var thread = new SafeFileHandle(processInfo.Thread, true);
@@ -225,4 +237,22 @@ public sealed class TerminalMockSession : ITerminalSession
     public void Write(string text) { if (IsRunning) Output?.Invoke(text + "\r\n\u001b[33m这是演示输入，未执行命令。\u001b[0m\r\n> "); }
     public void Resize(int columns, int rows) { }
     public void Dispose() { if (!IsRunning) return; IsRunning = false; Exited?.Invoke(0, null); }
+}
+
+/// <summary>
+/// 配置的 shell 不可用时的会话替身：不启动进程，启动时把原因写进终端，
+/// 让“所选 shell 未安装”成为看得见的事实，而不是静默换成别的 shell。
+/// </summary>
+public sealed class UnavailableSession(string reason) : ITerminalSession
+{
+#pragma warning disable CS0067 // Never started, so neither event can fire.
+    public event Action<string>? Output;
+    public event Action<int?, string?>? Exited;
+#pragma warning restore CS0067
+    public bool IsRunning => false;
+    public string? StartError => reason;
+    public void Start(string workingDirectory, int columns, int rows) { }
+    public void Write(string text) { }
+    public void Resize(int columns, int rows) { }
+    public void Dispose() { }
 }
