@@ -160,7 +160,9 @@ $backendPlugins = @(
     @{ Id = 'backend.omp'; Project = 'src/Fufucode.Plugins.Omp/Fufucode.Plugins.Omp.csproj' },
     @{ Id = 'backend.claude'; Project = 'src/Fufucode.Plugins.Claude/Fufucode.Plugins.Claude.csproj' },
     @{ Id = 'backend.codex'; Project = 'src/Fufucode.Plugins.Codex/Fufucode.Plugins.Codex.csproj' },
-    @{ Id = 'backend.dsh'; Project = 'src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj' }
+    @{ Id = 'backend.dsh'; Project = 'src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj' },
+    # 工作区页面插件：终端已按 2026-10-18 用户指令拆为可选插件。
+    @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' }
 )
 foreach ($p in $backendPlugins) {
     $proj = Join-Path $root $p.Project

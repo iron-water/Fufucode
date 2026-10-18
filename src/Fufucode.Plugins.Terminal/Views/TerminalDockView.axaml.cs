@@ -323,7 +323,7 @@ public partial class TerminalDockView : UserControl
     {
         switch (_tab?.Settings.Bell)
         {
-            case "beep": Console.Beep(880, 90); break;
+            case "beep": if (OperatingSystem.IsWindows()) Console.Beep(880, 90); break;
             case "none": break;
             default: TerminalSurface.FlashBell(); break; // “visual”
         }
