@@ -133,11 +133,6 @@ fun PairScreen(
                 style = MobileTypography.Title,
                 color = MobileColors.Ink,
             )
-            Text(
-                text = "在手机上继续电脑端的任务",
-                style = MobileTypography.BodySmall,
-                color = MobileColors.Muted,
-            )
         }
 
         if (notice != null) {
@@ -178,7 +173,7 @@ fun PairScreen(
                     }
                     BasicTextField(
                         value = hostInput,
-                        onValueChange = { hostInput = it },
+                        onValueChange = { hostInput = it; validation = null },
                         singleLine = true,
                         textStyle = MobileTypography.Body.copy(color = MobileColors.Ink),
                         cursorBrush = SolidColor(MobileColors.Accent),
@@ -199,7 +194,7 @@ fun PairScreen(
                         color = MobileColors.Ink,
                         modifier = Modifier.weight(1f),
                     )
-                    StatusPill(
+                    if (linkState != LinkState.Idle) StatusPill(
                         text = when (linkState) {
                             LinkState.Online -> "已连接"
                             LinkState.Connecting -> "连接中"
@@ -215,7 +210,7 @@ fun PairScreen(
                         },
                     )
                 }
-                PinBoxes(value = pin, onChange = { pin = it })
+                PinBoxes(value = pin, onChange = { pin = it; validation = null }, focusRequester = pinFocus)
 
                 if (validation != null) {
                     Text(text = validation!!, style = MobileTypography.Caption, color = MobileColors.Danger)
@@ -262,14 +257,14 @@ fun PairScreen(
                         onClick = { if (discovery.scanning) onStopScan() else onScan() },
                     )
                 }
-                if (discovery.scanning) Text(
+                if (discovery.scanning && helpOpen) Text(
                     text = discoveryScopeText(discovery), style = MobileTypography.Caption, color = MobileColors.Muted)
                 if (discovery.scanning) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         RadarIndicator(size = 18.dp, active = true)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            text = "已扫描 ${discovery.scannedHosts}/${discovery.totalHosts} 台主机",
+                            text = "${discovery.scannedHosts} / ${discovery.totalHosts}",
                             style = MobileTypography.Caption,
                             color = MobileColors.Muted,
                         )
@@ -280,13 +275,6 @@ fun PairScreen(
                         text = discovery.finishedReason!!,
                         style = MobileTypography.BodySmall,
                         color = MobileColors.Warning,
-                    )
-                }
-                if (discovery.found.isEmpty() && !discovery.scanning && discovery.finishedReason == null) {
-                    Text(
-                        text = "查找同一 Wi-Fi 下的电脑",
-                        style = MobileTypography.BodySmall,
-                        color = MobileColors.Muted,
                     )
                 }
                 discovery.found.forEach { url ->
@@ -321,12 +309,7 @@ fun PairScreen(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "连接帮助",
-                        style = MobileTypography.SectionTitle,
-                        color = MobileColors.Ink,
-                    )
-                    Text(
-                        text = "在电脑端开启手机远控，填写显示的地址和四位配对码。两台设备需要处于同一局域网。暂不支持扫码；模拟器连接本机可用 10.0.2.2。",
+                        text = "① 电脑端开启「手机远控」\n② 连接同一 Wi-Fi\n③ 输入电脑显示的地址和配对码",
                         style = MobileTypography.Caption,
                         color = MobileColors.Muted,
                     )
@@ -362,8 +345,7 @@ private fun discoveryScopeText(discovery: DiscoveryState): String = when {
  * 点一下方格即弹起数字键盘，整体更少一次操作。
  */
 @Composable
-private fun PinBoxes(value: String, onChange: (String) -> Unit) {
-    val focusRequester = remember { FocusRequester() }
+private fun PinBoxes(value: String, onChange: (String) -> Unit, focusRequester: FocusRequester) {
     var focused by remember { mutableStateOf(false) }
 
     Box(
