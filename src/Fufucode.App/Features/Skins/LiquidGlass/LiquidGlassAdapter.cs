@@ -172,7 +172,9 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
 
         private Avalonia.Threading.DispatcherTimer? _luminanceTimer;
 
-        /// <summary>启动 AdaptiveLuminance 采样：首帧后立即一次，之后每 250ms 跟 snapshot 同步。</summary>
+        /// <summary>启动 AdaptiveLuminance 采样：首帧后立即一次，之后每 250ms 跟 snapshot 同步。
+        /// 宿主不可见（隐藏/最小化/未入树）时 tick 直接跳过，不产生采样开销；
+        /// Avalonia 12 的 IsEffectivelyVisibleChanged 不可公开订阅，所以保留定时器用 tick 兜底。</summary>
         internal void StartAdaptiveLuminance()
         {
             if (_state.Surface is null || _luminanceTimer is not null) return;
@@ -192,8 +194,19 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             _luminanceTimer = null;
         }
 
+        /// <summary>宿主与所在窗口都实际可见时才采样；玻璃渲染本身不受影响。</summary>
+        private bool IsLuminanceVisible()
+        {
+            if (_disposed || _state.Surface is null) return false;
+            if (!_state.Host.IsEffectivelyVisible) return false;
+            return TopLevel.GetTopLevel(_state.Host) is Window window
+                ? window.IsVisible && window.WindowState != WindowState.Minimized
+                : false;
+        }
+
         private void UpdateAdaptiveLuminance()
         {
+            if (!IsLuminanceVisible()) return;
             if (_state.Surface is not { } surface) return;
             var snapshot = LiquidGlassBackdropProvider.TryGetSnapshot(surface);
             if (snapshot is null) return;
