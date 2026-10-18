@@ -207,11 +207,13 @@ public static class TerminalSelfTest
                 parsed = reportParsed;
             }
             session.Write("exit\r");
-            var echoed = rawText.Contains("[10;1R", StringComparison.Ordinal);
+            // cmd echoes the report as ^[[<row>;<col>R; the row depends on the prompt position.
+            var echoed = rawText.Contains(";1R", StringComparison.Ordinal) && rawText.Contains("[", StringComparison.Ordinal);
             // The echo line proves the reply reached the shell's own input path. ALT-P0 is only meaningful in
             // the alternate-screen frames (PowerShell's on-exit repaint echoes the whole command line).
-            var echoRow = snapshot.Lines.ToList().FindIndex(line => string.Concat(line.Select(cell => cell.Text)).Contains("[10;1R", StringComparison.Ordinal));
-            if (parsed == 0 && echoRow < 0)
+            var echoRow = snapshot.Lines.ToList().FindIndex(line =>
+                string.Concat(line.Select(cell => cell.Text)).Contains(";1R", StringComparison.Ordinal));
+            if (parsed == 0 && echoRow < 0 && !echoed)
                 throw new InvalidOperationException("The shell's cursor report was not answered. raw=" + Escaped(rawText));
             var row = FindRow(snapshot, "READY-P0");
             if (row < 0 || FindRow(snapshot, "PRIMARY-P0") < 0)
