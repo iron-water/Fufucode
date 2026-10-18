@@ -1,10 +1,13 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using Fufucode.App.Abstractions.Automation;
 using Fufucode.Core;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Features.LocalReview;
+using Fufucode.Plugins.AutoDev;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 
 namespace Fufucode.LocalReview.Tests;
 
@@ -62,6 +65,7 @@ internal static class Counterexamples
 
     public static async Task RunAsync(Action<bool, string> check)
     {
+        BatchHarnessAdapters.Register();
         var root = Path.Combine(Path.GetTempPath(),
             "fufucode-e1-counterexamples-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -130,9 +134,8 @@ internal static class Counterexamples
                 new UTF8Encoding(false));
             var scope = await LocalReviewScopeResolver.ResolveAsync(repository,
                 LocalReviewScopeKind.Workspace);
-            var runtime = FixtureRuntime(mode, file);
+            ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime(mode, file)));
             var executor = new LocalReviewHarnessExecutor(
-                () => new AutomationStore(Path.Combine(root, mode + ".db")), runtime,
                 Path.Combine(root, mode), "fixture", "devin/swe-2");
             var result = await executor.ReviewAsync(scope);
             var unreviewed = UnreviewedOf(result);
@@ -160,8 +163,8 @@ internal static class Counterexamples
         for (var i = 0; i < 20; i++)
             File.WriteAllText(Path.Combine(totalRepository, $"unicode{i}.cs"), new string('中', 10_000));
         var totalScope = await LocalReviewScopeResolver.ResolveAsync(totalRepository, LocalReviewScopeKind.Workspace);
+        ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("empty", file)));
         var totalExecutor = new LocalReviewHarnessExecutor(
-            () => new AutomationStore(Path.Combine(root, "total.db")), FixtureRuntime("empty", file),
             Path.Combine(root, "total"), "fixture", "devin/swe-2");
         var totalResult = await totalExecutor.ReviewAsync(totalScope);
         check(!totalResult.ReviewComplete && UnreviewedOf(totalResult).Count > 0,
@@ -178,9 +181,9 @@ internal static class Counterexamples
             var scope = await LocalReviewScopeResolver.ResolveAsync(repository, LocalReviewScopeKind.Workspace);
             // 夹具的第三个参数是"子进程启动标记文件"，不是被审查文件：hang 模式靠它证明真的启动了。
             var marker = Path.Combine(unknownRoot, "child-started.txt");
+            ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("hang", marker)));
             var executor = new LocalReviewHarnessExecutor(
-                () => new AutomationStore(Path.Combine(unknownRoot, "unknown.db")),
-                FixtureRuntime("hang", marker), unknownRoot, "fixture", "devin/swe-2");
+                unknownRoot, "fixture", "devin/swe-2");
             // 必须等真实投递发生（子进程启动并落地标记）之后再取消：在派发前取消属于
             // "什么都没发出去"，没有需要了对账的未知运行，也就证明不了保留行为。
             using var cts = new CancellationTokenSource();
@@ -206,9 +209,9 @@ internal static class Counterexamples
                 "CE7e 结果显式暴露保留的 scratch 路径");
 
             var doneRoot = Path.Combine(root, "completed");
+            ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("done", file)));
             var doneExecutor = new LocalReviewHarnessExecutor(
-                () => new AutomationStore(Path.Combine(doneRoot, "done.db")),
-                FixtureRuntime("done", file), doneRoot, "fixture", "devin/swe-2");
+                doneRoot, "fixture", "devin/swe-2");
             // 必须仍有工作区改动（夹具证据是 "original"），否则范围是空范围，走不到完成审查。
             File.WriteAllText(file, "original modified\n", new UTF8Encoding(false));
             var doneScope = await LocalReviewScopeResolver.ResolveAsync(repository,
@@ -224,9 +227,9 @@ internal static class Counterexamples
                 "CE7f 明确完成的运行释放自己的 scratch（不累积垃圾目录）");
 
             var missingTerminalRoot = Path.Combine(root, "missing-terminal");
+            ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => FixtureRuntime("unknown", file)));
             var unknownExecutor = new LocalReviewHarnessExecutor(
-                () => new AutomationStore(Path.Combine(missingTerminalRoot, "run.db")),
-                FixtureRuntime("unknown", file), missingTerminalRoot, "fixture", "devin/swe-2");
+                missingTerminalRoot, "fixture", "devin/swe-2");
             var unknown = await unknownExecutor.ReviewAsync(doneScope);
             check(!unknown.ReviewComplete && RetainedOf(unknown) is { } retainedPath &&
                 Directory.Exists(retainedPath), "CE7g 缺少终态的真实子进程退出后仍保留 scratch");

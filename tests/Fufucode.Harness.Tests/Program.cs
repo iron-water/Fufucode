@@ -2,6 +2,9 @@ using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
+
+BatchHarnessAdapters.Register();
 
 if (args.FirstOrDefault() == "--fake")
 {

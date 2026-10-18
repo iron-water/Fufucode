@@ -4,8 +4,11 @@ using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Automation.Hosting;
 using Fufucode.Hosting.Tests;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 using static Fufucode.Hosting.Tests.Fixture;
 using static Fufucode.Hosting.Tests.Verify;
+
+BatchHarnessAdapters.Register();
 
 // C1 execution reliability: owner and child-writer verification, controlled resolution of Unknown,
 // and the delivery receiving gate, plus the C2 background host and its client protocol. Every case

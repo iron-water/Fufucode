@@ -4,5 +4,6 @@
   "version": "1.0.0",
   "entryAssembly": "Fufucode.Plugins.AutoDev.dll",
   "packageType": "Fufucode.Plugins.AutoDev.AutoDevPluginPackage",
+  "commandHostType": "Fufucode.Plugins.AutoDev.AutoDevCommandHost",
   "category": "Automation"
 }
