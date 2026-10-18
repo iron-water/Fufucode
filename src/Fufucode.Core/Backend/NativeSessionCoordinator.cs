@@ -16,10 +16,21 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
 {
     private readonly NativeCSharpChatSession _session;
     private readonly object _gate = new();
+    /// <summary>工具卡片保留上限：只保留最近的已完成卡片，更早的会淘汰；未完成的卡片始终保留。</summary>
+    private const int MaxRetainedToolCards = 500;
     private readonly List<PiMessage> _messages = [];
+    /// <summary>工具卡片存储：仅存放已完成卡片，超过上限的头部队列被淘汰（Result 置空后释放）。</summary>
     private readonly List<PiToolCard> _tools = [];
+    /// <summary>尚未完成的工具卡片（按插入顺序）；完成后转入 <see cref="_tools"/>。</summary>
+    private readonly List<PiToolCard> _pendingTools = [];
     private readonly List<string> _queuedTexts = [];
     private readonly List<string> _recoverableQueue = [];
+    // 不可变快照缓存：Publish 只重建发生变化的集合数组，其余复用同一列表实例。
+    private IReadOnlyList<PiMessage> _messagesSnapshot = Array.Empty<PiMessage>();
+    private PiToolCard[] _toolsSnapshot = [];
+    private bool _toolsDirty;
+    private string[] _queuedSnapshot = [];
+    private string[] _recoverableSnapshot = [];
     private ConnectionState _connection = ConnectionState.Stopped;
     private ActivityState _activity = ActivityState.Idle;
     private TaskResult _result = TaskResult.Unknown;
@@ -325,9 +336,13 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
     {
         lock (_gate)
         {
+            // 重建而不复制：同一 PiMessage 实例可被多条历史条目复用。
             _messages.Clear();
             _messages.AddRange(history.CurrentBranchMessages);
+            _messagesSnapshot = _messages.ToArray();
             _tools.Clear();
+            _pendingTools.Clear();
+            _toolsDirty = true;
             _usageInput = _usageOutput = _usageCacheRead = _usageCacheWrite = 0;
             _usageMessages = 0;
             foreach (var message in _messages)
@@ -397,13 +412,17 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
                 case SessionEvent.QueueChanged changed:
                     _queuedTexts.Clear();
                     _queuedTexts.AddRange(changed.QueuedTexts);
+                    _queuedSnapshot = _queuedTexts.ToArray();
                     break;
                 case SessionEvent.QueueCleared cleared:
                     _recoverableQueue.AddRange(cleared.ClearedTexts);
+                    _recoverableSnapshot = _recoverableQueue.ToArray();
                     _queuedTexts.Clear();
+                    _queuedSnapshot = [];
                     break;
                 case SessionEvent.MessageFinished finished:
                     _messages.Add(ToWire(finished.FinalMessage));
+                    _messagesSnapshot = _messages.ToArray();
                     if (finished.FinalMessage.CumulativeUsage is { } usage)
                     {
                         _usageMessages++;
@@ -413,19 +432,80 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
                         _usageCacheWrite += usage.CacheWriteTokens ?? 0;
                     }
                     foreach (var block in finished.FinalMessage.Blocks.OfType<ToolCallBlock>())
-                    {
-                        var index = _tools.FindIndex(t => t.ToolCallId == block.ToolCallId);
-                        var card = new PiToolCard(block.ToolCallId, block.ToolName, null,
-                            ToJson(block.Output), block.Status is ToolCallStatus.Completed or ToolCallStatus.Failed,
-                            block.IsErrorOutput);
-                        if (index >= 0) _tools[index] = card;
-                        else _tools.Add(card);
-                    }
+                        UpsertToolCard(block);
                     break;
             }
         }
 
         Publish();
+    }
+
+    /// <summary>
+    /// 新增或更新一张工具卡片：未完成卡片进入 pending 列表（不淘汰），
+    /// 完成卡片进入有界保留列表，超限时淘汰最旧的并清空其结果以释放输出字符串。
+    /// </summary>
+    private void UpsertToolCard(ToolCallBlock block)
+    {
+        var isFinal = block.Status is ToolCallStatus.Completed or ToolCallStatus.Failed;
+        var card = new PiToolCard(block.ToolCallId, block.ToolName, null, ToJson(block.Output), isFinal,
+            block.IsErrorOutput);
+        var pendingIndex = _pendingTools.FindIndex(t => t.ToolCallId == block.ToolCallId);
+        var retained = _tools.FindIndex(t => t.ToolCallId == block.ToolCallId);
+        if (!isFinal)
+        {
+            if (pendingIndex >= 0) _pendingTools[pendingIndex] = card;
+            else if (retained < 0) _pendingTools.Add(card);
+            // 已进入保留列表的卡片不回退为 pending：其终态（结果是 pending 输出，不代表未完成）不会回退。
+            else return;
+            _toolsDirty = true;
+            return;
+        }
+
+        if (pendingIndex >= 0) _pendingTools.RemoveAt(pendingIndex);
+        if (retained >= 0)
+        {
+            _tools[retained] = card;
+        }
+        else
+        {
+            _tools.Add(card);
+            TrimRetainedToolCards();
+        }
+        _toolsDirty = true;
+    }
+
+    /// <summary>
+    /// 已完成的工具卡片只保留最近 N 张。被淘汰者在存储与上一次已发布快照中都替换为无结果的副本，
+    /// 从而释放其输出字符串。
+    /// </summary>
+    private void TrimRetainedToolCards()
+    {
+        var excess = _tools.Count - MaxRetainedToolCards;
+        if (excess <= 0) return;
+        for (var i = 0; i < excess; i++)
+        {
+            var stale = _tools[i];
+            if (stale.DisplayResult is null) continue;
+            var released = stale with { DisplayResult = null };
+            _tools[i] = released;
+            var snapshotIndex = Array.IndexOf(_toolsSnapshot, stale);
+            if (snapshotIndex >= 0) _toolsSnapshot[snapshotIndex] = released;
+        }
+        _tools.RemoveRange(0, excess);
+    }
+
+    /// <summary>
+    /// 返回不可变工具列表：已完成的保留卡片在前，未完成的 pending 卡片追加在末尾。
+    /// 数组惰性重建，使一次事件内的多次卡片更新只产生一个快照数组。
+    /// </summary>
+    private IReadOnlyList<PiToolCard> CurrentTools()
+    {
+        if (_toolsDirty)
+        {
+            _toolsSnapshot = _tools.ToArray();
+            _toolsDirty = false;
+        }
+        return _pendingTools.Count == 0 ? _toolsSnapshot : [.. _toolsSnapshot, .. _pendingTools];
     }
 
     private static PiMessage ToWire(ChatMessage message) => new(
@@ -456,9 +536,10 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
         }
     }
 
+    /// <summary>构造快照；调用方必须持有 <see cref="_gate"/>。复用未变化集合的不可变列表实例。</summary>
     private SessionSnapshot MakeSnapshot() => new(
-        null, _connection, _activity, _result, _messages.ToArray(), _tools.ToArray(),
-        null, _queuedTexts.ToArray(), _recoverableQueue.ToArray(), _session.PendingExtensionUiRequests.ToArray(),
+        null, _connection, _activity, _result, _messagesSnapshot, CurrentTools(),
+        null, _queuedSnapshot, _recoverableSnapshot, _session.PendingExtensionUiRequests,
         _error, SessionFaultKind.None, ApprovalAvailability, ApprovalDiagnostic);
 
     private void Publish()

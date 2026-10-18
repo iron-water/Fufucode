@@ -85,8 +85,9 @@ public sealed class NativeAgentLoop
             if (iterations > _maxIterations)
             {
                 var timeoutResponse = PureModelResponse.FromText($"[Agent Loop 已达到最大轮次限制（{_maxIterations} 轮）并安全终止。]");
-                conversationHistory.Add(new PureAgentMessage(PureAgentRole.Assistant, timeoutResponse.Text!));
-                onMessageAppended?.Invoke(conversationHistory[^1]);
+                var timeoutMsg = new PureAgentMessage(PureAgentRole.Assistant, timeoutResponse.Text!);
+                conversationHistory.Add(timeoutMsg);
+                onMessageAppended?.Invoke(timeoutMsg);
                 return new PureAgentTurnResult(PureAgentTurnStatus.Completed, timeoutResponse, allToolResults,
                     "已达到最大轮次限制", lastUsage);
             }
@@ -99,6 +100,8 @@ public sealed class NativeAgentLoop
                 onMessageAppended?.Invoke(steerMsg);
             }
 
+            // 直接引用实时历史列表发送请求；所有变更都发生在 await 之后、请求序列化之前，
+            // 因此模型客户端看到的是一致的前缀（回合闸门保证无并发写者）。
             var request = new PureModelRequest(conversationHistory, toolNames, modelId, toolDefinitions,
                 reasoningEffort);
             PureModelResponse response;
@@ -142,6 +145,7 @@ public sealed class NativeAgentLoop
             onMessageAppended?.Invoke(assistantToolMsg);
 
             // 3. 执行工具调用：只读安全工具并发并行执行，写操作独占串行执行，结果严格保序回填
+            //    索引遍历响应中的调用快照；历史在循环中追加不影响正在遍历的 callList。
             if (_toolDispatcher is null)
             {
                 foreach (var call in response.ToolCalls)
@@ -149,8 +153,9 @@ public sealed class NativeAgentLoop
                     var failRes = new PureToolResult(call.Id, false, "当前未配置工具调度器，无法执行工具。");
                     allToolResults.Add(failRes);
                     onToolCompleted?.Invoke(call, failRes);
-                    conversationHistory.Add(new PureAgentMessage(PureAgentRole.Tool, failRes.Content, ToolCallId: call.Id));
-                    onMessageAppended?.Invoke(conversationHistory[^1]);
+                    var failMsg = new PureAgentMessage(PureAgentRole.Tool, failRes.Content, ToolCallId: call.Id);
+                    conversationHistory.Add(failMsg);
+                    onMessageAppended?.Invoke(failMsg);
                 }
             }
             else
@@ -235,6 +240,8 @@ public sealed class NativeAgentLoop
                 {
                     // 中断时仍未完成的调用必须补一条合成 tool_result，
                     // 否则 assistant(tool_calls) 后面缺少配对的 tool 消息，下一次请求会被 API 拒绝。
+                    // 同一消息也必须经 onMessageAppended 通知会话：RoundRecorder 借此关闭
+                    // 等待中的工具消息，否则取消后会话无法开始新的助手消息。
                     foreach (var pending in callList)
                     {
                         if (completed.Contains(pending.Id)) continue;
@@ -243,8 +250,10 @@ public sealed class NativeAgentLoop
                         allToolResults.Add(cancelled);
                         // 不调用 onToolCompleted：UI 状态由会话终态标记为 Cancelled，
                         // 这里只补上协议所需的 tool_result 配对。
-                        conversationHistory.Add(new PureAgentMessage(PureAgentRole.Tool, cancelled.Content,
-                            ToolCallId: pending.Id));
+                        var cancelledMsg = new PureAgentMessage(PureAgentRole.Tool, cancelled.Content,
+                            ToolCallId: pending.Id);
+                        conversationHistory.Add(cancelledMsg);
+                        onMessageAppended?.Invoke(cancelledMsg);
                     }
                     throw;
                 }
