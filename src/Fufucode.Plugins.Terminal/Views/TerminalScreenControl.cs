@@ -373,6 +373,27 @@ public sealed class TerminalScreenControl : Control
         return text.Length == 0 ? Task.CompletedTask : WriteClipboardAsync(text);
     }
 
+    /// <summary>
+    /// Paste directly into the running shell (interactive programs such as vim/REPLs need this).
+    /// When the application enabled bracketed paste the text is wrapped so embedded newlines are safe.
+    /// </summary>
+    public async Task<bool> PasteToShellAsync()
+    {
+        if (Session is not { IsRunning: true } tab) return false;
+        var text = await ReadClipboardAsync();
+        if (string.IsNullOrEmpty(text)) return false;
+        var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
+        if (_snapshot?.BracketedPaste == true)
+            tab.SendRaw("\u001b[200~" + normalized + "\u001b[201~");
+        else
+            tab.SendRaw(normalized.Replace("\n", "\r"));
+        return true;
+    }
+
+    /// <summary>True when direct paste would send a line break without bracketed-paste protection.</summary>
+    public bool DirectPasteNeedsConfirmation =>
+        Session?.Buffer.BracketedPaste != true;
+
     /// <summary>Read the clipboard and merge it into the current tab's command draft (never sent to the shell).</summary>
     public async Task PasteToDraftAsync()
     {
@@ -557,6 +578,7 @@ public sealed class TerminalScreenControl : Control
         // Copy / paste / find stay available after the shell exits so old output is still readable.
         if (Matches("terminal.copy", control && shift && e.Key == Key.C)) { e.Handled = true; _ = CopySelectionAsync(); return; }
         if (Matches("terminal.paste", control && e.Key == Key.V || shift && e.Key == Key.Insert)) { e.Handled = true; _ = PasteToDraftAsync(); return; }
+        if (control && shift && e.Key == Key.V) { e.Handled = true; _ = PasteToShellAsync(); return; }
         if (Matches("terminal.find", control && e.Key == Key.F)) { e.Handled = true; FindRequested?.Invoke(this, EventArgs.Empty); return; }
         if (control && shift && e.Key == Key.A) { e.Handled = true; SelectAll(); return; }
         if (control && e.Key is Key.OemPlus or Key.Add) { e.Handled = true; FontSizeDip += 1; return; }

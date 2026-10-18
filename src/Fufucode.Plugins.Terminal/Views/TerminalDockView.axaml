@@ -75,7 +75,8 @@
                     <views:TerminalScreenControl.ContextMenu>
                         <ContextMenu x:Name="TerminalContextMenu">
                             <MenuItem x:Name="ContextCopyItem" Header="复制" Click="ContextCopy_Click"/>
-                            <MenuItem x:Name="ContextPasteItem" Header="粘贴" Click="ContextPaste_Click"/>
+                            <MenuItem x:Name="ContextPasteItem" Header="粘贴到命令草稿" Click="ContextPaste_Click"/>
+                            <MenuItem x:Name="ContextPasteShellItem" Header="粘贴到终端（直接发送）" Click="ContextPasteShell_Click"/>
                             <MenuItem x:Name="ContextSelectAllItem" Header="全选" Click="ContextSelectAll_Click"/>
                             <MenuItem x:Name="ContextOpenLinkItem" Header="打开链接" Click="ContextOpenLink_Click"/>
                             <Separator/>
