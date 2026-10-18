@@ -30,7 +30,7 @@ internal static class Program
 {
     private static int _passed;
 
-    private static int Main()
+    private static int Main(string[] args)
     {
         // Avalonia 的 avares 资源解析按“已加载程序集名的最短前缀匹配”选程序集
         // （Avalonia.Base AssemblyDescriptorResolver.GetAssembly）。本测试程序集名
@@ -43,6 +43,19 @@ internal static class Program
             .SetupWithoutStarting();
         try
         {
+            if (args.Contains("--conpty-p0"))
+            {
+                // Run off the headless dispatcher thread: blocking it would deadlock the async smoke.
+                Console.WriteLine(Task.Run(() => Fufucode.Plugins.Terminal.SelfTest.TerminalSelfTest
+                    .RunConPtyP0SmokeAsync(Environment.CurrentDirectory)).GetAwaiter().GetResult());
+                return 0;
+            }
+            if (args.Contains("--conpty"))
+            {
+                Console.WriteLine(Task.Run(() => Fufucode.Plugins.Terminal.SelfTest.TerminalSelfTest
+                    .RunConPtySmokeAsync(Environment.CurrentDirectory)).GetAwaiter().GetResult());
+                return 0;
+            }
             RunFirstCharacterChecks();
             RunClipboardChecks();
             RunHistoryChecks();
