@@ -189,6 +189,13 @@ public static class SelfTestRunner
             Console.WriteLine($"== 自测结束：{Failures.Count} 项失败 ==");
             return Failures.Count == 0 ? 0 : 1;
         }
+        if (args.Contains("--conpty-p0-only"))
+        {
+            try { Pass(await TerminalSelfTest.RunConPtyP0SmokeAsync(Environment.CurrentDirectory)); }
+            catch (Exception error) { Fail("真实 ConPTY P0：" + error); }
+            Console.WriteLine($"== 自测结束：{Failures.Count} 项失败 ==");
+            return Failures.Count == 0 ? 0 : 1;
+        }
         if (args.Contains("--r2-only"))
         {
             await RunWave5R2ChecksAsync(args);
