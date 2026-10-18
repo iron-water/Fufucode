@@ -1,5 +1,6 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:views="clr-namespace:Fufucode.App.Views">
+        xmlns:views="clr-namespace:Fufucode.App.Views"
+        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia">
   <!-- 工作台共享组件：停靠容器、页签、分隔条、窗口外框、工具条与空状态。
        只引用 App* 语义键，主题/强调色/风格预设统一经由令牌生效。 -->
   <Style Selector="Button.subtle">
@@ -269,6 +270,9 @@
   </Style>
   <Style Selector="Border.settingsGroup > StackPanel">
     <Setter Property="Margin" Value="0"/>
+    <!-- settingsGroup 包一层无间距 StackPanel：里面的 settingsRow 需要
+         行间 8px，否则卡片贴死（与 settingsGroupList 同一节奏）。 -->
+    <Setter Property="Spacing" Value="8"/>
   </Style>
   <Style Selector="TextBlock.settingsGroupHeader">
     <Setter Property="FontSize" Value="14"/>
@@ -551,6 +555,16 @@
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
   </Style>
+  <!-- 悬停时 Fluent 模板会把输入框内部刷成深色，在输入卡片里像突然挖了个黑洞；
+       输入区自己已有下划线反馈，这里保持透明。 -->
+  <Style Selector="TextBox.composerInput:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="TextBox.composerInput:pointerover:focus /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
   <Style Selector="TextBox.flatInput:focus /template/ Border#PART_BorderElement">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
@@ -616,6 +630,53 @@
     <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+  </Style>
+
+  <!-- 沉浸式：输入区收起后的浮起按钮，压在时间线内容之上。 -->
+  <Style Selector="Button.composerReveal">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="15"/>
+    <Setter Property="Opacity" Value="0.92"/>
+  </Style>
+
+  <!-- 表格：去掉全网格竖线，只保留行分隔与表头强调，贴近正文排版而不是电子表格。 -->
+  <Style Selector="md|MarkdownTableGrid">
+    <Setter Property="ColumnSpacing" Value="0"/>
+    <Setter Property="RowSpacing" Value="0"/>
+  </Style>
+  <Style Selector="md|MarkdownTableGrid > Border">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="Padding" Value="12,8"/>
+  </Style>
+  <Style Selector="md|MarkdownTableGrid > Border > StackPanel > md|MarkdownTextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+
+  <!-- 回合变更总结卡：与工具卡同一层级，但更强调"这一轮改了什么"。 -->
+  <Style Selector="Border.changeCard">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+  </Style>
+  <Style Selector="Border.changeIcon">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="TextBlock.changePath">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="TextBlock.additions">
+    <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="TextBlock.deletions">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 
   <!-- 会话标尺：轮次刻度按钮，次级文字、无描边 -->
