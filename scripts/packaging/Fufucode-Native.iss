@@ -8,6 +8,10 @@
 #ifndef OutName
 #define OutName "Fufucode-Native-Setup"
 #endif
+; 载荷目录可切换：self-contained（build-native）或框架依赖瘦身版（build-native-slim）。
+#ifndef PayloadRoot
+#define PayloadRoot "build-native"
+#endif
 [Setup]
 AppId={{7C4D2E31-5B60-4F27-9F0E-2A6C1D8B3E54}
 AppName={#AppName}
@@ -29,8 +33,8 @@ ChangesEnvironment=yes
 UninstallDisplayIcon={app}\Fufucode.exe
 DisableProgramGroupPage=yes
 [Files]
-Source: "..\..\out\build-native\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
-Source: "..\..\out\build-native\integrity-native.sha256.json"; DestDir: "{app}"
+Source: "..\..\out\{#PayloadRoot}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdirs ignoreversion
+Source: "..\..\out\{#PayloadRoot}\integrity-native.sha256.json"; DestDir: "{app}"
 [Icons]
 ; 与全量包同约定：快捷方式起始目录是用户文档目录，不是 {app}。
 ; 目标改 Fufucode.exe（GUI 启动器）：有图标、无 cmd 黑框、Windows 当正经应用对待。
