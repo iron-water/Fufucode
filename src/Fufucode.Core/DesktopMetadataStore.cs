@@ -1,6 +1,5 @@
 using Microsoft.Data.Sqlite;
 using System.Globalization;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 

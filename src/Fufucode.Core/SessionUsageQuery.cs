@@ -1,4 +1,3 @@
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -56,9 +55,9 @@ public static class SessionUsageQuery
             string? userId = null;
             while (parentId is not null)
             {
-                if (!visited.Add(parentId)) throw new PiRpcException("Usage ancestry contains a cycle.");
+                if (!visited.Add(parentId)) throw new RpcException("Usage ancestry contains a cycle.");
                 if (!byId.TryGetValue(parentId, out var parent))
-                    throw new PiRpcException("Usage ancestry references an unknown entry.");
+                    throw new RpcException("Usage ancestry references an unknown entry.");
                 if (parent.Message?.Role == "user") { userId = parent.Id; break; }
                 parentId = parent.ParentId;
             }

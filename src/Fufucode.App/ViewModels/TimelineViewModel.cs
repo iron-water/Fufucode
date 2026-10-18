@@ -25,10 +25,13 @@ public sealed partial class TimelineViewModel : ViewModelBase
     private readonly Dictionary<string, TimelineEntryViewModel> _byId = new();
     // "停止窗口"：用户点击停止（Cancelling）到本轮 TurnSettled 之间，Core 目前会把中止
     // 报成 Unknown("Request aborted")；窗口内把 Unknown/UserCancelled 统一改写为 UserCancelled。
-    // 实测真实序列（--realpi Atria 段）：Cancelling → Running（中止收尾的瞬态）→
+    // 实测真实序列（--realpi 段）：Cancelling → Running（中止收尾的瞬态）→
     // err(Unknown,"Request aborted") → Idle → TurnSettled——若以 Running 关窗会漏掉该错误，
     // 故以 TurnSettled（或连接终态）为关窗点；此后新一轮的错误不受影响。
     private bool _inStopWindow;
+    // 当前回合容器：同一用户提交后的连续 assistant 消息都合并到这里。
+    private AssistantMessageViewModel? _currentTurn;
+    private DateTimeOffset _currentTurnStartedAt;
 
     public TimelineViewModel(IChatSession session, IRefreshScheduler scheduler, IClipboardService clipboard)
     {
@@ -67,6 +70,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         Entries.Clear();
         _byId.Clear();
         _rebuilder.Reset();
+        _currentTurn = null;
         PendingSinceScrollUp = 0;
         IsAtBottom = true;
     }
@@ -185,7 +189,11 @@ public sealed partial class TimelineViewModel : ViewModelBase
         if (e is SessionEvent.MessageFinished or SessionEvent.SessionError or SessionEvent.TurnSettled)
         {
             ApplyBatch();
-            if (e is SessionEvent.TurnSettled) RefreshTurnSummaries();
+            if (e is SessionEvent.TurnSettled settled)
+            {
+                FinalizeCurrentTurn(settled.Outcome);
+                RefreshTurnSummaries();
+            }
         }
     }
 
@@ -196,7 +204,15 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
         foreach (var entry in batch.AddedEntries)
         {
-            var vm = CreateViewModel(entry);
+            // 用户消息是硬边界：先收敛上一回合，再开新回合。
+            if (entry.Kind == TimelineEntryKind.UserMessage)
+            {
+                FinalizeCurrentTurn(SessionOutcome.Unknown);
+            }
+
+            var vm = entry.Kind == TimelineEntryKind.AssistantMessage && entry.Message is { } message
+                ? MergeIntoTurn(entry, message)
+                : CreateViewModel(entry);
             if (vm is null)
             {
                 continue;
@@ -204,7 +220,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
             vm.Timestamp = entry.Timestamp;
             _byId[entry.Id] = vm;
-            Entries.Add(vm);
+            if (entry.Kind != TimelineEntryKind.AssistantMessage) Entries.Add(vm);
         }
 
         foreach (var id in batch.UpdatedEntryIds)
@@ -223,7 +239,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             switch (vm, snapshot.Message, snapshot.Error)
             {
                 case (AssistantMessageViewModel assistant, ChatMessage message, _):
-                    assistant.UpdateFrom(message);
+                    assistant.MergeMessage(message);
                     break;
                 case (UserMessageViewModel user, ChatMessage message, _):
                     user.UpdateFrom(message);
@@ -247,6 +263,33 @@ public sealed partial class TimelineViewModel : ViewModelBase
         {
             PendingSinceScrollUp += batch.AddedEntries.Count;
         }
+    }
+
+    /// <summary>
+    /// 把一条 assistant 消息并入当前回合；回合不存在或已结束时新建。
+    /// 这是"一个回合一个头像"的根：同一用户提交产生的多条消息不再各建条目。
+    /// </summary>
+    private AssistantMessageViewModel MergeIntoTurn(TimelineEntry entry, ChatMessage message)
+    {
+        if (_currentTurn is null || _currentTurn.IsComplete)
+        {
+            _currentTurn = new AssistantMessageViewModel(_clipboard) { Id = entry.Id };
+            _currentTurnStartedAt = entry.Timestamp;
+            _currentTurn.Timestamp = entry.Timestamp;
+            Entries.Add(_currentTurn);
+        }
+
+        _currentTurn.MergeMessage(message);
+        return _currentTurn;
+    }
+
+    /// <summary>回合结束：定阶段、算耗时、收起未固定的工具组与思考块。</summary>
+    internal void FinalizeCurrentTurn(SessionOutcome outcome)
+    {
+        if (_currentTurn is not { IsComplete: false } turn) return;
+        var elapsed = DateTimeOffset.Now - (_currentTurnStartedAt == default ? DateTimeOffset.Now : _currentTurnStartedAt);
+        turn.FinalizeTurn(outcome, elapsed);
+        _currentTurn = null;
     }
 
     private TimelineEntryViewModel? CreateViewModel(TimelineEntry entry)

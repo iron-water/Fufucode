@@ -8,7 +8,7 @@
   <!-- WinUI ContentDialog 观感：标题（盾图标）/ 正文（受保护资源卡片列表）/ 实色底条按钮区 -->
   <Grid RowDefinitions="Auto,*,Auto">
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="24,20,24,4">
-      <PathIcon Data="{StaticResource Icon.ShieldCheckmark}" Width="20" Height="20"
+      <PathIcon Data="{DynamicResource Icon.ShieldCheckmark}" Width="20" Height="20"
                 VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
       <TextBlock Classes="subtitle" FontSize="17" Text="是否信任此项目？"
                  VerticalAlignment="Center" />
@@ -24,7 +24,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="{x:Type x:String}">
                 <StackPanel Orientation="Horizontal" Spacing="8" Margin="8,4">
-                  <PathIcon Data="{StaticResource Icon.Document}" Width="14" Height="14"
+                  <PathIcon Data="{DynamicResource Icon.Document}" Width="14" Height="14"
                             VerticalAlignment="Center"
                             Foreground="{DynamicResource AppTextDim}"/>
                   <TextBlock Text="{Binding}" Classes="caption" VerticalAlignment="Center"/>
@@ -46,10 +46,10 @@
             Padding="20,12">
       <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
         <Button Content="不信任此项目" Click="OnDoNotTrust"
-                Padding="14,7" CornerRadius="{StaticResource ControlCornerRadius}"
+                Padding="14,7" CornerRadius="{DynamicResource ControlCornerRadius}"
                 MinWidth="96" HorizontalContentAlignment="Center" />
         <Button Content="信任此项目" Click="OnTrust" Classes="accent"
-                Padding="14,7" CornerRadius="{StaticResource ControlCornerRadius}"
+                Padding="14,7" CornerRadius="{DynamicResource ControlCornerRadius}"
                 MinWidth="96" HorizontalContentAlignment="Center" />
       </StackPanel>
     </Border>

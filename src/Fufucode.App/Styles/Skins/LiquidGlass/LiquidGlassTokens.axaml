@@ -1,0 +1,331 @@
+<!-- LiquidGlass（iOS 26 液态玻璃）皮肤令牌。
+     实色回退：玻璃面板的透明感由 LiquidGlassSurface.SurfaceColor 在渲染期叠加提供，
+     令牌层本身给不透明 iOS 色板——headless/无 GPU/无 snapshot 时仍产出完整画面；
+     与 Aero 的 .glass 双轨（实色渐变 + 模糊时半透明）同机制，只是玻璃由自绘 shader 完成而非渐变。
+     iOS 26 色板：systemGray6 #F2F2F7 / label #000000 / secondaryLabel #3C3C43@60%
+     systemBlue #007AFF（暗 #0A84FF）；跟随系统强调色（FollowsSystemAccent: true）。 -->
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <!-- ============ 亮 ============ -->
+    <ResourceDictionary x:Key="Light">
+      <!-- 强调色：系统强调色由 SkinLease.CustomAccentKeys 注入，这里给 iOS 蓝作基线。
+           LiquidGlassAccent 是本模块私有探针键（IsAppliedTo 按 ThemeDictionaries 键存在性探测）；
+           只放主题字典——顶层同名键会遮蔽变体值且 Default 查询也不会命中主题字典。 -->
+      <Color x:Key="LiquidGlassAccent">#FF007AFF</Color>
+
+      <!-- 背景层级：iOS systemGray6 页面底 / 侧栏稍深 / 卡片白 -->
+      <SolidColorBrush x:Key="AppWindowBackground"        Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppTitleBarBackground"      Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppSidebarBackground"       Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppSurfaceBackground"       Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppContentBackground"       Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppCardBackground"          Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppCardStroke"              Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="AppChromeBackground"        Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppDockBackground"          Color="#FFF7F7F9"/>
+      <SolidColorBrush x:Key="AppDockHeaderBackground"    Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppTabSelectedBackground"   Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppSubtleBackground"        Color="#FFEFEFF4"/>
+      <SolidColorBrush x:Key="AppToolCardBackground"      Color="#FFF7F7F9"/>
+      <SolidColorBrush x:Key="AppInnerWell"               Color="#FFEFEFF4"/>
+      <SolidColorBrush x:Key="AppCodeBackground"          Color="#FFF5F5F7"/>
+      <SolidColorBrush x:Key="AppCodeBorder"              Color="#FFE5E5EA"/>
+      <SolidColorBrush x:Key="AppDialogBackground"        Color="#FFF7F7F9"/>
+      <SolidColorBrush x:Key="AppDialogFooterBackground"  Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppSettingsNavBackground"   Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="AppTerminalBackground"      Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppTerminalForeground"      Color="#FFE5E5EA"/>
+      <!-- 窗口根页底必须透明：AcrylicBlur 的窗后桌面模糊才能透进 LiquidGlassSurface
+           背后的快照间隙（参考你给的 macOS 图，玻璃浮在壁纸上）。不透明 #F2F2F7 会
+           把平台模糊钉死成一块平灰。实色回退由 LiquidGlassFallbackPageBackground 提供
+           （无 AcrylicBlur 的桌面/无 GPU 场景经 SkinLease 把它临时顶到
+           AppMicaPageBackground）。 -->
+      <SolidColorBrush x:Key="AppMicaPageBackground"      Color="Transparent"/>
+      <SolidColorBrush x:Key="AppMicaSidebarBackground"   Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="LiquidGlassFallbackPageBackground" Color="#FFF2F2F7"/>
+
+      <!-- 玻璃表面专用：LiquidGlassAdapter/样式层按主题从这里取玻璃参数色。
+           TintColor 是玻璃染色（v1 adapter 未读，留作 v2 钩子的默认基调）。 -->
+      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#66F7F7F9"/>
+      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#4DF7F7F9"/>
+      <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#1A007AFF"/>
+      <SolidColorBrush x:Key="LiquidGlassHighlightColor"  Color="#E6FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#66F2F2F7"/>
+
+      <!-- 文本/墨水：iOS label / secondaryLabel(60%) / tertiaryLabel(30%) -->
+      <SolidColorBrush x:Key="AppTextPrimary"   Color="#FF000000"/>
+      <SolidColorBrush x:Key="AppTextSecondary" Color="#993C3C43"/>
+      <SolidColorBrush x:Key="AppTextDim"       Color="#4D3C3C43"/>
+      <!-- AppAccent/AppAccentText/AppAccentForeground/AppAccentSubtle/AppUserBubble/
+           AppNavAccentBrush 是强调色语义：FollowsSystemAccent 皮肤不锁色——由
+           ApplyCustomization 注入的系统/用户 accent 直接生效（本地 Resources 优先于本字典）。
+           AppSelectionForeground 保留：accent 之上的前景文字恒为浅色，注入链不管它。
+           AppAccentSubtle 的兜底定义：未注入 accent 的环境（测试工装、headless）
+           下 AppAccentSubtle 回落到全局主题的 AccentTextFillColorPrimaryBrush——
+           那是"accent 上的字色"，用它做选中行淡底会和选中字色撞成同色不可见；
+           这里给一个 iOS systemBlue 淡底兜底，注入后本地键照常覆盖它。
+           同理 AccentTextFillColorPrimaryBrush 需要 iOS 兜底：未注入时全局
+           主题是 system accent 的 Dark2，与 iOS 蓝淡底不配套——用 iOS 蓝代替。 -->
+      <SolidColorBrush x:Key="AppAccentSubtle" Color="#1F007AFF"/>
+      <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FF007AFF"/>
+      <!-- 焦点环同 accent 语义：经 SystemAccentColor 动态解析——注入环境跟用户 accent，
+           未注入跟 Fluent 系统 accent（每套皮肤的 AppFocusBrush 都绑自身强调色）。 -->
+      <SolidColorBrush x:Key="AppFocusBrush" Color="{DynamicResource SystemAccentColor}"/>
+      <SolidColorBrush x:Key="AppSelectionForeground" Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppDisabledForeground" Color="#4D3C3C43"/>
+
+      <!-- 交互/描边：iOS hairline 0.5px 侧向淡化。AppListSelected 同随 accent，不锁定。 -->
+      <SolidColorBrush x:Key="AppHover"         Color="#1F000000"/>
+      <SolidColorBrush x:Key="AppPressed"       Color="#33000000"/>
+      <SolidColorBrush x:Key="AppListHover"     Color="#0F000000"/>
+      <SolidColorBrush x:Key="AppBorderBrush"   Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="AppDividerSubtle" Color="#4DC6C6C8"/>
+      <SolidColorBrush x:Key="AppScrimBackground" Color="#66000000"/>
+      <SolidColorBrush x:Key="AppSmokeBackground" Color="#66000000"/>
+
+      <!-- 状态：iOS systemGreen/Orange/Red/Teal。info 蓝与强调色同源 → 随 accent，不锁。 -->
+      <SolidColorBrush x:Key="AppErrorBackground"    Color="#1AFF3B30"/>
+      <SolidColorBrush x:Key="AppErrorBorder"        Color="#40FF3B30"/>
+      <SolidColorBrush x:Key="AppSuccessBackground"  Color="#1A34C759"/>
+      <SolidColorBrush x:Key="AppSuccessForeground"  Color="#FF34C759"/>
+      <SolidColorBrush x:Key="AppCautionBackground"  Color="#1AFF9500"/>
+      <SolidColorBrush x:Key="AppCautionForeground"  Color="#FFFF9500"/>
+      <SolidColorBrush x:Key="AppCriticalForeground" Color="#FFFF3B30"/>
+      <SolidColorBrush x:Key="AppDiffAddedBackground"  Color="#1A34C759"/>
+      <SolidColorBrush x:Key="AppDiffAddedForeground"  Color="#FF248A3D"/>
+      <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#1AFF3B30"/>
+      <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFD70015"/>
+
+      <!-- Fluent 控件链：基础/卡片/列表/控件填充 -->
+      <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush"       Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush"  Color="#FFEFEFF4"/>
+      <SolidColorBrush x:Key="SolidBackgroundFillColorTertiaryBrush"   Color="#FFF7F7F9"/>
+      <SolidColorBrush x:Key="SolidBackgroundFillColorQuaternaryBrush" Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="LayerFillColorDefaultBrush"              Color="#80FFFFFF"/>
+      <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush"     Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush"   Color="#FFF7F7F9"/>
+      <SolidColorBrush x:Key="CardStrokeColorDefaultBrush"             Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="CardStrokeColorDefaultSolidBrush"        Color="#FFC6C6C8"/>
+      <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush"          Color="#4DC6C6C8"/>
+      <SolidColorBrush x:Key="SurfaceStrokeColorDefaultBrush"          Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="SurfaceStrokeColorFlyoutBrush"           Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="TextFillColorPrimaryBrush"    Color="#FF000000"/>
+      <SolidColorBrush x:Key="TextFillColorSecondaryBrush"  Color="#993C3C43"/>
+      <SolidColorBrush x:Key="TextFillColorTertiaryBrush"   Color="#4D3C3C43"/>
+      <SolidColorBrush x:Key="TextFillColorDisabledBrush"   Color="#4D3C3C43"/>
+      <SolidColorBrush x:Key="TextFillColorInverseBrush"    Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="ControlFillColorDefaultBrush"     Color="#0A000000"/>
+      <SolidColorBrush x:Key="ControlFillColorSecondaryBrush"   Color="#14000000"/>
+      <SolidColorBrush x:Key="ControlFillColorTertiaryBrush"    Color="#1F000000"/>
+      <SolidColorBrush x:Key="ControlFillColorDisabledBrush"    Color="#0A000000"/>
+      <SolidColorBrush x:Key="ControlFillColorInputActiveBrush" Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#66C6C6C8"/>
+      <SolidColorBrush x:Key="ControlElevationBorderBrush"      Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="SubtleFillColorTransparentBrush"  Color="#00FFFFFF"/>
+      <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush"    Color="#0A000000"/>
+      <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush"     Color="#14000000"/>
+      <SolidColorBrush x:Key="SubtleFillColorDisabledBrush"     Color="#00FFFFFF"/>
+      <SolidColorBrush x:Key="MenuSurfaceBrush"     Color="#F2F7F7F9"/>
+      <SolidColorBrush x:Key="MenuDividerBrush"     Color="#4DC6C6C8"/>
+      <SolidColorBrush x:Key="SmokeFillColorDefaultBrush" Color="#66000000"/>
+      <!-- 选中态与 accent 链全部交还注入层：ListBoxItemBackground*/AccentFillColor*/
+           AccentTextFillColor*/TextOnAccent*/SystemControl*Accent*/HyperlinkForegroundBrush/
+           TextControlBorderBrushFocused/AccentButtonBackground*/AccentButtonForeground*
+           均不定义——ApplyCustomization 每轮按用户/系统 accent 写入本地 Resources，
+           本地条目优先于本字典生效（ApplyWindowSkin 对 FollowsSystemAccent 皮肤不 strip）。
+           不锁 iOS 蓝是本皮肤与 Metro/M3/Aero/Luna 锁色皮肤的本质差别。 -->
+      <SolidColorBrush x:Key="ButtonBackground"            Color="#0A000000"/>
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#14000000"/>
+      <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#1F000000"/>
+      <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#0A000000"/>
+      <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#33C6C6C8"/>
+      <SolidColorBrush x:Key="ButtonForeground"            Color="#FF000000"/>
+      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FF000000"/>
+      <SolidColorBrush x:Key="ButtonForegroundPressed"     Color="#FF000000"/>
+      <SolidColorBrush x:Key="ButtonForegroundDisabled"    Color="#4D3C3C43"/>
+
+      <SolidColorBrush x:Key="SystemFillColorSuccessBrush"   Color="#FF34C759"/>
+      <SolidColorBrush x:Key="SystemFillColorCautionBrush"   Color="#FFFF9500"/>
+      <SolidColorBrush x:Key="SystemFillColorCriticalBrush"  Color="#FFFF3B30"/>
+      <SolidColorBrush x:Key="SystemFillColorNeutralBrush"   Color="#FF8E8E93"/>
+      <!-- SystemFillColorAttention* 是 accent 语义：不锁，交还 Fluent/注入链。 -->
+      <SolidColorBrush x:Key="SystemFillColorSuccessBackgroundBrush"   Color="#1A34C759"/>
+      <SolidColorBrush x:Key="SystemFillColorCautionBackgroundBrush"   Color="#1AFF9500"/>
+      <SolidColorBrush x:Key="SystemFillColorCriticalBackgroundBrush"  Color="#1AFF3B30"/>
+      <SolidColorBrush x:Key="SystemFillColorNeutralBackgroundBrush"   Color="#1A8E8E93"/>
+
+      <!-- 形状/焦点/字体/阴影：iOS 连续圆角（控件 10、卡片 14、浮层 14）+ 柔阴影 -->
+      <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
+      <CornerRadius x:Key="OverlayCornerRadius">14</CornerRadius>
+      <CornerRadius x:Key="AppCornerCard">14</CornerRadius>
+      <CornerRadius x:Key="AppCornerInput">10</CornerRadius>
+      <CornerRadius x:Key="AppCornerPill">20</CornerRadius>
+      <CornerRadius x:Key="AppCornerFlyout">14</CornerRadius>
+      <x:Double x:Key="AppFocusThickness">3</x:Double>
+      <x:Double x:Key="AppFocusOffset">1</x:Double>
+      <!-- 焦点环主色同为 accent 语义，交还注入/Fluent 链；只留内圈补色（非 accent）。 -->
+      <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#80FFFFFF"/>
+      <!-- iOS 用 SF 字体不可发行：回退 Segoe/Inter 系（同 Fluent 链） -->
+      <FontFamily x:Key="AppFontUi">Segoe UI, Segoe UI Variable Text, Microsoft YaHei UI, Inter</FontFamily>
+      <FontFamily x:Key="AppFontDisplay">Segoe UI Light, Segoe UI, Microsoft YaHei UI</FontFamily>
+      <FontFamily x:Key="AppFontMono">Cascadia Mono, Consolas, monospace</FontFamily>
+      <x:Double x:Key="AppFontSizeBase">13</x:Double>
+      <x:Double x:Key="AppFontSizeSecondary">12</x:Double>
+      <x:Double x:Key="AppFontSizeSection">20</x:Double>
+      <x:Double x:Key="AppFontSizePage">28</x:Double>
+      <FontWeight x:Key="AppFontWeightStrong">SemiBold</FontWeight>
+      <BoxShadows x:Key="FluentFlyoutShadow">0 8 24 0 #1A000000</BoxShadows>
+      <BoxShadows x:Key="FluentToastShadow">0 8 24 0 #1A000000</BoxShadows>
+      <BoxShadows x:Key="FluentPillShadow">0 2 8 0 #14000000</BoxShadows>
+      <BoxShadows x:Key="AppShadowFlyout">0 8 24 0 #1A000000</BoxShadows>
+      <BoxShadows x:Key="AppShadowToast">0 8 24 0 #1A000000</BoxShadows>
+      <BoxShadows x:Key="AppShadowPill">0 2 8 0 #14000000</BoxShadows>
+    </ResourceDictionary>
+
+    <!-- ============ 暗 ============ -->
+    <ResourceDictionary x:Key="Dark">
+      <Color x:Key="LiquidGlassAccent">#FF0A84FF</Color>
+      <!-- iOS 暗：systemBackground #000000 / secondarySystemBackground #1C1C1E / tertiary #2C2C2E -->
+      <SolidColorBrush x:Key="AppWindowBackground"        Color="#FF000000"/>
+      <SolidColorBrush x:Key="AppTitleBarBackground"      Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppSidebarBackground"       Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppSurfaceBackground"       Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppContentBackground"       Color="#FF000000"/>
+      <SolidColorBrush x:Key="AppCardBackground"          Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppCardStroke"              Color="#3338383A"/>
+      <SolidColorBrush x:Key="AppChromeBackground"        Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppDockBackground"          Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppDockHeaderBackground"    Color="#FF2C2C2E"/>
+      <SolidColorBrush x:Key="AppTabSelectedBackground"   Color="#FF2C2C2E"/>
+      <SolidColorBrush x:Key="AppSubtleBackground"        Color="#FF2C2C2E"/>
+      <SolidColorBrush x:Key="AppToolCardBackground"      Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppInnerWell"               Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppCodeBackground"          Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppCodeBorder"              Color="#FF38383A"/>
+      <SolidColorBrush x:Key="AppDialogBackground"        Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppDialogFooterBackground"  Color="#FF2C2C2E"/>
+      <SolidColorBrush x:Key="AppSettingsNavBackground"   Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="AppTerminalBackground"      Color="#FF000000"/>
+      <SolidColorBrush x:Key="AppTerminalForeground"      Color="#FFE5E5EA"/>
+      <SolidColorBrush x:Key="AppMicaPageBackground"      Color="Transparent"/>
+      <SolidColorBrush x:Key="AppMicaSidebarBackground"   Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="LiquidGlassFallbackPageBackground" Color="#FF000000"/>
+
+      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#661C1C1E"/>
+      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#4D1C1C1E"/>
+      <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#1A0A84FF"/>
+      <SolidColorBrush x:Key="LiquidGlassHighlightColor"  Color="#66FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#662C2C2E"/>
+
+      <SolidColorBrush x:Key="AppTextPrimary"   Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppTextSecondary" Color="#99EBEBF5"/>
+      <SolidColorBrush x:Key="AppTextDim"       Color="#4DEBEBF5"/>
+      <!-- accent 语义键同 Light：全部交还 ApplyCustomization 注入链（FollowsSystemAccent）；
+           AppAccentSubtle/AccentTextFillColorPrimaryBrush 同 Light 给 iOS 淡色/亮色兜底，
+           理由见 Light 段注释。 -->
+      <SolidColorBrush x:Key="AppAccentSubtle" Color="#3D0A84FF"/>
+      <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush" Color="#FFA6D8FF"/>
+      <SolidColorBrush x:Key="AppFocusBrush" Color="{DynamicResource SystemAccentColor}"/>
+      <SolidColorBrush x:Key="AppSelectionForeground" Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="AppDisabledForeground" Color="#4DEBEBF5"/>
+
+      <SolidColorBrush x:Key="AppHover"         Color="#1FFFFFFF"/>
+      <SolidColorBrush x:Key="AppPressed"       Color="#33FFFFFF"/>
+      <SolidColorBrush x:Key="AppListHover"     Color="#0FFFFFFF"/>
+      <SolidColorBrush x:Key="AppBorderBrush"   Color="#3338383A"/>
+      <SolidColorBrush x:Key="AppDividerSubtle" Color="#4D38383A"/>
+      <SolidColorBrush x:Key="AppScrimBackground" Color="#80000000"/>
+      <SolidColorBrush x:Key="AppSmokeBackground" Color="#80000000"/>
+
+      <SolidColorBrush x:Key="AppErrorBackground"    Color="#26FF453A"/>
+      <SolidColorBrush x:Key="AppErrorBorder"        Color="#4DFF453A"/>
+      <SolidColorBrush x:Key="AppSuccessBackground"  Color="#2632D74B"/>
+      <SolidColorBrush x:Key="AppSuccessForeground"  Color="#FF32D74B"/>
+      <SolidColorBrush x:Key="AppCautionBackground"  Color="#26FF9F0A"/>
+      <SolidColorBrush x:Key="AppCautionForeground"  Color="#FFFF9F0A"/>
+      <SolidColorBrush x:Key="AppCriticalForeground" Color="#FFFF453A"/>
+      <SolidColorBrush x:Key="AppDiffAddedBackground"  Color="#2632D74B"/>
+      <SolidColorBrush x:Key="AppDiffAddedForeground"  Color="#FF32D74B"/>
+      <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#26FF453A"/>
+      <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFFF6961"/>
+
+      <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush"       Color="#FF000000"/>
+      <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush"  Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="SolidBackgroundFillColorTertiaryBrush"   Color="#FF2C2C2E"/>
+      <SolidColorBrush x:Key="SolidBackgroundFillColorQuaternaryBrush" Color="#FF3A3A3C"/>
+      <SolidColorBrush x:Key="LayerFillColorDefaultBrush"              Color="#802C2C2E"/>
+      <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush"     Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush"   Color="#FF2C2C2E"/>
+      <SolidColorBrush x:Key="CardStrokeColorDefaultBrush"             Color="#3338383A"/>
+      <SolidColorBrush x:Key="CardStrokeColorDefaultSolidBrush"        Color="#FF38383A"/>
+      <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush"          Color="#4D38383A"/>
+      <SolidColorBrush x:Key="SurfaceStrokeColorDefaultBrush"          Color="#3338383A"/>
+      <SolidColorBrush x:Key="SurfaceStrokeColorFlyoutBrush"           Color="#3338383A"/>
+      <SolidColorBrush x:Key="TextFillColorPrimaryBrush"    Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="TextFillColorSecondaryBrush"  Color="#99EBEBF5"/>
+      <SolidColorBrush x:Key="TextFillColorTertiaryBrush"   Color="#4DEBEBF5"/>
+      <SolidColorBrush x:Key="TextFillColorDisabledBrush"   Color="#4DEBEBF5"/>
+      <SolidColorBrush x:Key="TextFillColorInverseBrush"    Color="#FF000000"/>
+      <SolidColorBrush x:Key="ControlFillColorDefaultBrush"     Color="#14FFFFFF"/>
+      <SolidColorBrush x:Key="ControlFillColorSecondaryBrush"   Color="#1FFFFFFF"/>
+      <SolidColorBrush x:Key="ControlFillColorTertiaryBrush"    Color="#2EFFFFFF"/>
+      <SolidColorBrush x:Key="ControlFillColorDisabledBrush"    Color="#0FFFFFFF"/>
+      <SolidColorBrush x:Key="ControlFillColorInputActiveBrush" Color="#FF1C1C1E"/>
+      <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#3338383A"/>
+      <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#6638383A"/>
+      <SolidColorBrush x:Key="ControlElevationBorderBrush"      Color="#3338383A"/>
+      <SolidColorBrush x:Key="SubtleFillColorTransparentBrush"  Color="#00FFFFFF"/>
+      <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush"    Color="#14FFFFFF"/>
+      <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush"     Color="#1FFFFFFF"/>
+      <SolidColorBrush x:Key="SubtleFillColorDisabledBrush"     Color="#00FFFFFF"/>
+      <SolidColorBrush x:Key="MenuSurfaceBrush"     Color="#F21C1C1E"/>
+      <SolidColorBrush x:Key="MenuDividerBrush"     Color="#4D38383A"/>
+      <SolidColorBrush x:Key="SmokeFillColorDefaultBrush" Color="#80000000"/>
+      <!-- 选中态与 accent 链同 Light：不定义，交还注入层。 -->
+      <SolidColorBrush x:Key="ButtonBackground"            Color="#14FFFFFF"/>
+      <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#1FFFFFFF"/>
+      <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#2EFFFFFF"/>
+      <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#0FFFFFFF"/>
+      <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#3338383A"/>
+      <SolidColorBrush x:Key="ButtonForeground"            Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="ButtonForegroundPressed"     Color="#FFFFFFFF"/>
+      <SolidColorBrush x:Key="ButtonForegroundDisabled"    Color="#4DEBEBF5"/>
+
+      <SolidColorBrush x:Key="SystemFillColorSuccessBrush"   Color="#FF32D74B"/>
+      <SolidColorBrush x:Key="SystemFillColorCautionBrush"   Color="#FFFF9F0A"/>
+      <SolidColorBrush x:Key="SystemFillColorCriticalBrush"  Color="#FFFF453A"/>
+      <SolidColorBrush x:Key="SystemFillColorNeutralBrush"   Color="#FF98989D"/>
+      <SolidColorBrush x:Key="SystemFillColorSuccessBackgroundBrush"   Color="#2632D74B"/>
+      <SolidColorBrush x:Key="SystemFillColorCautionBackgroundBrush"   Color="#26FF9F0A"/>
+      <SolidColorBrush x:Key="SystemFillColorCriticalBackgroundBrush"  Color="#26FF453A"/>
+      <SolidColorBrush x:Key="SystemFillColorNeutralBackgroundBrush"   Color="#2698989D"/>
+
+      <CornerRadius x:Key="ControlCornerRadius">10</CornerRadius>
+      <CornerRadius x:Key="OverlayCornerRadius">14</CornerRadius>
+      <CornerRadius x:Key="AppCornerCard">14</CornerRadius>
+      <CornerRadius x:Key="AppCornerInput">10</CornerRadius>
+      <CornerRadius x:Key="AppCornerPill">20</CornerRadius>
+      <CornerRadius x:Key="AppCornerFlyout">14</CornerRadius>
+      <x:Double x:Key="AppFocusThickness">3</x:Double>
+      <x:Double x:Key="AppFocusOffset">1</x:Double>
+      <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush" Color="#80000000"/>
+      <FontFamily x:Key="AppFontUi">Segoe UI, Segoe UI Variable Text, Microsoft YaHei UI, Inter</FontFamily>
+      <FontFamily x:Key="AppFontDisplay">Segoe UI Light, Segoe UI, Microsoft YaHei UI</FontFamily>
+      <FontFamily x:Key="AppFontMono">Cascadia Mono, Consolas, monospace</FontFamily>
+      <x:Double x:Key="AppFontSizeBase">13</x:Double>
+      <x:Double x:Key="AppFontSizeSecondary">12</x:Double>
+      <x:Double x:Key="AppFontSizeSection">20</x:Double>
+      <x:Double x:Key="AppFontSizePage">28</x:Double>
+      <FontWeight x:Key="AppFontWeightStrong">SemiBold</FontWeight>
+      <BoxShadows x:Key="FluentFlyoutShadow">0 8 24 0 #33000000</BoxShadows>
+      <BoxShadows x:Key="FluentToastShadow">0 8 24 0 #33000000</BoxShadows>
+      <BoxShadows x:Key="FluentPillShadow">0 2 8 0 #26000000</BoxShadows>
+      <BoxShadows x:Key="AppShadowFlyout">0 8 24 0 #33000000</BoxShadows>
+      <BoxShadows x:Key="AppShadowToast">0 8 24 0 #33000000</BoxShadows>
+      <BoxShadows x:Key="AppShadowPill">0 2 8 0 #26000000</BoxShadows>
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

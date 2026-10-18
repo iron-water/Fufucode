@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Fufucode.App.LiquidGlass.Tests</AssemblyName>
+    <RootNamespace>Fufucode.App.LiquidGlass.Tests</RootNamespace>
+    <!-- 与 Fufucode.App 的 WebView2Version 保持一致：仅用于下面的传递引用剥离。 -->
+    <WebView2Version>1.0.4258.31</WebView2Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.App/Fufucode.App.csproj" />
+  </ItemGroup>
+  <!-- 同 Fufucode.App.Skins.Tests：剥离 WebView2 传递过来的 WPF/WinForms 宿主程序集，
+       本测试只用 Avalonia/Skia。项标识写法与包 Common.targets 原样一致。 -->
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
+</Project>

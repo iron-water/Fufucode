@@ -1,0 +1,8 @@
+{
+  "id": "service.speech-synthesis",
+  "name": "语音朗读服务",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Speech.dll",
+  "packageType": "Fufucode.Plugins.Speech.SpeechPluginPackage",
+  "category": "Service"
+}

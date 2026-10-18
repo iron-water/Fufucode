@@ -102,13 +102,25 @@ public partial class ChatPage
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "添加" + filter.Name, AllowMultiple = true, FileTypeFilter = [filter] });
         await AttachFilesAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
     }
+    /// <summary>模型选择器条目：选中后关闭浮层。</summary>
+    private void ModelPickerItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
+    {
+        (sender as Button)?.Flyout?.Hide();
+    }
+
     private void ComposerChanged(object? sender, PropertyChangedEventArgs e) => RefreshComposerTools();
     private void TimelineChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => RefreshRuler();
     private void RefreshComposerTools()
     {
         if (DataContext is not MainViewModel vm) return;
         _updatingComposer = true;
-        try { _executionMode.SelectedIndex = Array.IndexOf(_modes, vm.Input.ExecutionMode); _executionMode.IsEnabled = vm.Input.CanChangeExecutionMode; }
+        try
+        {
+            _executionMode.SelectedIndex = Array.IndexOf(_modes, vm.Input.ExecutionMode);
+            _executionMode.IsEnabled = vm.Input.CanChangeExecutionMode;
+            // 后端不支持执行模式（例如 FUMO 原生内核）时整个控件隐藏，不留一个点不动的死下拉。
+            _executionMode.IsVisible = vm.Input.ShowsExecutionMode;
+        }
         finally { _updatingComposer = false; }
         DraftPreview.IsVisible = _previewDraft;
         Input.IsVisible = !_previewDraft;

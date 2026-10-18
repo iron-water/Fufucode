@@ -1,14 +1,14 @@
 #nullable enable
 using System.Text.Json;
 
-// Anchors are provenance labels for the recorded Pi RPC behaviour baseline.
+// Anchors refer to stable section labels in docs/runtime-baseline.md.
 // The baseline only attests the real-Pi subset; synthetic failure cases remain fixtures.
 internal static class BaselineAnchors
 {
-    public const string CapabilityTable = "baseline: 1.1.0 capability table";
-    public const string SessionPersistence = "baseline: Core session persistence supplement (2026-09-28)";
-    public const string ProjectTrust = "baseline: project trust RPC verification (2026-09-29)";
-    public const string FixtureOnly = "baseline: capability table response/ID correlation; synthetic transport fixture only";
+    public const string CapabilityTable = "docs/runtime-baseline.md: 1.1.0 当前运行基线";
+    public const string SessionPersistence = "docs/runtime-baseline.md: M4 Core 实测补充 (2026-09-28)";
+    public const string ProjectTrust = "docs/runtime-baseline.md: F01 项目信任 RPC 补验 (2026-09-29)";
+    public const string FixtureOnly = "docs/runtime-baseline.md: 能力表 / response 与 ID 关联; synthetic transport fixture only";
 }
 
 internal sealed record RpcContract(string BaselineAnchor,

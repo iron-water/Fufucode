@@ -1,0 +1,449 @@
+<!-- E7-AERO：Aero 限定样式（作用域与控件状态）。
+     只作用于 SkinLease 挂载目标（Window/Control）子树；本文件随租约整体移除。
+     颜色一律经 AeroTokens.axaml 的 DynamicResource 解析。
+     组成：
+       1) 标题栏作用域（Border.aeroCaption：active/inactive/glass/标题光晕/窗口按钮 inactive）；
+       2) 控件状态：Button（含 .accent）、iconButton、TextBox、ComboBox、dockTab/TabItem、
+          ListBoxItem、Border.settingsRow、菜单/浮层；
+       3) 窗口外框与浮动窗口阴影（顶层 Window 限定）。
+     不复制整套 Fluent 模板；只替换有限部件与属性（原则见教师参考书 §6.2）。 -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <StyleInclude Source="SkinShellStyles.axaml"/>
+  <Style Selector="Window">
+    <Setter Property="FontFamily" Value="{DynamicResource AppFontUi}"/>
+  </Style>
+
+  <!-- ================= 标题栏（作用域样式；inactive 依赖祖先类，ControlTheme 选不到祖先） ================= -->
+  <Style Selector="Border.aeroCaption">
+    <Setter Property="Height" Value="48"/>
+    <Setter Property="Background" Value="{DynamicResource AeroCaptionBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroCaptionRule}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+  </Style>
+  <Style Selector="Border.aeroCaption.inactive">
+    <Setter Property="Background" Value="{DynamicResource AeroCaptionBackgroundInactive}"/>
+  </Style>
+  <!-- 有平台模糊时（ActualTransparencyLevel != None）由适配器加 .glass；无模糊保持实色渐变 -->
+  <Style Selector="Border.aeroCaption.glass">
+    <Setter Property="Background" Value="{DynamicResource AeroCaptionGlass}"/>
+  </Style>
+  <Style Selector="Border.aeroCaption Border.aeroCaptionTopHighlight">
+    <Setter Property="Height" Value="1"/>
+    <Setter Property="VerticalAlignment" Value="Top"/>
+    <Setter Property="IsHitTestVisible" Value="False"/>
+    <Setter Property="Background" Value="{DynamicResource AeroCaptionTopHighlight}"/>
+  </Style>
+
+  <!-- 标题文字：13px + 柔光（Vista 标题“发光”字），inactive 去光变灰 -->
+  <Style Selector="Border.aeroCaption TextBlock.aeroCaptionTitle">
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionText}"/>
+    <Setter Property="Effect">
+      <DropShadowEffect BlurRadius="6" OffsetX="0" OffsetY="0" Opacity="1" Color="{DynamicResource AeroCaptionTextGlowColor}"/>
+    </Setter>
+  </Style>
+  <Style Selector="Border.aeroCaption.inactive TextBlock.aeroCaptionTitle">
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionTextInactive}"/>
+    <Setter Property="Effect" Value="{x:Null}"/>
+  </Style>
+  <!-- caption 内的工具栏图标/文字（顶栏动作按钮）在标题渐变上取标题文字色 -->
+  <Style Selector="Border.aeroCaption TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionText}"/>
+  </Style>
+  <Style Selector="Border.aeroCaption PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionText}"/>
+  </Style>
+  <Style Selector="Border.aeroCaption.inactive TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionTextInactive}"/>
+  </Style>
+  <Style Selector="Border.aeroCaption.inactive PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionTextInactive}"/>
+  </Style>
+
+  <!-- inactive 窗口按钮：未悬停/未按下时褪色；悬停仍给完整反馈（Vista 行为） -->
+  <Style Selector="Border.aeroCaption.inactive Button.aeroCaptionButton:not(:pointerover):not(:pressed) /template/ Border#PART_Plate">
+    <Setter Property="Background" Value="{DynamicResource AeroCaptionPlateInactive}"/>
+  </Style>
+  <Style Selector="Border.aeroCaption.inactive Button.aeroCaptionButton:not(:pointerover):not(:pressed) /template/ Path#PART_Glyph">
+    <Setter Property="Stroke" Value="{DynamicResource AeroCaptionGlyphInactive}"/>
+  </Style>
+  <Style Selector="Border.aeroCaption.inactive Button.aeroCaptionButton:not(:pointerover):not(:pressed) /template/ Path#PART_GlyphHalo">
+    <Setter Property="Opacity" Value="0"/>
+  </Style>
+
+  <!-- ================= 窗口外框（顶层窗口/浮动窗口；§2 L0） ================= -->
+  <Style Selector="Border.aeroFrame">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroFrameOuter}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AeroFrameRadius}"/>
+  </Style>
+  <Style Selector="Border.aeroFrame Border.aeroFrameInner">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroFrameInner}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AeroFrameRadius}"/>
+  </Style>
+
+  <!-- ================= 停靠区（chrome 允许浅渐变；正文/内容纸不受影响） ================= -->
+  <Style Selector="Border.aeroDockSurface">
+    <Setter Property="Background" Value="{DynamicResource AeroDockSurface}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+  </Style>
+  <Style Selector="Border.aeroStatusBar">
+    <Setter Property="Background" Value="{DynamicResource AeroStatusBarBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+  </Style>
+
+  <!-- ================= 按钮 ================= -->
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <!-- 默认按钮：Vista 灰四段渐变 + 1px 描边 + 内高光（.captionButton 由窗口按钮 ControlTheme 独立接管） -->
+  <Style Selector="Button:not(.captionButton)">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button:not(.captionButton):pointerover">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPointerOver}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderPointerOver}"/>
+  </Style>
+  <Style Selector="Button:not(.captionButton):pressed">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPressed}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderPressed}"/>
+  </Style>
+  <Style Selector="Button:not(.captionButton):disabled">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundDisabled}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderDisabled}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+
+  <!-- 应用中本应为透明的按钮类：Aero 下保持透明，只保留各自 hover 语义 -->
+  <Style Selector="Button.iconButton, Button.subtle, Button.navItem, Button.commandFlyoutItem, Button.crumbLink, Button.sessionTailAction, Button.scopeChoice">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Button.iconButton:pointerover, Button.subtle:pointerover, Button.crumbLink:pointerover, Button.navItem:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.iconButton:pressed, Button.subtle:pressed, Button.navItem:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+  </Style>
+
+  <!-- 默认（主）按钮：Vista 形态，普通渐变 + 青色内环（对比度考量，见参考书 §3.3） -->
+  <Style Selector="Button.accent">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonPrimaryBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroButtonPrimaryForeground}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.accent:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPointerOver}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonPrimaryBorder}"/>
+  </Style>
+  <Style Selector="Button.accent:pressed">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPressed}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderPressed}"/>
+  </Style>
+  <Style Selector="Button.accent:disabled">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundDisabled}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderDisabled}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="Button.accent TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AeroButtonPrimaryForeground}"/>
+  </Style>
+  <Style Selector="Button.accent PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AeroButtonPrimaryForeground}"/>
+  </Style>
+  <Style Selector="Button.accent:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="Button.accent:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <!-- 内环：默认按钮的 2px 青色描边盖在按钮边框内侧 -->
+  <Style Selector="Button.accent /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonPrimaryRing}"/>
+    <Setter Property="BorderThickness" Value="2"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+
+  <!-- 图标按钮（透明底）：hover/pressed 用蓝光泽，disabled 灰图形 -->
+  <Style Selector="Button.iconButton">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.iconButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPointerOver}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderPointerOver}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
+  <Style Selector="Button.iconButton:pressed">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPressed}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderPressed}"/>
+  </Style>
+  <Style Selector="Button.iconButton:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="Button.toolButton">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+
+  <!-- 焦点：Aero 焦点环只画在键盘路径（:focus-visible） -->
+  <Style Selector="Button:not(.captionButton):focus-visible, Button.accent:focus-visible, Button.iconButton:focus-visible, Button.toolButton:focus-visible, Button.dockTab:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroCaptionFocusRing}"/>
+    <Setter Property="BorderThickness" Value="2"/>
+  </Style>
+
+  <!-- ================= 输入 ================= -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource AeroInputBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="SelectionBrush" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="TextBox:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorderPointerOver}"/>
+  </Style>
+  <Style Selector="TextBox:focus">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorderFocused}"/>
+  </Style>
+  <Style Selector="TextBox:disabled">
+    <Setter Property="Background" Value="{DynamicResource AeroInputBackgroundDisabled}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorderDisabled}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="TextBox /template/ Border#PART_BorderElement">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="ComboBox:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorderPointerOver}"/>
+  </Style>
+  <Style Selector="ComboBox:focus, ComboBox:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroInputBorderFocused}"/>
+  </Style>
+  <Style Selector="ComboBox:disabled">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundDisabled}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderDisabled}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
+  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AeroMenuItemHoverBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AeroRowSelectedBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+  </Style>
+
+  <!-- ================= 页签 ================= -->
+  <!-- 工作台页签（Button.dockTab）：立体页签，选中白底 + 顶 2px 强调内线 -->
+  <Style Selector="Button.dockTab">
+    <Setter Property="CornerRadius" Value="3,3,0,0"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroTabBorder}"/>
+    <Setter Property="Background" Value="{DynamicResource AeroTabBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabText}"/>
+  </Style>
+  <Style Selector="Button.dockTab:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AeroButtonBackgroundPointerOver}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroButtonBorderPointerOver}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabTextSelected}"/>
+  </Style>
+  <Style Selector="Button.dockTab:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabTextSelected}"/>
+  </Style>
+  <Style Selector="Button.dockTab.selected">
+    <Setter Property="Background" Value="{DynamicResource AeroTabBackgroundSelected}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabTextSelected}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="Button.dockTab.selected:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AeroTabBackgroundSelected}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabTextSelected}"/>
+  </Style>
+  <Style Selector="Border.dockIndicator">
+    <Setter Property="Background" Value="{DynamicResource AeroTabIndicator}"/>
+    <Setter Property="Height" Value="2"/>
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="Margin" Value="8,0"/>
+  </Style>
+
+  <!-- Fluent TabControl 的 TabItem：同样的立体页签语义 -->
+  <Style Selector="TabItem">
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabText}"/>
+    <Setter Property="CornerRadius" Value="3,3,0,0"/>
+  </Style>
+  <Style Selector="TabItem:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabTextSelected}"/>
+  </Style>
+  <Style Selector="TabItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource AeroTabTextSelected}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+    <Setter Property="Background" Value="{DynamicResource AeroTabIndicator}"/>
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
+  <Style Selector="TabItem /template/ Border#PART_SelectedPipe">
+    <Setter Property="Background" Value="{DynamicResource AeroTabIndicator}"/>
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
+
+  <!-- ================= 列表 / 设置行 ================= -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AeroRowHoverBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroRowHoverBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AeroRowSelectedBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroRowSelectedBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+  </Style>
+  <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AeroRowSelectedBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AeroRowSelectedBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+  </Style>
+
+  <Style Selector="Border.settingsRow">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.clickable:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AeroRowHoverBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroRowHoverBorder}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.selected">
+    <Setter Property="Background" Value="{DynamicResource AeroRowSelectedBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroRowSelectedBorder}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.error">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppErrorBorder}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.disabled">
+    <Setter Property="Opacity" Value="0.75"/>
+  </Style>
+  <Style Selector="Border.card">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+  <Style Selector="Border.composerCard">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+  <Style Selector="Border.toolCard">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+  <Style Selector="Border.innerWell">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+  </Style>
+
+  <!-- ================= 菜单 / 浮层 / 对话框（直角 + 硬阴影；浮层不透明） ================= -->
+  <Style Selector="MenuFlyoutPresenter">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroMenuBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+  </Style>
+  <!-- MenuFlyoutPresenter/ContextMenu 自身没有 BoxShadow 属性（AVLN2000 实测），阴影挂模板外层 Border -->
+  <Style Selector="MenuFlyoutPresenter /template/ Border#PART_ContentRoot">
+    <Setter Property="BoxShadow" Value="{DynamicResource AeroMenuShadow}"/>
+  </Style>
+  <Style Selector="MenuFlyoutPresenter /template/ Border">
+    <Setter Property="BoxShadow" Value="{DynamicResource AeroMenuShadow}"/>
+  </Style>
+  <Style Selector="ContextMenu">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroMenuBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+  </Style>
+  <Style Selector="ContextMenu /template/ Border">
+    <Setter Property="BoxShadow" Value="{DynamicResource AeroMenuShadow}"/>
+  </Style>
+  <Style Selector="MenuItem">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource AeroMenuItemHoverBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroMenuItemHoverBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
+  <Style Selector="MenuItem:disabled /template/ Border#PART_LayoutRoot">
+    <Setter Property="Opacity" Value="1"/>
+  </Style>
+  <Style Selector="MenuItem:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="Border.overlayPanel">
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroMenuBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+  <Style Selector="Border.toast">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroMenuBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource AppShadowToast}"/>
+  </Style>
+
+  <!-- 对话框（现有 dialog 宿主）：Aero 标题条 + 白体 + 灰底栏；只按类作用，不改模板 -->
+  <Style Selector="Border.aeroDialogCaption">
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="Background" Value="{DynamicResource AeroCaptionBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AeroCaptionRule}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+  </Style>
+  <Style Selector="Border.aeroDialogCaption TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AeroCaptionText}"/>
+    <Setter Property="FontSize" Value="13"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Border.aeroDialogBody">
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+  </Style>
+  <Style Selector="Border.aeroDialogFooter">
+    <Setter Property="Background" Value="{DynamicResource AppDialogFooterBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,1,0,0"/>
+  </Style>
+</Styles>

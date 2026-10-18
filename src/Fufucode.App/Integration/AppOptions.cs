@@ -1,3 +1,5 @@
+using Fufucode.Core;
+
 namespace Fufucode.App.Integration;
 
 /// <summary>会话来源：默认接真实 Pi（M2 集成）；--mock 回到脚本化演示会话（--selftest 始终走 mock）。</summary>
@@ -16,7 +18,10 @@ public sealed record AppOptions(
     string? PiCliPath,
     // 自测隔离：AppSettingsStore/诊断的根目录覆盖；产品路径为 null（默认 LocalApplicationData/Fufucode）。
     string? AppDataRootOverride = null,
-    Fufucode.Pi.BackendId? Backend = null, string? OmpExecutablePath = null)
+    BackendId? Backend = null, string? OmpExecutablePath = null,
+    string? ClaudeExecutablePath = null,
+    string? CodexExecutablePath = null,
+    string? DshExecutablePath = null)
 {
     public static readonly AppOptions Mock = new(AppSessionMode.Mock, null, null, null, null);
 
@@ -26,14 +31,19 @@ public sealed record AppOptions(
     /// <summary>
     /// 支持开关：--mock（演示会话）、--project &lt;路径&gt;（Pi 工作目录；缺省回退最近项目，
     /// 仍无则进入“选择项目”态，不再以当前目录作缺省）、
-    /// --session &lt;id&gt;（恢复指定会话，缺省恢复该项目最近会话）、--pi-node/--pi-cli（运行环境覆盖）。
+    /// --session &lt;id&gt;（恢复指定会话，缺省恢复该项目最近会话）、--pi-node/--pi-cli（运行环境覆盖）、
+    /// --omp-exe（OMP 可执行文件）、--claude-exe（Claude Code CLI 可执行文件）、
+    /// --codex-exe（Codex CLI 可执行文件）、--dsh-exe（DeepSeek Harness CLI 可执行文件）。
     /// </summary>
     public static AppOptions Parse(string[] args)
     {
         var mode = AppSessionMode.Real;
         string? project = null, session = null, node = null, cli = null, dataRoot = null;
-        Fufucode.Pi.BackendId? backend = null;
+        BackendId? backend = null;
         string? omp = null;
+        string? claude = null;
+        string? codex = null;
+        string? dsh = null;
         for (var i = 0; i < args.Length; i++)
         {
             if (args[i].StartsWith("fufucode:", System.StringComparison.OrdinalIgnoreCase))
@@ -45,10 +55,19 @@ public sealed record AppOptions(
             switch (args[i])
             {
                 case "--backend" when i + 1 < args.Length:
-                    backend = Fufucode.Pi.BackendCapabilities.Parse(args[++i]);
+                    backend = BackendCapabilities.Parse(args[++i]);
                     break;
                 case "--omp-exe" when i + 1 < args.Length:
                     omp = System.IO.Path.GetFullPath(args[++i]);
+                    break;
+                case "--claude-exe" when i + 1 < args.Length:
+                    claude = System.IO.Path.GetFullPath(args[++i]);
+                    break;
+                case "--codex-exe" when i + 1 < args.Length:
+                    codex = System.IO.Path.GetFullPath(args[++i]);
+                    break;
+                case "--dsh-exe" when i + 1 < args.Length:
+                    dsh = System.IO.Path.GetFullPath(args[++i]);
                     break;
                 case "--mock":
                     mode = AppSessionMode.Mock;
@@ -71,6 +90,6 @@ public sealed record AppOptions(
             }
         }
 
-        return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp);
+        return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp, claude, codex, dsh);
     }
 }

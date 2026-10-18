@@ -147,12 +147,12 @@ public static class Wave5D6SelfTest
                 // 双击（同一文件行连续第二次点击）：打开预览并切到 Preview tab。
                 Click(row);
                 await Task.Delay(80);
-                check(vm.SelectedTab!.Kind == WorkspacePanelKind.Preview &&
+                check(vm.IsFilePreviewOpen &&
                       browser.ViewModel.CurrentFilePath == file.FullPath,
-                    "Files 双击文件 → 切到 Preview tab 且预览目标不变");
+                    "Files 双击文件 → 进入工作面板内文件预览态且预览目标不变");
 
                 // 目录不进入预览（只做逐层浏览）。
-                vm.OpenFilesCommand.Execute(null);
+                vm.CloseFilePreviewCommand.Execute(null);
                 await Task.Delay(60);
                 var folderRow = RowOf(view, vm, folder);
                 if (folderRow is not null) Click(folderRow);

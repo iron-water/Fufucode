@@ -4,6 +4,10 @@ using Avalonia.Controls;
 using Fufucode.App.Infrastructure.Browser;
 using Fufucode.App.ViewModels;
 
+// E2-B：独立浏览器测试工程（tests/Fufucode.App.Browser.Tests）需要访问 BrowserView/VM 的 internal 接缝，
+// 与既有 App 内自测共用同一实现，不改变 App.csproj 或共享 SelfTestRunner。
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Fufucode.App.Browser.Tests")]
+
 namespace Fufucode.App.Views;
 
 /// <summary>

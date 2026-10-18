@@ -5,21 +5,28 @@
          之上派生 App* 语义键并提供组件样式。App* 键名为既有契约，外部代码按名引用。 -->
     <Styles.Resources>
         <ResourceDictionary>
+            <x:Boolean x:Key="AppSkinIconMonochrome">False</x:Boolean>
+            <SolidColorBrush x:Key="AppTerminalSelection" Color="#5A61AFEF"/>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://Fufucode.App/Styles/FluentTokens.axaml"/>
                 <ResourceInclude Source="avares://Fufucode.App/Styles/Icons.axaml"/>
             </ResourceDictionary.MergedDictionaries>
             <ResourceDictionary.ThemeDictionaries>
                 <ResourceDictionary x:Key="Light">
-                    <!-- App* 语义键：值统一派生自 Fluent v2 令牌 -->
+                    <!-- App* 语义键：值统一派生自 Fluent v2 令牌；
+                         浅色侧栏用纯白浮于页面底(#F3F3F3)之上（Win11 浅色设置的 NavigationView 面）。 -->
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
+                    <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线。
+                         浅色 = 6% 黑，深色 = 6% 白（见 Dark 分支），比 AppBorderBrush 更轻，
+                         用于已带闭合卡片边框的容器内部，避免边框套娃的粗糙感。 -->
+                    <SolidColorBrush x:Key="AppDividerSubtle" Color="#0F000000"/>
                     <StaticResource x:Key="AppTextPrimary"        ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppTextSecondary"      ResourceKey="TextFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppTextDim"            ResourceKey="TextFillColorTertiaryBrush"/>
@@ -30,7 +37,10 @@
                     <StaticResource x:Key="AppHover"              ResourceKey="SubtleFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppListSelected"       ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <SolidColorBrush x:Key="AppListSelected" Color="#12000000"/>
+                    <SolidColorBrush x:Key="AppNavAccentBrush" Color="#0067C0"/>
+                    <!-- Win11 设置侧栏面（浅色）：白底浮起。 -->
+                    <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#FAFAFA"/>
                     <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.12"/>
                     <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
@@ -47,18 +57,21 @@
                     <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
                     <SolidColorBrush x:Key="AppScrimBackground" Color="#33000000"/>
-                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <!-- 轻质填充块：徽章底、内联说明区，弱于卡片底、不带边框。 -->
+                    <StaticResource x:Key="AppSubtleBackground"   ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppWarningForeground"  ResourceKey="SystemFillColorCautionBrush"/>
                     <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF14171D"/>
                     <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFDEE3EC"/>
                     <!-- Mica 激活时被窗口层覆盖为透明 -->
                     <StaticResource x:Key="AppMicaPageBackground" ResourceKey="AppWindowBackground"/>
                     <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
                     <!-- ListBoxItem 模板内部按这些键取色：选中态改为 subtle 底 + 主文字色（accent 指示条由模板内 navPill 提供） -->
-                    <StaticResource x:Key="ListBoxItemBackgroundSelected"            ResourceKey="SubtleFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <SolidColorBrush x:Key="ListBoxItemBackgroundSelected" Color="#1CFFFFFF"/>
+                    <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="#26FFFFFF"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
@@ -66,14 +79,18 @@
                     <StaticResource x:Key="ListBoxItemForegroundSelectedDisabled"    ResourceKey="TextFillColorDisabledBrush"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
+                    <!-- Win11 深色分层：窗口/内容基底压到最暗(#202020)，侧栏/停靠/chrome 浮起为
+                         #2C2C2C 的 Mica 面（SolidBackgroundFillColorQuaternary），卡片再亮半级。
+                         由此导航与内容产生 8% 明度差，无需任何描边即可分栏。 -->
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
-                    <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
+                    <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线（深色 = 6% 白）。 -->
+                    <SolidColorBrush x:Key="AppDividerSubtle" Color="#0FFFFFFF"/>
                     <StaticResource x:Key="AppTextPrimary"        ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppTextSecondary"      ResourceKey="TextFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppTextDim"            ResourceKey="TextFillColorTertiaryBrush"/>
@@ -84,7 +101,10 @@
                     <StaticResource x:Key="AppHover"              ResourceKey="SubtleFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppListSelected"       ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <SolidColorBrush x:Key="AppListSelected" Color="#2EFFFFFF"/>
+                    <SolidColorBrush x:Key="AppNavAccentBrush" Color="#4CC2FF"/>
+                    <!-- Win11 设置侧栏面：实色 #2C2C2C（Quaternary 是透明叠加，不透明这里不浮起）。 -->
+                    <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#2C2C2C"/>
                     <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.16"/>
                     <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
@@ -101,16 +121,20 @@
                     <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
                     <SolidColorBrush x:Key="AppScrimBackground" Color="#4D000000"/>
-                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <!-- chrome/停靠与侧栏同层（#2C2C2C）；内容区由 AppMicaPageBackground→Base 提供。 -->
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppSubtleBackground"   ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppWarningForeground"  ResourceKey="SystemFillColorCautionBrush"/>
                     <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF14171D"/>
                     <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFDEE3EC"/>
                     <StaticResource x:Key="AppMicaPageBackground" ResourceKey="AppWindowBackground"/>
                     <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
-                    <StaticResource x:Key="ListBoxItemBackgroundSelected"            ResourceKey="SubtleFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <SolidColorBrush x:Key="ListBoxItemBackgroundSelected" Color="#0F000000"/>
+                    <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="#26000000"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
@@ -122,7 +146,18 @@
             <FontFamily x:Key="AppFontFamily">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Inter</FontFamily>
             <FontFamily x:Key="AppMonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
             <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
+            <CornerRadius x:Key="AppCornerCard">6</CornerRadius>
+            <CornerRadius x:Key="AppCornerPill">16</CornerRadius>
+            <CornerRadius x:Key="AppCornerAvatarUser">12</CornerRadius>
+            <CornerRadius x:Key="AppCornerAvatarAssistant">14</CornerRadius>
             <CornerRadius x:Key="OverlayCornerRadius">8</CornerRadius>
+            <!-- UI-1 排版微调：等宽数字（tabular figures）——时间戳、计数、审计/日志数字
+                 强制锁定字宽，杜绝数字逐位变化时的整行水平抖动。 -->
+            <FontFeatureCollection x:Key="AppTabularNumericFeatures">
+                <FontFeature Tag="tnum"/>
+            </FontFeatureCollection>
+            <!-- UI-1 发丝细线：单闭合边框原则下容器内单向分隔线的推荐线宽。 -->
+            <x:Double x:Key="AppHairlineThickness">1</x:Double>
         </ResourceDictionary>
     </Styles.Resources>
 
@@ -185,6 +220,13 @@
     </Style>
     <Style Selector="TextBlock.mono">
         <Setter Property="FontFamily" Value="{StaticResource AppMonoFont}"/>
+        <!-- UI-1 排版微调：等宽字体同样锁定 tabular 数字，杜绝代码/计数数字列错位。 -->
+        <Setter Property="FontFeatures" Value="{StaticResource AppTabularNumericFeatures}"/>
+    </Style>
+    <!-- UI-1 排版微调·等宽数字：时间戳、指标计数、审计/日志、Token 用量等场景显式套用，
+         避免数字逐位变化（如 9→10）时整行水平抖动。 -->
+    <Style Selector="TextBlock.numeric">
+        <Setter Property="FontFeatures" Value="{StaticResource AppTabularNumericFeatures}"/>
     </Style>
 
     <!-- ================= 侧栏 ================= -->
@@ -207,7 +249,7 @@
     </Style>
     <Style Selector="ListBox.sessionList > ListBoxItem">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Padding" Value="10,6"/>
         <Setter Property="Margin" Value="0,1"/>
         <Setter Property="MinHeight" Value="40"/>
@@ -372,7 +414,7 @@
     <Style Selector="Button.iconButton">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Width" Value="32"/>
         <Setter Property="Height" Value="32"/>
         <Setter Property="Padding" Value="0"/>
@@ -414,7 +456,7 @@
     <Style Selector="Button.subtle">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Padding" Value="8,4"/>
         <Setter Property="Foreground" Value="{DynamicResource HyperlinkForegroundBrush}"/>
         <Setter Property="Transitions">
@@ -431,7 +473,7 @@
     <Style Selector="Button.commandFlyoutItem">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
         <Setter Property="Transitions">
             <Transitions>
@@ -451,13 +493,26 @@
         <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
     </Style>
     <Style Selector="Border.innerWell">
         <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    </Style>
+    <!-- UI-1 单闭合边框原则：嵌套在已闭合卡片（toolCard / composerCard / settingsRow）内的输出区、
+         内联填充块，只保留轻质填充，BorderThickness=0，避免"框套框"。 -->
+    <Style Selector="Border.nestedFill">
+        <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    </Style>
+    <!-- UI-1：单闭合边框范围内的结构划分，只用单向 1px 发丝细线（不闭合）。 -->
+    <Style Selector="Border.innerRule">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
     </Style>
 
     <!-- 页头状态 chip -->
@@ -527,7 +582,7 @@
     <!-- ================= 时间线 ================= -->
     <Style Selector="Border.userBubble">
         <Setter Property="Background" Value="{DynamicResource AppUserBubble}"/>
-        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
         <Setter Property="Padding" Value="12,8"/>
         <Setter Property="MaxWidth" Value="560"/>
         <Setter Property="HorizontalAlignment" Value="Right"/>
@@ -538,7 +593,7 @@
         <Setter Property="Background" Value="{DynamicResource AppCodeBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCodeBorder}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
     </Style>
 
     <!-- 思考块（轻量展开器） -->
@@ -546,7 +601,7 @@
         <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
     </Style>
 
     <!-- 错误 / 提示卡（InfoBar 风格；H1 严重性类保留） -->
@@ -554,7 +609,7 @@
         <Setter Property="Background" Value="{DynamicResource AppErrorBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppErrorBorder}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
         <Setter Property="Padding" Value="12,10"/>
     </Style>
     <Style Selector="Border.errorCard PathIcon">
@@ -580,7 +635,7 @@
         <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource OverlayCornerRadius}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
         <Setter Property="Padding" Value="12,10,12,8"/>
     </Style>
     <Style Selector="TextBox.composerInput">
@@ -611,21 +666,34 @@
         <Setter Property="Opacity" Value="1"/>
         <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
     </Style>
+    <!-- UI-1 单闭合边框原则：composerCard 已闭合，工具栏内的模型/思考选择器降级为无框轻质填充，
+         仅靠悬停底色传达可交互性，避免"容器内再套闭合框"。 -->
+    <Style Selector="Border.composerCard ComboBox">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="Border.composerCard ComboBox:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <Style Selector="Border.composerCard ComboBox:pointerover /template/ Border#Background">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
 
     <!-- 排队条：卡片内顶部 subtle 列表 -->
     <Style Selector="Border.queueStrip">
         <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <!-- UI-1 单闭合边框原则：外层 composerCard 已闭合，内部条只保留轻质填充，不再加闭合框。 -->
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Padding" Value="10,6"/>
     </Style>
     <!-- 恢复草稿提示（subtle InfoBar） -->
     <Style Selector="Border.restoreInfo">
         <Setter Property="Background" Value="{DynamicResource AppInfoBackground}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
-        <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{StaticResource ControlCornerRadius}"/>
+        <!-- UI-1 单闭合边框原则：同上，仅靠表面色差分传达层级。 -->
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Padding" Value="10,6"/>
     </Style>
 

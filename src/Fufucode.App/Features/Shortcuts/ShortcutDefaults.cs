@@ -16,6 +16,7 @@ public static class ShortcutDefaults
     private static readonly HashSet<string> TerminalInputActions = new(StringComparer.Ordinal)
     {
         "terminal", "terminal.copy", "terminal.paste", "terminal.interrupt", "terminal.new",
+        "terminal.copy-or-interrupt",
     };
 
     /// <summary>动作 ID → 作用范围。未列出的动作默认全局范围。</summary>
@@ -30,6 +31,13 @@ public static class ShortcutDefaults
         ["session.side"] = ShortcutScope.Chat,
         ["browser"] = ShortcutScope.Browser,
         ["terminal"] = ShortcutScope.Terminal,
+        ["terminal.copy"] = ShortcutScope.Terminal,
+        ["terminal.paste"] = ShortcutScope.Terminal,
+        ["terminal.find"] = ShortcutScope.Terminal,
+        ["terminal.bottom"] = ShortcutScope.Terminal,
+        ["terminal.copy-or-interrupt"] = ShortcutScope.Terminal,
+        ["terminal.interrupt"] = ShortcutScope.Terminal,
+        ["terminal.new"] = ShortcutScope.Terminal,
         ["edit.undo"] = ShortcutScope.Editor,
         ["edit.redo"] = ShortcutScope.Editor,
         ["edit.cut"] = ShortcutScope.Editor,
@@ -49,12 +57,19 @@ public static class ShortcutDefaults
         ["files"] = ["Ctrl+P"],
         ["toggle.bottom"] = ["Ctrl+J"],
         ["navigate.back"] = ["Alt+Left"],
+        ["terminal.copy"] = ["Ctrl+Shift+C"],
+        ["terminal.paste"] = ["Ctrl+V", "Shift+Insert"],
+        ["terminal.find"] = ["Ctrl+F"],
+        ["terminal.copy-or-interrupt"] = ["Ctrl+C"],
     };
 
     public static ShortcutScope ScopeOf(string id) =>
+        id.StartsWith("browser.", StringComparison.Ordinal) ? ShortcutScope.Browser :
         Scopes.TryGetValue(id, out var scope) ? scope : ShortcutScope.Global;
 
     public static IReadOnlyList<ShortcutGesture> DefaultGestures(string id) =>
+        Fufucode.App.Features.BrowserExperience.BrowserSurfaceActions.Catalog.FirstOrDefault(a => a.Id == id) is { } browser
+            ? (ShortcutGesture.Parse(browser.DefaultGesture) is { IsNone: false } gesture ? [gesture] : []) :
         Bindings.TryGetValue(id, out var texts)
             ? texts.Select(ShortcutGesture.Parse).OfType<ShortcutGesture>().ToArray()
             : [];

@@ -186,7 +186,7 @@ public sealed partial class ExtensionsPageViewModel : ViewModelBase
     private string _projectPath = string.Empty;
 
     /// <summary>mock 空状态文案：如实说明未连接真实 Pi。</summary>
-    public string MockNotice => "mock 模式未连接真实 Pi，扩展信息不可用。";
+    public string MockNotice => "mock 模式未连接真实后端，扩展信息不可用。";
 
     /// <summary>统一扩展列表：内置审批桥 + 已加载/已发现/手动添加/已启用路径。</summary>
     public ObservableCollection<ExtensionItemViewModel> Extensions { get; } = new();
@@ -515,7 +515,7 @@ public sealed partial class ExtensionsPageViewModel : ViewModelBase
             : pendingOn && !isActive ? ("待重启：启用", "attention", "安全重启会话后生效")
             : !pendingOn && isActive ? ("待重启：停用", "attention", "安全重启会话后生效")
             : pendingOn ? ("已加载", "success",
-                "Pi 加载扩展失败会启动即退出，因此启动成功即代表已加载")
+                "扩展加载失败会导致后端插件启动即退出，因此启动成功即代表已加载")
             : loadError is not null ? ("加载失败", "critical", loadError)
             : ("未启用", "neutral", "启用后在下次安全重启时加载");
 
@@ -672,7 +672,7 @@ public sealed partial class ExtensionsPageViewModel : ViewModelBase
     /// <summary>命令入口可用性：mock 模式禁用（Flyout 按钮 Tooltip 说明）。</summary>
     public bool CanUseCommands => !IsMock;
 
-    public string CommandButtonToolTip => IsMock ? "mock 模式未连接真实 Pi，命令列表不可用" : "插入命令或技能";
+    public string CommandButtonToolTip => IsMock ? "mock 模式未连接真实后端，命令列表不可用" : "插入命令或技能";
 
     // ── 安全重启 ──
 

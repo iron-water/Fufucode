@@ -9,16 +9,25 @@ var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Pr
 var node = Path.Combine(root, "runtime/node/node.exe");
 var cli = Path.Combine(root, "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 if (args.Contains("--d1-only")) { await D1BackendTests.RunAsync(root); return; }
+if (args.Contains("--claude-only")) { await ClaudeBackendIntegrationTests.RunAsync(root); return; }
+if (args.Contains("--codex-dsh-only")) { await CodexDshIntegrationTests.RunAsync(root); return; }
 if (args.Contains("--d1-regression-only")) { await PersistentTests.RunAsync(root, fake, dotnet); await ExtensionUiTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--bridge-only")) { await BridgeIntegrationTests.RunAsync(root, node, cli); return; }
 if (args.Contains("--cli-ui-only")) { await CliTests.RunUiAsync(root); return; }
 if (args.Contains("--cli-contract-only")) { await CliTests.RunContractsAsync(root); return; }
+if (args.Contains("--cli-host-only")) { await CliHostTests.RunAsync(); return; }
+if (args.Contains("--idle-maintenance-only")) { await IdleMaintenanceTests.RunAsync(root, fake, dotnet); return; }
+if (args.Contains("--process-exit-only")) { await ProcessExitTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--a13-only")) { await A13ContractTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--crash-repro-only")) { await CrashReproTests.RunAsync(root, node, cli); return; }
 if (args.Contains("--worktree-only")) { await ProjectForkTests.RunAsync(root, node, cli); return; }
+if (args.Contains("--adapter-stop-only")) { await AdapterStopTests.RunAsync(root, fake, dotnet); return; }
 PiRpcOptions fakeOptions() => new(dotnet, [fake], root);
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); Console.WriteLine($"PASS {name}"); }
 HistoryMappingTests.Run();
+await AdapterStopTests.RunAsync(root, fake, dotnet);
+await IdleMaintenanceTests.RunAsync(root, fake, dotnet);
+await ProcessExitTests.RunAsync(root, fake, dotnet);
 await CliTests.RunAsync(root, fake, dotnet);
 
 async Task WaitFor(Func<bool> condition)
@@ -33,7 +42,7 @@ async Task WaitFor(Func<bool> condition)
 
 foreach (var prompt in new[] { "stream", "early" })
 {
-    await using var session = new ChatSessionCoordinator(fakeOptions());
+    await using var session = PiSessions.Coordinator(fakeOptions());
     var snapshots = new ConcurrentQueue<SessionSnapshot>();
     session.SnapshotChanged += snapshots.Enqueue;
     await session.StartAsync();
@@ -62,7 +71,7 @@ foreach (var prompt in new[] { "stream", "early" })
         $"{prompt}: agent_end does not settle session");
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions()))
+await using (var session = PiSessions.Coordinator(fakeOptions()))
 {
     await session.StartAsync();
     await session.SendPromptAsync("hold");
@@ -78,17 +87,17 @@ await using (var session = new ChatSessionCoordinator(fakeOptions()))
         raw.GetProperty("pendingMessageCount").GetInt32() == 0, "clear_queue precedes abort and prevents queued work");
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions()))
+await using (var session = PiSessions.Coordinator(fakeOptions()))
 {
     await session.StartAsync();
     try { await session.SendPromptAsync("ack_timeout", acknowledgementTimeout: TimeSpan.FromMilliseconds(250)); throw new Exception("timeout missed"); }
-    catch (PiRpcException error) { Check(error.Message.Contains("timed out"), "prompt acknowledgement timeout is explicit"); }
+    catch (RpcException error) { Check(error.Message.Contains("timed out"), "prompt acknowledgement timeout is explicit"); }
     var state = (await session.QueryStateAsync()).Data!.Value;
     Check(state.GetProperty("promptCount").GetInt32() == 1 && session.Snapshot.LastResult == TaskResult.Unknown,
         "timed-out side-effect command is not resent");
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions()))
+await using (var session = PiSessions.Coordinator(fakeOptions()))
 {
     var events = new ConcurrentQueue<PiSessionEvent>();
     session.ProtocolEvent += events.Enqueue;
@@ -102,7 +111,7 @@ await using (var session = new ChatSessionCoordinator(fakeOptions()))
         "immediate prompt remains available after late lifecycle events");
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions() with
+await using (var session = PiSessions.Coordinator(fakeOptions() with
 {
     PromptAcknowledgementTimeout = TimeSpan.FromMilliseconds(100),
     ExtensionCommandAcknowledgementTimeout = TimeSpan.FromSeconds(2)
@@ -118,13 +127,13 @@ await using (var session = new ChatSessionCoordinator(fakeOptions() with
     await WaitFor(() => session.Snapshot.Activity == ActivityState.Idle);
     Check(session.Snapshot.LastError is null, "slash command acknowledgement succeeds after dialog response");
     try { await session.SendPromptAsync("ack_timeout"); throw new Exception("ordinary prompt timeout missed"); }
-    catch (PiRpcException error)
+    catch (RpcException error)
     {
         Check(error.Message.Contains("timed out"), "ordinary prompt keeps configured short acknowledgement timeout");
     }
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions()))
+await using (var session = PiSessions.Coordinator(fakeOptions()))
 {
     await session.StartAsync();
     await session.SendPromptAsync("handled");
@@ -137,16 +146,16 @@ await using (var session = new ChatSessionCoordinator(fakeOptions()))
         "model failure is distinct from command acknowledgement");
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions()))
+await using (var session = PiSessions.Coordinator(fakeOptions()))
 {
     await session.StartAsync();
     try { await session.SendPromptAsync("crash"); throw new Exception("crash missed"); }
-    catch (PiRpcException) { }
+    catch (RpcException) { }
     await WaitFor(() => session.Snapshot.Connection == ConnectionState.Faulted);
     Check(session.Snapshot.LastResult == TaskResult.Unknown, "process fault is distinct from model failure");
 }
 
-await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()))
+await using (var adapter = await PiSessions.ConnectAsync(fakeOptions()))
 {
     var events = new ConcurrentQueue<SessionEvent>();
     adapter.Event += (_, ev) => events.Enqueue(ev);
@@ -166,7 +175,7 @@ await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()
         "IChatSession maps tool completion and settled outcome");
 }
 
-await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()))
+await using (var adapter = await PiSessions.ConnectAsync(fakeOptions()))
 {
     var events = new ConcurrentQueue<SessionEvent>();
     adapter.Event += (_, ev) => events.Enqueue(ev);
@@ -179,7 +188,7 @@ await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()
         "IChatSession returns cleared queue without replacing draft");
 }
 
-await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()))
+await using (var adapter = await PiSessions.ConnectAsync(fakeOptions()))
 {
     var events = new ConcurrentQueue<SessionEvent>();
     adapter.Event += (_, ev) => events.Enqueue(ev);
@@ -196,10 +205,10 @@ foreach (var (request, expectedKind) in new[]
     ("crash", SessionErrorKind.ProcessExited)
 })
 {
-    await using var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions());
+    await using var adapter = await PiSessions.ConnectAsync(fakeOptions());
     var events = new ConcurrentQueue<SessionEvent>();
     adapter.Event += (_, ev) => events.Enqueue(ev);
-    try { await adapter.SendAsync(request); } catch (PiRpcException) { }
+    try { await adapter.SendAsync(request); } catch (RpcException) { }
     await WaitFor(() => adapter.Connection == SessionConnection.Faulted &&
         events.OfType<SessionEvent.SessionError>().Any(e => e.Kind == expectedKind));
     var errorKinds = string.Join(",", events.OfType<SessionEvent.SessionError>().Select(e => e.Kind));
@@ -207,7 +216,7 @@ foreach (var (request, expectedKind) in new[]
         $"IChatSession classifies {request} as {expectedKind}; observed {errorKinds}");
 }
 
-await using (var session = new ChatSessionCoordinator(fakeOptions()))
+await using (var session = PiSessions.Coordinator(fakeOptions()))
 {
     await session.StartAsync();
     await session.SendPromptAsync("state_fail");
@@ -217,7 +226,7 @@ await using (var session = new ChatSessionCoordinator(fakeOptions()))
     await session.StopAsync();
 }
 
-await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()))
+await using (var adapter = await PiSessions.ConnectAsync(fakeOptions()))
 {
     var cleared = new ConcurrentQueue<SessionEvent.QueueCleared>();
     adapter.Event += (_, ev) => { if (ev is SessionEvent.QueueCleared item) cleared.Enqueue(item); };
@@ -234,7 +243,7 @@ await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()
         "P2-7 next stop reports only newly recovered text");
 }
 
-await using (var adapter = await PiChatSessionAdapter.ConnectAsync(fakeOptions()))
+await using (var adapter = await PiSessions.ConnectAsync(fakeOptions()))
 {
     var events = new ConcurrentQueue<SessionEvent>();
     adapter.Event += (_, ev) => events.Enqueue(ev);
@@ -260,7 +269,7 @@ await ProjectForkTests.RunAsync(root, node, cli);
 await UserExtensionTests.RunRealAsync(root, node, cli);
 var work = Path.Combine(root, "tmp", "real-core-smoke");
 Directory.CreateDirectory(work);
-await using (var session = new ChatSessionCoordinator(new PiRpcOptions(node,
+await using (var session = PiSessions.Coordinator(new PiRpcOptions(node,
     [cli, "--mode", "rpc", "--no-session", "--no-extensions"], work,
     EnvironmentVariables: new Dictionary<string, string>
     {
@@ -298,4 +307,3 @@ await using (var session = new ChatSessionCoordinator(new PiRpcOptions(node,
         }
     }
 }
-await AtriaModelAcceptanceTests.RunIfConfiguredAsync(node, cli, root);

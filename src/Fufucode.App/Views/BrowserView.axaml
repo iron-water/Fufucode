@@ -1,21 +1,115 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:vm="using:Fufucode.App.ViewModels" xmlns:views="using:Fufucode.App.Views"
+             xmlns:vm="using:Fufucode.App.ViewModels" xmlns:bx="using:Fufucode.App.Features.BrowserExperience"
+             xmlns:views="using:Fufucode.App.Views"
              x:Class="Fufucode.App.Views.BrowserView" x:DataType="vm:BrowserViewModel" AutomationProperties.Name="内置浏览器">
-  <Grid RowDefinitions="Auto,Auto,*,Auto" Background="{DynamicResource AppWindowBackground}">
-    <Grid Grid.Row="0" RowDefinitions="30,34" ColumnDefinitions="*,Auto" Margin="8" RowSpacing="4">
-      <StackPanel Orientation="Horizontal" Spacing="2">
-        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding BackCommand}" ToolTip.Tip="后退" AutomationProperties.Name="浏览器后退"><PathIcon Data="{StaticResource Icon.ArrowLeft}" Width="16" Height="16"/></Button>
-        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding ForwardCommand}" ToolTip.Tip="前进" AutomationProperties.Name="浏览器前进"><PathIcon Data="{StaticResource Icon.ArrowRight}" Width="16" Height="16"/></Button>
-        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding ReloadCommand}" ToolTip.Tip="刷新" AutomationProperties.Name="浏览器刷新"><PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="16" Height="16"/></Button>
-        <Button Classes="iconButton" Width="30" Height="30" Command="{Binding StopCommand}" ToolTip.Tip="停止" AutomationProperties.Name="浏览器停止"><PathIcon Data="{StaticResource Icon.RecordStop}" Width="16" Height="16"/></Button>
-      </StackPanel>
-      <Button Grid.Column="1" Classes="iconButton" Width="30" Height="30" Click="OpenFile_Click" ToolTip.Tip="打开本地文件" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{StaticResource Icon.Folder}" Width="16" Height="16"/></Button>
-      <TextBox Grid.Row="1" Text="{Binding AddressText}" MinWidth="0" PlaceholderText="地址" KeyDown="Address_KeyDown" AutomationProperties.Name="浏览器地址栏"/>
-      <Button Grid.Row="1" Grid.Column="1" Classes="iconButton" Width="30" Height="30" Command="{Binding NavigateCommand}" ToolTip.Tip="转到地址" AutomationProperties.Name="浏览器转到"><PathIcon Data="{StaticResource Icon.ArrowRight}" Width="16" Height="16"/></Button>
+  <UserControl.Styles>
+    <Style Selector="Button.browserTab">
+      <Setter Property="CornerRadius" Value="8"/><Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+      <Setter Property="Padding" Value="10,4"/><Setter Property="MinHeight" Value="28"/>
+    </Style>
+    <Style Selector="Button.browserTab:pointerover"><Setter Property="Background" Value="{DynamicResource AppHover}"/><Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/></Style>
+    <Style Selector="Button.browserTab.selected">
+      <Setter Property="Background" Value="{DynamicResource AppListSelected}"/><Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Border.findBar">
+      <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/><Setter Property="BorderThickness" Value="0,0,0,1"/>
+    </Style>
+    <!-- 一体化胶囊地址栏（对标 Codex / ChatGPT）：单一深色圆角容器，内部承载锁 / 星标 / 输入 / 分享 -->
+    <Style Selector="Border.omniBar">
+      <Setter Property="CornerRadius" Value="16"/>
+      <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+      <Setter Property="MinHeight" Value="32"/>
+      <Setter Property="Padding" Value="4,0"/>
+    </Style>
+    <Style Selector="Border.omniBar:pointerover">
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    </Style>
+    <Style Selector="Border.omniBar TextBox">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="MinHeight" Value="30"/>
+      <Setter Property="Padding" Value="2,0"/>
+      <Setter Property="VerticalContentAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.omniAction">
+      <Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="13"/><Setter Property="Padding" Value="0"/>
+      <Setter Property="Width" Value="26"/><Setter Property="Height" Value="26"/>
+      <Setter Property="MinWidth" Value="26"/><Setter Property="MinHeight" Value="26"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.omniAction:pointerover"><Setter Property="Background" Value="{DynamicResource AppHover}"/></Style>
+    <!-- 收藏态：星标随真实收藏状态点亮，不做假高亮 -->
+    <Style Selector="Button.omniAction.bookmarked PathIcon"><Setter Property="Foreground" Value="{DynamicResource AppAccent}"/></Style>
+    <Style Selector="Button.omniAction.bookmarked"><Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/></Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Background="{DynamicResource AppWindowBackground}">
+    <!-- 页签栏：紧凑独立页签，紧贴顶部，无额外分划线 -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6,4,6,0">
+      <ScrollViewer x:Name="BrowserTabScroller" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+        <ItemsControl x:Name="BrowserTabs" ItemsSource="{Binding Tabs}">
+          <ItemsControl.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="2"/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="bx:BrowserTab">
+              <Border Classes="browserTabRow">
+                <Grid ColumnDefinitions="*,22">
+                  <Button Classes="browserTab" Classes.selected="{Binding IsSelected}" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).SelectTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding TabHeader}" AutomationProperties.Name="{Binding TabHeader}">
+                    <TextBlock Text="{Binding TabHeader}" FontSize="12" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                  </Button>
+                  <Button Grid.Column="1" Classes="iconButton" Width="20" Height="20" MinWidth="20" MinHeight="20" Padding="5" VerticalAlignment="Center" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).CloseTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="关闭页签" AutomationProperties.Name="关闭浏览器页签"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="9" Height="9"/></Button>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Button Grid.Column="1" Classes="iconButton" Width="26" Height="26" VerticalAlignment="Center" Command="{Binding NewTabCommand}" ToolTip.Tip="新建页签" AutomationProperties.Name="浏览器新建页签"><PathIcon Data="{DynamicResource Icon.Add}" Width="12" Height="12"/></Button>
     </Grid>
-    <ProgressBar Grid.Row="1" Height="3" Minimum="0" Maximum="1" Value="{Binding Progress}" IsIndeterminate="{Binding IsLoading}" IsVisible="{Binding IsLoading}"/>
-    <Grid Grid.Row="2">
-      <views:BrowserViewHost x:Name="Host"/>
+    <!-- 统一顶栏：左导航按钮组 + 一体化胶囊 + 右工具按钮组（无二重/三重分划线） -->
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*,Auto" Margin="6,4,6,6" ColumnSpacing="4">
+      <StackPanel Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <Button Classes="iconButton" Width="28" Height="28" Command="{Binding BackCommand}" ToolTip.Tip="后退" AutomationProperties.Name="浏览器后退"><PathIcon Data="{DynamicResource Icon.ArrowLeft}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" Command="{Binding ForwardCommand}" ToolTip.Tip="前进" AutomationProperties.Name="浏览器前进"><PathIcon Data="{DynamicResource Icon.ArrowRight}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" Command="{Binding ReloadCommand}" ToolTip.Tip="刷新" AutomationProperties.Name="浏览器刷新"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" Command="{Binding StopCommand}" IsVisible="{Binding IsLoading}" ToolTip.Tip="停止" AutomationProperties.Name="浏览器停止"><PathIcon Data="{DynamicResource Icon.RecordStop}" Width="13" Height="13"/></Button>
+      </StackPanel>
+      <!-- 一体化胶囊：锁/不安全图标 + 星标 + 地址输入 + 分享 -->
+      <Border Grid.Column="1" Classes="omniBar" VerticalAlignment="Center">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+          <Panel Grid.Column="0" Margin="4,0,2,0" VerticalAlignment="Center" ToolTip.Tip="{Binding SecurityToolTip}" IsVisible="{Binding ShowSecurity}">
+            <PathIcon Data="{DynamicResource Icon.ShieldCheckmark}" Width="13" Height="13" IsVisible="{Binding IsSecure}" Foreground="{DynamicResource AppSuccessForeground}"/>
+            <PathIcon Data="{DynamicResource Icon.ShieldError}" Width="13" Height="13" IsVisible="{Binding IsInsecure}" Foreground="{DynamicResource AppCautionForeground}"/>
+          </Panel>
+          <Button Grid.Column="1" Classes="omniAction" Classes.bookmarked="{Binding IsCurrentBookmarked}" Margin="2,0" Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="{Binding BookmarkToolTip}" AutomationProperties.Name="浏览器收藏当前页面">
+            <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12" Foreground="{DynamicResource AppTextSecondary}"/>
+          </Button>
+          <TextBox Grid.Column="2" Text="{Binding AddressText}" MinWidth="0" PlaceholderText="输入网址或本地文件路径…" KeyDown="Address_KeyDown" AutomationProperties.Name="浏览器地址栏" VerticalContentAlignment="Center"/>
+          <Button Grid.Column="3" Classes="omniAction" Margin="2,0,4,0" Command="{Binding ShareCommand}" ToolTip.Tip="分享当前页面地址" AutomationProperties.Name="浏览器分享"><PathIcon Data="{DynamicResource Icon.Share}" Width="12" Height="12"/></Button>
+        </Grid>
+      </Border>
+      <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
+        <Button Classes="iconButton" Width="28" Height="28" Click="InspectElement_Click" ToolTip.Tip="检查与拾取页面元素 (Inspect)" AutomationProperties.Name="浏览器检查元素"><PathIcon Data="{DynamicResource Icon.Code}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" Click="OpenFile_Click" ToolTip.Tip="打开本地文件" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" Click="More_Click" ToolTip.Tip="更多操作" AutomationProperties.Name="浏览器更多操作"><PathIcon Data="{DynamicResource Icon.More}" Width="13" Height="13"/></Button>
+      </StackPanel>
+    </Grid>
+    <!-- 查找条 -->
+    <Border Grid.Row="2" Classes="findBar" IsVisible="{Binding IsFindOpen}" Padding="8,4">
+      <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
+        <TextBox Text="{Binding FindQuery}" PlaceholderText="页内查找" KeyDown="Find_KeyDown" AutomationProperties.Name="浏览器查找输入" Height="26" VerticalContentAlignment="Center"/>
+        <TextBlock Grid.Column="1" Classes="caption" Text="{Binding FindStatus}" VerticalAlignment="Center" MinWidth="52" TextTrimming="CharacterEllipsis"/>
+        <Button Grid.Column="2" Classes="iconButton" Width="22" Height="22" Command="{Binding FindPreviousCommand}" ToolTip.Tip="上一个" AutomationProperties.Name="浏览器查找上一个"><PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="11" Height="11"/></Button>
+        <Button Grid.Column="3" Classes="iconButton" Width="22" Height="22" Command="{Binding FindNextCommand}" ToolTip.Tip="下一个" AutomationProperties.Name="浏览器查找下一个"><PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="11" Height="11"/></Button>
+        <Button Grid.Column="4" Classes="iconButton" Width="22" Height="22" Command="{Binding CloseFindCommand}" ToolTip.Tip="关闭查找" AutomationProperties.Name="浏览器关闭查找"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="11" Height="11"/></Button>
+      </Grid>
+    </Border>
+    <Grid Grid.Row="3">
+      <Grid x:Name="HostLayer"/>
       <Border IsVisible="{Binding HasRuntimeNotice}" Background="{DynamicResource AppCardBackground}" Margin="12" Padding="12">
         <StackPanel Spacing="8">
           <TextBlock Classes="bodyStrong" Text="浏览器运行时不可用"/>
@@ -26,12 +120,5 @@
         </StackPanel>
       </Border>
     </Grid>
-    <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="8">
-      <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto" RowSpacing="3">
-        <TextBlock Classes="caption" Text="{Binding ModeText}" Margin="0,0,8,0"/>
-        <TextBlock Grid.Column="1" Classes="caption" Text="{Binding StatusText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding StatusText}"/>
-        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Classes="caption" Text="{Binding DocumentTitle}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding DocumentTitle}"/>
-      </Grid>
-    </Border>
   </Grid>
 </UserControl>

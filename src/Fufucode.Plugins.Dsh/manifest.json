@@ -1,0 +1,15 @@
+{
+  "id": "backend.dsh",
+  "name": "DeepSeek Harness 后端",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Dsh.dll",
+  "packageType": "Fufucode.Plugins.Dsh.DshBackendPluginPackage",
+  "category": "Backend",
+  "description": "DeepSeek Harness 官方 CLI 的 headless JSON 协议适配后端。插件只携带适配器；dsh 可执行文件由用户本机安装。",
+  "runtime": {
+    "id": "dsh-cli",
+    "required": true,
+    "preferred": "system",
+    "installCommand": "安装 DeepSeek Harness，或传 --dsh-exe"
+  }
+}

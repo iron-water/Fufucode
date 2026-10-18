@@ -30,7 +30,7 @@ public partial class MainWindow
     internal CommandPaletteViewModel PaletteForTesting => _palette;
     internal UsageDetailsViewModel UsageForTesting => _usage;
     internal NotificationCenterViewModel NotificationsForTesting => _notifications;
-    internal bool NotificationCenterVisibleForTesting => GlobalOverlay.IsVisible && _overlayKind == "notifications";
+    internal bool NotificationCenterVisibleForTesting => _notificationsView.IsEffectivelyVisible;
 
     private void InitializeGlobalWorkspace()
     {
@@ -44,31 +44,44 @@ public partial class MainWindow
         _usageView.DataContext = _usage;
         _notificationsView.DataContext = _notifications;
         _palette.CloseRequested += () => CloseGlobalOverlay("commands");
-        _usage.CloseRequested += () => CloseGlobalOverlay("usage");
-        _notifications.CloseRequested += () => CloseGlobalOverlay("notifications");
+        _usage.CloseRequested += () => CloseDockPage("usage");
+        _notifications.CloseRequested += () => CloseDockPage("notifications");
+        _workbenchPages.RegisterCore("notifications", "通知", "Alert", _notificationsView);
+        _workbenchPages.RegisterCore("usage", "用量", "Info", _usageView);
+        _notificationsView.Focusable = _usageView.Focusable = true;
         _notifications.SessionRequested += async id =>
         {
             if (_host is not null && _host.Current.Session.Id != id) await SwitchSessionAsync(id);
             if (_host is null || _host.Current.Session.Id == id) await NavigateWorkspaceAsync(AppPage.Chat);
         };
         _notifications.PropertyChanged += OnNotificationPropertyChanged;
-        InitializeFloatingPanel();
+        InitializeNotificationDelivery();
+        RenderDockPages();
         _actions.ExecutionFailed += message => _vm?.Timeline.AddNotification("动作失败：" + message);
 
         string? SessionUnavailable() => _vm is null ? "会话尚未就绪" : null;
         string? WorkAreaUnavailable() => _vm is null ? "会话尚未就绪" : _vm.IsSettingsPage ? "返回工作区后可使用" : null;
+        RegisterBrowserActions();
         Register("commands", "命令面板", "全局", "Ctrl+K / Ctrl+Shift+P", "搜索应用动作，与输入框斜杠命令独立", () => { OpenGlobalOverlay("commands"); _palette.Open(); return Task.CompletedTask; });
         Register("settings", "设置", "全局", "", "切换设置与工作区", () => NavigateWorkspaceAsync(_vm?.IsSettingsPage == true ? AppPage.Chat : AppPage.Settings), SessionUnavailable);
         Register("chat", "返回对话", "导航", "", "返回当前会话", () => NavigateWorkspaceAsync(AppPage.Chat), SessionUnavailable);
-        Register("extensions", "扩展", "导航", "", "管理已安装的 Pi 扩展", () => NavigateWorkspaceAsync(AppPage.Extensions), SessionUnavailable);
+        Register("extensions", "扩展", "导航", "", "管理已安装的扩展", () => NavigateWorkspaceAsync(AppPage.Extensions), SessionUnavailable);
         Register("files", "文件", "工作区", "Ctrl+P", "浏览项目文件，完整路径可复制", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Files), WorkAreaUnavailable);
         Register("changes", "变更", "工作区", "", "查看工作树或会话直接写入范围", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Changes), WorkAreaUnavailable);
         Register("terminal", "交互终端", "工作区", "Ctrl+J", "独立于 Pi RPC 的项目终端", () => { OpenDockPage("terminal", DockZone.Bottom); return Task.CompletedTask; }, WorkAreaUnavailable);
-        Register("usage", "用量详情", "会话", "", "当前会话、本轮、全部记录口径", () => { OpenGlobalOverlay("usage"); _usage.Open(); return Task.CompletedTask; }, SessionUnavailable);
-        Register("notifications", "通知中心", "全局", "", "完成、失败与待审批归属", () => { OpenGlobalOverlay("notifications"); _notifications.Open(); return Task.CompletedTask; });
-        Register("floating.toggle", "显示/隐藏浮窗", "全局", "", "浮窗承载会话事件提醒与辅助对话", () => { ToggleFloatingPanel(); return Task.CompletedTask; });
-        Register("floating.pin", "固定/取消固定浮窗", "全局", "", "固定时只在应用内显示；取消固定可独立成窗", () => { SetFloatingPinned(!_floating.Pinned); return Task.CompletedTask; });
-        Register("preview", "文件预览", "工作区", "", "预览所选文件内容", () => { OpenDockPage("preview", DockZone.Right); return Task.CompletedTask; }, WorkAreaUnavailable);
+        string? TerminalMissing() => _terminalDock?.SelectedTab is null ? "请先打开终端" : null;
+        Register("terminal.copy", "复制终端选区", "终端", "", "复制固定输出快照中的选择，退出后仍可用", TerminalDock.CopySelectionAsync,
+            () => _terminalDock?.SelectedTab?.OutputSelection.HasText == true ? null : "请先选择终端输出");
+        Register("terminal.paste", "粘贴到终端草稿", "终端", "", "保留草稿并追加剪贴板；需显式运行，绝不自动发送", TerminalDock.PasteToDraftAsync, TerminalMissing);
+        Register("terminal.find", "查找终端输出", "终端", "", "在当前终端有界输出中查找", () => { TerminalDock.FindOutput(); return Task.CompletedTask; }, TerminalMissing);
+        Register("terminal.bottom", "终端返回底部", "终端", "", "恢复跟随当前终端输出", () => { TerminalDock.ReturnToBottom(); return Task.CompletedTask; }, TerminalMissing);
+        Register("terminal.copy-or-interrupt", "终端复制或中断", "终端", "", "输出有选区时复制，否则中断；命令框文字选择由编辑器复制", TerminalDock.CopyOrInterruptAsync, TerminalMissing);
+        Register("terminal.interrupt", "中断终端命令", "终端", "", "中断当前终端的shell命令", () => { _terminalDock?.SelectedTab?.Interrupt(); return Task.CompletedTask; },
+            () => _terminalDock?.SelectedTab?.IsRunning == true ? null : "没有运行中的终端");
+        Register("terminal.new", "新建终端", "终端", "", "在当前项目新增独立终端", () => { _terminalDock?.CreateTerminalCommand.Execute(null); return Task.CompletedTask; },
+            () => _terminalDock is null ? "项目尚未就绪" : null);
+        Register("usage", "用量详情", "会话", "", "当前会话、本轮、全部记录口径", () => { OpenDockPage("usage", DockZone.Right); _usage.Open(); _usageView.Focus(); return Task.CompletedTask; }, SessionUnavailable);
+        Register("notifications", "通知中心", "全局", "", "完成、失败与待审批归属", () => { OpenNotificationCenterOverlay(); return Task.CompletedTask; });
         Register("browser", "浏览器", "工作区", "", "内置浏览器", () => { OpenDockPage("browser", DockZone.Right); return Task.CompletedTask; },
             () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable());
         Register("library", "资料库", "工作区", "", "导入、检索与引用本地资料", () => { OpenDockPage("library", DockZone.Right); return Task.CompletedTask; },
@@ -77,7 +90,7 @@ public partial class MainWindow
         CaptionUsage.Command = _actions.GetCommand("usage");
         CaptionNotifications.Command = _actions.GetCommand("notifications");
         Activated += (_, _) => _notifications.SetWindowFocused(true);
-        Deactivated += (_, _) => _notifications.SetWindowFocused(false);
+        Deactivated += (_, _) => Dispatcher.UIThread.Post(RefreshNotificationFocus);
         SizeChanged += (_, _) => ResizeGlobalOverlay();
         ResizeGlobalOverlay();
     }
@@ -110,21 +123,22 @@ public partial class MainWindow
         if (_vm is not { } vm) return;
         var tab = vm.WorkspacePanel.Tabs.FirstOrDefault(item => item.Kind == kind);
         if (tab is not null) { tab.IsOpen = true; vm.WorkspacePanel.SelectedTab = tab; }
-        OpenDockPage(kind switch { WorkspacePanelKind.Files => "files", WorkspacePanelKind.Changes => "changes", _ => "preview" }, DockZone.Right);
+        OpenDockPage(kind switch { WorkspacePanelKind.Files => "files", WorkspacePanelKind.Changes => "changes", _ => "files" }, DockZone.Right);
         await vm.WorkspacePanel.RefreshAsync();
     }
 
-    /// <summary>浮窗内的"打开通知中心"入口：复用全局浮层，不另开一套。</summary>
+    /// <summary>打开同一通知功能页；已有浮动位置和通知历史保留。</summary>
     internal void OpenNotificationCenterOverlay()
     {
-        OpenGlobalOverlay("notifications");
+        OpenDockPage("notifications", DockZone.Right);
         _notifications.Open();
+        _notificationsView.Focus();
     }
 
     private void OpenGlobalOverlay(string kind)
     {
         if (_overlayKind is null) _overlayReturnFocus = FocusManager?.GetFocusedElement() as Control;
-        _palette.IsOpen = false; _usage.IsOpen = false; _notifications.IsOpen = false;
+        _palette.IsOpen = false;
         _overlayKind = kind;
         GlobalOverlayHost.Content = kind switch { "commands" => _paletteView, "usage" => _usageView, _ => (object)_notificationsView };
         GlobalOverlay.IsVisible = true;
@@ -142,7 +156,7 @@ public partial class MainWindow
     private void CloseGlobalOverlay(string? expected = null)
     {
         if (expected is not null && expected != _overlayKind) return;
-        _palette.IsOpen = false; _usage.IsOpen = false; _notifications.IsOpen = false;
+        _palette.IsOpen = false;
         _overlayKind = null; GlobalOverlay.IsVisible = false; GlobalOverlayHost.Content = null;
         SetBrowserOcclusion(false);
         RestoreFocus(_overlayReturnFocus);
@@ -155,7 +169,7 @@ public partial class MainWindow
         ToolTip.SetTip(CaptionNotifications, _notifications.SummaryText);
         NotificationPrompt.DataContext = _notifications.LatestPrompt;
         // 浮层只在用户选择该渠道时出现；关掉浮层渠道后浮窗仍按原策略提醒。
-        if (_floating is not null) RefreshNotificationChannel();
+        if (_notificationDelivery is not null) RefreshNotificationChannel();
         else NotificationPrompt.IsVisible = _notifications.HasPrompt;
     }
     private void NotificationPromptOpen_Click(object? sender, RoutedEventArgs e) => _notifications.ActivateCommand.Execute(_notifications.LatestPrompt);

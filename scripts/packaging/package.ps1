@@ -1,3 +1,12 @@
+<#
+全量渠道打包脚本：默认零 Pi/Node 载荷。
+
+历史版本会把 runtime/node、runtime/pi（约 149MB node_modules）与 extensions/fufucode-bridge
+打进安装包。按"FUMO 原生内核（纯 C# 实现）为默认后端、其它后端以插件身份下发"的方向，
+本渠道与 package-native.ps1 等价：只发布 Fufucode.App + Fufucode.Cli。
+
+Pi/OMP/Codex/DSH/Claude 是可选后端插件，由插件市场按需安装并携带各自运行时。
+#>
 param([string]$AppVersion = '1.4.0')
 $ErrorActionPreference = 'Stop'
 
@@ -12,19 +21,6 @@ if (-not [IO.Path]::GetFullPath($packageRoot).StartsWith($root + [IO.Path]::Dire
 if (Test-Path -LiteralPath $packageRoot) { Remove-Item -LiteralPath $packageRoot -Recurse -Force }
 New-Item -ItemType Directory -Force $packageRoot | Out-Null
 
-$nodeExe = Join-Path $root 'runtime/node/node.exe'
-$piRoot = Join-Path $root 'runtime/pi'
-$piNodeModules = Join-Path $piRoot 'node_modules'
-$piVersion = (Get-Content -LiteralPath (Join-Path $piNodeModules '@earendil-works/pi-coding-agent/package.json') -Raw | ConvertFrom-Json).version
-$cli = Join-Path $piNodeModules '@earendil-works/pi-coding-agent/dist/bundle/cli.js'
-
-if (-not (Test-Path -LiteralPath $nodeExe)) {
-    throw "Managed node.exe is missing at $nodeExe. Run this script after populating runtime/node."
-}
-if (-not (Test-Path -LiteralPath $cli)) {
-    throw "Pi CLI is missing at $cli. Run 'npm ci --prefix runtime/pi --ignore-scripts' first."
-}
-
 # --- 1. .NET self-contained publish (win-x64) ---
 foreach ($component in @('App', 'Cli')) {
     $project = Join-Path $root "src/Fufucode.$component/Fufucode.$component.csproj"
@@ -37,33 +33,14 @@ foreach ($component in @('App', 'Cli')) {
 # so Ctrl+C reaches the CLI directly instead of cmd's batch-job prompt.
 Copy-Item -LiteralPath (Join-Path $packageRoot 'cli/Fufucode.Cli.exe') -Destination (Join-Path $packageRoot 'cli/fufucode.exe')
 
-# --- 2. Managed node ---
-Write-Host "Copying managed Node..."
-$nodeDest = Join-Path $packageRoot 'runtime/node/node.exe'
-New-Item -ItemType Directory -Force (Split-Path $nodeDest) | Out-Null
-Copy-Item -LiteralPath $nodeExe -Destination $nodeDest -Force
-$nodeLicense = Join-Path $root 'runtime/node/LICENSE'
-if (-not (Test-Path -LiteralPath $nodeLicense)) { throw 'Managed Node license is missing.' }
-Copy-Item -LiteralPath $nodeLicense -Destination (Join-Path (Split-Path $nodeDest) 'LICENSE')
-
-# --- 3. Pi + lockfile (content fixed by A's package-lock.json) ---
-Write-Host "Copying managed Pi runtime..."
-New-Item -ItemType Directory -Force (Join-Path $packageRoot 'runtime/pi') | Out-Null
-Copy-Item -LiteralPath (Join-Path $piRoot 'package.json') -Destination (Join-Path $packageRoot 'runtime/pi/package.json') -Force
-Copy-Item -LiteralPath (Join-Path $piRoot 'package-lock.json') -Destination (Join-Path $packageRoot 'runtime/pi/package-lock.json') -Force
-Copy-Item -Recurse -Force -LiteralPath $piNodeModules -Destination (Join-Path $packageRoot 'runtime/pi/node_modules')
-
-# --- 3b. Bundled Pi extensions shipped with the app (D Wave2 finding: fufucode-bridge
-# is required for approvals/messaging; no external deps). Core discovers the bridge
-# beside runtime/. Ships only this production extension — dev fixtures stay out.
-$bridgeSource = Join-Path $root 'extensions/fufucode-bridge'
-if (-not (Test-Path -LiteralPath (Join-Path $bridgeSource 'index.ts'))) { throw 'Approval bridge is missing.' }
-$bridgeDestination = Join-Path $packageRoot 'extensions/fufucode-bridge'
-New-Item -ItemType Directory -Force $bridgeDestination | Out-Null
-Get-ChildItem -LiteralPath $bridgeSource | Copy-Item -Recurse -Force -Destination $bridgeDestination
-
-& (Join-Path $PSScriptRoot 'collect-notices.ps1') -Destination (Join-Path $packageRoot 'notices')
-Copy-Item -LiteralPath (Join-Path $root 'THIRD-PARTY-NOTICES.md') -Destination (Join-Path $packageRoot 'notices/README.md')
+# --- 2. 默认包不得包含任何 Node/Pi/扩展载荷 ---
+# 默认包只发 FUMO 原生内核（纯 C# 实现）；Pi 后端（含审批桥扩展 fufucode-bridge）改由后端插件包下发。
+$forbidden = @('runtime', 'extensions', 'notices')
+foreach ($name in $forbidden) {
+    if (Test-Path -LiteralPath (Join-Path $packageRoot $name)) {
+        throw "Default package must not contain '$name' (managed runtime/extension payload)."
+    }
+}
 
 # --- 4. Launcher ---
 Write-Host "Writing launcher..."
@@ -72,11 +49,6 @@ setlocal DisableDelayedExpansion
 set "FUFUCODE_DATA=%LocalAppData%\Fufucode"
 if not exist "%FUFUCODE_DATA%" mkdir "%FUFUCODE_DATA%"
 set "APP_DIR=%~dp0app"
-set "NODE=%~dp0runtime\node\node.exe"
-set "PI_CLI=%~dp0runtime\pi\node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js"
-set "PI_AGENT_DIR=%FUFUCODE_DATA%\pi-agent"
-set "SESSION_DIR=%FUFUCODE_DATA%\sessions"
-set "PI_CODING_AGENT_DIR=%PI_AGENT_DIR%"
 
 if "%~1"=="" goto gui
 if /i "%~1"=="--selftest" goto gui
@@ -95,9 +67,14 @@ setlocal DisableDelayedExpansion
 exit /b %ERRORLEVEL%
 ' -Encoding Ascii
 
+Set-Content -Path (Join-Path $packageRoot 'cli/Fufucode.Cli.cmd') -Value '@echo off
+setlocal DisableDelayedExpansion
+"%~dp0Fufucode.Cli.exe" %*
+exit /b %ERRORLEVEL%
+' -Encoding Ascii
+
 Set-Content -Path (Join-Path $packageRoot 'Fufucode.ps1') -Value '$ErrorActionPreference = ''Stop''
 $Env:FUFUCODE_DATA = Join-Path $Env:LocalAppData ''Fufucode''
-$Env:PI_CODING_AGENT_DIR = Join-Path $Env:FUFUCODE_DATA ''pi-agent''
 $null = New-Item -ItemType Directory -Force $Env:FUFUCODE_DATA
 $component = if ($args.Count -eq 0 -or $args[0] -eq ''--selftest'') { ''app\Fufucode.App.exe'' } else { ''cli\Fufucode.Cli.exe'' }
 $exe = Join-Path $PSScriptRoot $component
@@ -107,7 +84,7 @@ exit $LASTEXITCODE
 
 # --- 5. Readme + manifest of shipped components ---
 Set-Content -Path (Join-Path $packageRoot 'README.txt') -Value @"
-Fufucode release layout (M7 packaging spike)
+Fufucode release layout
 
 Run:
   Fufucode.cmd              start the app
@@ -118,23 +95,44 @@ Run:
   fufucode <command>        installed CLI (open a new terminal after installation)
   Fufucode.ps1              PowerShell launcher, same arguments as Fufucode.cmd
 
-Runtime layout:
+Layout:
   app/              self-contained .NET 10.0 win-x64 publish (Avalonia 12.1.3)
-  cli/              self-contained .NET 10.0 win-x64 CLI publish
-  extensions/       required Fufucode approval bridge
-  runtime/node/     project-managed Node v24.15.0 (exact binary copied from dev machine)
-  notices/          dependency license texts and remaining notice audit gaps
-  runtime/pi/       @earendil-works/pi-coding-agent@$piVersion + lockfile, started from runtime/node
-  Fufucode.cmd/.ps1 set PI_CODING_AGENT_DIR and --session-dir to %LocalAppData%\Fufucode
+  cli/              self-contained .NET 10.0 win-x64 CLI publish + PATH launchers
+  Fufucode.cmd/.ps1 set FUFUCODE_DATA to %LocalAppData%\Fufucode
 
-Data is written to %LocalAppData%\Fufucode (pi-agent, sessions, desktop.db, logs, exports).
+This package ships ONLY the native core (Fufucode.App + Fufucode.Cli). It contains no
+Node runtime, no Pi runtime and no bundled extensions, so the default FUMO native
+backend (pure C#) starts and runs with zero Node/external-agent processes.
+
+Pi, OMP, Codex, DSH and Claude are optional backend plugins: install them from the
+marketplace, which provisions each plugin's own runtime. Never copy runtime/node or
+runtime/pi into this layout by hand.
+
+Data is written to %LocalAppData%\Fufucode (agent, sessions, desktop.db, logs, exports;
+the legacy pi-agent directory is still read for backward compatibility).
 No global node, pi, or npm on PATH is required.
 
-Unverified: code signing and automatic Pi upgrade.
+Unverified: code signing and automatic backend plugin upgrade.
 The embedded browser requires Microsoft Edge WebView2 Runtime on the target machine.
 If unavailable, the app reports the missing runtime and offers an external-browser fallback.
-Installer validation evidence is maintained outside this repository.
+Installer validation evidence is maintained separately in docs/records/.
 "@
+
+# --- Build marker: local channel discovery; release builds write the github channel ---
+$buildChannel = if ($env:FUFUCODE_BUILD_CHANNEL) { $env:FUFUCODE_BUILD_CHANNEL } else { 'local' }
+$githubRepo = $env:FUFUCODE_GITHUB_REPOSITORY
+$buildCommit = $null
+try { $buildCommit = (& git -C $root rev-parse --short=12 HEAD 2>$null); if ($LASTEXITCODE -ne 0) { $buildCommit = $null } } catch { }
+$buildInfo = [ordered]@{
+    version = $AppVersion
+    builtAtUtc = (Get-Date).ToUniversalTime().ToString('o')
+    channel = $buildChannel
+}
+if ($buildCommit) { $buildInfo.commit = $buildCommit.Trim() }
+if (-not [string]::IsNullOrWhiteSpace($githubRepo)) { $buildInfo.githubRepository = $githubRepo }
+$buildInfo | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $packageRoot 'app/build-info.json') -Encoding Utf8
+$buildInfo | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $packageRoot 'cli/build-info.json') -Encoding Utf8
+Write-Host "Build marker: channel=$buildChannel version=$AppVersion"
 
 # --- 6. publish file integrity manifest ---
 & (Join-Path $PSScriptRoot 'integrity.ps1') -Mode Write -PackageRoot $packageRoot
@@ -154,3 +152,35 @@ Get-ChildItem -Directory $packageRoot | ForEach-Object {
 
 & (Join-Path $PSScriptRoot 'build-installer-version.ps1') -AppVersion $AppVersion -OutName "Fufucode-$AppVersion-setup"
 if ($LASTEXITCODE -ne 0) { throw 'Installer build failed.' }
+
+# --- 8. 独立发布可选后端插件（与 native 渠道同构：Pi 后端按需安装） ---
+$distRoot = Join-Path $root 'out\plugins-dist'
+$backendPlugins = @(
+    @{ Id = 'backend.pi'; Project = 'src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj' },
+    @{ Id = 'backend.omp'; Project = 'src/Fufucode.Plugins.Omp/Fufucode.Plugins.Omp.csproj' },
+    @{ Id = 'backend.claude'; Project = 'src/Fufucode.Plugins.Claude/Fufucode.Plugins.Claude.csproj' },
+    @{ Id = 'backend.codex'; Project = 'src/Fufucode.Plugins.Codex/Fufucode.Plugins.Codex.csproj' },
+    @{ Id = 'backend.dsh'; Project = 'src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj' }
+)
+foreach ($p in $backendPlugins) {
+    $proj = Join-Path $root $p.Project
+    if (-not (Test-Path -LiteralPath $proj)) {
+        Write-Warning "Backend plugin project missing, skipped: $proj"
+        continue
+    }
+    $targetDir = Join-Path $distRoot $p.Id
+    if (Test-Path -LiteralPath $targetDir) { Remove-Item -LiteralPath $targetDir -Recurse -Force }
+    Write-Host "Publishing backend plugin '$($p.Id)'..."
+    dotnet publish $proj -c Release -o $targetDir
+    if ($LASTEXITCODE -ne 0) { throw "Backend plugin $($p.Id) publish failed." }
+    foreach ($pattern in @('Fufucode.Core.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*', 'Avalonia.*',
+            'Microsoft.Data.Sqlite.*', 'SQLitePCLRaw.*', 'CommunityToolkit.Mvvm.*')) {
+        Get-ChildItem -Path $targetDir -Filter $pattern | Remove-Item -Force -Recurse
+    }
+    $runtimesDir = Join-Path $targetDir 'runtimes'
+    if (Test-Path -LiteralPath $runtimesDir) { Remove-Item -LiteralPath $runtimesDir -Recurse -Force }
+    $manifestSrc = Join-Path (Split-Path $proj) 'manifest.json'
+    if (Test-Path -LiteralPath $manifestSrc) { Copy-Item -LiteralPath $manifestSrc -Destination $targetDir -Force }
+    Compress-Archive -Path (Join-Path $targetDir '*') -DestinationPath (Join-Path $distRoot "$($p.Id)-1.0.0.zip") -Force
+    Write-Host "  -> $($p.Id)-1.0.0.zip"
+}

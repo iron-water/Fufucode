@@ -42,7 +42,7 @@ public static class DiagnosticsSummary
         sb.AppendLine($"模式: {input.ModeText}");
         sb.AppendLine($"项目: {input.ProjectPath}");
         sb.AppendLine($"数据目录: {input.DataRoot ?? "不可用"}");
-        sb.AppendLine($"Pi 配置目录: {input.AgentDirectory ?? "不可用"}");
+        sb.AppendLine($"代理配置目录: {input.AgentDirectory ?? "不可用"}");
         sb.AppendLine($"日志目录: {input.LogsDirectory ?? "不可用"}");
         sb.AppendLine($"审批桥: {input.ApprovalText ?? "未知"}" +
                       (input.ApprovalDiagnostic is { } d ? $"（{d}）" : string.Empty));

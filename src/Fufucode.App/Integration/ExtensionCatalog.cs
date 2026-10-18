@@ -6,7 +6,6 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App.Integration;
 
@@ -19,7 +18,7 @@ public sealed record CommandEntry(
     string? SourceBaseDir,
     string? SourceScope)
 {
-    /// <summary>输入框调用名：技能形如 skill:x → /skill:x；扩展/提示词 → /name。</summary>
+    /// <summary>输入框调用名：技能形如 skill:x → /skill:x；扩展/提示词 → /name（decisions.md [轨道B]）。</summary>
     public string Invocation => "/" + Name;
 }
 
@@ -61,13 +60,13 @@ public sealed class ExtensionCatalogSnapshot
 /// </summary>
 public sealed class ExtensionCatalog
 {
-    private readonly ChatSessionCoordinator _coordinator;
+    private readonly ISessionCoordinator _coordinator;
     private readonly string _projectPath;
     private readonly string _agentDirectory;
     private readonly object _errorLock = new();
     private readonly List<ExtensionErrorEntry> _errors = [];
 
-    public ExtensionCatalog(ChatSessionCoordinator coordinator, string projectPath, string agentDirectory)
+    public ExtensionCatalog(ISessionCoordinator coordinator, string projectPath, string agentDirectory)
     {
         _coordinator = coordinator;
         _projectPath = projectPath;
@@ -159,6 +158,8 @@ public sealed class ExtensionCatalog
             {
                 continue;
             }
+            // 自有加载事实证明是内部命令，不向用户命令选择器暴露实现细节。
+            if (name.StartsWith("fufucode-proof-", StringComparison.Ordinal)) continue;
 
             string? sourcePath = null, baseDir = null, scope = null;
             if (item.TryGetProperty("sourceInfo", out var info) &&

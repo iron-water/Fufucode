@@ -22,7 +22,7 @@ internal static class ExtensionUiTests
                     ["PI_CODING_AGENT_DIR"] = privateAgent,
                     ["FUFUCODE_APPROVAL_FIXTURE_FILE"] = marker
                 });
-            await using var session = new ChatSessionCoordinator(options);
+            await using var session = PiSessions.Coordinator(options);
             var notifications = new ConcurrentQueue<PiExtensionUiRequestEvent>();
             var seen = new ConcurrentQueue<PiSessionEvent>();
             session.ProtocolEvent += seen.Enqueue;
@@ -63,7 +63,7 @@ internal static class ExtensionUiTests
                     ["PI_CODING_AGENT_DIR"] = privateAgent,
                     ["FUFUCODE_APPROVAL_FIXTURE_FILE"] = marker
                 });
-            await using var session = new ChatSessionCoordinator(options);
+            await using var session = PiSessions.Coordinator(options);
             await session.StartAsync();
             var prompt = session.SendPromptAsync("/fufucode-approval-fixture");
             var until = DateTime.UtcNow + TimeSpan.FromSeconds(8);
@@ -71,14 +71,14 @@ internal static class ExtensionUiTests
             if (session.PendingExtensionUiRequests.Count != 1) throw new Exception("Fixture dialog did not open.");
             if (action == "stop") await session.StopAsync().WaitAsync(TimeSpan.FromSeconds(10));
             else await session.CloseAsync().WaitAsync(TimeSpan.FromSeconds(10));
-            try { await prompt; } catch (PiRpcException) when (action == "close") { }
+            try { await prompt; } catch (RpcException) when (action == "close") { }
             if (File.ReadAllText(marker) != "before" || session.PendingExtensionUiRequests.Count != 0)
                 throw new Exception($"{action} left an approval side effect or pending dialog.");
             Console.WriteLine($"PASS real Pi {action} rejects pending extension command without deadlock");
         }
 
         File.WriteAllText(marker, "before");
-        await using (var delayed = new ChatSessionCoordinator(new PiRpcOptions(node,
+        await using (var delayed = PiSessions.Coordinator(new PiRpcOptions(node,
             [cli, "--mode", "rpc", "--no-session", "--no-extensions", "--extension", fixture], work,
             EnvironmentVariables: new Dictionary<string, string>
             {
@@ -124,7 +124,7 @@ internal static class ExtensionUiTests
         foreach (var (decision, expectedWrite) in new[] { (true, true), (false, false), ((bool?)null, false) })
         {
             if (File.Exists(marker)) File.Delete(marker);
-            await using var session = new ChatSessionCoordinator(Options());
+            await using var session = PiSessions.Coordinator(Options());
             var events = new ConcurrentQueue<PiSessionEvent>();
             var dialogs = new ConcurrentQueue<ExtensionUiRequest>();
             var closed = new ConcurrentQueue<ExtensionUiRequest>();
@@ -172,7 +172,7 @@ internal static class ExtensionUiTests
             catch (InvalidOperationException) { Console.WriteLine("PASS answered or expired approval cannot be replayed"); }
         }
 
-        await using (var verified = new ChatSessionCoordinator(new PiRpcOptions(dotnet,
+        await using (var verified = PiSessions.Coordinator(new PiRpcOptions(dotnet,
             [fake, "--bridge-mode", "present"], work)))
         {
             var states = new ConcurrentQueue<ApprovalAvailability>();
@@ -186,7 +186,7 @@ internal static class ExtensionUiTests
                 "registered bridge probe transitions Unverified to Verified");
         }
 
-        await using (var degraded = new ChatSessionCoordinator(new PiRpcOptions(dotnet,
+        await using (var degraded = PiSessions.Coordinator(new PiRpcOptions(dotnet,
             [fake, "--bridge-mode", "present"], work, RequireApprovalBridge: true)))
         {
             await degraded.StartAsync();
@@ -201,18 +201,18 @@ internal static class ExtensionUiTests
                 "extension error transitions Verified to Unavailable and blocks later prompts");
         }
 
-        await using (var broken = new ChatSessionCoordinator(new PiRpcOptions(dotnet,
+        await using (var broken = PiSessions.Coordinator(new PiRpcOptions(dotnet,
             [fake, "--bridge-mode", "broken"], work)))
         {
             try { await broken.StartAsync(); throw new Exception("broken extension was accepted"); }
-            catch (PiRpcException) { }
+            catch (RpcException) { }
             Check(broken.ApprovalAvailability == ApprovalAvailability.Unavailable &&
                 broken.Snapshot.Connection == ConnectionState.Faulted &&
                 broken.ApprovalDiagnostic!.Contains("startup failed"),
                 "fatal extension startup maps to Unavailable with diagnostic");
         }
 
-        await using (var unknown = new ChatSessionCoordinator(Options()))
+        await using (var unknown = PiSessions.Coordinator(Options()))
         {
             var seen = new ConcurrentQueue<PiSessionEvent>();
             unknown.ProtocolEvent += seen.Enqueue;
@@ -226,7 +226,7 @@ internal static class ExtensionUiTests
                 "unknown method is recorded and ignored without a response");
         }
 
-        await using (var editor = new ChatSessionCoordinator(new PiRpcOptions(dotnet,
+        await using (var editor = PiSessions.Coordinator(new PiRpcOptions(dotnet,
             [fake], work, UiDefaultTimeout: TimeSpan.FromMilliseconds(200))))
         {
             var closed = new ConcurrentQueue<ExtensionUiRequest>();
@@ -246,7 +246,7 @@ internal static class ExtensionUiTests
                 "editor without Pi timeout receives a host cancellation deadline");
         }
 
-        await using (var lost = new ChatSessionCoordinator(Options()))
+        await using (var lost = PiSessions.Coordinator(Options()))
         {
             var opened = new ConcurrentQueue<ExtensionUiRequest>();
             var closed = new ConcurrentQueue<ExtensionUiRequest>();
@@ -261,7 +261,7 @@ internal static class ExtensionUiTests
                 "connection loss rejects and closes pending approval locally");
         }
 
-        await using (var adapter = await PiChatSessionAdapter.ConnectAsync(Options()))
+        await using (var adapter = await PiSessions.ConnectAsync(Options()))
         {
             var ui = (IExtensionUiSession)adapter;
             var notifications = new ConcurrentQueue<PiExtensionUiRequestEvent>();
@@ -284,7 +284,7 @@ internal static class ExtensionUiTests
             Check(ui.PendingExtensionUiRequests.Count == 0, "select/input/editor replies clear pending dialogs");
         }
 
-        await using (var session = new ChatSessionCoordinator(Options()))
+        await using (var session = PiSessions.Coordinator(Options()))
         {
             await session.StartAsync();
             await session.SendPromptAsync("approval_settled");
@@ -294,7 +294,7 @@ internal static class ExtensionUiTests
             await session.RespondToExtensionUiAsync(session.Snapshot.PendingUiRequests.Single(), PiExtensionUiResponse.Confirm(false));
         }
 
-        await using (var first = new ChatSessionCoordinator(Options()))
+        await using (var first = PiSessions.Coordinator(Options()))
         {
             await first.StartAsync();
             await first.SendPromptAsync("approval");
@@ -302,7 +302,7 @@ internal static class ExtensionUiTests
             var old = first.PendingExtensionUiRequests.Single();
             await first.CloseAsync();
             Check(first.PendingExtensionUiRequests.Count == 0, "closing clears pending dialogs");
-            await using var second = new ChatSessionCoordinator(Options());
+            await using var second = PiSessions.Coordinator(Options());
             await second.StartAsync();
             await second.SendPromptAsync("approval");
             await WaitFor(() => second.PendingExtensionUiRequests.Count == 1);

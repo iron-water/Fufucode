@@ -25,6 +25,18 @@ public static class HeadlessUiRunner
     public static int RunProcess(string[] args)
     {
         var data = Path.Combine(Path.GetTempPath(), "fufucode-ui-" + Guid.NewGuid().ToString("N"));
+        // DESK-1：在窗口创建前把选定皮肤/主题写进隔离数据根，让真实渲染截图对准目标皮肤。
+        var previewSkin = ValueAfter(args, "--skin") ?? "fluent";
+        var previewTheme = ValueAfter(args, "--theme") ?? "dark";
+        // 预览走 SelfTest 数据根（MainWindow 的皮肤存储用它），因此把种子写在同一个根上。
+        Program.SelfTestDataRoot = data;
+        try
+        {
+            Directory.CreateDirectory(data);
+            File.WriteAllText(Path.Combine(data, "ui.json"),
+                "{\"version\":1,\"skin\":\"" + previewSkin + "\",\"theme\":\"" + previewTheme + "\"}");
+        }
+        catch (Exception error) { Console.Error.WriteLine("Preview skin seed failed: " + error.Message); }
         var completed = new TaskCompletionSource<int>();
         Dispatcher.UIThread.Post(async () =>
         {
@@ -57,6 +69,22 @@ public static class HeadlessUiRunner
     {
         var arguments = args.ToList();
         var page = "chat";
+        // DESK-1：预览可以带 --skin/--theme，便于把真实渲染截图对准指定皮肤，
+        // 而不是只能在默认 Fluent 上看外壳。只写隔离的临时数据根，不碰产品配置。
+        var skin = "fluent";
+        var skinIndex = arguments.IndexOf("--skin");
+        if (skinIndex >= 0)
+        {
+            if (skinIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --skin value.");
+            skin = arguments[skinIndex + 1]; arguments.RemoveRange(skinIndex, 2);
+        }
+        var theme = "dark";
+        var themeIndex = arguments.IndexOf("--theme");
+        if (themeIndex >= 0)
+        {
+            if (themeIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --theme value.");
+            theme = arguments[themeIndex + 1]; arguments.RemoveRange(themeIndex, 2);
+        }
         var pageIndex = arguments.IndexOf("--page");
         if (pageIndex >= 0)
         {
@@ -64,6 +92,27 @@ public static class HeadlessUiRunner
             page = arguments[pageIndex + 1]; arguments.RemoveRange(pageIndex, 2);
         }
         if (page is not ("chat" or "extensions" or "settings")) throw new ArgumentException("Unknown preview page.");
+        string? settingsCategory = null;
+        var catIndex = arguments.IndexOf("--settings-category");
+        if (catIndex >= 0)
+        {
+            if (catIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --settings-category value.");
+            settingsCategory = arguments[catIndex + 1]; arguments.RemoveRange(catIndex, 2);
+        }
+        string? settingsPage = null;
+        var pageSubIndex = arguments.IndexOf("--settings-page");
+        if (pageSubIndex >= 0)
+        {
+            if (pageSubIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --settings-page value.");
+            settingsPage = arguments[pageSubIndex + 1]; arguments.RemoveRange(pageSubIndex, 2);
+        }
+        string? shortcutsGroup = null;
+        var groupIndex = arguments.IndexOf("--shortcuts-group");
+        if (groupIndex >= 0)
+        {
+            if (groupIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --shortcuts-group value.");
+            shortcutsGroup = arguments[groupIndex + 1]; arguments.RemoveRange(groupIndex, 2);
+        }
         var valid = arguments.Count == 1 && arguments[0] == "snapshot" ||
             arguments.Count == 2 && arguments[0] is "screenshot" or "invoke";
         if (!valid) throw new ArgumentException("Usage: ui snapshot | screenshot <new.png> | invoke nav.<page> [--page <page>].");
@@ -79,6 +128,18 @@ public static class HeadlessUiRunner
         await NavigateAsync("nav." + page);
         if (arguments[0] == "invoke") await NavigateAsync(arguments[1]);
         var currentPage = ((MainViewModel)window.DataContext!).CurrentPage.ToString().ToLowerInvariant();
+        if (settingsCategory is not null && ((MainViewModel)window.DataContext!).Settings is { } settingsVm)
+        {
+            settingsVm.SelectCategory(settingsCategory);
+            if (settingsPage is not null) settingsVm.OpenPage(settingsPage);
+            await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
+        }
+        if (shortcutsGroup is not null &&
+            ((MainViewModel)window.DataContext!).Settings.ShortcutsContent is Features.Shortcuts.ShortcutsPage shortcutsPage)
+        {
+            shortcutsPage.OpenGroupForTesting(shortcutsGroup);
+            await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
+        }
         if (arguments[0] == "screenshot")
         {
             var path = Path.GetFullPath(arguments[1]);
@@ -140,4 +201,10 @@ public static class HeadlessUiRunner
 
     private static void Write(object result) => Console.Out.WriteLine(JsonSerializer.Serialize(result,
         new JsonSerializerOptions { MaxDepth = 128 }));
+
+    private static string? ValueAfter(string[] args, string flag)
+    {
+        var index = Array.IndexOf(args, flag);
+        return index >= 0 && index + 1 < args.Length ? args[index + 1] : null;
+    }
 }

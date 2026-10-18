@@ -1,0 +1,368 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- Material 3 皮肤令牌（E7 样板，依据已接受 S1 样稿 css/tokens.css 的值与 M3 规范扩展）。
+         只在 SkinLease 应用时合并进目标 Window/Control 的 Resources，释放时按引用移除。
+         强调色为本样板固定值（亮 #6750A4 / 暗 #D0BCFF）；字体回退系统 Segoe 族，
+         不采购/捆绑 Roboto（S1-5、frontend-design-guideline U02）。 -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="SystemAccentColor">#FF6750A4</Color>
+            <Color x:Key="SystemAccentColorDark1">#FF544490</Color>
+            <Color x:Key="SystemAccentColorDark2">#FF3F2E77</Color>
+            <Color x:Key="SystemAccentColorDark3">#FF2B1B5E</Color>
+            <Color x:Key="SystemAccentColorLight1">#FF7F67BE</Color>
+            <Color x:Key="SystemAccentColorLight2">#FF9A83D8</Color>
+            <Color x:Key="SystemAccentColorLight3">#FFB69DF8</Color>
+
+            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush"      Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush" Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="SolidBackgroundFillColorTertiaryBrush"  Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="SolidBackgroundFillColorQuaternaryBrush" Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush"   Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush"      Color="#00000000"/>
+            <SolidColorBrush x:Key="CardStrokeColorDefaultSolidBrush" Color="#00000000"/>
+            <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush"   Color="#FFE7E0EC"/>
+            <SolidColorBrush x:Key="SurfaceStrokeColorDefaultBrush"   Color="#FF79747E"/>
+            <SolidColorBrush x:Key="SurfaceStrokeColorFlyoutBrush"    Color="#00000000"/>
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush"   Color="#FF1D1B20"/>
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FF49454F"/>
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush"  Color="#FF79747E"/>
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush"  Color="#FFB5AFBA"/>
+            <SolidColorBrush x:Key="TextFillColorInverseBrush"   Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush"    Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush"  Color="#FFEDE7F1"/>
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush"   Color="#FFE7E0EC"/>
+            <SolidColorBrush x:Key="ControlFillColorDisabledBrush"   Color="#FFEDE8EF"/>
+            <SolidColorBrush x:Key="ControlFillColorInputActiveBrush" Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#FF79747E"/>
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#FF938F99"/>
+            <!-- Fluent 残余剔除：M3 是色调分层容器 + 单色 outline，不使用 Fluent 双色高度描边。 -->
+            <SolidColorBrush x:Key="ControlElevationBorderBrush"      Color="#FF79747E"/>
+            <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="#00FFFFFF"/>
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush"   Color="#141D1B20"/>
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush"    Color="#1F1D1B20"/>
+            <SolidColorBrush x:Key="SubtleFillColorDisabledBrush"    Color="#00FFFFFF"/>
+            <SolidColorBrush x:Key="MenuSurfaceBrush" Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="MenuDividerBrush" Color="#FFE7E0EC"/>
+            <SolidColorBrush x:Key="SmokeFillColorDefaultBrush" Color="#66000000"/>
+
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush"    Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush"  Color="#FF7F67BE"/>
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush"   Color="#FF544490"/>
+            <SolidColorBrush x:Key="AccentFillColorDisabledBrush"   Color="#66CAC4D0"/>
+            <SolidColorBrush x:Key="AccentFillColorSelectedTextBackgroundBrush" Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush"   Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#FF544490"/>
+            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush"  Color="#FF7F67BE"/>
+            <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush"  Color="#FFB5AFBA"/>
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush"   Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#B3FFFFFF"/>
+            <SolidColorBrush x:Key="TextOnAccentFillColorDisabledBrush"  Color="#87FFFFFF"/>
+            <SolidColorBrush x:Key="SystemControlBackgroundAccentBrush"   Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush"   Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush"    Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemControlRevealFocusVisualBrush"  Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused"        Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="HyperlinkForegroundBrush"             Color="#FF6750A4"/>
+
+            <SolidColorBrush x:Key="SystemFillColorSuccessBrush"   Color="#FF3F6653"/>
+            <SolidColorBrush x:Key="SystemFillColorCautionBrush"   Color="#FF7A5900"/>
+            <SolidColorBrush x:Key="SystemFillColorCriticalBrush"  Color="#FFB3261E"/>
+            <SolidColorBrush x:Key="SystemFillColorAttentionBrush" Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemFillColorNeutralBrush"   Color="#FF49454F"/>
+            <SolidColorBrush x:Key="SystemFillColorSuccessBackgroundBrush"   Color="#FFDDEFE3"/>
+            <SolidColorBrush x:Key="SystemFillColorCautionBackgroundBrush"   Color="#FFFDF3DC"/>
+            <SolidColorBrush x:Key="SystemFillColorCriticalBackgroundBrush"  Color="#FFF9DEDC"/>
+            <SolidColorBrush x:Key="SystemFillColorAttentionBackgroundBrush" Color="#FFEADDFF"/>
+            <SolidColorBrush x:Key="SystemFillColorNeutralBackgroundBrush"   Color="#FFEDE8EF"/>
+
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FFDCD1EE"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#FFD0C4E5"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#FFEDE8EF"/>
+            <SolidColorBrush x:Key="ButtonForeground"            Color="#FF21005D"/>
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FF21005D"/>
+            <SolidColorBrush x:Key="ButtonForegroundPressed"     Color="#FF21005D"/>
+            <SolidColorBrush x:Key="ButtonForegroundDisabled"    Color="#FF9E99A4"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#00000000"/>
+            <SolidColorBrush x:Key="AccentButtonBackground"           Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#FF7F67BE"/>
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed"    Color="#FF544490"/>
+            <SolidColorBrush x:Key="AccentButtonBackgroundDisabled"   Color="#FFDCD1EE"/>
+            <SolidColorBrush x:Key="AccentButtonForeground"           Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AccentButtonForegroundPressed"    Color="#B3FFFFFF"/>
+            <SolidColorBrush x:Key="AccentButtonForegroundDisabled"   Color="#FF9E99A4"/>
+
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelected"            Color="#FFEADDFF"/>
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="#FFDCD1EE"/>
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPressed"     Color="#FFD0C4E5"/>
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedDisabled"    Color="#FFEDE8EF"/>
+            <SolidColorBrush x:Key="ListBoxItemForegroundSelected"            Color="#FF21005D"/>
+            <SolidColorBrush x:Key="ListBoxItemForegroundSelectedPointerOver" Color="#FF21005D"/>
+            <SolidColorBrush x:Key="ListBoxItemForegroundSelectedDisabled"    Color="#FF9E99A4"/>
+
+            <SolidColorBrush x:Key="AppWindowBackground"   Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="AppTitleBarBackground" Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="AppSidebarBackground"  Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="AppSurfaceBackground"  Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="AppContentBackground"  Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="AppCardBackground"     Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="AppCardStroke"         Color="#00000000"/>
+            <SolidColorBrush x:Key="AppBorderBrush"        Color="#FFE7E0EC"/>
+            <SolidColorBrush x:Key="AppTextPrimary"        Color="#FF1D1B20"/>
+            <SolidColorBrush x:Key="AppTextSecondary"      Color="#FF49454F"/>
+            <SolidColorBrush x:Key="AppTextDim"            Color="#FF79747E"/>
+            <SolidColorBrush x:Key="AppAccent"             Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AppAccentForeground"   Color="#FFFFFFFF"/>
+            <SolidColorBrush x:Key="AppAccentText"         Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AppAccentSubtle"       Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="AppHover"              Color="#141D1B20"/>
+            <SolidColorBrush x:Key="AppPressed"            Color="#1F1D1B20"/>
+            <SolidColorBrush x:Key="AppListHover"          Color="#141D1B20"/>
+            <SolidColorBrush x:Key="AppListSelected"       Color="#FFEADDFF"/>
+            <SolidColorBrush x:Key="AppUserBubble" Color="#FF6750A4" Opacity="0.12"/>
+            <SolidColorBrush x:Key="AppToolCardBackground" Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="AppInnerWell"          Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="AppCodeBackground"     Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="AppCodeBorder"         Color="#FFE7E0EC"/>
+            <SolidColorBrush x:Key="AppErrorBackground"    Color="#FFF9DEDC"/>
+            <SolidColorBrush x:Key="AppErrorBorder"        Color="#FFB3261E"/>
+            <SolidColorBrush x:Key="AppInfoBackground"     Color="#FFEADDFF"/>
+            <SolidColorBrush x:Key="AppInfoForeground"     Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AppSuccessForeground"  Color="#FF3F6653"/>
+            <SolidColorBrush x:Key="AppCautionForeground"  Color="#FF7A5900"/>
+            <SolidColorBrush x:Key="AppCriticalForeground" Color="#FFB3261E"/>
+            <SolidColorBrush x:Key="AppDialogBackground"   Color="#FFF7F2FA"/>
+            <SolidColorBrush x:Key="AppDialogFooterBackground" Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="AppSmokeBackground"    Color="#66000000"/>
+            <SolidColorBrush x:Key="AppScrimBackground"    Color="#33000000"/>
+            <SolidColorBrush x:Key="AppChromeBackground"   Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="AppDockBackground"     Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="AppDockHeaderBackground" Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="AppTabSelectedBackground" Color="#FFF3EDF7"/>
+            <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF1D1B20"/>
+            <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFE6E0E9"/>
+            <SolidColorBrush x:Key="AppMicaPageBackground"    Color="#FFFEF7FF"/>
+            <SolidColorBrush x:Key="AppMicaSidebarBackground" Color="#FFF3EDF7"/>
+
+            <SolidColorBrush x:Key="AppDisabledForeground" Color="#FFB5AFBA"/>
+            <SolidColorBrush x:Key="AppFocusBrush"          Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="AppSelectionForeground" Color="#FF21005D"/>
+            <SolidColorBrush x:Key="AppDiffAddedBackground"   Color="#FFDDEFE3"/>
+            <SolidColorBrush x:Key="AppDiffAddedForeground"   Color="#FF23503A"/>
+            <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#FFF7DFE2"/>
+            <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FF8C1D18"/>
+            <SolidColorBrush x:Key="AppSuccessBackground" Color="#FFDDEFE3"/>
+            <SolidColorBrush x:Key="AppCautionBackground" Color="#FFFDF3DC"/>
+
+            <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">28</CornerRadius>
+            <CornerRadius x:Key="AppCornerCard">16</CornerRadius>
+            <CornerRadius x:Key="AppCornerInput">4</CornerRadius>
+            <CornerRadius x:Key="AppCornerPill">20</CornerRadius>
+            <CornerRadius x:Key="AppCornerFlyout">28</CornerRadius>
+            <x:Double x:Key="AppFocusThickness">2</x:Double>
+            <x:Double x:Key="AppFocusOffset">2</x:Double>
+            <SolidColorBrush x:Key="FocusStrokeColorOuterBrush"               Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush"     Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush"   Color="#00000000"/>
+            <FontFamily x:Key="AppFontUi">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Inter</FontFamily>
+            <FontFamily x:Key="AppFontDisplay">Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="AppFontMono">Cascadia Mono, Consolas, monospace</FontFamily>
+            <x:Double x:Key="AppFontSizeBase">14</x:Double>
+            <x:Double x:Key="AppFontSizeSecondary">12</x:Double>
+            <x:Double x:Key="AppFontSizeSection">22</x:Double>
+            <x:Double x:Key="AppFontSizePage">32</x:Double>
+            <FontWeight x:Key="AppFontWeightStrong">Medium</FontWeight>
+            <BoxShadows x:Key="FluentFlyoutShadow">0 4 16 0 #26000000</BoxShadows>
+            <BoxShadows x:Key="FluentToastShadow">0 6 20 0 #2E000000</BoxShadows>
+            <BoxShadows x:Key="FluentPillShadow">0 4 12 0 #26000000</BoxShadows>
+            <BoxShadows x:Key="AppShadowFlyout">0 4 16 0 #26000000</BoxShadows>
+            <BoxShadows x:Key="AppShadowToast">0 6 20 0 #2E000000</BoxShadows>
+            <BoxShadows x:Key="AppShadowPill">0 4 12 0 #26000000</BoxShadows>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SystemAccentColor">#FFD0BCFF</Color>
+            <Color x:Key="SystemAccentColorDark1">#FFB69DF8</Color>
+            <Color x:Key="SystemAccentColorDark2">#FF9A83D8</Color>
+            <Color x:Key="SystemAccentColorDark3">#FF7F67BE</Color>
+            <Color x:Key="SystemAccentColorLight1">#FFDCC7FF</Color>
+            <Color x:Key="SystemAccentColorLight2">#FFE8DDFF</Color>
+            <Color x:Key="SystemAccentColorLight3">#FFF3EBFF</Color>
+
+            <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush"      Color="#FF141218"/>
+            <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush" Color="#FF211F26"/>
+            <SolidColorBrush x:Key="SolidBackgroundFillColorTertiaryBrush"  Color="#FF141218"/>
+            <SolidColorBrush x:Key="SolidBackgroundFillColorQuaternaryBrush" Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="LayerFillColorDefaultBrush" Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="CardBackgroundFillColorDefaultBrush"   Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="CardBackgroundFillColorSecondaryBrush" Color="#FF36343B"/>
+            <SolidColorBrush x:Key="CardStrokeColorDefaultBrush"      Color="#00000000"/>
+            <SolidColorBrush x:Key="CardStrokeColorDefaultSolidBrush" Color="#00000000"/>
+            <SolidColorBrush x:Key="DividerStrokeColorDefaultBrush"   Color="#FF36343B"/>
+            <SolidColorBrush x:Key="SurfaceStrokeColorDefaultBrush"   Color="#FF938F99"/>
+            <SolidColorBrush x:Key="SurfaceStrokeColorFlyoutBrush"    Color="#00000000"/>
+            <SolidColorBrush x:Key="TextFillColorPrimaryBrush"   Color="#FFE6E0E9"/>
+            <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#FFCAC4D0"/>
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush"  Color="#FF938F99"/>
+            <SolidColorBrush x:Key="TextFillColorDisabledBrush"  Color="#FF6F6B74"/>
+            <SolidColorBrush x:Key="TextFillColorInverseBrush"   Color="#FF141218"/>
+            <SolidColorBrush x:Key="ControlFillColorDefaultBrush"    Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="ControlFillColorSecondaryBrush"  Color="#FF36343B"/>
+            <SolidColorBrush x:Key="ControlFillColorTertiaryBrush"   Color="#FF3F3C44"/>
+            <SolidColorBrush x:Key="ControlFillColorDisabledBrush"   Color="#FF232128"/>
+            <SolidColorBrush x:Key="ControlFillColorInputActiveBrush" Color="#FF141218"/>
+            <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#FF938F99"/>
+            <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#FF79747E"/>
+            <SolidColorBrush x:Key="ControlElevationBorderBrush"      Color="#FF938F99"/>
+            <SolidColorBrush x:Key="SubtleFillColorTransparentBrush" Color="#00FFFFFF"/>
+            <SolidColorBrush x:Key="SubtleFillColorSecondaryBrush"   Color="#14E6E0E9"/>
+            <SolidColorBrush x:Key="SubtleFillColorTertiaryBrush"    Color="#1FE6E0E9"/>
+            <SolidColorBrush x:Key="SubtleFillColorDisabledBrush"    Color="#00FFFFFF"/>
+            <SolidColorBrush x:Key="MenuSurfaceBrush" Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="MenuDividerBrush" Color="#FF36343B"/>
+            <SolidColorBrush x:Key="SmokeFillColorDefaultBrush" Color="#66000000"/>
+
+            <SolidColorBrush x:Key="AccentFillColorDefaultBrush"    Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AccentFillColorSecondaryBrush"  Color="#FFDCC7FF"/>
+            <SolidColorBrush x:Key="AccentFillColorTertiaryBrush"   Color="#FFB69DF8"/>
+            <SolidColorBrush x:Key="AccentFillColorDisabledBrush"   Color="#66CAC4D0"/>
+            <SolidColorBrush x:Key="AccentFillColorSelectedTextBackgroundBrush" Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorPrimaryBrush"   Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorSecondaryBrush" Color="#FFDCC7FF"/>
+            <SolidColorBrush x:Key="AccentTextFillColorTertiaryBrush"  Color="#FFB69DF8"/>
+            <SolidColorBrush x:Key="AccentTextFillColorDisabledBrush"  Color="#FF6F6B74"/>
+            <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush"   Color="#FF381E72"/>
+            <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="#B3381E72"/>
+            <SolidColorBrush x:Key="TextOnAccentFillColorDisabledBrush"  Color="#87381E72"/>
+            <SolidColorBrush x:Key="SystemControlBackgroundAccentBrush"   Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemControlForegroundAccentBrush"   Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAccentBrush"    Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemControlHighlightAltAccentBrush" Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemControlRevealFocusVisualBrush"  Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="TextControlBorderBrushFocused"        Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="HyperlinkForegroundBrush"             Color="#FFD0BCFF"/>
+
+            <SolidColorBrush x:Key="SystemFillColorSuccessBrush"   Color="#FF9BD5B6"/>
+            <SolidColorBrush x:Key="SystemFillColorCautionBrush"   Color="#FFF5D98A"/>
+            <SolidColorBrush x:Key="SystemFillColorCriticalBrush"  Color="#FFF2B8B5"/>
+            <SolidColorBrush x:Key="SystemFillColorAttentionBrush" Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemFillColorNeutralBrush"   Color="#FFCAC4D0"/>
+            <SolidColorBrush x:Key="SystemFillColorSuccessBackgroundBrush"   Color="#FF1F3327"/>
+            <SolidColorBrush x:Key="SystemFillColorCautionBackgroundBrush"   Color="#FF3A2E14"/>
+            <SolidColorBrush x:Key="SystemFillColorCriticalBackgroundBrush"  Color="#FF4C2424"/>
+            <SolidColorBrush x:Key="SystemFillColorAttentionBackgroundBrush" Color="#FF2B2733"/>
+            <SolidColorBrush x:Key="SystemFillColorNeutralBackgroundBrush"   Color="#FF2B2930"/>
+
+            <SolidColorBrush x:Key="ButtonBackground"            Color="#FF4F378B"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPointerOver" Color="#FF5D44A0"/>
+            <SolidColorBrush x:Key="ButtonBackgroundPressed"     Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="ButtonBackgroundDisabled"    Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="ButtonForeground"            Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="ButtonForegroundPointerOver" Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="ButtonForegroundPressed"     Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="ButtonForegroundDisabled"    Color="#FF6F6B74"/>
+            <SolidColorBrush x:Key="ButtonBorderBrush"           Color="#00000000"/>
+            <SolidColorBrush x:Key="AccentButtonBackground"           Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AccentButtonBackgroundPointerOver" Color="#FFDCC7FF"/>
+            <SolidColorBrush x:Key="AccentButtonBackgroundPressed"    Color="#FFB69DF8"/>
+            <SolidColorBrush x:Key="AccentButtonBackgroundDisabled"   Color="#FF4F378B"/>
+            <SolidColorBrush x:Key="AccentButtonForeground"           Color="#FF381E72"/>
+            <SolidColorBrush x:Key="AccentButtonForegroundPointerOver" Color="#FF381E72"/>
+            <SolidColorBrush x:Key="AccentButtonForegroundPressed"    Color="#B3381E72"/>
+            <SolidColorBrush x:Key="AccentButtonForegroundDisabled"   Color="#87381E72"/>
+
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelected"            Color="#FF4F378B"/>
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="#FF5D44A0"/>
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPressed"     Color="#FF6750A4"/>
+            <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedDisabled"    Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="ListBoxItemForegroundSelected"            Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="ListBoxItemForegroundSelectedPointerOver" Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="ListBoxItemForegroundSelectedDisabled"    Color="#FF6F6B74"/>
+
+            <SolidColorBrush x:Key="AppWindowBackground"   Color="#FF141218"/>
+            <SolidColorBrush x:Key="AppTitleBarBackground" Color="#FF141218"/>
+            <SolidColorBrush x:Key="AppSidebarBackground"  Color="#FF211F26"/>
+            <SolidColorBrush x:Key="AppSurfaceBackground"  Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="AppContentBackground"  Color="#FF141218"/>
+            <SolidColorBrush x:Key="AppCardBackground"     Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="AppCardStroke"         Color="#00000000"/>
+            <SolidColorBrush x:Key="AppBorderBrush"        Color="#FF36343B"/>
+            <SolidColorBrush x:Key="AppTextPrimary"        Color="#FFE6E0E9"/>
+            <SolidColorBrush x:Key="AppTextSecondary"      Color="#FFCAC4D0"/>
+            <SolidColorBrush x:Key="AppTextDim"            Color="#FF938F99"/>
+            <SolidColorBrush x:Key="AppAccent"             Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AppAccentForeground"   Color="#FF381E72"/>
+            <SolidColorBrush x:Key="AppAccentText"         Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AppAccentSubtle"       Color="#FF4F378B"/>
+            <SolidColorBrush x:Key="AppHover"              Color="#14E6E0E9"/>
+            <SolidColorBrush x:Key="AppPressed"            Color="#1FE6E0E9"/>
+            <SolidColorBrush x:Key="AppListHover"          Color="#14E6E0E9"/>
+            <SolidColorBrush x:Key="AppListSelected"       Color="#FF4F378B"/>
+            <SolidColorBrush x:Key="AppUserBubble" Color="#FFD0BCFF" Opacity="0.16"/>
+            <SolidColorBrush x:Key="AppToolCardBackground" Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="AppInnerWell"          Color="#FF36343B"/>
+            <SolidColorBrush x:Key="AppCodeBackground"     Color="#FF1F1D24"/>
+            <SolidColorBrush x:Key="AppCodeBorder"         Color="#FF36343B"/>
+            <SolidColorBrush x:Key="AppErrorBackground"    Color="#FF4C2424"/>
+            <SolidColorBrush x:Key="AppErrorBorder"        Color="#FFF2B8B5"/>
+            <SolidColorBrush x:Key="AppInfoBackground"     Color="#FF2B2733"/>
+            <SolidColorBrush x:Key="AppInfoForeground"     Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AppSuccessForeground"  Color="#FF9BD5B6"/>
+            <SolidColorBrush x:Key="AppCautionForeground"  Color="#FFF5D98A"/>
+            <SolidColorBrush x:Key="AppCriticalForeground" Color="#FFF2B8B5"/>
+            <SolidColorBrush x:Key="AppDialogBackground"   Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="AppDialogFooterBackground" Color="#FF211F26"/>
+            <SolidColorBrush x:Key="AppSmokeBackground"    Color="#66000000"/>
+            <SolidColorBrush x:Key="AppScrimBackground"    Color="#66000000"/>
+            <SolidColorBrush x:Key="AppChromeBackground"   Color="#FF141218"/>
+            <SolidColorBrush x:Key="AppDockBackground"     Color="#FF141218"/>
+            <SolidColorBrush x:Key="AppDockHeaderBackground" Color="#FF211F26"/>
+            <SolidColorBrush x:Key="AppTabSelectedBackground" Color="#FF2B2930"/>
+            <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF1D1B20"/>
+            <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFE6E0E9"/>
+            <SolidColorBrush x:Key="AppMicaPageBackground"    Color="#FF141218"/>
+            <SolidColorBrush x:Key="AppMicaSidebarBackground" Color="#FF211F26"/>
+
+            <SolidColorBrush x:Key="AppDisabledForeground" Color="#FF6F6B74"/>
+            <SolidColorBrush x:Key="AppFocusBrush"          Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="AppSelectionForeground" Color="#FFE8DEF8"/>
+            <SolidColorBrush x:Key="AppDiffAddedBackground"   Color="#FF23503A"/>
+            <SolidColorBrush x:Key="AppDiffAddedForeground"   Color="#FFC6E9D4"/>
+            <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#FF5C2A2C"/>
+            <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFF4C6C3"/>
+            <SolidColorBrush x:Key="AppSuccessBackground" Color="#FF1F3327"/>
+            <SolidColorBrush x:Key="AppCautionBackground" Color="#FF3A2E14"/>
+
+            <CornerRadius x:Key="ControlCornerRadius">8</CornerRadius>
+            <CornerRadius x:Key="OverlayCornerRadius">28</CornerRadius>
+            <CornerRadius x:Key="AppCornerCard">16</CornerRadius>
+            <CornerRadius x:Key="AppCornerInput">4</CornerRadius>
+            <CornerRadius x:Key="AppCornerPill">20</CornerRadius>
+            <CornerRadius x:Key="AppCornerFlyout">28</CornerRadius>
+            <x:Double x:Key="AppFocusThickness">2</x:Double>
+            <x:Double x:Key="AppFocusOffset">2</x:Double>
+            <SolidColorBrush x:Key="FocusStrokeColorOuterBrush"               Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemControlFocusVisualPrimaryBrush"     Color="#FFD0BCFF"/>
+            <SolidColorBrush x:Key="SystemControlFocusVisualSecondaryBrush"   Color="#00000000"/>
+            <FontFamily x:Key="AppFontUi">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Inter</FontFamily>
+            <FontFamily x:Key="AppFontDisplay">Segoe UI Variable Display, Segoe UI, Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="AppFontMono">Cascadia Mono, Consolas, monospace</FontFamily>
+            <x:Double x:Key="AppFontSizeBase">14</x:Double>
+            <x:Double x:Key="AppFontSizeSecondary">12</x:Double>
+            <x:Double x:Key="AppFontSizeSection">22</x:Double>
+            <x:Double x:Key="AppFontSizePage">32</x:Double>
+            <FontWeight x:Key="AppFontWeightStrong">Medium</FontWeight>
+            <BoxShadows x:Key="FluentFlyoutShadow">0 4 16 0 #66000000</BoxShadows>
+            <BoxShadows x:Key="FluentToastShadow">0 6 20 0 #73000000</BoxShadows>
+            <BoxShadows x:Key="FluentPillShadow">0 4 12 0 #66000000</BoxShadows>
+            <BoxShadows x:Key="AppShadowFlyout">0 4 16 0 #66000000</BoxShadows>
+            <BoxShadows x:Key="AppShadowToast">0 6 20 0 #73000000</BoxShadows>
+            <BoxShadows x:Key="AppShadowPill">0 4 12 0 #66000000</BoxShadows>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

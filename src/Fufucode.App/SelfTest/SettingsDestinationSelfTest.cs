@@ -10,7 +10,6 @@ using Avalonia.VisualTree;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App.SelfTest;
 
@@ -86,7 +85,7 @@ public static class SettingsDestinationSelfTest
                 "通知使用同一偏好对象，并如实区分窗口内应用与落盘");
 
             vm.Attach(Context(store) with { IsTurnActive = () => true,
-                SetModel = (_, _, _) => Task.FromException<PiRpcResponse>(new InvalidOperationException("Running settings must not send RPC")) });
+                SetModel = (_, _, _) => Task.FromException<RpcResponse>(new InvalidOperationException("Running settings must not send RPC")) });
             var future = new SettingsPageViewModel.ModelChoice("fixture/future", "fixture/future");
             vm.ModelChoices.Add(future); vm.SelectedModel = future;
             Check(store.Current.SelectedModel == "fixture/future" && vm.ModelsState == SettingSaveState.Saved &&
@@ -156,8 +155,8 @@ public static class SettingsDestinationSelfTest
         null, null, null, () => null, () => null, () => [], () => null, () => "(fixture)",
         _ => Task.CompletedTask, _ => Task.CompletedTask, () => "unavailable", () => "unavailable");
 
-    private static PiRpcResponse Success(string command) => new("fixture", command, true, null, null);
-    private static PiRpcResponse State(string model, string thinking)
+    private static RpcResponse Success(string command) => new("fixture", command, true, null, null);
+    private static RpcResponse State(string model, string thinking)
     {
         var pieces = model.Split('/', 2);
         using var document = JsonDocument.Parse(JsonSerializer.Serialize(new { model = new { provider = pieces[0], id = pieces[1] }, thinkingLevel = thinking }));

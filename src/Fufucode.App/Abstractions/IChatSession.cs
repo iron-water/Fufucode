@@ -5,8 +5,8 @@ using System.Threading.Tasks;
 namespace Fufucode.App.Abstractions;
 
 /// <summary>
-/// 聊天会话契约：发送、停止与事件流。这是外壳（Fufucode.App）与 Core（真实 Pi 适配）之间的对接点。
-/// 本接口已冻结：改动需外壳与 Core 双方同步。
+/// 聊天会话契约：发送、停止与事件流。这是轨道 C 外壳与轨道 A 的 Core（真实 Pi 适配）之间的对接点。
+/// 本接口已冻结（见 docs/decisions.md [轨道C] 条目），改动需 A、C 双方同步。
 /// </summary>
 /// <remarks>
 /// 线程约定：<see cref="Event"/> 可在任意线程引发（真实实现通常在 RPC 读取泵线程上引发）；

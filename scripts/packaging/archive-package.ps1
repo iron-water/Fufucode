@@ -1,12 +1,15 @@
-param([Parameter(Mandatory)][string]$PackageRoot, [Parameter(Mandatory)][string]$Destination)
+param([Parameter(Mandatory)][string]$PackageRoot, [Parameter(Mandatory)][string]$Destination,
+  # 与 integrity.ps1 对齐的双渠道清单名；默认仍是全量渠道清单。
+  [string]$ManifestName = 'integrity.sha256.json')
 $ErrorActionPreference = 'Stop'
+if ([string]::IsNullOrWhiteSpace($ManifestName) -or $ManifestName -match '[\\/:*?"<>|]') { throw "Unsupported manifest name: $ManifestName" }
 Add-Type -AssemblyName System.IO.Compression
 $root = (Resolve-Path -LiteralPath $PackageRoot).Path
 $destinationPath = [IO.Path]::GetFullPath($Destination)
 if ($destinationPath.StartsWith($root + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
     throw 'Archive destination must be outside the package tree.'
 }
-$manifestPath = Join-Path $root 'integrity.sha256.json'
+$manifestPath = Join-Path $root $ManifestName
 $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
 $manifestHash = (Get-FileHash -LiteralPath $manifestPath -Algorithm SHA256).Hash.ToLowerInvariant()
 if ($manifest.format -ne 1) { throw 'Unsupported integrity manifest.' }
@@ -27,7 +30,7 @@ try {
     foreach ($file in Get-ChildItem -LiteralPath $root -File -Recurse -Force) {
         if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Package link rejected: $($file.FullName)" }
         $relative = $file.FullName.Substring($root.TrimEnd('\').Length + 1).Replace('\', '/')
-        if ($relative -ne 'integrity.sha256.json' -and -not $expected.ContainsKey($relative)) { throw "Unmanifested file: $relative" }
+        if ($relative -ne $ManifestName -and -not $expected.ContainsKey($relative)) { throw "Unmanifested file: $relative" }
         $input = $null; $entryStream = $null; $hasher = $null
         try {
             # Readers such as symbol indexing need not prevent a verified archive.
@@ -40,8 +43,8 @@ try {
                 $hasher.AppendData($buffer, 0, $read)
             }
             $hash = [BitConverter]::ToString($hasher.GetHashAndReset()).Replace('-', '').ToLowerInvariant()
-            if ($relative -eq 'integrity.sha256.json' -and $hash -ne $manifestHash) { throw 'Integrity manifest changed during archiving.' }
-            if ($relative -ne 'integrity.sha256.json') {
+            if ($relative -eq $ManifestName -and $hash -ne $manifestHash) { throw 'Integrity manifest changed during archiving.' }
+            if ($relative -ne $ManifestName) {
                 if ($hash -ne $expected[$relative]) { throw "Source changed or hash mismatch: $relative" }
                 $copied++
             }

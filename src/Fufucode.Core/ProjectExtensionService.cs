@@ -85,7 +85,7 @@ public static class ProjectExtensionService
             if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
             // Core will reject explicitly selected local extensions when the project is denied.
             await using (var session = sessionId is null
-                ? await manager.CreateAsync(projectPath, cancellationToken: cancellationToken)
+                ? await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: BackendId.Pi)
                 : await manager.ResumeAsync(sessionId, cancellationToken))
             {
                 if (!session.Coordinator.CanSendPrompt)

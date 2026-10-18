@@ -19,7 +19,7 @@ public partial class MainWindow
         var vault = OperatingSystem.IsWindows() ? new WindowsPasswordVaultCredentialResolver() : null;
         var rows = new StackPanel { Spacing = 8 };
         var status = new TextBlock { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
-        var name = new TextBox { PlaceholderText = "环境变量名称", Text = settings.Current.Endpoint?.ApiKeyEnvironmentVariable ?? "FUFUCODE_ATRIA_API_KEY" };
+        var name = new TextBox { PlaceholderText = "环境变量名称", Text = settings.Current.Endpoint?.ApiKeyEnvironmentVariable ?? "" };
         var password = new TextBox { PasswordChar = '*', PlaceholderText = "API 密钥", MaxLength = 2048 };
         var save = new Button { Content = "保存到 Windows 凭据库", IsEnabled = vault is not null };
         var remove = new Button { Content = "移除选中的凭据", IsEnabled = vault is not null };
@@ -32,7 +32,8 @@ public partial class MainWindow
             {
                 var names = vault?.ListNames() ?? [];
                 list.ItemsSource = names;
-                var variables = names.Append("FUFUCODE_ATRIA_API_KEY")
+                // 只列出实际存在的凭据与当前端点引用的变量，不预置任何开发期变量名。
+                var variables = names
                     .Concat(settings.Current.Endpoint is { } endpoint ? [endpoint.ApiKeyEnvironmentVariable] : Array.Empty<string>())
                     .Distinct(StringComparer.Ordinal);
                 foreach (var variable in variables)
@@ -48,7 +49,7 @@ public partial class MainWindow
                 {
                     using var auth = JsonDocument.Parse(File.ReadAllText(path));
                     foreach (var provider in auth.RootElement.EnumerateObject())
-                        rows.Children.Add(new TextBlock { Text = "Pi auth.json：" + provider.Name + "（由 Pi 管理）", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
+                        rows.Children.Add(new TextBlock { Text = "后端认证：" + provider.Name + "（由后端插件管理）", TextWrapping = Avalonia.Media.TextWrapping.Wrap });
                 }
             }
             catch (Exception error) { status.Text = "读取失败：" + error.Message; }
@@ -60,7 +61,7 @@ public partial class MainWindow
             {
                 vault!.Save((name.Text ?? "").Trim(), password.Text ?? "");
                 password.Text = "";
-                status.Text = "已保存。仅在模型配置引用同名变量时使用；新 Pi 进程生效。";
+                status.Text = "已保存。仅在模型配置引用同名变量时使用；新会话生效。";
                 Refresh();
             }
             catch (Exception error) { status.Text = "保存失败：" + error.Message; }
@@ -74,7 +75,7 @@ public partial class MainWindow
                 new TextBlock { Text = selected, TextWrapping = Avalonia.Media.TextWrapping.Wrap },
                 new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { no, yes } } } };
             yes.Click += (_, _) => confirm.Close(true); no.Click += (_, _) => confirm.Close(false);
-            if (!await confirm.ShowDialog<bool>(TopLevel.GetTopLevel(remove) as Window ?? this)) return;
+            if (!await Fufucode.App.Views.SkinDialog.ShowAsync<bool>(confirm, TopLevel.GetTopLevel(remove) as Window ?? this)) return;
             try { vault!.Delete(selected); status.Text = "已移除凭据库条目；未修改环境变量或 Pi auth.json。"; Refresh(); }
             catch (Exception error) { status.Text = "移除失败：" + error.Message; }
         };

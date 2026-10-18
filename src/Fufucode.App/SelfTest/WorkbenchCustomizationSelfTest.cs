@@ -17,6 +17,7 @@ using Fufucode.App.Abstractions;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
+using Fufucode.Core.Plugins;
 
 namespace Fufucode.App.SelfTest;
 
@@ -41,7 +42,9 @@ internal static class WorkbenchCustomizationSelfTest
         var customization = new WorkbenchCustomizationViewModel(store) { ProjectScope = true };
         customization.Change(s => s with { Composer = "hidden", ShowStatusBar = true });
         customization.Undo(); Check(customization.Current.Composer == "wide" && !customization.Current.ShowStatusBar, "undo restores exact UI scope");
-        customization.Redo(); Check(customization.Current.Composer == "hidden" && customization.Current.ShowStatusBar, "redo reapplies UI change");
+        customization.Redo();
+        var redoMatches = customization.Current.Composer == "hidden" && customization.Current.ShowStatusBar;
+        Check(redoMatches, "redo reapplies UI change" + (redoMatches ? "" : $"; composer={customization.Current.Composer}, statusBar={customization.Current.ShowStatusBar}, status={customization.Status}, root={root}"));
         customization.ClearOverrides(); Check(customization.Current.FontSize == 15 && customization.Current.UserName == "你", "clear project overrides restores inheritance");
         customization.Undo(); Check(customization.Current.FontSize == 19 && customization.Current.UserName == "测试用户", "undo of clearing project restores its sparse JSON");
         customization.Preset("reading"); Check(customization.Current.ReadWidth == 560 && customization.Current.Composer == "reading" && customization.Current.UserName == "测试用户", "reading preset preserves display names");
@@ -75,8 +78,8 @@ internal static class WorkbenchCustomizationSelfTest
         Check(input.DraftText == "retry" && input.ReferenceContext == "retain reference" && input.Attachments.Single() == image, "failed submission restores original draft, reference and attachment");
         session.Reject = false; await input.SetExecutionModeAsync("plan");
         Check(session.Mode == "plan" && input.ExecutionMode == "plan", "mode selection awaits the actual session command");
-        var scheduleStore = new WorkbenchScheduleStore(root); var rival = new WorkbenchScheduleStore(root);
-        var task = new WorkbenchScheduledTask("test", "session", DateTimeOffset.UtcNow.AddMinutes(-1), "task", true);
+        var scheduleStore = MainWindow.ResolveScheduleStoreForTesting(root); var rival = MainWindow.ResolveScheduleStoreForTesting(root);
+        var task = new ScheduledTaskItem("test", "session", DateTimeOffset.UtcNow.AddMinutes(-1), "task", true);
         scheduleStore.Save([task]);
         Check(scheduleStore.TryClaim("test", "dispatching") && !rival.TryClaim("test", "dispatching"), "two schedule readers cannot dispatch the same pending task twice");
         rival.Update("test", t => t with { State = "accepted" }); scheduleStore.Reload();
@@ -106,7 +109,7 @@ internal static class WorkbenchCustomizationSelfTest
                 .ToDictionary(i => i.Header?.ToString() ?? "", i => i);
             Check(new[] { "工作区页面", "复制", "导出", "分叉", "项目" }.All(groups.ContainsKey),
                 "the left auxiliary menu groups workspace pages, copy, export, fork and project");
-            Check(groups["工作区页面"].Items.Count == 7, "the workspace-pages submenu holds all seven pages");
+            Check(groups["工作区页面"].Items.Count == 6, "the workspace-pages submenu holds all six pages");
             Check(groups["复制"].Items.Count >= 6 && groups["复制"].Command is not null,
                 "the copy submenu aggregates its variants and defaults to copying the session id");
             Check(groups["导出"].Items.Count >= 2 && groups["导出"].Command is not null,
@@ -161,7 +164,7 @@ internal static class WorkbenchCustomizationSelfTest
             window.DockLayoutForTesting.Close("files");
             Check(window.DockLayoutForTesting.PinnedPages.Contains("files") && window.DockLayoutForTesting.Find("files") == DockZone.Left && !((MenuItem)fileTab.ContextMenu.Items[originalMenuItems - 1]!).IsEnabled,
                 "pinning through the tab menu prevents accidental closure");
-            var restoredPins = WorkbenchLayoutState.Restore(window.DockLayoutForTesting.Serialize(), new[] { "overview", "files", "changes", "preview", "terminal" });
+            var restoredPins = WorkbenchLayoutState.Restore(window.DockLayoutForTesting.Serialize(), new[] { "overview", "files", "changes", "terminal" });
             Check(restoredPins.PinnedPages.Contains("files") && restoredPins.Find("files") == DockZone.Left,
                 "pinned page and zone survive saved-layout restoration");
             c.SetPlacement("settings", UiActionPosition.TopLeft, -10);
@@ -208,7 +211,7 @@ internal static class WorkbenchCustomizationSelfTest
                 "semantic action icons have real resources and cannot fall back to the generic list");
             Check(final.ChangeSummary == "写入 · out.md" && final.ArtifactSummary == "out.md" && !intermediate.HasChangeSummary, "one summary per turn includes only confirmed successful direct writes");
             var large = new WorkbenchLayoutState { RightWidth = 1120 };
-            Check(WorkbenchLayoutState.Restore(large.Serialize(), new[] { "overview", "files", "changes", "preview", "terminal" }).RightWidth == 1120, "right dock restoration no longer imposes the old 700-pixel limit");
+            Check(WorkbenchLayoutState.Restore(large.Serialize(), new[] { "overview", "files", "changes", "terminal" }).RightWidth == 1120, "right dock restoration no longer imposes the old 700-pixel limit");
             foreach (var (width, height) in new[] { (1440, 900), (800, 640) })
             {
                 c.SetPlacement("settings", UiActionPosition.TopRight, 4);

@@ -1,0 +1,368 @@
+<!-- LiquidGlass（iOS 26 液态玻璃）限定样式。
+     只作用于 SkinLease 挂载目标（Window/Control）子树，随租约整体移除。
+     颜色一律经 LiquidGlassTokens.axaml 的 DynamicResource 解析。
+     组成：
+       1) 玻璃表面：LiquidGlassAdapter 给宿主 Border 加 .liquidGlass/.liquidGlassCaption/
+          .glass 类 —— 这里把宿主本身的背景改透明，让 LiquidGlassSurface 的自绘玻璃
+          （折射/模糊/高光）从底下透出；描边只剩 hairline 高光感。
+       2) 控件 iOS 化：连续大圆角（控件 10/卡片 14/胶囊 20）、半透明填充、弱化描边、
+          强调色选中态、3px 柔焦环。
+       3) 浮层/菜单/toast：14 圆角 + 半透明 MenuSurface + 柔阴影（v1 浮层先半透明实色，
+          shader 玻璃留给 v2）。 -->
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avaprimitives="using:Avalonia.Controls.Primitives">
+  <StyleInclude Source="../SkinShellStyles.axaml"/>
+
+  <Style Selector="Window">
+    <Setter Property="FontFamily" Value="{DynamicResource AppFontUi}"/>
+  </Style>
+
+  <!-- ================= 玻璃宿主（adapter 加类；背景让位给 LiquidGlassSurface 自绘） ================= -->
+  <!-- .liquidGlass：所有被包覆的 chrome Border —— 实色令牌背景会让 shader 玻璃全被盖住，
+       必须透明；hairline 交给 surface 的 highlight pass 画。 -->
+  <Style Selector="Border.liquidGlass">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource LiquidGlassHighlightColor}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+  </Style>
+  <!-- 液态玻璃版式：dock/侧栏/右栏/底栏玻璃面板浮起，与窗口边/内容区留缝（参考 macOS
+       Finder/Dock）——缝间露出的是 LiquidGlass 令牌底，玻璃面折射窗内内容，缝就是玻璃
+       浮在"桌面"上的明证；没有缝时面板与内容平铺一色，玻璃感全闷死。
+       margin 从 splitter 列宽挤出来：splitter 列 5px，dockHost 该侧留 8+5 缝。 -->
+  <Style Selector="Border.liquidGlass.dockLeft">
+    <Setter Property="Margin" Value="8,0,8,8"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="12"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.dockRight">
+    <Setter Property="Margin" Value="8,0,8,8"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="12"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.dockBottom">
+    <Setter Property="Margin" Value="8,0,8,8"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="12"/>
+  </Style>
+  <!-- 底栏/状态条同浮起（贴底窄条玻璃） -->
+  <Style Selector="Border.liquidGlassCaption.statusStrip, Border.liquidGlass.statusStrip">
+    <Setter Property="Margin" Value="8,2,8,6"/>
+    <Setter Property="CornerRadius" Value="10"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+  </Style>
+  <!-- 设置页左侧导航宿主：同样浮起成玻璃板（透明底侧栏 → 让窗底/内容缝透出模糊折射） -->
+  <Style Selector="Border.liquidGlass.settingsNavHost">
+    <Setter Property="Margin" Value="0,0,8,8"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+  </Style>
+  <!-- 中央内容区收边：工作区离开窗口底/右缘 8px，让底栏/右栏玻璃缝连贯成一周；
+       内容卡片保持实底（iOS 语义：正文不透明，玻璃只在 chrome）。 -->
+  <Style Selector="Grid#WorkspaceShell">
+    <Setter Property="Margin" Value="0,0,8,8"/>
+  </Style>
+  <!-- 标题栏：贴顶无边框感，底部一条 hairline 分隔（iOS nav bar 语义） -->
+  <Style Selector="Border.liquidGlassCaption">
+    <Setter Property="BorderThickness" Value="0,0,0,0.5"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+  </Style>
+  <!-- 玻璃上的文字/图标：主文本色默认；AdaptiveLuminance 提供 class 切换，
+       底下亮（underDark）→ 文字压暗（主色在 iOS 亮主题已是暗字，不动；
+       暗主题遇到亮底时也压成暗字），底下暗（underLight）→ 提亮。 -->
+  <Style Selector="Border.liquidGlass TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Border.liquidGlass PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Border.liquidGlass TextBlock.dim">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.underDark TextBlock">
+    <Setter Property="Foreground" Value="#FF000000"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.underDark PathIcon">
+    <Setter Property="Foreground" Value="#FF000000"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.underDark TextBlock.dim">
+    <Setter Property="Foreground" Value="#993C3C43"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.underLight TextBlock">
+    <Setter Property="Foreground" Value="#FFFFFFFF"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.underLight PathIcon">
+    <Setter Property="Foreground" Value="#FFFFFFFF"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.underLight TextBlock.dim">
+    <Setter Property="Foreground" Value="#99EBEBF5"/>
+  </Style>
+  <!-- dockHost 被包覆后其内部 dockHeader/dockTab 仍在玻璃上：页签行底部分隔弱化 -->
+  <Style Selector="Border.liquidGlass Border.dockHeaderRule">
+    <Setter Property="Background" Value="{DynamicResource AppDividerSubtle}"/>
+  </Style>
+
+  <!-- ================= 按钮（iOS：tinted 灰填充胶囊 + 强调色主按钮；无硬描边） ================= -->
+  <Style Selector="Button">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Background" Value="{DynamicResource ButtonBackground}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Foreground" Value="{DynamicResource ButtonForeground}"/>
+  </Style>
+  <Style Selector="Button:pointerover">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundPointerOver}"/>
+  </Style>
+  <Style Selector="Button:pressed">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundPressed}"/>
+  </Style>
+  <Style Selector="Button:disabled">
+    <Setter Property="Background" Value="{DynamicResource ButtonBackgroundDisabled}"/>
+    <Setter Property="Foreground" Value="{DynamicResource ButtonForegroundDisabled}"/>
+  </Style>
+  <!-- 应用中本应为透明的按钮类：保持透明，hover 给 iOS 灰填充 -->
+  <Style Selector="Button.iconButton, Button.subtle, Button.navItem, Button.commandFlyoutItem, Button.crumbLink, Button.sessionTailAction, Button.scopeChoice, Button.toolButton, Button.dockTabClose">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.iconButton:pointerover, Button.subtle:pointerover, Button.crumbLink:pointerover, Button.navItem:pointerover, Button.toolButton:pointerover, Button.dockTabClose:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.iconButton:pressed, Button.subtle:pressed, Button.navItem:pressed, Button.toolButton:pressed, Button.dockTabClose:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+  </Style>
+  <!-- 玻璃标题栏上的按钮：圆形命中区（iOS 风格浅按） -->
+  <Style Selector="Border.liquidGlassCaption Button, Border.liquidGlass Button.captionButton">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+  </Style>
+
+  <!-- 主按钮：iOS 实心强调色，按压变深；无描边 -->
+  <Style Selector="Button.accent">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackground}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="Button.accent:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPointerOver}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}"/>
+  </Style>
+  <Style Selector="Button.accent:pressed">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPressed}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPressed}"/>
+  </Style>
+  <Style Selector="Button.accent:disabled">
+    <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundDisabled}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundDisabled}"/>
+  </Style>
+
+  <!-- ================= 输入（iOS 搜索框语义：浅灰井、聚焦细强调描边） ================= -->
+  <Style Selector="TextBox">
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="SelectionBrush" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="TextBox:pointerover">
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
+  </Style>
+  <Style Selector="TextBox:focus">
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorInputActiveBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
+  </Style>
+  <Style Selector="TextBox:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="TextBox /template/ Border#PART_BorderElement">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+  </Style>
+
+  <Style Selector="ComboBox">
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="ComboBox:pointerover">
+    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
+  </Style>
+  <Style Selector="ComboBox:focus, ComboBox:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
+  </Style>
+  <Style Selector="ComboBoxItem">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+  </Style>
+  <Style Selector="ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+  </Style>
+
+  <!-- ================= 页签（iOS 分段控件语义：胶囊选中块，无下划线指示条） ================= -->
+  <Style Selector="Button.dockTab">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+  <Style Selector="Button.dockTab:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.dockTab.selected">
+    <Setter Property="Background" Value="{DynamicResource AppTabSelectedBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <!-- iOS 无 underline 页签指示器：压掉，选中态由整底表达 -->
+  <Style Selector="Border.dockIndicator">
+    <Setter Property="IsVisible" Value="False"/>
+  </Style>
+
+  <Style Selector="TabItem">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="TabItem:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="TabItem:selected">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="TabItem /template/ Border#PART_SelectedPipe">
+    <Setter Property="IsVisible" Value="False"/>
+  </Style>
+
+  <!-- ================= 列表（iOS：圆角行、选中=tinted 浅强调底+强调字，不是整块实蓝） ================= -->
+  <!-- AppAccentSubtle（注入淡底）OK；AppAccentText 在注入环境语义等同
+       AccentTextFillColorPrimaryBrush，但未注入时它的兜底就是该键本身——而
+       AppAccentSubtle 的兜底也是同一笔刷 → 底字同色不可见。选中字色改用
+       AccentTextFillColorPrimaryBrush，配合令牌字典里 AppAccentSubtle 的
+       iOS 淡色兜底，注入与未注入两种环境都保证可读（iOS 语义：浅强调底 +
+       强调色文字）。 -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+  </Style>
+  <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AccentTextFillColorPrimaryBrush}"/>
+  </Style>
+  <Style Selector="Border.navAccent">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+  </Style>
+
+  <!-- ================= 卡片/行（iOS 分组列表：14 圆角、hairline、组间留白由外层 margin 表达） ================= -->
+  <Style Selector="Border.settingsRow">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.clickable:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.error">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppErrorBorder}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.disabled">
+    <Setter Property="Opacity" Value="0.6"/>
+  </Style>
+  <Style Selector="Border.card, Border.composerCard, Border.toolCard, Border.queueStrip, Border.restoreInfo, Border.userBubble, Border.codeCard, Border.errorCard, Border.thinkingBlock">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+  <Style Selector="Border.innerWell">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+  </Style>
+  <Style Selector="Border.chip, Border.navPill">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+  </Style>
+  <Style Selector="Border.turnSummary">
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
+
+  <!-- ================= 菜单/浮层/toast（v1 半透明实色面 + 柔阴影；shader 玻璃进 v2） ================= -->
+  <Style Selector="MenuFlyoutPresenter">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+  </Style>
+  <Style Selector="MenuFlyoutPresenter /template/ Border">
+    <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+  </Style>
+  <Style Selector="ContextMenu">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+  </Style>
+  <Style Selector="ContextMenu /template/ Border">
+    <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+  </Style>
+  <Style Selector="MenuItem">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="MenuItem:pointerover /template/ Border#PART_LayoutRoot">
+    <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+  </Style>
+  <Style Selector="MenuItem:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <!-- overlayPanel 也进玻璃宿主名单：adapter 已包覆时上面 .liquidGlass 接管背景；
+       这里只兜底未包覆场景（对话框宿主等）给半透明面 -->
+  <Style Selector="Border.overlayPanel:not(.liquidGlass)">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+  <Style Selector="Border.toast:not(.liquidGlass)">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource SurfaceStrokeColorFlyoutBrush}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource AppShadowToast}"/>
+  </Style>
+
+  <!-- ================= 焦点（iOS 无传统焦点环；键盘路径给 3px 强调色柔环） ================= -->
+  <Style Selector="avaprimitives|AdornerLayer">
+    <Setter Property="DefaultFocusAdorner">
+      <FocusAdornerTemplate>
+        <Border BorderBrush="{DynamicResource AppFocusBrush}"
+                BorderThickness="{DynamicResource AppFocusThickness}"
+                CornerRadius="{DynamicResource ControlCornerRadius}"
+                Opacity="0.6"/>
+      </FocusAdornerTemplate>
+    </Setter>
+  </Style>
+</Styles>

@@ -35,7 +35,7 @@ public partial class MainWindow
             catch (Exception error) { _sideStatus.Text = "启动失败：" + error.Message; }
         };
         _sideChatHost.Child = new Grid { Children = { _sideChatPage, _sideEmpty } };
-        // 停靠页只是"槽位"，辅助对话控件能在浮窗与这里之间迁移。
+        // 通用功能页只承载同一业务控件；移栏、隐藏和浮动不另建会话。
         _sideChatDockSlot = new Border { Child = _sideChatHost };
         return _sideChatDockSlot;
     }

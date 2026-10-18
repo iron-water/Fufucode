@@ -34,7 +34,7 @@ internal static class UiSmoke
         check(FindButton(page, "重新计量") is not null, "页面渲染「重新计量」按钮");
         check(FindButton(page, "预览清理") is not null, "页面渲染「预览清理」按钮");
         check(FindButton(page, "执行清理") is not null, "页面渲染「执行清理」按钮");
-        check(page.GetLogicalDescendants().OfType<Button>().Count(button => (string?)button.Content == "打开") >= viewModel.Areas.Count,
+        check(page.GetLogicalDescendants().OfType<Button>().Count(button => button.Content is string label && label == "打开") >= viewModel.Areas.Count,
             "每个存储区域都有「打开」按钮");
         check(Texts(page).Any(text => text.Contains("会话数据")), "区域行渲染区域标题");
         check(Texts(page).Any(text => text.Contains(dataRoot, StringComparison.OrdinalIgnoreCase)), "区域行渲染真实路径");

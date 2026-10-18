@@ -7,7 +7,6 @@ using Fufucode.App.Abstractions;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App.SelfTest;
 

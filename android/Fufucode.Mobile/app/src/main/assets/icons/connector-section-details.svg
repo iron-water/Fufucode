@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <!-- Ardot 2530:5651 Connector detail / tool metadata section, 16×16. -->
+  <path d="M5.5 2.25H10.5C11.7426 2.25 12.75 3.25736 12.75 4.5V12C12.75 13.2426 11.7426 14.25 10.5 14.25H5.5C4.25736 14.25 3.25 13.2426 3.25 12V4.5C3.25 3.25736 4.25736 2.25 5.5 2.25Z" stroke="currentColor" stroke-width="1.35"/>
+  <path d="M6 6.25H10M6 8.5H10M6 10.75H8.5" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
+</svg>

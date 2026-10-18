@@ -1,7 +1,11 @@
-param([ValidateSet('Write','Verify')][string]$Mode='Verify',[Parameter(Mandatory)][string]$PackageRoot)
+param([ValidateSet('Write','Verify')][string]$Mode='Verify',[Parameter(Mandatory)][string]$PackageRoot,
+  # 双渠道打包：全量渠道用 integrity.sha256.json，原生渠道用 integrity-native.sha256.json。
+  # 默认值保持不变，既有调用方行为不受影响。
+  [string]$ManifestName='integrity.sha256.json')
 $ErrorActionPreference='Stop'
 $root=(Resolve-Path -LiteralPath $PackageRoot).Path
-$manifest=Join-Path $root 'integrity.sha256.json'
+if([string]::IsNullOrWhiteSpace($ManifestName) -or $ManifestName -match '[\\/:*?"<>|]'){throw "Unsupported manifest name: $ManifestName"}
+$manifest=Join-Path $root $ManifestName
 function Get-PackageFiles {
   Get-ChildItem -LiteralPath $root -File -Recurse -Force | Where-Object {
     if ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw "Package contains a file link: $($_.FullName)" }

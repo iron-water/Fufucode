@@ -110,7 +110,7 @@ public partial class MainWindow : ISessionManagement
             dialog.Close();
             _ = RenameAndRefreshAsync(value, id);
         };
-        await dialog.ShowDialog(this);
+        await Fufucode.App.Views.SkinDialog.ShowAsync(dialog, this);
     }
 
     private async Task RenameAndRefreshAsync(string name, string id)

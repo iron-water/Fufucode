@@ -2,21 +2,25 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fufucode.App.ViewModels"
              x:Class="Fufucode.App.Views.NotificationCenterView"
-             x:DataType="vm:NotificationCenterViewModel" MaxWidth="480"
-             AutomationProperties.Name="页内通知中心">
+             x:DataType="vm:NotificationCenterViewModel"
+             AutomationProperties.Name="通知功能页">
   <UserControl.Styles>
     <Style Selector="TextBlock.notificationCompleted"><Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/></Style>
     <Style Selector="TextBlock.notificationFailed"><Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/></Style>
     <Style Selector="TextBlock.notificationApproval"><Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/></Style>
   </UserControl.Styles>
   <Border Classes="overlayPanel">
-    <Grid RowDefinitions="Auto,*,Auto" MaxHeight="560">
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
       <Grid ColumnDefinitions="*,Auto" Margin="16,12,12,8">
         <TextBlock Classes="sectionTitle" Text="通知" VerticalAlignment="Center"/>
-        <Button Grid.Column="1" Classes="iconButton" Content="×" Width="32" Height="32"
+        <Button Grid.Column="1" x:Name="ClosePageButton" Classes="iconButton" Content="×" Width="32" Height="32"
                 Command="{Binding CloseCommand}" AutomationProperties.Name="关闭通知中心"/>
       </Grid>
-      <Grid Grid.Row="1" MinHeight="80">
+      <Border Grid.Row="1" x:Name="ChannelPrompt" IsVisible="False" Margin="12,0,12,8" Padding="10"
+              Background="{DynamicResource AppAccentSubtle}" AutomationProperties.Name="通知页提醒">
+        <TextBlock x:Name="ChannelPromptText" Classes="caption" TextWrapping="Wrap"/>
+      </Border>
+      <Grid Grid.Row="2" MinHeight="80">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
           <ItemsControl ItemsSource="{Binding Items}" Margin="16,0,16,8">
             <ItemsControl.ItemTemplate>
@@ -44,10 +48,10 @@
         </ScrollViewer>
         <TextBlock Classes="caption" Text="暂无通知" IsVisible="{Binding !HasItems}" Margin="16,16"/>
       </Grid>
-      <Border Grid.Row="2" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
+      <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
         <StackPanel Spacing="8">
           <TextBlock Classes="caption" Text="{Binding DroppedNoticeText}" IsVisible="{Binding HasDroppedNotices}" TextWrapping="Wrap"/>
-          <TextBlock Classes="caption" Text="系统通知暂不可用；这里可查看并返回所属会话。" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption" Text="提示位置可在设置中分别开关。关闭页签保留通知记录。" TextWrapping="Wrap"/>
           <Button Classes="subtle" Content="清除已结束通知" Command="{Binding ClearCompletedCommand}" HorizontalAlignment="Right" MinHeight="32"/>
         </StackPanel>
       </Border>

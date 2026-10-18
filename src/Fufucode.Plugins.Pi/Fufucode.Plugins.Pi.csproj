@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <!-- Pi 后端插件：由插件市场按需安装。默认包不引用本工程，
+       也不随 native 包发布 Fufucode.Pi.dll。 -->
+  <ItemGroup>
+    <ProjectReference Include="../Fufucode.Pi/Fufucode.Pi.csproj" />
+    <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj">
+      <PrivateAssets>all</PrivateAssets>
+    </ProjectReference>
+  </ItemGroup>
+</Project>

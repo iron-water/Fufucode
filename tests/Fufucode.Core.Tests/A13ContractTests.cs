@@ -58,7 +58,7 @@ internal static class A13ContractTests
     private static async Task ThinkingLevelsAsync(string root, string fake, string dotnet)
     {
         PiRpcOptions Options() => new(dotnet, [fake], root);
-        await using (var session = new ChatSessionCoordinator(Options()))
+        await using (var session = PiSessions.Coordinator(Options()))
         {
             await session.StartAsync();
             var availability = await session.QueryThinkingLevelsAsync();
@@ -71,7 +71,7 @@ internal static class A13ContractTests
                 "A13 thinking levels: a supported level is applied as requested");
         }
         // A model without reasoning silently clamps; the fixture clamps to off like Pi does.
-        await using (var clamping = new ChatSessionCoordinator(Options()))
+        await using (var clamping = PiSessions.Coordinator(Options()))
         {
             await clamping.StartAsync();
             await clamping.SetThinkingLevelAsync("xhigh");
@@ -90,7 +90,7 @@ internal static class A13ContractTests
             await using var refused = await manager.CreateAsync(project);
             throw new Exception("A13 a clamped thinking level was accepted as applied");
         }
-        catch (PiRpcException error)
+        catch (RpcException error)
         {
             Check(error.Message.Contains("does not offer", StringComparison.Ordinal) &&
                 error.Message.Contains("xhigh", StringComparison.Ordinal) &&
@@ -105,17 +105,17 @@ internal static class A13ContractTests
         // Parse contract: a malformed capability response is refused instead of silently empty.
         try
         {
-            ThinkingLevelAvailability.Parse(new PiRpcResponse("1", "get_available_thinking_levels", true,
+            ThinkingLevelAvailability.Parse(new RpcResponse("1", "get_available_thinking_levels", true,
                 JsonSerializer.SerializeToElement(new { levels = "off" }), null));
             throw new Exception("A13 a malformed level list was accepted");
         }
-        catch (PiRpcException) { Console.WriteLine("PASS A13 thinking levels: a malformed level list is refused"); }
+        catch (RpcException) { Console.WriteLine("PASS A13 thinking levels: a malformed level list is refused"); }
         try
         {
-            ThinkingLevelAvailability.Parse(new PiRpcResponse("1", "get_available_thinking_levels", false, null, "no"));
+            ThinkingLevelAvailability.Parse(new RpcResponse("1", "get_available_thinking_levels", false, null, "no"));
             throw new Exception("A13 a failed capability query was accepted");
         }
-        catch (PiRpcException) { Console.WriteLine("PASS A13 thinking levels: a failed capability query is refused"); }
+        catch (RpcException) { Console.WriteLine("PASS A13 thinking levels: a failed capability query is refused"); }
     }
 
     // ------------------------------------------------------- ② extension UI audit trail
@@ -127,7 +127,7 @@ internal static class A13ContractTests
         await using (var log = new DiagnosticLog(layout))
         {
             path = log.FilePath;
-            await using var session = new ChatSessionCoordinator(new PiRpcOptions(dotnet, [fake], root, DiagnosticSink: log));
+            await using var session = PiSessions.Coordinator(new PiRpcOptions(dotnet, [fake], root, DiagnosticSink: log));
             await session.StartAsync();
             await session.SendPromptAsync("approval");
             await WaitFor(() => session.PendingExtensionUiRequests.Count == 1, "A13 no approval dialog arrived");
@@ -157,7 +157,7 @@ internal static class A13ContractTests
         await using (var log = new DiagnosticLog(timeoutLayout))
         {
             timeoutPath = log.FilePath;
-            await using var session = new ChatSessionCoordinator(new PiRpcOptions(dotnet, [fake], root,
+            await using var session = PiSessions.Coordinator(new PiRpcOptions(dotnet, [fake], root,
                 DiagnosticSink: log));
             await session.StartAsync();
             await session.SendPromptAsync("approval");
@@ -174,7 +174,7 @@ internal static class A13ContractTests
         await using (var log = new DiagnosticLog(closedLayout))
         {
             closedPath = log.FilePath;
-            await using var session = new ChatSessionCoordinator(new PiRpcOptions(dotnet, [fake], root,
+            await using var session = PiSessions.Coordinator(new PiRpcOptions(dotnet, [fake], root,
                 DiagnosticSink: log));
             await session.StartAsync();
             await SendUnknownMethodAsync(session);
@@ -201,7 +201,7 @@ internal static class A13ContractTests
     private static async Task SendUnknownMethodAsync(ChatSessionCoordinator session)
     {
         try { await session.SendPromptAsync("ui_unknown"); }
-        catch (PiRpcException) { }
+        catch (RpcException) { }
         await Task.Delay(150);
     }
 
@@ -345,7 +345,7 @@ internal static class A13ContractTests
         Check(forked.ParentSessionId == parentId,
             "A13 fork: lineage survives a re-read of the metadata store");
         try { await manager.ForkAsync(child, "bad-entry"); throw new Exception("A13 an invalid fork entry was accepted"); }
-        catch (PiRpcException error)
+        catch (RpcException error)
         {
             Check(error.Message.Contains("fork failed", StringComparison.Ordinal),
                 "A13 fork: Pi's refusal of an unknown entry surfaces as a fork failure");

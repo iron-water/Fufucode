@@ -7,7 +7,7 @@ using Fufucode.Core;
 namespace Fufucode.App.Integration;
 
 /// <summary>
-/// 真实会话的扩展 UI 接线（冻结清单）：
+/// 真实会话的扩展 UI 接线（计划 §8.4、decisions.md [轨道B] 冻结清单）：
 /// 对话框类请求由 <see cref="ExtensionUiDialogHost"/> 弹窗处理；
 /// 免答通知类在此映射——notify/setWidget → 时间线轻提示，setStatus → 状态栏，
 /// setTitle → 窗口标题（无标题通道时降级为提示），set_editor_text → 输入框（保护未发送草稿）。

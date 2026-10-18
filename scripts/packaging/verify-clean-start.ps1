@@ -277,7 +277,7 @@ Record -rec $r
 $final = if ($ok) { 'PASS' } else { 'FAIL' }
 Out-Log "=== clean-start verification: $final ==="
 Out-Log "Report: $report"
-exit ($ok ? 0 : 1)
+if ($ok) { exit 0 } else { exit 1 }
 } finally {
     if ($pi) { [void](Stop-Pi -state $pi) }
     if ($stInfo) {

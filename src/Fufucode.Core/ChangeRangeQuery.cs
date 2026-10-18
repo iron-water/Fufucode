@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 

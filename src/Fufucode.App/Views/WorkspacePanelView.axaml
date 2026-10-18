@@ -50,7 +50,6 @@
               <StackPanel MinWidth="216" Spacing="4">
                 <Button Classes="subtle" Content="文件" Command="{Binding OpenFilesCommand}" HorizontalAlignment="Stretch"/>
                 <Button Classes="subtle" Content="变更" Command="{Binding OpenChangesCommand}" HorizontalAlignment="Stretch"/>
-                <Button Classes="subtle" Content="文件预览" Command="{Binding OpenPreviewCommand}" HorizontalAlignment="Stretch"/>
               </StackPanel>
             </Flyout>
           </Button.Flyout>
@@ -87,11 +86,13 @@
     </StackPanel>
 
     <!-- Both content instances stay alive, keeping independent list scrolling and selection. -->
-    <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}" RowDefinitions="Auto,*,Auto">
+    <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}">
+      <!-- 列表态：文件目录浏览 -->
+      <Grid x:Name="FilesListContainer" IsVisible="{Binding !IsFilePreviewOpen}" RowDefinitions="Auto,*,Auto">
       <StackPanel Grid.Row="0" Spacing="6" Margin="12,0,12,8">
         <Grid ColumnDefinitions="*,Auto,Auto">
           <TextBlock Classes="bodyStrong" Text="项目文件" VerticalAlignment="Center"/>
-          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新文件"><PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
+          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新文件"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
           <Button Grid.Column="2" Classes="subtle" Content="上一级" Command="{Binding GoUpCommand}" IsEnabled="{Binding CanGoUp}" Padding="6,3"/>
         </Grid>
         <TextBlock Classes="caption mono" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis"
@@ -109,8 +110,8 @@
             <Button Classes="subtle" Click="BrowseFile_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                     ToolTip.Tip="{Binding FullPath}" Padding="0" Background="Transparent">
               <Grid ColumnDefinitions="20,*" ColumnSpacing="6">
-                <PathIcon Data="{StaticResource Icon.Folder}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding IsDirectory}"/>
-                <PathIcon Data="{StaticResource Icon.Document}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding !IsDirectory}"/>
+                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding IsDirectory}"/>
+                <PathIcon Data="{DynamicResource Icon.Document}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding !IsDirectory}"/>
                 <StackPanel Grid.Column="1" Spacing="2">
                   <TextBlock Classes="body" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
                   <TextBlock Classes="caption" Text="{Binding Detail}"/>
@@ -131,13 +132,34 @@
           <Button Classes="subtle" Content="打开预览" Click="PreviewSelectedFile_Click" IsEnabled="{Binding CanPreviewSelectedFile}" HorizontalAlignment="Left"/>
         </StackPanel>
       </Border>
+      </Grid>
+      <!-- 预览态：直接在工作面板内呈现文件内容，显示文件身份（路径、名称、大小）并支持返回列表切换 -->
+      <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,*">
+        <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
+                Background="{DynamicResource AppCardBackground}" Padding="10,8">
+          <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
+            <Button Classes="subtle" Content="← 返回列表" Command="{Binding CloseFilePreviewCommand}"
+                    Padding="8,4" VerticalAlignment="Center" AutomationProperties.Name="返回文件列表"/>
+            <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center" Spacing="2">
+              <TextBlock Classes="bodyStrong" Text="{Binding PreviewFileName}" TextTrimming="CharacterEllipsis"/>
+              <TextBlock Classes="caption mono" Text="{Binding PreviewFilePath}" TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource AppTextSecondary}" ToolTip.Tip="{Binding PreviewFilePath}"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+              <TextBlock Classes="caption mono" Text="{Binding PreviewFileSize}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
+              <TextBlock Classes="caption" Text="{Binding PreviewFileDetail}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
+            </StackPanel>
+          </Grid>
+        </Border>
+        <views:BrowserView x:Name="PreviewBrowser" Grid.Row="1"/>
+      </Grid>
     </Grid>
 
     <Grid x:Name="ChangesContent" Grid.Row="2" IsVisible="{Binding IsChangesSelected}" RowDefinitions="Auto,*,*">
       <StackPanel Grid.Row="0" Spacing="8" Margin="12,0,12,12">
         <Grid ColumnDefinitions="*,Auto,Auto">
           <TextBlock Classes="bodyStrong" Text="变更范围" VerticalAlignment="Center"/>
-          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新变更"><PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
+          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新变更"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
           <TextBlock Grid.Column="2" Classes="caption" Text="{Binding ChangesCountText}" VerticalAlignment="Center"/>
         </Grid>
         <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
@@ -146,7 +168,9 @@
           <Button Grid.Column="1" Classes="subtle scopeChoice" Classes.selected="{Binding IsSessionScope}" Content="会话写入" Command="{Binding SessionScopeCommand}"
                   HorizontalAlignment="Stretch" Background="{DynamicResource AppCardBackground}"/>
         </Grid>
-        <TextBlock Classes="caption" Text="{Binding ScopeDescription}" TextWrapping="Wrap"/>
+        <Expander Header="范围说明" IsExpanded="False">
+          <TextBlock Classes="caption" Text="{Binding ScopeDescription}" TextWrapping="Wrap"/>
+        </Expander>
         <TextBlock Classes="caption mono" Text="{Binding ChangesRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ChangesRoot}"/>
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsChangesLoading}" Height="3"/>
         <TextBlock Classes="caption" Text="{Binding ChangesError}" IsVisible="{Binding HasChangesError}" TextWrapping="Wrap"/>
@@ -185,11 +209,5 @@
         </ScrollViewer>
       </Border>
     </Grid>
-
-    <!-- E-seam（轨道 E）：内置浏览器宿主。WorkspacePanelViewModel 以 identity+"|preview" 建 Preview tab，
-         选中该 tab 即点亮；Files/Changes 的内容区随之隐藏。
-         x:Name="PreviewBrowser" 是 E 侧声明的调用契约（BrowserView.PreviewControlName，
-         TryPreviewFile 据此定位；E2 常驻自测断言此名）。 -->
-    <views:BrowserView x:Name="PreviewBrowser" Grid.Row="2" IsVisible="{Binding SelectedTab.PanelId, Converter={x:Static vm:BrowserPreviewSeam.Instance}}"/>
   </Grid>
 </UserControl>

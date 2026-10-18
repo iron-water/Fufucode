@@ -6,7 +6,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
 using Fufucode.App.ViewModels;
-using Fufucode.Pi;
 using Fufucode.Core;
 
 namespace Fufucode.App;
@@ -67,7 +66,7 @@ public partial class MainWindow
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right, Children = { cancel, confirm } };
         Grid.SetRow(row, 1); grid.Children.Add(row); dialog.Content = grid;
         cancel.Click += (_, _) => dialog.Close(-1); confirm.Click += (_, _) => dialog.Close(picker.SelectedIndex);
-        var response = await dialog.ShowDialog<int?>(this);
+        var response = await Fufucode.App.Views.SkinDialog.ShowAsync<int?>(dialog, this);
         if (response is not { } choice || choice < 0 || choice >= entries.Length) return;
         var result = side ? await host.Manager.ForkAsync(session, entries[choice].Id) : await host.ForkAsync(entries[choice].Id);
         if (side)

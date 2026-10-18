@@ -2,7 +2,6 @@ using System.Text.Json;
 using System.Threading.Channels;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.Cli;
 
@@ -15,7 +14,8 @@ public static class CliChatRunner
     private sealed record Failure(string Error, int ExitCode);
     public static async Task<CliChatResult> RunAsync(IChatSession chat, IExtensionUiSession? approval,
         string prompt, bool json, TextWriter output, TextReader input,
-        CancellationToken cancellationToken = default, TextWriter? diagnostics = null)
+        CancellationToken cancellationToken = default, TextWriter? diagnostics = null,
+        bool autoApprove = false)
     {
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
@@ -139,6 +139,24 @@ public static class CliChatRunner
                 await foreach (var request in requests.Reader.ReadAllAsync(lifetime.Token))
                 {
                     if (!approval!.PendingExtensionUiRequests.Contains(request)) continue;
+                    if (autoApprove)
+                    {
+                        var autoResponse = request.Method switch
+                        {
+                            "confirm" => PiExtensionUiResponse.Confirm(true),
+                            "select" when CliApprovalCommands.Options(request).Length > 0 => PiExtensionUiResponse.WithValue(CliApprovalCommands.Options(request)[0]),
+                            "input" or "editor" => PiExtensionUiResponse.WithValue(""),
+                            _ => PiExtensionUiResponse.Confirm(true)
+                        };
+                        MarkResponse(request, autoResponse);
+                        await approval.RespondToExtensionUiAsync(request, autoResponse, lifetime.Token);
+                        if (!json)
+                        {
+                            await diagnostics.WriteLineAsync($"[Auto-approved: {request.Method}] {request.Id}");
+                            await diagnostics.FlushAsync();
+                        }
+                        continue;
+                    }
                     lock (gate)
                     {
                         if (json) output.WriteLine(JsonSerializer.Serialize(new
@@ -169,7 +187,7 @@ public static class CliChatRunner
                             if (line is null)
                             {
                                 // Mark failure before a cancellation reply can trigger agent_settled.
-                                Fail("Approval needs stdin; EOF cancelled the request.");
+                                Fail("Approval needs stdin; EOF cancelled the request. Use -y / --yes to auto-approve in non-interactive/piped mode.");
                                 MarkResponse(request, PiExtensionUiResponse.Cancel());
                                 await approval.RespondToExtensionUiAsync(request, PiExtensionUiResponse.Cancel(), lifetime.Token);
                                 return;

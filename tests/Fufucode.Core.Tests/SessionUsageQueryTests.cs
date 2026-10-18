@@ -121,7 +121,7 @@ public static class SessionUsageQueryTests
         cycle.ApplyEntriesResponse(cycleJson.RootElement);
         var rejected = false;
         try { SessionUsageQuery.QueryHistory(cycle); }
-        catch (PiRpcException) { rejected = true; }
+        catch (RpcException) { rejected = true; }
         Check(rejected, "A8 inactive branch ancestry cycle is rejected without hanging");
     }
 }

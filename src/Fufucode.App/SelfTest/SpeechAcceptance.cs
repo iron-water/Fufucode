@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Fufucode.App.Infrastructure;
+using Fufucode.Core.Plugins;
 
 namespace Fufucode.App.SelfTest;
 
@@ -9,7 +10,7 @@ internal static class SpeechAcceptance
 {
     internal static async Task<int> RunAsync()
     {
-        using var service = new ReplySpeechService { Volume = 0 };
+        using ISpeechService service = NullSpeechService.Instance;
         try
         {
             async Task Wait(string status)

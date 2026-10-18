@@ -1,0 +1,135 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:features="using:Fufucode.App.Features.LocalReview"
+             x:Class="Fufucode.App.Features.LocalReview.LocalReviewPageView"
+             x:DataType="features:LocalReviewViewModel"
+             Background="{DynamicResource AppWindowBackground}"
+             AutomationProperties.Name="本地审查">
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16,12,16,8" RowSpacing="8">
+
+    <!-- 项目与范围 -->
+    <StackPanel Grid.Row="0" Spacing="6">
+      <TextBlock Classes="title" Text="本地 Git 工作树与代码审查"/>
+      <TextBlock x:Name="DescriptionBlock" Classes="caption" TextWrapping="Wrap"
+                 Text="只读检查真实仓库；审查基于固定快照，不修改文件、不自动接受或集成。打开、跳转与导出都通过宿主请求。"/>
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <TextBox Text="{Binding ProjectPath}" PlaceholderText="项目路径（宿主注入或手动填写）"
+                 AutomationProperties.Name="项目路径"/>
+        <Button Grid.Column="1" Classes="subtle" Content="刷新工作树" Command="{Binding RefreshWorktreesCommand}"
+                VerticalAlignment="Bottom"/>
+      </Grid>
+      <TextBlock x:Name="StatusBlock" Classes="caption" Text="{Binding StatusText}" TextWrapping="Wrap"
+                 AutomationProperties.Name="状态行"/>
+    </StackPanel>
+
+    <!-- 工作树列表 + 显式创建 -->
+    <Border Grid.Row="1" Classes="settingsRow">
+      <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+        <TextBlock Classes="settingsRowTitle" Text="工作树"/>
+        <ListBox x:Name="WorktreeList" Grid.Row="1" ItemsSource="{Binding Worktrees}" SelectedItem="{Binding SelectedWorktree}"
+                 MaxHeight="120" AutomationProperties.Name="工作树列表">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="features:LocalReviewWorktreeItem">
+              <TextBlock Text="{Binding Label}" TextTrimming="CharacterEllipsis"/>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <!-- WrapPanel：任意宽度下控件自动换行，不会被压成零宽或挤出可视区（P1 已登记同类缺陷 D-P1-1） -->
+        <WrapPanel x:Name="WorktreeActions" Grid.Row="2" Orientation="Horizontal">
+          <TextBox Text="{Binding CreateDestination}" PlaceholderText="新工作树目录（显式创建）"
+                   MinWidth="220" Margin="0,0,8,4" AutomationProperties.Name="新工作树目录"/>
+          <Button Classes="subtle" Content="创建工作树" Command="{Binding CreateWorktreeCommand}" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="打开所选" Command="{Binding OpenSelectedWorktreeCommand}" Margin="0,0,0,4"/>
+        </WrapPanel>
+      </Grid>
+    </Border>
+
+    <!-- 范围选择与解析 -->
+    <Border Grid.Row="2" Classes="settingsRow">
+      <Grid RowDefinitions="Auto,Auto,Auto" RowSpacing="6">
+        <TextBlock Classes="settingsRowTitle" Text="审查范围"/>
+        <WrapPanel x:Name="ScopeInputs" Grid.Row="1" Orientation="Horizontal">
+          <ComboBox ItemsSource="{Binding ScopeChoices}" SelectedItem="{Binding SelectedScope}"
+                    MinWidth="240" Margin="0,0,8,4" AutomationProperties.Name="范围类型"/>
+          <TextBox Text="{Binding Revision}" PlaceholderText="提交（Commit/目标 Range）"
+                   MinWidth="140" Margin="0,0,8,4" AutomationProperties.Name="提交"/>
+          <TextBox Text="{Binding BaseRevision}" PlaceholderText="基准（Range 起点）"
+                   MinWidth="140" Margin="0,0,8,4" AutomationProperties.Name="基准"/>
+          <Button Classes="subtle" Content="解析范围" Command="{Binding ResolveScopeCommand}" Margin="0,0,0,4"/>
+        </WrapPanel>
+        <WrapPanel x:Name="RunActions" Grid.Row="2" Orientation="Horizontal">
+          <Button Classes="toolButton" Content="开始审查" Command="{Binding ReviewCommand}"
+                  IsEnabled="{Binding CanReview}" Margin="0,0,8,4" AutomationProperties.Name="开始审查"/>
+          <Button Classes="subtle" Content="取消" Command="{Binding CancelCommand}"
+                  IsVisible="{Binding CanCancel}" Margin="0,0,8,4"/>
+          <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" Margin="0,0,0,4"/>
+        </WrapPanel>
+      </Grid>
+    </Border>
+
+    <!-- 结果区：宽容器两列，窄停靠栏上下堆叠（OnSizeChanged 切换） -->
+    <Grid x:Name="ResultsGrid" Grid.Row="3" ColumnDefinitions="340,*" ColumnSpacing="12">
+      <DockPanel x:Name="FindingsPanel" Grid.Column="0">
+        <StackPanel DockPanel.Dock="Top" Spacing="4">
+          <TextBlock Classes="settingsRowTitle" Text="发现项"/>
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="caption" Text="优先级：" VerticalAlignment="Center"/>
+            <ComboBox ItemsSource="{Binding PriorityFilters}" SelectedItem="{Binding PriorityFilter}"
+                      MinWidth="110" AutomationProperties.Name="优先级过滤"/>
+          </StackPanel>
+          <TextBlock Classes="caption" Text="{Binding ScopeSummary}" TextWrapping="Wrap"/>
+          <TextBlock Classes="deletedFlag" Text="{Binding StaleWarning}" TextWrapping="Wrap"
+                     IsVisible="{Binding StaleWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+        <ListBox ItemsSource="{Binding Findings}" SelectedItem="{Binding SelectedFinding}"
+                 AutomationProperties.Name="发现项列表">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="features:LocalReviewFindingItem">
+              <StackPanel Spacing="2">
+                <!-- 单属性绑定：Run 内联绑定不渲染，已用计算属性代替 -->
+                <TextBlock Text="{Binding Header}" TextTrimming="CharacterEllipsis"/>
+                <TextBlock Classes="caption" Text="{Binding Detail}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <DockPanel x:Name="DetailPanel" Grid.Column="1">
+        <WrapPanel x:Name="DetailActions" DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+          <Button Classes="subtle" Content="跳转所选" Command="{Binding JumpCommand}" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="复制 Markdown" Command="{Binding CopyFindingsCommand}" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="导出 Markdown" Command="{Binding ExportCommand}" CommandParameter="md" Margin="0,0,8,4"/>
+          <Button Classes="subtle" Content="导出 JSON" Command="{Binding ExportCommand}" CommandParameter="json" Margin="0,0,0,4"/>
+        </WrapPanel>
+        <ScrollViewer>
+          <StackPanel Spacing="6">
+            <TextBlock Classes="settingsRowTitle" Text="被拒绝的无效定位"/>
+            <ItemsControl ItemsSource="{Binding Rejected}" AutomationProperties.Name="拒绝项列表">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="features:LocalReviewRejectedItem">
+                  <TextBlock Classes="caption" Text="{Binding Summary}" TextWrapping="Wrap"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Classes="settingsRowTitle" Text="历史" Margin="0,8,0,0"/>
+            <WrapPanel Orientation="Horizontal">
+              <Button Classes="subtle" Content="刷新历史" Command="{Binding ReloadHistoryCommand}" Margin="0,0,8,4"/>
+              <Button Classes="subtle" Content="加载所选历史" Click="LoadHistory_Click" Margin="0,0,0,4"/>
+            </WrapPanel>
+            <ListBox ItemsSource="{Binding History}" x:Name="HistoryList" MaxHeight="120"
+                     AutomationProperties.Name="历史列表">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="x:String">
+                  <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis"/>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Classes="caption" Text="{Binding ExportedPath}" TextWrapping="Wrap"/>
+            <TextBlock Classes="meta" Text="{Binding ExecutorNote}" TextWrapping="Wrap"/>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+    </Grid>
+  </Grid>
+</UserControl>

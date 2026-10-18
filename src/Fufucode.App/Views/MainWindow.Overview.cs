@@ -7,6 +7,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
@@ -14,6 +15,7 @@ using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Views;
 using Fufucode.Core;
 
 namespace Fufucode.App;
@@ -73,8 +75,8 @@ public partial class MainWindow
         if (state.ActivityView)
         {
             OverviewHeading("优先级");
-            var scheduled = new WorkbenchScheduleStore(_customization.DataRoot).Tasks
-                .Where(t => t.State == "pending").Select(t => t.SessionId).ToHashSet();
+            var store = _schedules ?? ResolveScheduleStoreForTesting(_customization.DataRoot);
+            var scheduled = store.Tasks.Where(t => t.State == "pending").Select(t => t.SessionId).ToHashSet();
             var important = all.Where(s => state.Priority switch
             {
                 "pinned" => SessionPresentation.Load(_host!.Manager.Metadata, s.Id).Pinned,
@@ -127,18 +129,19 @@ public partial class MainWindow
         .SelectMany(project => _host!.Manager.Metadata.ListSessions(project.Id));
     private TextBlock OverviewHeading(string title, double indent = 0)
     {
+        // Win11 侧栏分组标题与条目图标列对齐：条目内边距 4+图标 margin 8 = 12px 基线。
         var text = new TextBlock { Text = title, FontSize = 12, FontWeight = FontWeight.SemiBold,
-            Margin = new Thickness(indent + 4, 12, 4, 4), TextTrimming = TextTrimming.CharacterEllipsis };
+            Margin = new Thickness(indent + 12, 12, 4, 4), TextTrimming = TextTrimming.CharacterEllipsis };
+        text.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
         _overview.Body.Children.Add(text); return text;
     }
     private void OverviewEmpty(string text) => _overview.Body.Children.Add(new TextBlock
     { Text = text, Classes = { "meta" }, Margin = new Thickness(4, 3, 4, 5), TextWrapping = TextWrapping.Wrap });
     private Button OverviewIcon(string icon, string title, Func<Task> action)
     {
-        var button = new Button { Classes = { "iconButton" }, Width = 26, Height = 26, MinWidth = 26,
-            MinHeight = 26, Padding = new Thickness(6), Content = new PathIcon
-            { Width = 14, Height = 14, Data = this.FindResource("Icon." + icon) as Geometry } };
-        ToolTip.SetTip(button, title); AutomationProperties.SetName(button, title);
+        var button = WorkbenchUi.IconButton(icon, title, 26);
+        button.Padding = new Thickness(6);
+        if (button.Content is PathIcon glyph) glyph.Width = glyph.Height = 14;
         button.Click += (_, _) => OverviewRun(action); return button;
     }
     private MenuItem OverviewMenu(string title, Func<Task> action, bool enabled = true)
@@ -296,7 +299,7 @@ public partial class MainWindow
         save.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(input.Text)) dialog.Close(input.Text.Trim()); };
         cancel.Click += (_, _) => dialog.Close(null);
         dialog.Opened += (_, _) => { input.Focus(); input.SelectAll(); };
-        return await dialog.ShowDialog<string?>(this);
+        return await Fufucode.App.Views.SkinDialog.ShowAsync<string?>(dialog, this);
     }
     private async Task EditOverviewProjectAsync(ProjectRecord project)
     {
@@ -326,6 +329,6 @@ public partial class MainWindow
             catch (Exception ex) { error.Text = ex.Message; }
         };
         cancel.Click += (_, _) => dialog.Close();
-        await dialog.ShowDialog(this);
+        await Fufucode.App.Views.SkinDialog.ShowAsync(dialog, this);
     }
 }

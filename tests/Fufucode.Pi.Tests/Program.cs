@@ -1,9 +1,12 @@
+using Fufucode.Core;
 using Fufucode.Pi;
 
 var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin/Debug/net10.0/Fufucode.FakePi.dll");
 var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet/dotnet.exe");
 PiRpcOptions fakeOptions(int maxBytes = 8 * 1024 * 1024) => new(dotnet, [fake], root, MaxRecordBytes: maxBytes);
+if (args.Contains("--shutdown-only"))
+    return await PiShutdownTests.RunAsync(root, Path.Combine(root, "runtime/node/node.exe")) == 0 ? 0 : 1;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); Console.WriteLine($"PASS {name}"); }
 
 await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
@@ -23,7 +26,7 @@ await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
     await client.RequestAsync("stderr");
     Check(client.StderrTail.Length > 0 && client.StderrTail.Length <= 65536, "stderr drained with bounded diagnostics");
     try { await client.RequestAsync("hang", timeout: TimeSpan.FromMilliseconds(250)); throw new Exception("timeout missed"); }
-    catch (PiRpcException error) { Check(error.Message.Contains("timed out"), "deadline ends request"); }
+    catch (RpcException error) { Check(error.Message.Contains("timed out"), "deadline ends request"); }
     using (var cancel = new CancellationTokenSource(TimeSpan.FromMilliseconds(250)))
     {
         try { await client.RequestAsync("hang", cancellationToken: cancel.Token); throw new Exception("cancellation missed"); }
@@ -38,13 +41,13 @@ await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
     await Task.Delay(100);
     await client.StopAsync();
     try { await pending.WaitAsync(TimeSpan.FromSeconds(2)); throw new Exception("shutdown wait missed"); }
-    catch (PiRpcException) { Check(true, "shutdown ends pending request"); }
+    catch (RpcException) { Check(true, "shutdown ends pending request"); }
 }
 
 await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
 {
     try { await client.RequestAsync("die"); throw new Exception("process exit missed"); }
-    catch (PiRpcException error) { Check(error.InnerException is not null, "process exit ends pending request"); }
+    catch (RpcException error) { Check(error.InnerException is not null, "process exit ends pending request"); }
 }
 
 await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
@@ -55,20 +58,20 @@ await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
 await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
 {
     try { await client.RequestAsync("malformed"); throw new Exception("malformed JSON missed"); }
-    catch (PiRpcException error) { Check(error.InnerException is not null, "malformed JSON is fatal"); }
+    catch (RpcException error) { Check(error.InnerException is not null, "malformed JSON is fatal"); }
 }
 
 foreach (var command in new[] { "no_id", "missing_fields", "wrong_command" })
 {
     await using var client = await PiRpcClient.StartAsync(fakeOptions());
     try { await client.RequestAsync(command, timeout: TimeSpan.FromSeconds(2)); throw new Exception($"{command} missed"); }
-    catch (PiRpcException error) { Check(error.InnerException is not TimeoutException, $"{command} ends pending request"); }
+    catch (RpcException error) { Check(error.InnerException is not TimeoutException, $"{command} ends pending request"); }
 }
 
 await using (var client = await PiRpcClient.StartAsync(fakeOptions(1024)))
 {
     try { await client.RequestAsync("large"); throw new Exception("record limit missed"); }
-    catch (PiRpcException error) { Check(error.InnerException is not null, "record size limit is explicit"); }
+    catch (RpcException error) { Check(error.InnerException is not null, "record size limit is explicit"); }
 }
 
 var node = Path.Combine(root, "runtime/node/node.exe");
@@ -82,7 +85,7 @@ try
         var requests = Enumerable.Range(0, 16).Select(async _ =>
         {
             try { await client.RequestAsync("hang"); return false; }
-            catch (PiRpcException) { return true; }
+            catch (RpcException) { return true; }
         }).ToArray();
         await client.StopAsync();
         Check((await Task.WhenAll(requests).WaitAsync(TimeSpan.FromSeconds(3))).All(failed => failed),
@@ -112,5 +115,10 @@ try
     Check(state.Success && state.Data?.TryGetProperty("isStreaming", out _) == true, "real Pi state query");
     Check(!client.StderrTail.Contains("R-003 unexpected extension load", StringComparison.Ordinal),
         "R-003 isolated real Pi ignores a failing auto-discovered extension");
+    await client.StopAsync();
+    Check(client.ProcessExit is { } exit && exit.Generation == client.Generation && exit.ProcessId > 0 &&
+        client.ExitCode == exit.ExitCode, "real Pi shutdown records actual process exit for the original generation");
 }
 finally { Directory.Delete(work, recursive: true); }
+if (await PiShutdownTests.RunAsync(root, node) != 0) return 1;
+return 0;

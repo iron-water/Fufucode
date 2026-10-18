@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Fufucode.App.Abstractions;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 

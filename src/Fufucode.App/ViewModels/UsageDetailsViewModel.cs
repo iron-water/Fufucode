@@ -7,7 +7,6 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fufucode.Core;
-using Fufucode.Pi;
 
 namespace Fufucode.App.ViewModels;
 
@@ -62,7 +61,7 @@ public sealed partial class UsageDetailsViewModel : ViewModelBase, IDisposable
     public bool IsCurrentTurn => SelectedScopeIndex == 1;
     public bool IsAllRecorded => SelectedScopeIndex == 2;
     public bool HasTurns => Turns.Count > 0;
-    public string SourceLabel => IsMock ? "mock 用量演示 · 未连接真实 Pi" : "Pi 报告的 token 用量";
+    public string SourceLabel => IsMock ? "mock 用量演示 · 未连接真实后端" : "后端报告的 token 用量";
     public string ScopeDescription => SelectedScopeIndex switch
     {
         1 => "当前分支的最近一轮；仅计已结束的 assistant 响应。",
@@ -88,7 +87,7 @@ public sealed partial class UsageDetailsViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasTurns));
         if (IsOpen) _ = RefreshAsync();
     }
-    public void AttachRealContext(AppDataLayout layout, string projectPath, string sessionId, ChatSessionCoordinator coordinator)
+    public void AttachRealContext(AppDataLayout layout, string projectPath, string sessionId, ISessionCoordinator coordinator)
     {
         AttachContext(sessionId, cancellation =>
             {

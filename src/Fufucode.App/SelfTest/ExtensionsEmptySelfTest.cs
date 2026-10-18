@@ -21,7 +21,7 @@ public static class ExtensionsEmptySelfTest
 
         var vm = new ExtensionsPageViewModel();
         Check(vm.IsMock && vm.EmptyState == ExtensionEmptyState.None &&
-              vm.MockNotice.Contains("未连接真实 Pi") && !vm.HasCommandEmptyState,
+              vm.MockNotice.Contains("未连接真实后端") && !vm.HasCommandEmptyState,
             "mock 诚实未连接，不冒充未安装或已查询");
         vm.PreviewSnapshot(new ExtensionCatalogSnapshot());
         Check(vm.EmptyState == ExtensionEmptyState.NotInstalled &&

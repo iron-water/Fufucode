@@ -16,6 +16,7 @@ using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
+using Fufucode.Core.Updates;
 
 namespace Fufucode.App;
 
@@ -43,6 +44,11 @@ public partial class MainWindow
         Now("toggle.right", "右侧边栏", "布局", () => ToggleDock(DockZone.Right));
         Now("toggle.bottom", "底部面板", "布局", () => ToggleDock(DockZone.Bottom), shortcut: "Ctrl+J");
         Now("layout.reset", "恢复默认布局", "布局", ResetDockLayout);
+        Now("page.automation", "自动开发", "工作台", () => OpenDockPage("automation", DockZone.Right),
+            () => _workbenchPages.ContainsKey("automation") ? null : "请先在设置中启用自动开发模块");
+        Now("page.local-review", "本地审查", "项目", () => OpenDockPage("local-review", DockZone.Right),
+            () => !_workbenchPages.ContainsKey("local-review") ? "请先在设置中启用本地审查模块" :
+                _vm is null ? "会话尚未就绪" : !_vm.IsChatPage ? "返回工作区后可使用" : null);
         Now("composer.toggle", "显示/隐藏输入区", "布局", () => _customization.Change(s => s with { Composer = s.Composer == "hidden" ? "reading" : "hidden" }));
         Now("summary.toggle", "变更摘要", "布局", () => _customization.Change(s => s with { ShowChangeSummary = !s.ShowChangeSummary }));
         Action("navigate.back", "返回", "导航", () => MoveHistoryAsync(-1), () => _navigationIndex > 0 ? null : "没有上一位置");
@@ -98,7 +104,7 @@ public partial class MainWindow
         Now("view.zoomIn", "放大", "窗口", () => SetZoom(_zoom + .1));
         Now("view.zoomOut", "缩小", "窗口", () => SetZoom(_zoom - .1));
         Now("view.zoomReset", "实际大小", "窗口", () => SetZoom(1));
-        foreach (var (id, title) in new[] { ("status.connection", "Pi 连接"), ("status.shell", "Shell 连接"), ("status.activity", "会话活动"), ("status.tokens", "会话 Token"), ("status.duration", "会话用时"), ("status.project", "项目名称"), ("status.branch", "Git 分支") })
+        foreach (var (id, title) in new[] { ("status.connection", "后端连接"), ("status.shell", "Shell 连接"), ("status.activity", "会话活动"), ("status.tokens", "会话 Token"), ("status.duration", "会话用时"), ("status.project", "项目名称"), ("status.branch", "Git 分支") })
             Action(id, title, "状态", () => ShowTextAsync(title, StatusText(id)));
         Now("edit.undo", "撤销", "编辑", () => FocusedText()?.Undo());
         Now("edit.redo", "重做", "编辑", () => FocusedText()?.Redo());
@@ -157,8 +163,10 @@ public partial class MainWindow
     {
         var full = Path.GetFullPath(path, _host?.ProjectPath ?? Environment.CurrentDirectory);
         if (!File.Exists(full)) throw new FileNotFoundException("文件已不存在", full);
-        ((Views.BrowserView)_workbenchPages["preview"].Content).PreviewFile(full);
-        OpenDockPage("preview", DockZone.Right);
+        _vm?.WorkspacePanel.OpenFilePreview(full);
+        Views.BrowserView.TryPreviewFile(WorkspacePanel, full);
+        Views.BrowserView.TryPreviewFile(this, full);
+        OpenDockPage("files", DockZone.Right);
     }
     private SessionPresentation CurrentPresentation => _host is null ? _mockPresentation : SessionPresentation.Load(_host.Manager.Metadata, _host.Current.Session.Id);
     private void ChangeSessionPresentation(Func<SessionPresentation, SessionPresentation> edit)
@@ -305,12 +313,12 @@ public partial class MainWindow
     {
         foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
             for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
-                if (File.Exists(Path.Combine(directory.FullName, "Fufucode.sln"))) return directory.FullName;
+                if (File.Exists(Path.Combine(directory.FullName, "docs", "AI_DEVELOPMENT_PLAN.md"))) return directory.FullName;
         return AppContext.BaseDirectory;
     }
     private Task ShowDiagnosticsAsync() => ShowTextAsync("系统状态与故障排除", DiagnosticSummary());
 
-    /// <summary>关于 Fufucode：版本与数据目录，并把文档与反馈两个入口收进这里。</summary>
+    /// <summary>关于 Fufucode：版本与数据目录，并把文档、新功能、反馈三个入口收进这里。</summary>
     private Task ShowAboutAsync()
     {
         var panel = new StackPanel { Spacing = 10, MinWidth = 380 };
@@ -321,10 +329,12 @@ public partial class MainWindow
         panel.Children.Add(new TextBlock { Text = "数据目录：" + _options.CreateAppDataLayout().Root, TextWrapping = Avalonia.Media.TextWrapping.Wrap, Opacity = .75, FontSize = 12 });
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
         var docs = new Button { Content = "文档" };
-        docs.Click += async (_, _) => await ShowLocalDocumentAsync("README.md");
+        docs.Click += async (_, _) => await ShowLocalDocumentAsync("docs/AI_DEVELOPMENT_PLAN.md");
+        var changes = new Button { Content = "新功能" };
+        changes.Click += async (_, _) => await ShowLocalDocumentAsync("docs/decisions.md");
         var feedback = new Button { Content = "反馈问题" };
         feedback.Click += async (_, _) => await ExportDiagnosticsAsync();
-        actions.Children.Add(docs); actions.Children.Add(feedback);
+        actions.Children.Add(docs); actions.Children.Add(changes); actions.Children.Add(feedback);
         panel.Children.Add(actions);
         return ShowPanelAsync("关于 Fufucode", panel);
     }
@@ -362,12 +372,20 @@ public partial class MainWindow
     { using var process = Process.GetCurrentProcess(); if (_performanceSamples.Count < 3600) _performanceSamples.Add((DateTimeOffset.UtcNow, process.WorkingSet64, process.TotalProcessorTime)); }
     private async Task CheckUpdatesAsync()
     {
-        var remote = (await RunOutputAsync("git", ["remote", "get-url", "origin"], FindRepositoryRoot())).Trim();
-        var repository = remote.Replace("git@github.com:", "").Replace("https://github.com/", "").TrimEnd('/');
-        if (repository.EndsWith(".git", StringComparison.Ordinal)) repository = repository[..^4];
-        if (repository.Contains(':') || repository.Split('/').Length != 2) throw new InvalidOperationException("当前未配置可查询的 GitHub 发布仓库");
-        var release = await RunOutputAsync("gh", ["release", "view", "--repo", repository, "--json", "tagName,publishedAt,url,body"], FindRepositoryRoot());
-        await ShowTextAsync("最新发布（未自动安装）", release);
+        var layout = _options.CreateAppDataLayout();
+        var settingsStore = _settingsStore ?? new AppSettingsStore(layout);
+        using var updateService = new AppUpdateService(layout, settingsStore);
+        var currentVersion = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.4.0";
+        var result = await updateService.CheckForUpdatesAsync(currentVersion);
+        if (result.Status == UpdateCheckStatus.UpdateAvailable && result.Manifest is not null)
+        {
+            var text = $"{result.Message}\n\n更新说明：\n{result.Manifest.ReleaseNotes}\n\n下载包：{result.Manifest.PackageUrl}\n大小：{result.Manifest.PackageSizeBytes / 1024 / 1024} MB\nSHA-256：{result.Manifest.Sha256}\n政策：{result.Manifest.PolicyNotice}\n\n提示：可在「设置 - 关于」中一键下载并安全更新。";
+            await ShowTextAsync("发现软件更新", text);
+        }
+        else
+        {
+            await ShowTextAsync("检查更新", result.Message);
+        }
     }
     private static async Task<string> RunOutputAsync(string executable, string[] arguments, string directory)
     {

@@ -20,7 +20,7 @@ public static class WorkbenchActionDefaults
         "status.duration" or "status.branch" or "status.project" => new(UiActionPosition.Hidden),
         "session.side" or "session.fork" or "session.schedule" or "session.share" or "window.session" => new(UiActionPosition.HeaderMenu),
         "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
-        "floating.toggle" or "floating.pin" or "speech.stop" or "speech.start" or "usage" or "trace" => new(UiActionPosition.MenuRight),
+        "speech.stop" or "speech.start" or "usage" or "trace" => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("help.") || id.StartsWith("view.") || id.StartsWith("edit.") => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("status.") => new(UiActionPosition.Hidden),
         _ => new(UiActionPosition.MenuLeft)
@@ -28,7 +28,8 @@ public static class WorkbenchActionDefaults
     /// <summary>菜单二级分组：同一父名下的动作收进一个子菜单；null 表示直接平铺。</summary>
     public static string? SubMenu(string id) => id switch
     {
-        "chat" or "files" or "changes" or "preview" or "browser" or "terminal" or "extensions" => "工作区页面",
+        _ when id.StartsWith("browser.") => "浏览器操作",
+        "chat" or "files" or "changes" or "browser" or "terminal" or "extensions" => "工作区页面",
         "copy.session" or "copy.id" or "copy.task" or "copy.project" or "copy.log" or "copy.deeplink" or "copy.markdown" or "copy.workdir" => "复制",
         "session.export" or "session.export.markdown" or "session.export.metadata" or "session.export.pdf" => "导出",
         "session.fork" or "session.fork.worktree" => "分叉",
@@ -53,6 +54,11 @@ public static class WorkbenchActionDefaults
     };
     public static string Icon(string id) => id switch
     {
+        "browser.new-tab" => "Add", "browser.close-tab" => "Dismiss", "browser.back" => "ArrowLeft", "browser.forward" => "ArrowRight",
+        "browser.reload" or "browser.zoom-reset" => "ArrowClockwise", "browser.stop" => "RecordStop", "browser.find" => "Search",
+        "browser.zoom-in" => "ZoomIn", "browser.zoom-out" => "ZoomOut", "browser.copy-address" => "Copy",
+        "browser.open-external" => "Open", "browser.devtools" => "Wrench",
+        "page.local-review" => "ShieldCheckmark",
         "commands" or "session.search" => "Search", "settings" => "Settings",
                 "toggle.left" => "PanelLeft", "toggle.right" => "PanelRight", "toggle.bottom" => "PanelBottom", "terminal" => "Terminal",
         "session.new" => "Add", "navigate.back" => "ArrowLeft", "navigate.forward" => "ArrowRight",

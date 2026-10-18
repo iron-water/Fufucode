@@ -116,13 +116,52 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFilesSelected))]
     [NotifyPropertyChangedFor(nameof(IsChangesSelected))]
-    [NotifyPropertyChangedFor(nameof(IsPreviewSelected))]
     [NotifyPropertyChangedFor(nameof(HasSelectedTab))]
     private WorkspacePanelTabViewModel? _selectedTab;
     public bool IsFilesSelected => SelectedTab?.Kind == WorkspacePanelKind.Files;
     public bool IsChangesSelected => SelectedTab?.Kind == WorkspacePanelKind.Changes;
-    public bool IsPreviewSelected => SelectedTab?.Kind == WorkspacePanelKind.Preview;
+    public bool IsPreviewSelected => IsFilePreviewOpen;
     public bool HasSelectedTab => SelectedTab is not null;
+
+    [ObservableProperty] private bool _isFilePreviewOpen;
+    [ObservableProperty] private string _previewFileName = string.Empty;
+    [ObservableProperty] private string _previewFilePath = string.Empty;
+    [ObservableProperty] private string _previewFileSize = string.Empty;
+    [ObservableProperty] private string _previewFileDetail = string.Empty;
+
+    [RelayCommand]
+    public void CloseFilePreview() => IsFilePreviewOpen = false;
+
+    public void OpenFilePreview(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var info = new FileInfo(full);
+            PreviewFileName = info.Name;
+            PreviewFilePath = full;
+            PreviewFileSize = info.Exists ? FormatFileSize(info.Length) : "文件不存在";
+            PreviewFileDetail = info.Exists ? $"修改时间 {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}" : "无法获取文件信息";
+            IsFilePreviewOpen = true;
+        }
+        catch (Exception ex)
+        {
+            PreviewFileName = Path.GetFileName(path);
+            PreviewFilePath = path;
+            PreviewFileSize = "未知大小";
+            PreviewFileDetail = ex.Message;
+            IsFilePreviewOpen = true;
+        }
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        if (bytes < 1024) return $"{bytes} B";
+        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
+        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
+        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsWorkspaceScope))]
@@ -241,8 +280,6 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         Tabs.Clear();
         Tabs.Add(new(identity + "|files", WorkspacePanelKind.Files));
         Tabs.Add(new(identity + "|changes", WorkspacePanelKind.Changes));
-        // PanelId 后缀用 E 侧常量而非字面量：BrowserView 的可见性判定就靠这个约定，两处必须同源。
-        Tabs.Add(new(identity + BrowserPreviewSeam.PreviewPanelIdSuffix, WorkspacePanelKind.Preview, isOpen: false));
         SelectedTab = Tabs[0];
     }
 
@@ -294,7 +331,12 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     }
     [RelayCommand] private void OpenFiles() => Open(WorkspacePanelKind.Files);
     [RelayCommand] private void OpenChanges() => Open(WorkspacePanelKind.Changes);
-    [RelayCommand] private void OpenPreview() => Open(WorkspacePanelKind.Preview);
+    [RelayCommand] private void OpenPreview()
+    {
+        if (SelectedFile is { IsDirectory: false } file)
+            OpenFilePreview(file.FullPath);
+        Open(WorkspacePanelKind.Files);
+    }
     private void Open(WorkspacePanelKind kind)
     {
         var tab = Tabs.First(x => x.Kind == kind);

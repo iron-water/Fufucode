@@ -79,6 +79,32 @@ internal static class WorkbenchDemoSelfTest
         Check(!empty.Hidden[DockZone.Left] && empty.Selected[DockZone.Left] == "files", "L03: opening a closed page restores its region");
         empty.Open("overview", DockZone.Left); empty.Reorder("overview", 0);
         Check(WorkbenchLayoutState.Restore(empty.Serialize(), known).Pages[DockZone.Left].SequenceEqual(new[] { "overview", "files" }), "L09: reordered tabs survive serialization");
+
+        // PREVIEW-FIX 上下文迁移验证：旧布局含 preview 固定与独立浮动窗
+        var dockedLegacyJson = "{\"Pages\":{\"Left\":[\"overview\"],\"Right\":[\"changes\",\"preview\"],\"Bottom\":[\"terminal\"]}," +
+                               "\"Selected\":{\"Left\":\"overview\",\"Right\":\"preview\",\"Bottom\":\"terminal\"}," +
+                               "\"Hidden\":{\"Left\":false,\"Right\":false,\"Bottom\":false}," +
+                               "\"PinnedPages\":[\"preview\"]}";
+        var dockedMigrated = WorkbenchLayoutState.Restore(dockedLegacyJson, known);
+        Check(dockedMigrated.PinnedPages.Contains("files") && !dockedMigrated.PinnedPages.Contains("preview"),
+            "Preview migration: legacy pinned preview transfers to files");
+        Check(dockedMigrated.Pages[DockZone.Right].SequenceEqual(new[] { "changes", "files" }) &&
+              dockedMigrated.Selected[DockZone.Right] == "files",
+            "Preview migration: docked preview in Right zone maps to files and preserves selection");
+
+        var floatingLegacyJson = "{\"Pages\":{\"Left\":[\"overview\"],\"Right\":[\"changes\"],\"Bottom\":[\"terminal\"]}," +
+                                 "\"Selected\":{\"Left\":\"overview\",\"Right\":\"changes\",\"Bottom\":\"terminal\"}," +
+                                 "\"Floating\":[{\"Id\":\"old-preview-win\",\"HomeZone\":1,\"Pages\":[\"preview\"],\"Selected\":\"preview\",\"X\":120,\"Y\":240,\"Width\":720,\"Height\":520,\"Topmost\":true}]}";
+        var floatingMigrated = WorkbenchLayoutState.Restore(floatingLegacyJson, known);
+        Check(floatingMigrated.Floating.Count == 1 &&
+              floatingMigrated.Floating[0].Id == "old-preview-win" &&
+              floatingMigrated.Floating[0].Pages.SequenceEqual(new[] { "files" }) &&
+              floatingMigrated.Floating[0].Selected == "files" &&
+              floatingMigrated.Floating[0].X == 120 && floatingMigrated.Floating[0].Y == 240 &&
+              floatingMigrated.Floating[0].Width == 720 && floatingMigrated.Floating[0].Height == 520 &&
+              floatingMigrated.Floating[0].Topmost,
+            "Preview migration: floating preview window preserves coordinates and migrates to files instead of being destroyed");
+
         var session = new RecordingSession();
         var input = new InputViewModel(session) { DraftText = "question", ReferenceContext = "selected passage" };
         await input.SendCommand.ExecuteAsync(null);
@@ -107,6 +133,20 @@ internal static class WorkbenchDemoSelfTest
             window.FindControl<TransitioningContentControl>("PageHost")!.PageTransition = null;
             var vm = (MainViewModel)window.DataContext!;
             await Ready();
+            vm.CurrentPage = AppPage.Chat;
+            vm.Input.DraftText = "";
+            Check(window.AcceptLibraryCitation("引用A").Contains("尚未发送") && vm.Input.DraftText == "引用A",
+                "Library chat: citation enters current main draft without sending");
+            window.AcceptLibraryCitation("引用B");
+            Check(vm.Input.DraftText == "引用A" && vm.Input.HasPendingRestore,
+                "Library chat: existing draft survives and citation is recoverable");
+            vm.Input.ApplyPendingRestoreCommand.Execute(null);
+            Check(vm.Input.DraftText.Contains("引用B"), "Library chat: pending citation can be restored");
+            vm.CurrentPage = AppPage.Settings;
+            window.AcceptLibraryCitation("错误目标");
+            Check(!vm.Input.DraftText.Contains("错误目标"), "Library chat: hidden main conversation is not a citation target");
+            vm.CurrentPage = AppPage.Chat;
+            vm.Input.DraftText = "";
             var shortcuts = window.ShortcutsForTesting;
             Check(shortcuts.Rows.Count == window.ActionsForTesting.Actions.Count(),
                 "Shortcuts integration: catalog projects the actual action registry");
@@ -147,6 +187,30 @@ internal static class WorkbenchDemoSelfTest
                 "Library integration: enabling module creates a fresh view model");
             Check(WorkbenchModulePreferences.Restore(new WorkbenchModulePreferences(LibraryEnabled: false).Serialize(), out _).LibraryEnabled == false,
                 "Library integration: disabled preference round-trips");
+            var review = (Features.LocalReview.LocalReviewPageView)window.PageForTesting("local-review");
+            var reviewVm = review.ViewModel!;
+            await window.ActionsForTesting.ExecuteAsync("library"); await Ready();
+            Check(window.PageForTesting("library").IsEffectivelyVisible &&
+                window.CustomizationForTesting.Current.Layout?.Find("library") == DockZone.Right,
+                "Optional pages: opening library survives appearance layout synchronization");
+            await window.ActionsForTesting.ExecuteAsync("page.local-review"); await Ready();
+            Check(review.IsEffectivelyVisible && window.CustomizationForTesting.Current.Layout?.Find("local-review") == DockZone.Right,
+                "Optional pages: opening local review survives appearance layout synchronization");
+            Check(reviewVm.ProjectPath == vm.WorkspacePanel.ProjectPath && !reviewVm.HasExecutor,
+                "Local review integration: mock shell shares project context without inventing a model executor");
+            Check(vm.Settings.BuiltInModules.Any(module => module.Id == "builtin.local-review") &&
+                window.ActionsForTesting.Actions.Any(action => action.Id == "page.local-review"),
+                "Local review integration: settings and action registry expose the real optional page");
+            window.LocalReviewModuleForTesting.IsEnabled = false;
+            Check(!window.PageAvailableForTesting("local-review") && reviewVm.IsDisposed,
+                "Local review integration: disabling releases its model and cancels only its own review");
+            window.LocalReviewModuleForTesting.IsEnabled = true;
+            Check(window.PageAvailableForTesting("local-review") &&
+                !ReferenceEquals(((Features.LocalReview.LocalReviewPageView)window.PageForTesting("local-review")).ViewModel, reviewVm),
+                "Local review integration: enabling owns a fresh page lifecycle");
+            Check(!WorkbenchModulePreferences.Restore(new WorkbenchModulePreferences(LocalReviewEnabled: false).Serialize(), out _).LocalReviewEnabled &&
+                WorkbenchModulePreferences.Restore("{\"Version\":1,\"BrowserEnabled\":false}", out _).LocalReviewEnabled,
+                "Local review integration: disabled preference persists and old settings default enabled");
             Check(Application.Current.TryGetResource("Icon.Search", null, out var searchIcon) && searchIcon is Avalonia.Media.Geometry,
                 "A07: search icon resource exists");
             var originalTab = window.GetVisualDescendants().OfType<Button>()
@@ -206,6 +270,21 @@ internal static class WorkbenchDemoSelfTest
             window.ResetDockLayout(); await Ready();
             Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") == DockZone.Right && !window.DockLayoutForTesting.Hidden[DockZone.Bottom],
                 "L16: reset restores default positions and hidden regions");
+            // L17: 关空右侧页签后 Hidden 仍可能被用户切回 false，空区不可见（不收起规则）形成死区；
+            // 打开操作必须回填默认页签，否则右栏永远打不开（真实缺陷：关空后「右区」按钮失效）。
+            window.CloseDockPageForTesting("changes");
+            window.CloseDockPageForTesting("browser"); await Ready();
+            Check(window.DockLayoutForTesting.Pages[DockZone.Right].Count == 0 &&
+                window.DockLayoutForTesting.Hidden[DockZone.Right],
+                "L17: closing every right tab empties and hides the zone");
+            // 持久化里真实的死态是 Pages.Right 空且 Hidden.Right=false（用户关空后又点过开关，
+            // 但空区不收起规则把面板按住）。一次点击必须恢复：按有效开态（未隐藏且有页签）切换。
+            window.DockLayoutForTesting.Hidden[DockZone.Right] = false;
+            window.ToggleDockForTesting(DockZone.Right); await Ready();
+            var rightPanel = window.FindControl<Border>("RightPanelBorder")!;
+            Check(window.DockLayoutForTesting.Pages[DockZone.Right].Count > 0 && rightPanel.IsEffectivelyVisible,
+                "L17: reopening an emptied right zone reseeds default pages and shows the panel");
+            window.ResetDockLayout(); await Ready();
             var splitter = window.FindControl<GridSplitter>("RightPanelSplitter")!;
             var priorWidth = window.RightPreferenceForTesting;
             splitter.Focus();

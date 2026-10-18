@@ -22,7 +22,7 @@ Compression=lzma2
 ; solid compression itself. solid=yes on the app-only subset installs fine; solid=yes on the
 ; FULL ~585MB/15k-file payload is not yet verified end-to-end, so the proven-safe default is
 ; no. A completed solid=yes build may still work — but it is not the recorded evidence.
-; Recorded evidence keeps the conservative default.
+; See docs/progress-f.md.
 SolidCompression=no
 SetupLogging=yes
 ChangesEnvironment=yes

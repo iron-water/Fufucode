@@ -13,6 +13,9 @@ namespace Fufucode.App.Views;
 public partial class ChatPage
 {
     internal WorkbenchAppearance Appearance { get; private set; } = new();
+
+    /// <summary>语音朗读服务：由宿主注入；未安装语音插件时为 null（按钮不显示）。</summary>
+    internal Fufucode.Core.Plugins.ISpeechService? SpeechService { get; set; }
     private AppActionRegistry? _workbenchActions;
     internal void AttachWorkbenchActions(AppActionRegistry actions) => _workbenchActions = actions;
     internal void SetHeaderMenu(MenuFlyout menu)
@@ -25,7 +28,9 @@ public partial class ChatPage
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
         ComposerCard.IsVisible = settings.Composer != "hidden";
         ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
-        ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
+        if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
+            ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
+        else ComposerCard.ClearValue(Border.CornerRadiusProperty);
         InputBox.FontSize = settings.FontSize;
         // 刻度是对话区固定结构：常显示，不提供开关。
         MessageRuler.IsVisible = true;

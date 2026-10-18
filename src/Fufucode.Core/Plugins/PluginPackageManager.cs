@@ -1,0 +1,360 @@
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.Loader;
+using System.Text.Json;
+using System.Threading.Tasks;
+
+namespace Fufucode.Core.Plugins;
+
+/// <summary>校验载荷后安装并激活；失败恢复旧版本，状态和加载错误不伪装为成功。</summary>
+public sealed class PluginPackageManager : IAsyncDisposable
+{
+    public static IRemoteControlService? ActiveRemoteControlService { get; set; }
+    private static readonly ConcurrentDictionary<string, Func<IPluginPackage>> _registeredFactories = new(StringComparer.OrdinalIgnoreCase);
+    private readonly AppDataLayout _layout;
+    private readonly PluginToolRegistry _toolRegistry;
+    private readonly PluginStateStore _stateStore;
+    private readonly PluginDependencyStore _dependencyStore;
+    private readonly Func<Type, object?>? _serviceResolver;
+    private readonly Dictionary<string, (IPluginPackage Package, IPluginToolHandler? Handler, PluginPackageContext Context)> _activePlugins = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, AssemblyLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly object _gate = new();
+    private bool _changing;
+    public PluginPackageManager(AppDataLayout layout, PluginToolRegistry toolRegistry, PluginStateStore? stateStore = null,
+        Func<Type, object?>? serviceResolver = null)
+    {
+        _layout = layout ?? throw new ArgumentNullException(nameof(layout));
+        _toolRegistry = toolRegistry ?? throw new ArgumentNullException(nameof(toolRegistry));
+        _stateStore = stateStore ?? new(layout);
+        _dependencyStore = new(layout.PluginsDirectory);
+        _serviceResolver = serviceResolver;
+        _stateStore.Changed += SyncActivePlugins;
+    }
+    public AppDataLayout Layout => _layout;
+    public PluginStateStore StateStore => _stateStore;
+    public PluginDependencyStore DependencyStore => _dependencyStore;
+    public IReadOnlyDictionary<string, string> LoadErrors => _loadErrors;
+    private readonly Dictionary<string, string> _loadErrors = new(StringComparer.OrdinalIgnoreCase);
+
+    public static void RegisterPackageFactory(string pluginId, Func<IPluginPackage> factory)
+    {
+        PluginPathGuard.Segment(pluginId);
+        _registeredFactories[pluginId] = factory ?? throw new ArgumentNullException(nameof(factory));
+    }
+    private string Target(string id) => PluginPathGuard.Within(_layout.PluginsDirectory, PluginPathGuard.Segment(id));
+    private static void Known(string id)
+    {
+        PluginPathGuard.Segment(id);
+        if (PluginMarketplaceCatalog.Find(id) is null) throw new ArgumentException($"未知插件 '{id}'。");
+    }
+    public bool HasPhysicalPayload(string pluginId) => File.Exists(Path.Combine(Target(pluginId), "manifest.json"));
+    public void InstallPackage(string pluginId, string? sourcePayloadDirectory = null)
+    {
+        Known(pluginId);
+        lock (_gate)
+        {
+            if (_stateStore.GetState(pluginId).IsInstalled && HasPhysicalPayload(pluginId))
+                throw new InvalidOperationException("插件已安装，请使用更新操作。");
+            Deploy(pluginId, sourcePayloadDirectory, false);
+        }
+    }
+    public void UpdatePackage(string pluginId, string? newSourcePayloadDirectory = null)
+    {
+        Known(pluginId);
+        lock (_gate)
+        {
+            if (!_stateStore.GetState(pluginId).IsInstalled || !HasPhysicalPayload(pluginId))
+                throw new InvalidOperationException($"插件 '{pluginId}' 尚未安装。");
+            Deploy(pluginId, newSourcePayloadDirectory, true);
+        }
+    }
+
+    private void Deploy(string id, string? sourceDirectory, bool update)
+    {
+        var target = Target(id);
+        var staging = PluginPathGuard.Within(_layout.PluginsDirectory, ".staging", id + "-" + Guid.NewGuid().ToString("N"));
+        var backup = staging + ".backup";
+        var previous = _stateStore.GetState(id);
+        var wasActive = _activePlugins.ContainsKey(id);
+        var oldDeps = wasActive ? _activePlugins[id].Package.Dependencies.ToArray() : Array.Empty<PluginDependencyDeclaration>();
+        var acquired = new List<PluginDependencyDeclaration>();
+        IPluginPackage? prepared = null;
+        AssemblyLoadContext? preparedContext = null;
+        var swapped = false;
+        _changing = true;
+        try
+        {
+            var source = ResolveSourceDirectory(id, sourceDirectory);
+            Directory.CreateDirectory(staging);
+            if (source is not null)
+                CopyDirectory(source, staging);
+            else if (_registeredFactories.TryGetValue(id, out var factory))
+                File.WriteAllText(Path.Combine(staging, "manifest.json"),
+                    JsonSerializer.Serialize(new { id, version = factory().Version, entryAssembly = id + ".dll" }));
+            else throw new FileNotFoundException($"无法安装插件 '{id}'：没有可用的分发载荷。");
+
+            (prepared, preparedContext) = ResolvePackage(id, staging);
+            foreach (var dep in prepared.Dependencies)
+            {
+                _dependencyStore.ResolveAndAcquire(dep, id, source);
+                if (!oldDeps.Any(old => DependencyKey(old) == DependencyKey(dep))) acquired.Add(dep);
+            }
+            DeactivatePluginLocked(id);
+            if (Directory.Exists(target)) Directory.Move(target, backup);
+            Directory.Move(staging, target);
+            swapped = true;
+            if (!update || previous.IsEnabled)
+                ActivatePrepared(id, prepared, target, preparedContext);
+            else preparedContext?.Unload();
+            preparedContext = null;
+            _stateStore.RestoreState(previous with { IsInstalled = true, IsEnabled = !update || previous.IsEnabled, LastUpdatedUtc = DateTime.UtcNow });
+        }
+        catch (Exception error)
+        {
+            var recoveryErrors = new List<Exception>();
+            try { DeactivatePluginLocked(id); } catch (Exception e) { recoveryErrors.Add(e); }
+            preparedContext?.Unload();
+            try
+            {
+                if (swapped && Directory.Exists(target)) Directory.Delete(target, true);
+                if (Directory.Exists(backup)) Directory.Move(backup, target);
+            }
+            catch (Exception e) { recoveryErrors.Add(e); }
+            try { _dependencyStore.ReleaseDependencies(id, acquired); } catch (Exception e) { recoveryErrors.Add(e); }
+            try
+            {
+                _stateStore.RestoreState(previous);
+                if (wasActive) ActivatePluginLocked(id);
+            }
+            catch (Exception e) { recoveryErrors.Add(e); }
+            if (recoveryErrors.Count > 0)
+                throw new AggregateException($"插件 '{id}' 操作失败，恢复未完成；保留目录 '{backup}' 供恢复。", new[] { error }.Concat(recoveryErrors));
+            throw new InvalidOperationException($"插件 '{id}' 操作失败：{error.Message}。" +
+                (update ? "已自动回滚并恢复上一版本可用状态。" : "未安装新插件，原状态已保留。"), error);
+        }
+        finally
+        {
+            _changing = false;
+            if (Directory.Exists(staging)) Directory.Delete(staging, true);
+        }
+        // Cleanup failures are reported as cleanup failures, never roll back a committed installation.
+        try
+        {
+            if (Directory.Exists(backup)) Directory.Delete(backup, true);
+            _dependencyStore.ReleaseDependencies(id, oldDeps.Where(old => !prepared!.Dependencies.Any(dep => DependencyKey(dep) == DependencyKey(old))));
+        }
+        catch (Exception e) { throw new IOException($"插件已更新，但旧载荷/依赖清理未完成：{e.Message}", e); }
+    }
+    private static string DependencyKey(PluginDependencyDeclaration d) => $"{d.PackageId}@{d.Version}/{d.TargetFileName ?? d.PackageId + ".dll"}".ToUpperInvariant();
+
+    public void UninstallPackage(string pluginId)
+    {
+        Known(pluginId);
+        SetBackendEnabledFor(pluginId, false);
+        if (PluginMarketplaceCatalog.Find(pluginId)!.IsCoreBuiltin) throw new InvalidOperationException("核心内置组件不可卸载。");
+        lock (_gate)
+        {
+            var previous = _stateStore.GetState(pluginId);
+            var deps = _activePlugins.TryGetValue(pluginId, out var entry) ? entry.Package.Dependencies : Array.Empty<PluginDependencyDeclaration>();
+            _changing = true;
+            try
+            {
+                DeactivatePluginLocked(pluginId);
+                // Disable first: a file lock must not leave callable tools labelled uninstalled.
+                _stateStore.RestoreState(previous with { IsEnabled = false });
+                var target = Target(pluginId);
+                if (Directory.Exists(target)) Directory.Delete(target, true);
+                _dependencyStore.ReleaseDependencies(pluginId, deps);
+                _stateStore.Uninstall(pluginId);
+            }
+            finally { _changing = false; }
+        }
+    }
+    public void SetPackageEnabled(string pluginId, bool enabled)
+    {
+        Known(pluginId);
+        lock (_gate)
+        {
+            var previous = _stateStore.GetState(pluginId);
+            if (!previous.IsInstalled) throw new InvalidOperationException("插件尚未安装。");
+            if (!enabled && PluginMarketplaceCatalog.Find(pluginId)!.IsCoreBuiltin)
+                throw new InvalidOperationException("核心内置组件不可禁用。");
+            _changing = true;
+            try
+            {
+                if (enabled)
+                {
+                    SetBackendEnabledFor(pluginId, true);
+                    ActivatePluginLocked(pluginId);
+                }
+                else
+                {
+                    DeactivatePluginLocked(pluginId);
+                    SetBackendEnabledFor(pluginId, false);
+                }
+                _stateStore.SetEnabled(pluginId, enabled);
+            }
+            catch
+            {
+                if (!previous.IsEnabled) DeactivatePluginLocked(pluginId);
+                throw;
+            }
+            finally { _changing = false; }
+        }
+    }
+    public void InitializeInstalledPlugins(string? projectPath = null)
+    {
+        lock (_gate)
+            foreach (var def in PluginMarketplaceCatalog.All.Where(d => _stateStore.IsActive(d.Id) && HasPhysicalPayload(d.Id)))
+                try { ActivatePluginLocked(def.Id, projectPath); _loadErrors.Remove(def.Id); }
+                catch (Exception e) { _loadErrors[def.Id] = e.Message; }
+    }
+    private void SyncActivePlugins()
+    {
+        lock (_gate)
+        {
+            if (_changing) return;
+            foreach (var def in PluginMarketplaceCatalog.All)
+            {
+                if (_stateStore.IsActive(def.Id) && !_activePlugins.ContainsKey(def.Id) && HasPhysicalPayload(def.Id))
+                {
+                    try { ActivatePluginLocked(def.Id); _loadErrors.Remove(def.Id); }
+                    catch (Exception e) { _loadErrors[def.Id] = e.Message; }
+                }
+                else if (!_stateStore.IsActive(def.Id) && _activePlugins.ContainsKey(def.Id)) DeactivatePluginLocked(def.Id);
+            }
+        }
+    }
+    /// <summary>把插件 id 映射到后端标识，并同步 BackendPluginLoader 的启用状态。</summary>
+    private static void SetBackendEnabledFor(string pluginId, bool enabled)
+    {
+        if (!pluginId.StartsWith("backend.", StringComparison.OrdinalIgnoreCase)) return;
+        if (!Backend.EngineIdMap.TryParse(pluginId["backend.".Length..], out var engine)) return;
+        var backend = BackendCapabilities.FromEngineId(engine);
+        if (backend is null) return;
+        BackendPluginLoader.SetBackendEnabled(backend.Value, enabled);
+    }
+
+    private string? ResolveSourceDirectory(string id, string? source)
+    {
+        if (source is not null)
+        {
+            PluginPathGuard.RejectLinks(source);
+            if (!Directory.Exists(source)) throw new DirectoryNotFoundException($"分发目录不存在：{source}");
+            return Path.GetFullPath(source);
+        }
+        return new[] { Path.Combine(AppContext.BaseDirectory, "plugins-dist", id), Path.Combine(AppContext.BaseDirectory, "plugins", id),
+            Path.Combine(_layout.Root, "distribution", id) }.FirstOrDefault(Directory.Exists);
+    }
+    private static void CopyDirectory(string source, string target)
+    {
+        PluginPathGuard.RejectLinks(source);
+        PluginPathGuard.RejectLinks(target);
+        Directory.CreateDirectory(target);
+        foreach (var file in Directory.GetFiles(source))
+        {
+            PluginPathGuard.RejectLinks(file);
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
+        }
+        foreach (var dir in Directory.GetDirectories(source)) CopyDirectory(dir, Path.Combine(target, Path.GetFileName(dir)));
+    }
+    private void ActivatePluginLocked(string id, string? projectPath = null)
+    {
+        if (_activePlugins.ContainsKey(id)) return;
+        var (package, loadContext) = ResolvePackage(id, Target(id));
+        ActivatePrepared(id, package, Target(id), loadContext, projectPath);
+    }
+    private void ActivatePrepared(string id, IPluginPackage package, string directory, AssemblyLoadContext? loadContext, string? projectPath = null)
+    {
+        if (loadContext is PackageLoadContext packageContext) packageContext.Directory = directory;
+        var context = new PluginPackageContext(id, directory, projectPath, _serviceResolver);
+        IPluginToolHandler? handler = null;
+        try
+        {
+            package.InitializeAsync(context).GetAwaiter().GetResult();
+            handler = package.CreateToolHandler(context);
+            if (handler is not null) _toolRegistry.Register(handler);
+            _activePlugins.Add(id, (package, handler, context));
+            if (loadContext is not null) _loadContexts[id] = loadContext;
+        }
+        catch (Exception error)
+        {
+            if (handler is not null) _toolRegistry.Unregister(handler);
+            try { package.ShutdownAsync().GetAwaiter().GetResult(); }
+            catch (Exception cleanup) { throw new AggregateException("插件激活和副作用恢复均失败。", error, cleanup); }
+            finally { loadContext?.Unload(); }
+            throw;
+        }
+    }
+    private void DeactivatePluginLocked(string id)
+    {
+        if (!_activePlugins.TryGetValue(id, out var entry)) return;
+        if (entry.Handler is not null) _toolRegistry.Unregister(entry.Handler);
+        // Preserve the entry when shutdown fails so a later stop can retry.
+        entry.Package.ShutdownAsync().GetAwaiter().GetResult();
+        _activePlugins.Remove(id);
+        if (_loadContexts.Remove(id, out var context)) context.Unload();
+    }
+    private (IPluginPackage Package, AssemblyLoadContext? Context) ResolvePackage(string id, string directory)
+    {
+        var manifestPath = PluginPathGuard.Within(directory, "manifest.json");
+        using var manifest = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        var root = manifest.RootElement;
+        if (!root.TryGetProperty("id", out var identity) || !string.Equals(identity.GetString(), id, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("插件清单ID与请求不一致。");
+        if (_registeredFactories.TryGetValue(id, out var factory))
+        {
+            var fixture = factory();
+            if (fixture.Id != id) throw new InvalidDataException("插件工厂ID与请求不一致。");
+            return (fixture, null);
+        }
+        var name = PluginPathGuard.Segment(root.GetProperty("entryAssembly").GetString() ?? "");
+        var path = PluginPathGuard.Within(directory, name);
+        if (!File.Exists(path)) throw new FileNotFoundException("插件入口程序集不存在。", path);
+        var context = new PackageLoadContext(directory, _dependencyStore.SharedPoolDirectory);
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var asm = context.LoadFromStream(stream);
+            var type = root.TryGetProperty("packageType", out var typeName)
+                ? asm.GetType(typeName.GetString() ?? "", true)
+                : asm.GetTypes().SingleOrDefault(t => typeof(IPluginPackage).IsAssignableFrom(t) && !t.IsAbstract);
+            if (type is null || !typeof(IPluginPackage).IsAssignableFrom(type) || Activator.CreateInstance(type) is not IPluginPackage package ||
+                !string.Equals(package.Id, id, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("插件入口不符合宿主契约或身份。");
+            if (!root.TryGetProperty("version", out var version) || package.Version != version.GetString())
+                throw new InvalidDataException("插件版本与清单不一致。");
+            context.Dependencies = package.Dependencies;
+            return (package, context);
+        }
+        catch { context.Unload(); throw; }
+    }
+    private sealed class PackageLoadContext(string directory, string pool) : AssemblyLoadContext(isCollectible: true)
+    {
+        public string Directory { get; set; } = directory;
+        public IReadOnlyList<PluginDependencyDeclaration> Dependencies { get; set; } = Array.Empty<PluginDependencyDeclaration>();
+        protected override Assembly? Load(AssemblyName name)
+        {
+            var host = Default.Assemblies.FirstOrDefault(a => a.GetName().Name == name.Name);
+            if (host is not null) return host;
+            var local = PluginPathGuard.Within(Directory, PluginPathGuard.Segment(name.Name + ".dll"));
+            var shared = Dependencies.FirstOrDefault(d => (d.TargetFileName ?? d.PackageId + ".dll") == name.Name + ".dll");
+            if (!File.Exists(local) && shared is not null)
+                local = PluginPathGuard.Within(pool, shared.PackageId, shared.Version, shared.TargetFileName ?? shared.PackageId + ".dll");
+            if (!File.Exists(local)) return null;
+            using var stream = File.OpenRead(local);
+            return LoadFromStream(stream);
+        }
+    }
+    public ValueTask DisposeAsync()
+    {
+        _stateStore.Changed -= SyncActivePlugins;
+        lock (_gate)
+            foreach (var id in _activePlugins.Keys.ToArray()) DeactivatePluginLocked(id);
+        return ValueTask.CompletedTask;
+    }
+}

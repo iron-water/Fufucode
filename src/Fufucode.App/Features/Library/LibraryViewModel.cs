@@ -412,8 +412,8 @@ public sealed partial class LibraryViewModel : ViewModelBase, IDisposable
         var citation = _service.BuildCitation(SelectedEntry.Id, SearchText);
         if (citation is null) return;
         CitationText = citation.Markdown;
-        CitationCopyRequested?.Invoke(CitationText);
         StatusText = "已生成引用（含来源与版本）；聊天接线后可直接插入输入框。";
+        CitationCopyRequested?.Invoke(CitationText);
     }
 
     public void Dispose()

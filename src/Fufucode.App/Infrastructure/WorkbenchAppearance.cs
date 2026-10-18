@@ -4,6 +4,8 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
+using Fufucode.App.Features.Skins;
 
 namespace Fufucode.App.Infrastructure;
 
@@ -20,6 +22,9 @@ public sealed record WorkbenchAppearance
         ? Avalonia.Application.Current?.PlatformSettings?.GetColorValues().AccentColor1 ?? Avalonia.Media.Color.Parse("#0078D4")
         : Avalonia.Media.Color.Parse(Accent);
     public string Surface { get; init; } = "fluent";
+    // Retain an unknown stored identity for forward compatibility; resolve only for display/application.
+    public string Skin { get; init; } = "fluent";
+    [JsonIgnore] public SkinResolution SkinResolution => SkinCatalog.Resolve(Skin);
     public double FontSize { get; init; } = 13;
     public string Density { get; init; } = "cozy";
     public string Radius { get; init; } = "mid";
@@ -41,6 +46,18 @@ public sealed record WorkbenchAppearance
     public string UserName { get; init; } = "你";
     public string AssistantName { get; init; } = "Fufucode";
     public bool UseNamesInPrompt { get; init; } = true;
+    // ---- 浏览器 (Browser Use / CDP) 偏好设置 ----
+    public bool BrowserUseEnabled { get; init; } = true;
+    public string WebUrlOpenTarget { get; init; } = "builtin";
+    public string LocalUrlOpenTarget { get; init; } = "builtin";
+    public bool ShowFullUrl { get; init; } = true;
+    public string ScreenshotMode { get; init; } = "on_demand";
+    public bool PromptDownloadLocation { get; init; } = false;
+    public string BrowserPermissionHistory { get; init; } = "ask";
+    public bool EnableSiteTools { get; init; } = true;
+    public string DefaultBrowsePermission { get; init; } = "approval";
+    public string DefaultDownloadPermission { get; init; } = "approval";
+    public bool EnableFullCdpAccess { get; init; } = true;
     public Dictionary<string, UiActionPlacement> Actions { get; init; } = new(StringComparer.Ordinal);
     public WorkbenchLayoutState? Layout { get; init; }
 
@@ -90,6 +107,12 @@ public sealed record WorkbenchAppearance
             MessageActions = Choose(MessageActions, "hover", "show", "hover", "hide"),
             Composer = Choose(Composer, "wide", "wide", "reading", "hidden"),
             UserName = Name(UserName, "你"), AssistantName = Name(AssistantName, "Fufucode"),
+            WebUrlOpenTarget = Choose(WebUrlOpenTarget, "builtin", "builtin", "system"),
+            LocalUrlOpenTarget = Choose(LocalUrlOpenTarget, "builtin", "builtin", "system"),
+            ScreenshotMode = Choose(ScreenshotMode, "on_demand", "always", "on_demand", "never"),
+            BrowserPermissionHistory = Choose(BrowserPermissionHistory, "ask", "ask", "always", "deny"),
+            DefaultBrowsePermission = Choose(DefaultBrowsePermission, "approval", "approval", "allow", "block"),
+            DefaultDownloadPermission = Choose(DefaultDownloadPermission, "approval", "approval", "allow", "block"),
             Layout = Layout is null ? null : WorkbenchLayoutState.Restore(Layout.Serialize(), WorkbenchLayoutState.KnownPages),
             Actions = (Actions ?? new()).Where(p => !string.IsNullOrWhiteSpace(p.Key) && p.Value is not null && Enum.IsDefined(p.Value.Position))
                 .ToDictionary(p => p.Key, p => p.Value with { Order = Math.Clamp(p.Value.Order, -1000, 1000) }, StringComparer.Ordinal)

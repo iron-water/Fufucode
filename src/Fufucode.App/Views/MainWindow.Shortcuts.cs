@@ -24,14 +24,20 @@ public partial class MainWindow
         _shortcutActions = _actions.Actions.Select(action => new ShortcutAction(action.Id, action.Title, action.Group,
             ShortcutDefaults.ScopeOf(action.Id), ShortcutDefaults.DefaultGestures(action.Id), action.Description)).ToArray();
         _shortcuts.SetActions(_shortcutActions, _actions.GetDisabledReason);
+        TerminalDock.ShortcutMatches = (id, e) => _shortcutActions.FirstOrDefault(action => action.Id == id) is { } action &&
+            _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers);
         _shortcuts.Changed += UpdateShortcutLabels;
         _shortcutsPage = new(_shortcuts) { CompositionProbe = IsShortcutCompositionActive };
         _actions.Changed += OnShortcutCapabilitiesChanged;
         UpdateShortcutLabels();
     }
 
-    private void UpdateShortcutLabels() => _actions.UpdateShortcutLabels(id =>
-        _shortcutActions.FirstOrDefault(action => action.Id == id) is { } action ? _shortcuts.BindingText(action) : string.Empty);
+    private void UpdateShortcutLabels()
+    {
+        _actions.UpdateShortcutLabels(Label);
+        TerminalDock.UpdateShortcutLabels(Label);
+        string Label(string id) => _shortcutActions.FirstOrDefault(action => action.Id == id) is { } action ? _shortcuts.BindingText(action) : string.Empty;
+    }
 
     private void OnShortcutCapabilitiesChanged()
     {
@@ -39,8 +45,9 @@ public partial class MainWindow
             row.RefreshUnavailable(() => _actions.GetDisabledReason(row.Id));
     }
 
-    private bool IsShortcutCompositionActive() =>
-        (FocusManager?.GetFocusedElement() as Control)?.GetVisualDescendants()
+    private bool IsShortcutCompositionActive() => IsShortcutCompositionActive(FocusManager?.GetFocusedElement() as Control);
+    private static bool IsShortcutCompositionActive(Control? focused) =>
+        focused?.GetVisualDescendants()
             .OfType<TextPresenter>().Any(presenter => !string.IsNullOrEmpty(presenter.PreeditText)) == true;
 
     private bool RouteConfiguredShortcut(KeyEventArgs e, Control? focused)
@@ -58,6 +65,8 @@ public partial class MainWindow
             var candidates = _shortcutActions.Where(action => action.Scope == scope &&
                 _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers)).ToArray();
             if (candidates.Length == 0) return false;
+            if (candidates.Length == 1 && candidates[0].Id == "terminal.copy-or-interrupt" && focused is TextBox text &&
+                (text != TerminalDock.FindControl<TextBox>("TerminalInput") || !string.IsNullOrEmpty(text.SelectedText))) return false;
             if (candidates.Length > 1)
             {
                 _vm?.Timeline.AddNotification("快捷键冲突，请在设置中修改：" + string.Join("、", candidates.Select(action => action.Title)));

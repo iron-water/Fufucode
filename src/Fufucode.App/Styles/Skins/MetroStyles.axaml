@@ -1,0 +1,199 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avaprimitives="using:Avalonia.Controls.Primitives">
+    <!-- Metro 限定控件样式（E7 样板）：只作用于 SkinLease 挂载目标（Window/Control）子树，
+         只覆盖形态与选择/焦点状态，不复制业务页面、不改 App.axaml/原 Styles。
+         颜色一律经皮肤令牌 DynamicResource 解析；本文件随租约整体移除。 -->
+    <Style Selector="Window">
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontUi}"/>
+    </Style>
+
+    <!-- 按钮：直角、平面、按压为实色 -->
+    <Style Selector="Button">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Button.accent">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppAccentForeground}"/>
+        <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
+    </Style>
+    <Style Selector="Button.accent:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="Button.accent:pressed">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+    </Style>
+    <Style Selector="Button.accent:disabled">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorDisabledBrush}"/>
+    </Style>
+
+    <!-- 页签：选中＝整块强调色（直角），指示条加粗方角 -->
+    <Style Selector="Button.dockTab">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Button.dockTab.selected">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppAccentForeground}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="Border.dockIndicator">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="Height" Value="4"/>
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+    </Style>
+    <Style Selector="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+        <Setter Property="FontWeight" Value="Normal"/>
+    </Style>
+    <Style Selector="TabItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="TabItem /template/ Border#PART_SelectedPipe">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <!-- 输入：2px 直角描边，聚焦走强调色 -->
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
+    </Style>
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="ComboBox:focus, ComboBox:focus-within, ComboBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
+    </Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <!-- 列表选择：整块强调色填充 -->
+    <Style Selector="ListBoxItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorSecondaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AccentFillColorTertiaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+    </Style>
+    <Style Selector="ListBox.settingsNav ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+    </Style>
+    <Style Selector="ListBox.settingsNav ListBoxItem:selected TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AppSelectionForeground}"/>
+    </Style>
+    <Style Selector="Border.navAccent">
+        <Setter Property="Background" Value="{DynamicResource AppAccentForeground}"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <!-- 菜单/浮层：直角、2px 描边、无阴影 -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="ContextMenu">
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="BorderThickness" Value="2"/>
+    </Style>
+    <Style Selector="Border.overlayPanel">
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    </Style>
+    <Style Selector="Border.toast">
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource AppShadowToast}"/>
+    </Style>
+
+    <!-- 工作台卡片/行：直角平面 -->
+    <Style Selector="Border.card">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.settingsRow">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.composerCard">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.innerWell">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.toolCard">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.queueStrip">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.restoreInfo">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.chip">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.userBubble">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.codeCard">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.errorCard">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.thinkingBlock">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.navPill">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.turnSummary">
+        <Setter Property="BorderThickness" Value="3,0,0,0"/>
+    </Style>
+
+    <!-- 焦点：2px 直角强调色单环（覆盖 Fluent 双环） -->
+    <Style Selector="avaprimitives|AdornerLayer">
+        <Setter Property="DefaultFocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderBrush="{DynamicResource AppFocusBrush}"
+                        BorderThickness="2"
+                        CornerRadius="0"/>
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+    <StyleInclude Source="avares://Fufucode.App/Styles/Skins/SkinShellStyles.axaml"/>
+    <Style Selector="Border.chromeBar">
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    </Style>
+    <Style Selector="Button.captionButton">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.dockHeaderRule">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    </Style>
+</Styles>

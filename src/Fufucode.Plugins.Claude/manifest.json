@@ -1,0 +1,15 @@
+{
+  "id": "backend.claude",
+  "name": "Claude Code 后端",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Claude.dll",
+  "packageType": "Fufucode.Plugins.Claude.ClaudeBackendPluginPackage",
+  "category": "Backend",
+  "description": "通过官方 Claude Code CLI 的 stream-json 协议接入。插件只携带协议适配器；claude 可执行文件由用户本机安装。",
+  "runtime": {
+    "id": "claude-cli",
+    "required": true,
+    "preferred": "system",
+    "installCommand": "安装官方 Claude Code，或传 --claude-exe"
+  }
+}

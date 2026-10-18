@@ -103,7 +103,7 @@ public sealed partial class StorageManagerViewModel : ObservableObject, IDisposa
             new(StorageCleanupScope.ExpiredLogs, "过期日志", _policy.Describe() + "。", true, null),
             new(StorageCleanupScope.BrowserSiteData, "浏览器登录/站点数据",
                 "cookie、登录态、历史、站点存储与 Service Worker 离线存储（CacheStorage）；清理后相关网站需要重新登录、离线内容需重新下载。", false,
-                "警告：清理后网站登录状态与离线可用性会失效；模型认证在 Pi 配置目录，不受影响。"),
+                "警告：清理后网站登录状态与离线可用性会失效；模型认证在后端配置目录，不受影响。"),
         };
         foreach (var option in Scopes) option.PropertyChanged += (_, args) =>
         {

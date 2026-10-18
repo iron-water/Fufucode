@@ -1,0 +1,105 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Included only inside optional skin leases. Native Fluent templates remain the fallback,
+       while visible chrome and all interaction states use the active skin's semantic resources. -->
+  <Style Selector="Window">
+    <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Border.floatingToolbar">
+    <Setter Property="Background" Value="{DynamicResource AppDockHeaderBackground}"/>
+  </Style>
+  <Style Selector="Button.subtle, Button.iconButton, Button.toolButton, Button.settingsHelp">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <!-- 折叠小帮助按钮（SkinPresentation.CreateHelpButton）：皮肤级统一压成紧凑弱化标记，
+       按钮自身只留一个短标记，长说明只出现在 ToolTip 与自动化 HelpText 里，页面保持留白。 -->
+  <Style Selector="Button.skinHelp">
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.skinHelp:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.skinHelp:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+  </Style>
+  <Style Selector="Button.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.toolButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.subtle:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.iconButton:pressed /template/ ContentPresenter#PART_ContentPresenter, Button.toolButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.accent">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentForeground}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
+  </Style>
+  <Style Selector="Button.dockTab">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" CornerRadius="{TemplateBinding CornerRadius}">
+          <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" Padding="{TemplateBinding Padding}" HorizontalContentAlignment="Left" VerticalContentAlignment="Center"/>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Button.captionButton">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="{TemplateBinding CornerRadius}">
+          <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Button.captionButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.captionButton:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+  </Style>
+  <Style Selector="Button.captionButton:disabled">
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+  </Style>
+  <Style Selector="TextBox, ComboBox, NumericUpDown">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+  </Style>
+  <Style Selector="Border.card, Border.settingsRow, Border.toolCard, Border.codeCard, Border.innerWell, Border.composerCard">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+  </Style>
+  <Style Selector="Separator">
+    <Setter Property="Background" Value="{DynamicResource AppBorderBrush}"/>
+  </Style>
+  <Style Selector="ScrollBar /template/ Thumb">
+    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="ToolTip">
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+  </Style>
+  <Style Selector="ComboBox:disabled, TextBox:disabled">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppDisabledForeground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+  </Style>
+</Styles>

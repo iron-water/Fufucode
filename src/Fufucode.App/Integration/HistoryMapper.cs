@@ -2,14 +2,14 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using Fufucode.App.Abstractions;
-using Fufucode.Pi;
+using Fufucode.Core;
 
 namespace Fufucode.App.Integration;
 
 /// <summary>
 /// 把 Core 恢复的持久化历史（Pi get_entries 当前分支消息）映射为冻结契约的终态消息，
 /// 供时间线一次性回放。映射规则与 PiChatSessionAdapter 的流式映射保持一致；
-/// 若 Core 后续公开等价 helper，这里应替换为 Core 版本。
+/// 若轨道 A 后续在 Core 公开等价 helper，这里应替换为 Core 版本（已记入 docs/archive/progress/progress-d.md）。
 /// 已知限制（M2）：toolResult/custom 条目不单独回放，工具卡片不恢复输出文本，
 /// 状态按所属助手消息的持久化 stopReason 标注，不虚构执行结果。
 /// </summary>
