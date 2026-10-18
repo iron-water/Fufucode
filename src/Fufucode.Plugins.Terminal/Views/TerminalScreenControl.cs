@@ -35,13 +35,33 @@ public sealed class TerminalScreenControl : Control
             var next = Math.Clamp(value, 9, 28);
             if (Math.Abs(next - _fontSizeDip) < 0.01) return;
             _fontSizeDip = next;
+            RecomputeCellMetrics();
             InvalidateMeasure(); InvalidateVisual();
         }
     }
     private double _fontSizeDip = 13;
-    /// <summary>Cell advance for the current font size (Consolas is 0.6 em wide).</summary>
-    public double CellWidth => Math.Round(_fontSizeDip * 0.6, 2);
-    public double CellHeight => Math.Round(_fontSizeDip * 1.385, 2);
+    private double _cellWidth = 7.8, _cellHeight = 18;
+    /// <summary>Measured fixed-cell advance for the current font and size.</summary>
+    public double CellWidth => _cellWidth;
+    public double CellHeight => _cellHeight;
+
+    /// <summary>Measure a monospace glyph so the grid follows the real font metrics instead of a fixed ratio.</summary>
+    private void RecomputeCellMetrics()
+    {
+        try
+        {
+            var probe = new FormattedText("M", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
+                new Typeface(MonoFont, FontStyle.Normal, FontWeight.Normal), _fontSizeDip, Brushes.White);
+            _cellWidth = Math.Max(4, Math.Round(probe.WidthIncludingTrailingWhitespace, 2));
+            // Include line spacing so rows never overlap descenders across fonts.
+            _cellHeight = Math.Max(10, Math.Round(Math.Max(probe.Height, _fontSizeDip * 1.32), 2));
+        }
+        catch (Exception error) when (error is InvalidOperationException or ArgumentException or NotSupportedException)
+        {
+            _cellWidth = Math.Round(_fontSizeDip * 0.6, 2);
+            _cellHeight = Math.Round(_fontSizeDip * 1.385, 2);
+        }
+    }
 
     /// <summary>Cursor blink; the style comes from the shell's DECSCUSR, this only stops the animation.</summary>
     public bool BlinkCursor { get; set; } = true;
@@ -130,6 +150,7 @@ public sealed class TerminalScreenControl : Control
         this.Bind(SurfaceBrushProperty, new DynamicResourceExtension("AppTerminalBackground"));
         this.Bind(TextBrushProperty, new DynamicResourceExtension("AppTerminalForeground"));
         this.Bind(SelectionFillProperty, new DynamicResourceExtension("AppTerminalSelection"));
+        RecomputeCellMetrics();
         TextInput += (_, e) => { if (Session?.IsRunning == true && !string.IsNullOrEmpty(e.Text)) { Session.SendRaw(e.Text); e.Handled = true; } };
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;

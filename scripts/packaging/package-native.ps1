@@ -340,6 +340,7 @@ $hostAssemblies = @(
     'Fufucode.App.*',
     'Fufucode.App.Abstractions.*',
     'Avalonia.*',
+    'Microsoft.Web.WebView2.*',
     'Microsoft.Data.Sqlite.*',
     'SQLitePCLRaw.*',
     'CommunityToolkit.Mvvm.*'
