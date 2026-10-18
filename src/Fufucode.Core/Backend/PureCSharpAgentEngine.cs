@@ -145,7 +145,8 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         ArgumentNullException.ThrowIfNull(request);
         await _turnGate.WaitAsync(cancellationToken).ConfigureAwait(false);
 
-        List<PureAgentMessage>? working = null;
+        // 回合直接推进实时历史：回合闸门保证同一时刻只有一个写者，读取方（GetState）在锁内取副本。
+        // 不复制整段历史，也不再在结束时合并副本。
         try
         {
             lock (_gate)
@@ -166,17 +167,14 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
                         _history.Add(msg);
                     }
                 }
-
-                // 回合在副本上推进；完成后再一次性合并，GetState 不会看到并发写。
-                working = new List<PureAgentMessage>(_history);
             }
 
-            await CompactIfNeededAsync(working, request.ModelId ?? _modelId, cancellationToken).ConfigureAwait(false);
+            await CompactIfNeededAsync(_history, request.ModelId ?? _modelId, cancellationToken).ConfigureAwait(false);
 
             cancellationToken.ThrowIfCancellationRequested();
 
             return await _loop.ExecuteLoopAsync(
-                working,
+                _history,
                 request.ToolNames,
                 request.ModelId,
                 onMessageAppended: callbacks?.OnMessageAppended,
@@ -191,15 +189,6 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         }
         finally
         {
-            if (working is not null)
-            {
-                lock (_gate)
-                {
-                    _history.Clear();
-                    _history.AddRange(working);
-                }
-            }
-
             _isRunning = false;
             _turnGate.Release();
         }
@@ -279,10 +268,14 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
 
         var note = new PureAgentMessage(PureAgentRole.Assistant, summary);
         var kept = history.Skip(firstKept).ToList();
-        history.Clear();
-        if (system is not null) history.Add(system);
-        history.Add(note);
-        history.AddRange(kept);
+        // 历史是实时列表：压缩结果一次性换入，GetState 不会读到清空到一半的状态。
+        lock (_gate)
+        {
+            history.Clear();
+            if (system is not null) history.Add(system);
+            history.Add(note);
+            history.AddRange(kept);
+        }
     }
 
     /// <summary>未配置模型端点时的显式失败客户端；不伪造任何模型回复。</summary>
