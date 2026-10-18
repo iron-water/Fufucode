@@ -55,7 +55,7 @@ public static class SelfTestRunner
 
         if (args.Contains("--automation-only"))
         {
-            await RunOnHeadlessUiThreadAsync(() => AutomationControlSelfTest.RunAsync(Pass, Fail));
+            await RunAutomationSelfTestsAsync();
             Console.WriteLine($"Automation page failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
@@ -254,7 +254,7 @@ public static class SelfTestRunner
         await RunOnHeadlessUiThreadAsync(() => WorkbenchTabsSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => FloatingWorkbenchSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => NotificationPageSelfTest.RunAsync(Pass, Fail));
-        await RunOnHeadlessUiThreadAsync(() => AutomationControlSelfTest.RunAsync(Pass, Fail));
+        await RunAutomationSelfTestsAsync();
         await RunOnHeadlessUiThreadAsync(() => TerminalIntegrationSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => BrowserIntegrationSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => WorkbenchCustomizationSelfTest.RunAsync(Pass, Fail));
@@ -4430,6 +4430,27 @@ public static class SelfTestRunner
             try { window.Close(); } catch { }
             try { Directory.Delete(root, recursive: true); } catch { }
         }
+    }
+
+    /// <summary>
+    /// 自动开发自测位于独立测试组件 Fufucode.App.Automation.SelfTests：
+    /// 发布程序不静态引用插件，也不携带插件测试代码。组件存在时按接口调用，不存在时明确跳过。
+    /// </summary>
+    private static async Task RunAutomationSelfTestsAsync()
+    {
+        var type = Type.GetType(
+            "Fufucode.App.SelfTest.AutomationControlSelfTest, Fufucode.App.Automation.SelfTests");
+        var method = type?.GetMethod("RunAsync",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        if (method is null)
+        {
+            Console.WriteLine("自动开发自测组件未随包构建；请在 tests/Fufucode.App.Automation.SelfTests 单独运行。");
+            return;
+        }
+        await RunOnHeadlessUiThreadAsync(async () =>
+        {
+            if (method.Invoke(null, [(Action<string>)Pass, (Action<string>)Fail]) is Task task) await task;
+        });
     }
 
     private static async Task RunOnHeadlessUiThreadAsync(Func<Task> action)

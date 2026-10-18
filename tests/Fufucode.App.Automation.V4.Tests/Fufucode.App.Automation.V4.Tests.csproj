@@ -22,4 +22,8 @@
       <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
     </ItemGroup>
   </Target>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj" />
+    <Using Include="Fufucode.App.Abstractions.Automation.Harnesses" />
+  </ItemGroup>
 </Project>

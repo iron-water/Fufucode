@@ -18,6 +18,7 @@ using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
 using Fufucode.Core;
 using Fufucode.App.Features.Library;
+using Fufucode.App.Features.Plugins;
 using TextBlock = Avalonia.Controls.TextBlock;
 
 namespace Fufucode.App;
@@ -31,6 +32,7 @@ public partial class MainWindow
     private BuiltInModuleViewModel _libraryModule = null!;
     private BuiltInModuleViewModel _localReviewModule = null!;
     private BuiltInModuleViewModel _automationModule = null!;
+    private Features.Plugins.AutomationPageHost? _automationPageHost;
     private string? _automationDatabase;
     private LibraryService? _libraryService;
     private BrowserPageState? _browserPageState;
@@ -101,17 +103,14 @@ public partial class MainWindow
         _localReviewModule = new("builtin.local-review", "本地审查", SetLocalReviewModuleEnabled);
         _workbenchPages.RegisterOptional("automation", "自动开发", "Automation", "builtin.automation", () =>
         {
-            var page = new Features.Automation.AutomationControlPageView();
-            var model = new Features.Automation.AutomationControlViewModel(Program.SelfTestDataRoot ?? _options.CreateAppDataLayout().Root); model.SetProjectContext(_layoutContext);
-            model.DatabaseConnected += (database, context) =>
+            // 页面内容由插件贡献；未安装时容器显示真实安装指引，页签身份仍由宿主保留。
+            if (_automationPageHost is null)
             {
-                if (context != _layoutContext) return;
-                _automationDatabase = database;
-                try { SaveModulePreferences(); }
-                catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { model.StatusText = "连接已完成，但保存入口失败：" + error.Message; }
-            };
-            page.Attach(model); return page;
-        }, control => ((Features.Automation.AutomationControlPageView)control).Detach());
+                _automationPageHost = new Features.Plugins.AutomationPageHost();
+                _automationPageHost.DatabaseConnected += OnAutomationDatabaseConnected;
+            }
+            return _automationPageHost;
+        }, control => ((Features.Plugins.AutomationPageHost)control).Detach());
         _automationModule = new("builtin.automation", "自动开发", SetAutomationModuleEnabled);
         Add("terminal", "终端", "Terminal", TerminalDock);
         Add("sidechat", "侧边聊天", "Chat", CreateSideChatHost());
@@ -231,11 +230,39 @@ public partial class MainWindow
     }
     private void RestoreAutomationConnection()
     {
-        if (!_workbenchPages.ContainsKey("automation")) return;
-        var model = (Features.Automation.AutomationControlViewModel)_workbenchPages["automation"].Content.DataContext!;
-        model.SetProjectContext(_layoutContext);
-        model.Disconnect();
-        if (!string.IsNullOrWhiteSpace(_automationDatabase)) _ = model.ConnectAsync(_automationDatabase);
+        if (!_workbenchPages.ContainsKey("automation") || _automationPageHost is null) return;
+        _automationPageHost.SetProjectContext(_layoutContext);
+        _automationPageHost.Disconnect();
+        if (!string.IsNullOrWhiteSpace(_automationDatabase)) _ = _automationPageHost.ConnectAsync(_automationDatabase);
+    }
+
+    /// <summary>
+    /// 从插件宿主取自动开发页贡献并挂到已保留的页签上。插件未激活/已停用时只清空内容，
+    /// 不创建宿主内替代实现。停靠、浮动与布局状态因此不随插件装卸而失效。
+    /// </summary>
+    private void AttachAutomationPluginPage()
+    {
+        if (_automationPageHost is null) return;
+        var contribution = _pluginPackageManager?.PageContribution(PluginAccess.AutoDevPluginId);
+        if (contribution is null || !string.Equals(contribution.PageId, "automation", StringComparison.Ordinal))
+        {
+            _automationPageHost.Detach();
+            return;
+        }
+        if (_automationPageHost.Controller is not null) return;
+        if (contribution.CreateView() is not Avalonia.Controls.Control view) return;
+        _automationPageHost.Attach(view);
+        _automationPageHost.SetProjectContext(_layoutContext);
+        if (!string.IsNullOrWhiteSpace(_automationDatabase)) _ = _automationPageHost.ConnectAsync(_automationDatabase);
+    }
+
+    private void OnAutomationDatabaseConnected(string database, string? context)
+    {
+        if (context != _layoutContext) return;
+        _automationDatabase = database;
+        try { SaveModulePreferences(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+        { if (_vm is not null) _vm.Timeline.AddNotification("连接已完成，但保存入口失败：" + error.Message); }
     }
 
     private string SetLibraryModuleEnabled(bool enabled)

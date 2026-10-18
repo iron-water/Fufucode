@@ -15,4 +15,8 @@
     <ProjectReference Include="../../src/Fufucode.Plugins.Codex/Fufucode.Plugins.Codex.csproj" />
     <ProjectReference Include="../../src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj" />
+    <Using Include="Fufucode.App.Abstractions.Automation.Harnesses" />
+  </ItemGroup>
 </Project>

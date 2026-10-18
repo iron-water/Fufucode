@@ -24,7 +24,8 @@ public sealed record PluginPageContribution(
     string IconKey,
     string ModuleId,
     Func<object> CreateView,
-    Action<object>? DetachView = null);
+    Action<object>? DetachView = null,
+    Action<object, string?>? OnProjectChanged = null);
 
 /// <summary>
 /// 插件贡献的个性化皮肤定义。
@@ -44,7 +45,8 @@ public sealed record PluginPackageContext(
     string PluginId,
     string PackageDirectory,
     string? ProjectPath,
-    Func<Type, object?>? ServiceResolver = null)
+    Func<Type, object?>? ServiceResolver = null,
+    string? DataRoot = null)
 {
     public T? GetService<T>() where T : class => ServiceResolver?.Invoke(typeof(T)) as T;
 }

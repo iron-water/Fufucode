@@ -19,6 +19,13 @@ internal static class Program
     internal static string? SelfTestDataRoot { get; set; }
     internal static bool NativeModuleSelfTest { get; private set; }
 
+    /// <summary>独立测试组件进入无头自测模式：隔离数据根并跳过启动期主题/产品路径副作用。</summary>
+    internal static void EnterSelfTestMode(string dataRoot)
+    {
+        SelfTestMode = true;
+        SelfTestDataRoot = dataRoot;
+    }
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
@@ -34,10 +41,6 @@ internal static class Program
         catch (Exception error)
         {
             Console.WriteLine("工具链 PATH 注入失败：" + error.Message);
-        }
-        if (args.Length >= 2 && args[0] == "--automation-protocol")
-        {
-            SelfTest.AutomationControlSelfTest.ProtocolAsync(args).GetAwaiter().GetResult(); return;
         }
         if (args.Contains("--speech-probe")) Environment.Exit(SelfTest.SpeechAcceptance.RunAsync().GetAwaiter().GetResult());
         if (args.Contains("--windows-toast-probe"))

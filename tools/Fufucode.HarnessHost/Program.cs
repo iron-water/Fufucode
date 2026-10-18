@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
+
+BatchHarnessAdapters.Register();
 
 if (args.Length != 2 || args[0] is not ("register" or "run" or "status"))
 {
