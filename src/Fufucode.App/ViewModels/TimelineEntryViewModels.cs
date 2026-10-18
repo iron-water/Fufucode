@@ -373,6 +373,16 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     }
 
     /// <summary>
+    /// 回合结束或从时间线移除前调用：解除全部工具组对子工具的订阅。
+    /// 这是旧回合最主要的驻留来源（组通过 PropertyChanged 持有子工具，进而钉住已渲染控件）；
+    /// 保留块与投影本身，回合仍可正常显示，移除时随整个条目一起释放。
+    /// </summary>
+    public void DetachForRemoval()
+    {
+        foreach (var group in _groups) group.Detach();
+    }
+
+    /// <summary>
     /// 回合结束：定阶段、记耗时、收起未手动展开的工具组与思考块，
     /// 并把最后一个文本块标记为最终总结（上方过程内容弱化但不删除）。
     /// </summary>

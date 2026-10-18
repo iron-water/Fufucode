@@ -111,9 +111,9 @@ public partial class MainWindow
             _usage.AttachMock();
             _notifications.Attach("mock-window", Guid.NewGuid(), vm.Session);
         }
-        vm.Input.SubmissionStarting += _notifications.BeginSubmission;
-        vm.Input.SubmissionRejected += _notifications.CancelSubmission;
-        vm.PropertyChanged += (_, args) => { if (args.PropertyName == nameof(MainViewModel.CurrentPage)) _actions.RefreshCapabilities(); };
+        // Input.SubmissionStarting/SubmissionRejected 在 AttachSession 中随 VM 创建接一次，
+        // 这里不再重复订阅（重复会让通知中心为同一次提交建多个运行）。
+        vm.PropertyChanged +=(_, args) => { if (args.PropertyName == nameof(MainViewModel.CurrentPage)) _actions.RefreshCapabilities(); };
         _actions.RefreshCapabilities();
         AttachCustomization(vm);
     }

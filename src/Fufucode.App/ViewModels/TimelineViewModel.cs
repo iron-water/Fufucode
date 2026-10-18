@@ -16,7 +16,7 @@ namespace Fufucode.App.ViewModels;
 /// 时间线容器：订阅 <see cref="IChatSession"/> 事件，交给 <see cref="MessageRebuilder"/> 重建，
 /// 再把批次增量同步到可绑定的 <see cref="Entries"/>；滚动状态（上翻不回拉 + 回到最新）在此维护。
 /// </summary>
-public sealed partial class TimelineViewModel : ViewModelBase
+public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
 {
     private readonly IChatSession _session;
     private readonly MessageRebuilder _rebuilder = new();
@@ -32,6 +32,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
     // 当前回合容器：同一用户提交后的连续 assistant 消息都合并到这里。
     private AssistantMessageViewModel? _currentTurn;
     private DateTimeOffset _currentTurnStartedAt;
+    private bool _disposed;
 
     public TimelineViewModel(IChatSession session, IRefreshScheduler scheduler, IClipboardService clipboard)
     {
@@ -67,6 +68,11 @@ public sealed partial class TimelineViewModel : ViewModelBase
     /// <summary>新建会话：清空时间线与重建器。</summary>
     public void Reset()
     {
+        // 旧回合必须先解除工具组订阅：渲染后的 ToolGroupViewModel 被 DisplayBlocks 持有，
+        // 不解除会连同其子工具与渲染控件一起驻留。
+        _currentTurn?.DetachForRemoval();
+        foreach (var entry in Entries)
+            (entry as AssistantMessageViewModel)?.DetachForRemoval();
         Entries.Clear();
         _byId.Clear();
         _rebuilder.Reset();
@@ -78,6 +84,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
     /// <summary>
     /// 启动时回放持久化历史：每条消息按"开始+终态"事件灌入同一重建管线，单次刷新。
     /// 只放终态消息，不产生流式增量（计划 §7.2：先重建状态，再接收新工作）。
+    /// 先清空旧内容：同一时间线重复回放（重连/重启）不得叠加整份记录。
     /// </summary>
     public void LoadHistory(IReadOnlyList<ChatMessage> messages)
     {
@@ -87,6 +94,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             return;
         }
 
+        Reset();
         foreach (var message in messages)
         {
             _rebuilder.Apply(new SessionEvent.MessageStarted(message.Id, message.Role, message.Model, message.Blocks.Count));
@@ -157,6 +165,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     private void OnSessionEvent(object? sender, SessionEvent e)
     {
+        if (_disposed) return;
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => OnSessionEvent(sender, e));
@@ -199,6 +208,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
     private void ApplyBatch()
     {
+        if (_disposed) return;
         var batch = _rebuilder.Flush();
         var hasChanges = batch.AddedEntries.Count > 0 || batch.UpdatedEntryIds.Count > 0;
 
@@ -283,13 +293,33 @@ public sealed partial class TimelineViewModel : ViewModelBase
         return _currentTurn;
     }
 
-    /// <summary>回合结束：定阶段、算耗时、收起未固定的工具组与思考块。</summary>
+    /// <summary>回合结束：定阶段、算耗时、收起未固定的工具组与思考块，并解除旧回合的工具组订阅。</summary>
     internal void FinalizeCurrentTurn(SessionOutcome outcome)
     {
         if (_currentTurn is not { IsComplete: false } turn) return;
         var elapsed = DateTimeOffset.Now - (_currentTurnStartedAt == default ? DateTimeOffset.Now : _currentTurnStartedAt);
         turn.FinalizeTurn(outcome, elapsed);
         _currentTurn = null;
+        // 结束后本回合不再流式更新；解除工具组订阅（块与投影保留，回合照常显示）。
+        turn.DetachForRemoval();
+    }
+
+    /// <summary>
+    /// 时间线本身即将被丢弃（窗口、侧边聊天或会话重建）：解除会话事件订阅，
+    /// 释放当前回合与全部条目的工具组订阅，避免旧会话继续驱动已废弃的 VM。
+    /// </summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _session.Event -= OnSessionEvent;
+        _currentTurn = null;
+        foreach (var entry in Entries)
+        {
+            (entry as AssistantMessageViewModel)?.DetachForRemoval();
+        }
+        Entries.Clear();
+        _byId.Clear();
     }
 
     private TimelineEntryViewModel? CreateViewModel(TimelineEntry entry)
