@@ -462,7 +462,7 @@ internal static class Program
         var modes = new TerminalBuffer(20, 3);
         modes.Append("\u001b[?2004h\u001b[?1000h\u001b[3 q");
         var modesSnapshot = modes.Snapshot();
-        Check(modesSnapshot.BracketedPaste && modesSnapshot.MouseTracking && modesSnapshot.CursorStyle == 3,
+        Check(modesSnapshot.BracketedPaste && modesSnapshot.MouseTracking && modesSnapshot.MouseMode == 1000 && modesSnapshot.CursorStyle == 3,
             "terminal-modes-and-cursor-style");
 
         // BEL raises the bell event.
@@ -550,6 +550,13 @@ internal static class Program
             try { if (System.IO.Directory.Exists(pageRoot)) System.IO.Directory.Delete(pageRoot, true); }
             catch (System.IO.IOException) { }
             catch (UnauthorizedAccessException) { }
+        }
+
+        // Tab titles are user-editable; the shell title remains separate.
+        using (var titled = new TerminalTabViewModel(1, isMock: true, new TerminalMockSession()))
+        {
+            titled.Title = "构建终端";
+            Check(titled.Title == "构建终端", "terminal-tab-title-renamable");
         }
 
         // Scrollback limit is configurable per buffer.
