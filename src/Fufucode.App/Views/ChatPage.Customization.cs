@@ -24,9 +24,15 @@ public partial class ChatPage
     {
         Appearance = settings;
         TimelineItems.MaxWidth = settings.ReadWidth;
-        TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12), "airy" => new Thickness(28, 24), _ => new Thickness(24, 20, 24, 8) };
+        // 底部留出富余：回合结束后出现的消息操作条（复制/点赞/更多）需要净空，
+        // 否则最后一条消息贴到输入区上沿、操作条被输入区挡住。
+        TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12, 16, 28), "airy" => new Thickness(28, 24, 28, 40), _ => new Thickness(24, 20, 24, 32) };
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
         ComposerCard.IsVisible = settings.Composer != "hidden";
+        // 沉浸式：输入区收起时留一个上箭头按钮，避免只能回设置里改回来。
+        ComposerRevealButton.IsVisible = settings.Composer == "hidden";
+        // 沉浸式：输入区收起时留一个上箭头按钮，避免"只能去设置里改回来"。
+        ComposerRevealButton.IsVisible = settings.Composer == "hidden";
         ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
