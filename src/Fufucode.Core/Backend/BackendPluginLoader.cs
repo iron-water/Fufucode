@@ -25,8 +25,11 @@ public static class BackendPluginLoader
     private static readonly HashSet<BackendId> DisabledBackends = new();
     private static Assembly? _piAssembly;
     private static bool _piProbed;
-    // Pi 与 OMP 是两个独立插件，但共用 RPC 客户端程序集；保留全部已登记目录，
-    // 不能因为后安装的插件覆盖前一个插件的查找路径。
+    // Pi 与 OMP 是两个独立插件，但共用 RPC 客户端程序集；不能因为后安装的插件覆盖前一个插件的查找路径。
+    // 上限：每次激活插件都会登记目录，多次安装/启用循环会让列表无限增长。只保留最近登记的若干个
+    // （按不区分大小写去重，超出时丢弃最旧的）。被丢弃的旧目录若已不存在或装错版本也无害：
+    // 查找时逐个检查文件是否存在，找不到就继续下一个候选路径。
+    private const int MaxRegisteredDirectories = 16;
     private static readonly List<string> RegisteredDirectories = new();
 
     /// <summary>
@@ -224,6 +227,21 @@ public static class BackendPluginLoader
         {
             RegisteredDirectories.RemoveAll(item => string.Equals(item, full, StringComparison.OrdinalIgnoreCase));
             RegisteredDirectories.Add(full);
+            if (RegisteredDirectories.Count > MaxRegisteredDirectories)
+                RegisteredDirectories.RemoveRange(0, RegisteredDirectories.Count - MaxRegisteredDirectories);
+        }
+        ResetCache();
+    }
+
+    /// <summary>注销插件安装目录（插件关闭时调用）；目录不存在时为空操作。</summary>
+    public static void RemovePluginDirectory(string directory)
+    {
+        if (string.IsNullOrWhiteSpace(directory)) return;
+        var full = Path.GetFullPath(directory);
+        lock (Gate)
+        {
+            if (RegisteredDirectories.RemoveAll(item => string.Equals(item, full, StringComparison.OrdinalIgnoreCase)) == 0)
+                return;
         }
         ResetCache();
     }
