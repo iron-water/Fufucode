@@ -176,7 +176,7 @@ foreach ($p in $backendPlugins) {
     dotnet publish $proj -c Release -o $targetDir
     if ($LASTEXITCODE -ne 0) { throw "Backend plugin $($p.Id) publish failed." }
     foreach ($pattern in @('Fufucode.Core.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*', 'Avalonia.*',
-            'Microsoft.Data.Sqlite.*', 'SQLitePCLRaw.*', 'CommunityToolkit.Mvvm.*')) {
+            'Microsoft.Web.WebView2.*', 'Microsoft.Data.Sqlite.*', 'SQLitePCLRaw.*', 'CommunityToolkit.Mvvm.*')) {
         Get-ChildItem -Path $targetDir -Filter $pattern | Remove-Item -Force -Recurse
     }
     $runtimesDir = Join-Path $targetDir 'runtimes'

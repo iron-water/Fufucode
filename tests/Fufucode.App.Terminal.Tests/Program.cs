@@ -536,6 +536,17 @@ internal static class Program
             catch (UnauthorizedAccessException) { }
         }
 
+        // Built-in shell profiles resolve their real executable paths on Windows.
+        if (OperatingSystem.IsWindows())
+        {
+            var cmd = ShellProfiles.Find("cmd")!;
+            var powershell = ShellProfiles.Find("powershell")!;
+            Check(ShellProfiles.Resolve(cmd) is { Length: > 0 }, "terminal-shell-cmd-resolves");
+            Check(ShellProfiles.Resolve(powershell) is { Length: > 0 }, "terminal-shell-powershell-resolves");
+            Check(ShellProfiles.BuildCommandLine(cmd, ShellProfiles.Resolve(cmd), null).Contains("cmd.exe", StringComparison.OrdinalIgnoreCase),
+                "terminal-shell-command-line");
+        }
+
         // A shell that cannot be resolved produces an explicit start error, not a silent cmd fallback.
         var profile = ShellProfiles.Find("definitely-not-installed");
         Check(profile is null, "terminal-unknown-shell-profile-is-null");
