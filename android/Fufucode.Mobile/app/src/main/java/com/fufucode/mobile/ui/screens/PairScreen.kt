@@ -89,6 +89,7 @@ fun PairScreen(
     onScan: () -> Unit,
     onStopScan: () -> Unit,
     onDismissNotice: () -> Unit,
+    onOpenRemoteDesktop: () -> Unit = {},
 ) {
     var hostInput by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
@@ -289,6 +290,7 @@ fun PairScreen(
             }
         }
 
+        SecondaryTextButton(label = "远程桌面 · UU", onClick = onOpenRemoteDesktop)
         // 未实现的扫码不伪装成主操作，连接说明按需展开。
         Row(Modifier.fillMaxWidth().heightIn(min = 44.dp).clickable { helpOpen = !helpOpen },
             horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {

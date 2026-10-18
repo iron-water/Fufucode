@@ -28,11 +28,12 @@ import com.fufucode.mobile.ui.screens.ChatScreen
 import com.fufucode.mobile.ui.screens.DeviceScreen
 import com.fufucode.mobile.ui.screens.PairScreen
 import com.fufucode.mobile.ui.screens.SessionDrawer
+import com.fufucode.mobile.ui.screens.UuRemoteScreen
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
 
 /** 顶层页面路由。只有四个真实页面，不使用导航框架跳转到不存在的目标。 */
-private enum class MobileRoute { Pair, Chat, Device }
+private enum class MobileRoute { Pair, Chat, Device, Uu }
 
 /**
  * 应用根组合。负责：
@@ -43,21 +44,34 @@ private enum class MobileRoute { Pair, Chat, Device }
 @Composable
 fun MobileApp(
     viewModel: MobileViewModel = viewModel(),
+    uuViewModel: UuRemoteViewModel = viewModel(),
 ) {
     val state by viewModel.controller.state.collectAsStateWithLifecycle()
     val draft by viewModel.draft.collectAsStateWithLifecycle()
     val attachments by viewModel.attachments.collectAsStateWithLifecycle()
     val discovery by viewModel.discoveryState.collectAsStateWithLifecycle()
+    val uuCallbackVersion by uuViewModel.callbackVersion.collectAsStateWithLifecycle()
 
     var route by remember { mutableStateOf(MobileRoute.Pair) }
     var drawerOpen by remember { mutableStateOf(false) }
     var attachmentSheetOpen by remember { mutableStateOf(false) }
     var latencyMillis by remember { mutableStateOf<Long?>(null) }
+    var uuReturnRoute by remember { mutableStateOf(MobileRoute.Pair) }
     val scope = rememberCoroutineScope()
 
     val configuration = LocalConfiguration.current
     val density = LocalDensity.current
     val compact = with(density) { (configuration.screenWidthDp.dp).value < 360f }
+
+    // 冷启动与热启动回调都落在远程桌面页；拒绝的旧回调不会改变路由。
+    LaunchedEffect(uuCallbackVersion) {
+        if (uuCallbackVersion > 0) {
+            if (route != MobileRoute.Uu) uuReturnRoute = route
+            drawerOpen = false
+            attachmentSheetOpen = false
+            route = MobileRoute.Uu
+        }
+    }
 
     // 一旦连上就自动进入会话页；断开/离线则回到配对页。
     LaunchedEffect(state.link) {
@@ -65,7 +79,7 @@ fun MobileApp(
             LinkState.Online, LinkState.Reconnecting -> if (route == MobileRoute.Pair) {
                 route = MobileRoute.Chat
             }
-            LinkState.Idle, LinkState.Offline -> if (route != MobileRoute.Pair) {
+            LinkState.Idle, LinkState.Offline -> if (route != MobileRoute.Pair && route != MobileRoute.Uu) {
                 route = MobileRoute.Pair
                 drawerOpen = false
             }
@@ -75,7 +89,7 @@ fun MobileApp(
 
     // 回到前台/网络恢复时补一次连接尝试（仅在已有令牌且不在线时）。
     LaunchedEffect(state.link) {
-        if (state.link == LinkState.Offline && !viewModel.controller.hasPairing) {
+        if (state.link == LinkState.Offline && !viewModel.controller.hasPairing && route != MobileRoute.Uu) {
             route = MobileRoute.Pair
         }
     }
@@ -96,6 +110,7 @@ fun MobileApp(
                         onScan = { viewModel.scanLan() },
                         onStopScan = viewModel::stopScan,
                         onDismissNotice = viewModel::dismissNotice,
+                        onOpenRemoteDesktop = { uuReturnRoute = MobileRoute.Pair; route = MobileRoute.Uu },
                     )
 
                     MobileRoute.Chat -> ChatScreen(
@@ -130,7 +145,11 @@ fun MobileApp(
                         },
                         onReconnect = { viewModel.controller.connect() },
                         onDismissNotice = viewModel::dismissNotice,
+                        onOpenRemoteDesktop = { uuReturnRoute = MobileRoute.Device; route = MobileRoute.Uu },
                     )
+                    MobileRoute.Uu -> UuRemoteScreen(uuViewModel) {
+                        route = if (state.link == LinkState.Online) uuReturnRoute else MobileRoute.Pair
+                    }
                 }
 
                 if (drawerOpen) {
@@ -163,6 +182,9 @@ fun MobileApp(
             BackHandler(enabled = !attachmentSheetOpen && drawerOpen) { drawerOpen = false }
             BackHandler(enabled = !attachmentSheetOpen && !drawerOpen && route == MobileRoute.Device) {
                 route = MobileRoute.Chat
+            }
+            BackHandler(enabled = route == MobileRoute.Uu) {
+                route = if (state.link == LinkState.Online) uuReturnRoute else MobileRoute.Pair
             }
         }
     }
