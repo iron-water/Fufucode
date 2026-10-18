@@ -26,3 +26,13 @@
 
 没有接受参考App协议或登录，原版登录后页面仍未逐页实机对照；不声称视觉一致已验收。
 真实折射玻璃、完整富文本仍未在此轮实现。此次是有证据的视觉增量，不是最终1:1复刻。
+
+## 收尾核对
+
+- 源码调整已包含在 `1e72d5d`，本次续接不重复提交源码。
+- 最终构建日志 `C:/tmp/work/2026-10-18-mobile-visual/build-final.log`：`BUILD SUCCESSFUL in 24s`。
+- APK：`android/Fufucode.Mobile/app/build/outputs/apk/debug/app-universal-debug.apk`，17,608,650 字节。
+- SHA256：`BA854B6E6DAB0357DF9434B1FEF1A20CAB04A2CC1AB963F146767AD32A48E58B`。
+- 续接时核对本轮 PID 80024、57148 均已不存在，adb 设备列表为空；本次没有再次关闭或终止其他进程。
+- 三张截图已补入本记录相邻的证据目录：[配对](evidence/mobile-visual-20261018/pair.png)、[浅色聊天](evidence/mobile-visual-20261018/chat-light.png)、[深色聊天](evidence/mobile-visual-20261018/chat-dark.png)。
+- 下一步仍需原版登录后页面的可靠视觉依据，再逐页核对会话列表、工具展开态、输入与键盘状态；目前不将中性配色选择标为原版精确还原。
