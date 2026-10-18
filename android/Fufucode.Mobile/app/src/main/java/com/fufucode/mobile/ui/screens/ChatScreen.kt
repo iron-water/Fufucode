@@ -3,6 +3,7 @@ package com.fufucode.mobile.ui.screens
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -24,6 +25,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -47,6 +49,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -413,6 +417,11 @@ private fun ErrorBlock(message: String) {
 @Composable
 private fun ToolCard(tool: RemoteToolCall, onResolveApproval: (String, Boolean) -> Unit) {
     var expanded by remember(tool.toolCallId) { mutableStateOf(tool.status != ToolStatus.Completed) }
+    val disclosureAngle by animateFloatAsState(
+        targetValue = if (expanded) 90f else 0f,
+        animationSpec = tween(160),
+        label = "tool-disclosure",
+    )
     val tone = when (tool.status) {
         ToolStatus.Completed -> PillTone.Success
         ToolStatus.Failed, ToolStatus.Cancelled -> PillTone.Danger
@@ -433,6 +442,8 @@ private fun ToolCard(tool: RemoteToolCall, onResolveApproval: (String, Boolean) 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .heightIn(min = MobileDimens.TouchTargetMin)
+                    .semantics { stateDescription = "$label，${if (expanded) "已展开" else "已折叠"}" }
                     .clickable { expanded = !expanded }
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -452,7 +463,7 @@ private fun ToolCard(tool: RemoteToolCall, onResolveApproval: (String, Boolean) 
                         ToolStatus.AwaitingApproval -> MobileColors.Warning
                         else -> MobileColors.Info
                     },
-                    contentDescription = null,
+                    contentDescription = label,
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
@@ -462,7 +473,7 @@ private fun ToolCard(tool: RemoteToolCall, onResolveApproval: (String, Boolean) 
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                     )
-                    if (!tool.statusText.isNullOrBlank()) {
+                    if (tool.status != ToolStatus.Completed && !tool.statusText.isNullOrBlank()) {
                         Text(
                             text = tool.statusText!!,
                             style = MobileTypography.Caption,
@@ -472,10 +483,20 @@ private fun ToolCard(tool: RemoteToolCall, onResolveApproval: (String, Boolean) 
                         )
                     }
                 }
-                StatusPill(text = label, tone = tone)
+                if (tool.status != ToolStatus.Completed) StatusPill(text = label, tone = tone)
+                WorkBuddyAsset(
+                    asset = "chevron-right.svg",
+                    size = 16.dp,
+                    tint = MobileColors.Muted,
+                    modifier = Modifier.rotate(disclosureAngle),
+                    contentDescription = if (expanded) "收起详情" else "展开详情",
+                )
             }
             AnimatedVisibility(visible = expanded) {
                 Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
+                    if (tool.status == ToolStatus.Completed && !tool.statusText.isNullOrBlank()) {
+                        Text(text = tool.statusText!!, style = MobileTypography.Caption, color = MobileColors.Muted)
+                    }
                     Text(text = "参数", style = MobileTypography.Caption, color = MobileColors.Muted)
                     Text(
                         text = tool.argsJson.ifBlank { "（无参数）" },
@@ -511,7 +532,7 @@ private fun ToolCard(tool: RemoteToolCall, onResolveApproval: (String, Boolean) 
  * 输入区：附件入口 + 多行输入 + 发送/停止。
  *
  * 发送与停止互斥（`canSend` / `canStop` 来自服务端真实状态），
- * 按键命中区 48dp（≥44dp 要求），离线时输入禁用并明确提示。
+ * 按键命中区 48dp；不可发送时仍可编辑草稿，发送按钮禁用。
  */
 @Composable
 private fun Composer(
@@ -536,6 +557,7 @@ private fun Composer(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
                     .padding(bottom = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -582,7 +604,7 @@ private fun Composer(
             ) {
                 if (draft.isEmpty()) {
                     Text(
-                        text = if (state.writable) "给电脑端 Agent 发消息" else "当前不可发送",
+                        text = if (state.writable) "发送消息…" else "草稿…",
                         style = MobileTypography.Body,
                         color = MobileColors.Muted,
                     )
@@ -608,8 +630,7 @@ private fun Composer(
                     enabled = !state.stopInFlight,
                 )
             } else {
-                // 官方规范：发送键为品牌蓝圆形按钮（#0052D9）+ 纯白箭头；
-                // 不可发送时降为 35% 透明蓝，仍保持同一图形语言。
+                // 中性操作色随明暗主题变化，不可发送时降低不透明度。
                 CircleActionButton(
                     asset = "send-white.svg",
                     tint = MobileColors.OnAction,
@@ -630,8 +651,7 @@ private fun Composer(
 /**
  * 圆形动作键：命中区 48dp。
  *
- * 说明：底圆由调用方按官方令牌着色（发送 = 品牌蓝，停止 = 危险红），
- * 图形用纯白矢量（`send-white.svg` / `input-stop.svg`）保持同一套视觉语言。
+ * 发送使用主题操作色，停止使用危险色；矢量图标由调用方提供对比色。
  */
 @Composable
 private fun CircleActionButton(
@@ -820,7 +840,7 @@ fun ApprovalCard(
                         modifier = Modifier.weight(1f),
                     )
                     ApprovalButton(
-                        label = if (approval.inFlight) "提交中…" else "批准执行",
+                        label = if (approval.inFlight) "提交中…" else "允许一次",
                         background = MobileColors.Accent,
                         ink = Color.White,
                         border = Color.Transparent,
@@ -829,12 +849,6 @@ fun ApprovalCard(
                         modifier = Modifier.weight(1.4f),
                     )
                 }
-                Text(
-                    text = "单次有效：此决定只作用于本次调用，不会为该工具建立长期许可。",
-                    style = MobileTypography.Caption,
-                    color = MobileColors.Muted,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
             }
         }
     }
