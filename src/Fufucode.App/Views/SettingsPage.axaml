@@ -927,6 +927,11 @@
             <StackPanel IsVisible="{Binding HasRelatedSettings}" Spacing="0" Margin="0,20,0,0">
               <TextBlock Classes="settingsGroupHeader" Text="相关设置"/>
               <ItemsControl ItemsSource="{Binding RelatedLinks}">
+                <!-- 相关设置的行也是卡片行：ItemsControl 默认 StackPanel 无 Spacing，
+                     需要 settingsGroupList 的 8px 节奏，否则卡片贴死在一起。 -->
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate><StackPanel Classes="settingsGroupList"/></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="se:SettingsRelatedLink">
                     <Button Classes="settingsRow clickable"
