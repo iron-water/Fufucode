@@ -1,18 +1,17 @@
 using System.Text.Json;
 using System.Text;
 using System.IO.Compression;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
 /// <summary>Copies only bounded diagnostic metadata into a caller-owned export stream.</summary>
 public static class DiagnosticExport
 {
-    public static async Task<IReadOnlyList<Fufucode.Pi.PiDiagnosticEvent>> ReadRecentAsync(string path,
+    public static async Task<IReadOnlyList<PiDiagnosticEvent>> ReadRecentAsync(string path,
         int limit = 500, CancellationToken cancellationToken = default)
     {
         if (limit is < 1 or > 5000) throw new ArgumentOutOfRangeException(nameof(limit));
-        var entries = new Queue<Fufucode.Pi.PiDiagnosticEvent>();
+        var entries = new Queue<PiDiagnosticEvent>();
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
         using var reader = new StreamReader(stream);
         while (await reader.ReadLineAsync(cancellationToken) is { } line)

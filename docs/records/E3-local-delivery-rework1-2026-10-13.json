@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "type": "delivery.card",
+  "taskId": "E3-LOCAL",
+  "status": "submitted",
+  "summary": "返工四项已修复并红转绿：(1) 兼容/后端/宿主版本声明改为按固定版本冻结（PluginVersionRecord.Backend/SupportedHostVersions），列表/应用/回退一律按所选版本判定，导入 v2 不再改写 v1 门禁；(2) pending 绑定具体目标（PendingRemoveVersionId），ResolvePendingAsync 改为只读快照核对、不删除任何文件，实际删除只由显式 RemoveVersionAsync 且仅作用于原目标；(3) 移除改为先删文件后提交状态，删除失败不再被吞，报告失败并保留记录/文件/诊断，状态提交失败给出可收敛说明；(4) 新增持久化 OperationToken，跨 await 的成功/失败/异常/取消四类完成一律核对令牌，旧结果不覆盖新 pending/选定/回退目标，应用等待期间拒绝移除候选，令牌持久化覆盖其他服务实例竞争。M 忠实五项反例原样副本由 5 FAIL 变 5 PASS；模块自身套件 81→125 PASS、无头 UI 36→46 PASS；公共宿主/外壳接线仍由 M 负责，本轮未改 M-owned 入口。",
+  "commits": [
+    "c53e1d773202285e8655045e9f22561fe56ba9b4",
+    "1a669e1088b61005c667a071eabcd0f951ef72ed",
+    "f5421d668a847a75fd23721d9b11a4bf013b3ddf",
+    "21eebc564e28f2158a268d55a1ab72ffbecd0ec3",
+    "b3cdfa9ebef9059eed534f177b082a2ebd12128f",
+    "200a36a46fdae8958167a9189343f224c7742990"
+  ],
+  "changedFiles": [
+    "src/Fufucode.App/Features/Plugins/Contracts.cs",
+    "src/Fufucode.App/Features/Plugins/PluginCatalogState.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginService.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginViewModel.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginSectionView.axaml",
+    "tests/Fufucode.App.Plugins.Tests/Fixtures.cs",
+    "tests/Fufucode.App.Plugins.Tests/ServiceTests.cs",
+    "tests/Fufucode.App.Plugins.Tests/UiTests.cs",
+    "docs/records/E3-local-plugins-2026-10-13.md"
+  ],
+  "changedFilesNote": "以上为本返工轮相对被审核 HEAD 21eebc5 的 delta（9 个文件）。本任务全量范围仍为 15 个文件（新增 Features/Plugins 9 + tests/Fufucode.App.Plugins.Tests 5 + 自身记录 1），全部在原允许范围内；未改 Core/Pi/Hosting/Cli、ExtensionsPage/VM、MainWindow/Integration/Settings/Styles、solution、共享自测、包装、权威 progress/decisions，也未改 M 的 tmp/m-e3-review 日志与断言。",
+  "verification": {
+    "passed": [
+      "M 忠实反例（复制到本树 tmp/e3-rework-mirror，断言未改）5/5 PASS，Review: 0 failed，退出 0（红基线：M 原日志 5 FAIL）",
+      "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build → ALL PASS (125)，退出 0（原 81 + 返工四项与邻接反例 44 项）",
+      "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build -- --ui → UI ALL PASS (46)，退出 0（Avalonia Headless，无原生窗口）",
+      "dotnet build Fufucode.sln -v m → 0 警告 0 错误，退出 0",
+      "E3-VERSION-COMPAT-1：导入 v2 后 v1 在 1.1.0 宿主仍可应用；宿主切 2.0.0 后 v1 被拒且无宿主副作用；v2 在 1.1.0 宿主同样被拒；版本级声明与门禁跨重开保留",
+      "E3-PENDING-REMOVE-1：快照未知时移除 v1 只登记 v1 目标；恢复已知空快照后 ResolvePendingAsync 不删任何文件（v1、v2 均在盘）；显式移除只作用于原目标；待移除目标跨重开保留且互不串目标",
+      "E3-REMOVE-FAILURE-1：FileShare.None 独占入口时移除返回失败、记录与文件保留、诊断保留、释放锁后重试收敛；目录状态被占用时在删除前失败、未动任何文件",
+      "E3-STALE-APPLY-1：Apply1 在途时 Apply2 成功，旧 1 迟到成功/迟到失败/迟到异常均判为 StaleOperation，选定保持 v2、pending 与诊断不被污染；取消有界回收自身 pending；应用等待期间移除候选被拒且候选文件保留；跨服务实例竞争同样被令牌判定过期"
+    ],
+    "failed": [
+      "上一轮 App 全量自测曾出现 1 次 AutomationControlCreationSelfTest 'Actual creation key did not start command: restructure; focused=False'；同版本立即重跑 0 项失败，根因仍未确定，未宣称它非模块引入或只是假抖动。红日志保留 tmp/e3-selftest-final.log，绿日志 tmp/e3-selftest-rerun.log。本轮未重跑全量自测（见 notRun）。"
+    ],
+    "notRun": [
+      "App 全量自测：本轮按派工要求让位于 R1 的包内原生 UI 稳定性核查（服务测试优先、不与其原生验证抢窗口），待 M 排期复核",
+      "真实 Pi 实际加载本模块导入副本、宿主安全重启回调的整项验收、现有扩展页外壳接线、原生 IME/DPI（M 所有，本包未越权接公共入口）",
+      "Pi 原生入口发现规则真机核对（本模块只做显式相对入口 + 越界/存在校验）与 OMP/Codex/DSH 适配（首版明确 unsupported）",
+      "“副本文件已删除但目录状态提交失败”这一具体时序：代码路径与可收敛文案已实现，但无法从公开 API 确定性注入删除与提交之间的失败点，未实测",
+      "任何模型调用或试跑（本轮无云请求）"
+    ]
+  },
+  "evidence": [
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-mirror-green.log（M 五项反例：5 PASS / 0 failed，退出 0）",
+    "C:\\Projects\\Fucode\\Fufucode\\tmp\\m-e3-review\\results.log（M 红基线 5 FAIL；只读引用，未改动）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-service.log（ALL PASS 125，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-ui.log（UI ALL PASS 46，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\docs\\records\\E3-local-plugins-2026-10-13.md（返工段：红绿证据、四项修复说明、邻接边界、剩余未验、第二次交付卡）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-selftest-final.log 与 tmp\\e3-selftest-rerun.log（上一轮 focused=False 观察：一红一绿，根因未定）"
+  ],
+  "integrationNeeds": [
+    "接口未变：ILocalPluginHost（Identity / SnapshotAsync / ApplyAsync）+ ILocalPluginPicker + LocalPluginService(AppDataLayout, host) + LocalPluginSectionView.Attach(vm)",
+    "行为变更需 M 知悉：ResolvePendingAsync 现在是只读核对入口，只登记“宿主已实际加载待应用版本”，不删除任何文件；待移除的落地需要在宿主确认未使用后由用户/外壳显式再次调用 RemoveVersionAsync(pluginId, versionId)（界面已把该目标显示为“待移除（可执行移除）”）",
+    "M 在安全重启完成后仍应调用一次 ResolvePendingAsync；不要在只读核对里期待发生删除",
+    "可选并发保护：service.CurrentGeneration() 读代次，再以 expectedGeneration 传入 ImportAsync/ApplyVersionAsync 做 compare-and-set",
+    "文案合并：本地插件是本地可执行代码，权限声明不代表 OS 沙箱，信任由宿主负责"
+  ],
+  "blockers": [],
+  "writerStopped": true,
+  "worktree": "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode",
+  "base": "22f6bf4df764721d80dc59d613efad1dac5911c9",
+  "reviewedHead": "21eebc564e28f2158a268d55a1ab72ffbecd0ec3",
+  "productBase": "637bd9193df3536ae05ead09f1c094878ea5b89b",
+  "head": "200a36a46fdae8958167a9189343f224c7742990"
+}

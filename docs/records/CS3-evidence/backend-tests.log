@@ -1,0 +1,481 @@
+PASS 默认注册表包含五个后端引擎
+PASS Pi 引擎显示名为 Pi
+PASS OMP 引擎显示名为 OMP
+PASS Codex 引擎显示名为 Codex
+PASS DSH 引擎显示名为 DSH
+PASS NativeCSharp 引擎显示名为 C# Native
+PASS Pi 为 RPC 内核契约
+PASS OMP 为独立 CLI 进程契约
+PASS Codex 为协议适配内核
+PASS DSH 为协议适配内核
+PASS NativeCSharp 为纯托管原生运行时
+PASS TryResolve 命中已注册原生内核
+PASS 空注册表 TryResolve 返回 false
+PASS 解析未注册内核抛出而不回退
+PASS 重复注册同一内核抛出
+PASS 解析未知持久化标识抛出
+PASS 已配置且存在的运行时探测为可用
+PASS 运行时路径为规范化绝对路径
+PASS 运行时版本来自组合根提供值
+PASS 路径不存在时探测为不可用
+PASS 不可用探测给出诊断信息
+PASS 不可用探测不伪造版本号
+PASS 未配置路径的内核探测为不可用且不猜测路径
+PASS 纯 C# 原生内核始终可用且暴露当前进程与 CLR 版本
+PASS EngineId 枚举恰有五个内核
+PASS 标识 pi 往返解析一致
+PASS TryParse 识别 pi
+PASS 标识 omp 往返解析一致
+PASS TryParse 识别 omp
+PASS 标识 codex 往返解析一致
+PASS TryParse 识别 codex
+PASS 标识 dsh 往返解析一致
+PASS TryParse 识别 dsh
+PASS 标识 csharp 往返解析一致
+PASS TryParse 识别 csharp
+PASS Pi 持久化标识为 pi
+PASS OMP 持久化标识为 omp
+PASS Codex 持久化标识为 codex
+PASS DSH 持久化标识为 dsh
+PASS NativeCSharp 持久化标识为 csharp
+PASS 标识解析区分大小写，不静默接受
+PASS TryParse(null) 返回 false
+PASS 无配置文件时全局默认后端为 NativeCSharp 原生内核
+PASS 设置后全局默认后端为 Codex
+PASS 默认后端变更触发一次 Changed 事件
+PASS 默认后端跨实例持久化
+PASS 切换服务读取全局默认后端
+PASS 切换服务写入全局默认后端
+PASS 按全局默认创建会话绑定
+PASS 损坏配置回退到默认 NativeCSharp 原生内核
+PASS 损坏配置记录加载错误供诊断
+PASS Pi 徽标为绿色
+PASS OMP 徽标为橙色
+PASS Codex 徽标为蓝色
+PASS DSH 徽标为青色
+PASS NativeCSharp 徽标为紫色
+PASS Pi 徽标显示名为 Pi
+PASS OMP 徽标显示名为 OMP
+PASS Codex 徽标显示名为 Codex
+PASS DSH 徽标显示名为 DSH
+PASS NativeCSharp 徽标显示名为 C# Native
+PASS 徽标目录包含五个后端
+PASS Pi 徽标标识与持久化标识一致
+PASS Pi 徽标提供图标键
+PASS Pi 徽标颜色为 #RRGGBB
+PASS Omp 徽标标识与持久化标识一致
+PASS Omp 徽标提供图标键
+PASS Omp 徽标颜色为 #RRGGBB
+PASS Codex 徽标标识与持久化标识一致
+PASS Codex 徽标提供图标键
+PASS Codex 徽标颜色为 #RRGGBB
+PASS Dsh 徽标标识与持久化标识一致
+PASS Dsh 徽标提供图标键
+PASS Dsh 徽标颜色为 #RRGGBB
+PASS NativeCSharp 徽标标识与持久化标识一致
+PASS NativeCSharp 徽标提供图标键
+PASS NativeCSharp 徽标颜色为 #RRGGBB
+PASS 按持久化标识查找 C# Native 徽标
+PASS 未知持久化标识查找徽标抛出
+PASS 新会话默认绑定 NativeCSharp 原生内核
+PASS 初始会话展示 NativeCSharp 紫色徽标
+PASS 初始会话展示运行时可用
+PASS 切换到 OMP 返回 OMP 引擎
+PASS 会话绑定更新为 OMP
+PASS 会话持久化标识更新为 omp
+PASS 切换后时间线条目数量保持不变
+PASS 切换后首条用户消息保留
+PASS 切换后助手消息保留
+PASS 切换后会话展示 OMP 橙色徽标
+PASS 切换后视图持久化标识为 omp
+PASS 切换到未注册内核抛出而不改绑定
+PASS 失败切换后绑定保持 OMP
+PASS 失败切换后时间线不变
+PASS 成功切换到 DSH 更新绑定
+PASS 切换后展示 DSH 青色徽标
+PASS 多次切换后时间线仍保留
+PASS 纯 C# 契约提供 RunTurnAsync
+PASS 纯 C# 契约提供 GetState
+PASS 纯 C# 契约提供 Reset
+PASS 工具调度契约提供 DispatchAsync
+PASS 文本回合状态为 Completed
+PASS 文本回合返回模型文本
+PASS 文本回合无工具结果
+PASS 内核状态记录消息数量
+PASS 工具回合状态为 ToolCalls
+PASS 工具回合返回一条工具结果
+PASS 工具结果标记成功
+PASS 内核记录并调度工具调用
+PASS Reset 清空消息计数
+PASS Reset 后内核不再处于运行中
+PASS 纯 C# 契约尊重取消令牌
+PASS ProductionToolDispatcher 成功写入文件
+PASS 真实文件已落盘
+PASS ProductionToolDispatcher 成功读取文件
+PASS 文件内容正确读回
+PASS ProductionToolDispatcher 列出目录内容
+PASS 未知工具如实报错
+PASS 真实原生 Agent 循环顺利达到终态 Completed
+PASS 全流程产生并记录了 1 个工具执行结果
+PASS 工具执行结果标记成功
+PASS 模型最终回复中完整综合并呈现了工具回填结果
+PASS 完整 Agent Loop 多轮交互历史条目为 5
+PASS 历史中精确记录了 Tool 角色的回填消息
+PASS 历史中记录了带有 ToolCall 的 Assistant 消息
+PASS Reset 成功清空完整历史
+PASS Reset 后历史快照列表为空
+PASS 插件市场目录包含至少七个标准插件条目
+PASS C# Native 原生内核为内置核心，默认已安装且已启用
+PASS Pi 后端插件默认安装并启用
+PASS OMP 后端插件默认安装并启用
+PASS Codex 后端插件默认安装并启用
+PASS DSH 后端插件默认安装并启用
+PASS Browser Use 浏览器控制插件默认未安装且未启用
+PASS Computer Use 电脑操控插件默认未安装且未启用
+PASS Browser Use 明确声明所需系统权限
+PASS Computer Use 明确声明所需系统权限
+PASS 首次查询 Browser Use 为未安装态
+PASS 尝试卸载核心内置组件抛出异常
+PASS 安装后 Browser Use 转为已安装已启用
+PASS 安装触发 Changed 事件
+PASS 插件配置 plugins.json 已真实落盘
+PASS 新实例恢复已安装的 Browser Use 插件
+PASS 停用后 Browser Use 为已安装但未启用
+PASS 卸载后 Browser Use 恢复未安装未启用
+PASS 未安装插件尝试启用抛出异常
+PASS 浏览器控制能力解析到 browser-use 插件
+PASS 电脑操控能力解析到 computer-use 插件
+PASS 能力提供者都能解析到真实插件定义
+PASS 插件到能力是双向一致的映射
+PASS Browser Use 未安装时能力不可用
+PASS 未安装原因包含“未安装”
+PASS 未安装时 CDP 工具不进入工具调度表
+PASS 两个能力插件都未安装时调度表为空
+PASS 未安装时直接调用 CDP 被拒绝
+PASS 未安装时拒绝原因指向未安装，而不是泛化失败
+PASS 安装后 Browser Use 能力解锁
+PASS 安装后 CDP / evaluate / navigate 动作契约全部注册
+PASS 注册的动作契约都带有参数 Schema
+PASS 安装后 CDP 调用转发到真实宿主桥并返回结果
+PASS 停用后为已安装未启用且能力不可用
+PASS 停用原因不为“未安装”
+PASS 停用后 CDP 工具从调度表撤销
+PASS 停用后 CDP 调用被拒绝
+PASS 重新启用后 CDP 工具恢复
+PASS Computer Use 未安装时能力不可用
+PASS 未安装时屏幕截图工具不注入
+PASS 安装后电脑操控能力解锁
+PASS 安装后截图/鼠标/键盘工具全部注册
+PASS 截图工具经替身成功执行
+PASS 截图按真实路径落盘到输出目录
+PASS 带区域的截图同样成功
+PASS 缺少坐标的鼠标动作按参数错误拒绝
+PASS 合法鼠标点击执行成功
+PASS 组合键执行成功
+PASS 截图开关关闭时如实报告不可执行
+PASS 输入开关关闭时拒绝键盘模拟
+PASS 卸载后两个能力的工具全部撤销
+PASS 卸载后不存在可调用的幽灵 CDP 工具
+PASS 卸载后不存在可调用的幽灵截图工具
+PASS 浏览器处理器已被注销
+PASS 重复注销是幂等空操作
+PASS 未接线宿主桥时 CDP 调用如实报告未接线
+PASS 仅安装电脑操控时该能力可用
+PASS 仅安装电脑操控不影响浏览器控制门禁
+PASS 未登记能力没有提供者
+PASS 能力快照覆盖全部已登记能力
+PASS 卸载后能力快照全部不可用
+PASS LF 分帧解析出 3 条事件
+PASS 首条事件 data 正确
+PASS 次条事件 data 正确
+PASS 第三条事件识别为 [DONE]
+PASS CRLF 分帧解析出 3 条事件
+PASS CRLF 下首条 data 不含多余回车
+PASS CRLF 下识别 [DONE]
+PASS 多行 data 只派发一条事件
+PASS 多行 data 以换行连接
+PASS 纯注释块不派发事件
+PASS 注释不会污染随后的 data
+PASS event/id 字段事件派发一次
+PASS event 字段被保留
+PASS id 字段被保留
+PASS data: 无空格写法仍可解析
+PASS 3 字节切分仍解析出 2 条事件
+PASS UTF-8 跨字节分片未丢字或乱码
+PASS 切分后仍识别 [DONE]
+PASS 无结尾空行时仍派发已累积事件
+PASS 尾部事件 data 完整
+PASS 空流不派发事件
+PASS 增量文本回调收到 2 个真实分片
+PASS 首个文本分片内容正确
+PASS 第二个文本分片内容正确
+PASS 聚合文本等于各分片顺序拼接
+PASS 解析 finish_reason
+PASS 识别到 data: [DONE]
+PASS 记录响应 model 字段
+PASS 流结束回调触发一次
+PASS GenerateStreamingAsync 返回聚合文本
+PASS 纯文本流不产生工具调用
+PASS 工具调用回调收到 4 个分片（与报文一致）
+PASS 首片携带 id 与 name
+PASS 后续分片 id/name 为空、arguments 为增量
+PASS 末片 arguments 为尾部片段
+PASS 4 个分片聚合为 1 个工具调用
+PASS 聚合后保留工具调用 id
+PASS 聚合后保留工具名
+PASS 分片 arguments 顺序拼接为完整合法 JSON
+PASS finish_reason=tool_calls 被解析
+PASS 带索引回调同样收到 4 个分片
+PASS 索引回调首片携带 index=0
+PASS 拼接后的 JSON 可被真实解析
+PASS 流式拼装出的工具调用被真实调度器成功执行
+PASS 工具读取到的内容来自流式拼装的参数
+PASS 文本与工具分片交错时文本仍完整
+PASS 两个不同 index 的工具调用分别聚合
+PASS 下标 0 的工具名为 list_dir
+PASS 下标 1 的工具名为 read_file
+PASS 下标 1 的参数完整
+PASS 空参数回落为 {} 而不是空串
+PASS 累计分片数为 3
+PASS 流内 error 对象抛出 ModelClientException
+PASS 流内错误归类为 StreamError
+PASS 提取 error.code
+PASS 提取 error.message 进入异常消息
+PASS 错误发生前已派发的分片仍然送达
+PASS 出错后不触发 OnCompleted
+PASS HTTP 401 抛出结构化异常
+PASS HTTP 401 映射为 Authentication
+PASS HTTP 401 保留状态码
+PASS HTTP 401 提取 error.code
+PASS HTTP 401 可重试性判定
+PASS HTTP 401 错误消息取自 error.message
+PASS HTTP 401 流式路径同样抛出结构化异常
+PASS HTTP 401 流式路径类别一致
+PASS HTTP 429 抛出结构化异常
+PASS HTTP 429 映射为 RateLimited
+PASS HTTP 429 保留状态码
+PASS HTTP 429 提取 error.code
+PASS HTTP 429 可重试性判定
+PASS HTTP 429 错误消息取自 error.message
+PASS HTTP 429 流式路径同样抛出结构化异常
+PASS HTTP 429 流式路径类别一致
+PASS HTTP 500 抛出结构化异常
+PASS HTTP 500 映射为 ServerError
+PASS HTTP 500 保留状态码
+PASS HTTP 500 提取 error.code
+PASS HTTP 500 可重试性判定
+PASS HTTP 500 错误消息取自 error.message
+PASS HTTP 500 流式路径同样抛出结构化异常
+PASS HTTP 500 流式路径类别一致
+PASS HTTP 400 抛出结构化异常
+PASS HTTP 400 映射为 InvalidRequest
+PASS HTTP 400 保留状态码
+PASS HTTP 400 提取 error.code
+PASS HTTP 400 可重试性判定
+PASS HTTP 400 错误消息取自 error.message
+PASS HTTP 400 流式路径同样抛出结构化异常
+PASS HTTP 400 流式路径类别一致
+PASS HTTP 502 抛出结构化异常
+PASS HTTP 502 映射为 ServerError
+PASS HTTP 502 保留状态码
+PASS HTTP 502 提取 error.code
+PASS HTTP 502 可重试性判定
+PASS HTTP 502 非 JSON 错误体按原始内容保留诊断
+PASS HTTP 502 流式路径同样抛出结构化异常
+PASS HTTP 502 流式路径类别一致
+PASS 自动补全 chat/completions 端点
+PASS 流式请求体携带 stream=true
+PASS 请求体使用指定模型
+PASS 提供工具时使用 tool_choice=auto
+PASS 请求体携带工具 schema
+PASS 非流式路径解析 choices[0].message.content
+PASS 非流式请求体 stream=false
+PASS 未收到 [DONE] 时 SawDone=false
+PASS 缺 [DONE] 但有增量时仍返回聚合文本
+PASS 空流抛出结构化异常而不是伪造空回复
+PASS 空流归类为传输层失败
+PASS 逐字节切分下增量回调只触发一次
+PASS 逐字节切分下中文内容完整
+PASS 聚合文本与原文一致
+PASS 流式多轮循环达到 Completed
+PASS 循环全程未回退到一次性请求
+PASS 循环执行了 2 次流式模型请求
+PASS 循环记录 2 次完成的模型请求
+PASS 循环识别客户端支持流式并启用流式路径
+PASS 第 1 轮工具调用被真实调度
+PASS 工具执行成功
+PASS 工具读取到的内容来自流式拼装的参数
+PASS 第 2 轮终态文本由流式分片聚合
+PASS 跨两轮共派发 3 个文本分片（第 1 轮 1 个 + 第 2 轮 2 个）
+PASS 第 1 轮文本分片先于工具调用
+PASS 第 2 轮文本分片
+PASS 第 2 轮后续文本分片按序派发
+PASS 工具参数分片按 2 次回调派发（与报文分片数一致）
+PASS 首片携带 id/name 与 arguments 前缀
+PASS 末片只携带 arguments 增量
+PASS 带索引回调与约定回调分片数一致
+PASS 循环结束后历史包含 5 条消息
+PASS 第 3 条为带工具调用的 Assistant
+PASS Assistant 消息携带 1 个工具调用
+PASS 历史中的工具参数为完整拼装结果
+PASS 第 4 条为工具结果回填
+PASS 工具结果通过 tool_call_id 精确关联
+PASS 循环新增的 3 条消息都通过回调通知宿主
+PASS 首个通知为带工具调用的 Assistant
+PASS 第二个通知为工具回填结果
+PASS 第三个通知为流式聚合的终态回复
+PASS 第 2 次模型请求携带真实工具结果
+PASS 模型标识贯穿多轮请求
+PASS 多工具轮次收敛到 Completed
+PASS 两个工具调用都被调度
+PASS 首个工具名来自分片拼装
+PASS 第二个工具名来自另一分片
+PASS 首个工具结果按 id 关联
+PASS 第二个工具结果按 id 关联
+PASS 第二个工具读取到真实文件内容
+PASS 目录列表中包含目标文件
+PASS 两条工具回填后共 5 条历史消息
+PASS 达到最大轮次后按安全终止返回 Completed
+PASS 最多只请求 3 轮，不再继续自转
+PASS 每轮工具结果都被记录
+PASS 终止响应明确说明轮次上限
+PASS 历史末条为终端提示的 Assistant 消息
+PASS 流内错误使循环进入 Failed 终态
+PASS 失败结果携带服务端 error.message
+PASS 失败的模型请求不计入完成次数
+PASS 失败前已派发的分片仍送达回调
+PASS 失败时没有工具结果
+PASS 无流式回调时循环正常完成
+PASS 无回调时仍返回聚合文本
+PASS 真实客户端端到端循环 Completed
+PASS 端到端循环发出 2 次 HTTP 请求
+PASS 端到端循环执行 1 次真实工具
+PASS 工具读取到脚本化工作区中的真实文件
+PASS 终态文本由第二轮流式分片聚合
+PASS 两轮各派发一个文本分片
+PASS 处理器记录到 2 个请求体
+PASS 首次请求 stream=true
+PASS 首次请求使用指定模型
+PASS 回填后的第二轮请求仍为 stream=true
+PASS 第二轮请求携带工具回填后的完整上下文
+PASS 流式读取中途取消向上抛出 OperationCanceledException
+PASS 取消的模型请求不计入完成次数
+PASS 反例（红）：逐片独立解码确实会破坏跨片多字节字符
+PASS 反例（红）：被截断的中文产生 U+FFFD 替换字符
+PASS 生产实现（绿）：同一 1 字节分片输入下中文完整还原
+PASS 生产实现（绿）：不产生任何替换字符
+PASS 夹具确实使用了非空 UTF-8 字节
+PASS 夹具把 arguments 切成至少 3 片
+PASS 反例（红）：只保留末片导致 arguments 丢失前段
+PASS 反例（红）：被截断的参数不是合法 JSON
+PASS 生产实现（绿）：分片顺序追加还原出完整 parameters
+PASS 生产实现（绿）：还原出的参数可被真实解析
+PASS 夹具字节流非空
+PASS 反例（红）：CRLF 报文里不存在 "\n\n"，两条事件被并成一条
+PASS 反例（红）：并成一条后解析失败
+PASS 反例（红）：换成 LF 报文后同一 naive 写法可切出 2 条，故 LF 单测不足以暴露 CRLF 缺陷
+PASS 生产实现（绿）：CRLF 下 data 不含残留 \r
+PASS 生产实现（绿）：剥净后可直接解析
+PASS 反例（红）：忽略 error 后只得到残缺文本且被当作成功结果
+PASS 生产实现（绿）：流内错误抛出结构化异常
+PASS 生产实现（绿）：暴露 error.code 供上游判定
+PASS 流式客户端的会话报告 IsStreaming=true
+PASS 发送开始先派发 ActivityChanged(Running)
+PASS 紧随其后为用户消息 MessageStarted
+PASS 用户消息通过 TextAppended 回放
+PASS 事件最终由 TurnSettled 收束
+PASS 收束前派发 ActivityChanged(Idle)
+PASS 助手消息以 MessageStarted(Assistant) 开始
+PASS 助手消息紧跟 BlockStarted
+PASS BlockStarted 后立即为 TextAppended（未等到整轮结束）
+PASS 收到 3 个文本增量（真实分片而非整段回放）
+PASS 首增量按序到达
+PASS 第二增量按序到达
+PASS 第三增量按序到达
+PASS 首个文本增量早于 BlockFinished
+PASS BlockFinished 早于 MessageFinished
+PASS 助手文本块通过 BlockFinished 收束
+PASS 块终态文本为增量顺序拼接结果
+PASS MessageFinished 携带整体替换的最终文本
+PASS 会话终态为 Completed
+PASS 会话回到 Idle
+PASS 工具参数分片按 2 次 ToolCallAppended 实时派发
+PASS 首片携带 arguments 前缀
+PASS 末片只携带剩余 arguments 增量
+PASS 工具开始执行时派发 Running 状态
+PASS 工具执行完成后派发 Completed 状态
+PASS Running 状态早于 Completed 状态到达
+PASS 工具调用块在 BlockFinished 中收束为 1 个
+PASS 工具块记录工具名
+PASS 工具块参数为分片拼接后的完整 JSON
+PASS 工具块终态为 Completed
+PASS 工具块携带真实执行输出
+PASS 工具轮文本增量到达
+PASS 终态文本由第二轮流式分片聚合
+PASS 工具轮与终态轮各产生 1 条 MessageFinished
+PASS 会话驱动了 2 次真实 HTTP 请求
+PASS 工具轮会话终态为 Completed
+PASS 取消后仍以 TurnSettled 收束
+PASS 取消的会话终态为 Interrupted
+PASS TurnSettled 携带 Interrupted
+PASS 取消前已到达的文本增量仍送达订阅端
+PASS 取消路径上已开放的助手消息被兜底收束（不悬挂）
+PASS 流内错误使会话终态为 Failed
+PASS 派发 SessionError(ModelFailed)
+PASS TurnSettled 概要携带服务端错误消息
+PASS 失败前已到达的增量仍送达
+PASS 失败路径上已开放的助手消息被兜底收束
+PASS 引擎模式报告 IsStreaming=false
+PASS 引擎模式整段回放为单个文本块
+PASS 引擎模式回放模型文本
+PASS 引擎模式仍以 TurnSettled 收束
+PASS 引擎模式终态为 Completed
+PASS 反例（红）：不接增量回调时只能拿到 1 个整段增量
+PASS 反例（红）：整段文本为聚合结果
+PASS 生产实现（绿）：同一报文拆出 3 个真实增量
+PASS 生产实现（绿）：增量数严格多于整段投递，断言确实有鉴别力
+PASS 响应未结束时首个增量已到达订阅端
+PASS 响应暂停期间尚无 MessageFinished
+PASS 响应暂停期间尚无 TurnSettled
+PASS 发送已接受但模型仍运行，停止可用且不允许并发发送
+PASS 并发发送被拒绝且未覆盖原取消源
+PASS 解除传输暂停后剩余增量按序到达
+PASS 原有引擎构造路径使用客户端配置模型，不发送 csharp-native 显示名
+PASS 流式仍由原引擎维护真实完整历史
+PASS 真实桌面 MessageRebuilder 消费事件后全部助手消息收束
+PASS 真实桌面 MessageRebuilder 收到最终文本且未重复追加
+PASS 稀疏索引、多工具和跨轮相同 ID 均收束为独立块
+PASS Success=true 即使内容以未知工具开头也判定成功
+PASS Success=false 即使内容为 ok 也判定失败
+PASS 失败工具的终态块保留 IsErrorOutput=true
+PASS 交错工具分片按稀疏索引正确拼装
+PASS 下一轮相同调用 ID 不串到上一轮
+PASS 仅工具轮从 contentIndex=0 开始，无空洞
+PASS 第二工具块保持连续索引
+PASS 三个真实工具各有开始和终态状态通知
+PASS 跨轮重复 ID 的状态属于不同 MessageId
+PASS 真实桌面 MessageRebuilder 消费事件后全部助手消息收束
+PASS 真实桌面 MessageRebuilder 收到最终文本且未重复追加
+PASS 真实桌面重建器保留三个工具块
+PASS 桌面重建器保留真实失败状态
+PASS 桌面重建器收到真实失败输出
+PASS StopAsync 等待工具取消清理完成
+PASS 取消未收敛时禁止新发送
+PASS 真实 StopAsync 路径以 Interrupted 收束
+PASS 被停止工具只有 Running→Cancelled，不伪造 Completed
+PASS 停止收敛后恢复 Idle 可发送状态
+PASS 取消工具后不再请求下一轮模型
+PASS 取消消息最终快照也保留 Cancelled
+PASS 无调度器明确 Failed，不伪造 Running
+PASS 轮次上限本地终止提示也有独立完整消息
+PASS 未流式产生的轮次上限提示正常回放
+PASS 订阅者异常不会吞掉其他订阅者的增量
+PASS DisposeAsync 取消真实 SSE 读取并等待终态
+PASS 释放后连接为 Stopped
+PASS 释放后发送和停止不可用
+PASS 释放后发送被明确拒绝
+PASS 订阅者异常和释放不会重复派发 TurnSettled
+PASS 订阅者异常不伪装成 ModelFailed
+PASS 释放时部分消息正常收束
+
+全部通过：479 项断言

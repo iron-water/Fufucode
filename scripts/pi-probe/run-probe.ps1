@@ -1,3 +1,4 @@
+# Pi backend plugin diagnostic — not part of the default native package.
 param(
     [Parameter(Mandatory = $true)][string]$PiRoot,
     [string]$Project,

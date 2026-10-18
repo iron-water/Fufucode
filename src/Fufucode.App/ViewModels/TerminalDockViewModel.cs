@@ -4,6 +4,7 @@ using System.IO;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using Fufucode.App.Features.TerminalExperience;
 using Fufucode.App.Infrastructure;
 
 namespace Fufucode.App.ViewModels;
@@ -33,7 +34,12 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
     public string OwnershipTooltip => "终端属于当前项目容器。Agent 工具执行与这些交互 shell 的实例归属将在后续接线。";
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private TerminalTabViewModel? _selectedTab;
+    /// <summary>Mirrors the selected tab's output selection so the copy entry can reflect availability.</summary>
+    [ObservableProperty] private bool _hasOutputSelection;
     public bool HasTabs => Tabs.Count > 0;
+
+    /// <summary>Called by the view after a selection gesture so the copy entry stays in sync per tab.</summary>
+    public void RefreshOutputSelection() => HasOutputSelection = SelectedTab?.OutputSelection.HasText == true;
 
     public void Show()
     {
@@ -73,6 +79,7 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
 {
     private readonly ITerminalSession _session;
     private bool _disposed;
+    private TerminalSnapshot? _snapshot;
     public TerminalTabViewModel(int number, bool isMock, ITerminalSession session)
     {
         TerminalSessionId = Guid.NewGuid().ToString("N");
@@ -81,17 +88,40 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
         _session = session;
         _session.Output += OnOutput;
         _session.Exited += OnExited;
+        Buffer.Changed += () => _snapshot = null;
     }
 
     public string TerminalSessionId { get; }
     public string Title { get; }
     public bool IsMock { get; }
+    /// <summary>True once this tab has been closed; pending asynchronous work must not touch it.</summary>
+    public bool IsDisposed => _disposed;
     public TerminalBuffer Buffer { get; } = new();
     public double ScrollOffsetY { get; set; }
     public bool FollowOutput { get; set; } = true;
+
+    /// <summary>
+    /// Stable snapshot of the bounded screen + scrollback. Cached until the buffer changes so selection
+    /// and search can prove they still refer to the text they were resolved against.
+    /// </summary>
+    public TerminalSnapshot Snapshot => _snapshot ??= Buffer.Snapshot();
+
+    /// <summary>Selection is per tab and anchored to the snapshot it was captured from.</summary>
+    public TerminalOutputSelection OutputSelection { get; } = new();
+
+    /// <summary>Command history for this tab only; in memory, bounded, never persisted or shared.</summary>
+    public TerminalCommandHistory History { get; } = new();
+
+    /// <summary>Per-tab output search state (query, hits and current position).</summary>
+    public TerminalSearchSession Search { get; } = new();
+
     [ObservableProperty] private string _statusText = "启动中";
     [ObservableProperty] private string _inputText = string.Empty;
     [ObservableProperty] private bool _isRunning;
+    [ObservableProperty] private string _searchQuery = string.Empty;
+    [ObservableProperty] private bool _searchMatchCase;
+    [ObservableProperty] private string _searchStatus = string.Empty;
+    [ObservableProperty] private bool _isSearchOpen;
 
     public void Start(string workspace)
     {
@@ -115,9 +145,81 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
     [RelayCommand] public void SendInput()
     {
         if (!IsRunning) return;
-        SendRaw(InputText + "\r"); InputText = string.Empty;
+        var command = InputText;
+        SendRaw(command + "\r");
+        History.Record(command);
+        InputText = string.Empty;
     }
     [RelayCommand] public void Interrupt() => SendRaw("\u0003");
+
+    /// <summary>Paste into the draft only; the shell is never written to and nothing is auto-run.</summary>
+    public void PasteToDraft(string? clipboardText)
+    {
+        var normalized = TerminalInputDraft.Normalize(clipboardText);
+        if (normalized.Length == 0) return;
+        InputText = TerminalInputDraft.Merge(InputText, normalized);
+    }
+
+    /// <summary>Step back through this tab's history, keeping the unsent draft for restoration.</summary>
+    public bool HistoryPrevious()
+    {
+        var previous = History.Previous(InputText);
+        if (previous is null) return false;
+        InputText = previous;
+        return true;
+    }
+
+    /// <summary>Step forward through this tab's history, returning to the original draft at the end.</summary>
+    public bool HistoryNext()
+    {
+        var next = History.Next();
+        if (next is null) return false;
+        InputText = next;
+        return true;
+    }
+
+    /// <summary>Run the pending query against the current bounded snapshot; returns the hit count.</summary>
+    public int RunSearch(bool fromEnd = false)
+    {
+        var count = Search.Run(Snapshot, SearchQuery, SearchMatchCase, fromEnd);
+        SearchStatus = Search.StatusText();
+        return count;
+    }
+
+    /// <summary>Move to the next/previous hit. Re-resolves against the live snapshot when output changed.</summary>
+    public TerminalSearchMatch? MoveSearch(int direction)
+    {
+        Search.EnsureCurrent(Snapshot);
+        var match = Search.Move(direction);
+        SearchStatus = Search.StatusText();
+        return match;
+    }
+
+    /// <summary>Drop the per-tab selection and search highlights (used when a tab is reused or closed).</summary>
+    public void ClearOutputInteraction()
+    {
+        OutputSelection.Clear();
+        Search.Clear();
+        SearchQuery = string.Empty;
+        SearchStatus = string.Empty;
+        IsSearchOpen = false;
+    }
+
+    partial void OnSearchQueryChanged(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            Search.Clear();
+            SearchStatus = string.Empty;
+            return;
+        }
+        RunSearch();
+    }
+
+    partial void OnSearchMatchCaseChanged(bool value)
+    {
+        if (SearchQuery.Length > 0) RunSearch();
+    }
     public void SendRaw(string text)
     {
         try { _session.Write(text); }
@@ -138,5 +240,7 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
         if (_disposed) return;
         _disposed = true;
         _session.Output -= OnOutput; _session.Exited -= OnExited; _session.Dispose(); IsRunning = false;
+        _snapshot = null;
+        ClearOutputInteraction();
     }
 }

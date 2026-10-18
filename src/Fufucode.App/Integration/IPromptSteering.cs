@@ -25,7 +25,7 @@ public interface IPromptSteering
 public sealed class RealPromptSteering : IPromptSteering
 {
     private readonly RealSessionHost? _host;
-    private readonly ChatSessionCoordinator? _directCoordinator;
+    private readonly ISessionCoordinator? _directCoordinator;
 
     public RealPromptSteering(RealSessionHost host)
     {
@@ -33,12 +33,12 @@ public sealed class RealPromptSteering : IPromptSteering
     }
 
     /// <summary>直接包裹 coordinator（自测在无 host 的真实会话上使用）。</summary>
-    internal RealPromptSteering(ChatSessionCoordinator coordinator)
+    internal RealPromptSteering(ISessionCoordinator coordinator)
     {
         _directCoordinator = coordinator;
     }
 
-    private ChatSessionCoordinator Coordinator =>
+    private ISessionCoordinator Coordinator =>
         _directCoordinator ?? _host!.Current.Coordinator;
 
     public bool CanSteer =>

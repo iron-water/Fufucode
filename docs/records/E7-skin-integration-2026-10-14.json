@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E7-WIRING",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": "7deef34974fb1af0b1c6723d8587f0aa13a3b1b3",
+  "teacherSourceHead": "841ce9fe93a1917aa22f77fa91fadb229a86b819",
+  "engineSourceHead": "4d084888ca305f4c5a49e45afac04393a7fa3a73",
+  "acceptedParts": ["bounded teacher/reference", "Metro/Material3 scoped resource modules", "independent Skin preference", "current settings and floating-window wiring"],
+  "gates": {"solutionWarnings":0,"solutionErrors":0,"appPass":1406,"appFailed":0,"skinIntegrationPass":18,"skinModulePass":120,"teacherAvaloniaPass":45,"teacherBrowserPass":17,"independentThemeReparentPass":10},
+  "evidence": ["docs/records/M-E7-skin-wiring-2026-10-14.md", "tmp/m-cycle59-final-build.log", "tmp/m-cycle59-app-final.log", "tmp/m-cycle59-final-skins.log", "tmp/m-cycle59-main-engine.log"],
+  "productAcceptance": "pending",
+  "notRun": ["current-source clean install/uninstall", "native IME/DPI/window input", "actual Windows backdrop", "Aero production integration", "user visual acceptance"],
+  "nextAction": "Dispatch bounded E7-AERO resource/control module to low-cost implementer from committed main; M owns later catalog/window integration. Keep Fluent default."
+}

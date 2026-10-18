@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST-RECEIPTS",
+  "runId": "E3-M-HOST-RECEIPTS-0593b9e",
+  "sourceMainSha": "52a8f3c3a1f33d6b59c8d39623bc27ea4fb0628b",
+  "integrationStatus": "integrated",
+  "integrationScope": "original receipt history/details and exact-token read-only current loading observation; catalog/receipt preservation, integrity/compatibility/stale/selection guards; compiled bindings and real Pi query path",
+  "productAcceptance": "pending",
+  "verification": {
+    "solution": { "warnings": 0, "errors": 0, "exitCode": 0 },
+    "appFull": { "pass": 1270, "fail": 0, "exitCode": 0 },
+    "defaultReceiptAssertions": { "pass": 15, "fail": 0 },
+    "sharedPluginsAndStartup": { "pass": 52, "fail": 0 },
+    "realPiShell": { "pass": 14, "fail": 0, "exitCode": 0 },
+    "pluginServices": { "pass": 166 },
+    "proofRules": { "pass": 21 },
+    "moduleHeadlessUi": { "pass": 46 },
+    "coreFull": { "pass": 359, "skip": 1, "exitCode": 0 },
+    "piFull": { "pass": 21, "exitCode": 0 }
+  },
+  "evidence": [
+    "docs/records/M-E3-receipt-inspection-2026-10-13.md",
+    "tmp/m-cycle50-receipt-red.log",
+    "tmp/m-cycle50-frame.log",
+    "tmp/m-cycle50-frame-build.log",
+    "tmp/m-cycle50-shell-real.log",
+    "tmp/m-cycle50-app-final-full.log",
+    "tmp/m-cycle50-services.log",
+    "tmp/m-cycle50-ui.log",
+    "tmp/m-cycle50-core.log",
+    "tmp/m-cycle50-pi.log"
+  ],
+  "notVerified": [
+    "E3-RECEIPT-PIXEL-1: result panel not shown in captured frame despite passing layout geometry/binding checks; cause unknown",
+    "system native pointer/keyboard/file pickers/IME/DPI",
+    "safe explicit release of abandoned persistent in-flight candidates",
+    "long-duration pressure, production migration, current-source installer"
+  ],
+  "nextAction": "M resolves the receipt result pixel discrepancy before accepting its visual path; preserve original receipts and never auto-resend or release protection. Original stopped R1/E3 workers and frozen installer gate remain unchanged."
+}

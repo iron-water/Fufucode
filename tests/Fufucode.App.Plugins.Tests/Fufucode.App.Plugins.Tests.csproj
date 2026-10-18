@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Fufucode.App.Plugins.Tests</AssemblyName>
+    <RootNamespace>Fufucode.App.Plugins.Tests</RootNamespace>
+    <!-- 与 Fufucode.App 的 WebView2Version 保持一致：仅用于下面的传递引用剥离。 -->
+    <WebView2Version>1.0.4258.31</WebView2Version>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
+    <!-- 无头页面绑定测试需要真实 Avalonia 控件与编译绑定；沿用 App.Library.Tests 的做法引用 App。 -->
+    <ProjectReference Include="../../src/Fufucode.App/Fufucode.App.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Pi/Fufucode.Pi.csproj" />
+  </ItemGroup>
+  <!-- Fufucode.App 通过 Microsoft.Web.WebView2 把 WPF/WinForms 宿主程序集传递到本测试工程，
+       与 net10.0 引用程序集的 WindowsBase 产生 MSB3277 版本冲突。本测试不使用这两个宿主程序集，
+       按 App 工程既有 StripUnusedWebView2ManagedRefs 的路径写法真正剥离引用，保持 0 警告。 -->
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\$(WebView2Version)\buildTransitive\..\\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
+</Project>

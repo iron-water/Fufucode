@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "type": "delivery.card",
+  "taskId": "E3-LOCAL",
+  "status": "submitted",
+  "summary": "第二修复轮三项相邻不变量已修复并红转绿：(1) E3-SUPERSEDED-INFLIGHT-1——新增持久化 InFlight 在途候选登记，删除路径把保护复核、文件删除、状态提交放进同一独占写入区，因此宿主回调未返回期间任何实例都不能删除该候选；保护不永久锁死，宿主可用 AbandonInFlightAsync 显式对账回收；较新应用请求照常被接受并生效（竞争场景未删除）。(2) E3-CANCELLED-COMPLETION-1——所有完成提交改用不可取消的本地记账，不再因调用方取消留下永久 OperationToken/PendingApplyVersionId；新增 cancelled_unknown 分诊与持久化 LastApplyReceipt，自己的取消不再误报 StaleOperation，也不假称成功或自动重发。(3) E3-FIXED-CONTENT-1——应用/回退前复核托管副本路径/入口/链接/摘要，篡改或损坏一律零宿主副作用拒绝，诊断写入版本记录，绝不改写旧摘要凑通过。M 相邻 4 反例由 4 FAIL 变 4 PASS，原 5 反例保持 5 PASS，本模块套件 125→156 PASS，无头 UI 46 PASS，solution 0 警告 0 错误。公共宿主/页面接线仍由 M 负责。",
+  "commits": [
+    "c53e1d773202285e8655045e9f22561fe56ba9b4",
+    "1a669e1088b61005c667a071eabcd0f951ef72ed",
+    "f5421d668a847a75fd23721d9b11a4bf013b3ddf",
+    "21eebc564e28f2158a268d55a1ab72ffbecd0ec3",
+    "b3cdfa9ebef9059eed534f177b082a2ebd12128f",
+    "200a36a46fdae8958167a9189343f224c7742990",
+    "245bba93825b7d8cb1e59f9996c20241cd60ec47",
+    "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2"
+  ],
+  "changedFiles": [
+    "src/Fufucode.App/Features/Plugins/Contracts.cs",
+    "src/Fufucode.App/Features/Plugins/PluginCatalogState.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginService.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginViewModel.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginSectionView.axaml",
+    "tests/Fufucode.App.Plugins.Tests/ServiceTests.cs",
+    "docs/records/E3-local-plugins-2026-10-13.md"
+  ],
+  "changedFilesNote": "以上为本第二修复轮相对增量基准 200a36a46fdae8958167a9189343f224c7742990 的 delta（7 个文件）。本任务全量范围仍为 15 个文件（新增 Features/Plugins 9 + tests/Fufucode.App.Plugins.Tests 5 + 自身记录 1），全部在原允许范围内；未改 Core/Pi/Hosting/Cli、ExtensionsPage/VM、MainWindow/Integration/Settings/Styles、solution、共享自测、包装、权威 progress/decisions，也未改 M 的 tmp/m-e3-review 与 tmp/m-e3-adjacent 日志与断言。",
+  "verification": {
+    "passed": [
+      "M 相邻反例（复制到本树 tmp/e3-adjacent-mirror，断言未改）4/4 PASS，Adjacent review: 0 failed，退出 0（红基线：M 原日志 4 FAIL）",
+      "M 首轮五反例（tmp/e3-rework-mirror 原样副本）仍 5/5 PASS，Review: 0 failed，退出 0（回归门未破）",
+      "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build → ALL PASS (156)，退出 0（125 + 本轮 31 项相邻生命周期反例）",
+      "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build -- --ui → UI ALL PASS (46)，退出 0（Avalonia Headless，无原生窗口）",
+      "dotnet build Fufucode.sln -v m → 0 警告 0 错误，退出 0",
+      "在途保护：挂起 Apply1 时 Apply2 照常成功且生效；此时 Remove1 被拒（OperationBusy）且文件仍在；另一服务实例同样不能删除；回调返回后可在途登记自动回收并成功移除；宿主显式对账 AbandonInFlightAsync（含无证据说明拒绝）后可移除，不永久锁死",
+      "取消分诊：宿主取消调用方 token 后返回成功 → OperationToken/PendingApplyVersionId 清空、InFlight 收回、结果不再报 StaleOperation、不假称成功、回执 cancelled_unknown 保留；取消以异常返回同样清理并保留回执；调用前取消不调用宿主",
+      "摘要与入口复核：改写托管 index.js 后应用被拒（IntegrityMismatch）且宿主回调次数为 0、记录摘要未被改写、IntegrityError 写入版本记录、回退同样被拒；入口文件被删后拒绝应用；恢复导入时字节后应用成功",
+      "邻接：迟到完成发生在插件记录已被移除时不抛异常、不复活记录；回执跨重开保留"
+    ],
+    "failed": [],
+    "notRun": [
+      "App 全量自测：按派工要求让位 R1 的原生包装验收（服务检查优先、不与其原生验证抢窗口），待 M 排期复核",
+      "真实 Pi 实际加载本模块导入副本、宿主安全重启回调的整项验收、现有扩展页外壳接线、原生 IME/DPI（M 所有）",
+      "宿主进程崩溃/重启后的真实对账回收演练：AbandonInFlightAsync 已有自动测试，真机演练需 M 接宿主时执行",
+      "上一轮 App 全量自测的 focused=False 偶发失败根因仍未确定，未宣称它非模块引入或只是假抖动；红日志 tmp/e3-selftest-final.log 保留",
+      "任何模型调用或试跑（本轮无云请求）"
+    ]
+  },
+  "evidence": [
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-adjacent-green.log（M 相邻 4 反例：4 PASS / 0 failed，退出 0）",
+    "C:\\Projects\\Fucode\\Fufucode\\tmp\\m-e3-adjacent\\results.log（M 红基线 4 FAIL；只读引用，未改动）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-mirror-green.log（M 首轮 5 反例：仍 0 failed，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-service.log（ALL PASS 156，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-ui.log（UI ALL PASS 46，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\docs\\records\\E3-local-plugins-2026-10-13.md（第三次交付段：红绿对照、三项修复说明、邻接边界、剩余未验、第三次交付卡）"
+  ],
+  "integrationNeeds": [
+    "接口未变：ILocalPluginHost（Identity / SnapshotAsync / ApplyAsync）+ ILocalPluginPicker + LocalPluginService(AppDataLayout, host) + LocalPluginSectionView.Attach(vm)",
+    "新增宿主可选入口：AbandonInFlightAsync(pluginId, versionId, reason) —— 仅当宿主确认该候选不会再被加载且不会有后续副作用时调用，用于持有者进程异常结束等场景的显式对账回收；本模块绝不自行解除在途保护",
+    "行为变更需 M 知悉：应用/回退会在调用宿主前复核托管副本的固定摘要/入口/链接，篡改或损坏一律拒绝且零宿主副作用、诊断落入版本记录",
+    "ResolvePendingAsync 仍是只读核对入口（只登记“宿主已实际加载待应用版本”，不删文件）；待移除的落地需在宿主确认未使用后显式再次调用 RemoveVersionAsync(pluginId, versionId)",
+    "M 在安全重启完成后调用一次 ResolvePendingAsync；不要在只读核对里期待发生删除",
+    "可选并发保护：service.CurrentGeneration() 读代次，再以 expectedGeneration 传入 ImportAsync/ApplyVersionAsync 做 compare-and-set"
+  ],
+  "blockers": [],
+  "writerStopped": true,
+  "worktree": "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode",
+  "base": "200a36a46fdae8958167a9189343f224c7742990",
+  "incrementBase": "200a36a46fdae8958167a9189343f224c7742990",
+  "originalTaskBase": "22f6bf4df764721d80dc59d613efad1dac5911c9",
+  "productBase": "637bd9193df3536ae05ead09f1c094878ea5b89b",
+  "head": "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2"
+}

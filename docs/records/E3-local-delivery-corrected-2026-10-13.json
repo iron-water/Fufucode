@@ -1,0 +1,86 @@
+{
+  "transport": "codex-desktop",
+  "manualStructuredCardExtraction": true,
+  "rawAssistantMessage": "All real SHAs verified; the previously reported SHA is confirmed nonexistent. Final card:\n\n{\n  \"schemaVersion\": 1,\n  \"type\": \"delivery.card\",\n  \"taskId\": \"E3-LOCAL\",\n  \"status\": \"submitted\",\n  \"summary\": \"交付元数据补正（纯文档，无实现/测试变更）：上一卡 commits 与 commitsFull 中的 b47e8d9eb0f0b6b1b8bd3fa1d4dfa1a24bb9c1a3 不存在（git cat-file -e 实测 MISSING）；经原树 git log --format=\\\"%H %s\\\" 实查，该提交真实完整 SHA 为 b47e8d9fe09f9c2b40462cda25ef24cf3564e584。本轮只补正自身记录（把该提交从短前缀补成真实完整 SHA，并新增“元数据补正”段记录错误来源与真实值），单独文档提交 8c672892c34f4b7564b2d7a2da92ea4481eb7dba；当前真实 HEAD 为 8c672892c34f4b7564b2d7a2da92ea4481eb7dba，工作树干净。实现、测试、全部红绿证据与继承状态未改动；本轮未跑构建/测试/UI/模型，卡内验证结果均为上一轮（b47e8d9、其前代码状态）的真实执行记录，不冒称重跑。\",\n  \"metadataCorrection\": {\n    \"reportedSha\": \"b47e8d9eb0f0b6b1b8bd3fa1d4dfa1a24bb9c1a3\",\n    \"reportedShaExists\": false,\n    \"realSha\": \"b47e8d9fe09f9c2b40462cda25ef24cf3564e584\",\n    \"realShaExists\": true,\n    \"source\": \"git log --format=\\\"%H %s\\\" 与 git cat-file -e <sha>^{commit} 实测（原树 C:\\\\Users\\\\mio\\\\.codex\\\\worktrees\\\\2884\\\\Fufucode）\",\n    \"selfRecordImpact\": \"自身记录此前只使用短前缀 b47e8d9（真实前缀），本轮已补成完整 SHA 并新增元数据补正段，未改任何实现或测试\",\n    \"noSelfReference\": \"文档内不写本次补正提交自身的 SHA；其完整 SHA 只从 git 实查后写入本卡 commits\"\n  },\n  \"commits\": [\n    \"c53e1d773202285e8655045e9f22561fe56ba9b4\",\n    \"1a669e1088b61005c667a071eabcd0f951ef72ed\",\n    \"f5421d668a847a75fd23721d9b11a4bf013b3ddf\",\n    \"21eebc564e28f2158a268d55a1ab72ffbecd0ec3\",\n    \"b3cdfa9ebef9059eed534f177b082a2ebd12128f\",\n    \"200a36a46fdae8958167a9189343f224c7742990\",\n    \"245bba93825b7d8cb1e59f9996c20241cd60ec47\",\n    \"ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2\",\n    \"b47e8d9fe09f9c2b40462cda25ef24cf3564e584\",\n    \"1305755643eca7ea2ded7565130b241ed4ac5dbc\",\n    \"8c672892c34f4b7564b2d7a2da92ea4481eb7dba\"\n  ],\n  \"commitsVerification\": \"以上 11 个 SHA 全部经 git cat-file -e <sha>^{commit} 实测存在；不存在项仅 reportedSha（已在上方记录）。\",\n  \"changedFiles\": [\n    \"docs/records/E3-local-plugins-2026-10-13.md\"\n  ],\n  \"changedFilesScope\": {\n    \"thisCorrectionDeltaBase\": \"1305755643eca7ea2ded7565130b241ed4ac5dbc\",\n    \"thisCorrectionDelta\": \"1 个文件（docs/records/E3-local-plugins-2026-10-13.md，纯文档）\",\n    \"thirdRoundCodeDeltaBase\": \"ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2\",\n    \"thirdRoundCodeDelta\": \"4 个文件（LocalPluginService.cs / PluginCatalogState.cs / ServiceTests.cs / 自身记录）\",\n    \"cumulativeTaskScope\": \"15 个文件累计（src/Fufucode.App/Features/Plugins/** 9 + tests/Fufucode.App.Plugins.Tests/** 5 + docs/records/E3-local-plugins-2026-10-13.md 1），全部在原允许范围内；本补正轮未新增或改动任何实现/测试文件\",\n    \"notTouched\": \"未改 M-owned 入口（ExtensionsPage/VM、MainWindow/Integration/Settings/Styles）、Core/Pi/Hosting/Cli、solution、共享自测、包装、权威进度/决策、R1 候选与其源；未改 M 的 tmp 日志与断言\"\n  },\n  \"verification\": {\n    \"passed\": [\n      \"【上一轮真实执行，本轮未重跑】dotnet build Fufucode.sln -v m → 0 警告 0 错误，退出 0\",\n      \"【上一轮真实执行，本轮未重跑】tests/Fufucode.App.Plugins.Tests -c Release --no-build → ALL PASS (166)，退出 0；tmp/e3-plugins-service.log\",\n      \"【上一轮真实执行，本轮未重跑】tests/Fufucode.App.Plugins.Tests -c Release --no-build -- --ui → UI ALL PASS (46)，退出 0；tmp/e3-plugins-ui.log\",\n      \"【上一轮真实执行，本轮未重跑】M 回执身份反例原样副本 → PASS E3-RECEIPT-IDENTITY，退出 0；tmp/e3-receipt-green.log\",\n      \"【上一轮真实执行，本轮未重跑】M 首轮五反例原样副本 → Review: 0 failed，退出 0；tmp/e3-mirror-green.log\",\n      \"【上一轮真实执行，本轮未重跑】M 相邻四反例原样副本 → Adjacent review: 0 failed，退出 0；tmp/e3-adjacent-green.log\",\n      \"【本轮新执行】git log --format=\\\"%H %s\\\" 与 git cat-file -e 逐条核对 11 个提交 SHA：全部存在；被举报的错误 SHA 实测不存在\"\n    ],\n    \"failed\": [],\n    \"notRun\": [\n      \"本轮未运行构建/测试/UI/模型：按派工要求只做元数据补正，不重复验证；卡内验证项均标注为上一轮真实执行结果\",\n      \"App 全量自测与原生 UI（仍让位 M 在主区的公共工作台原生验证）\",\n      \"真实 Pi 加载/安全重启接线/页面接线/原生 IME-DPI（M 所有）\",\n      \"上一轮 focused=False 偶发失败根因仍未确定；红日志 tmp/e3-selftest-final.log 保留\"\n    ]\n  },\n  \"evidence\": [\n    \"C:\\\\Users\\\\mio\\\\.codex\\\\worktrees\\\\2884\\\\Fufucode\\\\docs\\\\records\\\\E3-local-plugins-2026-10-13.md（含新增“元数据补正（2026-10-13，纯文档）”段）\",\n    \"原树 git log --format=\\\"%H %s\\\" 输出（11 条提交完整 SHA）与 git cat-file -e <sha>^{commit} 逐条结果（10 EXISTS + reportedSha MISSING）\",\n    \"C:\\\\Users\\\\mio\\\\.codex\\\\worktrees\\\\2884\\\\Fufucode\\\\tmp\\\\e3-receipt-green.log、tmp\\\\e3-mirror-green.log、tmp\\\\e3-adjacent-green.log、tmp\\\\e3-plugins-service.log、tmp\\\\e3-plugins-ui.log（上一轮真实证据，未改动）\",\n    \"C:\\\\Projects\\\\Fucode\\\\Fufucode\\\\tmp\\\\m-e3-receipt\\\\results.log（M 红基线；只读引用，未改动）\"\n  ],\n  \"integrationNeeds\": [\n    \"接口未变：ILocalPluginHost（Identity / SnapshotAsync / ApplyAsync）+ ILocalPluginPicker + LocalPluginService(AppDataLayout, host) + LocalPluginSectionView.Attach(vm)\",\n    \"宿主只读核对：LastApplyReceipt=最新已确认结果；RecentReceipts=按原身份保留的迟到/取消/异常记录（含 VersionId/Token/Outcome/Message/AtUtc，≤20 条）\",\n    \"宿主可选入口：AbandonInFlightAsync(pluginId, versionId, reason) —— 仅在宿主确认该候选不会再加载且无后续副作用时调用\",\n    \"语义提醒：应用/回退前复核托管副本固定摘要/入口/链接；ResolvePendingAsync 为只读核对入口，不删文件；待移除落地需宿主确认后显式再次调用 RemoveVersionAsync\",\n    \"可选并发保护：service.CurrentGeneration() + expectedGeneration 做 compare-and-set\"\n  ],\n  \"blockers\": [],\n  \"writerStopped\": true,\n  \"worktree\": \"C:\\\\Users\\\\mio\\\\.codex\\\\worktrees\\\\2884\\\\Fufucode\",\n  \"base\": \"1305755643eca7ea2ded7565130b241ed4ac5dbc\",\n  \"correctionBase\": \"1305755643eca7ea2ded7565130b241ed4ac5dbc\",\n  \"incrementBase\": \"ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2\",\n  \"originalTaskBase\": \"22f6bf4df764721d80dc59d613efad1dac5911c9\",\n  \"productBase\": \"637bd9193df3536ae05ead09f1c094878ea5b89b\",\n  \"head\": \"8c672892c34f4b7564b2d7a2da92ea4481eb7dba\"\n}",
+  "card": {
+    "schemaVersion": 1,
+    "type": "delivery.card",
+    "taskId": "E3-LOCAL",
+    "status": "submitted",
+    "summary": "交付元数据补正（纯文档，无实现/测试变更）：上一卡 commits 与 commitsFull 中的 b47e8d9eb0f0b6b1b8bd3fa1d4dfa1a24bb9c1a3 不存在（git cat-file -e 实测 MISSING）；经原树 git log --format=\"%H %s\" 实查，该提交真实完整 SHA 为 b47e8d9fe09f9c2b40462cda25ef24cf3564e584。本轮只补正自身记录（把该提交从短前缀补成真实完整 SHA，并新增“元数据补正”段记录错误来源与真实值），单独文档提交 8c672892c34f4b7564b2d7a2da92ea4481eb7dba；当前真实 HEAD 为 8c672892c34f4b7564b2d7a2da92ea4481eb7dba，工作树干净。实现、测试、全部红绿证据与继承状态未改动；本轮未跑构建/测试/UI/模型，卡内验证结果均为上一轮（b47e8d9、其前代码状态）的真实执行记录，不冒称重跑。",
+    "metadataCorrection": {
+      "reportedSha": "b47e8d9eb0f0b6b1b8bd3fa1d4dfa1a24bb9c1a3",
+      "reportedShaExists": false,
+      "realSha": "b47e8d9fe09f9c2b40462cda25ef24cf3564e584",
+      "realShaExists": true,
+      "source": "git log --format=\"%H %s\" 与 git cat-file -e <sha>^{commit} 实测（原树 C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode）",
+      "selfRecordImpact": "自身记录此前只使用短前缀 b47e8d9（真实前缀），本轮已补成完整 SHA 并新增元数据补正段，未改任何实现或测试",
+      "noSelfReference": "文档内不写本次补正提交自身的 SHA；其完整 SHA 只从 git 实查后写入本卡 commits"
+    },
+    "commits": [
+      "c53e1d773202285e8655045e9f22561fe56ba9b4",
+      "1a669e1088b61005c667a071eabcd0f951ef72ed",
+      "f5421d668a847a75fd23721d9b11a4bf013b3ddf",
+      "21eebc564e28f2158a268d55a1ab72ffbecd0ec3",
+      "b3cdfa9ebef9059eed534f177b082a2ebd12128f",
+      "200a36a46fdae8958167a9189343f224c7742990",
+      "245bba93825b7d8cb1e59f9996c20241cd60ec47",
+      "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+      "b47e8d9fe09f9c2b40462cda25ef24cf3564e584",
+      "1305755643eca7ea2ded7565130b241ed4ac5dbc",
+      "8c672892c34f4b7564b2d7a2da92ea4481eb7dba"
+    ],
+    "commitsVerification": "以上 11 个 SHA 全部经 git cat-file -e <sha>^{commit} 实测存在；不存在项仅 reportedSha（已在上方记录）。",
+    "changedFiles": [
+      "docs/records/E3-local-plugins-2026-10-13.md"
+    ],
+    "changedFilesScope": {
+      "thisCorrectionDeltaBase": "1305755643eca7ea2ded7565130b241ed4ac5dbc",
+      "thisCorrectionDelta": "1 个文件（docs/records/E3-local-plugins-2026-10-13.md，纯文档）",
+      "thirdRoundCodeDeltaBase": "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+      "thirdRoundCodeDelta": "4 个文件（LocalPluginService.cs / PluginCatalogState.cs / ServiceTests.cs / 自身记录）",
+      "cumulativeTaskScope": "15 个文件累计（src/Fufucode.App/Features/Plugins/** 9 + tests/Fufucode.App.Plugins.Tests/** 5 + docs/records/E3-local-plugins-2026-10-13.md 1），全部在原允许范围内；本补正轮未新增或改动任何实现/测试文件",
+      "notTouched": "未改 M-owned 入口（ExtensionsPage/VM、MainWindow/Integration/Settings/Styles）、Core/Pi/Hosting/Cli、solution、共享自测、包装、权威进度/决策、R1 候选与其源；未改 M 的 tmp 日志与断言"
+    },
+    "verification": {
+      "passed": [
+        "【上一轮真实执行，本轮未重跑】dotnet build Fufucode.sln -v m → 0 警告 0 错误，退出 0",
+        "【上一轮真实执行，本轮未重跑】tests/Fufucode.App.Plugins.Tests -c Release --no-build → ALL PASS (166)，退出 0；tmp/e3-plugins-service.log",
+        "【上一轮真实执行，本轮未重跑】tests/Fufucode.App.Plugins.Tests -c Release --no-build -- --ui → UI ALL PASS (46)，退出 0；tmp/e3-plugins-ui.log",
+        "【上一轮真实执行，本轮未重跑】M 回执身份反例原样副本 → PASS E3-RECEIPT-IDENTITY，退出 0；tmp/e3-receipt-green.log",
+        "【上一轮真实执行，本轮未重跑】M 首轮五反例原样副本 → Review: 0 failed，退出 0；tmp/e3-mirror-green.log",
+        "【上一轮真实执行，本轮未重跑】M 相邻四反例原样副本 → Adjacent review: 0 failed，退出 0；tmp/e3-adjacent-green.log",
+        "【本轮新执行】git log --format=\"%H %s\" 与 git cat-file -e 逐条核对 11 个提交 SHA：全部存在；被举报的错误 SHA 实测不存在"
+      ],
+      "failed": [],
+      "notRun": [
+        "本轮未运行构建/测试/UI/模型：按派工要求只做元数据补正，不重复验证；卡内验证项均标注为上一轮真实执行结果",
+        "App 全量自测与原生 UI（仍让位 M 在主区的公共工作台原生验证）",
+        "真实 Pi 加载/安全重启接线/页面接线/原生 IME-DPI（M 所有）",
+        "上一轮 focused=False 偶发失败根因仍未确定；红日志 tmp/e3-selftest-final.log 保留"
+      ]
+    },
+    "evidence": [
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\docs\\records\\E3-local-plugins-2026-10-13.md（含新增“元数据补正（2026-10-13，纯文档）”段）",
+      "原树 git log --format=\"%H %s\" 输出（11 条提交完整 SHA）与 git cat-file -e <sha>^{commit} 逐条结果（10 EXISTS + reportedSha MISSING）",
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-receipt-green.log、tmp\\e3-mirror-green.log、tmp\\e3-adjacent-green.log、tmp\\e3-plugins-service.log、tmp\\e3-plugins-ui.log（上一轮真实证据，未改动）",
+      "C:\\Projects\\Fucode\\Fufucode\\tmp\\m-e3-receipt\\results.log（M 红基线；只读引用，未改动）"
+    ],
+    "integrationNeeds": [
+      "接口未变：ILocalPluginHost（Identity / SnapshotAsync / ApplyAsync）+ ILocalPluginPicker + LocalPluginService(AppDataLayout, host) + LocalPluginSectionView.Attach(vm)",
+      "宿主只读核对：LastApplyReceipt=最新已确认结果；RecentReceipts=按原身份保留的迟到/取消/异常记录（含 VersionId/Token/Outcome/Message/AtUtc，≤20 条）",
+      "宿主可选入口：AbandonInFlightAsync(pluginId, versionId, reason) —— 仅在宿主确认该候选不会再加载且无后续副作用时调用",
+      "语义提醒：应用/回退前复核托管副本固定摘要/入口/链接；ResolvePendingAsync 为只读核对入口，不删文件；待移除落地需宿主确认后显式再次调用 RemoveVersionAsync",
+      "可选并发保护：service.CurrentGeneration() + expectedGeneration 做 compare-and-set"
+    ],
+    "blockers": [],
+    "writerStopped": true,
+    "worktree": "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode",
+    "base": "1305755643eca7ea2ded7565130b241ed4ac5dbc",
+    "correctionBase": "1305755643eca7ea2ded7565130b241ed4ac5dbc",
+    "incrementBase": "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+    "originalTaskBase": "22f6bf4df764721d80dc59d613efad1dac5911c9",
+    "productBase": "637bd9193df3536ae05ead09f1c094878ea5b89b",
+    "head": "8c672892c34f4b7564b2d7a2da92ea4481eb7dba"
+  }
+}

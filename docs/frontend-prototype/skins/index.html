@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="zh-CN" data-skin="fluent" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fufucode 皮肤样稿 · Fluent 基线 / Metro / Material 3（HTML 原型）</title>
+<link rel="icon" href="../../../assets/icon/icon-32.png" type="image/png">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/skin-fluent.css">
+<link rel="stylesheet" href="css/skin-metro.css">
+<link rel="stylesheet" href="css/skin-material3.css">
+</head>
+<body>
+<div class="app" id="app" data-view="shell" data-chat="filled">
+
+  <!-- ① 顶栏：品牌、项目、全局入口与皮肤切换 -->
+  <header class="caption">
+    <div class="brand"><img src="../../../assets/icon/icon-32.png" alt="Fufucode">Fufucode</div>
+    <span class="prototype-badge">皮肤样稿 · HTML 原型</span>
+    <span class="project" id="skin-caption">Fluent 基线 · 当前 UniGetUI 色调意图</span>
+    <span class="spacer"></span>
+    <button class="field search-trigger" onclick="toast('命令面板 · 样稿仅示意')"><span>搜索会话与功能</span><i data-lucide="search"></i></button>
+    <div class="segmented" id="skin-switch" role="radiogroup" aria-label="皮肤">
+      <button data-skin="fluent" class="selected" role="radio" aria-checked="true" onclick="setSkin('fluent')">Fluent</button>
+      <button data-skin="metro" role="radio" aria-checked="false" onclick="setSkin('metro')">Metro</button>
+      <button data-skin="material3" role="radio" aria-checked="false" onclick="setSkin('material3')">Material 3</button>
+    </div>
+    <button class="iconbtn" id="theme-toggle" title="明暗主题" aria-label="明暗主题" onclick="toggleTheme()"><i data-lucide="sun-moon"></i></button>
+    <label class="field" title="缩放（样稿用 CSS zoom 近似 DPI 缩放）"><i data-lucide="zoom-in"></i>
+      <select id="scale-select" aria-label="缩放" onchange="setScale(this.value)">
+        <option value="1">100%</option><option value="1.25">125%</option><option value="1.5">150%</option>
+      </select>
+    </label>
+    <div class="segmented" id="view-switch" role="tablist" aria-label="视图">
+      <button data-view="shell" class="selected" onclick="setView('shell')">工作台</button>
+      <button data-view="settings" onclick="setView('settings')">设置</button>
+      <button data-view="states" onclick="setView('states')">状态</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <!-- ② 左栏：图标轨 + 会话侧栏 -->
+    <aside class="zone zone-left" aria-label="左栏">
+      <div class="rail">
+        <button class="iconbtn selected" title="会话" aria-label="会话"><i data-lucide="messages-square"></i></button>
+        <button class="iconbtn" title="文件" aria-label="文件"><i data-lucide="folder-tree"></i></button>
+        <button class="iconbtn" title="变更" aria-label="变更"><i data-lucide="git-compare-arrows"></i></button>
+        <button class="iconbtn" title="终端" aria-label="终端"><i data-lucide="square-terminal"></i></button>
+        <button class="iconbtn" title="扩展（未接线）" aria-label="扩展（未接线）" disabled><i data-lucide="blocks"></i></button>
+        <span class="spacer" style="flex:1"></span>
+        <button class="iconbtn" title="设置" aria-label="设置" onclick="setView('settings')"><i data-lucide="settings"></i></button>
+      </div>
+      <div class="sidebar">
+        <div class="sidebar-head">
+          <button class="btn accent" style="flex:1" onclick="toast('新建会话 · 样稿仅示意')"><i data-lucide="square-plus"></i>新建会话</button>
+          <button class="iconbtn" title="搜索会话" aria-label="搜索会话"><i data-lucide="search"></i></button>
+        </div>
+        <div class="sidebar-body">
+          <div class="group-title"><span>Fufucode 项目</span><i data-lucide="chevron-down" style="width:14px;height:14px"></i></div>
+          <button class="row-item selected"><i data-lucide="message-square"></i><span>皮肤样稿与主题资源</span><small>现在</small></button>
+          <button class="row-item"><i data-lucide="message-square"></i><span>内容渲染与数学</span><small>09:42</small></button>
+          <button class="row-item"><i data-lucide="loader-circle"></i><span>终端交互检查</span><span class="tag">运行中</span></button>
+          <button class="row-item"><i data-lucide="message-square"></i><span>文件预览支持矩阵</span><small>昨天</small></button>
+          <button class="row-item is-disabled" aria-disabled="true"><i data-lucide="archive"></i><span>已归档会话（示例禁用）</span><span class="tag mute">只读</span></button>
+          <div class="group-title"><span>其他项目</span><i data-lucide="chevron-down" style="width:14px;height:14px"></i></div>
+          <button class="row-item"><i data-lucide="message-square"></i><span>发布环境收尾</span><small>周一</small></button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="splitter split-left" role="separator" tabindex="0" aria-label="左栏宽度"></div>
+
+    <!-- ③ 中央：会话头 / 时间线 / composer -->
+    <main class="center" aria-label="中央对话">
+      <div class="session-head">
+        <div class="titles">
+          <h1>皮肤样稿与主题资源</h1>
+          <div class="meta"><span>Fufucode / agent/s1-unattended</span><span class="tag warn">待审批 1</span><span class="tag mute">示例数据</span></div>
+        </div>
+        <button class="iconbtn" title="查找本会话" aria-label="查找本会话"><i data-lucide="search"></i></button>
+        <button class="iconbtn selected" title="会话刻度" aria-label="会话刻度"><i data-lucide="list-tree"></i></button>
+        <button class="iconbtn" title="重命名" aria-label="重命名"><i data-lucide="pencil"></i></button>
+      </div>
+
+      <div class="timeline">
+        <div class="reading">
+          <div class="banner info"><i data-lucide="info"></i><div class="body"><strong>样稿数据</strong>此页为 HTML 原型：不调用模型、不读取项目文件、不执行命令。</div></div>
+
+          <article class="msg">
+            <div class="msg-label"><span class="avatar"><i data-lucide="user-round"></i></span><strong>你</strong><span>10:24</span></div>
+            <div class="bubble">先按用户意见做 Fluent 基线、Metro 和 Material 3 的可比较样稿，覆盖亮暗、缩放和控件状态。</div>
+          </article>
+
+          <article class="msg">
+            <div class="msg-label"><span class="avatar"><i data-lucide="sparkles"></i></span><strong>Fufucode</strong><span>规划会话</span><span>10:25</span></div>
+            <div class="answer">
+              <h2>同一骨架，三套视觉语言</h2>
+              <p>五区结构与组件身份保持不变；皮肤只替换令牌层（表面、强调、圆角、描边、阴影、字体度量）。</p>
+              <div class="card">
+                <div class="card-head"><i data-lucide="git-compare-arrows"></i><span>变更摘要 · 6 个文件</span><span class="tag ok">已确认写入</span></div>
+                <div class="paths"><span>docs/frontend-prototype/skins/css/tokens.css</span><span>css/base.css</span><span>css/skin-fluent.css</span><span>css/skin-metro.css</span><span>css/skin-material3.css</span><span>index.html</span></div>
+                <div class="paths" style="margin-top:6px"><span class="add">+412</span><span class="del">−0</span></div>
+              </div>
+              <div class="code">
+                <div class="code-head"><span>C# · 令牌接线示例</span><button class="iconbtn" title="复制" aria-label="复制" style="width:22px;height:22px"><i data-lucide="copy"></i></button></div>
+<pre>ThemeDictionaries["Light"]["AppAccent"] = Fluent.SystemAccentColor;</pre>
+              </div>
+              <div class="card">
+                <div class="card-head"><i data-lucide="terminal"></i><span>dotnet build src/Fufucode.App</span><span class="tag ok">0 警告 0 错误 · 示例</span></div>
+              </div>
+              <div class="banner error">
+                <i data-lucide="circle-alert"></i>
+                <div class="body"><strong>1 个工具失败（错误状态示例）</strong>截图渲染：Chrome headless 未找到可用配置目录。<br><span style="opacity:.85">恢复动作：显式指定 --user-data-dir 后重试。</span></div>
+                <button class="btn subtle"><i data-lucide="rotate-cw"></i>重试</button>
+              </div>
+              <div class="event"><i data-lucide="check-circle-2"></i>已完成 3 个轮次 · 用量未知（示例）</div>
+            </div>
+          </article>
+
+          <!-- chat=empty：空会话状态 -->
+          <div id="variant-empty" hidden>
+            <div class="empty-state"><i data-lucide="message-square-dashed"></i>
+              <strong>这个会话还没有消息</strong>
+              <p>选择项目并描述任务，或从下方入口开始一个新方向。</p>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">
+                <button class="btn accent">开始任务</button><button class="btn">打开项目</button>
+              </div>
+            </div>
+          </div>
+          <!-- chat=error：加载失败状态 -->
+          <div id="variant-error" hidden>
+            <div class="banner error"><i data-lucide="server-off"></i><div class="body">
+              <strong>会话历史加载失败</strong>Pi 子进程在握手阶段退出（示例）。历史草稿未受影响。
+              <div style="margin-top:6px">恢复动作：检查运行环境版本，或重新启动连接。</div>
+            </div><button class="btn accent">重新连接</button></div>
+            <div class="empty-state"><i data-lucide="cloud-off"></i><strong>暂无可用历史</strong><p>重连成功后会自动补齐快照与事件。</p></div>
+          </div>
+          <!-- chat=loading：加载中状态 -->
+          <div id="variant-loading" hidden>
+            <div class="skeleton" style="margin:12px 0"><span></span><span></span><span></span></div>
+            <div class="event"><i data-lucide="loader-circle"></i>恢复会话快照中…（示例，不表示真实运行）</div>
+          </div>
+        </div>
+      </div>
+
+      <form class="composer" onsubmit="event.preventDefault();toast('样稿不发送消息')">
+        <div class="queue"><i data-lucide="list-ordered"></i><span style="flex:1">队列 1 条：「按 Metro 再检查一遍页签选中态」· 下一轮执行</span><button type="button" class="btn subtle"><i data-lucide="square"></i>停止并清空队列</button></div>
+        <textarea aria-label="消息输入" placeholder="描述任务，或继续讨论皮肤方案…">皮肤样稿先用 HTML 对比，选定后由 S2 接入主题资源。</textarea>
+        <div class="controls">
+          <button type="button" class="iconbtn" disabled title="附件未接线" aria-label="附件未接线"><i data-lucide="paperclip"></i></button>
+          <label class="field">模型<select aria-label="模型"><option>示例模型</option><option>本地模型（示例）</option></select></label>
+          <label class="field">思考<select aria-label="思考等级"><option>标准</option><option>深度</option></select></label>
+          <label class="field">权限<select aria-label="权限"><option>写入前确认</option><option>只读</option></select></label>
+          <button type="submit" class="send" title="发送（样稿不发送）" aria-label="发送"><i data-lucide="arrow-up"></i></button>
+        </div>
+      </form>
+    </main>
+
+    <div class="splitter split-right" role="separator" tabindex="0" aria-label="右栏宽度"></div>
+
+    <!-- ④ 右栏：页签化工作视图 -->
+    <aside class="zone zone-right" aria-label="右栏">
+      <div class="tabstrip" role="tablist">
+        <button class="tab selected" role="tab" aria-selected="true"><i data-lucide="git-compare-arrows"></i>变更</button>
+        <button class="tab" role="tab" aria-selected="false"><i data-lucide="file-search"></i>预览</button>
+        <button class="tab" role="tab" aria-selected="false"><i data-lucide="shield-check"></i>审查</button>
+        <button class="tab is-hover" role="tab" aria-selected="false"><i data-lucide="globe"></i>浏览器</button>
+        <button class="tab is-disabled" role="tab" aria-selected="false" aria-disabled="true"><i data-lucide="blocks"></i>插件（未接线）</button>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><i data-lucide="file-code-2"></i>docs/frontend-prototype/skins/css/tokens.css</div>
+        <div class="diff">
+          <div class="diff-line"><i>18</i> /* Fluent 基线令牌 */</div>
+          <div class="diff-line minus"><i>19</i>- --app-accent: #087E66;</div>
+          <div class="diff-line plus"><i>19</i>+ --app-accent: #0078D4;</div>
+          <div class="diff-line plus"><i>20</i>+ --app-corner-control: 4px;</div>
+          <div class="diff-line"><i>21</i> }</div>
+        </div>
+        <div class="panel-head" style="margin-top:8px"><i data-lucide="layers"></i>皮肤资源接入（建议）</div>
+        <div style="padding:10px 12px">
+          <button class="list-row selected"><i data-lucide="check"></i><span class="grow">Fluent 基线（当前色调）</span><span class="tag ok">已交付形态</span></button>
+          <button class="list-row"><i data-lucide="square"></i><span class="grow">Metro 令牌包</span><span class="tag mute">待用户选定</span></button>
+          <button class="list-row"><i data-lucide="circle"></i><span class="grow">Material 3 令牌包</span><span class="tag mute">待用户选定</span></button>
+          <button class="list-row is-disabled" aria-disabled="true"><i data-lucide="lock"></i><span class="grow">Aero / Liquid Glass</span><span class="tag mute">本轮不做</span></button>
+        </div>
+      </div>
+    </aside>
+
+    <div class="splitter split-bottom" role="separator" tabindex="0" aria-label="底栏高度"></div>
+
+    <!-- ⑤ 底栏：终端 -->
+    <section class="zone zone-bottom" aria-label="底栏终端">
+      <div class="terminal">
+        <div class="terminal-bar">
+          <button class="tab selected"><i data-lucide="square-terminal"></i>PowerShell</button>
+          <button class="tab"><i data-lucide="square-terminal"></i>构建（示例）</button>
+          <button class="iconbtn" title="新建终端" aria-label="新建终端" style="width:26px;height:26px"><i data-lucide="plus"></i></button>
+          <span style="flex:1"></span>
+          <button class="iconbtn" title="清空输出" aria-label="清空输出" style="width:26px;height:26px"><i data-lucide="eraser"></i></button>
+        </div>
+        <div class="terminal-out"><span class="ok">PS C:\Projects\Fufucode-agent-s1&gt;</span> dotnet build src/Fufucode.App
+  Fufucode.App → net10.0/Fufucode.App.dll
+<span class="ok">  Build succeeded. 0 warnings · 0 errors（示例输出）</span></div>
+        <div class="terminal-input"><span class="ok">PS&gt;</span><input aria-label="终端输入" placeholder="样稿不执行命令"></div>
+      </div>
+    </section>
+  </div>
+
+  <footer class="statusbar">
+    <span class="dot warn"></span><span>示例项目</span><span>agent/s1-unattended</span>
+    <span class="spacer"></span>
+    <span id="status-skin">皮肤 Fluent 基线</span><span id="status-scale">缩放 100%</span><span>未连接 Pi（样稿）</span>
+  </footer>
+
+  <!-- 独立设置目的地（Windows 设置式） -->
+  <section class="settings" id="settings" aria-label="设置">
+    <nav class="settings-nav">
+      <button class="btn subtle back" onclick="setView('shell')"><i data-lucide="arrow-left"></i>返回工作台</button>
+      <h3>设置</h3>
+      <button class="navitem selected"><i data-lucide="panels-top-left"></i>界面与布局</button>
+      <button class="navitem"><i data-lucide="bot"></i>模型与供应商</button>
+      <button class="navitem"><i data-lucide="shield-check"></i>审批与工具</button>
+      <button class="navitem"><i data-lucide="bell"></i>通知与朗读</button>
+      <button class="navitem"><i data-lucide="database"></i>数据与诊断</button>
+      <button class="navitem"><i data-lucide="blocks"></i>扩展</button>
+    </nav>
+    <div class="settings-main">
+      <h1>界面与布局</h1>
+      <h4>外观</h4>
+      <div class="setting-row"><div class="text">皮肤<small>Fluent 为当前基线；Metro 与 Material 3 为对比样稿</small></div>
+        <div class="control"><select aria-label="皮肤"><option>Fluent 基线</option><option>Metro</option><option>Material 3</option></select></div></div>
+      <div class="setting-row"><div class="text">颜色主题<small>浅色 / 深色 / 跟随系统</small></div>
+        <div class="control"><select aria-label="主题"><option>跟随系统</option><option>浅色</option><option>深色</option></select></div></div>
+      <div class="setting-row"><div class="text">强调色<small>默认跟随系统强调色；样稿显示本机默认蓝</small></div>
+        <div class="control"><span class="tag">#0078D4</span><button class="btn subtle">更改</button></div></div>
+      <div class="setting-row"><div class="text">界面缩放<small>样稿以 CSS zoom 近似 DPI 缩放；生产由原生 DPI 处理</small></div>
+        <div class="control"><input type="range" min="100" max="200" step="25" value="100" aria-label="界面缩放"></div></div>
+      <h4>布局</h4>
+      <div class="setting-row"><div class="text">默认区域尺寸<small>左 232 / 右 320 / 底 240（DIP）</small></div>
+        <div class="control"><button class="btn">恢复默认布局</button></div></div>
+      <div class="setting-row"><div class="text">底栏状态条<small>连接 / Shell / 活动 / 用量细条</small></div>
+        <div class="control"><input type="checkbox" aria-label="底栏状态条"></div></div>
+      <div class="setting-row is-disabled" aria-disabled="true"><div class="text" style="color:var(--app-text-disabled)">皮肤分组（多个皮肤并存）<small>需要 S2 主题机制接入后开放</small></div>
+        <div class="control"><span class="tag mute">未接线</span><button class="btn" disabled>暂不可用</button></div></div>
+      <h4>保存状态反馈</h4>
+      <div class="banner success"><i data-lucide="check-circle-2"></i><div class="body"><strong>已保存并生效</strong>主题与密度即时应用。</div></div>
+      <div class="banner warn"><i data-lucide="clock"></i><div class="body"><strong>下次启动生效</strong>运行环境路径变更需要重启 Pi 进程。</div></div>
+      <div class="banner error"><i data-lucide="circle-alert"></i><div class="body"><strong>保存失败（已回退）</strong>写入设置文件失败，已保留上一份配置。</div>
+        <button class="btn">重试</button></div>
+    </div>
+  </section>
+
+  <!-- 状态画廊（view=states，内容由 app.js 生成） -->
+  <section class="gallery" id="gallery" aria-label="状态画廊">
+    <h2>控件与状态画廊</h2>
+    <p class="lead" id="gallery-lead"></p>
+    <div id="gallery-body"></div>
+  </section>
+</div>
+
+<div class="toast-region" id="toast-region" aria-live="polite"></div>
+
+<script src="../lucide.min.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

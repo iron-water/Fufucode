@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Fufucode Assistant - 浏览器双向协同插件",
+  "version": "1.0.0",
+  "description": "连接 Fufucode 桌面端，实现网页 DOM 元素拾取、正文一键引用、智能体网页操作与双向控制。",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://localhost/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Fufucode 浏览器助手"
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content/inspector.js", "content/collector.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

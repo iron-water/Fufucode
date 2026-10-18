@@ -1,0 +1,6 @@
+{"elapsedMs":145332,"phase":"selftest","exitCode":0,"time":"2026-10-11T20:19:30.2684450-07:00","pass":true}
+{"time":"2026-10-11T20:19:32.3857772-07:00","startedInMs":1377,"exitCode":null,"phase":"pi-start","gotResponse":true,"alive":true,"readyInMs":2042,"pass":true}
+{"elapsedMs":57,"phase":"get-state","success":true,"time":"2026-10-11T20:19:32.4757184-07:00","responseBytes":563}
+{"clean":true,"time":"2026-10-11T20:19:32.5885919-07:00","exitCode":0,"phase":"pi-stop","stoppedInMs":76,"graceful":true}
+{"count":0,"phase":"residual","time":"2026-10-11T20:19:32.8126487-07:00","processes":null}
+{"pathEntryCount":94,"time":"2026-10-11T20:19:32.8349811-07:00","phase":"overall","selftestWorkingDirectory":"C:\\Users\\mio\\AppData\\Local\\Temp\\fff-pkg-test-c2659bb6a5424174b2a88ab9fe2940fd\\project","pass":true,"packageRoot":"C:\\Users\\mio\\AppData\\Local\\Temp\\fff-pkg-test-c2659bb6a5424174b2a88ab9fe2940fd\\package"}

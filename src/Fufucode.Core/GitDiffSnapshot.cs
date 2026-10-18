@@ -10,6 +10,8 @@ public enum GitDiffSnapshotStatus
     NoPathsCaptured,
 }
 
+public enum GitDiffSnapshotSource { Worktree, StagedIndex, TargetTree }
+
 /// <summary>Snapshot of one explicitly requested file at capture time. This is a read-only copy
 /// of the file bytes plus the unified diff result; it is not an atomic Git snapshot.</summary>
 public sealed record GitDiffSnapshotEntry(string RelativePath,
@@ -24,12 +26,20 @@ public sealed record FileDiffSnapshot(string RepositoryRoot, string HeadCommit,
     IReadOnlyList<GitDiffSnapshotEntry> Entries, GitDiffSnapshotStatus Status,
     string? Error)
 {
-    /// <summary>True when every captured entry still matches the working tree and HEAD is unchanged.</summary>
+    public GitDiffSnapshotSource Source { get; init; } = GitDiffSnapshotSource.Worktree;
+    public string? BaseCommit { get; init; }
+    public string? TargetCommit { get; init; }
+    public string? IndexFingerprint { get; init; }
+    /// <summary>True when the captured source (worktree/index/target tree) and observed HEAD remain valid.</summary>
     public async Task<bool> IsFreshAsync(CancellationToken cancellationToken = default) =>
         await GitDiffSnapshot.CheckFreshAsync(this, cancellationToken);
+
+    /// <summary>Whether frozen lines can safely locate current worktree content. Independent of source freshness.</summary>
+    public Task<bool> MatchesWorkingTreeAsync(CancellationToken cancellationToken = default) =>
+        GitDiffSnapshot.CheckWorkingTreeBytesAsync(this, cancellationToken);
 }
 
-public static class GitDiffSnapshot
+public static partial class GitDiffSnapshot
 {
     public const int MaximumFileBytes = 8 * 1024 * 1024;
 
@@ -82,12 +92,16 @@ public static class GitDiffSnapshot
                     }
                     else
                     {
-                        bytes = await File.ReadAllBytesAsync(full, cancellationToken);
-                        sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
-                        // Re-check the file after reading: if it changed during the read, mark stale.
-                        var post = await CaptureStateAsync(root, project, [path], cancellationToken);
-                        var current = post.TryGetValue(path, out var p) ? p : null;
-                        if (!(current?.Equals(after) ?? after is null)) stale = true;
+                        var read = await ReadBoundedFileAsync(full, cancellationToken);
+                        if (read is null) { error = "file-too-large"; stale = true; }
+                        else
+                        {
+                            bytes = read;
+                            sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+                            var post = await CaptureStateAsync(root, project, [path], cancellationToken);
+                            var current = post.TryGetValue(path, out var p) ? p : null;
+                            if (!(current?.Equals(after) ?? after is null)) stale = true;
+                        }
                     }
                 }
                 entries.Add(new(path, existed, tracked, stale, sha, bytes, diff, error));
@@ -107,6 +121,8 @@ public static class GitDiffSnapshot
     /// <summary>Compares the recorded state to a fresh read of the same paths and HEAD.</summary>
     public static async Task<bool> CheckFreshAsync(FileDiffSnapshot snapshot, CancellationToken cancellationToken = default)
     {
+        if (snapshot.Source != GitDiffSnapshotSource.Worktree)
+            return await CheckGitSourceFreshAsync(snapshot, cancellationToken);
         if (snapshot.Status != GitDiffSnapshotStatus.Captured || snapshot.Entries.Count == 0)
             return false;
         var head = await GitAsync(snapshot.RepositoryRoot, ["rev-parse", "--verify", "HEAD"], cancellationToken);
@@ -121,9 +137,11 @@ public static class GitDiffSnapshot
                 return false;
             if (now.Exists && entry.Sha256 is not null)
             {
+                if (now.Length > MaximumFileBytes || now.Sha256 != entry.Sha256) return false;
                 var full = Resolve(snapshot.RepositoryRoot, snapshot.ProjectPath, entry.RelativePath);
                 if (full is null || !File.Exists(full)) return false;
-                var bytes = await File.ReadAllBytesAsync(full, cancellationToken);
+                var bytes = await ReadBoundedFileAsync(full, cancellationToken);
+                if (bytes is null) return false;
                 var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
                 if (!string.Equals(sha, entry.Sha256, StringComparison.Ordinal)) return false;
             }
@@ -157,13 +175,28 @@ public static class GitDiffSnapshot
                 length = info.Length;
                 if (length <= MaximumFileBytes)
                 {
-                    var bytes = await File.ReadAllBytesAsync(full, cancellationToken);
-                    sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
+                    var bytes = await ReadBoundedFileAsync(full, cancellationToken);
+                    if (bytes is null) length = MaximumFileBytes + 1L;
+                    else sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes));
                 }
             }
             result[path] = new(exists, tracked, sha, length);
         }
         return result;
+    }
+
+    private static async Task<byte[]?> ReadBoundedFileAsync(string path, CancellationToken ct)
+    {
+        await using var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete,
+            8192, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var content = new MemoryStream();
+        var buffer = new byte[8192]; int count;
+        while ((count = await file.ReadAsync(buffer, ct)) > 0)
+        {
+            if (content.Length + count > MaximumFileBytes) return null;
+            content.Write(buffer, 0, count);
+        }
+        return content.ToArray();
     }
 
     private static string? Resolve(string root, string project, string relativePath)

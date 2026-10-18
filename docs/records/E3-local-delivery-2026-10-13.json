@@ -1,0 +1,71 @@
+{
+  "schemaVersion": 1,
+  "type": "delivery.card",
+  "taskId": "E3-LOCAL",
+  "status": "module_ready",
+  "summary": "本地插件固定版本模块已交付：本产品描述文件 fufucode-plugin.json 严格校验、plugins/local 托管副本（安全ID路径/来源摘要逐字绑定/同名版本冲突拒绝/校验→新暂存→原子发布）、精确宿主版本兼容判定（unknown 与 OMP/Codex/DSH 拒绝应用但本地副本可浏览安装）、更新失败保旧选定版本与文件并保留诊断、显式回退经同一宿主门、活动使用或快照未知只登记 pending 且不碰加载目录、移除只限托管且非活动副本、generation CAS + OS 文件锁 + 原子写入、损坏/未来版本不静默重建；附可嵌入现有扩展页的 UserControl/VM 与无头编译绑定生命周期验证。公共宿主快照/安全重启/外壳接线由 M 完成，模块待接线。",
+  "commits": [
+    "c53e1d773202285e8655045e9f22561fe56ba9b4",
+    "1a669e1088b61005c667a071eabcd0f951ef72ed",
+    "f5421d668a847a75fd23721d9b11a4bf013b3ddf",
+    "21eebc564e28f2158a268d55a1ab72ffbecd0ec3"
+  ],
+  "changedFiles": [
+    "src/Fufucode.App/Features/Plugins/Contracts.cs",
+    "src/Fufucode.App/Features/Plugins/PluginDescriptorReader.cs",
+    "src/Fufucode.App/Features/Plugins/PluginPackageScanner.cs",
+    "src/Fufucode.App/Features/Plugins/PluginCatalogState.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginService.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginViewModel.cs",
+    "src/Fufucode.App/Features/Plugins/LocalPluginSectionView.axaml",
+    "src/Fufucode.App/Features/Plugins/LocalPluginSectionView.axaml.cs",
+    "src/Fufucode.App/Features/Plugins/PluginRecordExtensions.cs",
+    "tests/Fufucode.App.Plugins.Tests/Fufucode.App.Plugins.Tests.csproj",
+    "tests/Fufucode.App.Plugins.Tests/Fixtures.cs",
+    "tests/Fufucode.App.Plugins.Tests/Program.cs",
+    "tests/Fufucode.App.Plugins.Tests/ServiceTests.cs",
+    "tests/Fufucode.App.Plugins.Tests/UiTests.cs",
+    "docs/records/E3-local-plugins-2026-10-13.md"
+  ],
+  "verification": {
+    "passed": [
+      "dotnet build Fufucode.sln -v m → 0 警告 0 错误（退出 0）",
+      "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build → ALL PASS (81)，退出 0",
+      "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build -- --ui → UI ALL PASS (36)，退出 0（真实无头 Window + 编译绑定）",
+      "dotnet run --project src/Fufucode.App -c Release -- --selftest → 0 项失败，退出 0（重跑）",
+      "真实反例：同名版本不同内容拒绝覆盖、入口 ../ 与绝对路径与显式入口越界拒绝、包内 junction 遍历拒绝、真实文件锁被占用时拒绝写入且状态不变、目录状态损坏/未来 schema 不重建不覆盖、generation 旧值双向 CAS 拒绝且无副本副作用、外部源目录与用户插件全程保持、模块数据根无 desktop.db",
+      "状态来源分离反例：未确认不显示已加载，仅有真实宿主快照命中该副本入口时才为 Loaded；活动使用与快照不可用均只登记 pending 且不删除/改动活动目录"
+    ],
+    "failed": [
+      "dotnet run --project src/Fufucode.App -c Release -- --selftest → 首跑 1 项失败：AutomationControlCreationSelfTest 'Actual creation key did not start command: restructure; focused=False'（无头焦点时序抖动，属 M 的 Automation 所有权，非本模块引入；同版本立即重跑 0 项失败，日志 tmp/e3-selftest-final.log 与 tmp/e3-selftest-rerun.log）"
+    ],
+    "notRun": [
+      "真实 Pi 实际加载本模块导入副本（需 M 把 ILocalPluginHost 接到既有安全重启与真实 Pi 启动路径，本包不越权接共享入口）",
+      "宿主安全重启回调的整项验收、现有扩展页外壳接线、原生 IME/DPI 与系统级交互",
+      "Pi 原生入口发现规则（index.ts / package.json pi.extensions）真机核对：本模块只做显式相对入口 + 越界/存在校验，不复制引擎发现逻辑",
+      "OMP/Codex/DSH 适配与跨后端加载（首版明确 unsupported）",
+      "任何模型调用或试跑（本包无模型请求）"
+    ]
+  },
+  "evidence": [
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-service.log（ALL PASS 81，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-ui.log（UI ALL PASS 36，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-selftest-rerun.log（App 全量自测 0 项失败，退出 0）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-selftest-final.log（偶发失败原文，供 M 登记）",
+    "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\docs\\records\\E3-local-plugins-2026-10-13.md（身份卡、行为清单、反例清单、未验边界、M 接线契约、自身交付卡）"
+  ],
+  "integrationNeeds": [
+    "M 实现 ILocalPluginHost：HostIdentity（例 HostIdentity.Pi(\"1.1.0\")，不确定用 HostIdentity.Unknown()）、SnapshotAsync（真实已加载路径，拿不到返回 Success=false）、ApplyAsync（接既有安全重启，未成功返回 Success=false）",
+    "M 构造 LocalPluginService(AppDataLayout, host)，根固定为 <layout.Root>/plugins/local；可选注入 ILocalPluginPicker 提供目录/入口选择",
+    "M 把 LocalPluginSectionView 嵌入现有扩展页（Attach/Detach 生命周期与本地审查页一致；临时移出视觉树不得 Detach），不复制窗口/侧边栏、不改已完成布局基线",
+    "M 在安全重启完成后调用一次 ResolvePendingAsync，仅按真实宿主快照登记事实；不得把“已交宿主应用”显示为“已加载”",
+    "可选并发保护：service.CurrentGeneration() 读代次，再以 expectedGeneration 传入 ImportAsync/ApplyVersionAsync 做 compare-and-set",
+    "文案合并：本产品本地插件是本地可执行代码，界面权限声明不代表 OS 沙箱，信任由宿主负责"
+  ],
+  "blockers": [],
+  "writerStopped": true,
+  "worktree": "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode",
+  "base": "22f6bf4df764721d80dc59d613efad1dac5911c9",
+  "productBase": "637bd9193df3536ae05ead09f1c094878ea5b89b",
+  "head": "21eebc564e28f2158a268d55a1ab72ffbecd0ec3"
+}

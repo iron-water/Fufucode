@@ -21,14 +21,35 @@ public sealed class ShortcutsPage : UserControl
     private readonly ShortcutManagerViewModel _vm;
     private readonly ShortcutRecorder _recorder = new();
     private StackPanel? _list;
+    private ScrollViewer? _scroller;
     private TextBox? _searchBox;
+    private ComboBox? _scopeBox;
     private string? _recordingActionId;
+    /// <summary>二级页当前展开的分组；null = 一级分组目录页（Win11 设置式下钻）。
+    /// 状态由宿主经 <see cref="GroupOpened"/>/<see cref="GroupClosed"/> 与设置页 CurrentPageId 同步。</summary>
+    private string? _activeGroup;
 
     /// <summary>录制/试按期间由宿主注入的输入法组合状态读取器（组合中按键一律忽略）。</summary>
     public Func<bool>? CompositionProbe { get; set; }
 
     /// <summary>可选的宿主接线：终端输入优先的让路判断等由宿主提供。</summary>
     public Func<Key, bool>? HostOwnsKey { get; set; }
+
+    /// <summary>进入分组二级页时回调宿主（参数 = 组名）。宿主用它更新面包屑。</summary>
+    public Action<string>? GroupOpened { get; set; }
+    /// <summary>从二级页返回分组目录时回调宿主。</summary>
+    public Action? GroupClosed { get; set; }
+    /// <summary>当前展开的二级组（宿主读取以渲染标题）。</summary>
+    public string? ActiveGroup => _activeGroup;
+    /// <summary>宿主同步用：直接设置当前二级组（不触发回调），配合面包屑返回和 headless 截图。</summary>
+    public void SyncGroup(string? group)
+    {
+        if (_activeGroup == group) return;
+        _activeGroup = group;
+        _recordingActionId = null;
+        RenderList();
+        FadeContentIn();
+    }
 
     public ShortcutsPage(ShortcutManagerViewModel viewModel)
     {
@@ -48,12 +69,13 @@ public sealed class ShortcutsPage : UserControl
         var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,Auto,*") };
 
         var header = new StackPanel { Spacing = 4, Margin = new Thickness(0, 0, 0, 12) };
-        header.Children.Add(new TextBlock { Text = "键盘快捷键", FontSize = 24, FontWeight = FontWeight.SemiBold });
-        header.Children.Add(new TextBlock
-        {
-            Text = "从应用动作目录生成；修改后立即生效，保存后重启保留。冲突会同时列出双方动作，不会静默覆盖。",
-            TextWrapping = TextWrapping.Wrap, Opacity = .78,
-        });
+        var title = new TextBlock { Text = "键盘快捷键" };
+        title.Classes.Add("settingsPageTitle");
+        header.Children.Add(title);
+        var help = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(2, 0, 0, 0) };
+        help.Classes.Add("settingsRowDesc");
+        help.Text = "从应用动作目录生成；修改后立即生效，保存后重启保留。冲突会同时列出双方动作，不会静默覆盖。";
+        header.Children.Add(help);
         Grid.SetRow(header, 0);
         root.Children.Add(header);
 
@@ -66,15 +88,15 @@ public sealed class ShortcutsPage : UserControl
         DockPanel.SetDock(_searchBox, Dock.Left);
         filters.Children.Add(_searchBox);
 
-        var scopeBox = new ComboBox
+        _scopeBox = new ComboBox
         {
             ItemsSource = new[] { "全部范围" }.Concat(ShortcutScopeInfo.All.Select(scope => scope.Title())).ToArray(),
             SelectedIndex = 0, MinWidth = 140, Margin = new Thickness(8, 0, 8, 0),
         };
-        scopeBox.SelectionChanged += (_, _) =>
-            _vm.ScopeFilter = scopeBox.SelectedIndex <= 0 ? null : ShortcutScopeInfo.All[scopeBox.SelectedIndex - 1];
-        DockPanel.SetDock(scopeBox, Dock.Left);
-        filters.Children.Add(scopeBox);
+        _scopeBox.SelectionChanged += (_, _) =>
+            _vm.ScopeFilter = _scopeBox.SelectedIndex <= 0 ? null : ShortcutScopeInfo.All[_scopeBox.SelectedIndex - 1];
+        DockPanel.SetDock(_scopeBox, Dock.Left);
+        filters.Children.Add(_scopeBox);
 
         var revert = new Button { Content = "放弃改动", Margin = new Thickness(8, 0, 0, 0) };
         revert.Click += (_, _) => _vm.Revert();
@@ -108,11 +130,23 @@ public sealed class ShortcutsPage : UserControl
         Grid.SetRow(error, 2);
         root.Children.Add(error);
 
-        var scroller = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        _scroller = new ScrollViewer
+        {
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Transitions = new Avalonia.Animation.Transitions
+            {
+                new Avalonia.Animation.DoubleTransition
+                {
+                    Property = OpacityProperty,
+                    Duration = TimeSpan.FromMilliseconds(150),
+                    Easing = new Avalonia.Animation.Easings.CubicEaseOut(),
+                },
+            },
+        };
         _list = new StackPanel { Spacing = 0 };
-        scroller.Content = _list;
-        Grid.SetRow(scroller, 3);
-        root.Children.Add(scroller);
+        _scroller.Content = _list;
+        Grid.SetRow(_scroller, 3);
+        root.Children.Add(_scroller);
 
         Content = root;
         AddHandler(KeyDownEvent, OnRecordingKeyDown, Avalonia.Interactivity.RoutingStrategies.Tunnel);
@@ -122,6 +156,9 @@ public sealed class ShortcutsPage : UserControl
     }
 
     private void OnViewModelChanged() => Dispatcher.UIThread.Post(RenderList);
+
+    /// <summary>搜索或范围过滤激活时平铺全部匹配（搜索要一览），否则一级页只列分组入口。</summary>
+    private bool IsFiltered => _vm.ScopeFilter is not null || !string.IsNullOrWhiteSpace(_vm.SearchText);
 
     private void RenderList()
     {
@@ -145,13 +182,68 @@ public sealed class ShortcutsPage : UserControl
             _list.Children.Add(SettingsLayout.Group(conflictRows));
         }
 
+        // ── 无过滤：一级分组目录 / 二级组内列表（Win11 设置式下钻，不铺开几十个动作） ──
+        if (!IsFiltered)
+        {
+            if (_activeGroup is null)
+            {
+                foreach (var group in _vm.Rows.GroupBy(row => row.Group))
+                {
+                    var name = group.Key;
+                    var count = group.Count();
+                    var bound = group.Count(row => row.HasBinding);
+                    _list.Children.Add(SettingsLayout.ChevronRow(name, $"{count} 个动作 · {bound} 个已绑定", () => OpenGroup(name), "Keyboard"));
+                }
+                _list.Children.Add(SettingsLayout.Note("默认绑定沿袭现有产品行为；「全局」范围在终端输入焦点下自动让路，中文输入法组合期间的按键不参与绑定。"));
+                return;
+            }
+
+            var back = SettingsLayout.Row("键盘快捷键", "返回全部分组", null, "ArrowLeft");
+            back.Classes.Add("clickable");
+            back.PointerPressed += (_, _) => BackToGroups();
+            _list.Children.Add(back);
+            var rows = _vm.Rows.Where(row => row.Group == _activeGroup).Select(row => (Control)BuildRow(row)).ToArray();
+            _list.Children.Add(SettingsLayout.GroupHeader(_activeGroup));
+            _list.Children.Add(SettingsLayout.Group(rows));
+            if (rows.Length == 0)
+                _list.Children.Add(SettingsLayout.Row("此分组没有动作", null, null, "Keyboard"));
+            return;
+        }
+
+        // ── 搜索/范围过滤：平铺全部匹配 ──
         foreach (var group in _vm.Rows.GroupBy(row => row.Group))
         {
             _list.Children.Add(SettingsLayout.GroupHeader(group.Key));
             _list.Children.Add(SettingsLayout.Group(group.Select(row => (Control)BuildRow(row)).ToArray()));
         }
-
         _list.Children.Add(SettingsLayout.Note("默认绑定沿袭现有产品行为；「全局」范围在终端输入焦点下自动让路，中文输入法组合期间的按键不参与绑定。"));
+    }
+
+    private void OpenGroup(string group)
+    {
+        _activeGroup = group;
+        _recordingActionId = null;
+        RenderList();
+        FadeContentIn();
+        GroupOpened?.Invoke(group);
+    }
+
+    private void BackToGroups()
+    {
+        _activeGroup = null;
+        _recordingActionId = null;
+        RenderList();
+        FadeContentIn();
+        GroupClosed?.Invoke();
+    }
+
+    /// <summary>下钻/返回时内容区淡入（与设置页 ActivePageId 切换同一观感）。</summary>
+    private void FadeContentIn()
+    {
+        if (_scroller is null) return;
+        _scroller.Opacity = 0;
+        var scroller = _scroller;
+        Dispatcher.UIThread.Post(() => scroller.Opacity = 1, DispatcherPriority.Render);
     }
 
     private Control BuildRow(ShortcutRowViewModel row)
@@ -292,6 +384,12 @@ public sealed class ShortcutsPage : UserControl
 
     /// <summary>测试钩子：放弃当前录制。</summary>
     internal void CancelRecordingForTesting() => CancelRecording();
+
+    /// <summary>测试钩子：等价于点击一级页的分组入口卡，进入该组二级页（走完整回调链）。</summary>
+    internal void OpenGroupForTesting(string group) => OpenGroup(group);
+
+    /// <summary>测试钩子：等价于点击二级页的返回行（走完整回调链）。</summary>
+    internal void BackToGroupsForTesting() => BackToGroups();
 
     /// <summary>测试钩子：直接发起对某一行的录制（等价于点击「更改」）。</summary>
     internal void BeginRecordingForTesting(string actionId)

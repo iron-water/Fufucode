@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -24,7 +23,7 @@ public sealed class SessionHistory
         if (data.ValueKind != JsonValueKind.Object ||
             !data.TryGetProperty("entries", out var entries) || entries.ValueKind != JsonValueKind.Array ||
             !data.TryGetProperty("leafId", out var leaf) || leaf.ValueKind is not (JsonValueKind.String or JsonValueKind.Null))
-            throw new PiRpcException("get_entries lacks entries or leafId.");
+            throw new RpcException("get_entries lacks entries or leafId.");
         var previousRaw = _rawEntries.ToArray();
         var previousEntries = Entries;
         var previousLeaf = LeafId;
@@ -36,8 +35,8 @@ public sealed class SessionHistory
             {
                 if (entry.ValueKind != JsonValueKind.Object || String(entry, "id") is not { Length: > 0 } id ||
                     String(entry, "type") is null)
-                    throw new PiRpcException("get_entries contains an invalid entry.");
-                if (!known.Add(id)) throw new PiRpcException($"get_entries repeated entry {id}.");
+                    throw new RpcException("get_entries contains an invalid entry.");
+                if (!known.Add(id)) throw new RpcException($"get_entries repeated entry {id}.");
                 _rawEntries.Add(entry.Clone());
             }
             LeafId = leaf.ValueKind == JsonValueKind.String ? leaf.GetString() : null;
@@ -60,8 +59,8 @@ public sealed class SessionHistory
         var cursor = LeafId;
         while (cursor is not null)
         {
-            if (!byId.TryGetValue(cursor, out var entry)) throw new PiRpcException("Session leaf references an unknown entry.");
-            if (!activeIds.Add(cursor)) throw new PiRpcException("Session entry tree contains a cycle.");
+            if (!byId.TryGetValue(cursor, out var entry)) throw new RpcException("Session leaf references an unknown entry.");
+            if (!activeIds.Add(cursor)) throw new RpcException("Session entry tree contains a cycle.");
             cursor = String(entry, "parentId");
         }
         var firstKeptIndex = 0;
@@ -71,7 +70,7 @@ public sealed class SessionHistory
                 var kept = String(_rawEntries[i], "firstKeptEntryId");
                 firstKeptIndex = kept == String(_rawEntries[i], "id") ? i :
                     _rawEntries.FindIndex(e => String(e, "id") == kept);
-                if (firstKeptIndex < 0) throw new PiRpcException("Compaction references an unknown retained entry.");
+                if (firstKeptIndex < 0) throw new RpcException("Compaction references an unknown retained entry.");
             }
         var result = new List<HistoryEntry>(_rawEntries.Count);
         for (var i = 0; i < _rawEntries.Count; i++)

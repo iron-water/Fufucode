@@ -1,0 +1,16 @@
+{
+ "schemaVersion": 1,
+ "type": "review.decision",
+ "transport": "codex-desktop",
+ "runId": "E3-LOCAL-637bd91",
+ "taskId": "E3-LOCAL",
+ "threadId": "01a1345a-47b6-7460-94d0-ae3218a0dc90",
+ "deliveryTurnId": "01a1359a-13ad-7642-9926-b4c507357c5c",
+ "reviewedHead": "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+ "decision": "rework",
+ "integrationStatus": "not_integrated",
+ "mainSha": null,
+ "evidence": ["tmp/m-e3-receipt/results.log", "tmp/m-e3-receipt/Program.cs", "docs/records/M-E3-receipt-review-2026-10-13.md"],
+ "findings": ["E3-RECEIPT-IDENTITY-1"],
+ "nextAction": "Keep the original L3 model/chat/worktree. Bind delayed apply receipts to their original version and token; preserve nine verified counterexamples. Public wiring remains M-owned."
+}

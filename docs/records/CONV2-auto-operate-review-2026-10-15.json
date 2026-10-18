@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "CONV-2",
+  "runId": "CONV-2-R1",
+  "deliveryRevision": "r1",
+  "threadId": "01a1403f-1dc1-7341-b758-5e3384af2c59",
+  "reviewedHead": "80d843f9809f0c502979cb3e2c580ac87d012bb2",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "evidence": [
+    "Delivery received from thread 01a1403f-1dc1-7341-b758-5e3384af2c59 with writerStopped: true and clean worktree.",
+    "AutomationControlPageView.axaml and ViewModel.V4.cs refactored into conversation-driven v4 overview, threads, deliveries, and activity.",
+    "New project entry policy defaults to conversation-driven automatic development while preserving existing projects.",
+    "dotnet build Fufucode.sln verified clean with 0 warnings, 0 errors.",
+    "tests/Fufucode.App.Automation.V4.Tests verified with 59 assertions ALL PASS.",
+    "tests/Fufucode.App.Automation.Persistence.Tests verified with 192 assertions ALL PASS.",
+    "dotnet run --project src/Fufucode.App -- --selftest --automation-only verified with 0 failures.",
+    "Merged cleanly into main branch."
+  ],
+  "findings": [
+    {
+      "id": "CONV-2-DELIVERY",
+      "status": "verified_module",
+      "detail": "Conversation workbench v4 UI (overview with central conversation, dynamic cards, dual-view threads, delegation drawer, automatic default policy) verified and integrated into main."
+    }
+  ],
+  "nextAction": "Integrated into main. Update dispatch ledger and proceed with next steps."
+}

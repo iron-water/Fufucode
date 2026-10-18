@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "type": "audit.correction",
+  "taskId": "NATIVE-CS",
+  "auditDate": "2026-10-15",
+  "subject": "C4 Pure C# Agent Engine reality check and task upgrade",
+  "status": "in_progress",
+  "findings": [
+    {
+      "id": "C4-LOOP-MISSING",
+      "severity": "critical",
+      "detail": "PureCSharpAgentEngine was previously delivered with only a mock echo client (DefaultPureModelClient) and single-step RunTurnAsync without tool-result reinjection loop. It does not constitute a true Node-free agent loop."
+    },
+    {
+      "id": "C4-BOOTSTRAP-NODE-DEPENDENT",
+      "severity": "critical",
+      "detail": "Desktop RealSessionBootstrap still strictly requires node.exe and Pi cli.js. App does not wire PureCSharpAgentEngine into live desktop sessions."
+    },
+    {
+      "id": "REFERENCE-SELECTION",
+      "severity": "info",
+      "detail": "Authenticated gh inspection completed for user-shared candidates: claw-sharp/ClawSharp (MIT, C#) has complete QueryLoopRunner and SSE streaming; daemonicai/dmon-core (MPL-2.0, C#) is available; tkleisas/thuvu (MIT, C#) is local-only; JupiterTheWarlock/pi-agent.cs does not exist."
+    }
+  ],
+  "decision": "Upgrade C4 to NATIVE-CS. Implement full Agent Loop with multi-turn tool result feedback, real SSE model client (OpenAI/Anthropic compatible), production tool dispatcher, and wire into desktop session bootstrap. Verify in Node-free environment."
+}

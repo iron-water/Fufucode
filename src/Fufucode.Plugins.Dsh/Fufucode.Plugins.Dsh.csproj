@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <!--
+    DeepSeek Harness 协议适配插件骨架：生命周期与其它后端插件一致。
+    协议实现尚未完成时，工厂返回明确诊断，不伪造可用性。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" PrivateAssets="all" />
+    <ProjectReference Include="../Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" PrivateAssets="all" />
+    <!-- 会话适配由内部组件提供；构建时复用，发布时由本插件携带编译结果。 -->
+    <Compile Include="../Fufucode.Core/Backend/DshChatSession.cs" Link="DshChatSession.cs" />
+    <Compile Include="../Fufucode.Core/Backend/DshSessionCoordinator.cs" Link="DshSessionCoordinator.cs" />
+  </ItemGroup>
+</Project>

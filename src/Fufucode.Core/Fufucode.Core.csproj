@@ -5,10 +5,25 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../Fufucode.Pi/Fufucode.Pi.csproj" />
     <ProjectReference Include="../Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+  </ItemGroup>
+  <!--
+    后端插件源码迁出：Claude/Codex/DSH 的会话适配现在由
+    src/Fufucode.Plugins.Claude|Codex|Dsh 编译并作为插件载荷发布；
+    Core 不再编译或引用它们，只通过 IBackendSessionFactory 调用。
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' == 'Fufucode.Core'">
+    <Compile Remove="Backend/CodexChatSession.cs" />
+    <Compile Remove="Backend/CodexSessionCoordinator.cs" />
+    <Compile Remove="Backend/DshChatSession.cs" />
+    <Compile Remove="Backend/DshSessionCoordinator.cs" />
+  </ItemGroup>
+  <!-- Seep 逆向工作台插件的作战协议人格：逐字内嵌 ~/.pi/agent/AGENTS.md，
+       只在插件“已安装且已启用”时注入会话 System 指令；不依赖外部文件路径。 -->
+  <ItemGroup>
+    <EmbeddedResource Include="Plugins\ReverseLab\Assets\seep-combat-protocol.md" />
   </ItemGroup>
 </Project>

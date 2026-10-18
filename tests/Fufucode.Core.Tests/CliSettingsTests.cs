@@ -106,7 +106,7 @@ internal static class CliSettingsTests
                 await CliSettingsCommands.SetModelAsync(session, manager.Settings, "fixture/unsaved", true, failedOutput);
                 throw new Exception("CLI saved a model without successful get_state confirmation.");
             }
-            catch (PiRpcException) { }
+            catch (RpcException) { }
             Check(manager.Settings.Current == previous && failedOutput.ToString().Length == 0 &&
                 new AppSettingsStore(layout).Current.SelectedModel == "fixture/text-model",
                 "CLI failed model confirmation preserves settings and emits no success result");

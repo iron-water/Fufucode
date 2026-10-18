@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "type": "validation.record",
+  "taskId": "E7-WIRING-RECOVERY",
+  "sourceMainSha": "2aa896e9ba6d82b2bd2024a01c4dcfdec29f92c5",
+  "productSha": "7deef34974fb1af0b1c6723d8587f0aa13a3b1b3",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": "2aa896e9ba6d82b2bd2024a01c4dcfdec29f92c5",
+  "changedProductSource": false,
+  "appBuild": {"warnings":0,"errors":0,"exitCode":0},
+  "skinIntegration": {"passed":32,"failed":0,"newChecks":14,"exitCode":0},
+  "appSelfTest": {"passed":1420,"failed":0,"exitCode":0},
+  "evidence": ["docs/records/M-E7-skin-recovery-validation-2026-10-14.md", "tmp/m-cycle60-final-build.log", "tmp/m-cycle60-final-paths.log", "tmp/m-cycle60-app-full.log"],
+  "scope": "headless real controls, temporary file lock, scoped resources, persistence and same-process window reopen",
+  "notRun": ["native IME/DPI verification", "new-source clean install/uninstall", "process crash recovery", "Aero production acceptance"],
+  "nextAction": "Continue E7-AERO and original resumed E7-NATIVE; review only stopped cards. Apply authorized callback rule on next normal dispatch or continuation."
+}

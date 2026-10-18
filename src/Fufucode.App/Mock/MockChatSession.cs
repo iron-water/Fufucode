@@ -8,7 +8,7 @@ using Fufucode.App.Integration;
 namespace Fufucode.App.Mock;
 
 /// <summary>
-/// <see cref="IChatSession"/> 的 mock 实现：用脚本化事件流模拟 Pi 的行为，不访问任何真实进程。
+/// <see cref="IChatSession"/> 的 mock 实现：用脚本化事件流模拟后端行为，不访问任何真实进程。
 /// 演示范围：流式输出（ delta 节奏）、分块消息重建、工具卡片（成功/失败）、
 /// 错误条目、排队、停止（清空队列并回传待恢复草稿）。
 /// </summary>
@@ -65,7 +65,7 @@ public sealed class MockChatSession : IChatSession, IPromptSteering
 
     public event EventHandler<SessionEvent>? Event;
 
-    /// <summary>连接 mock 后端。真实实现里这对应 Pi 子进程启动。</summary>
+    /// <summary>连接 mock 后端。真实实现里这对应后端会话启动。</summary>
     public Task ConnectAsync(CancellationToken cancellationToken = default)
     {
         lock (_gate)

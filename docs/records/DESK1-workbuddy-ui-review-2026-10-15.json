@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "DESK-1",
+  "runId": "DESK-1-R1",
+  "deliveryRevision": 1,
+  "threadId": "01a13fcf-b0d4-75f3-a632-d570202ada9f",
+  "reviewedHead": "aad9b083f62bed152fdf78671294aefc9f210269",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": "0e12345",
+  "evidence": [
+    "Delivery received from thread 01a13fcf-b0d4-75f3-a632-d570202ada9f with writerStopped: true and clean worktree.",
+    "WorkBuddy tokens and styles added: Styles/Skins/WorkBuddy.axaml and WorkBuddyStyles.axaml.",
+    "WorkBuddyIconSet.cs ported 57 official SVG vector icons into Avalonia geometries.",
+    "MainWindow.Chrome.cs rewrote caption drag classifier and TopLevel.GetTopLevel(this) BeginMoveDrag.",
+    "DockRegionView.cs tab close button slimmed to 16dp capsule, drag threshold 5 with 3px move coalescing.",
+    "ShowStatusBar locked to false by default.",
+    "dotnet build Fufucode.sln verified clean with 0 warnings, 0 errors.",
+    "dotnet run -- --selftest --workbuddy-only verified with 0 failures.",
+    "Merged cleanly into main branch."
+  ],
+  "findings": [
+    {
+      "id": "DESK-1-DELIVERY",
+      "status": "verified_module",
+      "detail": "Avalonia desktop WorkBuddy skin, authentic icons, caption drag fix, tab close button slimming, and hidden status bar verified and integrated into main."
+    }
+  ],
+  "nextAction": "Integrated into main. Update dispatch ledger and continue overseeing active threads."
+}

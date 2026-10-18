@@ -1,0 +1,64 @@
+{
+  "taskId": "CLAUDE-1",
+  "title": "Claude Code 第五外部后端接入（stream-json 协议适配，不读源码）",
+  "status": "module_ready",
+  "worktree": "C:/Projects/Fucode/worktrees/claude1-backend",
+  "branch": "agent/claude1-backend",
+  "baseHead": "b394c7d",
+  "head": "34d565fbeb6c7d5677e9724dcea2149f09174969",
+  "commit": "34d565fbeb6c7d5677e9724dcea2149f09174969",
+  "headNote": "head/commit 为实现提交；交接卡本身紧随其后的记录提交写入，真实 HEAD 以主控对账时的 git rev-parse 为准",
+  "uncommitted": false,
+  "writerStopped": true,
+  "stoppedWriting": true,
+  "changes": [
+    "src/Fufucode.Core/Backend/BackendEngineContract.cs: EngineId.Claude + EngineIdMap(ToStorageId/Parse/TryParse) = \"claude\"",
+    "src/Fufucode.Core/Backend/BackendEngines.cs: ClaudeBackendEngine (ProtocolAdapter) + 工厂分支",
+    "src/Fufucode.Pi/BackendProtocol.cs: BackendId.Claude + BackendCapabilities.For/StorageId/Parse (2.1.296)",
+    "src/Fufucode.Core/PersistentSessionManager.cs: Claude 会话启动显式 NotSupportedException，防止误落 OMP 分支",
+    "src/Fufucode.Core/Plugins/PluginMarketplace.cs: backend.claude (BackendEngine, 默认安装并启用)",
+    "src/Fufucode.App/Features/Backend/BackendDescriptor.cs: Claude 徽标 #C15F3C",
+    "src/Fufucode.App/ViewModels/SettingsPageViewModel.Features.cs: 设置页第 6 个后端选项",
+    "src/Fufucode.Claude/{ClaudeProtocol,ClaudeStreamClient,ClaudeChatSessionAdapter}.cs: 新项目（帧编解码 / 进程 stdio / IChatSession 适配）",
+    "tests/Fufucode.Claude.Tests + tests/Fufucode.FakeClaude: 定向测试与假 CLI 夹具",
+    "Fufucode.sln: 加入 3 个新项目",
+    "docs/records/CLAUDE1-backend-delivery.md + docs/records/evidence/CLAUDE1-live-frames.jsonl: 交付记录与真实帧取证"
+  ],
+  "evidence": [
+    "真实抓取：docs/records/evidence/CLAUDE1-live-frames.jsonl（init/assistant/result/tool_result/control_request/control_response/stream_event，含来源与裁剪标记）",
+    "单轮：claude -p --output-format stream-json --verbose -> system(init)/assistant(text)/result(success)",
+    "审批允许：control_request{subtype:can_use_tool, tool_name:Write} -> control_response{behavior:allow,updatedInput} -> user/tool_result{permission_decision:accept}",
+    "审批拒绝：control_response{behavior:deny,message} -> user/tool_result{is_error:true, permission_decision:reject}",
+    "多轮：同进程连续 user 帧保持上下文；--resume <session_id> 新进程恢复上下文（答出记忆值 ZEBRA42）；非法 session_id 返回 result{is_error:true}",
+    "interrupt：control_request{subtype:interrupt} -> control_response{still_queued:[]}",
+    "真实 CLI 冒烟：tests/Fufucode.Claude.Tests --live（devin/swe-2）握手 Connected / outcome Completed / text PONG / 进程退出被观测",
+    "真实工具审批往返：tests/Fufucode.Claude.Tests --live-tool（devin/swe-2）Write 批准 -> 工具块 Completed / permission=accept (user_temporary) / 文件真实创建"
+  ],
+  "verified": [
+    "dotnet build Fufucode.sln = 0 警告 0 错误",
+    "tests/Fufucode.Claude.Tests = 115 项断言全过（帧解码 + 假 CLI 子进程往返：握手/文本/工具批准/工具拒绝/session_id 恢复/进程退出）",
+    "tests/Fufucode.App.Backend.Tests = 491 项断言全过（六后端枚举/徽标/插件目录）",
+    "tests/Fufucode.Core.Tests -- --d1-only = Pi 段 13 项全过"
+  ],
+  "notRunOrUnverified": [
+    "OMP 段 D1 回归未运行：工作树与主仓均缺 runtime/omp/omp.exe（runtime/ 被 gitignore），既有环境差异，与本次改动无关",
+    "StopAsync 中断未在真实 CLI 上端到端验证（仅控制帧形状实测 + 单元覆盖）",
+    "--include-partial-messages 打字机增量未在默认启动参数启用（实现已就位并有单元覆盖）",
+    "ProjectFork 未验证，BackendCapabilities.For(Claude).ProjectFork=false",
+    "产品级验收未做：桌面共享组合根未接线，Claude 会话无法从界面真实创建"
+  ],
+  "pendingIntegration": [
+    "PersistentSessionManager 增加 Claude 启动分支（可执行文件、ClaudeProtocol.BuildArguments、会话目录、--resume <session_id> 持久化）",
+    "AppOptions/组合根注入 Claude 运行时路径并 BackendRuntimePaths.Set(EngineId.Claude, path)",
+    "桌面审批 UI 订阅 ClaudeChatSessionAdapter.PermissionRequested 并调用 RespondToPermissionAsync（现 IExtensionUiSession 为 Pi 专用，未强行复用以免破坏既有契约）",
+    "如需打字机增量，启动参数追加 --include-partial-messages"
+  ],
+  "temporaryState": [
+    "为跑 Pi 段 D1 临时复制 runtime/node/node.exe 并给 runtime/pi/node_modules 建 junction；两者均被 gitignore 忽略，验证后已删除/解除，工作树恢复原状",
+    "协议探针产物在 C:\\tmp\\clprobe\\*.ndjson（工作树外），未纳入仓库；关键帧裁剪副本已入库",
+    "未修改 reference/，未推送，未改写历史，未创建或删除工作树"
+  ],
+  "restored": true,
+  "processes": "无遗留进程：live 探针的 claude 子进程随会话 Dispose 退出（退出码已观测）；未启动其它常驻进程",
+  "modelPolicy": "验证与试跑使用最低成本模型（devin/swe-2，免费档）；未使用 S/A 级高价模型"
+}

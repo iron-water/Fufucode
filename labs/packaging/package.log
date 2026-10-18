@@ -1,0 +1,36 @@
+Publishing .NET self-contained win-x64...
+  正在确定要还原的项目…
+  所有项目均是最新的，无法还原。
+C:\Program Files\dotnet\sdk\10.0.401\Current\SolutionFile\ImportAfter\Microsoft.NET.Sdk.Solution.targets(36,5): warning NETSDK1194: 生成解决方案时不支持 "--output" 选项。指定解决方案级输出路径会导致所有项目将输出复制到同一目录，这可能会导致生成不一致。 [C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\Fufucode.sln]
+  Avalonia Accelerate Community requires telemetry. To opt out, please upgrade to a paid tier. Learn more: https://avaloniaui.net/accelerate/
+  Fufucode.App.Abstractions -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\Abstractions\bin\Release\net10.0\Fufucode.App.Abstractions.dll
+  Fufucode.App.Abstractions -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\Abstractions\bin\Release\net10.0\win-x64\Fufucode.App.Abstractions.dll
+  Fufucode.Pi -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.Pi\bin\Release\net10.0\win-x64\Fufucode.Pi.dll
+  Fufucode.Pi -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.Pi\bin\Release\net10.0\Fufucode.Pi.dll
+  Fufucode.App.Abstractions -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+  Fufucode.FakePi -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\tests\Fufucode.FakePi\bin\Release\net10.0\win-x64\Fufucode.FakePi.dll
+  Fufucode.Pi -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+  Avalonia Accelerate Community requires telemetry. To opt out, please upgrade to a paid tier. Learn more: https://avaloniaui.net/accelerate/
+  Fufucode.FakePi -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+  Fufucode.Pi.Tests -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\tests\Fufucode.Pi.Tests\bin\Release\net10.0\win-x64\Fufucode.Pi.Tests.dll
+  TestApp -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\TestApp\bin\Release\net10.0\win-x64\TestApp.dll
+  Fufucode.Pi.Tests -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+  Fufucode.Core -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.Core\bin\Release\net10.0\win-x64\Fufucode.Core.dll
+  Fufucode.Core -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+  Fufucode.Core -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.Core\bin\Release\net10.0\Fufucode.Core.dll
+  TestApp -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\Program.cs(2,7): warning CS0105: “System”的 using 指令以前在此命名空间中出现过 [C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\Fufucode.App.csproj]
+C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\SelfTest\SelfTestRunner.cs(533,13): warning CS0618: “Bitmap.Save(string, int?)”已过时:“Use the overload accepting BitmapEncoderOptions instead.” [C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\Fufucode.App.csproj]
+  Fufucode.Core.Tests -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\tests\Fufucode.Core.Tests\bin\Release\net10.0\win-x64\Fufucode.Core.Tests.dll
+  Fufucode.Core.Tests -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+  Fufucode.App -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\src\Fufucode.App\bin\Release\net10.0\win-x64\Fufucode.App.dll
+  Fufucode.App -> C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\
+Copying managed Node...
+Copying managed Pi runtime...
+Writing launcher...
+Archiving...
+Package: C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\Fufucode.zip
+192,908,360 bytes (183.97 MB)
+Component sizes:
+  app: 209.4 MB
+  runtime: 348.3 MB

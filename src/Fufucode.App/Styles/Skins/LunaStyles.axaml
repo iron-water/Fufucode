@@ -1,0 +1,247 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:avaprimitives="using:Avalonia.Controls.Primitives">
+    <!-- Luna 限定控件样式（Windows XP Luna Blue）：
+         只作用于 SkinLease 挂载目标（Window/Control）子树，随租约整体移除，
+         不复制业务页面、不改 App.axaml / 原 Styles。
+         组成：1) 标题栏（Border.chromeBar 蓝渐变 + 白字，状态栏单独还原）；
+               2) 控件：Button（含 .accent）、TextBox、ComboBox、dockTab/TabItem、ListBoxItem、
+                  Border.settingsRow/card、菜单/浮层；
+               3) 焦点环与页签指示条。
+         颜色一律经 Luna.axaml 的 DynamicResource 解析；渐变只出现在 chrome 与控件外观层。 -->
+    <StyleInclude Source="avares://Fufucode.App/Styles/Skins/SkinShellStyles.axaml"/>
+
+    <Style Selector="Window">
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontUi}"/>
+    </Style>
+
+    <!-- ================= 标题栏（XP Luna 蓝渐变 + 白字；仅 chrome 层） ================= -->
+    <Style Selector="Border.chromeBar">
+        <Setter Property="Background" Value="{DynamicResource AppTitleBarBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource LunaChromeRule}"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    </Style>
+    <Style Selector="Border.chromeBar TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource LunaTitleText}"/>
+    </Style>
+    <Style Selector="Border.chromeBar PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource LunaTitleText}"/>
+    </Style>
+    <!-- 状态栏与标题栏同用 chromeBar 类，必须单独还原成内容面语义 -->
+    <Style Selector="Border.chromeBar.statusStrip">
+        <Setter Property="Background" Value="{DynamicResource AppChromeBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="BorderThickness" Value="0,1,0,0"/>
+    </Style>
+    <Style Selector="Border.chromeBar.statusStrip TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    </Style>
+    <Style Selector="Border.chromeBar.statusStrip PathIcon">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    </Style>
+
+    <!-- ================= 按钮（XP 3px 圆角 + 四段实色玻璃渐变 + 1px 描边） ================= -->
+    <Style Selector="Button">
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    </Style>
+    <Style Selector="Button.accent">
+        <Setter Property="Background" Value="{DynamicResource AccentButtonBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource LunaDefaultButtonBorder}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForeground}"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    </Style>
+    <Style Selector="Button.accent:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPointerOver}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPointerOver}"/>
+    </Style>
+    <Style Selector="Button.accent:pressed">
+        <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundPressed}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundPressed}"/>
+    </Style>
+    <Style Selector="Button.accent:disabled">
+        <Setter Property="Background" Value="{DynamicResource AccentButtonBackgroundDisabled}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ButtonBorderBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AccentButtonForegroundDisabled}"/>
+    </Style>
+    <Style Selector="Button.captionButton">
+        <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    </Style>
+
+    <!-- 页签：顶圆角 3,3,0,0；选中＝白底 + 顶部强调内线 -->
+    <Style Selector="Button.dockTab">
+        <Setter Property="CornerRadius" Value="3,3,0,0"/>
+    </Style>
+    <Style Selector="Button.dockTab.selected">
+        <Setter Property="Background" Value="{DynamicResource AppTabSelectedBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="Border.dockIndicator">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="Height" Value="2"/>
+        <Setter Property="CornerRadius" Value="0"/>
+        <Setter Property="Margin" Value="0"/>
+    </Style>
+    <Style Selector="TabItem">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+        <Setter Property="CornerRadius" Value="3,3,0,0"/>
+    </Style>
+    <Style Selector="TabItem:selected">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+        <Setter Property="FontWeight" Value="Bold"/>
+    </Style>
+    <Style Selector="TabItem:selected /template/ Border#PART_SelectedPipe">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="TabItem /template/ Border#PART_SelectedPipe">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <!-- 输入：XP 白底 + 1px 蓝灰描边（#7F9DB9），聚焦转 XP 选择蓝 -->
+    <Style Selector="TextBox">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+    </Style>
+    <Style Selector="TextBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorSecondaryBrush}"/>
+    </Style>
+    <Style Selector="TextBox:focus">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
+    </Style>
+    <Style Selector="ComboBox">
+        <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+    </Style>
+    <Style Selector="ComboBox:focus, ComboBox:focus-within, ComboBox:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
+    </Style>
+    <Style Selector="ComboBoxItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <!-- 列表选择：XP 整块选择蓝 + 白字（直角块，圆角只给按钮/页签/标题） -->
+    <Style Selector="ListBoxItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource ListBoxItemBackgroundSelected}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ListBoxItemForegroundSelected}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource ListBoxItemBackgroundSelectedPointerOver}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ListBoxItemForegroundSelectedPointerOver}"/>
+    </Style>
+    <Style Selector="ListBoxItem:selected:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource ListBoxItemBackgroundSelectedPressed}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ListBoxItemForegroundSelectedPointerOver}"/>
+    </Style>
+    <Style Selector="ListBox.settingsNav ListBoxItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="ListBox.settingsNav ListBoxItem:selected /template/ ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource ListBoxItemBackgroundSelected}"/>
+        <Setter Property="Foreground" Value="{DynamicResource ListBoxItemForegroundSelected}"/>
+    </Style>
+    <Style Selector="ListBox.settingsNav ListBoxItem:selected TextBlock">
+        <Setter Property="Foreground" Value="{DynamicResource ListBoxItemForegroundSelected}"/>
+    </Style>
+    <Style Selector="Border.navAccent">
+        <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+
+    <!-- 菜单/浮层/对话框：3px 圆角 + 1px 描边 + XP 硬阴影 -->
+    <Style Selector="MenuFlyoutPresenter">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    </Style>
+    <Style Selector="MenuFlyoutPresenter /template/ Border">
+        <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    </Style>
+    <Style Selector="MenuItem">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="ContextMenu">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    </Style>
+    <Style Selector="ContextMenu /template/ Border">
+        <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    </Style>
+    <Style Selector="Border.overlayPanel">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource AppShadowFlyout}"/>
+    </Style>
+    <Style Selector="Border.toast">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerFlyout}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource AppShadowToast}"/>
+    </Style>
+
+    <!-- 卡片/行：3px 圆角、1px 描边（XP 分组框语义） -->
+    <Style Selector="Border.card">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.settingsRow">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.composerCard">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.innerWell">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
+    </Style>
+    <Style Selector="Border.toolCard">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.queueStrip">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.restoreInfo">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.chip">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.userBubble">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.codeCard">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.errorCard">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.thinkingBlock">
+        <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    </Style>
+    <Style Selector="Border.navPill">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
+    <Style Selector="Border.turnSummary">
+        <Setter Property="BorderThickness" Value="3,0,0,0"/>
+    </Style>
+
+    <!-- 焦点：1px XP 选择蓝单环（高对比、无 Fluent 双环） -->
+    <Style Selector="avaprimitives|AdornerLayer">
+        <Setter Property="DefaultFocusAdorner">
+            <FocusAdornerTemplate>
+                <Border BorderBrush="{DynamicResource AppFocusBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"/>
+            </FocusAdornerTemplate>
+        </Setter>
+    </Style>
+</Styles>

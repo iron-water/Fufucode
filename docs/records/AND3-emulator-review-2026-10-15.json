@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "AND-3",
+  "runId": "AND-3-R1",
+  "deliveryRevision": 1,
+  "threadId": "01a13f29-5cce-7222-98ad-914b1597980d",
+  "reviewedHead": "300d01804cb9c6934c11ce63028b0c8bdfb94ecb",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": "300d01804cb9c6934c11ce63028b0c8bdfb94ecb",
+  "evidence": [
+    "Delivery received from thread 01a13f29-5cce-7222-98ad-914b1597980d with writerStopped: true and clean working directory.",
+    "Real AVD emulator-5554 (Android 16 / sdk36, x86_64) verified.",
+    "Installed app-x86_64-debug.apk (SHA256: 9CD41E2B20D78B057285B1ABA61C973011C4AEBB5402C0D7AFA15D94EA9FF530) -> Success.",
+    "Cold-start verified via am start -W -> LaunchState: COLD, Status: ok, TotalTime: 3134ms.",
+    "Foreground activity verified: mCurrentFocus=com.fufucode.mobile.debug/com.fufucode.mobile.MainActivity, PID: 4150, logcat crashes: none.",
+    "6 authentic screenshots captured and committed to docs/records/evidence/and3-emulator/ (pair-screen, cold-start, pair-input-focus, pair-digits-entered, discovery-scan, discovery-result)."
+  ],
+  "findings": [
+    {
+      "id": "AND-3-COLD-START-VERIFIED",
+      "status": "verified_module",
+      "detail": "Native Android app successfully installed and cold-started on real Android 36 x86_64 AVD emulator, rendering WorkBuddy-styled pair screen with zero crashes."
+    }
+  ],
+  "nextAction": "Accepted and integrated into main. Monitor active thread 01a13f28-ff2d-7951-b556-af0545a250ea (MKT-1) in slot 1."
+}

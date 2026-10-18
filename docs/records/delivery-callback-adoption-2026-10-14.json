@@ -1,0 +1,19 @@
+{
+  "schemaVersion":1,
+  "type":"coordination.record",
+  "eventId":"callback-policy/01a13994-73c3-74b3-be7e-34171e21f403/1",
+  "sourceThreadId":"01a12596-9397-7132-b8c9-095b38fa726f",
+  "sourceUserMessageId":"01a13994-73c3-74b3-be7e-34171e21f403",
+  "humanAuthorization":"那么你这个会话不要加定时任务。然后按照你这个修改后的做，为了保证能够唤醒，还是把原来的定时唤醒直接改为两小时。",
+  "humanSourceReadVerified":true,
+  "managerThreadId":"01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "automationId":"fufucode",
+  "automationConfigurationVerified":true,
+  "status":"applied",
+  "adoptionMainSha":"2aa896e9ba6d82b2bd2024a01c4dcfdec29f92c5",
+  "documents":["docs/tasks/delivery-callback-protocol.md","docs/records/delivery-callback-config-2026-10-14.md","docs/tasks/hourly-main-coordination.md","docs/tasks/session-handoff-protocol.md"],
+  "workerDeliveryCallbackVerified":true,
+  "firstDeliveryCallbackEvidence":"E7-NATIVE R2 delivery.received actually arrived at M, followed by completed/idle and matching clean d3a34da56dd45e9c0a0dbab5524bf72cdd0f836b. Replay/failed-send/fallback remain unverified.",
+  "activeWorkersUpdated":false,
+  "nextAction":"Preserve in-flight workers; include direct human authorization, manager identity, bound task/run/revision/HEAD, stable eventId and one-shot callback rule on the next normal new dispatch/rework/continuation. Notifications only trigger terminal-state verification."
+}

@@ -1,0 +1,626 @@
+{
+  "schemaVersion": 1,
+  "id": "fufucode-development-v2",
+  "baseline": "61984e0",
+  "effectiveDate": "2026-10-11",
+  "kind": "development_plan",
+  "runtimeActivated": false,
+  "authorityDocument": "docs/tasks/development-topology-v2.md",
+  "executionPolicy": {
+    "projectDeliveryDoesNotDependOnAutomationConsole": true,
+    "maxDevelopmentLanes": 2,
+    "mainIntegrators": 1,
+    "mechanismTestModel": "devin/swe-2",
+    "preserveExistingSessions": true,
+    "autoDispatch": false
+  },
+  "milestones": [
+    {
+      "id": "v3-feature-packages",
+      "title": "v3 功能优先·大包推进",
+      "tasks": [
+        "B1",
+        "B2",
+        "S2",
+        "T1",
+        "M1",
+        "P1",
+        "K1"
+      ],
+      "completion": "核心刚需功能全量落地，延后集中大验收"
+    },
+    {
+      "id": "desktop-usable",
+      "tasks": [
+        "V1",
+        "V2",
+        "V3",
+        "R1"
+      ],
+      "completion": "阶段桌面验收，不表示全项目完成"
+    },
+    {
+      "id": "semi-automatic",
+      "tasks": [
+        "C1",
+        "C2",
+        "C3",
+        "C4",
+        "C5"
+      ],
+      "completion": "真实半自动闭环与原生入口"
+    },
+    {
+      "id": "autonomous-p0",
+      "tasks": [
+        "A1"
+      ],
+      "completion": "委托范围内自主推进、纠偏与结束"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "V1",
+      "title": "原生会话补验",
+      "lane": "desktop",
+      "dependsOn": [],
+      "legacy": [
+        "D1",
+        "G1"
+      ],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "V2",
+      "title": "已集成模块收口",
+      "lane": "desktop",
+      "dependsOn": [],
+      "legacy": [
+        "O1",
+        "O2",
+        "O3"
+      ],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "V3",
+      "title": "资料与聊天接线",
+      "lane": "desktop",
+      "dependsOn": [
+        "V1",
+        "V2"
+      ],
+      "legacy": [
+        "O3"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "R1",
+      "title": "桌面候选包与安装验收",
+      "lane": "desktop",
+      "dependsOn": [
+        "V3"
+      ],
+      "legacy": [
+        "D0",
+        "R",
+        "G3"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "C1",
+      "title": "执行可靠性与交付门",
+      "lane": "control",
+      "dependsOn": [],
+      "legacy": [
+        "U1",
+        "U2"
+      ],
+      "planningStatus": "ready",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "C2",
+      "title": "唯一后台宿主",
+      "lane": "control",
+      "dependsOn": [
+        "C1"
+      ],
+      "legacy": [
+        "D5",
+        "G2"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "C3",
+      "title": "上层状态统一至U1",
+      "lane": "control",
+      "dependsOn": [
+        "C2"
+      ],
+      "legacy": [
+        "U1",
+        "U2"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "C4",
+      "title": "半自动真实闭环",
+      "lane": "control",
+      "dependsOn": [
+        "C3"
+      ],
+      "legacy": [
+        "U2"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "C5",
+      "title": "原生最小控制台",
+      "lane": "control",
+      "dependsOn": [
+        "C4"
+      ],
+      "legacy": [
+        "U0",
+        "U3"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "H1",
+      "title": "Pi/OMP桌面公共宿主接线",
+      "lane": "backends",
+      "dependsOn": [
+        "V1",
+        "C2"
+      ],
+      "legacy": [
+        "D1",
+        "D5",
+        "G2"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "H2",
+      "title": "Codex交互后端",
+      "lane": "backends",
+      "dependsOn": [
+        "C2"
+      ],
+      "legacy": [],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "H3",
+      "title": "DSH交互后端",
+      "lane": "backends",
+      "dependsOn": [
+        "C2"
+      ],
+      "legacy": [],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "E1",
+      "title": "Git工作树与本地审查",
+      "lane": "extensions",
+      "dependsOn": [],
+      "legacy": [
+        "D4-SNAPSHOT",
+        "D4",
+        "O4"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "E2",
+      "title": "终端与浏览器基础",
+      "lane": "extensions",
+      "dependsOn": [],
+      "legacy": [
+        "D2",
+        "D3"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "F1",
+      "title": "页签与辅助栏浮动、三处通知和默认关闭状态栏",
+      "lane": "extensions",
+      "dependsOn": [],
+      "legacy": [
+        "floating-panel"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L4",
+      "owner": "主 agent M；共享布局单写",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/floating-workbench.md"
+    },
+    {
+      "id": "E3",
+      "title": "插件管理",
+      "lane": "extensions",
+      "dependsOn": [],
+      "legacy": [
+        "O5"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "E4",
+      "title": "周期调度",
+      "lane": "extensions",
+      "dependsOn": [
+        "C2"
+      ],
+      "legacy": [
+        "O6-RULES",
+        "O6"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "E5",
+      "title": "手机局域网",
+      "lane": "extensions",
+      "dependsOn": [
+        "H1"
+      ],
+      "legacy": [
+        "M0",
+        "D6"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "E6",
+      "title": "图像及资料收藏",
+      "lane": "extensions",
+      "dependsOn": [
+        "V2"
+      ],
+      "legacy": [
+        "O7"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "E7",
+      "title": "正式皮肤：当前优先教师与可选模块",
+      "lane": "extensions",
+      "dependsOn": [],
+      "legacy": [
+        "S1",
+        "S2"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L3",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md",
+      "gate": "可选资源模块与教师样板立即推进；用户选择新默认与最终视觉，默认Fluent保留；原生验收另门",
+      "priority": "now",
+      "subtasks": [
+        {
+          "id": "E7-DESIGN",
+          "difficulty": "L4",
+          "model": "group/auto-claude-opus-5-5",
+          "dependsOn": [],
+          "runtimeThreadId": "01a13901-cf1c-79a2-8dda-e42d74456958",
+          "executionStatus": "completed",
+          "integrationStatus": "integrated",
+          "scopeAndAcceptance": "docs/tasks/hourly-E7-design-teacher.md"
+        },
+        {
+          "id": "E7-ENGINE",
+          "difficulty": "L3",
+          "model": "group/auto-deepseek-v4-1-flash",
+          "dependsOn": [],
+          "runtimeThreadId": "01a13904-2006-7152-b872-d15c8acd0b7d",
+          "executionStatus": "completed",
+          "integrationStatus": "integrated",
+          "scopeAndAcceptance": "docs/tasks/hourly-E7-skin-engine.md"
+        },
+        {
+          "id": "E7-WIRING",
+          "difficulty": "L4",
+          "owner": "M公共接线",
+          "dependsOn": [
+            "E7-ENGINE"
+          ],
+          "executionStatus": "completed",
+          "integrationStatus": "integrated",
+          "mainSha": "7deef34974fb1af0b1c6723d8587f0aa13a3b1b3",
+          "gate": "本公共增量18定向/1406全量通过；原生/最终视觉/生产安装另验"
+        },
+        {
+          "id": "E7-AERO",
+          "difficulty": "L3",
+          "model": "group/auto-deepseek-v4-1-flash",
+          "dependsOn": [
+            "E7-DESIGN",
+            "E7-ENGINE"
+          ],
+          "runtimeThreadId": "01a1398b-0076-71e1-9655-91e850a851c7",
+          "executionStatus": "inProgress",
+          "scopeAndAcceptance": "docs/tasks/hourly-E7-aero-module.md"
+        },
+        {
+          "id": "E7-NATIVE",
+          "difficulty": "L3",
+          "role": "verification_only",
+          "model": "devin/swe-2",
+          "dependsOn": [
+            "E7-WIRING"
+          ],
+          "runtimeThreadId": "01a13993-76d2-7650-a774-ad1df6aa12d7",
+          "executionStatus": "inProgress",
+          "fixedProductSha": "7deef34974fb1af0b1c6723d8587f0aa13a3b1b3",
+          "scopeAndAcceptance": "docs/tasks/hourly-E7-native.md"
+        }
+      ]
+    },
+    {
+      "id": "E8",
+      "title": "各基础能力的高级扩展",
+      "lane": "extensions",
+      "dependsOn": [],
+      "legacy": [
+        "D8",
+        "O8",
+        "D9",
+        "S3"
+      ],
+      "planningStatus": "backlog",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md",
+      "subtasks": [
+        {
+          "id": "E8-browser",
+          "legacy": "D8",
+          "dependsOn": [
+            "E2"
+          ]
+        },
+        {
+          "id": "E8-pr",
+          "legacy": "O8",
+          "dependsOn": [
+            "E1"
+          ],
+          "gate": "外发评论须明确授权"
+        },
+        {
+          "id": "E8-remote",
+          "legacy": "D9",
+          "dependsOn": [
+            "E5"
+          ],
+          "gate": "外网与设备撤销专项验收"
+        },
+        {
+          "id": "E8-skins",
+          "legacy": "S3",
+          "dependsOn": [
+            "E7"
+          ]
+        }
+      ],
+      "dispatchable": false
+    },
+    {
+      "id": "A1",
+      "title": "最小自主决策P0",
+      "lane": "automatic",
+      "dependsOn": [
+        "C4"
+      ],
+      "legacy": [],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "A2",
+      "title": "动态组织P1",
+      "lane": "automatic",
+      "dependsOn": [
+        "A1"
+      ],
+      "legacy": [],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "A3",
+      "title": "长期项目治理P2",
+      "lane": "automatic",
+      "dependsOn": [
+        "A2"
+      ],
+      "legacy": [],
+      "planningStatus": "planned",
+      "difficulty": "L4",
+      "owner": "主 agent M；独立包仅经明确委派",
+      "runtimeThreadId": null,
+      "scopeAndAcceptance": "docs/tasks/development-topology-v2.md"
+    },
+    {
+      "id": "B1",
+      "title": "内置浏览器全能对标 & Browser Use / CDP 桥接",
+      "lane": "browser",
+      "dependsOn": [],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max)",
+      "owner": "主 agent M 统一组织与推进",
+      "scopeAndAcceptance": "设置页浏览器专栏、CDP桥接、Browser Use工具集、DOM元素拾取、单行沉浸式工具条"
+    },
+    {
+      "id": "B2",
+      "title": "外部浏览器扩展插件开发计划",
+      "lane": "browser",
+      "dependsOn": [
+        "B1"
+      ],
+      "planningStatus": "planned",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max)",
+      "owner": "独立包 / M 推进",
+      "scopeAndAcceptance": "Native Messaging / WebSocket 桥接控制外部 Chrome/Edge/Firefox"
+    },
+    {
+      "id": "S2",
+      "title": "设置面板三级架构重构 & 侧栏条目治理",
+      "lane": "settings",
+      "dependsOn": [],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max)",
+      "owner": "主 agent M 统一组织与推进",
+      "scopeAndAcceptance": "设置三级架构（基础/大功能/其他二级）、交互式升降级持久化、通知用量退出默认侧栏、文件预览内嵌化"
+    },
+    {
+      "id": "T1",
+      "title": "底部终端深度优化 & ConPTY / IME 增强",
+      "lane": "terminal",
+      "dependsOn": [],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max)",
+      "owner": "主 agent M 统一组织与推进",
+      "scopeAndAcceptance": "焦点切换丝滑、中文IME无损回显、剪贴板快捷键与右键、历史命令导航"
+    },
+    {
+      "id": "M1",
+      "title": "手机局域网远程控制 (WorkBuddy 对标 + 4位PIN)",
+      "lane": "mobile",
+      "dependsOn": [],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max)",
+      "owner": "主 agent M 统一组织与推进",
+      "scopeAndAcceptance": "局域网轻量HTTP/WebSocket服务、WorkBuddy移动端版式、二维码扫码+4位PIN配对、实时会话与审批"
+    },
+    {
+      "id": "P1",
+      "title": "多核心后端矩阵与一键切换 (Pi/OMP/Codex/DSH + 全C#内核路线)",
+      "lane": "core",
+      "dependsOn": [],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max)",
+      "owner": "主 agent M 统一组织与推进",
+      "scopeAndAcceptance": "全局默认后端配置、会话卡片徽标指示与一键切换、Pi/OMP/Codex/DSH四内核接入、全C#内核远期路线"
+    },
+    {
+      "id": "K1",
+      "title": "全套皮肤深度视觉资产化与美化重构",
+      "lane": "skins",
+      "dependsOn": [],
+      "planningStatus": "ready",
+      "difficulty": "L3",
+      "modelRecommendation": "group/auto-deepseek-v4-1-flash (effort=max) 或 group/auto-claude-opus-5-5",
+      "owner": "主 agent M 统一组织与推进",
+      "scopeAndAcceptance": "Fluent/Metro/M3/Aero/Luna全套独立资产表、零Fluent残余、收敛堆砌文字"
+    }
+  ],
+  "legacyCoverage": {
+    "G0": "既有边界，按新任务逐项继承",
+    "Q": "每个任务的定向验证与交付条件",
+    "V": "V1/V2及各任务原生验证，不是全局pending节点"
+  },
+  "preserve": [
+    "所有已有工作树和未提交内容",
+    "旧run/review/integration身份及证据",
+    "G1原生审批停止要求",
+    "G2关窗与恢复要求",
+    "旧门房状态直到显式安全迁移"
+  ]
+}

@@ -3,6 +3,7 @@
         xmlns:imaging="using:Avalonia.Media.Imaging"
              xmlns:vm="using:Fufucode.App.ViewModels"
              xmlns:anim="using:Fufucode.App.Infrastructure"
+             xmlns:plugins="using:Fufucode.App.Features.Plugins"
              x:Class="Fufucode.App.Views.ExtensionsPage"
              x:DataType="{x:Type vm:ExtensionsPageViewModel}"
              Background="{DynamicResource AppMicaPageBackground}">
@@ -29,7 +30,7 @@
       <!-- 1. 页头：40px 页图标 + 大标题 + 副标题 + 右侧工具（UniGetUI MainHeader 几何） -->
       <Grid x:Name="ExtensionsHeader" ColumnDefinitions="56,*,Auto" ColumnSpacing="8"
             RowSpacing="12" SizeChanged="ExtensionsHeader_SizeChanged">
-        <PathIcon Grid.Column="0" Data="{StaticResource Icon.PuzzlePiece}" Width="40" Height="40"
+        <PathIcon Grid.Column="0" Data="{DynamicResource Icon.PuzzlePiece}" Width="40" Height="40"
                   VerticalAlignment="Center" HorizontalAlignment="Left" Margin="4,0,0,0"
                   Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
         <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
@@ -43,18 +44,18 @@
                   Margin="0,0,8,4"
                   IsVisible="{Binding !IsMock}">
             <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Data="{StaticResource Icon.Add}" Width="13" Height="13"/>
+              <PathIcon Data="{DynamicResource Icon.Add}" Width="13" Height="13"/>
               <TextBlock Text="添加扩展…" VerticalAlignment="Center"/>
             </StackPanel>
           </Button>
           <Button Classes="iconButton" Command="{Binding RefreshCommand}"
                   Margin="0,0,8,4"
                   IsEnabled="{Binding !IsRefreshing}" ToolTip.Tip="刷新">
-            <PathIcon Data="{StaticResource Icon.ArrowClockwise}" Width="14" Height="14"/>
+            <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
           </Button>
           <Button Command="{Binding RestartCommand}" Padding="12,6"
                   Margin="0,0,0,4"
-                  CornerRadius="{StaticResource ControlCornerRadius}"
+                  CornerRadius="{DynamicResource ControlCornerRadius}"
                   ToolTip.Tip="{Binding RestartDisabledReason}">
             <TextBlock Text="{Binding RestartButtonText}"/>
           </Button>
@@ -65,18 +66,23 @@
                  Foreground="{DynamicResource AppTextDim}"
                  IsVisible="{Binding HasRestartDisabledReason}"/>
 
-      <!-- 2. 启动失败（critical）：扩展加载失败会导致 Pi 启动即退出（0.87.1 行为） -->
+      <ContentControl x:Name="LocalPluginsSlot">
+        <plugins:LocalPluginSectionView x:Name="LocalPluginsSection" MinHeight="540"
+                                        DataContext="{x:Null}"/>
+      </ContentControl>
+
+      <!-- 2. 启动失败（critical）：扩展加载失败会导致后端插件启动即退出 -->
       <Border Classes="errorCard" IsVisible="{Binding HasStartupFailure}">
         <StackPanel Spacing="4">
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <PathIcon Data="{StaticResource Icon.ErrorCircle}" Width="15" Height="15"
+            <PathIcon Data="{DynamicResource Icon.ErrorCircle}" Width="15" Height="15"
                       VerticalAlignment="Top"/>
             <TextBlock Classes="bodyStrong" Text="会话启动失败" VerticalAlignment="Center"/>
           </StackPanel>
           <TextBlock Classes="body" TextWrapping="Wrap"
                      Text="{Binding LastStartupFailure.Message}"/>
           <TextBlock Classes="caption" TextWrapping="Wrap"
-                     Text="扩展加载失败会导致 Pi 启动即退出（Pi 0.87.1 行为）。请检查最近添加的扩展后重试。"/>
+                     Text="扩展加载失败会导致后端插件启动即退出。请检查最近添加的扩展后重试。"/>
           <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}"
                      Text="{Binding LastStartupFailure.When.LocalDateTime, StringFormat='记录时间 {0:MM-dd HH:mm:ss}'}"/>
         </StackPanel>
@@ -108,7 +114,7 @@
         <Border Classes="errorCard info" IsVisible="{Binding HasPendingChanges}">
           <Grid ColumnDefinitions="*,Auto" SizeChanged="ActionRow_SizeChanged">
             <Grid Grid.Column="0" ColumnDefinitions="Auto,*" ColumnSpacing="8">
-              <PathIcon Data="{StaticResource Icon.Info}" Width="15" Height="15"
+              <PathIcon Data="{DynamicResource Icon.Info}" Width="15" Height="15"
                         VerticalAlignment="Center"/>
               <TextBlock Grid.Column="1" Classes="body" Text="{Binding PendingChangesText}"
                          TextWrapping="Wrap"
@@ -159,7 +165,7 @@
                   <Grid ColumnDefinitions="*,Auto" SizeChanged="ActionRow_SizeChanged">
                     <StackPanel Grid.Column="0" Spacing="4">
                       <WrapPanel>
-                        <PathIcon Data="{StaticResource Icon.PuzzlePiece}" Width="16" Height="16"
+                        <PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"
                                   Margin="0,0,8,6"
                                   VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
                         <TextBlock Classes="bodyStrong" Text="{Binding Name}" VerticalAlignment="Center"
@@ -213,7 +219,7 @@
                                           Padding="10,5"
                                           Command="{Binding RemoveCommand}"
                                           Click="RemoveConfirmCancel_Click"
-                                          CornerRadius="{StaticResource ControlCornerRadius}"/>
+                                          CornerRadius="{DynamicResource ControlCornerRadius}"/>
                                   <Button Classes="subtle" Content="取消" Padding="10,5"
                                           Click="RemoveConfirmCancel_Click"/>
                                 </StackPanel>
@@ -273,7 +279,7 @@
         <Border Classes="card" Padding="12">
           <StackPanel Spacing="8">
             <WrapPanel>
-              <PathIcon Data="{StaticResource Icon.ShieldCheckmark}" Width="16" Height="16"
+              <PathIcon Data="{DynamicResource Icon.ShieldCheckmark}" Width="16" Height="16"
                         Margin="0,0,8,0"
                         VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
               <TextBlock Classes="bodyStrong" Text="项目信任" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -288,7 +294,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="{x:Type x:String}">
                   <Grid ColumnDefinitions="Auto,*" ColumnSpacing="6" Margin="0,0,0,3">
-                    <PathIcon Data="{StaticResource Icon.Document}" Width="12" Height="12"
+                    <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
                     <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding}" TextWrapping="Wrap"
                                Foreground="{DynamicResource AppTextDim}"/>
@@ -312,7 +318,7 @@
           </StackPanel>
         </Border>
 
-        <!-- 9. RPC 模式不支持的扩展能力（默认收起） -->
+        <!-- 9. RPC 模式不支持的扩展能力（默认收起；逐条照抄 docs/decisions.md [轨道B]） -->
         <Border Classes="card" Padding="12">
           <Expander ExpandDirection="Down">
             <Expander.Header>

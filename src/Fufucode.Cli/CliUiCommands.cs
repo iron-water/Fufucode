@@ -61,7 +61,7 @@ public static class CliUiCommands
         while (await source.ReadLineAsync() is { } line) { await target.WriteLineAsync(line); await target.FlushAsync(); }
     }
 
-    private static string ResolveApp()
+    internal static string ResolveApp()
     {
         var name = OperatingSystem.IsWindows() ? "Fufucode.App.exe" : "Fufucode.App";
         for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)

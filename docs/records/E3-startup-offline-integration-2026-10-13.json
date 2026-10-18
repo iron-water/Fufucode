@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST-STARTUP",
+  "runId": "E3-M-HOST-STARTUP-b43212d",
+  "sourceMainSha": "08a1e6927f2bf1c89e3b4e98522931df4a9785df",
+  "integrationStatus": "integrated",
+  "integrationScope": "same-window offline plugin access before project selection or after startup failure; original section/catalog retention and explicit return/retry; recovery into actual Pi safe apply",
+  "productAcceptance": "pending",
+  "verification": {
+    "solution": { "warnings": 0, "errors": 0, "exitCode": 0 },
+    "appFull": { "pass": 1255, "fail": 0, "exitCode": 0 },
+    "startupAssertions": { "pass": 29, "fail": 0 },
+    "existingSharedPluginAssertions": { "pass": 23, "fail": 0 },
+    "headlessShellWithRealPi": { "pass": 12, "fail": 0, "exitCode": 0 },
+    "coreFull": { "pass": 359, "skip": 1, "exitCode": 0 },
+    "piFull": { "pass": 21, "exitCode": 0 }
+  },
+  "evidence": [
+    "docs/records/M-E3-startup-offline-2026-10-13.md",
+    "tmp/m-cycle47-startup-red.log",
+    "tmp/m-cycle47-startup-final.log",
+    "tmp/m-cycle47-shell-real.log",
+    "tmp/m-cycle47-shell-real-diagnostic.log",
+    "tmp/m-cycle47-shell-real-verified.log",
+    "tmp/m-cycle47-solution-verified-build.log",
+    "tmp/m-cycle47-app-full.log",
+    "tmp/m-cycle47-core.log",
+    "tmp/m-cycle47-pi.log"
+  ],
+  "notVerified": [
+    "system native pointer/keyboard/file pickers/IME/DPI",
+    "long-task close/cancel combinations and production data migration",
+    "candidate installer containing current plugin source"
+  ],
+  "nextAction": "M continues serial native plugin and cancellation boundaries. Preserve stopped original E3/R1 sessions; retry only R1's same frozen installer gate after Sandbox is verifiably free."
+}

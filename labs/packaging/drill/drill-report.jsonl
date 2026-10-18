@@ -1,0 +1,15 @@
+{"exitCode":0,"time":"2026-10-04T09:00:19.1774376-07:00","phase":"install-1.2.0","pass":true}
+{"time":"2026-10-04T09:00:19.2746102-07:00","dir":"C:\\Users\\mio\\AppData\\Local\\Programs\\Fufucode","phase":"resolved-install-dir","pass":true}
+{"time":"2026-10-04T09:00:19.2953477-07:00","hasIntegrityManifest":true,"phase":"layout-1.2.0","pass":true}
+{"time":"2026-10-04T09:01:23.2887691-07:00","exitCode":0,"elapsedMs":63941,"phase":"selftest-1.2.0","pass":true}
+{"time":"2026-10-04T09:01:31.8083846-07:00","files":16536,"phase":"snapshot-1.2.0"}
+{"exitCode":0,"time":"2026-10-04T09:02:45.6263800-07:00","phase":"upgrade-1.3.0","pass":true}
+{"time":"2026-10-04T09:02:45.6380196-07:00","dir":"C:\\Users\\mio\\AppData\\Local\\Programs\\Fufucode","phase":"resolved-install-dir-1.0"}
+{"time":"2026-10-04T09:02:45.6450574-07:00","phase":"layout-1.3.0","pass":true}
+{"extra":[],"expectedExtra":["unins000.dat","unins000.exe","app/selftest-window.png"],"pass":true,"time":"2026-10-04T09:03:08.6374029-07:00","missing":[],"checked":16536,"changed":[],"phase":"integrity-1.3.0"}
+{"time":"2026-10-04T09:03:13.6048877-07:00","files":16540,"phase":"snapshot-1.3.0"}
+{"exitCode":0,"time":"2026-10-04T09:03:23.6389917-07:00","phase":"uninstall","pass":true}
+{"leftover":null,"time":"2026-10-04T09:03:25.6608986-07:00","phase":"code-tree-removed","pass":true}
+{"exists":true,"time":"2026-10-04T09:03:25.6689074-07:00","phase":"user-data-preserved","pass":true}
+{"exitCode":0,"time":"2026-10-04T09:04:29.4663053-07:00","phase":"rollback-1.2.0","pass":true}
+{"installDir":"C:\\Users\\mio\\AppData\\Local\\Programs\\Fufucode","time":"2026-10-04T09:04:39.5490407-07:00","phase":"overall","pass":true}

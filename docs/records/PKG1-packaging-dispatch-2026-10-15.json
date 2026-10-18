@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "type": "dispatch.record",
+  "taskId": "PKG-1",
+  "difficulty": "L3",
+  "role": "packaging",
+  "projectId": "15dc7d93-7442-4727-88d8-d014a1360105",
+  "hostId": "local",
+  "startMainSha": "d4e3671f54460a3bb2c4314488b394145ad39999",
+  "threadId": "01a13f34-40b2-7ed0-a6ee-e0e2cd2f30bc",
+  "worktree": "C:/Projects/Fucode/worktrees/pkg1-packaging",
+  "branch": "agent/pkg1-packaging",
+  "executionStatus": "inProgress",
+  "callbackAuthorizationIncluded": true,
+  "callbackManagerThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "taskBook": "docs/tasks/native-kernel-plugin-marketplace.md",
+  "record": "docs/records/PKG1-native-packaging-delivery.md",
+  "nextAction": "Worker creates package-native.ps1 and Fufucode-Native.iss to output zero-node native setup installer."
+}

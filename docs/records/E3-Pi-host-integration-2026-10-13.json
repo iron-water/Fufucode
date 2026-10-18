@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST",
+  "runId": "E3-M-HOST-15a3859",
+  "sourceMainSha": "3eabe3b66568fc809634a03aa4bfc7978cfcc92c",
+  "integrationStatus": "integrated",
+  "integrationScope": "real Pi idle safe apply/update/rollback, original session/draft retention, proof-bound snapshot and restored live chat wiring",
+  "productAcceptance": "pending",
+  "verification": {
+    "solution": {
+      "warnings": 0,
+      "errors": 0,
+      "exitCode": 0
+    },
+    "appFull": {
+      "pass": 1226,
+      "fail": 0,
+      "exitCode": 0
+    },
+    "coreFull": {
+      "pass": 359,
+      "skip": 1,
+      "exitCode": 0
+    },
+    "piFull": {
+      "pass": 21,
+      "exitCode": 0
+    },
+    "pluginService": {
+      "pass": 166
+    },
+    "proofRules": {
+      "pass": 21
+    },
+    "headlessUi": {
+      "pass": 46
+    },
+    "realPiHost": {
+      "pass": 19,
+      "exitCode": 0
+    },
+    "realProof": {
+      "pass": 35,
+      "exitCode": 0
+    },
+    "headlessShellWithRealPi": {
+      "pass": 8,
+      "fail": 0,
+      "exitCode": 0
+    }
+  },
+  "evidence": [
+    "docs/records/M-E3-Pi-host-wiring-2026-10-13.md",
+    "tmp/m-cycle46-shell-real-red.log",
+    "tmp/m-cycle46-shell-real-final.log",
+    "tmp/m-cycle46-maintenance-red.log",
+    "tmp/m-cycle46-restored-build.log",
+    "tmp/m-cycle46-core-final.log",
+    "tmp/m-cycle46-pi.log",
+    "tmp/m-cycle46-app-full-final.log",
+    "tmp/m-cycle46-host-final2.log",
+    "tmp/m-cycle46-proof-real.log"
+  ],
+  "notVerified": [
+    "startup failure/no-session offline plugin entry",
+    "system native pointer/keyboard/IME/DPI",
+    "long-task close/cancel combinations and production data migration",
+    "candidate installer with current plugin source"
+  ],
+  "nextAction": "M finishes startup-failure offline access and native boundaries; preserve original E3 worker stopped. R1 stays frozen to cc44eee and only retries its same installer gate after unknown Sandbox ownership is resolved or the slot is verifiably free."
+}

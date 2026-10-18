@@ -31,7 +31,7 @@ public sealed class WorkbenchCustomizationViewModel : ViewModelBase
     {
         var layout = Layout; edit(layout); Change(s => s with { Layout = layout });
     }
-    public void ResetLayout() => Change(s => s with { Layout = new() });
+    public void ResetLayout() => Change(s => s with { Layout = new() { NotificationMigrationApplied = true } });
     public void SynchronizeLayout(WorkbenchLayoutState layout)
     {
         var snapshot = WorkbenchLayoutState.Restore(layout.Serialize(), WorkbenchLayoutState.KnownPages);
@@ -46,8 +46,8 @@ public sealed class WorkbenchCustomizationViewModel : ViewModelBase
     { _store.AttachProject(path); _projectScope = _projectScope && HasProject; _undo.Clear(); _redo.Clear(); Refresh(); Applied?.Invoke(Current); }
     public void Change(Func<WorkbenchAppearance, WorkbenchAppearance> edit) => Execute(() => _store.Save(edit(Current), ProjectScope));
     public void ApplyJson() => Execute(() => _store.Replace(Json, ProjectScope));
-    public void Preset(string preset) => Change(current => WorkbenchAppearance.Preset(preset) with { Actions = current.Actions, Layout = current.Layout, UserName = current.UserName, AssistantName = current.AssistantName });
-    public void Reset() => Execute(() => { _store.Reset(ProjectScope); _store.Save(Current with { Layout = new() }, ProjectScope); });
+    public void Preset(string preset) => Change(current => WorkbenchAppearance.Preset(preset) with { Skin = current.Skin, Actions = current.Actions, Layout = current.Layout, UserName = current.UserName, AssistantName = current.AssistantName });
+    public void Reset() => Execute(() => { _store.Reset(ProjectScope); _store.Save(Current with { Layout = new() { NotificationMigrationApplied = true } }, ProjectScope); });
     public void ClearOverrides() { ProjectScope = true; Execute(_store.ClearProjectOverrides); }
     public void Reload() { _store.Reload(); Refresh(); Applied?.Invoke(Current); }
     private void Execute(Action operation, bool? scope = null)

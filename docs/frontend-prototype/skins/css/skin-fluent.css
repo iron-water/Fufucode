@@ -1,0 +1,48 @@
+/* 皮肤 1：Fluent 基线（当前交付工作台的色调意图，对齐 UniGetUI / WinUI 3 设置）。
+   与生产 FluentTokens.axaml（Light/Dark）取值同源；此处只做形态微调，不改动骨架。 */
+
+/* 页签：Fluent 用底部 2px 强调条表达选中（Windows 11 设置 / UniGetUI 风格）。 */
+:root[data-skin="fluent"] .tab { border-bottom: 2px solid transparent; }
+:root[data-skin="fluent"] .tab.selected {
+  background: var(--app-dock-background);
+  color: var(--app-text-primary);
+  border-bottom-color: var(--app-accent);
+}
+:root[data-skin="fluent"] .tab:hover:not(.selected) { background: var(--app-hover); }
+
+/* 控件：4px 圆角 + 单像素描边，禁用保持可读。 */
+:root[data-skin="fluent"] .btn { box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.06); }
+:root[data-skin="fluent"] .btn.accent { box-shadow: none; }
+:root[data-skin="fluent"] .card { box-shadow: none; }
+
+/* 焦点：Windows 双环（外黑内白）——用 outline + 内阴影近似。 */
+:root[data-skin="fluent"] .is-focus,
+:root[data-skin="fluent"] :where(button, input, textarea, select):focus-visible {
+  outline: 2px solid var(--app-focus-color);
+  outline-offset: 1px;
+  box-shadow: inset 0 0 0 1px var(--app-focus-inner);
+}
+
+/* Composer：聚焦时底边强调线（沿用已交付工作台行为）。 */
+:root[data-skin="fluent"] .composer:focus-within { border-bottom: 2px solid var(--app-accent); padding-bottom: 9px; }
+
+/* 设置页：Windows 11 设设置卡（圆角 4、同组 4px 缝、卡外分组标题）。 */
+:root[data-skin="fluent"] .settings-nav .navitem.selected { position: relative; }
+:root[data-skin="fluent"] .settings-nav .navitem.selected::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 16px;
+  border-radius: 2px;
+  background: var(--app-accent);
+}
+
+/* 分隔条：Fluent 常态几乎不可见，hover 才显强调色。 */
+:root[data-skin="fluent"] .splitter { background: var(--app-border); }
+:root[data-skin="fluent"] .splitter.is-hover, :root[data-skin="fluent"] .splitter.is-pressed { background: var(--app-accent); }
+
+/* 空态/骨架与正文一致使用中性表面，不加装饰渐变。 */
+:root[data-skin="fluent"] .empty-state svg { color: var(--app-text-dim); }

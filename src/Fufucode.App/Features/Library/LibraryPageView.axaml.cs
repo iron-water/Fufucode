@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Media;
 using Avalonia.Platform.Storage;
 
 namespace Fufucode.App.Features.Library;
@@ -22,8 +23,65 @@ namespace Fufucode.App.Features.Library;
 public partial class LibraryPageView : UserControl, ILibraryFilePicker
 {
     private LibraryViewModel? _viewModel;
+    private bool _narrowLayout;
 
     public LibraryPageView() => InitializeComponent();
+
+    /// <summary>
+    /// 窄容器（例如默认宽度的右侧停靠栏）下把“列表 + 详情”和页头改为上下堆叠。
+    /// 固定 340 列表列在 320 宽停靠栏里会把详情列压成 0 宽，导致标签/引用/删除按钮不可达。
+    /// </summary>
+    protected override void OnSizeChanged(SizeChangedEventArgs e)
+    {
+        base.OnSizeChanged(e);
+        ApplyNarrowLayout(Bounds.Width);
+    }
+
+    /// <summary>按当前宽度切换两列/堆叠布局；同一宽度状态内幂等，不重复改布局。</summary>
+    private void ApplyNarrowLayout(double width)
+    {
+        // 页头 + 列表 340 + 间距 12 + 左右留白 32：低于此宽度两列布局必然挤压详情列。
+        const double twoColumnMinimum = 720;
+        var narrow = width > 0 && width < twoColumnMinimum;
+        if (narrow == _narrowLayout) return;
+        _narrowLayout = narrow;
+
+        if (narrow)
+        {
+            HeaderGrid.ColumnDefinitions = new ColumnDefinitions("*");
+            HeaderGrid.RowDefinitions = new RowDefinitions("Auto,Auto");
+            HeaderGrid.RowSpacing = 8;
+            Grid.SetRow(HeaderActions, 1);
+            EntriesGrid.ColumnDefinitions = new ColumnDefinitions("*");
+            // 列表行只保留可滚动最小高度：详情行按内容排布，避免窄停靠栏里纵向溢出把按钮推出可视区。
+            EntriesGrid.RowDefinitions = new RowDefinitions("120,*");
+            EntriesGrid.RowSpacing = 8;
+            Grid.SetColumn(EntryDetail, 0);
+            Grid.SetRow(EntryDetail, 1);
+            // 长路径与提示语在 320 宽里换行数行，会把操作按钮推出可视区；窄模式改为单行截断。
+            DetailSource.TextWrapping = TextWrapping.NoWrap;
+            DetailSource.TextTrimming = TextTrimming.CharacterEllipsis;
+            DetailNote.TextWrapping = TextWrapping.NoWrap;
+            DetailNote.TextTrimming = TextTrimming.CharacterEllipsis;
+        }
+        else
+        {
+            HeaderGrid.ColumnDefinitions = new ColumnDefinitions("*,Auto");
+            // 清空行定义以还原 XAML 的隐式单行（Star）；显式 Auto 会让列表不再撑满可用高度。
+            HeaderGrid.RowDefinitions.Clear();
+            HeaderGrid.RowSpacing = 0;
+            Grid.SetRow(HeaderActions, 0);
+            EntriesGrid.ColumnDefinitions = new ColumnDefinitions("340,*");
+            EntriesGrid.RowDefinitions.Clear();
+            EntriesGrid.RowSpacing = 0;
+            Grid.SetColumn(EntryDetail, 1);
+            Grid.SetRow(EntryDetail, 0);
+            DetailSource.TextWrapping = TextWrapping.Wrap;
+            DetailSource.TextTrimming = TextTrimming.None;
+            DetailNote.TextWrapping = TextWrapping.Wrap;
+            DetailNote.TextTrimming = TextTrimming.None;
+        }
+    }
 
     public LibraryViewModel? ViewModel => _viewModel;
 

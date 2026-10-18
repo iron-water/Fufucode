@@ -109,6 +109,14 @@ internal static class UiSmoke
         viewModel.CopyCitationCommand.Execute(null);
         check(citationRaised == 2 && viewModel.CitationText.Length > 0, "重挂后引用仍可用");
 
+        // ---- 窄容器（默认右侧停靠栏宽度）下操作按钮必须仍可达 ----
+        window.Width = 320;
+        check(Pump(() => view.Bounds.Width > 0 && view.Bounds.Width <= 340), "窗口收窄到停靠栏宽度");
+        check(Pump(() => ActionButtonsReachable(view)), "窄宽度下标签/引用/删除按钮仍可达（未被压成零宽）");
+        window.Width = 960;
+        check(Pump(() => view.Bounds.Width > 700), "窗口恢复宽布局");
+        check(Pump(() => ActionButtonsReachable(view)), "恢复宽度后操作按钮仍可达");
+
         // ---- 重复挂载幂等 + 最终释放取消订阅 ----
         check(WriteClipboard(window, "哨兵-未发送"), "写入剪贴板哨兵");
         view.Attach(viewModel);
@@ -129,6 +137,34 @@ internal static class UiSmoke
         check(ReadClipboard(window) == "哨兵-释放后", "Detach 后没有残留订阅（重复 Attach 未重复订阅）");
 
         window.Close();
+    }
+
+    private static bool ActionButtonsReachable(LibraryPageView view)
+    {
+        string[] labels = ["添加标签", "同步来源变化", "生成引用", "删除条目"];
+        var buttons = view.GetLogicalDescendants().OfType<Button>()
+            .Where(button => button.Content is string content && labels.Contains(content, StringComparer.Ordinal))
+            .ToList();
+        if (buttons.Count != labels.Length) return false;
+        return buttons.All(button =>
+        {
+            if (!button.IsVisible || button.Bounds.Width <= 1 || button.Bounds.Height <= 1)
+            {
+                Console.WriteLine($"[diag] {button.Content} 不可见或零尺寸 bounds={button.Bounds.Size} visible={button.IsVisible}");
+                return false;
+            }
+            // 必须完整落在视图可视区内：只判宽度会漏掉“渲染但横向溢出被裁”的情况。
+            var origin = button.TranslatePoint(new Point(0, 0), view);
+            if (origin is null) return false;
+            var reachable = origin.Value.X >= -1 && origin.Value.Y >= -1
+                && origin.Value.X + button.Bounds.Width <= view.Bounds.Width + 1
+                && origin.Value.Y + button.Bounds.Height <= view.Bounds.Height + 1;
+            if (!reachable)
+            {
+                Console.WriteLine($"[diag] {button.Content} 溢出可视区 bounds={button.Bounds.Size} origin={origin} view={view.Bounds.Size}");
+            }
+            return reachable;
+        });
     }
 
     private static bool Pump(Func<bool> condition, int timeoutMs = 5000)

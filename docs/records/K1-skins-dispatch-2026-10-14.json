@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "type": "dispatch.record",
+  "taskId": "K1-SKINS",
+  "difficulty": "L3",
+  "role": "implementation",
+  "model": "group/auto-deepseek-v4-1-flash",
+  "requestedEffort": "max",
+  "projectId": "15dc7d93-7442-4727-88d8-d014a1360105",
+  "hostId": "local",
+  "startMainSha": "2993c20032f840bfe0233774691c32961a07a1f6",
+  "threadId": "01a13b9f-5656-7230-936b-91b1744da3f1",
+  "worktree": "C:/Projects/Fucode/worktrees/k1-skins",
+  "branch": "agent/k1-skins",
+  "executionStatus": "inProgress",
+  "callbackAuthorizationIncluded": true,
+  "callbackManagerThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "callbackEventIdTemplate": "K1-SKINS/01a13b9f-5656-7230-936b-91b1744da3f1/K1-SKINS-R1/1/<deliveryHead>",
+  "taskBook": "docs/tasks/hourly-K1-skins-matrix.md",
+  "record": "docs/records/K1-skins-matrix.md",
+  "allowedPaths": [
+    "src/Fufucode.App/Styles/Skins/**",
+    "src/Fufucode.App/Features/Skins/**",
+    "tests/Fufucode.App.Skins.Tests/**",
+    "docs/records/K1-skins-matrix.md"
+  ],
+  "nextAction": "Worker executes K1 complete per-skin visual asset matrix (Fluent2/Metro/M3/Aero/Luna) + text clutter clean-up. Review card when stopped."
+}

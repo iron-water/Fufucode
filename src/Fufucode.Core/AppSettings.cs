@@ -10,15 +10,38 @@ public static class SettingKeys
     public const string Theme = "theme";
     public const string ProxyUrl = "proxyUrl";
     public const string Endpoint = "endpoint";
+    public const string UpdateFeedUrl = "updateFeedUrl";
+    public const string AutoCheckUpdates = "autoCheckUpdates";
+    public const string GitHubRepository = "githubRepository";
 }
 
-/// <summary>One Pi-compatible OpenAI-completions provider; key material is resolved from the process environment.</summary>
+/// <summary>
+/// 一个 OpenAI 兼容端点。ModelId 是当前选中的模型；Models 是该端点可用的模型清单
+/// （从 /models 拉取后保存，避免每次重新获取）。
+/// </summary>
 public sealed record CompatibleEndpoint(string ProviderName, string BaseUrl, string ModelId,
-    string ApiKeyEnvironmentVariable);
+    string ApiKeyEnvironmentVariable,
+    // 端点下可用的全部模型 id；旧配置没有该字段时为空，回退到 ModelId。
+    IReadOnlyList<string>? Models = null)
+{
+    /// <summary>可用于选择的模型：保存的清单，缺失时回退到当前模型。</summary>
+    public IReadOnlyList<string> AvailableModels =>
+        Models is { Count: > 0 } models ? models :
+        string.IsNullOrWhiteSpace(ModelId) ? [] : [ModelId];
+}
 
 public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     string? ThinkingLevel = null, string Theme = "system", string? ProxyUrl = null,
-    CompatibleEndpoint? Endpoint = null);
+    CompatibleEndpoint? Endpoint = null,
+    string? UpdateFeedUrl = null,
+    bool AutoCheckUpdates = false,
+    // 双渠道更新：开发构建默认只扫描本地；正式发布版在构建时写入 GitHub 仓库坐标，
+    // 使其自动对齐 GitHub Release。设置页不暴露这个字段。
+    string? GitHubRepository = null,
+    // 模型选择器里置顶的模型 id（可跨多个提供商）。
+    IReadOnlyList<string>? PinnedModels = null,
+    // 用户在模型选择器里关闭掉的关键字快捷项。
+    IReadOnlyList<string>? DismissedModelKeywords = null);
 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(AppSettings))]
@@ -130,7 +153,7 @@ public sealed class AppSettingsStore
         {
             if (string.IsNullOrWhiteSpace(endpoint.ProviderName) ||
                 !endpoint.ProviderName.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_' or '.') ||
-                string.IsNullOrWhiteSpace(endpoint.ModelId) ||
+                (string.IsNullOrWhiteSpace(endpoint.ModelId) && (endpoint.Models is not { Count: > 0 })) ||
                 !Uri.TryCreate(endpoint.BaseUrl, UriKind.Absolute, out var endpointUri) ||
                 endpointUri.Scheme is not ("http" or "https") || endpointUri.UserInfo.Length > 0 || endpointUri.Query.Length > 0 ||
                 string.IsNullOrWhiteSpace(endpoint.ApiKeyEnvironmentVariable) ||
@@ -138,6 +161,10 @@ public sealed class AppSettingsStore
                 !endpoint.ApiKeyEnvironmentVariable.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
                 throw new ArgumentException("Invalid compatible endpoint.");
         }
+        if (settings.UpdateFeedUrl is { Length: > 0 } feed &&
+            (!Uri.TryCreate(feed, UriKind.Absolute, out var feedUri) ||
+             feedUri.Scheme is not ("http" or "https" or "file")))
+            throw new ArgumentException("Invalid update feed URL.");
         return settings;
     }
 
@@ -149,7 +176,8 @@ public sealed class AppSettingsStore
         var model = new { providers = new Dictionary<string, object>
         {
             [endpoint.ProviderName] = new { baseUrl = endpoint.BaseUrl, api = "openai-completions",
-                apiKey = "$" + endpoint.ApiKeyEnvironmentVariable, models = new[] { new { id = endpoint.ModelId } } }
+                apiKey = "$" + endpoint.ApiKeyEnvironmentVariable,
+                models = endpoint.AvailableModels.Select(id => new { id }).ToArray() }
         } };
         return JsonSerializer.Serialize(model);
     }
@@ -167,7 +195,7 @@ public interface ICredentialStore : ICredentialResolver
     void Delete(string environmentVariable);
 }
 
-/// <summary>Legacy environment credential path, retained for existing Atria configuration.</summary>
+/// <summary>环境变量凭据解析（进程环境优先）。</summary>
 public sealed class EnvironmentCredentialResolver : ICredentialResolver
 {
     public ValueTask<string?> ResolveAsync(string environmentVariable, CancellationToken cancellationToken = default)

@@ -1,0 +1,8 @@
+{
+  "id": "agent.browser-use",
+  "name": "Browser Use 浏览器控制",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.BrowserUse.dll",
+  "packageType": "Fufucode.Plugins.BrowserUse.BrowserUsePluginPackage",
+  "capabilities": ["BrowserControl"]
+}

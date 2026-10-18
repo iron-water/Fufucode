@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "type": "dispatch.record",
+  "taskId": "CS-3",
+  "difficulty": "L3",
+  "role": "implementation",
+  "projectId": "15dc7d93-7442-4727-88d8-d014a1360105",
+  "hostId": "local",
+  "startMainSha": "fd7b34d9a5b6d5f7f90f3c5b52f10b2dfc836952",
+  "threadId": "01a13f5d-ef1c-7a80-b126-f692c6334f24",
+  "worktree": "C:/Projects/Fucode/worktrees/cs3-streaming",
+  "branch": "agent/cs3-streaming",
+  "executionStatus": "inProgress",
+  "callbackAuthorizationIncluded": true,
+  "callbackManagerThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "taskBook": "docs/tasks/native-csharp-runtime.md",
+  "record": "docs/records/CS3-streaming-session-delivery.md",
+  "nextAction": "Worker wires streaming callbacks from NativeAgentLoop into NativeCSharpChatSession to trigger real-time TextAppended and ToolCallAppended events."
+}

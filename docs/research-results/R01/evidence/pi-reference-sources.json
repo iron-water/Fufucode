@@ -1,0 +1,34 @@
+[
+  {
+    "path": "docs/extensions.md",
+    "commit": "a13d35a742c6ef8462812a28fbe1d8c8b7431c32",
+    "filename": "pi-upstream-docs__extensions.md",
+    "sha256": "26c7542e365fed7d6bd3f1d39b1ac38ef67c30ff1b714477ea49f97a3f7fde9c",
+    "matchesInstalled": true
+  },
+  {
+    "path": "docs/rpc-extension-ui.md",
+    "commit": "a13d35a742c6ef8462812a28fbe1d8c8b7431c32",
+    "filename": "pi-upstream-docs__rpc-extension-ui.md",
+    "sha256": "3c6f2c6edfc8b1ace6642343727aef97a7e9234c85509850921b52d6ff09a48e",
+    "matchesInstalled": true
+  },
+  {
+    "path": "src/modes/rpc/rpc-mode.ts",
+    "commit": "a13d35a742c6ef8462812a28fbe1d8c8b7431c32",
+    "filename": "pi-upstream-src__modes__rpc__rpc-mode.ts",
+    "sha256": "d534e0fa1484844a097963d5f4fb4df9397c5a1b5e29e42aed7575ab6f67989b"
+  },
+  {
+    "path": "src/core/agent-session.ts",
+    "commit": "a13d35a742c6ef8462812a28fbe1d8c8b7431c32",
+    "filename": "pi-upstream-src__core__agent-session.ts",
+    "sha256": "11ce7b78ee9d4235f2cdc80632332c93935ad23d7e5d68fe1aa5b155e1a297c0"
+  },
+  {
+    "path": "src/core/extensions/loader.ts",
+    "commit": "a13d35a742c6ef8462812a28fbe1d8c8b7431c32",
+    "filename": "pi-upstream-src__core__extensions__loader.ts",
+    "sha256": "bfda2e6b9a70f72a5884e1cc084fdf21f63370f69a5707ca2d7b311a4e2dd7d4"
+  }
+]

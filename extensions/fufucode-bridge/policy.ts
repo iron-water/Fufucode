@@ -1,7 +1,7 @@
 /**
  * Fufucode bridge policy: maps a tool name to an approval decision.
  *
- * The policy is data-driven. Defaults:
+ * The policy is data-driven. Defaults follow the assignment (计划 §8.2 / 任务书 §3):
  *   - read-only / search tools are auto-allowed,
  *   - file-writing and shell tools always require confirmation,
  *   - unknown custom tools default to confirmation (fail-safe).

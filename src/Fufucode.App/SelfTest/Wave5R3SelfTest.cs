@@ -127,8 +127,15 @@ public static class Wave5R3SelfTest
             window.PaletteForTesting.SearchText = "审查"; await Ready();
             var paletteView = window.GetVisualDescendants().OfType<CommandPaletteView>().First();
             var search = paletteView.FindControl<TextBox>("SearchBox")!;
+            Console.WriteLine($"E1 palette before: selected={window.PaletteForTesting.SelectedItem?.Id}, reason={window.PaletteForTesting.SelectedItem?.DisabledReason}, page={vm.IsChatPage}");
             search.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Enter }); await Ready();
-            Check(window.PaletteForTesting.IsOpen && !window.PaletteForTesting.Items.Any(), "已删除的审查入口不出现在搜索结果，Enter不伪执行");
+            Console.WriteLine($"E1 palette after: open={window.PaletteForTesting.IsOpen}, feedback={window.PaletteForTesting.Feedback}, visible={window.PageForTesting("local-review").IsEffectivelyVisible}, width={window.PageForTesting("local-review").Bounds.Width}, dock={window.DockLayoutForTesting.Selected[Infrastructure.DockZone.Right]}");
+            Check(!window.PaletteForTesting.IsOpen && window.PageAvailableForTesting("local-review") &&
+                window.PageForTesting("local-review").IsEffectivelyVisible &&
+                window.PageForTesting("local-review") is Features.LocalReview.LocalReviewPageView { ViewModel: not null },
+                "E1 已接线审查搜索结果：Enter打开真实模块页面");
+            input.Focus();
+            await window.ActionsForTesting.ExecuteAsync("commands"); await Ready();
             search.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Avalonia.Input.Key.Escape }); await Ready();
             Check(!window.PaletteForTesting.IsOpen && ReferenceEquals(window.FocusManager?.GetFocusedElement(), input), "真实面板Esc事件退出并恢复composer");
             SendKey(Key.P, KeyModifiers.Control); await Ready();

@@ -19,6 +19,7 @@ var availableThinkingLevels = (Option("--thinking-levels") ?? "off,low,medium,hi
 string? forkParentId = null;
 string? forkEntryId = null;
 var abortWithMessage = false;
+var deferAbortSettled = false;
 var uiReplies = new List<JsonElement>();
 var uiEffectCount = 0;
 var cliDialogReplies = new HashSet<string>(StringComparer.Ordinal);
@@ -116,7 +117,7 @@ var eventContracts = new Dictionary<string, EventContract>(StringComparer.Ordina
     [PiProtocolStrings.Wire.SecondEvent] = new(BaselineAnchors.FixtureOnly, PiEventHandlers.SecondEvent, PiEventHandlers.SecondEventSchema),
 };
 
-// Pi 1.0.0 compatible fixture subset. These anchors are provenance labels,
+// Pi 1.0.0 compatible fixture subset. These references are labels in runtime-baseline.md,
 // not claims that every injected transport/approval failure was emitted by real Pi.
 // Handlers below preserve the original fixture behavior and emission order.
 var commandContracts = new Dictionary<string, RpcContract>(StringComparer.Ordinal)
@@ -386,6 +387,20 @@ async Task<bool> HandleClearQueue(JsonElement root, string id, string type)
 async Task<bool> HandleAbort(JsonElement root, string id, string type)
 {
     streaming = false;
+    if (deferAbortSettled)
+    {
+        deferAbortSettled = false;
+        await Emit(new { type = PiProtocolStrings.Wire.Response, id, command = type, success = true });
+        var release = Option("--settle-release") ?? throw new InvalidOperationException("Missing fixture release path");
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (!File.Exists(release))
+        {
+            if (DateTime.UtcNow > deadline) throw new TimeoutException("Fixture settlement was not released");
+            await Task.Delay(10);
+        }
+        await Emit(new { type = PiProtocolStrings.Wire.AgentSettled });
+        return true;
+    }
     if (abortWithMessage)
     {
         abortWithMessage = false;
@@ -655,9 +670,10 @@ async Task<bool> HandlePrompt(JsonElement root, string id, string type)
         await Emit(new { type = PiProtocolStrings.Wire.Response, id, command = type, success = true });
         return true;
     }
-    if (message == "hold")
+    if (message is "hold" or "hold_late_settled")
     {
         streaming = true;
+        deferAbortSettled = message == "hold_late_settled";
         await Emit(new { type = PiProtocolStrings.Wire.Response, id, command = type, success = true });
         await Emit(new { type = PiProtocolStrings.Wire.AgentStart });
         return true;

@@ -119,7 +119,7 @@ internal static class D1BackendTests
                 "-e", Path.Combine(root, "tests/fixtures/d1-crash-extension.ts")]);
             if (backend == BackendId.Omp) engineArgs.AddRange(["--no-title", "--no-rules", "--no-lsp"]);
             using (var lease = SessionLease.Acquire(Path.GetDirectoryName(file)!, savedId))
-            await using (var crashed = new ChatSessionCoordinator(new PiRpcOptions(backend == BackendId.Pi ? node : omp,
+            await using (var crashed = PiSessions.Coordinator(new PiRpcOptions(backend == BackendId.Pi ? node : omp,
                 engineArgs, scratch, EnvironmentVariables: new Dictionary<string, string>
                 {
                     ["PI_CODING_AGENT_DIR"] = backend == BackendId.Pi ? layout.AgentDirectory : Path.Combine(layout.Root, "omp-agent"),
@@ -128,7 +128,7 @@ internal static class D1BackendTests
             {
                 await crashed.StartAsync();
                 try { await crashed.SendPromptAsync("/d1.crash"); throw new Exception("Crash command unexpectedly returned"); }
-                catch (PiRpcException) { }
+                catch (RpcException) { }
                 await Wait(() => crashed.Snapshot.Connection == ConnectionState.Faulted);
                 Check(crashed.Snapshot.LastResult != TaskResult.Completed, backend + " exit faults pending command without false success");
             }
@@ -138,7 +138,7 @@ internal static class D1BackendTests
                     backend + " process-exit recovery does not replay a prompt");
             manager.Settings.Update(s => s with { SelectedModel = "d1/model-that-does-not-exist" });
             try { await manager.CreateAsync(scratch, backend: backend); throw new Exception("Invalid model accepted"); }
-            catch (Exception e) when (e is PiRpcException or InvalidOperationException)
+            catch (Exception e) when (e is RpcException or InvalidOperationException)
             { Check(true, backend + " model error refuses chat creation"); }
             manager.Settings.Update(s => s with { SelectedModel = "d1/d1-fixture" });
             await using (var recovered = await manager.ResumeAsync(savedId))

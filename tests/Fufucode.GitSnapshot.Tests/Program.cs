@@ -11,6 +11,7 @@ void Check(bool condition, string name)
 }
 
 var temp = Path.Combine(Path.GetTempPath(), "fufu-gitsnapshot-" + Guid.NewGuid().ToString("N"));
+await RangeChecks.Run(Check);
 Directory.CreateDirectory(temp);
 try
 {

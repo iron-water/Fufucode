@@ -11,7 +11,11 @@ public sealed record DiffHunk(string Header, int OldStart, int OldLines, int New
 
 /// <summary>Read-only unified diff for one file. It never writes, stages, restores or reverts anything.</summary>
 public sealed record FileDiff(string Path, string? OldPath, bool? IsBinary, bool Truncated,
-    IReadOnlyList<DiffHunk> Hunks, string? Error);
+    IReadOnlyList<DiffHunk> Hunks, string? Error)
+{
+    public string? OldMode { get; init; }
+    public string? NewMode { get; init; }
+}
 
 public static class DiffQuery
 {
@@ -60,7 +64,7 @@ public static class DiffQuery
     private static FileDiff Failed(string path, bool truncated, string error) =>
         new(path, null, null, truncated, [], error);
 
-    private static FileDiff Parse(string path, string output, int maximumLines)
+    internal static FileDiff Parse(string path, string output, int maximumLines)
     {
         var lines = output.Replace("\r\n", "\n").Split('\n');
         var hunks = new List<DiffHunk>();
@@ -70,9 +74,15 @@ public static class DiffQuery
         var active = false;
         var truncated = false;
         var emitted = 0;
+        string? oldMode = null, newMode = null;
         foreach (var line in lines)
         {
-            if (line.StartsWith("Binary files ", StringComparison.Ordinal)) return new(path, null, true, false, [], null);
+            if (line.StartsWith("old mode ", StringComparison.Ordinal)) oldMode = line[9..].Trim();
+            if (line.StartsWith("new mode ", StringComparison.Ordinal)) newMode = line[9..].Trim();
+            if (line.StartsWith("deleted file mode ", StringComparison.Ordinal)) oldMode = line[18..].Trim();
+            if (line.StartsWith("new file mode ", StringComparison.Ordinal)) newMode = line[14..].Trim();
+            if (line.StartsWith("Binary files ", StringComparison.Ordinal))
+                return new(path, null, true, false, [], null) { OldMode = oldMode, NewMode = newMode };
             if (line.StartsWith("diff --git ", StringComparison.Ordinal) || line.StartsWith("index ", StringComparison.Ordinal) ||
                 line.StartsWith("old mode ", StringComparison.Ordinal) || line.StartsWith("new mode ", StringComparison.Ordinal) ||
                 line.StartsWith("similarity ", StringComparison.Ordinal) || line.StartsWith("rename ", StringComparison.Ordinal) ||
@@ -81,7 +91,7 @@ public static class DiffQuery
                 Flush();
                 continue;
             }
-            if (line.StartsWith("--- ", StringComparison.Ordinal) || line.StartsWith("+++ ", StringComparison.Ordinal)) continue;
+            if (!active && (line.StartsWith("--- ", StringComparison.Ordinal) || line.StartsWith("+++ ", StringComparison.Ordinal))) continue;
             if (line.StartsWith("@@", StringComparison.Ordinal))
             {
                 Flush();
@@ -99,7 +109,7 @@ public static class DiffQuery
             emitted++;
         }
         Flush();
-        return new(path, null, hunks.Count == 0 ? (bool?)null : false, truncated, hunks, null);
+        return new(path, null, hunks.Count == 0 ? (bool?)null : false, truncated, hunks, null) { OldMode = oldMode, NewMode = newMode };
 
         void Flush()
         {

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST-PI-SHUTDOWN-BARRIER",
+  "runId": "E3-M-HOST-PI-SHUTDOWN-BARRIER-fd6808d",
+  "sourceMainSha": "eb710d627132a96ea16751b4d7f346ca6036ad23",
+  "integrationStatus": "integrated",
+  "integrationScope": "shared Pi RPC Stop/Dispose termination tasks and immutable actual child exit observation; repeated shutdown waits for original process exit and preserves generation/PID/exit code after disposal",
+  "productAcceptance": "pending",
+  "resolves": ["PI-CONCURRENT-SHUTDOWN-1"],
+  "verification": {
+    "solution": { "warnings": 0, "errors": 0, "exitCode": 0 },
+    "appFull": { "pass": 1329, "fail": 0, "exitCode": 0 },
+    "coreFull": { "pass": 359, "skip": 1, "exitCode": 0 },
+    "piFull": { "pass": 48, "fail": 0, "exitCode": 0 },
+    "shutdownAssertionsIncludedInPiFull": { "pass": 26, "fail": 0 },
+    "realPiExitAssertionIncludedInPiFull": { "pass": 1 },
+    "realPiPluginShell": { "pass": 15, "fail": 0, "exitCode": 0 },
+    "realPiPluginCancellation": { "pass": 27, "fail": 0, "exitCode": 0 },
+    "ownedShutdownFixtureProcessesRemaining": 0
+  },
+  "evidence": [
+    "docs/records/M-Pi-shutdown-barrier-2026-10-14.md",
+    "tmp/m-cycle54-shutdown-red.log",
+    "tmp/m-cycle54-shutdown-green.log",
+    "tmp/m-cycle54-probe.log",
+    "tmp/m-cycle54-solution.log",
+    "tmp/m-cycle54-pi-full.log",
+    "tmp/m-cycle54-core-full.log",
+    "tmp/m-cycle54-app-full.log",
+    "tmp/m-cycle54-plugin-real.log",
+    "tmp/m-cycle54-cancel-real.log"
+  ],
+  "notVerified": [
+    "persistent original plugin request/holder/engine termination association",
+    "application crash/power-loss recovery and arbitrary detached child side effects",
+    "safe explicit release of abandoned persistent in-flight candidates",
+    "system native input/IME/DPI and current-source installer"
+  ],
+  "nextAction": "M binds observed actual generation exit to the original request/holder lifecycle before considering explicit recovery. One RPC child exit is not proof of all side effects ending. Preserve old requests, stopped R1/E3 workers and frozen installer gate."
+}

@@ -1,0 +1,324 @@
+<UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:a="using:Fufucode.App.Features.Automation" xmlns:core="using:Fufucode.Core.Automation" xmlns:p="using:Fufucode.App.Features.Automation.Persistence"
+             x:Class="Fufucode.App.Features.Automation.AutomationControlPageView"
+             x:DataType="a:AutomationControlViewModel" Background="{DynamicResource AppWindowBackground}" AutomationProperties.Name="自动开发工作台">
+  <UserControl.Styles>
+    <Style Selector="Border.automation-thread"><Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/><Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/></Style>
+    <Style Selector="Path.automation-edge"><Setter Property="Stroke" Value="{DynamicResource AppAccent}"/><Setter Property="StrokeThickness" Value="1.5"/></Style>
+    <Style Selector="Border.automationCard"><Setter Property="Background" Value="{DynamicResource AppCardBackground}"/><Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/><Setter Property="Padding" Value="10"/></Style>
+    <!-- UI-1 单闭合边框原则：已闭合 automationCard 内的次级条目只保留轻质填充，不再加闭合框。 -->
+    <Style Selector="Border.automationCardInner"><Setter Property="Background" Value="{DynamicResource AppInnerWell}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/><Setter Property="Padding" Value="10"/></Style>
+    <!-- UI-1：卡片内部的结构划分只用单向 1px 发丝细线。 -->
+    <Style Selector="Border.automationRule"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/><Setter Property="BorderThickness" Value="0,1,0,0"/></Style>
+    <!-- UI-1：卡片内输入框降级为无框轻质填充。 -->
+    <Style Selector="Border.automationCard TextBox, Border.automationCardInner TextBox"><Setter Property="Background" Value="{DynamicResource AppInnerWell}"/><Setter Property="BorderThickness" Value="0"/></Style>
+    <Style Selector="Border.automationCard TextBox:focus /template/ Border#PART_BorderElement, Border.automationCardInner TextBox:focus /template/ Border#PART_BorderElement"><Setter Property="Background" Value="{DynamicResource AppInnerWell}"/><Setter Property="BorderThickness" Value="0"/></Style>
+    <Style Selector="Border.automationCard TextBox:pointerover /template/ Border#PART_BorderElement, Border.automationCardInner TextBox:pointerover /template/ Border#PART_BorderElement"><Setter Property="Background" Value="{DynamicResource AppInnerWell}"/><Setter Property="BorderThickness" Value="0"/></Style>
+    <Style Selector="Border.automationCard ComboBox, Border.automationCardInner ComboBox"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/></Style>
+    <Style Selector="Button.automationTab"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/><Setter Property="Padding" Value="10,5"/></Style>
+    <Style Selector="Button.automationTab.selected"><Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/><Setter Property="FontWeight" Value="SemiBold"/></Style>
+    <Style Selector="Border.automationDrawer"><Setter Property="Background" Value="{DynamicResource AppCardBackground}"/><Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/><Setter Property="BorderThickness" Value="1,0,1,0"/><Setter Property="Padding" Value="10"/></Style>
+  </UserControl.Styles>
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="12,10,12,8" RowSpacing="8">
+
+    <!-- 项目头：名称、状态、模式、后台连接、主操作 -->
+    <Grid x:Name="WorkbenchHeader" Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+      <StackPanel Spacing="1" MinWidth="150">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Classes="title" Text="自动开发"/>
+          <TextBlock Text="{Binding ProjectStateText}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+          <TextBlock Text="{Binding ModeTextV4}" Classes="caption" VerticalAlignment="Center"/>
+        </StackPanel>
+        <TextBlock Classes="caption" Text="{Binding HostConnectionText}" TextWrapping="Wrap"/>
+        <TextBlock x:Name="StatusBlock" Classes="caption" Text="{Binding StatusText}" TextWrapping="Wrap" AutomationProperties.Name="状态行"/>
+      </StackPanel>
+      <!-- 窄于 1000DIP 时主操作行下移到整行（第 2 行），避免与标题重叠。 -->
+      <WrapPanel x:Name="HeaderActions" Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Right">
+        <Button Content="连接工作台…" Click="Connect_Click" Margin="0,0,8,4" AutomationProperties.Name="连接现有工作台数据库"/>
+        <Button Content="刷新" Command="{Binding RefreshCommand}" Margin="0,0,8,4"/>
+        <Button x:Name="ResumeAutomatic" Content="暂停新任务/继续（自动模式）" Command="{Binding ResumeAutomaticCommand}" Margin="0,0,8,4"
+                ToolTip.Tip="向核心提交自动开发模式；未启用时保留核心拒绝的真实原因，不伪造切换成功。"/>
+        <Button Content="委托与预算" Command="{Binding OpenDelegationDrawerCommand}" Margin="0,0,8,4"/>
+        <Button Content="返回总览" Command="{Binding ReturnToOverviewCommand}" Margin="0,0,0,4"/>
+      </WrapPanel>
+    </Grid>
+
+    <!-- 二级页签与当前安排 -->
+    <StackPanel Grid.Row="1" Spacing="6">
+      <Border x:Name="OfflineBanner" Classes="automationCard" IsVisible="{Binding ShowOfflineNotice}">
+        <TextBlock Text="{Binding OfflineNotice}" TextWrapping="Wrap"/>
+      </Border>
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <Button x:Name="OverviewTab" Classes="automationTab" Content="总览" Command="{Binding SelectTabCommand}" CommandParameter="overview" AutomationProperties.Name="总览页签"/>
+        <Button x:Name="ThreadsTab" Classes="automationTab" Content="执行线程" Command="{Binding SelectTabCommand}" CommandParameter="threads" AutomationProperties.Name="执行线程页签"/>
+        <Button x:Name="DeliveriesTab" Classes="automationTab" Content="成果与验收" Command="{Binding SelectTabCommand}" CommandParameter="deliveries" AutomationProperties.Name="成果与验收页签"/>
+        <Button x:Name="ActivityTab" Classes="automationTab" Content="活动记录" Command="{Binding SelectTabCommand}" CommandParameter="activity" AutomationProperties.Name="活动记录页签"/>
+      </StackPanel>
+      <Border x:Name="CurrentArrangement" Classes="automationCard">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <StackPanel Spacing="2">
+            <TextBlock Text="当前安排" FontWeight="SemiBold"/>
+            <TextBlock x:Name="NextActionBlock" Text="{Binding CurrentNextAction}" TextWrapping="Wrap" AutomationProperties.Name="当前安排"/>
+            <TextBlock Classes="caption" Text="{Binding CurrentProgressNote}" TextWrapping="Wrap"/>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="2" MinWidth="140">
+            <TextBlock Classes="numeric" Text="{Binding DecisionCountText, StringFormat='需要你决定 {0}'}"/>
+            <TextBlock Classes="numeric" Text="{Binding WorkingCountText, StringFormat='工作中 {0}'}"/>
+            <TextBlock Classes="caption" Text="{Binding LastProgressText}" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Grid>
+      </Border>
+      <TextBlock Classes="caption" Text="{Binding BackendReadinessText}" TextWrapping="Wrap" AutomationProperties.Name="执行后端就绪"/>
+      <TextBlock x:Name="EntryPolicyBlock" Classes="caption" TextWrapping="Wrap" AutomationProperties.Name="项目入口策略"
+                 Text="{Binding EntryPolicyText}"/>
+      <TextBlock x:Name="EntryPolicyModeBlock" Classes="caption" TextWrapping="Wrap" Text="{Binding EntryPolicyMode}"/>
+    </StackPanel>
+
+    <!-- 详情抽屉：委托与预算（全局设置仍在设置页） -->
+    <Border x:Name="DelegationDrawer" Grid.Row="1" Classes="automationDrawer" IsVisible="{Binding DrawerOpen}" Margin="0,0,0,8">
+      <StackPanel Spacing="6">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Text="委托与预算" FontWeight="SemiBold"/>
+          <Button Grid.Column="1" Content="收起" Command="{Binding CloseDelegationDrawerCommand}" AutomationProperties.Name="收起委托抽屉"/>
+        </Grid>
+        <TextBlock Classes="caption" Text="{Binding Delegation.ScopeText}" TextWrapping="Wrap"/>
+        <WrapPanel>
+          <StackPanel Margin="0,0,16,6" MinWidth="150">
+            <TextBlock Text="并发执行槽"/>
+            <NumericUpDown Value="{Binding Delegation.Concurrency, Mode=TwoWay}" Minimum="1" Maximum="8" Increment="1" AutomationProperties.Name="并发执行槽"/>
+          </StackPanel>
+          <StackPanel Margin="0,0,16,6"><CheckBox Content="自动审核" IsChecked="{Binding Delegation.AutoReview, Mode=TwoWay}"/><CheckBox Content="自动集成" IsChecked="{Binding Delegation.AutoIntegrate, Mode=TwoWay}"/></StackPanel>
+          <StackPanel Margin="0,0,16,6" MinWidth="170"><TextBlock Text="实现模型"/><TextBox Text="{Binding Delegation.ImplementationModel, Mode=TwoWay}" AutomationProperties.Name="实现模型"/></StackPanel>
+          <StackPanel Margin="0,0,16,6" MinWidth="170"><TextBlock Text="验证模型（最低成本）"/><TextBox Text="{Binding Delegation.VerificationModel, Mode=TwoWay}" AutomationProperties.Name="验证模型"/></StackPanel>
+          <StackPanel Margin="0,0,16,6"><CheckBox Content="允许联网" IsChecked="{Binding Delegation.AllowNetwork, Mode=TwoWay}"/><CheckBox Content="允许付费动作" IsChecked="{Binding Delegation.AllowPaidActions, Mode=TwoWay}"/><CheckBox Content="周期本地补漏" IsChecked="{Binding Delegation.PeriodicLocalSweep, Mode=TwoWay}"/></StackPanel>
+        </WrapPanel>
+        <TextBlock Classes="caption" Text="{Binding DelegationSummary}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="{Binding Delegation.BudgetText}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="{Binding Delegation.PermissionText}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="提交目标与点击开始是一次委托；不再逐项要求批准。危险工具审批单独标明，不被自动模式免除。" TextWrapping="Wrap"/>
+      </StackPanel>
+    </Border>
+
+    <!-- A. 总览：主控对话 + 执行概况 / 需要你决定 / 最近成果 -->
+    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsOverviewTab}">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+        <Border Classes="automationCard" MinHeight="220">
+          <Grid RowDefinitions="Auto,*,Auto" RowSpacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <TextBlock Text="主控对话" FontWeight="SemiBold"/>
+              <TextBlock Classes="caption" Text="主控解释、决定与成果卡；自动模式在委托范围内自行规划推进" VerticalAlignment="Center"/>
+            </StackPanel>
+            <ScrollViewer Grid.Row="1" MinHeight="140" HorizontalScrollBarVisibility="Disabled">
+              <ItemsControl x:Name="MessageList" ItemsSource="{Binding MessageRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="a:AutomationV4MessageRow">
+                    <!-- UI-1：主控对话外卡已闭合，消息条目降级为无框轻质填充。 -->
+                    <Border Classes="automationCardInner" Margin="0,0,0,6">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Header}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="{Binding Body}" TextWrapping="Wrap"/>
+                        <TextBlock Classes="caption" Text="{Binding DeliveryState}"/>
+                        <TextBlock Classes="caption numeric" Text="{Binding Timestamp}"/>
+                      </StackPanel>
+                    </Border>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+            <StackPanel Grid.Row="2" Spacing="4">
+              <TextBox x:Name="GoalInput" Text="{Binding GoalDraft, Mode=TwoWay}" PlaceholderText="补充目标、改变优先级，或直接问主控…"
+                       AcceptsReturn="True" MinHeight="56" TextWrapping="Wrap" AutomationProperties.Name="主控目标输入"/>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                <TextBlock Classes="caption" Text="自动开发 · 委托范围内自行推进" VerticalAlignment="Center"/>
+                <Button x:Name="SendGoal" Grid.Column="1" Content="发送给主控" Command="{Binding SubmitGoalRequestCommand}"/>
+              </Grid>
+            </StackPanel>
+          </Grid>
+        </Border>
+        <StackPanel Grid.Column="1" Spacing="8" MinWidth="260" MaxWidth="320">
+          <Border Classes="automationCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="正在工作" FontWeight="SemiBold"/>
+              <ItemsControl x:Name="MiniThreadList" ItemsSource="{Binding MiniThreadRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="a:AutomationV4ThreadRow">
+                    <StackPanel Margin="0,0,0,4"><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/><TextBlock Classes="caption" Text="{Binding State}"/><TextBlock Classes="caption" Text="{Binding Shas}" TextWrapping="Wrap"/></StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Button Content="查看线程与依赖" Command="{Binding SelectTabCommand}" CommandParameter="threads" HorizontalAlignment="Left"/>
+            </StackPanel>
+          </Border>
+          <Border Classes="automationCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="需要你决定" FontWeight="SemiBold"/>
+              <TextBlock Classes="caption" Text="{Binding DecisionCountText, StringFormat='可操作事项 {0} 项；普通实现不占人类收件箱。'}" TextWrapping="Wrap"/>
+              <ListBox x:Name="DecisionList" ItemsSource="{Binding Inbox}" SelectedItem="{Binding SelectedDecision, Mode=TwoWay}" MaxHeight="140" MinHeight="40">
+                <ListBox.ItemTemplate>
+                  <DataTemplate x:DataType="a:AutomationInboxRow"><StackPanel><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/><TextBlock Text="{Binding Availability}" Classes="caption"/></StackPanel></DataTemplate>
+                </ListBox.ItemTemplate>
+              </ListBox>
+            </StackPanel>
+          </Border>
+          <Border Classes="automationCard">
+            <StackPanel Spacing="4">
+              <TextBlock Text="最近成果" FontWeight="SemiBold"/>
+              <TextBlock Text="{Binding RecentDeliveryText}" TextWrapping="Wrap"/>
+              <TextBlock Classes="caption" Text="已提交不等于已整合；验证结果随成果版本保存。" TextWrapping="Wrap"/>
+              <Button Content="查看成果与证据" Command="{Binding SelectTabCommand}" CommandParameter="deliveries" HorizontalAlignment="Left"/>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
+    </ScrollViewer>
+
+    <!-- B. 执行线程：列表 / 依赖图双视角 -->
+    <Grid Grid.Row="3" RowDefinitions="Auto,*" RowSpacing="6" IsVisible="{Binding IsThreadsTab}">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="执行线程" FontWeight="SemiBold" VerticalAlignment="Center"/>
+        <Button x:Name="ListViewButton" Classes="subtle" Content="列表" Command="{Binding SetThreadViewCommand}" CommandParameter="list" AutomationProperties.Name="列表视角"/>
+        <Button x:Name="GraphViewButton" Classes="subtle" Content="依赖图" Command="{Binding SetThreadViewCommand}" CommandParameter="graph" AutomationProperties.Name="依赖图视角"/>
+        <TextBlock Classes="caption" Text="{Binding ThreadViewText}" VerticalAlignment="Center"/>
+        <CheckBox Content="展开全部次级线程" IsChecked="{Binding ShowAllThreads, Mode=TwoWay}"/>
+      </StackPanel>
+      <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto" IsVisible="{Binding IsThreadListVisible}">
+        <ItemsControl x:Name="ThreadList" ItemsSource="{Binding ThreadRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="a:AutomationV4ThreadRow">
+              <Border Classes="automationCard" Margin="0,0,0,6">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding Facts}" TextWrapping="Wrap"/>
+                  <TextBlock Text="{Binding State}"/>
+                  <TextBlock Classes="caption" Text="{Binding Tree}" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding Shas}" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding LastEventText}" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding NextAction}" TextWrapping="Wrap"/>
+                  <Button Content="打开线程详情" Command="{Binding $parent[ItemsControl].((a:AutomationControlViewModel)DataContext).SelectThreadRowCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" AutomationProperties.Name="线程任务依赖图" IsVisible="{Binding IsThreadGraphVisible}">
+        <Canvas x:Name="GraphCanvas"/>
+      </ScrollViewer>
+    </Grid>
+
+    <!-- C. 成果与验收 -->
+    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsDeliveriesTab}">
+      <StackPanel Spacing="6">
+        <TextBlock Text="区分交付、接受、整合和验证，保留每一份成果的版本。" Classes="caption" TextWrapping="Wrap"/>
+        <ItemsControl x:Name="DeliveryList" ItemsSource="{Binding DeliveryRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="a:AutomationV4DeliveryPartRow">
+              <Border Classes="automationCard" Margin="0,0,0,6">
+                <StackPanel Spacing="3">
+                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding Bindings}" TextWrapping="Wrap"/>
+                  <TextBlock Text="{Binding Flow}" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding Verification}" TextWrapping="Wrap"/>
+                  <TextBlock Classes="caption" Text="{Binding Wiring}" TextWrapping="Wrap"/>
+                  <Button Content="查看交付与证据" Command="{Binding $parent[ItemsControl].((a:AutomationControlViewModel)DataContext).SelectDeliveryRowCommand}" CommandParameter="{Binding}" HorizontalAlignment="Left"/>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <Border Classes="automationCard">
+          <StackPanel Spacing="3">
+            <TextBlock Text="项目验收" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding AcceptanceText}" TextWrapping="Wrap"/>
+            <SelectableTextBlock Text="{Binding AcceptanceGapText}" TextWrapping="Wrap"/>
+            <TextBlock Classes="caption" Text="只有真实终验通过才显示“项目已完成”；发布/推送是另一个获授权动作。" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- D. 活动记录与本地回执/草稿 -->
+    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsActivityTab}">
+      <StackPanel Spacing="6">
+        <TextBlock Classes="caption" Text="时间线区分业务进展与宿主健康：token 生成或进程存活不等于有效进展。" TextWrapping="Wrap"/>
+        <StackPanel x:Name="InvalidatedInputPanel" IsVisible="{Binding HasInvalidatedInput}" Spacing="6">
+          <TextBlock Text="待办已变化，旧输入仍保留。可复制或保存草稿；不能提交旧决定。" TextWrapping="Wrap"/>
+          <ComboBox ItemsSource="{Binding InvalidatedDrafts}" SelectedItem="{Binding SelectedInvalidatedDraft, Mode=TwoWay}" HorizontalAlignment="Stretch">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="p:AutomationDraftEntry"><TextBlock Text="{Binding TodoId}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <SelectableTextBlock x:Name="InvalidatedInputPreview" Text="{Binding InvalidatedInputPreview}" TextWrapping="Wrap"/>
+          <WrapPanel>
+            <Button x:Name="SaveInvalidatedInput" Content="保存这份旧输入" Command="{Binding SaveInvalidatedDraftCommand}" Margin="0,0,8,4"/>
+            <Button Content="丢弃这份未保存输入" Command="{Binding DiscardInvalidatedDraftCommand}" Margin="0,0,8,4" ToolTip.Tip="只移除此处临时输入，不删除已保存草稿。"/>
+          </WrapPanel>
+        </StackPanel>
+        <Expander x:Name="LocalAutomationRecords" Header="本地草稿与原回执" IsVisible="{Binding Connected}">
+          <StackPanel Spacing="6">
+            <TextBlock Text="{Binding PersistenceText}" TextWrapping="Wrap"/>
+            <WrapPanel><Button x:Name="SaveAutomationDraft" Content="保存当前输入" Command="{Binding SaveDraftCommand}" Margin="0,0,8,4"/><Button Content="重读本地记录" Command="{Binding ReloadLocalRecordsCommand}" Margin="0,0,8,4"/></WrapPanel>
+            <ComboBox x:Name="SavedAutomationDrafts" ItemsSource="{Binding SavedDrafts}" SelectedItem="{Binding SelectedSavedDraft, Mode=TwoWay}" PlaceholderText="选择保留草稿" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate><DataTemplate x:DataType="p:AutomationDraftEntry"><StackPanel><TextBlock Text="{Binding TodoKind}"/><TextBlock Text="{Binding TodoId}" TextWrapping="Wrap"/></StackPanel></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+            <SelectableTextBlock Text="{Binding SavedDraftPreview}" TextWrapping="Wrap"/>
+            <Button x:Name="RestoreAutomationDraft" Content="恢复所选草稿" Command="{Binding RestoreDraftCommand}" HorizontalAlignment="Left"/>
+            <ComboBox ItemsSource="{Binding PendingRequests}" SelectedItem="{Binding SelectedPendingRequest, Mode=TwoWay}" PlaceholderText="选择结果未知的原操作" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate><DataTemplate x:DataType="p:AutomationRequestRecord"><TextBlock Text="{Binding CommandId}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button x:Name="ObserveAutomationReceipt" Content="核对原回执（不重发）" Command="{Binding ObservePendingRequestCommand}" HorizontalAlignment="Left"/>
+          </StackPanel>
+        </Expander>
+        <Border Classes="automationCard">
+          <StackPanel Spacing="4">
+            <TextBlock Text="运行健康" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding HostConnectionText}" TextWrapping="Wrap"/>
+            <TextBlock Text="{Binding SummaryText}" TextWrapping="Wrap"/>
+            <TextBlock Classes="caption" Text="最后有效进展与进程存活分别记录；补扫无变化时不调用模型。" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+        <TextBlock Text="待办与决定" FontWeight="SemiBold"/>
+        <ListBox x:Name="ActivityDecisionList" ItemsSource="{Binding Inbox}" SelectedItem="{Binding SelectedDecision, Mode=TwoWay}" MaxHeight="160" MinHeight="40">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="a:AutomationInboxRow"><StackPanel><TextBlock Text="{Binding Title}" TextWrapping="Wrap"/><TextBlock Text="{Binding Availability}" Classes="caption"/></StackPanel></DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel IsVisible="{Binding HasDetails}" Spacing="8">
+          <SelectableTextBlock x:Name="Details" Text="{Binding DetailText}" TextWrapping="Wrap"/>
+          <StackPanel IsVisible="{Binding HasSelectedExecution}" Spacing="6">
+            <SelectableTextBlock Text="{Binding ExecutionText}" TextWrapping="Wrap"/>
+            <TextBox x:Name="CancellationReason" Text="{Binding ReasonText, Mode=TwoWay}" PlaceholderText="取消理由（必填）" TextWrapping="Wrap" AutomationProperties.Name="执行取消理由"/>
+            <Button x:Name="CancelExecution" Content="确认取消本次执行" Command="{Binding CancelExecutionCommand}" HorizontalAlignment="Left"/>
+          </StackPanel>
+          <StackPanel IsVisible="{Binding HasCancelledRuns}" Spacing="6">
+            <TextBlock Text="取消后的人工对账" FontWeight="SemiBold"/>
+            <ComboBox x:Name="CancelledRunInput" ItemsSource="{Binding CancelledRuns}" SelectedItem="{Binding SelectedCancelledRun, Mode=TwoWay}" PlaceholderText="选择具体运行" HorizontalAlignment="Stretch">
+              <ComboBox.ItemTemplate><DataTemplate x:DataType="core:ControlRunStopState"><TextBlock Text="{Binding RunId}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+            </ComboBox>
+            <Button x:Name="InspectCancelledRun" Content="核查原运行与工作树" Command="{Binding InspectCancelledRunCommand}" HorizontalAlignment="Left"/>
+            <SelectableTextBlock Text="{Binding ReconciliationText}" TextWrapping="Wrap"/>
+            <TextBox x:Name="ResolutionReason" Text="{Binding ResolutionReason, Mode=TwoWay}" PlaceholderText="记录为中断的理由（必填）" TextWrapping="Wrap"/>
+            <TextBox x:Name="ResolutionEvidence" Text="{Binding ResolutionEvidence, Mode=TwoWay}" PlaceholderText="实际核查依据（必填）" TextWrapping="Wrap"/>
+            <Button x:Name="ResolveCancelledRun" Content="确认记录为中断" Command="{Binding ResolveCancelledRunCommand}" HorizontalAlignment="Left"/>
+          </StackPanel>
+          <TextBlock Text="{Binding DecisionEffectText}" TextWrapping="Wrap" Classes="caption"/>
+          <TextBox x:Name="ResponseInput" IsVisible="{Binding IsQuestion}" Text="{Binding ResponseText, Mode=TwoWay}" PlaceholderText="你的回答（必填）" AcceptsReturn="True" MinHeight="80" TextWrapping="Wrap" AutomationProperties.Name="问题回答"/>
+          <ComboBox x:Name="WinnerInput" IsVisible="{Binding IsChoice}" ItemsSource="{Binding WinnerChoices}" SelectedItem="{Binding SelectedWinner, Mode=TwoWay}" PlaceholderText="选择已接受的候选" HorizontalAlignment="Stretch" AutomationProperties.Name="竞争候选">
+            <ComboBox.ItemTemplate><DataTemplate x:DataType="a:AutomationWinnerChoice"><TextBlock Text="{Binding Label}" TextWrapping="Wrap"/></DataTemplate></ComboBox.ItemTemplate>
+          </ComboBox>
+          <TextBox IsVisible="{Binding NeedsReason}" Text="{Binding ReasonText, Mode=TwoWay}" PlaceholderText="理由或具体返工要求（拒绝必填）" AcceptsReturn="True" MinHeight="64" TextWrapping="Wrap" AutomationProperties.Name="决定理由"/>
+          <TextBox IsVisible="{Binding NeedsReviewEvidence}" Text="{Binding EvidenceText, Mode=TwoWay}" PlaceholderText="实际核查依据（审核必填）" AcceptsReturn="True" MinHeight="64" TextWrapping="Wrap" AutomationProperties.Name="审核依据"/>
+          <ItemsControl x:Name="DecisionActions" ItemsSource="{Binding DecisionActions}">
+            <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate><DataTemplate x:DataType="a:AutomationDecisionAction">
+              <Button Content="{Binding Label}" Command="{Binding Command}" CommandParameter="{Binding Option}" Margin="0,0,8,4"/>
+            </DataTemplate></ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+
+    <!-- 计划的创建入口保留在活动记录的诊断区，不再是新入口默认流程 -->
+    <StackPanel Grid.Row="2" IsVisible="{Binding IsActivityTab}">
+      <a:AutomationControlCreationView x:Name="CreationForm"/>
+    </StackPanel>
+  </Grid>
+</UserControl>

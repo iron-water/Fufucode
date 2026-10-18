@@ -1,0 +1,60 @@
+{
+  "taskId": "UI-1",
+  "status": "module_ready",
+  "package": "UI-1 open-claude-ui interaction polish",
+  "worktree": "C:/Projects/Fucode/worktrees/ui1-claude-polish",
+  "branch": "agent/ui1-claude",
+  "baseSha": "5f1ea0e",
+  "headSha": "0cb7767a87cf6d65352e95dfaa98a3302f4372c2",
+  "commit": "0cb7767a87cf6d65352e95dfaa98a3302f4372c2",
+  "commitSubject": "feat(ui): UI-1 open-claude-ui interaction polish (single border, IME dual-interlock, 4px drag dead zone, tabular numerals)",
+  "deliveryRevision": "r1",
+  "eventId": "UI-1:r1:0cb7767a87cf6d65352e95dfaa98a3302f4372c2",
+  "mainControlThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "recordPath": "docs/records/UI1-claude-polish-delivery.md",
+  "changedFiles": [
+    "src/Fufucode.App/Styles/FufucodeTheme.axaml",
+    "src/Fufucode.App/Styles/WorkbenchStyles.axaml",
+    "src/Fufucode.App/Infrastructure/ImeEnterGuard.cs",
+    "src/Fufucode.App/Infrastructure/DragDeadZone.cs",
+    "src/Fufucode.App/Infrastructure/DeadZoneGridSplitter.cs",
+    "src/Fufucode.App/Views/ChatPage.axaml",
+    "src/Fufucode.App/Views/ChatPage.axaml.cs",
+    "src/Fufucode.App/Views/DockRegionView.cs",
+    "src/Fufucode.App/Views/MainWindow.axaml",
+    "src/Fufucode.App/Features/Automation/AutomationControlPageView.axaml",
+    "tests/Fufucode.App.Ui1.Tests/Fufucode.App.Ui1.Tests.csproj",
+    "tests/Fufucode.App.Ui1.Tests/Harness.cs",
+    "tests/Fufucode.App.Ui1.Tests/Program.cs",
+    "docs/records/UI1-claude-polish-delivery.md"
+  ],
+  "implemented": [
+    "单闭合边框原则：新增 AppDividerSubtle(6% 白/黑) 发丝细线令牌、Border.nestedFill(无框轻质填充)、Border.innerRule(单向 1px)；ChatPage 工具卡输出区 codeCard→nestedFill，代码头分隔改单向细线；composer 内 queueStrip/restoreInfo 与模型选择器降级无框",
+    "CJK 输入法双重互锁：ImeEnterGuard 新增 ImeProcessKeyCode=229 与 ShouldSwallowEnter(keyCode,isComposing) 纯判定；ChatPage 输入框 KeyDown 增加 Key.ImeProcessed(VK229) 吞键第二重，组合态时间窗为第一重",
+    "4px 拖拽死区：DragDeadZone 统一 4px 阈值与切比雪夫度量；DockRegionView Tab 起拖/上报阈值 → 4px；新增 DeadZoneGridSplitter 覆盖 OnDragDelta 做累计位移门（StyleKeyOverride 复用 Fluent 模板），MainWindow 三处分栏改用之；键盘方向键拖动即时放行不受死区影响",
+    "排版微调：AppTabularNumericFeatures(tnum) 令牌，mono/meta 全局锁定 + 新增 TextBlock.numeric，套用到 ChatPage 时间戳与自动化页计数/时间戳",
+    "定向测试工程 tests/Fufucode.App.Ui1.Tests：43 项断言，覆盖四迁移项纯逻辑 + 真实无头窗口令牌解析"
+  ],
+  "verified": {
+    "solutionBuild": "dotnet build Fufucode.sln -v q → 0 警告 0 错误",
+    "targetedTests": "tests/Fufucode.App.Ui1.Tests -c Release → 43 项断言全部通过（含 DeadZoneGridSplitter.EvaluateDelta 死区判定、真实无头窗口资源解析、numeric 实际携带 tnum）",
+    "nativeSelfTest": "dotnet run --project src/Fufucode.App -c Debug -- --selftest → 全量无头自测 0 失败（含 L11 splitter keyboard resize、L07 指针拖放）",
+    "targetedSelftestFilters": "--workbench-only 0 失败；--tabs-only 0 失败；--sessions-only 0 失败；--automation-only(Automation page failures) 0 失败",
+    "regressionFix": "首次全量自测 L11 失败（DeadZoneGridSplitter 未设 StyleKeyOverride 致 Fluent GridSplitter 模板未命中）；经 stash 干净基线 workbench-only 0 失败对照确认来源后修复，复跑全量 0 失败"
+  },
+  "notRun": [
+    "真实原生人工视觉审阅（100%/125%/150% DPI 下 composer/工作台/设置页人工观感）",
+    "真实中文拼音输入法实机选词回车验证（双重互锁为库级+无头窗口定向验证，VK229 映射经 Avalonia API 契约确认）",
+    "指针拖拽端到端重排抑制未由定向工程证明（合成夹具无法驱动真实 Splitter 指针拖动，改由主 App --selftest L07/L11 覆盖）",
+    "open-claude-ui 其它迁移项（弹簧预设/渐隐遮罩/Web Audio）不在本任务范围"
+  ],
+  "blockers": [],
+  "publicWiringNeeded": [
+    "DeadZoneGridSplitter 已直接接入 MainWindow.axaml 三处分栏（含 XAML 类型交换）；如需其他窗口/未来分栏复用同款死区，主控可指定共享入口",
+    "如需把 UI-1 的四条不变量写入 Fufucode UI 规范真源（面向 Agent 的门禁清单），属主控文档接线范围"
+  ],
+  "temporaryState": "none",
+  "restoreResult": "no temporary processes, services or permissions were created; 一个自测遗留 Fufucode.App 进程(PID 31680,自身测试残留)已 Stop-Process 清理",
+  "stoppedWriting": true,
+  "writerStopped": true
+}

@@ -1,0 +1,16 @@
+{
+ "schemaVersion": 1,
+ "type": "review.decision",
+ "transport": "codex-desktop",
+ "runId": "E3-LOCAL-637bd91",
+ "taskId": "E3-LOCAL",
+ "threadId": "01a1345a-47b6-7460-94d0-ae3218a0dc90",
+ "deliveryTurnId": "01a1360a-7ed3-7bf3-9015-058bed85dfaa",
+ "reviewedHead": "8c672892c34f4b7564b2d7a2da92ea4481eb7dba",
+ "decision": "accept",
+ "integrationStatus": "pending_wiring",
+ "mainSha": null,
+ "evidence": ["docs/records/E3-local-delivery-corrected-2026-10-13.json", "docs/records/M-E3-module-acceptance-2026-10-13.md", "tmp/m-continue43-e3-service.log", "tmp/m-continue43-m-e3-review-green.log", "tmp/m-continue43-m-e3-adjacent-green.log", "tmp/m-continue43-m-e3-receipt-green.log"],
+ "findings": [],
+ "nextAction": "M accepts only the independently verified isolated module. Wire the existing extension page and real Pi host, then validate native interaction and the actual load/restart/rollback chain. Keep original worker stopped and preserve state."
+}

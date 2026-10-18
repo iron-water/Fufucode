@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+  <!-- Ardot 2530:5651 Connector detail / basic information section, 16×16. -->
+  <path d="M5.25 3.5H13M5.25 8H13M5.25 12.5H13" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
+  <circle cx="2.75" cy="3.5" r=".875" fill="currentColor"/>
+  <circle cx="2.75" cy="8" r=".875" fill="currentColor"/>
+  <circle cx="2.75" cy="12.5" r=".875" fill="currentColor"/>
+</svg>

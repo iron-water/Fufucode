@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "M1-REMOTE",
+  "runId": "M1-REMOTE-R1",
+  "deliveryRevision": 2,
+  "threadId": "01a13b58-769e-7dd2-8b0a-d13cc4444d74",
+  "reviewedHead": "d9780b8c733009c57a489aa4f8e87b61088909c2",
+  "decision": "accept",
+  "integrationStatus": "integrated_module_pending_acceptance",
+  "mainSha": "3c03b44610111f18579d469493f0b093392f2324",
+  "evidence": [
+    "Actual structured delivery card received and worker thread completed/idle with clean worktree matching HEAD d9780b8c733009c57a489aa4f8e87b61088909c2.",
+    "Worker delivered self-contained net10.0 HTTP/1.1 and WebSocket server, 4-digit PIN authentication with IP lockout, responsive mobile web UI, session bridge, QR code generator (versions 1-6), and 10 screenshot artifacts.",
+    "M verified: dotnet build tests/Fufucode.App.RemoteControl.Tests -> 0 warnings, 0 errors.",
+    "M verified: dotnet run --project tests/Fufucode.App.RemoteControl.Tests -> 112 assertions pass, 0 fail on loopback HTTP/WebSocket.",
+    "M merged into main via 3c03b44610111f18579d469493f0b093392f2324; public shell wiring completed via 9c8c7db and updated in MainWindow/SettingsPage.",
+    "Acceptance audit recorded in docs/records/M1-acceptance-audit-2026-10-15.md."
+  ],
+  "findings": [
+    {
+      "id": "M1-REMOTE-MODULE",
+      "status": "verified_module",
+      "detail": "Mobile remote control module verified at unit/loopback level: net10.0 HTTP/WebSocket server, 4-digit PIN pairing with IP lockout, single-use tool approval gate, emergency stop, SVG QR code generation, and browser extension collect endpoint pass 112 automated assertions."
+    },
+    {
+      "id": "M1-WORKBUDDY-PARITY-OPEN",
+      "status": "open_unverified",
+      "detail": "End-to-end WorkBuddy parity not verified: authentic running WorkBuddy screens were not observed (based only on static decompiled metadata); web UI delivers single-session chat and approval, lacking project/session lists and attachments; assets lack manifest/SW for offline PWA installation; real phone, cross-WiFi, lock-screen IME were not tested."
+    },
+    {
+      "id": "M1-WIRING-BOUNDARY",
+      "status": "open_wiring",
+      "detail": "Shell public wiring unified: SettingsPage and top bar now strictly bind real chat session (mock fallback removed); public tool approval wiring remains pending real agent extension bridge calls."
+    }
+  ],
+  "nextAction": "Retain verified service and web code. Do not unilaterally rewrite an Android APK before user confirms preferred mobile client form (Web/PWA vs native APK). Plan real session tool approval wiring and multi-session/attachment parity for next focused sprint."
+}

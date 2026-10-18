@@ -1,0 +1,21 @@
+{
+  "mode": "session-only",
+  "model": null,
+  "executable": "C:\\Program Files\\dotnet\\dotnet.exe",
+  "harnessPid": 36092,
+  "childPath": "",
+  "bundledNodeExists": false,
+  "sampledDescendants": [
+    {
+      "processId": 34932,
+      "parentId": 36092,
+      "name": "conhost.exe",
+      "executablePath": "C:\\WINDOWS\\system32\\conhost.exe"
+    }
+  ],
+  "sampleCount": 1,
+  "sampledAgentRuntimeCount": 0,
+  "exitCode": 0,
+  "elapsedMilliseconds": 920,
+  "boundary": "PATH-empty managed session harness with sampled descendants; not an OS sandbox or a clean-installed full desktop acceptance."
+}

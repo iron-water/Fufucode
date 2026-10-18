@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST-RETURNED-REGISTRATION",
+  "runId": "E3-M-HOST-RETURNED-REGISTRATION-c4c7be6",
+  "sourceMainSha": "bddf39f6e601886c2d7389045223f1a510b1f2e6",
+  "integrationStatus": "integrated",
+  "integrationScope": "Explicit exact-token metadata reconciliation of returned host calls whose actual completion holder has stopped, original structured scope/exit matches, current same-session candidate is unloaded, and actual idle/apply leases plus catalog CAS are held. Preserve files, immutable returns, original application receipts and newer decisions; separate bounded registration-ending history.",
+  "productAcceptance": "pending",
+  "resolves": ["E3-RETURNED-REGISTRATION-RECOVERY-1"],
+  "verification": {
+    "solution": { "warnings": 0, "errors": 0, "exitCode": 0 },
+    "appFull": { "pass": 1388, "fail": 0, "exitCode": 0 },
+    "newReconciliationAssertionsIncludedInFull": { "pass": 47, "fail": 0, "exitCode": 0 },
+    "coreFull": { "pass": 366, "skip": 1, "exitCode": 0 },
+    "piFull": { "pass": 48, "fail": 0, "exitCode": 0 },
+    "realPiPluginShell": { "pass": 34, "newThisCycle": 15, "fail": 0, "exitCode": 0 },
+    "realPiPluginCancellation": { "pass": 27, "fail": 0, "exitCode": 0 },
+    "pluginServices": { "pass": 166, "exitCode": 0 },
+    "proofRules": { "pass": 21, "exitCode": 0 },
+    "moduleHeadlessUi": { "pass": 46, "exitCode": 0 },
+    "inspectedHeadlessFrames": ["1100x800", "800x640"],
+    "ownedFinalNodeProcessesRemaining": 0
+  },
+  "evidence": [
+    "docs/records/M-E3-returned-registration-reconciliation-2026-10-14.md",
+    "tmp/m-cycle56-red.log",
+    "tmp/m-cycle56-final-real.log",
+    "tmp/m-cycle56-build-visible.log",
+    "tmp/m-cycle56-final-reconciliation.log",
+    "tmp/m-cycle56-real-visible.log",
+    "tmp/m-cycle56-cancel-real.log",
+    "tmp/m-cycle56-app-full.log",
+    "tmp/m-cycle56-core-full.log",
+    "tmp/m-cycle56-pi-full.log",
+    "tmp/m-cycle56-final-services.log",
+    "tmp/m-cycle56-ui.log",
+    "C:/Users/mio/AppData/Local/Temp/fufucode-plugin-shell-f18c471931d24d989dc543902a24cd60/reconciliation-1100x800.png",
+    "C:/Users/mio/AppData/Local/Temp/fufucode-plugin-shell-f18c471931d24d989dc543902a24cd60/reconciliation-800x640.png"
+  ],
+  "notVerified": [
+    "abnormal cross-process holder crash, power loss, production migration and long-term pressure",
+    "unknown/cancelled/thrown requests lacking matching returned-call and observed-exit evidence",
+    "termination of arbitrary detached plugin processes or external tasks",
+    "system native pointer/keyboard/IME/DPI, current-source installer and complete E3/production acceptance"
+  ],
+  "nextAction": "Proceed from the completed returned-registration path to missing-evidence unknown recovery contracts and native/current-candidate gates. Keep legacy unknown registrations protected. Preserve stopped R1/E3 workers and their old acknowledgements; R1 finite retry of the frozen setup only when native occupancy is verifiably free."
+}

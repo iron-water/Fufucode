@@ -1,0 +1,433 @@
+== Fufucode 无头自测开始 ==
+[IME 守卫]
+  ok: 无组合时回车放行
+  ok: preedit 非空时吞回车
+  ok: 组合结束 30ms 内仍吞回车
+  ok: 组合结束 200ms 后回车放行
+[文本分段器]
+  ok: 代码块正确拆分，语言与内容剥离
+  ok: 行数统计正确
+  ok: 未闭合围栏按代码段保留
+[消息重建器]
+  ok: 文本/思考/工具调用分块互不混淆
+  ok: BlockFinished 替换临时块
+  ok: MessageFinished 整体替换，临时累积不残留
+[用量累计]
+  ok: usage 按累计快照覆盖，不逐条相加
+[mock 会话流程]
+  ok: 包含可折叠思考块
+  ok: 包含助手文本块
+  ok: 包含成功的工具卡片
+  ok: 包含失败的工具卡片
+  ok: 文本块正确拆出代码段
+  ok: 正常回合终态 Completed
+  ok: 失败演示产生错误条目
+  ok: 失败回合终态 Failed
+  ok: 失败回合的未完成消息按原样残留
+[停止与草稿恢复]
+  ok: 运行中提交的消息进入队列
+  ok: 停止后队列被清空
+  ok: 停止时已有草稿未被覆盖
+  ok: 队列清空后产生待恢复草稿（不覆盖已有草稿）
+  ok: 待恢复草稿可追回，且保留原有草稿
+  ok: 草稿为空时停止后直接恢复队首文本
+  ok: 停止终态 Interrupted
+[停止窗口错误归一]
+  ok: 停止窗口内 Unknown("Request aborted") → 已中断（中性）
+  ok: 收尾瞬态 Running 期间的 Unknown 中止仍归一为已中断
+  ok: 停止窗口外 Unknown 仍为错误级条目
+  ok: 窗口外 UserCancelled 也为中性条目
+[排队提示]
+  ok: 回合活跃时发送按钮显示「排队」
+  ok: 运行中发送进入队列并显示排队条
+  ok: 排队发送仍被会话接受（FollowUp 语义）
+  ok: 队列耗尽后提示撤下、按钮恢复「发送」
+[运行中插入 steer]
+  ok: 空闲时插入入口禁用
+  ok: 草稿为 / 扩展命令形状时插入入口禁用
+  ok: /skill: 前缀不受扩展命令保守判定影响
+  ok: steer 命令投递到 Steering 并清空草稿
+  ok: 排队条徽章：steer 项标「插入」、followUp 项标「排队」
+  ok: steer 项出队后记录清理（同文本再入队标「排队」）
+  ok: steer 失败回填草稿并报 OperationFailed
+  ok: Steering.CanSteer=false 时插入入口禁用
+  ok: mock：steer 文本进入队列并标「插入」徽章
+[usage 覆盖]
+  ok: 助手 usage 显示
+  ok: 用户 message_end 不触碰 usage
+  ok: 助手无 usage 时清空（未知），不残留旧值
+[长会话性能]
+  ok: 500 条消息 → 1000 个时间线条目
+  信息：同步调度下条目 VM 数量=1000
+  ok: 500 条消息生成耗时 0.97s（含每 8 条一次让出）
+  ok: 长会话首尾条目可访问
+[界面渲染]
+  信息：渲染位图 C:\Users\21894\.codex\worktrees\track-f-packaging\Fufucode\out\build\app\selftest-window.png（49656 字节，1440x900）
+  ok: 主窗口在无头模式可构建并渲染
+[回车发送]
+  ok: Enter 发送草稿，时间线出现用户消息
+  ok: Shift+Enter 插入换行且不发送
+  ok: 中段插入后 Enter 正常发送（无文本形状误吞）
+  ok: preedit 非空（组合中）Enter 不发送
+[Ctrl+Enter 插入]
+  ok: 空闲 Ctrl+Enter 走普通发送
+  ok: 运行中 Ctrl+Enter 走 steer（徽章「插入」）
+  ok: 运行中 Enter 走排队（徽章「排队」）
+  ok: 组合中 Ctrl+Enter 不触发 steer
+[页面往返]
+  ok: 页面往返后草稿保留（视图与 VM 均一致）
+  ok: 往返后 Enter 发送且仅发送一次（Tunnel 接线未重复）
+  ok: W5-R2 工作视图：mock 通过 A8 DTO 同一投影呈现四个文件
+  ok: W5-R2 工作视图：new / deleted / binary 来自 DTO 实证
+  ok: W5-R2 工作视图：null 保持未知，不转 false 或 0
+  ok: W5-R2 工作视图：关闭并重开 tab 保留身份与已选文件
+  ok: W5-R2 工作视图：Changes 复制的是完整路径
+  ok: W5-R2 工作视图：Git 不可用与空成功结果分开
+  ok: W5-R2 工作视图：真实空列表显示空状态
+  ok: W5-R2 工作视图：Files 逐层浏览实际项目目录
+  ok: W5-R2 工作视图：Files 选择与路径复制保留 Unicode
+  ok: W5-R2 工作视图：上一级停在项目根
+  ok: W5-R2 工作视图：旧会话的延迟查询不能污染新上下文
+  ok: W5-R2 工作视图：会话口径消费独立查询，范围说明不夸大 bash 副作用
+  ok: W5-R2 工作视图：单层目录加载有 300 项上限并显示截断说明
+  ok: terminal-vt-carriage-color
+  ok: terminal-vt-erase-line
+  ok: terminal-vt-split-sequence-wide
+  ok: terminal-scrollback-bounded
+  ok: terminal-buffer-resize
+  ok: terminal-esc-cursor-restore-after-shrink
+  ok: terminal-hide-reopen-preserves-output
+  ok: terminal-independent-tab-ids
+  ok: terminal-mock-input-is-explicit
+  ok: terminal-close-keeps-other-tab
+  ok: terminal-last-close-hides
+  ok: terminal-rapid-tab-switch-keeps-inactive-offset
+  ok: terminal-rapid-tab-switch-restores-final-offset
+  ok: terminal-old-output-callback-does-not-scroll-new-tab
+  ok: W5-R2：尺寸偏好持久化与窗口限幅分离
+  ok: W5-R2：无效尺寸回退建议值
+  ok: W5-R2：Core活动事件映射运行glyph
+  ok: W5-R2：可靠终态映射失败与窗口内未读
+  ok: W5-R2：返回对话清除窗口内未读
+  ok: W5-R2：Changes mock真实控件投影与宽窗并排
+  ok: W5-R2：分割柄键盘调整更新宽度偏好
+  ok: W5-R2：收起重开保tab与草稿
+  ok: W5-R2：底栏双实例与高度限幅
+  ok: W5-R2：底栏隐藏重开同尺寸保实例与输出
+  ok: W5-R2：宽度 1200 的并排/抽屉保持身份
+  ok: W5-R2：宽度 800 的并排/抽屉保持身份
+  ok: W5-R2：800DIP自动收会话栏且不缩字号
+  ok: W5-R2：宽度 1600 的并排/抽屉保持身份
+  ok: W5-R2：关闭仅结束目标终端
+  ok: W5-R2：关闭窗口释放终端生命周期
+  ok: W5-R3 设置：分类仅为真实现有设置，初始没有未保存草稿
+  ok: W5-R3 设置：搜索同时过滤分类与不匹配控件行
+  ok: W5-R3 设置：无匹配设置显示明确空状态
+  ok: W5-R3 设置：主题实际落盘并立即应用，自动保存不计 dirty
+  ok: W5-R3 设置：编辑代理只产生草稿，不伪保存
+  ok: W5-R3 设置：代理保存与当前应用分开，等待重启
+  ok: W5-R3 设置：收起端点表单仍保留真实 dirty 状态
+  ok: W5-R3 设置：丢弃仅恢复草稿，已保存设置不受影响，清密码事件已发出
+  ok: W5-R3 设置：返回动作交由宿主统一处理 dirty 与焦点
+  ok: W5-R3 设置：通知使用同一偏好对象，并如实区分窗口内应用与落盘
+  ok: W5-R3 设置：运行期间只保存未来默认值，不假标当前应用
+  ok: W5-R3 设置：RPC 应用后落盘失败实际恢复旧运行值，保留受保护配置文件
+  ok: W5-R3 设置：外观失败保留原值并明确回退状态
+  ok: W5-R3 设置：420 DIP 时导航在顶部、控制行在说明下方
+  ok: W5-R3 设置：密码输入只通过存在标志加入 dirty
+  ok: W5-R3 设置：丢弃时真实密码输入框清空
+  ok: W5-R3 设置：1280 DIP 时恢复分类侧栏与左说明右控件
+  ok: W5-R3 扩展：mock 诚实未连接，不冒充未安装或已查询
+  ok: W5-R3 扩展：成功查询空目录显示未安装
+  ok: W5-R3 扩展：目录原本为空时筛选不冒充无匹配
+  ok: W5-R3 扩展：扩展筛选忽略大小写和首尾空格，保留同一行对象
+  ok: W5-R3 扩展：筛选未改写源集合或待启用状态
+  ok: W5-R3 扩展：已有扩展无匹配与未安装分开
+  ok: W5-R3 扩展：清空筛选恢复源行和顺序
+  ok: W5-R3 扩展：命令无匹配不声称没有注册
+  ok: W5-R3 扩展：命令清空筛选恢复真实目录
+  ok: W5-R3 扩展：非空目录真实控件隐藏空态
+  ok: W5-R3 扩展：无匹配绑定到真实空态控件
+  ok: W5-R3 扩展：查询错误优先失败态，不伪造空成功或无命令
+  ok: W5-R3 扩展：失败原因绑定到真实页面
+  ok: W5-R3 扩展：失败后成功空查询恢复未安装态
+  ok: W5-R3 扩展：420DIP 页头与扩展操作区上下重排
+  ok: W5-R3 扩展：窄窗列表和筛选框宽度受页面约束
+  ok: W5-R3 扩展：恢复宽窗时操作区回到右侧
+  ok: W5-R3 跨区全局：可用动作分组，禁用动作仍保留说明
+  ok: W5-R3 跨区全局：搜索匹配实际快捷键且可读禁用原因
+  ok: W5-R3 跨区全局：面板和共享按钮能力门一致，禁用动作不执行
+  ok: W5-R3 跨区全局：Enter对应命令执行后关闭并请求焦点返回
+  ok: W5-R3 跨区全局：按钮、快捷键和面板共用注册执行路径
+  ok: W5-R3 跨区全局：上下选择可往返，选择对象与行对应
+  ok: W5-R3 跨区全局：无匹配为空态，不伪执行
+  ok: W5-R3 跨区全局：偏好真实落盘后重建保持策略和审批开关
+  ok: W5-R3 跨区全局：偏好保存失败保留原值与失败说明
+  ok: W5-R3 跨区全局：unknown不伪零，Int64小计保留且重复查询不累加
+  ok: W5-R3 跨区全局：本轮只查询当前分支最近用户锚定轮次
+  ok: W5-R3 跨区全局：全部记录使用独立查询与范围标签
+  ok: W5-R3 跨区全局：partialTail只有已知前缀，不显示完整总数
+  ok: W5-R3 跨区全局：确实测得的0保留为0
+  ok: W5-R3 跨区全局：旧会话延迟查询不能覆盖新会话
+  ok: W5-R3 跨区全局：Idle和最终文本不产生完成通知
+  ok: W5-R3 跨区全局：可靠终态同run只提醒一次，焦点内默认局部反馈
+  ok: W5-R3 跨区全局：失焦策略提供页内主动提示
+  ok: W5-R3 跨区全局：不提醒策略保留失败标记，fault和失败终态不双发且不存敏感参数
+  ok: W5-R3 跨区全局：Unknown和Interrupted均不发成功通知
+  ok: W5-R3 跨区全局：拒绝的空闲提交不冒充已执行任务
+  ok: W5-R3 跨区全局：待审批有独立类别、可操作标记并按请求去重
+  ok: W5-R3 跨区全局：关闭审批主动提醒不隐藏待处理事项
+  ok: W5-R3 跨区全局：旧连接审批不污染当前代次
+  ok: W5-R3 跨区全局：切会话退订旧事件并撤下过期操作标记
+  ok: W5-R3 跨区全局：点击按通知所属会话路由，当前会话不会覆盖归属
+  ok: W5-R3 跨区全局：总是策略在焦点内仍可显示主动反馈
+  ok: W5-R3 跨区全局：成功终态之后独立连接故障单独显示一次，保留原任务成功记录
+  ok: W5-R3 主窗口：独立设置隐藏工作面板且终端仍运行
+  ok: W5-R3 主窗口：设置期间菜单与快捷键的工作区能力一致
+  ok: W5-R3 主窗口：Caption Light 的46×32完整hover资产
+  ok: W5-R3 主窗口：Caption Dark 的46×32完整hover资产
+  ok: W5-R3 主窗口：未保存网络草稿选择继续编辑阻止离页
+  ok: W5-R3 主窗口：丢弃仅设置草稿，恢复会话右tab底栏与输入
+  ok: W5-R3 主窗口：设置返回恢复原composer焦点
+  ok: W5-R3 主窗口：最大化同步还原按钮
+  ok: W5-R3 主窗口：还原同步最大化按钮
+  ok: W5-R3 主窗口：长标题截断且保留详情与面板入口，不堆叠常态chips
+  ok: W5-R3 主窗口：工作区入口使用实际存在的图标geometry
+  ok: W5-R3 主窗口：Ctrl+K 打开统一命令面板 Light
+  ok: W5-R3 主窗口：关闭命令面板恢复触发焦点 Light
+  ok: W5-R3 主窗口：用量mock保留unknown语义 Light
+  ok: W5-R3 主窗口：Esc关闭用量并恢复工作面
+  ok: W5-R3 主窗口：Ctrl+K 打开统一命令面板 Dark
+  ok: W5-R3 主窗口：关闭命令面板恢复触发焦点 Dark
+  ok: W5-R3 主窗口：用量mock保留unknown语义 Dark
+  ok: W5-R3 主窗口：Esc关闭用量并恢复工作面
+  ok: W5-R3 主窗口：终端焦点保留Ctrl+Shift+P给shell
+  ok: W5-R3 主窗口：composer焦点Ctrl+Shift+P可打开命令面板
+  ok: W5-R3 主窗口：禁用审查通过真实Enter路由仍不执行
+  ok: W5-R3 主窗口：真实面板Esc事件退出并恢复composer
+  ok: W5-R3 主窗口：Ctrl+P选择真实Files tab
+  ok: W5-R3 主窗口：页内中心渲染可靠完成/失败fixture
+  ok: W5-R3 主窗口：自绘caption独占32DIP行，不叠系统标题
+  ok: E1 浏览器：裸主机名补全为 https
+  ok: E1 浏览器：http 与端口/查询串原样保留
+  ok: E1 浏览器：空输入落到 about:blank
+  ok: E1 浏览器：脚本协议被白名单拒绝且不导航
+  ok: E1 浏览器：白名单外的 ftp 被拒绝
+  ok: E1 浏览器：不存在的本地路径被拒绝
+  ok: E1 浏览器：html 以 file URI 直接渲染（保留相对资源）
+  ok: E1 浏览器：小图内联为 data URI 文档
+  ok: E1 浏览器：txt 走文本渲染
+  ok: E1 浏览器：文本内容经过 HTML 转义，不执行其中的脚本
+  ok: E1 浏览器：log 同样按文本预览
+  ok: E1 浏览器：含 NUL 字节的文本扩展名判定为二进制，不预览
+  ok: E1 浏览器：缺失文件只提示，不导航
+  ok: E1 浏览器：超过 512 KB 的文本截断并如实标注，不静默丢弃
+  ok: E1 浏览器：默认 UserDataFolder 落在 %LocalAppData%\Fufucode\webview
+  ok: E1 浏览器：自测隔离根下同样建 webview 子目录（不写用户真实目录）
+  ok: E1 浏览器：数据目录可创建
+  ok: E1 浏览器：初始态为自由导航，未探测时不遮挡宿主
+  ok: E1 浏览器：地址栏提交经归一化后请求导航
+  ok: E1 浏览器：脚本协议提交被拒绝，不改变当前页
+  ok: E1 浏览器：接收本地路径进入文件预览模式并请求内联文档
+  ok: E1 浏览器：缺失文件只提示不导航
+  ok: E1 浏览器：后退/前进可用性来自宿主历史，并驱动命令 CanExecute
+  ok: E1 浏览器：后退命令转成宿主动作
+  ok: E1 浏览器：运行时可用时不显示提示层
+  ok: E1 浏览器：运行时缺失时给出可操作提示而不是空白
+  ok: E1 浏览器：提示附带官方下载链接
+  ok: E1 浏览器：BrowserView 自带 VM，不继承外层 DataContext
+  ok: E1 浏览器：构造完成即返回，不在无头环境触发 WebView2 初始化
+  ok: E1 浏览器：面板为空时入口返回 false，不抛异常
+  ok: E1 浏览器：面板上没有内置浏览器时入口返回 false
+  ok: E1 浏览器：按 x:Name 契约可在真实右栏内定位内置浏览器
+  ok: E1 浏览器：定位成功后路径已进入文件预览模式
+  ok: W5-R4 Markdown：解析标题+列表+粗体+行内代码+斜体+链接不抛异常
+  ok: W5-R4 Markdown：解析生成多段行内内容（19 段）
+  ok: W5-R4 Markdown：星号/反引号/链接语法符不再原样直出
+  ok: W5-R4 Markdown：解析后文本内容无丢失
+  ok: W5-R4 Markdown：列表项渲染项目符号
+  ok: W5-R4 Markdown：行内代码段带等宽 FontFamily 属性
+  ok: W5-R4 Markdown：行内代码段带浅背景（取自 AppCodeBackground 令牌）
+  ok: W5-R4 Markdown：粗体生成 Bold 行内元素
+  ok: W5-R4 Markdown：斜体生成 Italic 行内元素
+  ok: W5-R4 Markdown：一级标题字号 20 且加粗（实测 20.0）
+  ok: W5-R4 Markdown：标题层级字号递减且不小于正文
+  ok: W5-R4 Markdown：链接以可点击行内控件容器承载
+  ok: W5-R4 Markdown：链接协议白名单放行 http/https
+  ok: W5-R4 Markdown：链接协议白名单拒绝 javascript/file/data
+  ok: W5-R4 Markdown：围栏代码块保留内容并去掉围栏标记
+  ok: W5-R4 Markdown：snake_case 下划线不被误判为斜体
+  ok: W5-R4 Markdown：null/空内容解析为空集合不报错
+  ok: W5-R4 Markdown：畸形/截断输入全部不抛异常
+  ok: W5-R4 Markdown：附加属性把解析结果写回 TextBlock.Inlines（3 段）
+  ok: W5-R4 Markdown：真实 ChatPage 模板中消息正文按行内内容渲染，等宽代码段存在
+  ok: W5-R4 Markdown：真实模板里星号不再直出且内容完整
+  ok: W5-R4 Markdown：Markdown 截图已落盘 tmp/w5r4/markdown.png
+  ok: W5-R4 队列条：QueueChanged 镜像出三条队列项
+  ok: W5-R4 队列条：Core 已持有的队列项：编辑/删除均为禁用（界面无权单独改 Pi 队列）
+  ok: W5-R4 队列条：禁用项 tooltip 说明受阻原因并指向今天真正可用的路径
+  ok: W5-R4 队列条：预览项一律标记为非界面持有
+  ok: W5-R4 队列条：对 Core 持有项执行编辑/删除命令不改动队列、不污染草稿
+  ok: W5-R4 队列条：界面持有的本地项：按钮可用且不再显示受阻说明
+  ok: W5-R4 队列条：编辑：回填输入框的同时原条从队列移除
+  ok: W5-R4 队列条：删除：仅移除目标条，计数与顺序正确
+  ok: W5-R4 队列条：删除不回填草稿
+  ok: W5-R4 队列条：编辑在已有草稿时追加，不覆盖用户已输入内容
+  ok: W5-R4 队列条：下一次 QueueChanged 会按 Core 权威列表整体覆盖镜像（本地改动不持久，故必须禁用而非伪删）
+  ok: W5-R4 队列条：真实 ChatPage 渲染出队列条 ItemsControl
+  ok: W5-R4 队列条：队列条每行渲染编辑与删除两个入口（实测 2 个）
+  ok: W5-R4 队列条：真实界面中两个按钮对 Core 持有项为禁用态
+  ok: W5-R4 队列条：真实界面按钮带受阻原因 tooltip
+  ok: W5-R4 队列条：队列条截图已落盘 tmp/w5r4/queue-strip.png
+  ok: W5-D6：1440 并排：无避让边距且右栏 ≥360
+  ok: W5-D6：1024 避让带度量有效（非未布局退化值）
+  ok: W5-D6：1024 窄宽切抽屉且面板仍 ≥360
+  ok: W5-D6：抽屉顶不压会话头动作区
+  ok: W5-D6：抽屉底不压 composer
+  ok: W5-D6：抽屉在避让带内仍保留 ≥200DIP 可用高度
+  ok: W5-D6：遮罩同步避让，页头与输入区保持可点
+  ok: W5-D6：抽屉+底栏展开的最紧态仍不覆盖两区
+  ok: W5-D6：最紧态抽屉仍保留 ≥200DIP
+  ok: W5-D6：收起右栏后避让边距归零
+  ok: W5-D6：x:Name=PreviewBrowser 契约在真实右栏内可定位
+  ok: W5-D6：初始未选择文件时浏览器保持自由导航态
+  ok: W5-D6：Files 行可定位（列表已实现容器）
+  ok: W5-D6：Files 单击文件 → 内置浏览器进入文件预览态
+  ok: W5-D6：单击只就位预览目标，不抢 Files tab
+  ok: W5-D6：Files 双击文件 → 切到 Preview tab 且预览目标不变
+  ok: W5-D6：目录只做逐层浏览，不抢占预览目标
+[扩展目录解析]
+  ok: get_commands 解析：4 条命令全部解析
+  ok: 扩展分组：baseDir 分组正确，审批桥识别
+  ok: 扩展错误按 ExtensionPath 归入对应扩展
+  ok: 调用名规则：技能 /skill:x，扩展命令 /name
+  ok: 缺字段容错：description/sourceInfo 缺失时按 null 处理
+  ok: 异常响应填充 QueryError，不抛异常
+[扩展发现扫描]
+  ok: 发现扫描：直接文件 + index.ts/js + package.json 声明均计入，无入口目录排除
+  ok: 发现扫描：全局目录（AgentDirectory/extensions）生效
+[命令填入]
+  ok: 空草稿填入：草稿设为调用名+空格
+  ok: 非空草稿填入：调用名前置到草稿开头
+  ok: 填入命令后 Enter 发送一次且内容为调用名
+[安全重启守卫]
+  ok: 空闲且无待决请求时安全重启可用
+  ok: 回合进行中重启禁用并给出原因
+  ok: 待决扩展请求期间重启禁用并给出原因
+  ok: 请求关闭后重启恢复可用
+[重启失败流程]
+  ok: 重启失败流程：遮罩可见 + 错误消息 + 重试按钮 + LastStartupFailure
+  ok: 重启失败流程：首次重试仍失败，遮罩保留
+  ok: 重启失败流程：重试成功后恢复，遮罩关闭
+  ok: 重启信任拒绝：遮罩+未恢复说明+重试，无“已保留当前会话”假文案
+[扩展启停状态]
+  ok: 启停徽章：内置桥/已加载/加载失败/路径缺失/未启用/手动添加/项目作用域
+  ok: pending 差异：待重启启用 + 项目未信任提示 + 变更 InfoBar
+  ok: 撤销恢复 active 状态
+  ok: 应用变更成功：期望集合含缺失路径整体持久化、active 更新为已加载
+  ok: 加载成功清除旧错误：ext-a 错误清空、未启用 ext-broken 错误保留
+  ok: 停用扩展计入待重启停用
+  ok: 应用失败回滚：pending 复位、已加载徽章优先且行内错误文本保留
+[扩展持久化]
+  ok: 启用列表按项目隔离持久化，缺失路径被过滤
+  ok: 加载错误按项目持久化可读回
+[添加扩展校验]
+  ok: 添加入口校验：index.ts / pi.extensions / .ts 文件通过，空目录与文本文件拒绝
+[启动期扩展失败]
+  ok: 启动失败遮罩：扩展加载失败文案 + “停用该扩展并重试”按钮
+  ok: 停用并重试：路径已移除且重新尝试打开会话
+[扩展移除确认]
+  ok: 移除改为确认 Flyout：行按钮不直接删除
+  ok: 确认 Flyout 内含独立确认按钮（绑定删除命令）
+  ok: 确认后移除手动添加记录
+[最近项目偏好]
+  ok: 最近项目去重/排序/大小写不敏感
+  ok: 最近项目上限 10
+  ok: ResolveStartupProject：显式优先/最近存在回退/全缺失与无最近为 null
+[项目选择启动态]
+  ok: 无项目启动遮罩：选择项目态渲染（主按钮可见、最近列表为空）
+  ok: 最近项目存在时直接解析打开（不经选择项目态）
+  ok: 启动失败态：重试 + 打开其他项目… 均可见
+  ok: 打开其他项目…→选择项目态：重试隐藏、最近列表含失败项目
+  ok: 信任放弃态：打开其他项目…→选择项目态、重试隐藏
+[设置页：主题持久化与失败保护]
+  ok: 设置 dark：主题即时生效、settings.json 落盘、Changed 触发
+  ok: light/system 往返：主题与落盘一致
+  ok: newer-version 设置文件：Update 失败显示错误且主题不变
+[设置页：models.json 解析与脱敏]
+  ok: models.json：$VAR/${VAR}/字面量/缺省四种 apiKey 形态脱敏正确
+  ok: models.json 缺失如实报告
+  ok: 坏 JSON 如实报告解析错误
+  ok: 诊断摘要脱敏：含变量名/隐藏占位，不含密钥值
+[设置页：W2 设置应用链路]
+  ok: 代理非法值报错且不保存
+  ok: 代理带 userinfo 拒绝且不保存
+  ok: 合法代理保存并提示重启生效
+  ok: 立即重启回调接通
+  ok: 同一 store 主题+代理并存（合写无覆盖）
+  ok: 端点字段校验：名称/URL/变量名非法均拒绝且不保存
+  ok: 同名非自有 provider 拒绝覆盖
+  ok: 密钥路径：凭据写派生名；解析失败不保存端点
+  ok: 密钥安全：VM 属性/诊断摘要/settings.json 均无密钥
+  ok: 端点保存成功并联动 SelectedModel + 重启提示
+  ok: 回合进行中改模型：仅保存，不调用 live RPC
+  ok: 空闲改模型：RPC 成功后保存并刷新页头
+  ok: set_model 失败不保存且回退选择
+  ok: Attach 自动拉取模型列表：填充/回填不触发 set_model 与设置写入
+[W1 截图]
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\settings-light.png（24665 字节）
+  ok: 已渲染 settings-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\settings-light-about.png（24665 字节）
+  ok: 已渲染 settings-light-about.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\chat-empty-light.png（47608 字节）
+  ok: 已渲染 chat-empty-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\extensions-mock-light.png（39830 字节）
+  ok: 已渲染 extensions-mock-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\composer-running-light.png（58186 字节）
+  ok: 已渲染 composer-running-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\settings-dark.png（24630 字节）
+  ok: 已渲染 settings-dark.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\settings-dark-about.png（24630 字节）
+  ok: 已渲染 settings-dark-about.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\chat-empty-dark.png（46548 字节）
+  ok: 已渲染 chat-empty-dark.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\extensions-mock-dark.png（39609 字节）
+  ok: 已渲染 extensions-mock-dark.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\w1-shots\composer-running-dark.png（57289 字节）
+  ok: 已渲染 composer-running-dark.png
+  ok: W1 截图已输出到 C:\Users\21894\.codex\worktrees\tmp\w1-shots
+[H2 视觉截图]
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\main-light.png（80203 字节）
+  ok: 已渲染 main-light.png
+  ok: 段落与代码块间距 6px ≤ 16px
+  ok: 代码块与后续段落间距 6px ≤ 16px
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\main-light-bottom.png（73659 字节）
+  ok: 已渲染 main-light-bottom.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\extensions-light.png（39961 字节）
+  ok: 已渲染 extensions-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\main-dark.png（80593 字节）
+  ok: 已渲染 main-dark.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\main-dark-bottom.png（74262 字节）
+  ok: 已渲染 main-dark-bottom.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\extensions-dark.png（39739 字节）
+  ok: 已渲染 extensions-dark.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\trust-dialog-light.png（25645 字节）
+  ok: 已渲染 trust-dialog-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\trust-dialog-dark.png（26000 字节）
+  ok: 已渲染 trust-dialog-dark.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\confirm-dialog-light.png（5448 字节）
+  ok: 已渲染 confirm-dialog-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h2-shots\confirm-dialog-dark.png（5852 字节）
+  ok: 已渲染 confirm-dialog-dark.png
+  ok: H2 截图已输出到 C:\Users\21894\.codex\worktrees\tmp\h2-shots
+[H3 扩展页截图]
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h3-shots\extensions-light.png（88001 字节）
+  ok: 已渲染 extensions-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h3-shots\command-flyout-light.png（60921 字节）
+  ok: 已渲染 command-flyout-light.png
+  信息：截图 C:\Users\21894\.codex\worktrees\tmp\h3-shots\extensions-dark.png（88317 字节）
+  ok: 已渲染 extensions-dark.png
+  ok: H3 截图已输出到 C:\Users\21894\.codex\worktrees\tmp\h3-shots
+
+== 自测结束：0 项失败 ==
+SELFTEST_EXIT=0 elapsed=77s

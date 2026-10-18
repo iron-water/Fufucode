@@ -1,0 +1,78 @@
+{
+  "transport": "codex-desktop",
+  "taskId": "E3-LOCAL",
+  "head": "1305755643eca7ea2ded7565130b241ed4ac5dbc",
+  "card": {
+    "schemaVersion": 1,
+    "type": "delivery.card",
+    "taskId": "E3-LOCAL",
+    "status": "submitted",
+    "summary": "E3-RECEIPT-IDENTITY-1 已修复：CompleteAsync 不再从可变的 PendingApplyVersionId / 上一条回执推断归属，而是接收显式的原请求版本参数，并优先采用该操作自己持久化在途登记中的 VersionId；回执写入拆成两处——LastApplyReceipt 仅在令牌仍为当前令牌时更新，迟到/被取代/取消/异常/完整性拒绝的结果只写入新增的有界原身份历史 RecentReceipts（按 token 去重，上限 20 条），因此既不会用旧失败冒充新版本失败，也不会顶掉已确认的新回执。AbandonInFlightAsync 仍按显式 versionId 匹配在途登记，不从可变当前 pending 猜归属。M 回执反例由 FAIL 变 PASS（after 保持 v2/token2/confirmed，迟到 v1 失败进原身份历史），原 5 反例与相邻 4 反例保持全绿，本模块套件 156→166 PASS，无头 UI 46 PASS，solution 0 警告 0 错误。公共宿主/页面接线仍由 M 负责。",
+    "commits": [
+      "c53e1d773202285e8655045e9f22561fe56ba9b4",
+      "1a669e1088b61005c667a071eabcd0f951ef72ed",
+      "f5421d668a847a75fd23721d9b11a4bf013b3ddf",
+      "21eebc564e28f2158a268d55a1ab72ffbecd0ec3",
+      "b3cdfa9ebef9059eed534f177b082a2ebd12128f",
+      "200a36a46fdae8958167a9189343f224c7742990",
+      "245bba93825b7d8cb1e59f9996c20241cd60ec47",
+      "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+      "b47e8d9eb0f0b6b1b8bd3fa1d4dfa1a24bb9c1a3",
+      "1305755643eca7ea2ded7565130b241ed4ac5dbc"
+    ],
+    "changedFiles": [
+      "src/Fufucode.App/Features/Plugins/LocalPluginService.cs",
+      "src/Fufucode.App/Features/Plugins/PluginCatalogState.cs",
+      "tests/Fufucode.App.Plugins.Tests/ServiceTests.cs",
+      "docs/records/E3-local-plugins-2026-10-13.md"
+    ],
+    "changedFilesNote": "以上为本第三修复轮相对增量基准 ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2 的 delta（4 个文件）。本任务全量范围仍为 15 个文件（Features/Plugins 9 + tests/Fufucode.App.Plugins.Tests 5 + 自身记录 1），全部在原允许范围内；未改 M-owned 入口、Core/Pi/Hosting/Cli、ExtensionsPage/VM、MainWindow/Integration/Settings/Styles、solution、共享自测、包装、权威进度/决策，也未改 M 的 tmp 日志与断言。b47e8d9 的完整 SHA 见下：",
+    "commitsFull": [
+      "b47e8d9eb0f0b6b1b8bd3fa1d4dfa1a24bb9c1a3"
+    ],
+    "verification": {
+      "passed": [
+        "M 回执身份反例（复制到本树 tmp/e3-receipt-mirror，断言未改）→ PASS E3-RECEIPT-IDENTITY，退出 0；after 保持 {VersionId=2.0, Token=token2, Outcome=confirmed}，迟到 v1 失败按原身份入历史（红基线：M 原日志 after={VersionId=2.0, Token=token1, Outcome=failed}）",
+        "M 首轮五反例（tmp/e3-rework-mirror 原样副本）仍 5/5 PASS，Review: 0 failed，退出 0",
+        "M 相邻四反例（tmp/e3-adjacent-mirror 原样副本）仍 4/4 PASS，Adjacent review: 0 failed，退出 0",
+        "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build → ALL PASS (166)，退出 0（156 + 本轮 10 项回执身份邻接断言）",
+        "dotnet run --project tests/Fufucode.App.Plugins.Tests -c Release --no-build -- --ui → UI ALL PASS (46)，退出 0（Avalonia Headless，无原生窗口）",
+        "dotnet build Fufucode.sln -v m → 0 警告 0 错误，退出 0",
+        "本轮新增严格断言：迟到失败与迟到成功都按 v1 原身份入历史且最新回执保持 v2/confirmed；历史中不存在「旧令牌配新版本」污染；取消分支回执身份为原请求版本且 outcome=cancelled_unknown；完整性拒绝回执绑定被拒绝的原版本；对账回收后的迟到结果仍按原身份入历史且最新回执不携带其他版本身份；插件记录已不存在时迟到完成不抛异常、不复活记录"
+      ],
+      "failed": [],
+      "notRun": [
+        "App 全量自测与原生 UI：按派工要求让位 M 在主区进行公共工作台只读刷新/焦点问题的原生验证（服务测试独立进行，不抢窗口）",
+        "真实 Pi 实际加载本模块导入副本、宿主安全重启回调整项验收、现有扩展页外壳接线、原生 IME/DPI（M 所有）",
+        "回执历史的跨进程长时间并发清理压力验证（已按 token 去重并有 20 条上限，未做长压）",
+        "上一轮 App 全量自测 focused=False 偶发失败根因仍未确定；红日志 tmp/e3-selftest-final.log 保留",
+        "任何模型调用或试跑（本轮无云请求）"
+      ]
+    },
+    "evidence": [
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-receipt-green.log（M 回执身份反例：PASS，退出 0）",
+      "C:\\Projects\\Fucode\\Fufucode\\tmp\\m-e3-receipt\\results.log（M 红基线：FAIL + before/after JSON；只读引用，未改动）",
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-mirror-green.log（首轮 5 反例仍 0 failed）",
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-adjacent-green.log（相邻 4 反例仍 0 failed）",
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-service.log（ALL PASS 166，退出 0）",
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\tmp\\e3-plugins-ui.log（UI ALL PASS 46，退出 0）",
+      "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode\\docs\\records\\E3-local-plugins-2026-10-13.md（第四次交付段：缺陷说明、红绿对照、邻接断言、剩余未验、交付卡）"
+    ],
+    "integrationNeeds": [
+      "接口未变：ILocalPluginHost（Identity / SnapshotAsync / ApplyAsync）+ ILocalPluginPicker + LocalPluginService(AppDataLayout, host) + LocalPluginSectionView.Attach(vm)",
+      "数据新增：PluginRecord.RecentReceipts（有界原身份回执历史，≤20 条，按 token 去重）。宿主只读核对建议：LastApplyReceipt=最新已确认结果；RecentReceipts=含迟到/取消/异常的按原身份记录（每条含 VersionId/Token/Outcome/Message/AtUtc）",
+      "宿主可选入口仍为 AbandonInFlightAsync(pluginId, versionId, reason)：仅当宿主确认该候选不会再加载且无后续副作用时调用；本模块绝不自行解除在途保护",
+      "语义提醒：应用/回退前会复核托管副本固定摘要/入口/链接（篡改或损坏一律零宿主副作用拒绝）；ResolvePendingAsync 仍是只读核对入口，不删文件；待移除落地需宿主确认后显式再次调用 RemoveVersionAsync",
+      "可选并发保护：service.CurrentGeneration() + expectedGeneration 做 compare-and-set"
+    ],
+    "blockers": [],
+    "writerStopped": true,
+    "worktree": "C:\\Users\\mio\\.codex\\worktrees\\2884\\Fufucode",
+    "base": "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+    "incrementBase": "ff6bab6a1eeabd838820cbd98c91ab1d4b47fbc2",
+    "originalTaskBase": "22f6bf4df764721d80dc59d613efad1dac5911c9",
+    "productBase": "637bd9193df3536ae05ead09f1c094878ea5b89b",
+    "head": "1305755643eca7ea2ded7565130b241ed4ac5dbc"
+  },
+  "note": "Original card retained without replacing its nonexistent b47... commit; corrected follow-up is separately saved."
+}

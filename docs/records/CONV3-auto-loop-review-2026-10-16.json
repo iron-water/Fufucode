@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "CONV-3",
+  "runId": "CONV-3-R1",
+  "deliveryRevision": "r1",
+  "threadId": "01a142e5-6d4e-7be1-b6cd-059913efb379",
+  "reviewedHead": "fb8a5dd899066a9c9610d62b250de1008897a882",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "evidence": [
+    "Delivery received from thread 01a142e5-6d4e-7be1-b6cd-059913efb379 with writerStopped: true and clean worktree.",
+    "Core Automatic restriction lifted: removed NotSupportedException for SetMode(Automatic) across binding, repair, and queue paths.",
+    "AutoAdvancementEngine implemented: idle reconciliation state machine with durable delegation scope, settling reviews, authorizing integration, dispatching ready tasks under concurrency/budget limits, reporting ProjectCompleted or Stalled reason without spinning.",
+    "Versioned project goals implemented in AutomationStore.Goal.cs, wired to AutomationControlViewModel.SubmitGoalRequestAsync.",
+    "Fixed 26 missing awaits in WatchdogChecks.cs.",
+    "dotnet build Fufucode.sln verified clean with 20 projects, 0 errors, 0 warnings.",
+    "tests/Fufucode.Control.Tests verified with 538 assertions ALL PASS (including 25 CONV-3 end-to-end checks).",
+    "tests/Fufucode.Conv.Tests verified with 73 assertions ALL PASS.",
+    "Merged cleanly into main branch."
+  ],
+  "findings": [
+    {
+      "id": "CONV-3-DELIVERY",
+      "status": "verified_module",
+      "detail": "Core Automatic mode enabled, idle auto-advancement loop and versioned goal submission verified and integrated into main."
+    }
+  ],
+  "nextAction": "Integrated into main. Update dispatch ledger and oversee remaining UI-1 thread."
+}

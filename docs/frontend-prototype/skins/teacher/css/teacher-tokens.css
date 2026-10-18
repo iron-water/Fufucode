@@ -1,0 +1,385 @@
+/* E7 教师样板：组件令牌层（HTML 样板，不是 Avalonia 资源）。
+   结构：S1 原语令牌（../../css/tokens.css，Fluent 值唯一来源）→ 本文件 --t-* 组件令牌 → teacher.css 组件。
+   Fluent 段只做映射、不改 S1 值；Aero 段是本任务新增的 Vista 风格取值。
+   每个 --t-* 在 docs/design/skin-teacher-reference.md §3 有对应 Avalonia 键名。 */
+
+/* ================= Fluent：映射 S1 已接受值 ================= */
+:root[data-skin="fluent"] {
+  --t-desktop: linear-gradient(135deg, #D9E3EE, #C7D3E0);
+  --t-frame-outer: var(--app-strong-border);
+  --t-frame-inner: transparent;
+  --t-frame-radius: 8px;
+  --t-caption-bg: var(--app-chrome-background);
+  --t-caption-bg-inactive: var(--app-chrome-background);
+  --t-caption-glass: var(--app-chrome-background);
+  --t-caption-text: var(--app-text-secondary);
+  --t-caption-text-inactive: var(--app-text-dim);
+  --t-caption-glow: none;
+  --t-caption-rule: var(--app-border);
+
+  --t-window-bg: var(--app-window-background);
+  --t-dock-bg: var(--app-dock-background);
+  --t-dock-header-bg: var(--app-dock-header-background);
+  --t-content-bg: var(--app-content-background);
+  --t-border: var(--app-border);
+  --t-strong-border: var(--app-strong-border);
+  --t-text: var(--app-text-primary);
+  --t-text2: var(--app-text-secondary);
+  --t-text3: var(--app-text-dim);
+  --t-text-disabled: var(--app-text-disabled);
+  --t-accent: var(--app-accent);
+  --t-accent-fg: var(--app-accent-foreground);
+  --t-accent-text: var(--app-accent-text);
+  --t-accent-subtle: var(--app-accent-subtle);
+  --t-hover: var(--app-hover);
+  --t-pressed: var(--app-pressed);
+
+  --t-btn-bg: var(--app-control-fill);
+  --t-btn-border: var(--app-strong-border);
+  --t-btn-bg-hover: var(--app-control-fill-hover);
+  --t-btn-border-hover: var(--app-strong-border);
+  --t-btn-bg-pressed: var(--app-pressed);
+  --t-btn-border-pressed: var(--app-border);
+  --t-btn-bg-disabled: var(--app-control-fill);
+  --t-btn-border-disabled: var(--app-border);
+  --t-btn-highlight: none;
+  --t-btn-radius: var(--app-corner-control);
+  --t-btn-primary-bg: var(--app-accent);
+  --t-btn-primary-bg-hover: var(--app-accent-hover);
+  --t-btn-primary-border: transparent;
+  --t-btn-primary-fg: var(--app-accent-foreground);
+  --t-btn-primary-ring: none;
+  --t-focus-ring: 0 0 0 1px var(--app-focus-inner), 0 0 0 3px var(--app-focus-color);
+
+  --t-input-bg: var(--app-control-fill);
+  --t-input-border: var(--app-border);
+  --t-input-border-bottom: var(--app-strong-border);
+  --t-input-border-hover: var(--app-strong-border);
+  --t-input-border-focus: var(--app-accent);
+  --t-input-radius: var(--app-corner-input);
+
+  --t-tab-bg: transparent;
+  --t-tab-bg-hover: var(--app-hover);
+  --t-tab-bg-selected: transparent;
+  --t-tab-border: transparent;
+  --t-tab-text: var(--app-text-secondary);
+  --t-tab-text-selected: var(--app-text-primary);
+  --t-tab-indicator: var(--app-accent);
+  --t-tab-radius: 0;
+
+  --t-menu-bg: var(--app-dialog-background);
+  --t-menu-border: var(--app-border);
+  --t-menu-shadow: var(--app-shadow-flyout);
+  --t-menu-radius: var(--app-corner-flyout);
+  --t-menu-gutter: none;
+  --t-menu-item-hover-bg: var(--app-hover);
+  --t-menu-item-hover-border: transparent;
+
+  --t-row-bg: var(--app-card-background);
+  --t-row-border: var(--app-card-stroke);
+  --t-row-hover-bg: var(--app-hover);
+  --t-row-hover-border: var(--app-card-stroke);
+  --t-row-selected-bg: var(--app-accent-subtle);
+  --t-row-selected-border: var(--app-card-stroke);
+  --t-row-radius: var(--app-corner-control);
+  --t-list-hover-bg: var(--app-hover);
+  --t-list-hover-border: transparent;
+  --t-list-selected-bg: var(--app-selected);
+  --t-list-selected-border: transparent;
+
+  --t-dialog-bg: var(--app-dialog-background);
+  --t-dialog-footer-bg: var(--app-dialog-footer-background);
+  --t-dialog-radius: var(--app-corner-flyout);
+  --t-user-bubble: var(--app-accent-subtle);
+  --t-term-bg: var(--app-terminal-background);
+  --t-term-fg: var(--app-terminal-foreground);
+  --t-term-accent: var(--app-terminal-accent);
+  --t-term-border: transparent;
+
+  --t-error-bg: var(--app-error-background);
+  --t-error-border: var(--app-error-border);
+  --t-error-fg: var(--app-error-foreground);
+  --t-success-fg: var(--app-success-foreground);
+  --t-caution-fg: var(--app-caution-foreground);
+  --t-diff-add-bg: var(--app-diff-add-background);
+  --t-diff-add-fg: var(--app-diff-add-foreground);
+  --t-diff-del-bg: var(--app-diff-del-background);
+  --t-diff-del-fg: var(--app-diff-del-foreground);
+  --t-statusbar-bg: var(--app-chrome-background);
+  --t-scrim: var(--app-scrim);
+  --t-float-shadow: var(--app-shadow-flyout);
+  --t-font-ui: var(--app-font-ui);
+  --t-font-mono: var(--app-font-mono);
+
+  /* 标题栏按钮沿用生产 CaptionAssetButton 语义（中性 hover，关闭红底白字） */
+  --t-cap-plate: transparent;
+  --t-cap-plate-hover: var(--app-hover);
+  --t-cap-plate-pressed: var(--app-pressed);
+  --t-cap-close: transparent;
+  --t-cap-close-hover: #C42B1C;
+  --t-cap-close-pressed: #C84031;
+  --t-cap-plate-inactive: transparent;
+  --t-cap-border: transparent;
+  --t-cap-glyph: var(--app-text-primary);
+  --t-cap-glyph-hot: var(--app-text-primary);
+  --t-cap-glyph-close-hot: #FFFFFF;
+  --t-cap-glyph-shadow: none;
+  --t-cap-glyph-inactive: var(--app-text-dim);
+}
+
+/* ================= Aero（Vista 风格）亮色 ================= */
+:root[data-skin="aero"][data-theme="light"] {
+  --t-desktop: radial-gradient(120% 90% at 20% 10%, #6FB6E8 0%, #2E78B8 45%, #123B66 100%);
+  /* 玻璃框：外沿深线 + 内沿高光，两层 1px，是 Aero 的辨识点 */
+  --t-frame-outer: #3D5A78;
+  --t-frame-inner: rgba(255, 255, 255, 0.62);
+  --t-frame-radius: 7px;
+  /* 标题栏：真实渐变（50% 处硬切 = Vista 玻璃反光），这是无模糊也能工作的实色版本 */
+  --t-caption-bg: linear-gradient(180deg, #DDEBF9 0%, #BFD6F0 46%, #A3C3E8 50%, #B4CEEC 100%);
+  --t-caption-bg-inactive: linear-gradient(180deg, #F0F3F6 0%, #E3E8EE 48%, #D8DFE7 50%, #DFE5EC 100%);
+  /* 有平台模糊时的半透明版，只给 caption/外框，不给正文 */
+  --t-caption-glass: linear-gradient(180deg, rgba(232, 242, 252, 0.72) 0%, rgba(200, 222, 244, 0.6) 46%, rgba(170, 202, 236, 0.55) 50%, rgba(190, 214, 240, 0.62) 100%);
+  --t-caption-text: #10233A;
+  --t-caption-text-inactive: #4F5B6A;
+  --t-caption-glow: 0 0 6px rgba(255, 255, 255, 0.95), 0 0 2px rgba(255, 255, 255, 0.9);
+  --t-caption-rule: #8FA9C6;
+
+  --t-window-bg: #EEF3F8;
+  --t-dock-bg: linear-gradient(180deg, #F7FAFD 0%, #EAF1F8 100%);
+  --t-dock-header-bg: linear-gradient(180deg, #FDFEFF 0%, #EDF3F9 49%, #E2EAF3 50%, #E9EFF6 100%);
+  --t-content-bg: #FFFFFF;
+  --t-border: #C9D6E3;
+  --t-strong-border: #8E9FB2;
+  --t-text: #1B1B1B;
+  --t-text2: #4A5462;
+  --t-text3: #66717F;
+  --t-text-disabled: #8D96A0;
+  --t-accent: #2F7ED8;
+  --t-accent-fg: #FFFFFF;
+  --t-accent-text: #0B5CAD;
+  --t-accent-subtle: #DCEBFC;
+  --t-hover: #E5F3FB;
+  --t-pressed: #CCE4F7;
+
+  /* 按钮：以 WPF Aero ButtonChrome 公开值（dotnet/wpf，MIT）为基准 */
+  --t-btn-bg: linear-gradient(180deg, #F2F2F2 0%, #EBEBEB 50%, #DDDDDD 50%, #CFCFCF 100%);
+  --t-btn-border: #707070;
+  --t-btn-bg-hover: linear-gradient(180deg, #EAF6FD 0%, #D9F0FC 50%, #BEE6FD 50%, #A7D9F5 100%);
+  --t-btn-border-hover: #3C7FB1;
+  --t-btn-bg-pressed: linear-gradient(180deg, #E5F4FC 0%, #C4E5F6 50%, #98D1EF 50%, #68B3DB 100%);
+  --t-btn-border-pressed: #2C628B;
+  --t-btn-bg-disabled: #F4F4F4;
+  --t-btn-border-disabled: #ADB2B5;
+  --t-btn-highlight: inset 0 0 0 1px rgba(255, 255, 255, 0.72);
+  --t-btn-radius: 3px;
+  /* 主按钮 = Vista “默认按钮”：普通渐变 + 2px 青色内环 + 深色字（白字压在渐变上对比只有 3.x–4.1，弃用） */
+  --t-btn-primary-bg: linear-gradient(180deg, #F2F2F2 0%, #EBEBEB 50%, #DDDDDD 50%, #CFCFCF 100%);
+  --t-btn-primary-bg-hover: linear-gradient(180deg, #EAF6FD 0%, #D9F0FC 50%, #BEE6FD 50%, #A7D9F5 100%);
+  --t-btn-primary-border: #3C7FB1;
+  --t-btn-primary-fg: #1B1B1B;
+  --t-btn-primary-ring: inset 0 0 0 2px rgba(0, 204, 255, 0.75);
+  /* 焦点：外 2px 青色光环，和 hover 的蓝渐变可区分 */
+  --t-focus-ring: 0 0 0 1px #FFFFFF, 0 0 0 3px #39A0E6;
+
+  --t-input-bg: #FFFFFF;
+  --t-input-border: #ABADB3;
+  --t-input-border-bottom: #E3E9EF;
+  --t-input-border-hover: #5794BF;
+  --t-input-border-focus: #3D7BAD;
+  --t-input-radius: 2px;
+
+  --t-tab-bg: linear-gradient(180deg, #F6F7F8 0%, #EDEEF0 50%, #DFE1E4 50%, #D3D6DA 100%);
+  --t-tab-bg-hover: linear-gradient(180deg, #EAF6FD 0%, #D9F0FC 50%, #BEE6FD 50%, #A7D9F5 100%);
+  --t-tab-bg-selected: #FFFFFF;
+  --t-tab-border: #8C99A8;
+  --t-tab-text: #2E3A48;
+  --t-tab-text-selected: #000000;
+  --t-tab-indicator: #3C7FB1;
+  --t-tab-radius: 3px 3px 0 0;
+
+  --t-menu-bg: #F5F6F7;
+  --t-menu-border: #979797;
+  --t-menu-shadow: 2px 2px 4px rgba(0, 0, 0, 0.32);
+  --t-menu-radius: 0;
+  --t-menu-gutter: linear-gradient(90deg, #F1F1F1 0 28px, #E2E3E3 28px 29px, #FFFFFF 29px 30px, transparent 30px);
+  --t-menu-item-hover-bg: linear-gradient(180deg, #F1F8FD 0%, #D5EFFC 100%);
+  --t-menu-item-hover-border: #A8D8EB;
+
+  /* 设置行/列表：Win7 资源管理器选择态 */
+  --t-row-bg: #FFFFFF;
+  --t-row-border: #D5DFE8;
+  --t-row-hover-bg: linear-gradient(180deg, #FAFBFD 0%, #EBF3FD 100%);
+  --t-row-hover-border: #B8D6FB;
+  --t-row-selected-bg: linear-gradient(180deg, #DCEBFC 0%, #C1DBFC 100%);
+  --t-row-selected-border: #7DA2CE;
+  --t-row-radius: 3px;
+  --t-list-hover-bg: linear-gradient(180deg, #FAFBFD 0%, #EBF3FD 100%);
+  --t-list-hover-border: #B8D6FB;
+  --t-list-selected-bg: linear-gradient(180deg, #DCEBFC 0%, #C1DBFC 100%);
+  --t-list-selected-border: #7DA2CE;
+
+  --t-dialog-bg: #FFFFFF;
+  --t-dialog-footer-bg: #F0F0F0;
+  --t-dialog-radius: 7px;
+  --t-user-bubble: linear-gradient(180deg, #F3F8FE 0%, #E3EFFC 100%);
+  --t-term-bg: #0C0F14;
+  --t-term-fg: #E2E8F0;
+  --t-term-accent: #7FD5A6;
+  --t-term-border: #22303F;
+
+  --t-error-bg: #FFF1F0;
+  --t-error-border: #C42B1C;
+  --t-error-fg: #A4231A;
+  --t-success-fg: #1E7B1E;
+  --t-caution-fg: #8A5300;
+  --t-diff-add-bg: #E6F5E9;
+  --t-diff-add-fg: #1D5C2E;
+  --t-diff-del-bg: #FBE9EA;
+  --t-diff-del-fg: #922028;
+  --t-statusbar-bg: linear-gradient(180deg, #F1F5FB 0%, #DFE7F2 100%);
+  --t-scrim: rgba(10, 30, 55, 0.28);
+  --t-float-shadow: 0 10px 28px rgba(8, 30, 60, 0.42);
+  --t-font-ui: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --t-font-mono: "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+
+  /* 标题栏按钮：视觉板 46×21 吊在 46×32 命中区顶部（参考书 §4.1） */
+  --t-cap-plate: linear-gradient(180deg, #D5E3F1 0%, #B5CAE0 49%, #9DB6D1 50%, #B4C9DF 100%);
+  --t-cap-plate-hover: linear-gradient(180deg, #B7E0FA 0%, #69B6EA 49%, #2E86C9 50%, #63BDF0 100%);
+  --t-cap-plate-pressed: linear-gradient(180deg, #5A9ACB 0%, #2D6EA6 49%, #154E80 50%, #2A6AA0 100%);
+  --t-cap-close: linear-gradient(180deg, #ECA996 0%, #DA7A62 49%, #C4462D 50%, #D0694E 100%);
+  --t-cap-close-hover: linear-gradient(180deg, #FBC0AE 0%, #F06E4E 49%, #E0391B 50%, #F7845F 100%);
+  --t-cap-close-pressed: linear-gradient(180deg, #C2583E 0%, #A33A20 49%, #85220C 50%, #9B331A 100%);
+  --t-cap-plate-inactive: linear-gradient(180deg, #E9EDF1 0%, #DADFE5 49%, #CDD3DA 50%, #D7DCE2 100%);
+  --t-cap-border: rgba(28, 48, 76, 0.62);
+  --t-cap-glyph: #FFFFFF;
+  --t-cap-glyph-hot: #FFFFFF;
+  --t-cap-glyph-close-hot: #FFFFFF;
+  --t-cap-glyph-shadow: drop-shadow(0 0 1px rgba(0, 0, 0, 0.95)) drop-shadow(0 0 1px rgba(0, 0, 0, 0.6));
+  --t-cap-glyph-inactive: #7C8794;
+}
+
+/* ================= Aero 暗色（"Aero Night"：Vista 无官方暗色，本样板自定，须用户确认） ================= */
+:root[data-skin="aero"][data-theme="dark"] {
+  --t-desktop: radial-gradient(120% 90% at 20% 10%, #24476B 0%, #11263F 50%, #060D18 100%);
+  --t-frame-outer: #05090F;
+  --t-frame-inner: rgba(255, 255, 255, 0.16);
+  --t-frame-radius: 7px;
+  --t-caption-bg: linear-gradient(180deg, #3A4B60 0%, #2A394B 46%, #1B2634 50%, #223042 100%);
+  --t-caption-bg-inactive: linear-gradient(180deg, #33383F 0%, #2A2E34 48%, #222529 50%, #272B30 100%);
+  --t-caption-glass: linear-gradient(180deg, rgba(70, 92, 120, 0.7) 0%, rgba(40, 56, 76, 0.62) 46%, rgba(20, 30, 44, 0.6) 50%, rgba(30, 44, 62, 0.66) 100%);
+  --t-caption-text: #EAF2FB;
+  --t-caption-text-inactive: #9AA4B0;
+  --t-caption-glow: 0 0 6px rgba(0, 0, 0, 0.85);
+  --t-caption-rule: #0A1018;
+
+  --t-window-bg: #161B22;
+  --t-dock-bg: linear-gradient(180deg, #1C232C 0%, #171D25 100%);
+  --t-dock-header-bg: linear-gradient(180deg, #2C3643 0%, #232C37 49%, #1B232D 50%, #202934 100%);
+  --t-content-bg: #1A1F26;
+  --t-border: #2E3946;
+  --t-strong-border: #4F5E70;
+  --t-text: #ECEFF3;
+  --t-text2: #B9C2CD;
+  --t-text3: #8E99A6;
+  --t-text-disabled: #67717D;
+  --t-accent: #4EA6EE;
+  --t-accent-fg: #06121F;
+  --t-accent-text: #8CCBFF;
+  --t-accent-subtle: #1D3550;
+  --t-hover: #22303F;
+  --t-pressed: #1A3A58;
+
+  --t-btn-bg: linear-gradient(180deg, #3C4652 0%, #333C47 50%, #29313B 50%, #2E3742 100%);
+  --t-btn-border: #0B0F14;
+  --t-btn-bg-hover: linear-gradient(180deg, #3F6E96 0%, #2F5A80 50%, #214A6F 50%, #2C5C86 100%);
+  --t-btn-border-hover: #5FA8E0;
+  --t-btn-bg-pressed: linear-gradient(180deg, #1D3D5C 0%, #1A3752 50%, #132A40 50%, #183450 100%);
+  --t-btn-border-pressed: #3B85C2;
+  --t-btn-bg-disabled: #23282F;
+  --t-btn-border-disabled: #3A424C;
+  --t-btn-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  --t-btn-radius: 3px;
+  --t-btn-primary-bg: linear-gradient(180deg, #3C4652 0%, #333C47 50%, #29313B 50%, #2E3742 100%);
+  --t-btn-primary-bg-hover: linear-gradient(180deg, #3F6E96 0%, #2F5A80 50%, #214A6F 50%, #2C5C86 100%);
+  --t-btn-primary-border: #5FA8E0;
+  --t-btn-primary-fg: #FFFFFF;
+  --t-btn-primary-ring: inset 0 0 0 2px rgba(95, 182, 242, 0.7);
+  --t-focus-ring: 0 0 0 1px #0B0F14, 0 0 0 3px #5FB6F2;
+
+  --t-input-bg: #12161C;
+  --t-input-border: #4A5562;
+  --t-input-border-bottom: #3A4450;
+  --t-input-border-hover: #5FA8E0;
+  --t-input-border-focus: #78BDF2;
+  --t-input-radius: 2px;
+
+  --t-tab-bg: linear-gradient(180deg, #333C47 0%, #2B333D 50%, #232A33 50%, #262E38 100%);
+  --t-tab-bg-hover: linear-gradient(180deg, #3F6E96 0%, #2F5A80 50%, #214A6F 50%, #2C5C86 100%);
+  --t-tab-bg-selected: #1A1F26;
+  --t-tab-border: #0B0F14;
+  --t-tab-text: #B9C2CD;
+  --t-tab-text-selected: #FFFFFF;
+  --t-tab-indicator: #5FB6F2;
+  --t-tab-radius: 3px 3px 0 0;
+
+  --t-menu-bg: #20262E;
+  --t-menu-border: #4A5562;
+  --t-menu-shadow: 2px 3px 8px rgba(0, 0, 0, 0.6);
+  --t-menu-radius: 0;
+  --t-menu-gutter: linear-gradient(90deg, #1B2028 0 28px, #333B45 28px 29px, transparent 29px);
+  --t-menu-item-hover-bg: linear-gradient(180deg, #2E5274 0%, #234463 100%);
+  --t-menu-item-hover-border: #4F8FC4;
+
+  --t-row-bg: #20262E;
+  --t-row-border: #2F3945;
+  --t-row-hover-bg: linear-gradient(180deg, #26313D 0%, #22303F 100%);
+  --t-row-hover-border: #3F6F99;
+  --t-row-selected-bg: linear-gradient(180deg, #24476A 0%, #1C3A58 100%);
+  --t-row-selected-border: #4F8FC4;
+  --t-row-radius: 3px;
+  --t-list-hover-bg: linear-gradient(180deg, #26313D 0%, #22303F 100%);
+  --t-list-hover-border: #3F6F99;
+  --t-list-selected-bg: linear-gradient(180deg, #24476A 0%, #1C3A58 100%);
+  --t-list-selected-border: #4F8FC4;
+
+  --t-dialog-bg: #1E242C;
+  --t-dialog-footer-bg: #171C22;
+  --t-dialog-radius: 7px;
+  --t-user-bubble: linear-gradient(180deg, #213244 0%, #1C2B3B 100%);
+  --t-term-bg: #07090C;
+  --t-term-fg: #DDE4EC;
+  --t-term-accent: #7FD5A6;
+  --t-term-border: #000000;
+
+  --t-error-bg: #3A1A1C;
+  --t-error-border: #F1707A;
+  --t-error-fg: #FFB4B9;
+  --t-success-fg: #7DD88A;
+  --t-caution-fg: #F2C14E;
+  --t-diff-add-bg: #17331F;
+  --t-diff-add-fg: #9FE0AE;
+  --t-diff-del-bg: #3A1A1E;
+  --t-diff-del-fg: #FFAAB2;
+  --t-statusbar-bg: linear-gradient(180deg, #232B35 0%, #1A2029 100%);
+  --t-scrim: rgba(0, 0, 0, 0.45);
+  --t-float-shadow: 0 12px 32px rgba(0, 0, 0, 0.7);
+  --t-font-ui: "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", sans-serif;
+  --t-font-mono: "Cascadia Mono", Consolas, "Microsoft YaHei", monospace;
+
+  --t-cap-plate: linear-gradient(180deg, rgba(255,255,255,0.26) 0%, rgba(255,255,255,0.12) 49%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.1) 100%);
+  --t-cap-plate-hover: linear-gradient(180deg, #7FC2EE 0%, #3C8FCB 49%, #1C6AA8 50%, #3A9AD8 100%);
+  --t-cap-plate-pressed: linear-gradient(180deg, #2E5F88 0%, #1B4769 49%, #0E3150 50%, #194567 100%);
+  --t-cap-close: linear-gradient(180deg, #D88E7C 0%, #C0614A 49%, #A63A23 50%, #B85840 100%);
+  --t-cap-close-hover: linear-gradient(180deg, #F5B09D 0%, #E8644A 49%, #D1361A 50%, #EC7A59 100%);
+  --t-cap-close-pressed: linear-gradient(180deg, #A84C35 0%, #8A311B 49%, #6E1D09 50%, #842D17 100%);
+  --t-cap-plate-inactive: linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.07) 50%, rgba(255,255,255,0.02) 50%, rgba(255,255,255,0.06) 100%);
+  --t-cap-border: rgba(0, 0, 0, 0.8);
+  --t-cap-glyph: #E6EDF5;
+  --t-cap-glyph-hot: #FFFFFF;
+  --t-cap-glyph-close-hot: #FFFFFF;
+  --t-cap-glyph-shadow: drop-shadow(0 0 1px rgba(0, 0, 0, 0.95));
+  --t-cap-glyph-inactive: #8E97A2;
+}
+
+/* 无模糊/降级模式（data-backdrop="solid"，默认）：caption 使用不透明渐变；
+   data-backdrop="glass" 仅示意平台提供模糊时的透明度，HTML 不伪造真实 DWM 模糊。 */

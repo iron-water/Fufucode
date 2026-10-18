@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>Fufucode 浏览器助手</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <div class="title-row">
+      <span class="logo">Fufucode</span>
+      <span id="status-badge" class="badge checking">检测中...</span>
+    </div>
+    <div class="subtitle">桌面端双向协同扩展</div>
+  </div>
+
+  <div class="body">
+    <!-- 未配对态 -->
+    <div id="auth-panel" class="panel hidden">
+      <div class="desc">请输入 Fufucode 设置中显示的 4 位配对 PIN 码：</div>
+      <div class="input-row">
+        <input type="text" id="pin-input" maxlength="4" placeholder="4位PIN" class="pin-box">
+        <button id="pair-btn" class="btn primary">配对</button>
+      </div>
+      <div id="auth-error" class="error-text hidden"></div>
+    </div>
+
+    <!-- 已连接就绪态 -->
+    <div id="ready-panel" class="panel hidden">
+      <button id="collect-btn" class="action-btn">
+        <span class="btn-icon">📄</span>
+        <div class="btn-text">
+          <div class="btn-title">引用当前网页到对话</div>
+          <div class="btn-desc">自动捕获正文或划选高亮文字</div>
+        </div>
+      </button>
+
+      <button id="inspect-btn" class="action-btn">
+        <span class="btn-icon">🎯</span>
+        <div class="btn-text">
+          <div class="btn-title">拾取网页元素 (Inspect)</div>
+          <div class="btn-desc">点击页面任意元素并复制选择器</div>
+        </div>
+      </button>
+    </div>
+
+    <!-- 服务未启动态 -->
+    <div id="offline-panel" class="panel hidden">
+      <div class="offline-icon">🔌</div>
+      <div class="offline-title">未检测到 Fufucode 服务</div>
+      <div class="offline-desc">请确认桌面端已启动，并在设置中开启手机远程/外部接口。</div>
+      <button id="retry-btn" class="btn secondary">重试连接</button>
+    </div>
+  </div>
+
+  <div class="footer">
+    <span id="host-label">http://127.0.0.1:54321</span>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

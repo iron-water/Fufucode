@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "type": "task.dispatch",
+  "taskId": "DESK-1",
+  "threadId": "01a13fcf-b0d4-75f3-a632-d570202ada9f",
+  "worktree": "C:/Projects/Fucode/worktrees/desk1-workbuddy-ui",
+  "branch": "agent/desk1-ui",
+  "baseSha": "bce1551",
+  "model": "group/auto-deepseek-v4-1-flash",
+  "thinking": "high",
+  "dispatchedAt": "2026-10-15T14:40:00Z",
+  "objective": "Avalonia 桌面端全面吸收 WorkBuddy 官方 TDesign 规范与 SVG 图标进行视觉重构，消除 Fluent 残留与堆砌文本，修复主窗口顶栏拖动与 Tab X 关闭按钮笨重反人类交互，默认关闭极扁状态栏。"
+}

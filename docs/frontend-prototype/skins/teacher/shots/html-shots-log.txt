@@ -1,0 +1,13 @@
+fluent-light-shell-1440.png 1440x900 ?skin=fluent&theme=light -> 129425 bytes
+fluent-dark-shell-1440.png 1440x900 ?skin=fluent&theme=dark -> 130932 bytes
+aero-light-shell-1440.png 1440x900 ?skin=aero&theme=light -> 176997 bytes
+aero-dark-shell-1440.png 1440x900 ?skin=aero&theme=dark -> 174791 bytes
+aero-light-states-1440.png 1440x1300 ?skin=aero&theme=light&view=states -> 190427 bytes
+aero-dark-states-1440.png 1440x1300 ?skin=aero&theme=dark&view=states -> 186677 bytes
+fluent-light-states-1440.png 1440x1300 ?skin=fluent&theme=light&view=states -> 132941 bytes
+aero-light-shell-800x640.png 800x640 ?skin=aero&theme=light -> 92504 bytes
+aero-light-settings-800x640-statusbar.png 800x640 ?skin=aero&theme=light&view=settings&statusbar=on -> 62621 bytes
+fluent-light-settings-1440.png 1440x900 ?skin=fluent&theme=light&view=settings -> 85769 bytes
+aero-dark-settings-1440.png 1440x900 ?skin=aero&theme=dark&view=settings -> 112729 bytes
+aero-light-inactive-float-dialog-1440.png 1440x900 ?skin=aero&theme=light&active=false&float=right&dialog=open -> 192587 bytes
+aero-light-glass-menu-1440.png 1440x900 ?skin=aero&theme=light&backdrop=glass&menu=open -> 181227 bytes

@@ -14,17 +14,27 @@ public sealed class AppDataLayout
 
     public string Root { get; }
     public string RuntimeDirectory => Path.Combine(Root, "runtime");
-    public string AgentDirectory => Path.Combine(Root, "pi-agent");
+    /// <summary>后端无关的代理配置目录（FUMO 与后端插件共用）。</summary>
+    public string AgentDirectory => Path.Combine(Root, "agent");
+
+    /// <summary>历史 Pi 代理目录：只读兼容，用于迁移前数据与旧配置。</summary>
+    public string LegacyPiAgentDirectory => Path.Combine(Root, "pi-agent");
     public string SessionsDirectory => Path.Combine(Root, "sessions");
     public string DatabasePath => Path.Combine(Root, "desktop.db");
     public string LogsDirectory => Path.Combine(Root, "logs");
     public string ExportsDirectory => Path.Combine(Root, "exports");
+    public string PluginsDirectory => Path.Combine(Root, "plugins");
+    public string PluginDirectory(string pluginId) => Path.Combine(PluginsDirectory, pluginId);
+    public string PluginStagingDirectory(string pluginId) => Path.Combine(PluginsDirectory, ".staging", pluginId);
     public string ProjectSessionsDirectory(string projectId) => Path.Combine(SessionsDirectory, projectId);
+    public string UpdatesDirectory => Path.Combine(Root, "updates");
+    public string UpdateStagingDirectory(string version) => Path.Combine(UpdatesDirectory, ".staging", version);
+    public string UpdateBackupDirectory => Path.Combine(UpdatesDirectory, "backup");
 
     public void EnsureCreated()
     {
         foreach (var path in new[] { Root, RuntimeDirectory, AgentDirectory,
-            SessionsDirectory, LogsDirectory, ExportsDirectory }) Directory.CreateDirectory(path);
+            SessionsDirectory, LogsDirectory, ExportsDirectory, PluginsDirectory, UpdatesDirectory }) Directory.CreateDirectory(path);
     }
 
     public static string NormalizeProjectPath(string path)

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "type": "task.dispatch",
+  "taskId": "CONV-2",
+  "threadId": "01a1403f-1dc1-7341-b758-5e3384af2c59",
+  "worktree": "C:/Projects/Fucode/worktrees/conv2-auto-operate",
+  "branch": "agent/conv2-ui",
+  "baseSha": "0e5fd05",
+  "model": "group/auto-deepseek-v4-1-flash",
+  "thinking": "high",
+  "dispatchedAt": "2026-10-15T16:15:00Z",
+  "objective": "实现对话驱动自动工作台原生控制与监控页面（CONV-AUTO-v4 / AUTO-OPERATE）：主控对话与流水线安排为中心，右侧卡片与次级执行线程/依赖图双视角，新项目默认全自动，委托抽屉与后台配置。"
+}

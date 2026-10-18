@@ -8,7 +8,7 @@ public static class HistoryMappingTests
     public static void Run()
     {
         using var userJson = JsonDocument.Parse("""{"role":"user","content":[{"type":"text","text":"question"}]}""");
-        using var assistantJson = JsonDocument.Parse("""{"role":"assistant","model":"atria/Atria-Dawn-Preview","stopReason":"aborted","content":[{"type":"thinking","thinking":"reason"},{"type":"toolCall","id":"call-1","name":"write","arguments":{"path":"a.txt"}},{"type":"custom","value":"ignored"}],"usage":{"input":2147483648,"output":7,"cacheRead":3,"cacheWrite":2,"cost":{"total":0.125}}}""");
+        using var assistantJson = JsonDocument.Parse("""{"role":"assistant","model":"example-provider/example-model","stopReason":"aborted","content":[{"type":"thinking","thinking":"reason"},{"type":"toolCall","id":"call-1","name":"write","arguments":{"path":"a.txt"}},{"type":"custom","value":"ignored"}],"usage":{"input":2147483648,"output":7,"cacheRead":3,"cacheWrite":2,"cost":{"total":0.125}}}""");
         using var toolJson = JsonDocument.Parse("""{"role":"toolResult","content":[{"type":"text","text":"result"}]}""");
         var messages = new[]
         {
@@ -25,7 +25,7 @@ public static class HistoryMappingTests
 
         var assistant = transcript[1];
         if (assistant.Id != "history-2" || assistant.Role != MessageRole.Assistant ||
-            assistant.Model != "atria/Atria-Dawn-Preview" || assistant.Blocks.Count != 2)
+            assistant.Model != "example-provider/example-model" || assistant.Blocks.Count != 2)
             throw new Exception("History mapper must retain assistant model and supported content only.");
         if (assistant.Blocks[0] is not ThinkingBlock { Text: "reason" } ||
             assistant.Blocks[1] is not ToolCallBlock

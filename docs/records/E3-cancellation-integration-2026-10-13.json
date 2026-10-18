@@ -1,0 +1,38 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST-CANCEL",
+  "runId": "E3-M-HOST-CANCEL-2c7d492",
+  "sourceMainSha": "92abe0559e06ad3d7372f83f04eee0d71a0d45f3",
+  "integrationStatus": "integrated",
+  "integrationScope": "pre-cancel preserves old Pi connection; initialization cancellation restores old runtime selection; explicit shell recovery; serialized apply and disposal; real trust decline and duplicate request guards",
+  "productAcceptance": "pending",
+  "verification": {
+    "solution": { "warnings": 0, "errors": 0, "exitCode": 0 },
+    "appFull": { "pass": 1255, "fail": 0, "exitCode": 0 },
+    "realCancellationShell": { "pass": 18, "fail": 0, "exitCode": 0 },
+    "existingRealPluginShell": { "pass": 12, "fail": 0, "exitCode": 0 },
+    "coreFull": { "pass": 359, "skip": 1, "exitCode": 0 },
+    "piFull": { "pass": 21, "exitCode": 0 },
+    "ownCancellationProbeResidualNodes": 0
+  },
+  "evidence": [
+    "docs/records/M-E3-cancellation-2026-10-13.md",
+    "tmp/m-cycle48-cancel-red.log",
+    "tmp/m-cycle48-cancel-red2.log",
+    "tmp/m-cycle48-cancel-final.log",
+    "tmp/m-cycle48-cancel-processes.json",
+    "tmp/m-cycle48-solution-build.log",
+    "tmp/m-cycle48-shell-real.log",
+    "tmp/m-cycle48-app-full.log",
+    "tmp/m-cycle48-core.log",
+    "tmp/m-cycle48-pi.log"
+  ],
+  "notVerified": [
+    "late close after successful candidate loading/persistence",
+    "human reconciliation of a cancellation-unknown receipt",
+    "system native pointer/keyboard/file pickers/IME/DPI; current tools expose no node_repl for Computer Use",
+    "long-duration pressure, production migration, candidate installation containing this source"
+  ],
+  "nextAction": "M continues late-close/unknown-result boundaries. Native evidence waits for supported Computer Use runtime. Preserve original stopped workers; R1's frozen cc44eee installer gate remains deferred while unknown Sandbox exists."
+}

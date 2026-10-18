@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "S2-SETTINGS",
+  "runId": "S2-SETTINGS-R1",
+  "deliveryRevision": 1,
+  "threadId": "01a13b97-cd98-7342-981c-456a6ba337ae",
+  "reviewedHead": "2332829dc015d35ffa65745b66b352bce66539fb",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": null,
+  "evidence": [
+    "Delivery card received from thread 01a13b97-cd98-7342-981c-456a6ba337ae with writerStopped: true and worktree clean at 2332829dc015d35ffa65745b66b352bce66539fb.",
+    "Features/SettingsExperience module implemented: SettingsNavCatalog with 3-tier architecture (Basic/Features/Other), SettingsNavPreference (promote/demote persistence to <dataRoot>/settings-nav.json), SettingsRelatedSettings, SettingsPreviewProtocol.",
+    "SettingsPageViewModel & Views updated with 3-tier grouping, search and promote/demote bindings.",
+    "M verified: dotnet build Fufucode.sln -> 0 warnings, 0 errors.",
+    "M verified: dotnet run --project tests/Fufucode.App.Settings.Tests -> 48/48 assertions pass.",
+    "Merged cleanly into main branch."
+  ],
+  "findings": [
+    {
+      "id": "S2-SETTINGS-DELIVERY-1",
+      "status": "verified_module",
+      "detail": "3-tier settings sidebar reorg, interactive promote/demote persistence, related settings cards and cross-tier search verified with 48 unit tests."
+    }
+  ],
+  "nextAction": "Integrated into main. Content pages for terminal/files/automation/usage to be wired in following passes."
+}

@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "type": "integration.record",
+  "taskId": "E3-M-HOST-LATE-CANCEL",
+  "runId": "E3-M-HOST-LATE-CANCEL-5ca6c6b",
+  "sourceMainSha": "4a9e0343e87ec88fc82d9ed25a8e0f959b35394d",
+  "integrationStatus": "integrated",
+  "integrationScope": "cancellation or close observed after actual Pi Resume success and before selected extension persistence; release uncommitted candidate and retain original configuration for explicit recovery",
+  "productAcceptance": "pending",
+  "verification": {
+    "solution": { "warnings": 0, "errors": 0, "exitCode": 0 },
+    "appFull": { "pass": 1255, "fail": 0, "exitCode": 0 },
+    "realCancellationShell": { "pass": 27, "fail": 0, "exitCode": 0 },
+    "existingRealPluginShell": { "pass": 12, "fail": 0, "exitCode": 0 },
+    "coreFull": { "pass": 359, "skip": 1, "exitCode": 0 },
+    "piFull": { "pass": 21, "exitCode": 0 },
+    "ownLateCancellationProbeResidualNodes": 0
+  },
+  "evidence": [
+    "docs/records/M-E3-late-cancellation-2026-10-13.md",
+    "tmp/m-cycle49-late-red.log",
+    "tmp/m-cycle49-late-green.log",
+    "tmp/m-cycle49-late-processes.json",
+    "tmp/m-cycle49-solution-build.log",
+    "tmp/m-cycle49-shell-real.log",
+    "tmp/m-cycle49-app-full.log",
+    "tmp/m-cycle49-core.log",
+    "tmp/m-cycle49-pi.log"
+  ],
+  "notVerified": [
+    "cancellation arriving after persistence has committed",
+    "human reconciliation of unknown receipts and abandoned persistent in-flight candidates",
+    "system native pointer/keyboard/file pickers/IME/DPI; node_repl is not currently exposed",
+    "long-duration pressure, production migration, installer containing this source"
+  ],
+  "nextAction": "M continues read-only unknown-result reconciliation; no automatic resend or protection release. Preserve stopped original workers and R1 frozen source; installer gate remains deferred while unknown Sandbox exists."
+}

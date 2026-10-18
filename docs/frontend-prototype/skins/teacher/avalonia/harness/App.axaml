@@ -1,0 +1,16 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="AeroCaptionHarness.App" RequestedThemeVariant="Light">
+  <!-- 落点示范：ResourceDictionary 合并进资源，作用域 Styles 进 Styles；生产中二者应挂在“皮肤租约”所在的 TopLevel，而不是 App 全局 -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="avares://AeroCaptionHarness/AeroCaption.axaml"/>
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme/>
+    <StyleInclude Source="avares://AeroCaptionHarness/AeroCaption.Styles.axaml"/>
+  </Application.Styles>
+</Application>

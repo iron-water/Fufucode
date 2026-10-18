@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "transport": "codex-desktop",
+  "runId": "E3-LOCAL-637bd91",
+  "taskId": "E3-LOCAL",
+  "threadId": "01a1345a-47b6-7460-94d0-ae3218a0dc90",
+  "deliveryTurnId": "01a1353d-8d92-7373-97b9-84e1a20bdd49",
+  "reviewedHead": "21eebc564e28f2158a268d55a1ab72ffbecd0ec3",
+  "decision": "rework",
+  "integrationStatus": "not_integrated",
+  "mainSha": null,
+  "evidence": ["docs/records/E3-local-delivery-2026-10-13.json", "docs/records/M-E3-local-review-2026-10-13.md", "tmp/m-e3-review/Program.cs", "tmp/m-e3-review/results.log"],
+  "findings": ["E3-VERSION-COMPAT-1", "E3-PENDING-REMOVE-1", "E3-REMOVE-FAILURE-1", "E3-STALE-APPLY-1"],
+  "nextAction": "Repair in the original chat/model/worktree within the original allowlist. Preserve five M counterexamples and all previous valid behavior, deliver a new final HEAD and stop. Public host/page wiring remains M-owned."
+}

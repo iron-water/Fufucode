@@ -1,0 +1,8 @@
+{
+  "id": "automation.auto-dev",
+  "name": "自动开发工作台",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.AutoDev.dll",
+  "packageType": "Fufucode.Plugins.AutoDev.AutoDevPluginPackage",
+  "category": "Automation"
+}

@@ -18,7 +18,7 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
-$ini = Join-Path $root 'scripts/packaging/pi-pipe.ps1'
+$ini = Join-Path $root 'scripts/dev/pi/pi-pipe.ps1'
 $drillDir = Join-Path $root 'labs/packaging/drill'
 $oldSetup = Join-Path $root "out\Fufucode-$OldVersion-setup.exe"
 $newSetup = Join-Path $root "out\Fufucode-$NewVersion-setup.exe"
@@ -237,4 +237,4 @@ Start-Sleep -Seconds 2
 $r = New-Rec -phase 'overall'; $r.pass = $ok; $r.installDir = $installDir; Record -rec $r
 Out-Log "=== drill: $(if ($ok) {'PASS'} else {'FAIL'}) ==="
 Out-Log "Report: $report"
-exit ($ok ? 0 : 1)
+if ($ok) { exit 0 } else { exit 1 }

@@ -134,7 +134,7 @@ public sealed class StorageCleaner
             warnings.Add("浏览器可能正在运行：被占用的文件会跳过并如实记录，不会强行删除。");
         if (targets.Any(target => target.Scope == StorageCleanupScope.BrowserSiteData) ||
             skipped.Any(item => item.Kind == StorageCleanupSkipKind.ReparsePoint && item.Path.Contains("Service Worker", StringComparison.OrdinalIgnoreCase)))
-            warnings.Add("清理浏览器登录/站点数据：相关网站的登录状态会失效，Service Worker 离线内容需要重新下载；模型认证在 Pi 配置目录，不受影响。");
+            warnings.Add("清理浏览器登录/站点数据：相关网站的登录状态会失效，Service Worker 离线内容需要重新下载；模型认证在后端配置目录，不受影响。");
         warnings.Add("预览后发生变化的目标（重新写入、新增内容、变为链接或不再过期）会保留并如实报告，不会按旧预览删除。");
 
         var affected = targets.Select(target => target.AreaId).Distinct(StringComparer.Ordinal).OrderBy(id => id, StringComparer.Ordinal).ToArray();

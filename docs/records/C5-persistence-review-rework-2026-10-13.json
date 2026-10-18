@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "transport": "codex-desktop",
+  "runId": "c5-persist-9fde",
+  "taskId": "C5-PERSIST",
+  "threadId": "01a132c3-319c-7510-abe5-571ca2fc50c8",
+  "deliveryTurnId": "01a132c3-64e3-7d63-8b39-db3116017d6f",
+  "reviewedHead": "0ebc1fa242b61c00f1cd1ba096f2503b51ec9642",
+  "decision": "rework",
+  "integrationStatus": "not_integrated",
+  "mainSha": null,
+  "evidence": ["tmp/m-c5-persist-module.log", "tmp/m-c5-persist-counterexamples.log", "tmp/c5-persist-review/Program.cs", "docs/records/M-C5-persistence-review-2026-10-13.md"],
+  "findings": ["C5-PERSIST-SCOPE-1", "C5-PERSIST-PATH-1", "C5-PERSIST-FINGERPRINT-1", "C5-PERSIST-GENERATION-1"],
+  "nextAction": "原会话、原group/auto-qfmodel、原工作树修复四个已复现边界，保持L3；保留135项原测试并加入M五反例。仅修改原允许Persistence/独立测试/自身记录，公共接线仍由M负责；提交完整新卡后停写。"
+}

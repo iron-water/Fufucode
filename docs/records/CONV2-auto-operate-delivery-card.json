@@ -1,0 +1,65 @@
+{
+  "taskId": "CONV-2",
+  "status": "module_ready",
+  "package": "AUTO-OPERATE",
+  "worktree": "C:/Projects/Fucode/worktrees/conv2-auto-operate",
+  "branch": "agent/conv2-ui",
+  "baseSha": "0e5fd05eb4a0c847814b7978a01cdfa19410300e",
+  "headSha": "cfbc6bc61388b3e6a7f36441ca6595ca7c418905",
+  "commit": "cfbc6bc61388b3e6a7f36441ca6595ca7c418905",
+  "commitSubject": "feat(automation): rework workbench into conversation-driven v4 overview, threads, deliveries and activity",
+  "deliveryRevision": "r1",
+  "eventId": "CONV-2:r1:cfbc6bc61388b3e6a7f36441ca6595ca7c418905",
+  "mainControlThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "recordPath": "docs/records/CONV2-auto-operate-delivery.md",
+  "changedFiles": [
+    "Fufucode.sln",
+    "src/Fufucode.App/Features/Automation/AutomationControlProjection.cs",
+    "src/Fufucode.App/Features/Automation/AutomationControlViewModel.V4.cs",
+    "src/Fufucode.App/Features/Automation/AutomationProjectPolicy.cs",
+    "src/Fufucode.App/Features/Automation/AutomationControlPageView.axaml",
+    "src/Fufucode.App/Features/Automation/AutomationControlPageView.axaml.cs",
+    "src/Fufucode.App/Features/Automation/AutomationControlViewModel.cs",
+    "src/Fufucode.App/SelfTest/AutomationControlSelfTest.cs",
+    "src/Fufucode.App/SelfTest/AutomationControlAdvancedSelfTest.cs",
+    "src/Fufucode.App/SelfTest/AutomationControlPersistenceSelfTest.cs",
+    "tests/Fufucode.App.Automation.V4.Tests/Fufucode.App.Automation.V4.Tests.csproj",
+    "tests/Fufucode.App.Automation.V4.Tests/Program.cs",
+    "docs/records/CONV2-auto-operate-delivery.md"
+  ],
+  "implemented": [
+    "v4 只读状态投影（ProjectView/ThreadView/DeliveryView/MessageView/AuditView）",
+    "四页签原生工作台：总览（主控对话+正在工作/需要你决定/最近成果）",
+    "执行线程列表/依赖图双视角切换，卡片含真实 HEAD、分支、工作树、运行时长与停顿原因",
+    "成果与验收区分已提交/已接受/已整合/已验证/未验收与验收缺口面板",
+    "活动记录时间线、运行健康、本地草稿与原回执诊断区",
+    "委托与预算抽屉：默认并发 2、自动审核/集成、模型、联网/付费开关、周期本地补漏，按项目落盘读回",
+    "新项目默认自动入口策略；已有项目保留模式/暂停/在途身份，不被静默覆盖",
+    "窄于 1000DIP 单列布局，主操作行下移避免重叠"
+  ],
+  "verified": {
+    "solutionBuild": "dotnet build Fufucode.sln → 0 警告 0 错误",
+    "targetedTests": "tests/Fufucode.App.Automation.V4.Tests → 59 项断言通过（真实 SQLite + Git + BackgroundHost 子进程）",
+    "existingTargetedTests": "tests/Fufucode.App.Automation.Persistence.Tests → 192 项断言通过（无回归）",
+    "nativeSelfTest": "dotnet run --project src/Fufucode.App -- --selftest --automation-only → Automation page failures: 0",
+    "diffCheck": "git diff --check → 无输出、退出 0"
+  },
+  "notRun": [
+    "原生真机 UI 人工验收（125%/150% DPI、中文 IME 实机输入、键盘返回、弹出层、800×640/1100×800 人工视觉审阅）",
+    "主控目标→核心目标版本的写入与自动规划/派工/集成闭环（属于 AUTO-LOOP 与共享接线）",
+    "GUI 写命令统一由宿主执行、后台/登录自启生命周期",
+    "旧 HTML/脚本入口退役与生产队列迁移"
+  ],
+  "blockers": [
+    "Core 仍拒绝 ControlAction.SetMode(Automatic)（'Automatic policy is not enabled.'）；页面如实显示该原因，不伪造切换成功。"
+  ],
+  "publicWiringNeeded": [
+    "组合根在 automation 模块构造后调用 AutomationControlViewModel.ApplyEntryPolicy(dataRoot)",
+    "主控目标入口需要 Core 公共契约；页面当前只保存请求并显示“未产生核心命令”",
+    "委托设置与首次进入标记的权威路径若并入项目级设置，需主控指定"
+  ],
+  "temporaryState": "none",
+  "restoreResult": "no temporary processes, services or permissions were created",
+  "stoppedWriting": true,
+  "writerStopped": true
+}

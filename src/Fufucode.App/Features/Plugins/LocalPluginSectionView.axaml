@@ -1,0 +1,151 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:features="using:Fufucode.App.Features.Plugins"
+             x:Class="Fufucode.App.Features.Plugins.LocalPluginSectionView"
+             x:DataType="features:LocalPluginViewModel"
+             AutomationProperties.Name="本地插件固定版本">
+  <!-- 窄容器（右侧停靠栏）下按钮必须可达：全部动作行用 WrapPanel 自动换行。 -->
+  <Grid RowDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+
+    <!-- 标题与宿主状态 -->
+    <StackPanel x:Name="HeaderPanel" Grid.Row="0" Spacing="4">
+      <TextBlock Classes="settingsRowTitle" Text="本地插件：固定版本与失败恢复"/>
+      <TextBlock Classes="caption" Text="插件会执行本地代码，请仅导入可信来源。" TextWrapping="Wrap"/>
+      <Expander Header="版本与加载说明" IsExpanded="False">
+        <TextBlock x:Name="DescriptionBlock" Classes="caption" TextWrapping="Wrap"
+                   Text="导入本地固定版本副本，当前支持 Pi。启用不等于加载成功，实际加载以宿主状态为准。"/>
+      </Expander>
+      <TextBlock Classes="caption" Text="{Binding HostText}" TextWrapping="Wrap"
+                 AutomationProperties.Name="宿主状态"/>
+    </StackPanel>
+
+    <!-- 本地导入与预览 -->
+    <Border Grid.Row="1" Classes="settingsRow">
+      <StackPanel Spacing="6">
+        <TextBlock Classes="settingsRowTitle" Text="本地导入"/>
+        <Expander Header="导入格式" IsExpanded="False">
+          <TextBlock x:Name="ImportHintBlock" Classes="caption" TextWrapping="Wrap"
+                     Text="目录需含 fufucode-plugin.json，声明 id、displayName、version、backend、entryRelativePath、supportedHostVersions。"/>
+        </Expander>
+        <TextBox Text="{Binding SourceDirectory}" PlaceholderText="插件目录（本地固定版本源）"
+                 AutomationProperties.Name="插件目录"/>
+        <TextBox Text="{Binding EntryRelativePath}" PlaceholderText="入口（包内相对路径，可留空用描述文件声明）"
+                 AutomationProperties.Name="入口相对路径"/>
+        <WrapPanel x:Name="ImportActions" Orientation="Horizontal">
+          <Button Classes="subtle" Content="选择插件目录…" Command="{Binding PickDirectoryCommand}"
+                  Margin="0,0,8,4" AutomationProperties.Name="选择插件目录"/>
+          <Button Classes="subtle" Content="选择入口…" Command="{Binding PickEntryCommand}"
+                  IsEnabled="{Binding CanPickEntry}" Margin="0,0,8,4"
+                  AutomationProperties.Name="选择入口"/>
+          <Button Classes="subtle" Content="预览" Command="{Binding PreviewCommand}"
+                  Margin="0,0,8,4" AutomationProperties.Name="预览"/>
+          <Button Classes="subtle" Content="导入固定版本" Command="{Binding ImportCommand}"
+                  IsEnabled="{Binding CanImport}" Margin="0,0,8,4"
+                  AutomationProperties.Name="导入固定版本"/>
+          <Button Classes="subtle" Content="刷新" Command="{Binding RefreshCommand}"
+                  Margin="0,0,0,4" AutomationProperties.Name="刷新"/>
+        </WrapPanel>
+        <TextBlock Classes="caption" Text="{Binding PreviewText}" TextWrapping="Wrap"
+                   IsVisible="{Binding HasPreview}" AutomationProperties.Name="导入预览"/>
+        <Border Classes="errorCard" IsVisible="{Binding HasPreviewError}">
+          <TextBlock Classes="body" TextWrapping="Wrap" Text="{Binding PreviewError}"/>
+        </Border>
+      </StackPanel>
+    </Border>
+
+    <!-- 插件与版本列表 -->
+    <Grid x:Name="ListsGrid" Grid.Row="2" ColumnDefinitions="*,*" ColumnSpacing="12">
+      <DockPanel x:Name="PluginsPanel" Grid.Column="0">
+        <StackPanel DockPanel.Dock="Top" Spacing="4">
+          <TextBlock Classes="settingsRowTitle" Text="本地副本"/>
+          <TextBlock Classes="caption" Text="{Binding StatusText}" TextWrapping="Wrap"
+                     AutomationProperties.Name="状态行"/>
+        </StackPanel>
+        <Border Classes="errorCard" DockPanel.Dock="Top" IsVisible="{Binding HasCorrupt}">
+          <TextBlock Classes="body" TextWrapping="Wrap" Text="{Binding CorruptText}"/>
+        </Border>
+        <ListBox x:Name="PluginList" ItemsSource="{Binding Plugins}"
+                 SelectedItem="{Binding SelectedPlugin}"
+                 AutomationProperties.Name="本地插件列表">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="features:LocalPluginRow">
+              <StackPanel Spacing="2">
+                <TextBlock Classes="bodyStrong" Text="{Binding SingleLine}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="{Binding CompatibilityText}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="{Binding StatusText}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="{Binding PendingRemoveText}" TextWrapping="Wrap"
+                           AutomationProperties.Name="待移除状态"/>
+                <TextBlock Classes="caption" Text="{Binding InFlightText}" TextWrapping="Wrap"
+                           AutomationProperties.Name="在途保护状态"/>
+                <TextBlock Classes="caption" Text="{Binding LoadError}" TextWrapping="Wrap"
+                           IsVisible="{Binding HasLoadError}"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+
+      <DockPanel x:Name="VersionsPanel" Grid.Column="1">
+        <StackPanel DockPanel.Dock="Top" Spacing="4">
+          <TextBlock Classes="settingsRowTitle" Text="固定版本"/>
+          <TextBlock Classes="caption" Text="{Binding SelectedPlugin.CountText}" TextWrapping="Wrap"/>
+        </StackPanel>
+        <ListBox x:Name="VersionList" ItemsSource="{Binding Versions}"
+                 SelectedItem="{Binding SelectedVersion}"
+                 AutomationProperties.Name="固定版本列表">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="features:LocalPluginVersionItem">
+              <StackPanel Spacing="2">
+                <TextBlock Classes="bodyStrong" Text="{Binding SingleLine}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="{Binding SourceRootText}" TextWrapping="Wrap"/>
+                <TextBlock Classes="caption" Text="{Binding ImportedText}" TextWrapping="Wrap"/>
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </DockPanel>
+    </Grid>
+
+    <!-- 生命周期动作 -->
+    <WrapPanel x:Name="LifecycleActions" Grid.Row="3" Orientation="Horizontal">
+      <Button Classes="subtle" Content="{Binding ApplyButtonText}" Command="{Binding ApplyCommand}"
+              ToolTip.Tip="真实Pi空闲时安全重启，保留会话和草稿；仅运行你信任的本地插件。"
+              IsEnabled="{Binding CanApply}" Margin="0,0,8,4"
+              AutomationProperties.Name="应用所选版本"/>
+      <Button Classes="subtle" Content="回退到上一版本" Command="{Binding RollbackCommand}"
+              IsEnabled="{Binding CanRollback}" Margin="0,0,8,4"
+              AutomationProperties.Name="回退到上一版本"/>
+      <Button Classes="subtle" Content="移除所选版本" Command="{Binding RemoveCommand}"
+              IsEnabled="{Binding CanRemove}" Margin="0,0,8,4"
+              AutomationProperties.Name="移除所选版本"/>
+      <Button Classes="subtle" Content="按宿主快照确认" Command="{Binding ResolvePendingCommand}"
+              Margin="0,0,0,4" AutomationProperties.Name="按宿主快照确认"/>
+      <ProgressBar IsIndeterminate="True" Width="120" IsVisible="{Binding IsBusy}" Margin="0,0,0,4"/>
+    </WrapPanel>
+
+    <!-- 空状态 -->
+    <TextBlock x:Name="EmptyBlock" Grid.Row="4" Classes="caption" TextWrapping="Wrap"
+               Text="{Binding EmptyText}" IsVisible="{Binding !HasPlugins}"/>
+    <StackPanel Grid.Row="5" Spacing="6" IsVisible="{Binding HasInFlightRequests}">
+      <TextBlock Classes="settingsRowTitle" Text="未结束请求（受保护）"/>
+      <Button x:Name="InspectInFlightButton" Classes="subtle" HorizontalAlignment="Left" Content="只读核对未结束请求" Command="{Binding InspectInFlightCommand}"/>
+      <TextBox x:Name="InFlightObservation" IsReadOnly="True" Text="{Binding InFlightObservationText}" TextWrapping="Wrap" AutomationProperties.Name="未结束请求只读核对结果"/>
+      <CheckBox x:Name="ConfirmRegistrationEnd" IsChecked="{Binding ConfirmRegistrationEnd}" Content="仅结束已返回登记，保留文件与原回执"/>
+      <Button x:Name="ReconcileInFlightButton" Classes="subtle" HorizontalAlignment="Left" Content="结束已返回请求登记" Command="{Binding ReconcileInFlightCommand}" ToolTip.Tip="先核对原请求。仅同会话空闲、原调用已结束且候选未加载时可用；不删除文件、不重发、不认证外部任务终止。"/>
+      <ListBox x:Name="InFlightRequestList" MaxHeight="120" ItemsSource="{Binding InFlightRequests}" SelectedItem="{Binding SelectedInFlight}" AutomationProperties.Name="未结束请求列表">
+        <ListBox.ItemTemplate><DataTemplate x:DataType="features:PluginInFlightRow"><TextBlock Text="{Binding Caption}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+      <TextBox x:Name="InFlightOriginalDetails" IsReadOnly="True" Text="{Binding SelectedInFlight.OriginalDetails}" TextWrapping="Wrap" AutomationProperties.Name="原未结束请求"/>
+    </StackPanel>
+    <StackPanel Grid.Row="6" Spacing="6" IsVisible="{Binding HasReceipts}">
+      <TextBlock Classes="settingsRowTitle" Text="最近应用回执"/>
+      <Button x:Name="InspectReceiptButton" Classes="subtle" HorizontalAlignment="Left" Content="只读核对当前加载" Command="{Binding InspectReceiptCommand}"/>
+      <TextBox x:Name="ReceiptObservation" IsReadOnly="True" Text="{Binding ReceiptObservationText}" TextWrapping="Wrap" AutomationProperties.Name="回执只读核对结果"/>
+      <ListBox x:Name="ReceiptList" MaxHeight="120" ItemsSource="{Binding Receipts}" SelectedItem="{Binding SelectedReceipt}" AutomationProperties.Name="应用回执列表">
+        <ListBox.ItemTemplate><DataTemplate x:DataType="features:PluginReceiptRow"><TextBlock Text="{Binding Caption}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
+      </ListBox>
+      <TextBox x:Name="ReceiptOriginalDetails" IsReadOnly="True" Text="{Binding SelectedReceipt.OriginalDetails}" TextWrapping="Wrap" AutomationProperties.Name="原应用回执"/>
+    </StackPanel>
+    <TextBox Grid.Row="7" IsVisible="{Binding HasReconciliationHistory}" IsReadOnly="True" Text="{Binding ReconciliationHistoryText}" TextWrapping="Wrap" AutomationProperties.Name="请求登记对账历史"/>
+  </Grid>
+</UserControl>

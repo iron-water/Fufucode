@@ -1,7 +1,7 @@
 /**
  * Verifies the Fufucode approval bridge against a real Pi agent loop.
  *
- * Scenarios A01/A02/A03 cover allow, deny and fail-closed paths.
+ * A01/A02/A03 per docs/archive/assignments/track-b-assignment.md.
  *
  * Each scenario:
  *   - builds an isolated workspace (agent dir via PI_CODING_AGENT_DIR)

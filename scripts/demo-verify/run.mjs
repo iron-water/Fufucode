@@ -273,7 +273,7 @@ async function deadLockFree() {
 }
 
 // ---------------------------------------------------------------------------
-// Fixtures for the M5 management page.
+// Fixtures for the M5 management page (docs/archive/assignments/track-b-fixtures.md)
 // ---------------------------------------------------------------------------
 
 async function fixtureAtria({ gated }) {

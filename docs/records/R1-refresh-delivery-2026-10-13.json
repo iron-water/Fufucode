@@ -1,0 +1,130 @@
+{
+  "schemaVersion": 1,
+  "type": "delivery.card",
+  "taskId": "R1-REFRESH",
+  "status": "submitted",
+  "summary": "固定产品来源 4de5151 的新候选已构建并交付：两套自有输出（out/r1-refresh 分段构建、out/r1-e2e 端到端单命令 package.ps1 exit=0），ZIP 15,542 条完整性校验、包内托管 Pi 发现与优雅停止、包内 CLI 临时数据根跨进程恢复、启动器 16 项、Windows Sandbox 安装/原生窗口启停/卸载/数据保留 12/12 PASS 两次均实跑通过。继承工件逐字节保留并实测守卫生效。实测发现并小步提交 3 个真实包装缺陷修复（默认输出根破坏性删除、清单哈希不可复现、安装程序被 $null 退出码守卫误杀）。包内 App 全量 --selftest 不稳定：8 次串行独占实跑 3 绿 5 红，5 次红的 label 各不相同，根因未确认，按 failed 门如实上报并发协调卡，未挑绿、未放宽断言、未改禁止范围。候选非正式发布，不声称生产六门通过。已停写。",
+  "commits": [
+    "bdccbcf0b4acac0c1c49f4e10bbabd6cbb8fbae2",
+    "b84ff3d9296425dc78bada0c71a5741a3939b74c",
+    "b405af0bff3a18f0eab43ddcd40e8f818ecd1ec5",
+    "a99693ce87e3fce40a9d8fa5f0b95f1890c4ab5f"
+  ],
+  "changedFiles": [
+    "scripts/packaging/package.ps1",
+    "scripts/packaging/build-installer-version.ps1",
+    "scripts/packaging/Fufucode.iss",
+    "scripts/packaging/run-sandbox.ps1",
+    "scripts/packaging/verify-clean-start.ps1",
+    "scripts/packaging/integrity.ps1",
+    "labs/packaging/clean-start-report-r1.jsonl",
+    "labs/packaging/clean-start-report-r1b.jsonl",
+    "labs/packaging/clean-start-report-r1e2e.jsonl",
+    "docs/records/R1-refresh-candidate-2026-10-12.md"
+  ],
+  "verification": {
+    "passed": [
+      "dotnet restore Fufucode.sln -v quiet exit=0 (tmp/r1-restore.log)",
+      "dotnet build Fufucode.sln --no-restore -v quiet exit=0，0 警告 0 错误，用时 29.94s (tmp/r1-build.out.log，err 0B)",
+      "源码 Debug 构建 dotnet src\\Fufucode.App\\bin\\Debug\\net10.0\\Fufucode.App.dll --selftest 两次 exit=0 / 1198 ok / 0 项失败 (tmp/r1-selftest.out.log, tmp/r1-selftest2.out.log)",
+      "dotnet run tests\\Fufucode.Core.Tests --no-build exit=0：340 PASS 行 + 1 SKIP（Atria 需真实凭据，未启用）(tmp/r1-run-Fufucode.Core.Tests.log)",
+      "dotnet run tests\\Fufucode.Pi.Tests --no-build exit=0：21 PASS（含真实 Pi get_state/models）(tmp/r1-run-Fufucode.Pi.Tests.log)",
+      "dotnet run tests\\Fufucode.Control.Tests --no-build（独占串行重跑）exit=0：PASS 511 checks，0 FAIL (tmp/r1-run-Control-retry.log)",
+      "dotnet run tests\\Fufucode.Hosting.Tests exit=0 PASS 267 checks；Harness.Tests exit=0 PASS 51 checks；LocalReview.Tests exit=0 ALL PASS (86)；GitSnapshot.Tests exit=0 ALL 57 CHECKS PASSED；App.Automation.Persistence.Tests exit=0 192 项断言",
+      "scripts/packaging/test-archive.ps1 exit=0、test-verifier.ps1 exit=0（修复后共享夹具）",
+      "包装继承保护实测：无参 package.ps1 在任何删除前抛 Inherited output exists；继承 out/Fufucode.zip 前后 SHA256 不变 14E4DCB2…E7C36 / 190,577,624B；out/build 240→240 文件；探针目录同样被拒；-OutputDir '..\\outside' 被仓库边界拒绝 (tmp/r1-guard-test.ps1)",
+      "归档校验：archive-package.ps1 PASS archive: 15542 file hashes verified（两套包各一次）",
+      "清单可复现性（修复2后）：同一载荷树 6 次 integrity -Mode Write → 1 个哈希变体（修复前 2 个变体）；-Mode Verify exit=0 ok=true checked=15542 missing=0 changed=0 extra=0（暂存树与解压树各一次）；ZIP 内清单字节哈希 = 暂存 = 安装包",
+      "两次独立构建差异定位：15,542 条目集合两侧相同、only-in 0/0，仅 19 个 .NET 程序集/pdb/exe 因内嵌 SourceRevisionId 不同（d7d452f → b405af0），产品 C#/TS/Node 载荷逐字节一致 (tmp/r1-two-builds-diff.ps1, tmp/r1-two-builds-difflist.txt)",
+      "端到端单命令：package.ps1 -AppVersion 1.4.3-candidate -OutputDir out/r1-e2e → exit=0，产出 ZIP 与版本化安装程序 (tmp/r1-e2e.log, PID 976 出生 06:16:01, 哨兵 tmp/r1-e2e.done)",
+      "包内托管 Pi（clean PATH，PATH 剥离至 95 项，临时 FUFUCODE_DATA/HOME/USERPROFILE/TEMP）：pi-start spawn 1399/1522/1830ms ready 2282/2347/2697ms gotResponse=true 存活；第二次 get_state success 563B；pi-stop graceful exit=0；residual 0 个包内进程（三次实跑）",
+      "包内 CLI 临时数据根启动 + 新进程恢复：同一 --app-data 根 3 个独立进程 models list exit=0、sessions list exit=0 返回持久会话 1be4a272b743421796c03a11c2360021、settings get theme exit=0 {\"theme\":\"system\"}；根内建出 exports,logs,pi-agent,runtime,sessions,desktop.db (tmp/r1-cli-recover.txt, tmp/r1-cli2-*.log)",
+      "启动器夹具 scripts/cli-package-verify.ps1（out/r1-refresh 的 cli/app 发布物，含空格路径）：16 项检查全部命中期望退出码（4 个入口 × settings/sessions/usage-error=2/missing-runtime=3）(tmp/cli-package-56b994e6…/launcher-report.json)",
+      "干净 Windows Sandbox 验收 #1：run-sandbox.ps1 -AppVersion 1.4.3-candidate -OutputDir out/r1-refresh exit=0，Sandbox acceptance PASS，12/12 全 true，guest WDAGUtilityAccount/Virtual Machine/NT 10.0.26100.0，证据 tmp/sandbox-885a8efac4074945a9459bcef96afaf1/evidence（install.log 6,513,639B、uninstall.log 2,983,349B）",
+      "干净 Windows Sandbox 验收 #2（交付 HEAD 构建的第二套包）：-OutputDir out/r1-e2e exit=0，PASS 12/12，证据 tmp/sandbox-5e82db3cfaf64e35ad2128c05bb3d73c/evidence；两次启动前 wsb list 均为空，未停止未知实例，宿主未安装未卸载，未操作宿主窗口",
+      "打包内容旧机器/旧 worktree 硬编码定向检查：包内非 node_modules 文本与 scripts/packaging/*.ps1、Fufucode.iss 对 C:\\Users\\mio|.codex\\worktrees|Projects\\Fucode|21894 命中 0 (tmp/r1-counts-scan.txt)",
+      "scripts/packaging/*.ps1 在 Windows PowerShell 5.1 AST 解析 0 错误（修复后复测）",
+      "verify-clean-start 整门 PASS 一次：-OutputDir out/r1-e2e exit=0，selftest ok + pi-start/get-state/pi-stop/residual 全 ok，overall pass=true (labs/packaging/clean-start-report-r1e2e.jsonl，selftest 262,399ms exit=0)"
+    ],
+    "failed": [
+      "包内 App 全量 --selftest 不稳定（候选门按 failed 上报，根因未确认）：8 次串行独占实跑中 5 次红，红的 label 各不相同——A 采用到新规范（clean-start exit=1，1068 ok，labs/packaging/clean-start-report-r1.jsonl）、C package（exit=1，1077 ok，tmp/r1-packaged-selftest-1.log）、D 批准重组（exit=1，1065 ok，tmp/r1-packaged-selftest-2.log）、E restructure 并级联 1 项（exit=1，1093 ok，tmp/r1-packaged-selftest-flaky0.log）、G 记录回答（clean-start exit=1，1058 ok，labs/packaging/clean-start-report-r1b.jsonl）；B/F/H 三次绿如实保留为独立事实，未用作门通过依据。共同观测：busy=False、enabled=True、focused=False、active=True，30s Until 超时，异常抛自 src/Fufucode.App/SelfTest/AutomationControlSelfTest.cs PressDecision 与 AutomationControlCreationSelfTest.cs:37 Save。同一固定源码的 Debug 构建两次全绿，包内 Release exe + clean PATH + 临时数据根路径才复现，两套包产品源码逐字节一致，故不能称只是焦点竞态，也不能称已定位产品缺陷",
+      "dotnet run tests\\Fufucode.Control.Tests --no-build 首跑 exit=-532462766：124 条 PASS 后未捕获异常 Worktree ownership is active or unverifiable; verdict=ActiveElsewhere; A child of the journaled writer is still alive（ControlIntentConsumer.cs:46），红日志 tmp/r1-run-Fufucode.Control.Tests.log 9,337B 原样保留；随后独占串行重跑 exit=0 记为另一独立事实，两者均入卡不合并",
+      "cli-package-verify.ps1 整体 exit=1：16 项启动器检查全对，其后 Fufucode.cmd --selftest 返回 1，失败原因即上述包内自测不稳定，不是启动器缺陷 (tmp/r1-cli-package-verify.log)",
+      "package.ps1 修复前的原始默认路径实跑：归档阶段被本会话中断，留下 out/r1-refresh/Fufucode.zip.8f78d0810af64cf7aadda75144c32586.partial 157,913,244B（本任务自有产物，核对后由自有脚本删除，未触碰继承工件）；installer 步骤两次 exit=1（缺陷 #3），红日志 tmp/r1-resume-pack.log、tmp/r1-rebuild.log 保留"
+    ],
+    "notRun": [
+      "原生 IME 组合态、系统 DPI/非 100% 缩放、多显示器布局、跨进程键盘焦点行为：本包无 GUI 交互取证，Sandbox 仅证明窗口创建/退出",
+      "代码签名与 SmartScreen/杀软行为；自动 Pi 升级（README 自述未验）：无证书与授权",
+      "升级安装（覆盖既有 1.4.x）、卸载后重装、跨版本数据迁移：run-drill.ps1 未运行，需两个历史版本安装程序与宿主安装区，越出本包禁止范围",
+      "OMP 后端在包内可用：runtime/omp 在本树与主区均不存在，包内不含；RealSessionBootstrap.cs:47 默认 runtime/omp/omp.exe，PersistentSessionManager.cs:434 缺失即抛 FileNotFoundException，如实记为未托管未打包",
+      "真实云端模型对话闭环：零云调用；Core 的 Atria 项按凭据 SKIP，未启用 FUFUCODE_ATRIA_REAL_MODEL_TEST",
+      "WebView2 真实页面渲染：Sandbox 关网络，目标机需 Edge WebView2 Runtime，包内未验",
+      "C5 本地草稿/回执在包内的跨进程原生 UI 复验：本包只做包内全量自测与包内 CLI 跨进程恢复，未做跨进程 GUI",
+      "包内 HarnessHost/新增 Control/Hosting 宿主程序集：按清单核对不存在于载荷（tools/Fufucode.HarnessHost 匹配 0 文件，App.csproj 只引用 Abstractions+Core），未据此声称自动化闭环可用"
+    ]
+  },
+  "evidence": [
+    "worktree: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode（detached HEAD）",
+    "base: d7d452fb365efc09fad64ed4d27139f2c2acd8fb（其父即产品冻结 SHA 4de5151272c1766415c837060a09d99617e5554e；4de5151..base 仅派工文档；git diff --stat 4de5151..HEAD -- src tests tools Fufucode.sln extensions runtime 为空；HEAD:src 树 == 4de5151:src 树 == 8d84b690c1cc3562daa98fc166b6e5c315152bd6）",
+    "head: a99693ce87e3fce40a9d8fa5f0b95f1890c4ab5f",
+    "artifact: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-refresh\\Fufucode.zip bytes=191736830 sha256=483FE1BA7CC8B2B8756C4167FCE9C6A73C4EF848750EB9B3D6A8A995915A03D4（构建时内嵌源标识 d7d452fb…，§5 包内验证与 Sandbox #1 的实际被测对象）",
+    "artifact: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-refresh\\Fufucode-1.4.3-candidate-setup.exe bytes=141146693 sha256=9116EA8BBE43D790958284AE596DDFFF736E3F97A1BB0765FC46C7F26FB48BC8",
+    "artifact: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-refresh\\build\\integrity.sha256.json bytes=2963859 sha256=B8FD6853EE13A40DBD8D6354B850DE6E3275218F69C394A7B6A71F995359A9DE（format=1，15542 条：app=243 cli=205 runtime=15076 extensions=3 notices=12 根文件 3）",
+    "artifact: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-e2e\\Fufucode.zip bytes=191736776 sha256=B2D20A49B34AA15F87B5ED653BCE43F4FC504C62D2DEC8474FEA8FB4E4CA06B7（交付 HEAD b405af0b… 构建，端到端单命令 exit=0，其包内整门 PASS 与 Sandbox #2）",
+    "artifact: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-e2e\\Fufucode-1.4.3-candidate-setup.exe bytes=141147158 sha256=A7694956D310259AAF920A6E5C30068AC18B9230C3DC33A1BCD1053C230824B1（ProductVersion=1.4.3-candidate）",
+    "artifact: C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-e2e\\build\\integrity.sha256.json bytes=2963859 sha256=EEB29A1D248CD93F9DD8C1B7788CA2387656ACC5288A4A31199D796DB3688195",
+    "runtime: Node v24.15.0 node.exe 91694408B sha256=3331E1FFE19874215472217C5E94F5A0C6D8E18C4AC7111D3937AA0AD5E9B4A5 = LICENSE.provenance.json binarySha256；LICENSE 156926B sha256=4573185D56580DA2B890BA34A85A409257640F1C5632EADE4300137266194D18 = provenance licenseSha256，blob 403ea3c5717087b20e9cddaa2b4881256b6b4858",
+    "runtime: Pi @earendil-works/pi-coding-agent@1.1.0，robocopy 自主区 C:\\Projects\\Fucode\\Fufucode Dirs 1437/Files 15072/FAILED 0（tmp/robocopy-pi.log）；包内 cli.js sha256=E79626F2DD6F94AA45D30F3FA63CD84319A6EEFCD150B353CFAF274366926774 本树=主区=包内三处一致；锁文件 blob 5ed4c8085f10a31c72fb6ce8558fe8d51cbaff3d",
+    "logs: tmp/r1-restore.log, r1-build.{out,err}.log, r1-selftest.{out,err}.log, r1-selftest2.out.log, r1-run-*.log, r1-gates*.txt, r1-tests-summary*, r1-counts-scan.txt, r1-guard-test.ps1 输出, r1-resume-pack.{log,done}, r1-rebuild.{log,done}, r1-installer-only.{log,done}, r1-e2e.{log,done}, r1-clean-start.{log,done}, r1-clean-start2.{log,done}, r1-clean-start-e2e.{log,done}, r1-sandbox.{log,done}, r1-packaged-selftest-{0,1,2,flaky0,flaky1}.log, r1-cli-recover.txt + r1-cli2-*.log, r1-manifest-{check,diff,stable}*.txt, r1-diff2.ps1/r1-two-builds-diff.ps1 输出 + r1-two-builds-difflist.txt, r1-timeline.ps1 输出, r1-lastexit-probe.ps1 输出, mvar-0/mvar-1.json, mf-a/mf-b.json",
+    "sandbox: tmp/sandbox-885a8efac4074945a9459bcef96afaf1/evidence/{complete.txt=PASS,results.json,install.log 6513639B,uninstall.log 2983349B,sandbox-info.json}；tmp/sandbox-5e82db3cfaf64e35ad2128c05bb3d73c/evidence/ 同结构 12/12",
+    "reports: labs/packaging/clean-start-report-r1.jsonl（overall pass=false）、clean-start-report-r1b.jsonl（pass=false）、clean-start-report-r1e2e.jsonl（pass=true）；继承 labs/packaging/clean-start-report.jsonl 928B 未改",
+    "background pid/exit 保存（供再次中断恢复）：45476 package.ps1（06:16 前一次中断，仅自有 .partial 残留）、52000 r1-resume-pack 01:59:28 已退出、40576 r1-rebuild 02:57:45 已退出、55096 r1-installer-only 03:04:11 exit=0、50260 clean-start 03:08:17 exit=1、25292 sandbox 03:09:14 exit=0、53492 三次自测 05:27:26、21392 两次自测 05:55:26、45320 clean-start2 06:06:26 exit=1、976 e2e 06:16:01 exit=0、23776 sandbox#2 06:35:17 exit=0、54608 clean-start-e2e 06:40:37 exit=0；结束哨兵 tmp/r1-*.done 全部落盘",
+    "inherited protection: out/Fufucode.zip 190577624B sha256=14E4DCB29000B36F994F07C98E8C69AEDA033AFAEE142DE6F22A669DDC5E7C36 未变；out/build 240 文件未变；主区 out/candidates/1.4.2-e64dd1b 三文件未触碰（140557907 / 186277820 / 853B）",
+    "record: docs/records/R1-refresh-candidate-2026-10-12.md（§5.4 A–H 逐次原命令/PID/exit/label/证据、§6.1 两套构建差异根因、§7 继承保护实测、§8 环境事实、§10 协调卡全文）"
+  ],
+  "integrationNeeds": [
+    "协调卡（§10）：包内 App 全量 --selftest 不稳定的根因需 M 在 src/Fufucode.App/SelfTest/**（PressDecision / AutomationControlCreationSelfTest.Save 的就绪判定：依赖 button.Focus() 返回值 + window.KeyPress(Enter)，以 RelayCommand.ExecutionTask 变化为唯一信号，focused=False 时 30s 超时）与包内运行环境契约范围内定位修复；本受限 worker 未改禁止范围，未放宽断言。请 M 判定：是否把包内 --selftest 作为本候选硬门、修复归属会话、是否接受“候选产物完整 + 该门 failed”的组合入库",
+    "§9 OMP 打包决策：纳入包内 runtime/omp 还是安装期要求 --omp-exe，属发布范围，不由本包擅改",
+    "§8-1 runtime/node/LICENSE 幻影 M 状态已查清并保留未提交未暂存：磁盘 156926B 纯 LF，sha256 4573185D…94D18 = provenance licenseSha256，HEAD blob 403ea3c5… 同字节，git diff --numstat 空、--exit-code=0；本机 core.autocrlf=true 使 stat 需刷新。若要消除需 .gitattributes 固定该路径 -text（涉跟踪文件与打包语义，越出本包范围，请 M 决定）",
+    "§8-2 本机 Inno Setup 6.7.3 编译打印 Non-commercial use only，属许可事实，登记供发布决策",
+    "§8-3 本仓库测试工程无 VSTest 适配器，dotnet test 静默 0 用例且 exit=0，是工装陷阱；本轮全部改用 dotnet run 取真实计数",
+    "M 收编本轮产物时请使用含 4de5151 身份的独立目录，两套 out/* 均保留未提交；继承 out/Fufucode.zip 与 out/build 仍为 HEAD 跟踪工件（243 文件），其处置交 M 裁定"
+  ],
+  "blockers": [],
+  "writerStopped": true,
+  "worktree": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode",
+  "base": "d7d452fb365efc09fad64ed4d27139f2c2acd8fb",
+  "head": "a99693ce87e3fce40a9d8fa5f0b95f1890c4ab5f",
+  "artifacts": [
+    {
+      "path": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-refresh\\Fufucode.zip",
+      "bytes": 191736830,
+      "sha256": "483FE1BA7CC8B2B8756C4167FCE9C6A73C4EF848750EB9B3D6A8A995915A03D4"
+    },
+    {
+      "path": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-refresh\\Fufucode-1.4.3-candidate-setup.exe",
+      "bytes": 141146693,
+      "sha256": "9116EA8BBE43D790958284AE596DDFFF736E3F97A1BB0765FC46C7F26FB48BC8"
+    },
+    {
+      "path": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-refresh\\build\\integrity.sha256.json",
+      "bytes": 2963859,
+      "sha256": "B8FD6853EE13A40DBD8D6354B850DE6E3275218F69C394A7B6A71F995359A9DE"
+    },
+    {
+      "path": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-e2e\\Fufucode.zip",
+      "bytes": 191736776,
+      "sha256": "B2D20A49B34AA15F87B5ED653BCE43F4FC504C62D2DEC8474FEA8FB4E4CA06B7"
+    },
+    {
+      "path": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-e2e\\Fufucode-1.4.3-candidate-setup.exe",
+      "bytes": 141147158,
+      "sha256": "A7694956D310259AAF920A6E5C30068AC18B9230C3DC33A1BCD1053C230824B1"
+    },
+    {
+      "path": "C:\\Users\\mio\\.codex\\worktrees\\cb9f\\Fufucode\\out\\r1-e2e\\build\\integrity.sha256.json",
+      "bytes": 2963859,
+      "sha256": "EEB29A1D248CD93F9DD8C1B7788CA2387656ACC5288A4A31199D796DB3688195"
+    }
+  ]
+}

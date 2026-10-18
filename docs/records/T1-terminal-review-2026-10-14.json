@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "T1-TERMINAL",
+  "runId": "T1-TERMINAL-R1",
+  "deliveryRevision": 1,
+  "threadId": "01a13b58-d488-73f2-bd1d-f140b034913e",
+  "reviewedHead": "76de7e56cc949263d0d520a1fe78a4625e91efd4",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": null,
+  "evidence": [
+    "Actual structured delivery card received and worker thread completed/idle with clean worktree matching HEAD 76de7e56cc949263d0d520a1fe78a4625e91efd4.",
+    "Worker delivered atomic input/focus capture (TerminalScreenControl.CaptureInput), IME composition preview and commit guard, right-click context menu (copy, paste, clear buffer locally), and per-tab command history navigation.",
+    "M verified: dotnet build tests/Fufucode.App.Terminal.Tests -> 0 warnings, 0 errors.",
+    "M verified: dotnet run --project tests/Fufucode.App.Terminal.Tests -> 39 assertions pass, 0 fail (reproduced cleanly 4 times).",
+    "M verified: dotnet build Fufucode.sln -> 0 warnings, 0 errors.",
+    "Automatic merge into main completed without conflict."
+  ],
+  "findings": [
+    {
+      "id": "T1-TERMINAL-DELIVERY-1",
+      "status": "verified_module",
+      "detail": "Bottom terminal experience enhancements verified: atomic focus capture prevents first-character loss (echo->cho fix), IME composition preview prevents duplicate commit or corrupt surrogate pairs, Ctrl+C/V clipboard integration with right-click menu, and command history up/down navigation."
+    }
+  ],
+  "nextAction": "Merge and commit into main. Monitor active P1-BACKEND worker in slot 1. Prepare S2 (settings 3-tier reorganization & sidebar governance)."
+}

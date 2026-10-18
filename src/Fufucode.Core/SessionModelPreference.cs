@@ -1,5 +1,4 @@
 using System.Text.Json;
-using Fufucode.Pi;
 
 namespace Fufucode.Core;
 
@@ -26,12 +25,12 @@ public static class SessionModelPreference
         if (session.Coordinator.Snapshot is not { Connection: ConnectionState.Connected, Activity: ActivityState.Idle })
             throw new InvalidOperationException("Model selection requires a connected, idle session.");
         var selected = await session.Coordinator.SetModelAsync(provider, modelId, cancellationToken);
-        if (!selected.Success) throw new PiRpcException("Pi set_model failed.");
+        if (!selected.Success) throw new RpcException("Pi set_model failed.");
         var response = await session.Coordinator.QueryStateAsync(cancellationToken);
         if (!response.Success || response.Data is not { ValueKind: JsonValueKind.Object } state ||
             !state.TryGetProperty("model", out var model) || model.ValueKind != JsonValueKind.Object ||
             ReadString(model, "provider") != provider || ReadString(model, "id") != modelId)
-            throw new PiRpcException("Pi did not confirm the requested model; application default was not saved.");
+            throw new RpcException("Pi did not confirm the requested model; application default was not saved.");
         cancellationToken.ThrowIfCancellationRequested();
         session.ApplyConfirmedState(state);
         settings.Update(current => current with { SelectedModel = providerModel });

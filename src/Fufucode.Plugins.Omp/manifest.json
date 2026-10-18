@@ -1,0 +1,15 @@
+{
+  "id": "backend.omp",
+  "name": "OMP 后端",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Omp.dll",
+  "packageType": "Fufucode.Plugins.Omp.OmpBackendPluginPackage",
+  "category": "Backend",
+  "description": "Oh My Pi 独立 CLI 引擎。插件提供 RPC 客户端；omp 可执行文件由本机安装或 --omp-exe 指定。",
+  "runtime": {
+    "id": "omp-cli",
+    "required": true,
+    "preferred": "system",
+    "installCommand": "安装 OMP，或传 --omp-exe"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "MKT-1",
+  "runId": "MKT-1-R1",
+  "deliveryRevision": 1,
+  "threadId": "01a13f28-ff2d-7951-b556-af0545a250ea",
+  "reviewedHead": "0b717cea8c7418477ce7bb948cef3f3da5395ef1",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "mainSha": null,
+  "evidence": [
+    "Delivery received from thread 01a13f28-ff2d-7951-b556-af0545a250ea with writerStopped: true and clean worktree.",
+    "Worker delivered PluginCapability gateway, PluginToolRegistry for dynamic capability injection/revocation (preventing ghost tools), Win32 GDI screen capture/input simulation in ComputerUsePlugin, and BrowserUsePlugin bridge.",
+    "Settings UI dynamically reflects plugin state: shows '未安装：请在插件市场中安装 Browser Use 扩展' and disables CDP when uninstalled; unlocks when installed and enabled; cleanly revokes on uninstall.",
+    "M verified: dotnet build Fufucode.sln -> 0 warnings, 0 errors.",
+    "M verified: tests/Fufucode.App.Backend.Tests -> 381 assertions pass (0 fail).",
+    "M verified: tests/Fufucode.App.Settings.Tests -> 66 assertions pass (0 fail).",
+    "Real Win32 screen capture verified on host: valid PNG 2048x1280 with non-black pixels.",
+    "Merged cleanly into main branch."
+  ],
+  "findings": [
+    {
+      "id": "MKT-1-DELIVERY",
+      "status": "verified_module",
+      "detail": "Dynamic plugin capability gating, ghost tool prevention, BrowserUse/ComputerUse lifecycle and Win32 capture verified with 447 total unit tests."
+    }
+  ],
+  "nextAction": "Integrated into main. Monitor active thread 01a13f34-40b2-7ed0-a6ee-e0e2cd2f30bc (PKG-1) in slot 2."
+}

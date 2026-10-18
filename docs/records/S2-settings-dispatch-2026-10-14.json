@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "type": "dispatch.record",
+  "taskId": "S2-SETTINGS",
+  "difficulty": "L3",
+  "role": "implementation",
+  "model": "group/auto-deepseek-v4-1-flash",
+  "requestedEffort": "max",
+  "projectId": "15dc7d93-7442-4727-88d8-d014a1360105",
+  "hostId": "local",
+  "startMainSha": "043fd2c37a3c7f817781009f4b881f9513efeb1d",
+  "threadId": "01a13b97-cd98-7342-981c-456a6ba337ae",
+  "worktree": "C:/Projects/Fucode/worktrees/s2-settings",
+  "branch": "agent/s2-settings",
+  "executionStatus": "inProgress",
+  "callbackAuthorizationIncluded": true,
+  "callbackManagerThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "callbackEventIdTemplate": "S2-SETTINGS/01a13b97-cd98-7342-981c-456a6ba337ae/S2-SETTINGS-R1/1/<deliveryHead>",
+  "taskBook": "docs/tasks/hourly-S2-settings-reorg.md",
+  "record": "docs/records/S2-settings-reorg.md",
+  "allowedPaths": [
+    "src/Fufucode.App/Views/SettingsPage*",
+    "src/Fufucode.App/Views/WorkbenchSectionsView*",
+    "src/Fufucode.App/ViewModels/SettingsPageViewModel*",
+    "src/Fufucode.App/Features/SettingsExperience/**",
+    "tests/Fufucode.App.Settings.Tests/**",
+    "docs/records/S2-settings-reorg.md"
+  ],
+  "nextAction": "Worker executes S2 settings 3-tier reorganization (basic, big features, other with promotion/demotion persistence) + related settings card + sidebar governance. Review card when stopped."
+}

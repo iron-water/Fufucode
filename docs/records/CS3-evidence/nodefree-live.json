@@ -1,0 +1,21 @@
+{
+  "mode": "live-session",
+  "model": "devin/swe-2",
+  "executable": "C:\\Program Files\\dotnet\\dotnet.exe",
+  "harnessPid": 37504,
+  "childPath": "",
+  "bundledNodeExists": false,
+  "sampledDescendants": [
+    {
+      "processId": 7012,
+      "parentId": 37504,
+      "name": "conhost.exe",
+      "executablePath": "C:\\WINDOWS\\system32\\conhost.exe"
+    }
+  ],
+  "sampleCount": 17,
+  "sampledAgentRuntimeCount": 0,
+  "exitCode": 0,
+  "elapsedMilliseconds": 10252,
+  "boundary": "PATH-empty managed session harness with sampled descendants; not an OS sandbox or a clean-installed full desktop acceptance."
+}

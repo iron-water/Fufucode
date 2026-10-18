@@ -1,0 +1,8 @@
+{
+  "id": "automation.cron",
+  "name": "用户定时任务",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.CronSchedules.dll",
+  "packageType": "Fufucode.Plugins.CronSchedules.CronSchedulesPluginPackage",
+  "category": "Automation"
+}

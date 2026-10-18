@@ -25,6 +25,20 @@ internal static class Program
     [STAThread]
     public static void Main(string[] args)
     {
+        // 用户按需安装到 Fufucode 的工具链（node/bun/python/git-bash 等）对子进程可见；
+        // 系统已有工具链时排在最前，不改变现有行为。
+        try
+        {
+            Fufucode.Core.Runtimes.ToolchainEnvironment.ApplyToProcess(new Fufucode.Core.AppDataLayout());
+        }
+        catch (Exception error)
+        {
+            Console.WriteLine("工具链 PATH 注入失败：" + error.Message);
+        }
+        if (args.Length >= 2 && args[0] == "--automation-protocol")
+        {
+            SelfTest.AutomationControlSelfTest.ProtocolAsync(args).GetAwaiter().GetResult(); return;
+        }
         if (args.Contains("--speech-probe")) Environment.Exit(SelfTest.SpeechAcceptance.RunAsync().GetAwaiter().GetResult());
         if (args.Contains("--windows-toast-probe"))
         {
@@ -71,7 +85,19 @@ internal static class Program
             Environment.Exit(RunSelfTestHeadless(args));
         }
 
-        // 默认接真实 Pi（M2 集成）；--mock 回到脚本化演示会话
+        // 部署的收尾：上次"部署最新构建"留下的锁定文件必须在本进程加载程序集之前替换，
+        // 否则会一直读到旧程序集、且 restart-pending.json 永远残留。
+        try
+        {
+            new Fufucode.Core.Updates.BuildDeploymentService(
+                new Fufucode.Core.AppDataLayout()).ApplyPendingOnStartup();
+        }
+        catch (Exception error)
+        {
+            Console.WriteLine("待重启部署收尾失败：" + error.Message);
+        }
+
+        // 默认后端为 FUMO 原生内核；--mock 回到脚本化演示会话
         BuildAvaloniaApp(AppOptions.Parse(args)).StartWithClassicDesktopLifetime(args);
     }
 

@@ -1,0 +1,27 @@
+{
+  "build": "ok",
+  "host": {
+    "address": "198.18.0.1",
+    "port": 54321,
+    "pin": "7527",
+    "pairingUrl": "http://198.18.0.1:54321/"
+  },
+  "connections": 1,
+  "pairing": "ok",
+  "messageReceived": "Hello from WorkBuddy Android",
+  "approval": {
+    "approvalId": "apv-581e58e83d3d",
+    "toolName": "edit"
+  },
+  "approvalAccepted": "Approve",
+  "finalStatus": {
+    "service": "Running",
+    "connections": 1,
+    "approvalsPending": 0,
+    "stopCount": 0,
+    "sentMessages": [
+      "Hello from WorkBuddy Android"
+    ]
+  },
+  "outcome": "pass"
+}

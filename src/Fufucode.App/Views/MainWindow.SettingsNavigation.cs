@@ -77,7 +77,7 @@ public partial class MainWindow
         keep.Click += (_, _) => dialog.Close(false);
         discard.Click += (_, _) => dialog.Close(true);
         dialog.Opened += (_, _) => keep.Focus();
-        return dialog.ShowDialog<bool>(this);
+        return Fufucode.App.Views.SkinDialog.ShowAsync<bool>(dialog, this);
     }
 
     private void WireSettingsReturn(MainViewModel vm)

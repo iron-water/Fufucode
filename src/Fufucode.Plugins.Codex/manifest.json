@@ -1,0 +1,15 @@
+{
+  "id": "backend.codex",
+  "name": "Codex 后端",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Codex.dll",
+  "packageType": "Fufucode.Plugins.Codex.CodexBackendPluginPackage",
+  "category": "Backend",
+  "description": "Codex 官方 CLI 的 `codex exec --json` 协议适配后端。插件只携带适配器；codex 可执行文件由用户本机安装。",
+  "runtime": {
+    "id": "codex-cli",
+    "required": true,
+    "preferred": "system",
+    "installCommand": "安装 Codex CLI（npm 全局或独立安装），或传 --codex-exe"
+  }
+}

@@ -1,0 +1,12 @@
+{
+ "schemaVersion":1,"type":"review.decision","taskId":"E7-AERO","runId":"E7-AERO-R2-3732900","deliveryRevision":2,
+ "threadId":"01a1398b-0076-71e1-9655-91e850a851c7","reviewedHead":"bdf8540eb17889ea156eb602c038aa27f189c61c",
+ "decision":"accept","integrationStatus":"not_integrated","mainSha":null,
+ "evidence":["Actual callback received, then actual turn completed/idle; source clean and HEAD matches, no tree-bound dotnet writer","R2 changes only allowed adapter/tests/own record","M independently re-ran exact three production-caption/theme/class probes: tmp/m-aero-review/green.log exit0 Failures0; original three-red result.log preserved","Saved module 169 and real-caption43 logs inspected; not whole-product/native evidence"],
+ "findings":[
+  {"id":"E7-AERO-CAPTION-SCOPE-1","status":"verified_module","detail":"Actual mixed MainWindow caption attaches three window buttons without rejecting ordinary toolbar actions."},
+  {"id":"E7-AERO-THEME-OWNERSHIP-1","status":"verified_module","detail":"M confirms exact preexisting Theme reference restoration."},
+  {"id":"E7-AERO-CLASS-OWNERSHIP-1","status":"verified_module","detail":"M confirms preexisting aeroCaption class survives release."}
+ ],
+ "nextAction":"Preserve stopped module worktree. M still owns shared catalog/skin lease/main/floating/dialog integration and native validation. Accept is module acceptance, not integration or whole Aero/product acceptance."
+}

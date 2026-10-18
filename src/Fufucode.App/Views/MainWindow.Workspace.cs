@@ -29,6 +29,9 @@ public partial class MainWindow
     private readonly WorkbenchPageRegistry _workbenchPages = new();
     private BuiltInModuleViewModel _browserModule = null!;
     private BuiltInModuleViewModel _libraryModule = null!;
+    private BuiltInModuleViewModel _localReviewModule = null!;
+    private BuiltInModuleViewModel _automationModule = null!;
+    private string? _automationDatabase;
     private LibraryService? _libraryService;
     private BrowserPageState? _browserPageState;
     private bool _modulePreferencesCanWrite = true;
@@ -54,32 +57,65 @@ public partial class MainWindow
     internal Control PageForTesting(string id) => _workbenchPages[id].Content;
     internal BuiltInModuleViewModel BrowserModuleForTesting => _browserModule;
     internal BuiltInModuleViewModel LibraryModuleForTesting => _libraryModule;
+    internal BuiltInModuleViewModel LocalReviewModuleForTesting => _localReviewModule;
     internal bool PageAvailableForTesting(string id) => _workbenchPages.ContainsKey(id);
+
+    // Resolve synchronously at click time, never after an asynchronous session switch.
+    internal string AcceptLibraryCitation(string text)
+    {
+        if (_vm is not { IsChatPage: true } target || string.IsNullOrWhiteSpace(text))
+            return "引用已复制；请先打开目标主聊天会话，再生成引用。";
+        var applied = target.Input.ApplyExternalText(text);
+        var message = applied
+            ? "资料引用已插入当前主聊天草稿，尚未发送。"
+            : "当前主聊天已有草稿；资料引用已保存为待恢复文本，未覆盖草稿。";
+        target.Timeline.AddNotification(message);
+        _chatPage.Input.Focus();
+        return message;
+    }
 
     private void InitializeWorkspaceShell()
     {
         ShellGrid.Children.Add(_parkedPages);
-        var content = WorkspacePanel.TakeDockPages();
+        var (files, changes) = WorkspacePanel.TakeDockPages();
         Add("overview", "会话管理", "AppsList", _overview);
         _overview.DataContextChanged += (_, _) => RenderOverview();
-        Add("files", "文件", "Folder", content.Files);
-        Add("changes", "变更", "Branch", content.Changes);
-        Add("preview", "文件预览", "Document", content.Preview);
+        Add("files", "文件", "Folder", files);
+        Add("changes", "变更", "Branch", changes);
         _workbenchPages.RegisterOptional("browser", "浏览器", "Globe", "builtin.browser",
-            () => new BrowserView(), control => ((BrowserView)control).Dispose());
+            () => CreateBrowserPage(), control => ((BrowserView)control).Dispose());
         _browserModule = new("builtin.browser", "浏览器", SetBrowserModuleEnabled);
         _workbenchPages.RegisterOptional("library", "资料库", "Folder", "builtin.library", () =>
         {
             _libraryService ??= new LibraryService(Path.Combine(
                 Program.SelfTestDataRoot ?? _options.CreateAppDataLayout().Root, "library"));
             var view = new LibraryPageView();
-            view.Attach(new LibraryViewModel(_libraryService));
+            var library = new LibraryViewModel(_libraryService);
+            library.CitationCopyRequested += text => library.StatusText = AcceptLibraryCitation(text);
+            view.Attach(library);
             return view;
         }, control => ((LibraryPageView)control).Detach());
         _libraryModule = new("builtin.library", "资料库", SetLibraryModuleEnabled);
+        _workbenchPages.RegisterOptional("local-review", "本地审查", "ShieldCheckmark", "builtin.local-review",
+            CreateLocalReviewPage, control => ((Features.LocalReview.LocalReviewPageView)control).Detach());
+        _localReviewModule = new("builtin.local-review", "本地审查", SetLocalReviewModuleEnabled);
+        _workbenchPages.RegisterOptional("automation", "自动开发", "Automation", "builtin.automation", () =>
+        {
+            var page = new Features.Automation.AutomationControlPageView();
+            var model = new Features.Automation.AutomationControlViewModel(Program.SelfTestDataRoot ?? _options.CreateAppDataLayout().Root); model.SetProjectContext(_layoutContext);
+            model.DatabaseConnected += (database, context) =>
+            {
+                if (context != _layoutContext) return;
+                _automationDatabase = database;
+                try { SaveModulePreferences(); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { model.StatusText = "连接已完成，但保存入口失败：" + error.Message; }
+            };
+            page.Attach(model); return page;
+        }, control => ((Features.Automation.AutomationControlPageView)control).Detach());
+        _automationModule = new("builtin.automation", "自动开发", SetAutomationModuleEnabled);
         Add("terminal", "终端", "Terminal", TerminalDock);
         Add("sidechat", "侧边聊天", "Chat", CreateSideChatHost());
-        WorkspacePanel.PreviewRequested += () => OpenDockPage("preview", DockZone.Right);
+        WorkspacePanel.PreviewRequested += () => OpenDockPage("files", DockZone.Right);
         foreach (var dock in Docks())
         {
             dock.Catalog = _workbenchPages.Values.ToArray();
@@ -87,6 +123,8 @@ public partial class MainWindow
             dock.MoveRequested += MoveDockPage;
             dock.SelectRequested += id => OpenDockPage(id, dock.Zone);
             dock.CloseRequested += CloseDockPage;
+            dock.FloatPageRequested += id => FloatDockPage(id);
+            dock.FloatRegionRequested += () => FloatDockRegion(dock.Zone);
             dock.PinRequested += id =>
             {
                 if (!_dockLayout.PinnedPages.Remove(id)) _dockLayout.PinnedPages.Add(id);
@@ -98,6 +136,7 @@ public partial class MainWindow
             dock.PageDragged += DropDockPage;
         }
         LeftDock.Zone = DockZone.Left; RightDock.Zone = DockZone.Right; BottomDock.Zone = DockZone.Bottom;
+        Opened += (_, _) => RenderDockPages();
         SizeChanged += (_, _) => ApplyWorkspaceLayout();
         _chatPage.FindControl<Border>("ComposerCard")!.SizeChanged += (_, e) =>
         {
@@ -131,7 +170,7 @@ public partial class MainWindow
             _workbenchPages["browser"].Content.IsEffectivelyVisible;
         _workbenchPages.SetEnabled("browser", enabled, content =>
         {
-            foreach (var dock in Docks()) dock.DetachPage(content);
+            foreach (var dock in AllDockHosts()) dock.DetachPage(content);
             _parkedPages.Children.Remove(content);
         });
         if (activating) ((BrowserView)_workbenchPages["browser"].Content).RestoreState(_browserPageState);
@@ -165,18 +204,38 @@ public partial class MainWindow
         if (_workbenchPages.ContainsKey("browser")) _browserPageState = ((BrowserView)_workbenchPages["browser"].Content).CaptureState();
         _host.Manager.Metadata.SetPreference(ModulePreferenceKey(),
             new WorkbenchModulePreferences(BrowserEnabled: _workbenchPages.ContainsKey("browser"), BrowserState: _browserPageState,
-                LibraryEnabled: _workbenchPages.ContainsKey("library")).Serialize());
+                LibraryEnabled: _workbenchPages.ContainsKey("library"),
+                LocalReviewEnabled: _workbenchPages.ContainsKey("local-review"),
+                AutomationEnabled: _workbenchPages.ContainsKey("automation"), AutomationDatabase: _automationDatabase).Serialize());
     }
 
     private void ApplyLibraryModuleState(bool enabled)
     {
         _workbenchPages.SetEnabled("library", enabled, content =>
         {
-            foreach (var dock in Docks()) dock.DetachPage(content);
+            foreach (var dock in AllDockHosts()) dock.DetachPage(content);
             _parkedPages.Children.Remove(content);
         });
         RenderDockPages();
         _actions.RefreshCapabilities();
+    }
+
+    private string SetAutomationModuleEnabled(bool enabled)
+    {
+        _workbenchPages.SetEnabled("automation", enabled, content =>
+        { foreach (var dock in AllDockHosts()) dock.DetachPage(content); _parkedPages.Children.Remove(content); });
+        RenderDockPages(); _actions.RefreshCapabilities(); _modulePreferencesCanWrite = true;
+        if (enabled) RestoreAutomationConnection();
+        try { SaveModulePreferences(); return enabled ? "已启用" : "已停用"; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { return "状态保存失败：" + error.Message; }
+    }
+    private void RestoreAutomationConnection()
+    {
+        if (!_workbenchPages.ContainsKey("automation")) return;
+        var model = (Features.Automation.AutomationControlViewModel)_workbenchPages["automation"].Content.DataContext!;
+        model.SetProjectContext(_layoutContext);
+        model.Disconnect();
+        if (!string.IsNullOrWhiteSpace(_automationDatabase)) _ = model.ConnectAsync(_automationDatabase);
     }
 
     private string SetLibraryModuleEnabled(bool enabled)
@@ -218,7 +277,7 @@ public partial class MainWindow
     {
         foreach (var page in _workbenchPages.Values)
             foreach (var browser in Avalonia.VisualTree.VisualExtensions.GetVisualDescendants(page.Content).OfType<BrowserViewHost>())
-                browser.SetOccluded(value);
+                if (ReferenceEquals(TopLevel.GetTopLevel(browser), this)) browser.SetOccluded(value);
     }
 
     private void AttachWorkspaceContext(MainViewModel vm)
@@ -274,6 +333,13 @@ public partial class MainWindow
                 _browserModule.ApplyState(modules.BrowserEnabled, diagnostic ?? (modules.BrowserEnabled ? "已启用" : "已停用"));
                 ApplyLibraryModuleState(modules.LibraryEnabled);
                 _libraryModule.ApplyState(modules.LibraryEnabled, diagnostic ?? (modules.LibraryEnabled ? "已启用" : "已停用"));
+                ApplyLocalReviewModuleState(modules.LocalReviewEnabled);
+                _localReviewModule.ApplyState(modules.LocalReviewEnabled, diagnostic ?? (modules.LocalReviewEnabled ? "已启用" : "已停用"));
+                _automationDatabase = modules.AutomationDatabase;
+                _workbenchPages.SetEnabled("automation", modules.AutomationEnabled, content =>
+                { foreach (var dock in AllDockHosts()) dock.DetachPage(content); _parkedPages.Children.Remove(content); });
+                _automationModule.ApplyState(modules.AutomationEnabled, diagnostic ?? (modules.AutomationEnabled ? "已启用" : "已停用"));
+                RestoreAutomationConnection();
                 if (diagnostic is not null) vm.Timeline.AddNotification(diagnostic);
                 var text = _host?.Manager.Metadata.GetPreference(LayoutPreferenceKey());
                 _dockLayout = WorkbenchLayoutState.Restore(text,_workbenchPages.KnownPageIds);
@@ -285,8 +351,19 @@ public partial class MainWindow
         try { vm.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]); }
         finally { _syncingDockState = false; }
         RenderDockPages();
-        vm.Settings.AttachBuiltInModules([_browserModule, _libraryModule]);
+        UpdateLocalReviewProject(path);
+        vm.Settings.AttachBuiltInModules([_browserModule, _libraryModule, _localReviewModule, _automationModule]);
         vm.Settings.ShortcutsContent = _shortcutsPage;
+        // 快捷键页内部分组下钻 → 同步到设置页子页路由，让面包屑/标题/淡入一起走。
+        _shortcutsPage.GroupOpened += group => vm.Settings.OpenShortcutsGroup(group);
+        _shortcutsPage.GroupClosed += () => vm.Settings.CloseShortcutsGroup();
+        // 面包屑返回（点分类名或 GoBack）→ 控件跟随回到一级目录。
+        vm.Settings.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(ViewModels.SettingsPageViewModel.CurrentPageId) &&
+                _shortcutsPage.ActiveGroup != vm.Settings.ShortcutsGroupId)
+                _shortcutsPage.SyncGroup(vm.Settings.ShortcutsGroupId);
+        };
         vm.Settings.StorageContent = _storagePage;
         _ = vm.WorkspacePanel.RefreshAsync();
     }
@@ -300,12 +377,15 @@ public partial class MainWindow
         {
             if (_closed || !ReferenceEquals(sender, _workspaceSession)) return;
             RenderOverview();
+            NotifyLocalPluginHostChanged();
             if (e is SessionEvent.TurnSettled) _ = _vm?.WorkspacePanel.RefreshAsync();
         }, DispatcherPriority.Background);
     }
 
     private void OnTerminalPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is nameof(TerminalDockViewModel.SelectedTab) or nameof(TerminalDockViewModel.HasOutputSelection))
+            _actions.RefreshCapabilities();
         if (e.PropertyName != nameof(TerminalDockViewModel.IsVisible) || _syncingDockState) return;
         if (_terminalDock?.IsVisible == true) OpenDockPage("terminal", DockZone.Bottom);
         else if (_dockLayout.Find("terminal") is { } zone)
@@ -341,47 +421,85 @@ public partial class MainWindow
     private void CloseDockPageCore(string id)
     {
         // Closing a workspace page only removes its view, never kills the project-owned terminal.
+        var zone = _dockLayout.Find(id);
         _dockLayout.Close(id);
+        if (zone is not null && _dockLayout.Pages.TryGetValue(zone.Value, out var pages) && pages.Count == 0) _dockLayout.Hidden[zone.Value] = true;
         RenderDockPages(); SaveWorkspaceDimensions();
     }
 
+    internal void ToggleDockForTesting(DockZone zone) => ToggleDock(zone);
     private void ToggleDock(DockZone zone)
     {
         if (zone == DockZone.Left && Bounds.Width < 1100)
         {
             _leftDrawerOpen = !_leftDrawerOpen;
             _rightDrawerOpen = false;
-            ApplyWorkspaceLayout();
+            if (_leftDrawerOpen && EnsureDockHasPages(zone)) { RenderDockPages(); SaveWorkspaceDimensions(); }
+            else ApplyWorkspaceLayout();
             return;
         }
         if (zone == DockZone.Right && Bounds.Width < 1100)
-        { _rightDrawerOpen = !_rightDrawerOpen; _leftDrawerOpen = false; ApplyWorkspaceLayout(); return; }
-        _dockLayout.Hidden[zone] = !_dockLayout.Hidden[zone];
+        {
+            _rightDrawerOpen = !_rightDrawerOpen;
+            _leftDrawerOpen = false;
+            if (_rightDrawerOpen && EnsureDockHasPages(zone)) { RenderDockPages(); SaveWorkspaceDimensions(); }
+            else ApplyWorkspaceLayout();
+            return;
+        }
+        // 有效开态 = 未隐藏且有页签：空区不收起时 Pages 空+Hidden=false 也是"关"，
+        // 按有效开态切换，一次点击即可从死态恢复（回填默认页后再显示）。
+        var isOpen = !_dockLayout.Hidden[zone] && _dockLayout.Pages[zone].Count > 0;
+        if (isOpen) _dockLayout.Hidden[zone] = true;
+        else { EnsureDockHasPages(zone); _dockLayout.Hidden[zone] = false; }
         RenderDockPages(); SaveWorkspaceDimensions();
+    }
+
+    /// <summary>区域的页签被逐一关空后，开关只能翻转 Hidden、面板仍不可见（空区不收起规则），
+    /// 形成无法恢复的死状态。打开空区时回填该区默认页（视图只是被移回暂存区，重挂即可）。
+    /// 返回是否发生了回填。</summary>
+    private bool EnsureDockHasPages(DockZone zone)
+    {
+        if (_dockLayout.Pages[zone].Count > 0) return false;
+        var defaults = new WorkbenchLayoutState().Pages[zone].Where(id => _workbenchPages.ContainsKey(id)).ToList();
+        if (defaults.Count == 0) return false;
+        _dockLayout.Pages[zone] = defaults;
+        _dockLayout.Selected[zone] = defaults[0];
+        return true;
     }
 
     private void RenderDockPages()
     {
-        foreach (var dock in Docks()) dock.Catalog = _workbenchPages.Values.ToArray();
-        foreach (var dock in Docks()) dock.ReleasePages(_dockLayout);
-        foreach (var page in _workbenchPages.Values)
-        {
-            if (_dockLayout.Find(page.Id) is null)
-            {
-                if (!_parkedPages.Children.Contains(page.Content)) _parkedPages.Children.Add(page.Content);
-            }
-            else _parkedPages.Children.Remove(page.Content);
-        }
-        foreach (var dock in Docks()) dock.Render(_dockLayout);
-        _syncingDockState = true;
+        if (_renderingDockPages) return;
+        _renderingDockPages = true;
         try
         {
-            _vm?.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]);
-            if (_dockLayout.Find("terminal") is { } zone && !_dockLayout.Hidden[zone] &&
-                TerminalDock.IsVisible) _terminalDock?.Show();
+            SeedNotificationMigration();
+            SynchronizeFloatingHosts();
+            foreach (var dock in AllDockHosts()) dock.Catalog = _workbenchPages.Values.ToArray();
+            foreach (var dock in AllDockHosts()) dock.ReleasePages(_dockLayout);
+            foreach (var page in _workbenchPages.Values)
+            {
+                if (_dockLayout.Find(page.Id) is null && _dockLayout.FindFloating(page.Id) is null)
+                {
+                    if (!_parkedPages.Children.Contains(page.Content)) _parkedPages.Children.Add(page.Content);
+                }
+                else _parkedPages.Children.Remove(page.Content);
+            }
+            foreach (var dock in AllDockHosts()) dock.Render(_dockLayout);
+            RefreshNotificationChannel();
+            RenderFloatingWindows();
+            SynchronizeAuxiliaryPageVisibility();
+            _syncingDockState = true;
+            try
+            {
+                _vm?.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]);
+                if (_dockLayout.Find("terminal") is { } zone && !_dockLayout.Hidden[zone] &&
+                    TerminalDock.IsVisible) _terminalDock?.Show();
+            }
+            finally { _syncingDockState = false; }
+            ApplyWorkspaceLayout();
         }
-        finally { _syncingDockState = false; }
-        ApplyWorkspaceLayout();
+        finally { _renderingDockPages = false; }
     }
 
     private void ApplyWorkspaceLayout()
@@ -405,7 +523,8 @@ public partial class MainWindow
             SidebarBorder.Width = narrow ? _dockLayout.LeftWidth : double.NaN;
             SidebarBorder.Margin = narrow ? DrawerBand() : default;
             var available = width - (left && !narrow ? leftWidth + 5 : 0);
-            var right = !settings && (narrow ? _rightDrawerOpen : !_dockLayout.Hidden[DockZone.Right]);
+            var rightHasPages = _dockLayout.Pages.TryGetValue(DockZone.Right, out var rPages) && rPages.Count > 0;
+            var right = !settings && (narrow ? _rightDrawerOpen : (!_dockLayout.Hidden[DockZone.Right] && (rightHasPages || IsRightDrawerForTesting)));
             IsRightDrawerForTesting = narrow;
             var rightWidth = Math.Clamp(_dockLayout.RightWidth,32,Math.Max(32,available - 32));
             WorkspaceShell.ColumnDefinitions[0].Width = new GridLength(1,GridUnitType.Star);
@@ -477,7 +596,7 @@ public partial class MainWindow
     {
         if (_vm is { } vm) vm.Settings.ThemeIndex = ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark ? 1 : 2;
     }
-    internal void ResetDockLayout() { _leftDrawerOpen = _rightDrawerOpen = false; _dockLayout = new(); RenderDockPages(); SaveWorkspaceDimensions(); }
+    internal void ResetDockLayout() { _leftDrawerOpen = _rightDrawerOpen = false; _dockLayout = new() { NotificationMigrationApplied = true }; RenderDockPages(); SaveWorkspaceDimensions(); }
     private void ResetLayout_Click(object? sender, RoutedEventArgs e) => ResetDockLayout();
     private void RestoreFocus(Control? control) => Dispatcher.UIThread.Post(() => { if (!_closed && control?.IsEffectivelyVisible == true) control.Focus(); });
 }

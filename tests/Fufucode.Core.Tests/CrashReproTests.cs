@@ -66,7 +66,7 @@ internal static class CrashReproTests
                     var options = new PiRpcOptions(node,
                         [cli, "--mode", "rpc", "--no-session", "--no-extensions", "--model", "fff-stub/fff-stub-model",
                             "--extension", bridge], work, EnvironmentVariables: env, RequireApprovalBridge: true);
-                    var session = new ChatSessionCoordinator(options);
+                    var session = PiSessions.Coordinator(options);
                     try
                     {
                         await session.StartAsync();

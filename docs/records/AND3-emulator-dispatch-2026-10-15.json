@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "type": "dispatch.record",
+  "taskId": "AND-3",
+  "difficulty": "L2",
+  "role": "verification",
+  "projectId": "15dc7d93-7442-4727-88d8-d014a1360105",
+  "hostId": "local",
+  "startMainSha": "dcb7415494d1b091f0932c0d5e14cb70a969f6e6",
+  "threadId": "01a13f29-5cce-7222-98ad-914b1597980d",
+  "executionStatus": "inProgress",
+  "callbackAuthorizationIncluded": true,
+  "callbackManagerThreadId": "01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07",
+  "taskBook": "docs/tasks/M1-android-workbuddy.md",
+  "record": "docs/records/AND3-emulator-verification.md",
+  "nextAction": "Worker launches AVD emulator wakeup_36, installs app-x86_64-debug.apk, verifies cold-start and takes screencap evidence."
+}

@@ -1,0 +1,326 @@
+{
+  "icon\\fufucode.ico": {
+    "bytes": 21902,
+    "sha256": "d1ca004fd8ba1a9ea323f3d86c3ca67b391f4f870ca1a8241855b7681a90516a"
+  },
+  "icon\\icon-256.png": {
+    "bytes": 11189,
+    "sha256": "f48640ad972eb0e2ce342e5d2a5a34c4cb601e28b4ed9d2109159cf20fa9d705"
+  },
+  "icon\\icon-small-32.png": {
+    "bytes": 937,
+    "sha256": "9c242716a61ea978cb8e3c21c865191cb76109325da4e9307c821be8dcb67325"
+  },
+  "icon\\icon-small.svg": {
+    "bytes": 415,
+    "sha256": "ff7fb71d773e314bf61c475b1f5b2017c28301366435993099581528e26e00a1"
+  },
+  "icon\\icon.svg": {
+    "bytes": 838,
+    "sha256": "7e7a7f8711b84d29a26453a69b56c0255409bd8f3c8d5e0e364511c4f21e0878"
+  },
+  "icon\\preview-dark.png": {
+    "bytes": 4224,
+    "sha256": "48469d0415c8a7be595a95c77a1a80c6488d03e9c4491bf7602d74e725727a8b"
+  },
+  "icon\\preview-dark.svg": {
+    "bytes": 926,
+    "sha256": "5d3dca0e61ede3f0dd534756c16be66dd3ff4578bde6b588c4e1911db30e07a4"
+  },
+  "icon\\preview-light.png": {
+    "bytes": 4341,
+    "sha256": "772313a23d3ed22e998d6047ab342148f15d9a84b1509c2a2ea0a68f50da6a94"
+  },
+  "icon\\preview-light.svg": {
+    "bytes": 926,
+    "sha256": "a90cbe263d4338ce1fbea70f964670ea1380bb590fb0384121abaf0d1955aa74"
+  },
+  "empty\\conversation-dark.png": {
+    "bytes": 4465,
+    "sha256": "8f9336f16947b949eab4f4221c48eff0e4974016fdc3b819660916ee50d58734"
+  },
+  "empty\\conversation-dark.svg": {
+    "bytes": 541,
+    "sha256": "98bcd827ecae5271e514389ffa490fc113b60629014d37d86b93bdc3342119f1"
+  },
+  "empty\\conversation-dark@2x.png": {
+    "bytes": 9247,
+    "sha256": "3af0bd27991597cd67d1475b65919e192ef3244d3e89c875842c095492647f8f"
+  },
+  "empty\\conversation-light.png": {
+    "bytes": 4362,
+    "sha256": "30dee3f6ef2f48ab3c622135f06a431d293fd70d792fdb34687a19aad0f13eaf"
+  },
+  "empty\\conversation-light.svg": {
+    "bytes": 541,
+    "sha256": "c5f779c58ad6bc8de28a3d329f8bc8546e9f13700f30a693c05a4f12364f717e"
+  },
+  "empty\\conversation-light@2x.png": {
+    "bytes": 9253,
+    "sha256": "7687442f61ae849fd39f3ef8c13d8f9298dd66d357ce16a5d2c2f3051e0ac0db"
+  },
+  "empty\\extensions-dark.png": {
+    "bytes": 2466,
+    "sha256": "d1f86a61363f4320482775279c8e5d456e365b4943bd59a9ac92ca20c97cfe5e"
+  },
+  "empty\\extensions-dark.svg": {
+    "bytes": 426,
+    "sha256": "83d5d383c07b2abb98e61fa7e5f63c488e2c16206d6811b9f351f7652aed7636"
+  },
+  "empty\\extensions-dark@2x.png": {
+    "bytes": 5333,
+    "sha256": "57dda534e3bd0e6616885b775b750da701135430a97781754742a3fbd908f0f4"
+  },
+  "empty\\extensions-light.png": {
+    "bytes": 2391,
+    "sha256": "e5c8ecd0f585b7c250b3a527ab8f8c172a3a47ca7e6382b2d0f6426727cf7812"
+  },
+  "empty\\extensions-light.svg": {
+    "bytes": 426,
+    "sha256": "d5fe1595ca676caaaf824964f05605dee90dd2fcbdbae0ee0fee0d5eaeb14abd"
+  },
+  "empty\\extensions-light@2x.png": {
+    "bytes": 5197,
+    "sha256": "46102cc56fb1f0f07f199479ec0023a0cf227f3d9f45dfbfe002eb8c9a46a6af"
+  },
+  "empty\\interrupted-dark.png": {
+    "bytes": 4641,
+    "sha256": "111a424a9041979752974080907e61d95bb4c2b2c0c029a0ca9c456247fbd423"
+  },
+  "empty\\interrupted-dark.svg": {
+    "bytes": 445,
+    "sha256": "96e1b42fad833ba8071db7e95d5deb82f06daf63e09c0ed4bc04fb816e86f7ed"
+  },
+  "empty\\interrupted-dark@2x.png": {
+    "bytes": 9905,
+    "sha256": "e546b5c69e99feb4f7b449bd1f2f18917b357d61fc70b750618de2c4a816b69f"
+  },
+  "empty\\interrupted-light.png": {
+    "bytes": 4510,
+    "sha256": "29225aaac295c6679c8c22fd2ce5453f9322fd77e59d54e5ba016f1dd2843988"
+  },
+  "empty\\interrupted-light.svg": {
+    "bytes": 445,
+    "sha256": "e4459d2e366a3760f6fbe34501ca67d415d29aa67ed72349c3e6b20fc6941a43"
+  },
+  "empty\\interrupted-light@2x.png": {
+    "bytes": 9739,
+    "sha256": "aab6d00227f42250d0c19168347e4b6936cf5ffb1cf3720de505bdfbcffc781a"
+  },
+  "installer\\complete.png": {
+    "bytes": 7756,
+    "sha256": "2e4de5e1aea0c0017c9d6453de194d4d96d9bdcd18d52ef195474b787f69b2b6"
+  },
+  "installer\\complete.svg": {
+    "bytes": 335,
+    "sha256": "cf098ffd8efdd35512159682941a8f4de260ea69c85294ca542ea6c8754eb6b9"
+  },
+  "installer\\wizard-side.png": {
+    "bytes": 12436,
+    "sha256": "b22f5e1abee5435194490f00cf3b8d163d55f9780186799ffc09f58a2b552713"
+  },
+  "installer\\wizard-side.svg": {
+    "bytes": 944,
+    "sha256": "6f946aa5d43cb7419a03370191f6f22054968644b5d33aeb98c2de415483eb6d"
+  },
+  "installer\\wizard-small.png": {
+    "bytes": 7171,
+    "sha256": "bc13dbec622a2026a466cd7c4ad00260d30f05307b44b804908758b79b93ae92"
+  },
+  "installer\\wizard-small.svg": {
+    "bytes": 528,
+    "sha256": "6bd5c191b938dde93321465251d909c680197cabe4e370163ee38d16e94e87cf"
+  },
+  "titlebar\\close-hover.png": {
+    "bytes": 630,
+    "sha256": "ad02d4472067c3d31379135f1d0430e16e258821045490958c0ca52ed1f52fb1"
+  },
+  "titlebar\\close-hover.svg": {
+    "bytes": 273,
+    "sha256": "716f900dccf7288d6d4bcd522a06e3e8ba48cfa940587434e503fdabaa197aaf"
+  },
+  "titlebar\\close-hover@2x.png": {
+    "bytes": 969,
+    "sha256": "645d0f5f688a10b5b872bf3223305aecd0b703620061a8bbe35fcf27a33a5a20"
+  },
+  "titlebar\\close-hover@3x.png": {
+    "bytes": 1329,
+    "sha256": "68a66db442c92733def9d46d7ede67c0cb4909ecf2e55f8ae15a08917abd0bd8"
+  },
+  "titlebar\\close-normal.png": {
+    "bytes": 507,
+    "sha256": "b7f852e966b5fa6e436b9e4f4f19f54c43a0625c2d91b984d305d0520502ce48"
+  },
+  "titlebar\\close-normal.svg": {
+    "bytes": 228,
+    "sha256": "04f40a4dd8d02230e78cfcf06b5cb200fe60eea419e31a018dfbe64fc8624a89"
+  },
+  "titlebar\\close-normal@2x.png": {
+    "bytes": 981,
+    "sha256": "05a160a005059157b371dabad8bf8fc7c72b8ec14234de7574925877c87fac81"
+  },
+  "titlebar\\close-normal@3x.png": {
+    "bytes": 1243,
+    "sha256": "d22c61326a5364bc51c6ce22b6ebebf41076a973b5b855f108534ae765f0d28d"
+  },
+  "titlebar\\close-pressed.png": {
+    "bytes": 631,
+    "sha256": "20ae793097bfdcd6676499283d203cd551723ba21346bfe811f7594e90dfa43d"
+  },
+  "titlebar\\close-pressed.svg": {
+    "bytes": 273,
+    "sha256": "44bb1dea85f6da81b900125bb9e03d8567746e0b0b603cd35d970c67bdf93d48"
+  },
+  "titlebar\\close-pressed@2x.png": {
+    "bytes": 1034,
+    "sha256": "02a5eaf9936651f73d1e901d5dfde3859ddb1d8ed22fe2d47589d4262a022c59"
+  },
+  "titlebar\\close-pressed@3x.png": {
+    "bytes": 1330,
+    "sha256": "16bd0c488158f24fd03638f546ffc2f89fbb2e6d8788669bd8dd2de2031ff652"
+  },
+  "titlebar\\maximize-hover.png": {
+    "bytes": 486,
+    "sha256": "58b6d4e0a072cc217a723c04f767448ddb5b06f4a3f6c2f7860cdb0ac8512cff"
+  },
+  "titlebar\\maximize-hover.svg": {
+    "bytes": 293,
+    "sha256": "78c47150e4b4cae5fbb22e6cf6a28413b2baf67b2a8f84b2dc9924cfbfc15dfc"
+  },
+  "titlebar\\maximize-hover@2x.png": {
+    "bytes": 641,
+    "sha256": "1df1c37b33ed9f9e5f993697c7e2181139c1ac193bdb3c813d855d8af3f61e7f"
+  },
+  "titlebar\\maximize-hover@3x.png": {
+    "bytes": 860,
+    "sha256": "b551634b8044615a04bed6a9c5a3614fd600bed9b2767efa3151015bf9e0ce64"
+  },
+  "titlebar\\maximize-normal.png": {
+    "bytes": 424,
+    "sha256": "33645048fd82cfd8b3abff2450564a4972fb944807f9895cc2e5bfbb51232cf9"
+  },
+  "titlebar\\maximize-normal.svg": {
+    "bytes": 248,
+    "sha256": "03536cd8162cf0b0f1fa3cf945c32b7dd09e360635c5b2ec7f679bb4f0a95ffb"
+  },
+  "titlebar\\maximize-normal@2x.png": {
+    "bytes": 568,
+    "sha256": "013d724667da1bde94d92dc4fbca5b5522c7faaf21d203bc555ad888c3ec3a59"
+  },
+  "titlebar\\maximize-normal@3x.png": {
+    "bytes": 703,
+    "sha256": "cd83633295adbf0ea8d35df911cc0651eb968fc8077149b7f85773a9d71cd3d7"
+  },
+  "titlebar\\maximize-pressed.png": {
+    "bytes": 466,
+    "sha256": "38f264ecbbf10d4b4988be2430a1ab591febbfccd8a0a074563508d993518473"
+  },
+  "titlebar\\maximize-pressed.svg": {
+    "bytes": 293,
+    "sha256": "f266fad2bd89e506579450cd3145324c93ab9efb991b0de18df57c1203410366"
+  },
+  "titlebar\\maximize-pressed@2x.png": {
+    "bytes": 634,
+    "sha256": "c32ff3cf72d9c3fd7d3efe16657d17b8b8b0de22861e3d84dfe8d9321f4158f1"
+  },
+  "titlebar\\maximize-pressed@3x.png": {
+    "bytes": 858,
+    "sha256": "348c602811b71dae218f09691e19e6fcf46fb4340d8b184e8b0fe775a2a164f1"
+  },
+  "titlebar\\minimize-hover.png": {
+    "bytes": 285,
+    "sha256": "cdf3d3c10f6e3a2ffd2a7019a6ce6d0e80f30cd9e1de997366a2b495098611fc"
+  },
+  "titlebar\\minimize-hover.svg": {
+    "bytes": 260,
+    "sha256": "e47231f2a215e14f42009a1bccda6da8b72da7c74de415bc817660ce200d7b18"
+  },
+  "titlebar\\minimize-hover@2x.png": {
+    "bytes": 406,
+    "sha256": "fb07d46652d911d981b43ef170d440ce0e7b8802c90ebd69e6f83e99602af291"
+  },
+  "titlebar\\minimize-hover@3x.png": {
+    "bytes": 501,
+    "sha256": "d32920ba723e6576ed02ba9e0357a70a7c48d73413aee8233d26426062a6f758"
+  },
+  "titlebar\\minimize-normal.png": {
+    "bytes": 204,
+    "sha256": "dc5e4e431e4d69ffa186d4b4f93a43eb848071e1ddc6cce4ac31db94cf9358c8"
+  },
+  "titlebar\\minimize-normal.svg": {
+    "bytes": 215,
+    "sha256": "ca868ae5a9595b8d6384b5cd531108f20a399931e8634cfccf81bbca221893f2"
+  },
+  "titlebar\\minimize-normal@2x.png": {
+    "bytes": 297,
+    "sha256": "f454bbe45922df47b425194ca21cda44e01116f74329151407ed2c1bbaf3cdf3"
+  },
+  "titlebar\\minimize-normal@3x.png": {
+    "bytes": 360,
+    "sha256": "d50739d6b79793a4ab1c25dd3aefe55cc6ca975b2cdc2e9ec99e53ae3634dd0a"
+  },
+  "titlebar\\minimize-pressed.png": {
+    "bytes": 264,
+    "sha256": "db5a48d8fc1381704f902e882c3d922244cd550ff2ce68371551e7b00168efb7"
+  },
+  "titlebar\\minimize-pressed.svg": {
+    "bytes": 260,
+    "sha256": "5804536d42c0fd1fed168119e54a17874f790723436a89b486358665b3117274"
+  },
+  "titlebar\\minimize-pressed@2x.png": {
+    "bytes": 402,
+    "sha256": "c8ec226ab42ec548ad02df08d6d9e6b1630643acd6acfadb6c0e4cdef11b3cb3"
+  },
+  "titlebar\\minimize-pressed@3x.png": {
+    "bytes": 517,
+    "sha256": "ce0cdae3f64d8f575a53e9f5850f30ff7cae89e39203ddedf052c6ca45934fab"
+  },
+  "titlebar\\restore-hover.png": {
+    "bytes": 656,
+    "sha256": "1b17afc0d589ca1d8209fdbb5eca53ebc773d3c1ddb9f3db1c50b24c56329f14"
+  },
+  "titlebar\\restore-hover.svg": {
+    "bytes": 275,
+    "sha256": "830ddf76b4d0bc26aeb8b70a7b62eeeb802eb279dcbaaaea407219b62973e9d4"
+  },
+  "titlebar\\restore-hover@2x.png": {
+    "bytes": 990,
+    "sha256": "33706a40241e13af1c22fb2d4774cfed1298f58a77a1c0840eeba43b74f05aa7"
+  },
+  "titlebar\\restore-hover@3x.png": {
+    "bytes": 1125,
+    "sha256": "b12664e161af62ab3cbb4392b9e64ccf1994aaae42cc310ea9ea22a811bd8947"
+  },
+  "titlebar\\restore-normal.png": {
+    "bytes": 582,
+    "sha256": "ab0c4b7e8d2f7cd89cba15c852dc21d517319acd04de8611ec34d9a55e86934c"
+  },
+  "titlebar\\restore-normal.svg": {
+    "bytes": 230,
+    "sha256": "c397a3a50f00250ddc3304e103dcc20c7565a66fb2dc0c41fff8e75bc5f88af5"
+  },
+  "titlebar\\restore-normal@2x.png": {
+    "bytes": 917,
+    "sha256": "627f9686dec394b8d8fd32a24bc2c4bf3d1c4def98c2256468237f14907a6782"
+  },
+  "titlebar\\restore-normal@3x.png": {
+    "bytes": 1022,
+    "sha256": "d1695a52b04b8a7e97e98055d192cce0c8c72f5ea2412925e95c6f9d5c871521"
+  },
+  "titlebar\\restore-pressed.png": {
+    "bytes": 642,
+    "sha256": "8c2f6c44ed24ed6b8c70522a5c58028e7487a7211c943b1e959237cd03bb7c07"
+  },
+  "titlebar\\restore-pressed.svg": {
+    "bytes": 275,
+    "sha256": "ae9265c4b8f06d59980414a3f2bc49f78d49744cea7cc8cf61e12db663ff9804"
+  },
+  "titlebar\\restore-pressed@2x.png": {
+    "bytes": 969,
+    "sha256": "1d58d5837c9298e4aec94d4307c89e13a4d8ba910ff74253fb27aaec6fb8f66b"
+  },
+  "titlebar\\restore-pressed@3x.png": {
+    "bytes": 1105,
+    "sha256": "e759186e9929866364212dfe78f93492d2f0c3a10153847ce298211e3f025f95"
+  }
+}

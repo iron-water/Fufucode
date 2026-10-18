@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "type": "review.decision",
+  "taskId": "AND-2",
+  "runId": "AND-2-R1",
+  "deliveryRevision": 1,
+  "threadId": "01a13f5e-5ab2-7c40-b43e-86de279e97a5",
+  "reviewedHead": "5127ff8fcbdf13e77b9e2fdb2f28e2c3645725c1",
+  "decision": "accept",
+  "integrationStatus": "integrated",
+  "evidence": [
+    "Delivery received from thread 01a13f5e-5ab2-7c40-b43e-86de279e97a5 with writerStopped: true and clean worktree.",
+    "Verified on real emulator-5554 (Android 16 / SDK 36, x86_64).",
+    "Pairing verified: host reported connections=1 after PIN pairing from 10.0.2.2:54321.",
+    "Message sent from mobile: host received and logged Hello from WorkBuddy Android.",
+    "Streaming timeline rendered on device: thinking block, text stream, and tool card.",
+    "Tool approval card rendered with WorkBuddy shield warning, drag handle, deny and approve buttons.",
+    "Mobile approved tool execution: host WaitForApprovalAsync returned accepted=true, approvalsPending=0.",
+    "9 high-fidelity screenshots committed in docs/records/evidence/and2-live-pairing/.",
+    "Gradle unit tests 29/29 pass (MobileSessionControllerTest 21, RemoteWireTest 8).",
+    "Clean reproducibility run confirmed with new PIN 9449 and approval apv-61be53ad4c5d.",
+    "Merged cleanly into main branch."
+  ],
+  "findings": [
+    {
+      "id": "AND-2-DELIVERY",
+      "status": "verified_module",
+      "detail": "Android mobile client WorkBuddy design spec, live pairing, message streaming, and real tool approval card on emulator-5554 fully verified and integrated into main."
+    }
+  ],
+  "nextAction": "Integrated into main. Update dispatch ledger and proceed with next task."
+}
