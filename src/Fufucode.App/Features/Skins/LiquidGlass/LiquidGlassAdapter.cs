@@ -2,8 +2,10 @@ using System;
 using System.Collections.Generic;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
+using Avalonia.Platform;
 using Avalonia.VisualTree;
 
 namespace Fufucode.App.Features.Skins.LiquidGlass
@@ -79,6 +81,12 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             var state = new SharedState(host, SnapshotClasses(host), refCount: 1);
             try
             {
+                // 先加类再建表面：.liquidGlass/.dockLeft 等限定样式把浮起 Margin 写到宿主上，
+                // CreateSurface 读 Margin 时必须是加类之后的值，否则玻璃面吃不到版式缝。
+                AddClass(host, "liquidGlass");
+                if (isCaption) AddClass(host, "liquidGlassCaption");
+                AddClass(host, "glass");
+
                 var surface = CreateSurface(host, isCaption);
                 var index = parent.Children.IndexOf(host);
                 if (index < 0)
@@ -88,12 +96,13 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 surface.Child = host;
                 parent.Children.Insert(index, surface);
 
+                // Surface 自身的类名：样式层/调试据它识别包覆容器（玻璃浮层语义无样式不可达）。
+                surface.Classes.Add("glassSurface");
+                if (isCaption) surface.Classes.Add("glassCaptionSurface");
+                if (host.Classes.Contains("statusStrip")) surface.Classes.Add("glassStatusSurface");
+
                 state.Surface = surface;
                 state.Parent = parent;
-
-                AddClass(host, "liquidGlass");
-                if (isCaption) AddClass(host, "liquidGlassCaption");
-                AddClass(host, "glass");
 
                 Shared[host] = state;
                 var adapter = new LiquidGlassAdapter(state);
@@ -116,22 +125,48 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             }
         }
 
-        /// <summary>按窗口实际透明级别同步 glass 强弱（与 Aero .glass 机制对齐）。</summary>
+        /// <summary>
+        /// 按窗口实际透明级别 + 系统无障碍偏好同步 glass 强弱（与 Aero .glass 机制对齐）。
+        /// 无平台模糊 / 系统高对比（iOS "Reduce Transparency" 对应物）时把玻璃降到
+        /// 近平实色面：关折射/色散/渐进模糊，提高 BackdropOpacity，文字可读优先。
+        /// 系统"减少动画"（iOS "Reduce Motion" 对应物）关交互形变与指尖点亮。
+        /// </summary>
         public void SyncFrom(Window window)
         {
             ArgumentNullException.ThrowIfNull(window);
             if (_disposed) throw new ObjectDisposedException(nameof(LiquidGlassAdapter));
-            if (_state.Surface is null) return;
+            if (_state.Surface is not { } surface) return;
 
-            // 平台已给窗后模糊（AcrylicBlur/Blur/Mica/Transparent）时，玻璃面自身的 SurfaceColor
-            // 保持较低不透明度让窗后透出；无平台模糊时提高 SurfaceColor 的不透明度，靠折射+色散
-            // 单独撑起玻璃感（快照里只有窗内内容）。
             var level = window.ActualTransparencyLevel;
             var hasPlatformBlur = level == WindowTransparencyLevel.AcrylicBlur
                 || level == WindowTransparencyLevel.Blur
                 || level == WindowTransparencyLevel.Mica
                 || level == WindowTransparencyLevel.Transparent;
-            _state.Surface.BackdropOpacity = hasPlatformBlur ? 0.85 : 1.0;
+
+            var reducedTransparency =
+                Application.Current?.PlatformSettings?.GetColorValues().ContrastPreference
+                    == ColorContrastPreference.High;
+            var reducedMotion = Fufucode.App.Infrastructure.MotionPreference.ReducedMotion;
+
+            // 平台已给窗后模糊（AcrylicBlur/Blur/Mica/Transparent）时，玻璃面自身的 SurfaceColor
+            // 保持较低不透明度让窗后透出；无平台模糊时提高 SurfaceColor 的不透明度，靠折射+色散
+            // 单独撑起玻璃感（快照里只有窗内内容）。高对比等同"降低透明度"——彻底实色。
+            surface.BackdropOpacity = reducedTransparency ? 1.0 : (hasPlatformBlur ? 0.85 : 1.0);
+            surface.ChromaticAberration = !reducedTransparency;
+            surface.RefractionAmount = reducedTransparency
+                ? 0.0
+                : (IsCaptionHost(_state.Host) ? 26.0 : 16.0);
+            surface.ProgressiveBlurEnabled =
+                !reducedTransparency && !IsCaptionHost(_state.Host);
+            surface.HighlightOpacity = reducedTransparency
+                ? 0.9
+                : (IsCaptionHost(_state.Host) ? 0.7 : 0.5);
+
+            if (surface is LiquidGlassInteractiveSurface interactive)
+            {
+                interactive.IsInteractive = !reducedMotion;
+                interactive.InteractiveHighlightEnabled = !reducedMotion;
+            }
         }
 
         /// <summary>幂等释放：引用计数归 0 时把宿主 Border 从 Surface 中取出放回父容器原位，并还原类与 Child。</summary>
@@ -301,7 +336,13 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             CopyAttached(host, surface, Canvas.BottomProperty);
             CopyAttached(host, surface, Visual.ZIndexProperty);
 
-            surface.Margin = host.Margin;
+            // Margin/IsVisible 用绑定而不是一次性拷贝：宿主的浮起边距是 .liquidGlass
+            // 类下的样式值（加类后才生效，且皮肤热切换会再写），一次拷贝拿不到；
+            // 绑定让玻璃面实时跟随宿主版式，宿主隐藏（如 ShowStatusBar=false）时玻璃面同隐。
+            surface.Bind(Layoutable.MarginProperty,
+                new Avalonia.Data.Binding(nameof(Layoutable.Margin)) { Source = host });
+            surface.Bind(Visual.IsVisibleProperty,
+                new Avalonia.Data.Binding(nameof(Visual.IsVisible)) { Source = host });
             if (!double.IsNaN(host.Width)) surface.Width = host.Width;
             if (!double.IsNaN(host.Height)) surface.Height = host.Height;
             surface.MinWidth = host.MinWidth;
