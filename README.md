@@ -1,74 +1,74 @@
 # Fufucode
 
-A Windows-first desktop client for the [Pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) coding agent, written in C# on [Avalonia](https://avaloniaui.net/).
+Windows-first desktop client for AI coding agents, built in C# on [Avalonia](https://avaloniaui.net/). Default backend is **FUMO**, a pure C# agent kernel with zero external runtime dependencies. Pi, OMP, Claude Code, Codex and DeepSeek Harness are optional backend plugins.
 
-Fufucode does **not** reimplement an agent loop or a model-provider protocol. It drives the official Pi process over its documented JSONL RPC surface and renders what comes back: a streaming message timeline, tool-execution cards, and an explicit approval gate. The desktop shell is deliberately thin — Pi does the work, Fufucode gives it a window.
+Fufucode renders the session: streaming timeline, tool cards, approval gate, built-in browser, terminal, file preview and Git panel.
 
-## What is here
+## Layout
 
 | Path | Contents |
 |---|---|
-| `src/Fufucode.Core` | Sessions, persistence, project trust, diffs, usage queries, Git worktrees |
-| `src/Fufucode.Pi` | Pi RPC protocol: JSONL transport, event decoding, backend identification |
-| `src/Fufucode.App` | Avalonia UI: workbench shell, timeline, approvals, settings, extensions, embedded browser |
-| `src/Fufucode.Cli` | Headless CLI: `sessions`, `chat`, `approve`, `models`, `settings`, `extensions`, `diag` |
-| `extensions/fufucode-bridge` | Pi extension that routes every tool call through a desktop approval dialog |
-| `tests/` | Executable verification suites plus `FakePi`, a protocol-conformant stub harness |
-| `scripts/` | Runtime setup, packaging, installer drills, and real-Pi verification harnesses |
-
-## Architecture
-
-```
-Fufucode.App / Fufucode.Cli
-        └── Fufucode.Core        session orchestration, persistence, trust
-                └── Fufucode.Pi  JSONL RPC client
-                        └── Pi   official agent process (Node.js)
-```
-
-Approvals travel the opposite way: Pi emits `extension_ui_request`, `fufucode-bridge` relays it, and the desktop dialog answers `allow` / `deny`. A denial or an unanswered timeout blocks the tool; an approval is bound to the parameter snapshot it was granted for and is re-requested if that snapshot changes.
+| `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog |
+| `src/Fufucode.App` | Avalonia UI shell |
+| `src/Fufucode.Cli` | Headless CLI |
+| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, remote control, cron, auto-dev, skins) |
+| `src/Fufucode.Pi` / `src/Fufucode.Claude` | Protocol adapters carried by their backend plugins |
+| `tools/` | Native launcher and CLI forwarder |
+| `scripts/packaging/` | Package, installer, toolchain and runtime packaging |
+| `tests/` | Executable verification suites |
 
 ## Requirements
 
-- Windows 10+ (x64), .NET SDK 10.0
-- Node.js v24.15.0 for the managed Pi runtime
-- Microsoft Edge WebView2 Runtime for the embedded browser preview (the app reports it and falls back to an external browser when missing)
+- Windows 10+ (x64)
+- .NET 10 SDK (build only; release builds are self-contained)
+- Optional: Node, Bun, Python, Git Bash, or any backend CLI. Fufucode uses what is already installed and only offers a download for what is missing.
 
 ## Build and run
 
-```powershell
+```bash
 dotnet build Fufucode.sln -c Release
-dotnet run --project src/Fufucode.App -c Release -- --project <path-to-your-repo>
 ```
 
-Prepare the Pi runtime that ships beside the app:
+Local development build and deploy:
 
-```powershell
-npm ci --prefix runtime/pi --ignore-scripts
-pwsh scripts/setup-runtime.ps1     # copies node.exe into runtime/node and installs Pi
+```bash
+pwsh fucode/publish-local.ps1
 ```
 
-`RealSessionBootstrap` looks for `runtime/node/node.exe` and `runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js`; pass `--pi-node` / `--pi-cli` to point somewhere else.
+## CLI
 
-## Verify
+```bash
+fufucode "<prompt>"                  # one-shot chat
+fufucode sessions list
+fufucode settings get --json
+fufucode runtime status              # node / bun / python / git-bash / backends
+fufucode plugins status              # installed plugin payloads
+```
 
-Every claim in this repository is expected to be reproducible, so verification is code, not prose.
+Runtime and plugin payloads install from a local zip or URL with SHA-256 verification:
 
-```powershell
-dotnet run --project src/Fufucode.App -c Release -- --selftest          # headless UI + mock sessions
-dotnet run --project src/Fufucode.App -c Release -- --selftest --realpi # adds real Pi integration segment
-pwsh scripts/bridge-verify/run.mjs     # approval bridge against a real Pi agent loop
-node scripts/pi-probe/probe.mjs        # Pi RPC protocol conformance probe
+```bash
+fufucode runtime install pi --from Fufucode-Pi-Runtime.zip --sha256 <hex>
+fufucode plugins install backend.claude --from backend.claude-1.0.0.zip
 ```
 
 ## Packaging
 
-```powershell
-pwsh scripts/packaging/package.ps1 -AppVersion <ver>   # self-contained win-x64 bundle -> out/Fufucode.zip
-pwsh scripts/packaging/build-installer.ps1             # Inno Setup installer
+```bash
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0
+pwsh scripts/packaging/package-toolchain.ps1 -Id pi
 ```
 
-`THIRD-PARTY-NOTICES.md` records the licence position for every distributed component. The application code itself has **no licence file yet**; see the compliance-gap table in that document before redistributing.
+Outputs to `out/`: `Fufucode-Native-Setup.exe` (~19 MB), `build-native/` (~62 MB installed), `plugins-dist/` and `runtimes/` as separate download assets. Build output is not committed.
+
+## Verify
+
+```bash
+out/build-native/app/Fufucode.App.exe --selftest
+pwsh scripts/packaging/native-start-smoke.ps1 -PackageRoot out/build-native
+pwsh scripts/packaging/test-native-channel.ps1
+```
 
 ## Status
 
-Early-stage, actively developed. The single-session desktop path (open a project, pick a model, submit a task, watch the stream, approve or stop, reopen the session) is the delivered core. Multi-session management, plugin installation, background hosts, and mobile pairing are planned, not shipped. Expect breaking changes and unfinished edges; issues and pull requests are welcome.
+Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
