@@ -291,6 +291,7 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
                 PureAgentRole.Tool => "toolResult",
                 _ => "system",
             };
+            // 角色映射与 Pi 线格式一致：Tool→toolResult，System→system；内容形状保持不变。
 
             var content = new List<object>();
             if (!string.IsNullOrEmpty(message.Content)) content.Add(new { type = "text", text = message.Content });
