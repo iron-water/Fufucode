@@ -56,9 +56,12 @@ public partial class MainWindow : Window
     private readonly Views.ExtensionsPage _extensionsPage = new();
     private readonly Views.SettingsPage _settingsPage = new();
     private MainViewModel? _vm;
-    // 已接扩展 UI 的会话对象：同一会话重复 AttachRealSession 时不再叠加订阅
-    // （SessionUiWiring 目前没有解除入口，只能在源头上保证每个会话只接一次）。
+    // 已接扩展 UI 的会话对象与解除句柄：同一会话重复 AttachRealSession 时不再叠加订阅
+    // （句柄用于替换视图模型时解除旧接线，引用比较作为第二道防线）。
     private IChatSession? _extensionUiWiredSession;
+    private IDisposable? _extensionUiWiring;
+    // AttachGlobalContext 的页面切换处理器：持引用以便换 VM/关闭时解除。
+    private PropertyChangedEventHandler? _globalVmPropertyChanged;
     private AppSettingsStore? _settingsStore;
 
     /// <summary>无参构造保持 mock 会话（无头自测与设计器使用）；真实会话经 <see cref="AppOptions"/> 注入。</summary>
@@ -145,7 +148,12 @@ public partial class MainWindow : Window
         {
             _vm.Timeline.ScrollToEndRequested -= OnScrollToEndRequested;
             _vm.PropertyChanged -= OnVmPropertyChanged;
+            if (_globalVmPropertyChanged is not null) _vm.PropertyChanged -= _globalVmPropertyChanged;
             // 旧 VM 的会话/输入订阅：先解除再释放，避免旧会话继续驱动已废弃的 VM。
+            _extensionUiWiring?.Dispose();
+            _extensionUiWiring = null;
+            _extensionUiWiredSession = null;
+            DetachCustomizationSession();
             DetachDraftPersistence();
             _vm.Timeline.Dispose();
             _vm.WorkspacePanel.Dispose();
@@ -635,7 +643,9 @@ public partial class MainWindow : Window
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.LoadHistory(host.CurrentTranscript());
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {
-            SessionUiWiring.AttachExtensionUi(host.Chat, vm.Timeline, vm.Input, vm.StatusBar,
+            // 换会话/重建：先解除旧接线，避免旧时间线与输入框继续接收扩展事件。
+            _extensionUiWiring?.Dispose();
+            _extensionUiWiring = SessionUiWiring.AttachExtensionUi(host.Chat, vm.Timeline, vm.Input, vm.StatusBar,
                 title => Title = $"Fufucode — {title}");
             _extensionUiWiredSession = host.Chat;
         }
@@ -1140,8 +1150,15 @@ public partial class MainWindow : Window
             _host.SaveDraft(vm.Input.ComposePrompt());
         }
 
-        // 释放主 VM：解除草稿防抖与时间线的会话订阅（_vm 可能不是 DataContext 绑定的实例，须单独释放）。
+        // 释放主 VM：解除草稿防抖、扩展接线、定制/全局处理器与时间线的会话订阅
+        // （_vm 可能不是 DataContext 绑定的实例，须单独释放）。
         DetachDraftPersistence();
+        DetachCustomizationSession();
+        if (_vm is not null && _globalVmPropertyChanged is not null) _vm.PropertyChanged -= _globalVmPropertyChanged;
+        _globalVmPropertyChanged = null;
+        _extensionUiWiring?.Dispose();
+        _extensionUiWiring = null;
+        _extensionUiWiredSession = null;
         try { _vm?.Timeline.Dispose(); }
         catch
         {
