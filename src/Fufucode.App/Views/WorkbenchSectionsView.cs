@@ -173,9 +173,13 @@ public sealed class WorkbenchSectionsView : UserControl
                 s => ((int)Math.Round(s.FontSize)).ToString(), (s, v) => s with { FontSize = double.Parse(v) }, "Document", "11", "12", "13", "14", "16", "18", "20", "24"),
             ChoiceRow(vm, "密度", "行高与列表间距", new[] { "紧凑", "舒适", "宽松" }, s => s.Density, (s, v) => s with { Density = v }, "AppsList", "compact", "cozy", "airy"),
             FluentOnly(ChoiceRow(vm, "圆角", null, new[] { "无", "中", "大" }, s => s.Radius, (s, v) => s with { Radius = v }, "PanelRight", "none", "mid", "high")),
-            ChoiceRow(vm, "阅读宽度", "正文的最大阅读宽度；代码与表格不受限", new[] { "窄", "标准", "自由" }, s => s.ReadingWidth, (s, v) => s with { ReadingWidth = v }, "Document", "narrow", "standard", "free"));
-        Group(rows, "",
-            SettingsLayout.ChevronRow("前端功能排布", "区域显隐、页面位置、辅助栏与入口位置", () => PageRequested?.Invoke("appearance.arrange"), "PanelLeft"));
+            ChoiceRow(vm, "阅读宽度", "正文的最大阅读宽度；代码与表格不受限", new[] { "窄", "标准", "宽", "自由" }, s => s.ReadingWidth, (s, v) => s with { ReadingWidth = v }, "Document", "narrow", "standard", "wide", "free"));
+        var arrangeEntry = SettingsLayout.ChevronRow("前端功能排布", "区域显隐、页面位置、辅助栏与入口位置",
+            () => PageRequested?.Invoke("appearance.arrange"), "PanelLeft");
+        // 跨组下钻入口：整个分组壳加组级顶距，与上一组拉开，不并进"字体与密度"的行距节奏。
+        var arrangeGroup = (Control)SettingsLayout.Group(arrangeEntry);
+        arrangeGroup.Margin = new Thickness(0, 24, 0, 0);
+        rows.Children.Add(arrangeGroup);
 
         Control FluentOnly(Control row)
         {
@@ -206,8 +210,11 @@ public sealed class WorkbenchSectionsView : UserControl
             () => { vm.ResetLayout(); vm.Status = "已恢复默认布局，保留颜色与名称"; }, "settings-layout-reset"));
         Group(rows, "页面位置", pageRows.ToArray());
 
-        Group(rows, "",
-            SettingsLayout.ChevronRow("辅助栏", "逐个功能选择出现在左辅助、右辅助，或不出现", () => PageRequested?.Invoke("appearance.arrange.aux"), "AppsList"));
+        var auxEntry = SettingsLayout.ChevronRow("辅助栏", "逐个功能选择出现在左辅助、右辅助，或不出现",
+            () => PageRequested?.Invoke("appearance.arrange.aux"), "AppsList");
+        var auxGroup = (Control)SettingsLayout.Group(auxEntry);
+        auxGroup.Margin = new Thickness(0, 24, 0, 0);
+        rows.Children.Add(auxGroup);
 
         var entryRows = vm.Actions.Select(action => PlacementRow(vm, action)).Cast<Control>().ToArray();
         var entryBody = SettingsLayout.Group(entryRows);
