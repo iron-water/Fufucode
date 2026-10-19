@@ -1,0 +1,9 @@
+{
+  "id": "workspace.terminal",
+  "name": "交互终端",
+  "version": "2.0.0",
+  "entryAssembly": "Fufucode.Plugins.Terminal.dll",
+  "packageType": "Fufucode.Plugins.Terminal.TerminalPluginPackage",
+  "category": "Workspace",
+  "capabilities": ["WorkspacePage"]
+}

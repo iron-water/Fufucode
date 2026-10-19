@@ -26,8 +26,9 @@ namespace Fufucode.App;
 public partial class MainWindow
 {
     private WorkbenchLayoutState _dockLayout = new();
-    private readonly Dictionary<string, TerminalDockViewModel> _projectTerminals = new(StringComparer.OrdinalIgnoreCase);
     private readonly WorkbenchPageRegistry _workbenchPages = new();
+    private Features.Plugins.PluginWorkspacePageHost? _pluginPageHost;
+    private Features.Plugins.IPluginWorkspacePage? _terminalPage;
     private BuiltInModuleViewModel _browserModule = null!;
     private BuiltInModuleViewModel _libraryModule = null!;
     private BuiltInModuleViewModel _localReviewModule = null!;
@@ -38,10 +39,8 @@ public partial class MainWindow
     private BrowserPageState? _browserPageState;
     private bool _modulePreferencesCanWrite = true;
     private readonly WorkspacePanelView WorkspacePanel = new();
-    private readonly TerminalDockView TerminalDock = new();
     private readonly OverviewView _overview = new();
     private readonly Grid _parkedPages = new() { IsVisible = false };
-    private TerminalDockViewModel? _terminalDock;
     private IChatSession? _workspaceSession;
     private string? _layoutContext;
     private bool _applyingWorkspaceLayout;
@@ -65,7 +64,8 @@ public partial class MainWindow
     private bool _drawerWasVisible;
     private Control? _drawerReturnFocus;
     internal bool IsRightDrawerForTesting { get; private set; }
-    internal TerminalDockViewModel TerminalForTesting => _terminalDock!;
+    internal Features.Plugins.IPluginWorkspacePage? TerminalPageForTesting => _terminalPage;
+    internal bool TerminalPluginAvailableForTesting => _terminalPage is not null;
     internal double RightPreferenceForTesting => _dockLayout.RightWidth;
     internal WorkbenchLayoutState DockLayoutForTesting => _dockLayout;
     internal Control PageForTesting(string id) => _workbenchPages[id].Content;
@@ -149,7 +149,6 @@ public partial class MainWindow
             return _automationPageHost;
         }, control => ((Features.Plugins.AutomationPageHost)control).Detach());
         _automationModule = new("builtin.automation", "自动开发", SetAutomationModuleEnabled);
-        Add("terminal", "终端", "Terminal", TerminalDock);
         Add("sidechat", "侧边聊天", "Chat", CreateSideChatHost());
         WorkspacePanel.PreviewRequested += () => OpenDockPage("files", DockZone.Right);
         foreach (var dock in Docks())
@@ -363,15 +362,9 @@ public partial class MainWindow
         }
         _workspaceSession = vm.Session;
         _workspaceSession.Event += OnWorkspaceSessionEvent;
-        if (_terminalDock is not null) _terminalDock.PropertyChanged -= OnTerminalPropertyChanged;
         var key = Path.GetFullPath(path);
-        if (!_projectTerminals.TryGetValue(key, out _terminalDock))
-        {
-            _terminalDock = new TerminalDockViewModel(useMock: _options.Mode == AppSessionMode.Mock, workspacePath:key);
-            _projectTerminals.Add(key,_terminalDock);
-        }
-        _terminalDock.PropertyChanged += OnTerminalPropertyChanged;
-        TerminalDock.DataContext = _terminalDock;
+        _pluginPageHost?.SetProject(key, _options.Mode == AppSessionMode.Mock);
+        SyncTerminalPageReference();
         if (_layoutContext != key)
         {
             if (_layoutContext is not null)
@@ -446,16 +439,12 @@ public partial class MainWindow
         }, DispatcherPriority.Background);
     }
 
-    private void OnTerminalPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnPluginPageStateChanged(object? sender, EventArgs e)
     {
-        if (e.PropertyName is nameof(TerminalDockViewModel.SelectedTab) or nameof(TerminalDockViewModel.HasOutputSelection))
-            _actions.RefreshCapabilities();
-        if (e.PropertyName != nameof(TerminalDockViewModel.IsVisible) || _syncingDockState) return;
-        if (_terminalDock?.IsVisible == true) OpenDockPage("terminal", DockZone.Bottom);
-        else if (_dockLayout.Find("terminal") is { } zone)
-        {
-            CloseDockPage("terminal");
-        }
+        _actions.RefreshCapabilities();
+        if (_syncingDockState || _terminalPage is null) return;
+        if (_terminalPage.IsVisible) OpenDockPage("terminal", DockZone.Bottom);
+        else if (_dockLayout.Find("terminal") is not null) CloseDockPage("terminal");
     }
 
     internal void OpenDockPage(string id, DockZone target)
@@ -465,7 +454,7 @@ public partial class MainWindow
         if (Bounds.Width < 1100 && _dockLayout.Find(id) is { } drawer && drawer != DockZone.Bottom)
         { _leftDrawerOpen = drawer == DockZone.Left; _rightDrawerOpen = drawer == DockZone.Right; }
         RenderDockPages(); SaveWorkspaceDimensions();
-        if (id == "terminal") _terminalDock?.Show();
+        if (id == "terminal") _terminalPage?.Show();
     }
 
     internal void MoveDockPage(string id, DockZone target)
@@ -558,7 +547,7 @@ public partial class MainWindow
             {
                 _vm?.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]);
                 if (_dockLayout.Find("terminal") is { } zone && !_dockLayout.Hidden[zone] &&
-                    TerminalDock.IsVisible) _terminalDock?.Show();
+                    _terminalPage?.IsVisible == true) _terminalPage?.Show();
             }
             finally { _syncingDockState = false; }
             ApplyWorkspaceLayout();

@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>Rules for moving clipboard text into the per-tab command draft (never straight into the shell).</summary>
 public static class TerminalInputDraft

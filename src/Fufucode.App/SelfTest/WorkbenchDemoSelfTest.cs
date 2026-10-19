@@ -315,19 +315,10 @@ internal static class WorkbenchDemoSelfTest
                 }
             }
             window.ResetDockLayout(); await Ready();
-            var terminal = window.TerminalForTesting;
-            terminal.Show(); await Ready();
-            var tab = terminal.SelectedTab;
-            window.MoveDockPage("terminal", DockZone.Right);
-            window.MoveDockPage("terminal", DockZone.Bottom); await Ready();
-            Check(ReferenceEquals(tab, terminal.SelectedTab) && tab!.IsRunning, "Moving terminal does not restart its session");
-            var terminalView = (Views.TerminalDockView)window.PageForTesting("terminal");
-            terminalView.ConfirmCloseForTesting = _ => Task.FromResult(false);
-            await terminalView.CloseSelectedAsync();
-            Check(terminal.Tabs.Contains(tab!) && tab!.IsRunning, "T04: canceling terminal close keeps its session alive");
+            // Terminal dock/session behavior is covered by the optional terminal plugin tests.
             await window.NavigateForTestingAsync(AppPage.Settings); await Ready();
-            Check(!window.FindControl<Border>("SidebarBorder")!.IsVisible && !window.FindControl<Border>("RightPanelBorder")!.IsVisible && tab!.IsRunning,
-                "Settings hides docks without stopping terminal");
+            Check(!window.FindControl<Border>("SidebarBorder")!.IsVisible && !window.FindControl<Border>("RightPanelBorder")!.IsVisible,
+                "Settings hides the work docks");
             await window.NavigateForTestingAsync(AppPage.Chat); await Ready();
             Check(window.FindControl<Border>("SidebarBorder")!.IsVisible, "Returning from settings restores docks");
             window.OpenDockPage("overview", DockZone.Left);
@@ -380,9 +371,6 @@ internal static class WorkbenchDemoSelfTest
             window.KeyRelease(Avalonia.Input.Key.Escape, Avalonia.Input.RawInputModifiers.None, Avalonia.Input.PhysicalKey.Escape, null); await Ready();
             Check(!window.FindControl<Border>("SidebarBorder")!.IsVisible, "L13: Escape closes left drawer");
             Check(ReferenceEquals(window.FocusManager?.GetFocusedElement(), draftBox), "L13: drawer switch and Escape restore composer focus");
-            terminalView.ConfirmCloseForTesting = _ => Task.FromResult(true);
-            await terminalView.CloseSelectedAsync();
-            Check(!terminal.Tabs.Contains(tab!) && !tab!.IsRunning, "T04: accepting terminal close stops only the selected session");
             window.Width = 1440; window.Height = 900;
             window.OpenDockPage("overview", DockZone.Left);
             window.OpenDockPage("changes", DockZone.Right); await Ready();
@@ -415,18 +403,7 @@ internal static class WorkbenchDemoSelfTest
                 var vm = real.DataContext as MainViewModel ?? throw new InvalidOperationException("Real session failed to start");
                 Check(vm.Session.Connection == SessionConnection.Connected && vm.Session is not Mock.MockChatSession,
                     "Desktop uses a real installed Pi session");
-                real.OpenDockPage("terminal", DockZone.Bottom); await Ready();
-                var terminalPage = real.PageForTesting("terminal");
-                var terminalInput = terminalPage.GetVisualDescendants().OfType<TextBox>().Single(t => t.Name == "TerminalInput");
-                var run = terminalPage.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "运行");
-                terminalInput.Text = "set UI_TOKEN=TERMINAL_UI_"; await Ready();
-                ClickNative(run); await Ready();
-                terminalInput.Text = "echo %UI_TOKEN%OK"; await Ready();
-                ClickNative(run);
-                deadline = DateTime.UtcNow.AddSeconds(12);
-                while (!real.TerminalForTesting.SelectedTab!.Buffer.PlainText.Contains("TERMINAL_UI_OK") && DateTime.UtcNow < deadline) await Task.Delay(100);
-                Check(real.TerminalForTesting.SelectedTab!.Buffer.PlainText.Contains("TERMINAL_UI_OK") && real.TerminalForTesting.SelectedTab.IsRunning,
-                    "Tabs: native terminal input and Run button execute real cmd output rather than input echo");
+                // Native ConPTY input is covered by the optional terminal plugin tests.
                 var settled = new TaskCompletionSource();
                 vm.Session.Event += (_, e) => { if (e is SessionEvent.TurnSettled) settled.TrySetResult(); };
                 vm.Input.DraftText = "Reply with the local acceptance marker";

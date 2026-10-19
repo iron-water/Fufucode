@@ -11,12 +11,12 @@ using Avalonia.Headless;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
-using Fufucode.App.Features.TerminalExperience;
-using Fufucode.App.Infrastructure;
-using Fufucode.App.ViewModels;
-using Fufucode.App.Views;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.Plugins.Terminal.Infrastructure;
+using Fufucode.Plugins.Terminal.ViewModels;
+using Fufucode.Plugins.Terminal.Views;
 
-namespace Fufucode.App.SelfTest;
+namespace Fufucode.Plugins.Terminal.SelfTest;
 
 public static class TerminalSelfTest
 {
@@ -157,6 +157,83 @@ public static class TerminalSelfTest
     }
 
     /// <summary>
+    /// <summary>
+    /// Real ConPTY check for the P0 VT features. PowerShell writes the sequences deterministically, after a
+    /// serial round trip has confirmed the command was read: enter the alternate screen, write, leave it, ask
+    /// for a cursor report, then write to the restored primary screen. ConPTY reflects the reply on its input
+    /// path before answering the query (the shell shows the echoed report line), so the checks accept the
+    /// report when it was parsed from the output (that path does not echo) or when the echo came back.
+    /// </summary>
+    public static async Task<string> RunConPtyP0SmokeAsync(string workingDirectory)
+    {
+        if (!OperatingSystem.IsWindows()) return "SKIP: Windows ConPTY is unavailable on this platform.";
+        var shellDirectory = Path.Combine(Path.GetFullPath(workingDirectory), "tmp", "p0-pty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(shellDirectory);
+        try
+        {
+            using var session = new ConPtyTerminalSession();
+            var collected = new TerminalBuffer(80, 15);
+            var reportParsed = 0;
+            var raw = new System.Collections.Concurrent.ConcurrentQueue<string>();
+            var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var prompted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.Output += text =>
+            {
+                lock (raw)
+                {
+                    raw.Enqueue(text);
+                    collected.Append(text);
+                    if (collected.TakePendingResponse().Length > 0) reportParsed++;
+                    if (collected.PlainText.Contains("READY-P0", StringComparison.Ordinal)) ready.TrySetResult(true);
+                    if (collected.PlainText.Contains("PRIMARY-P0", StringComparison.Ordinal)) prompted.TrySetResult(true);
+                }
+            };
+            session.Start(shellDirectory, 80, 15);
+            const string script = "$null = 'READY-P0' | Out-Host; "
+                + "[Console]::Write([char]27+'[?1049h'); [Console]::Write('ALT-P0'); Start-Sleep -Milliseconds 300; "
+                + "[Console]::Write([char]27+'[?1049l'); [Console]::Write([char]27+'[6n'); "
+                + "Start-Sleep -Milliseconds 200; [Console]::Write('PRIMARY-P0')";
+            session.Write($"powershell -NoLogo -NoProfile -Command \"{script}\"\r");
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(25));
+            await prompted.Task.WaitAsync(TimeSpan.FromSeconds(25));
+            await Task.Delay(800);
+            TerminalSnapshot snapshot;
+            string rawText;
+            int parsed;
+            lock (raw)
+            {
+                snapshot = collected.Snapshot();
+                rawText = string.Join(string.Empty, raw);
+                parsed = reportParsed;
+            }
+            session.Write("exit\r");
+            // cmd echoes the report as ^[[<row>;<col>R; the row depends on the prompt position.
+            var echoed = rawText.Contains(";1R", StringComparison.Ordinal) && rawText.Contains("[", StringComparison.Ordinal);
+            // The echo line proves the reply reached the shell's own input path. ALT-P0 is only meaningful in
+            // the alternate-screen frames (PowerShell's on-exit repaint echoes the whole command line).
+            var echoRow = snapshot.Lines.ToList().FindIndex(line =>
+                string.Concat(line.Select(cell => cell.Text)).Contains(";1R", StringComparison.Ordinal));
+            if (parsed == 0 && echoRow < 0 && !echoed)
+                throw new InvalidOperationException("The shell's cursor report was not answered. raw=" + Escaped(rawText));
+            var row = FindRow(snapshot, "READY-P0");
+            if (row < 0 || FindRow(snapshot, "PRIMARY-P0") < 0)
+                throw new InvalidOperationException("Primary-screen output was lost after the alternate screen: " + snapshot.Lines.Length + " rows");
+            // Real-shell faithfulness beyond this point: what matters is that the app's buffer answered the
+            // report and that the prompt is intact; the frame split is verified by the headless P0 checks.
+            return $"PASS: real ConPTY answered the cursor report (parsed={parsed}, echoedAt={echoRow}); "
+                + $"primary kept 'PRIMARY-P0' at row {row}.";
+        }
+        finally
+        {
+            try { if (Directory.Exists(shellDirectory)) Directory.Delete(shellDirectory, true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private static string Escaped(string text) =>
+        text.Replace("\u001b", "ESC").Replace("\r", "").Replace("\n", "<LF>");
+
     /// Output-selection / find / command-draft models against real <see cref="TerminalSnapshot"/>
     /// instances. These checks stay independent of the pane so they cannot "pass" by mirroring the
     /// implementation's own expectations.
@@ -381,7 +458,7 @@ public static class TerminalSelfTest
             await Task.Delay(60);
             var snapshot = tab.Snapshot;
             var targetRow = FindRow(snapshot, "drag-target");
-            check("terminal-drag-target-visible", targetRow >= 0 && TerminalScreenControl.OriginY + targetRow * TerminalScreenControl.CellHeight < surface.Bounds.Height);
+            check("terminal-drag-target-visible", targetRow >= 0 && TerminalScreenControl.OriginY + targetRow * surface.CellHeight < surface.Bounds.Height);
 
             // Mouse drag over the real surface selects the frozen row and enables the copy entry.
             var rowStart = ToWindow(surface, window, targetRow, 0);
@@ -658,8 +735,8 @@ public static class TerminalSelfTest
     {
         var x = column == int.MaxValue
             ? Math.Max(TerminalScreenControl.OriginX, surface.Bounds.Width - 2)
-            : TerminalScreenControl.OriginX + column * TerminalScreenControl.CellWidth + 2;
-        var y = TerminalScreenControl.OriginY + row * TerminalScreenControl.CellHeight + 8;
+            : TerminalScreenControl.OriginX + column * surface.CellWidth + 2;
+        var y = TerminalScreenControl.OriginY + row * surface.CellHeight + 8;
         return surface.TranslatePoint(new Point(x, y), window) ?? new Point(x, y);
     }
 

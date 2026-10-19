@@ -2,9 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
-using Fufucode.App.Infrastructure;
+using Fufucode.Plugins.Terminal.Infrastructure;
 
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>One fixed-cell position in a <see cref="TerminalSnapshot"/> (row / column, zero based).</summary>
 public readonly record struct TerminalCellPosition(int Row, int Column);
@@ -64,6 +64,61 @@ public sealed class TerminalOutputSelection
         if (!ReferenceEquals(_snapshot, snapshot)) return false;
         if (_caret == position) return true;
         _caret = position;
+        _text = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Select the whole visible snapshot (screen + scrollback) at once; used by “全选”.
+    /// The selection is anchored to this snapshot so a later copy still returns exactly this text.
+    /// </summary>
+    public bool SelectAll(TerminalSnapshot snapshot)
+    {
+        if (snapshot.Lines.Length == 0) return false;
+        _snapshot = snapshot;
+        _anchor = new TerminalCellPosition(0, 0);
+        var lastRow = snapshot.Lines.Length - 1;
+        _caret = new TerminalCellPosition(lastRow, Math.Max(0, snapshot.Lines[lastRow].Length - 1));
+        _text = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Select one logical row (double-click). Trailing blanks are excluded so the copied text is the
+    /// visible line, not the padded cell row.
+    /// </summary>
+    public bool SelectRow(TerminalSnapshot snapshot, int row)
+    {
+        if (row < 0 || row >= snapshot.Lines.Length) return false;
+        var line = snapshot.Lines[row];
+        var last = line.Length - 1;
+        while (last > 0 && string.IsNullOrEmpty(line[last].Text.Trim())) last--;
+        _snapshot = snapshot;
+        _anchor = new TerminalCellPosition(row, 0);
+        _caret = new TerminalCellPosition(row, Math.Max(0, last));
+        _text = null;
+        return true;
+    }
+
+    /// <summary>
+    /// Select one whitespace-delimited word around a cell (double-click). Falls back to a single cell
+    /// when the cell is blank.
+    /// </summary>
+    public bool SelectWord(TerminalSnapshot snapshot, TerminalCellPosition position)
+    {
+        if (position.Row < 0 || position.Row >= snapshot.Lines.Length) return false;
+        var line = snapshot.Lines[position.Row];
+        if (line.Length == 0) return false;
+        var start = Math.Clamp(position.Column, 0, line.Length - 1);
+        static bool IsWordCell(TerminalCell cell) => cell.Text.Length > 0 && !char.IsWhiteSpace(cell.Text[0]);
+        if (!IsWordCell(line[start])) return SelectRow(snapshot, position.Row);
+        var first = start;
+        while (first > 0 && IsWordCell(line[first - 1])) first--;
+        var last = start;
+        while (last + 1 < line.Length && IsWordCell(line[last + 1])) last++;
+        _snapshot = snapshot;
+        _anchor = new TerminalCellPosition(position.Row, first);
+        _caret = new TerminalCellPosition(position.Row, last);
         _text = null;
         return true;
     }

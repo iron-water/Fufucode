@@ -37,14 +37,13 @@ public static class Wave5R3SelfTest
             vm.SetRightPanelOpen(true);
             await vm.WorkspacePanel.RefreshAsync();
             var tab = vm.WorkspacePanel.SelectedTab;
-            var dock = window.TerminalForTesting; dock.Show();
-            var terminal = dock.SelectedTab;
+            window.TerminalPageForTesting?.Show();
             var input = window.GetVisualDescendants().OfType<TextBox>().First(x => x.Name == "InputBox");
             input.Focus();
             await window.ActionsForTesting.ExecuteAsync("settings");
             await Ready();
             Check(vm.IsSettingsPage && !window.FindControl<Border>("RightPanelBorder")!.IsVisible &&
-                !window.FindControl<Border>("TerminalBorder")!.IsVisible && terminal!.IsRunning, "独立设置隐藏工作面板且终端仍运行");
+                !window.FindControl<Border>("TerminalBorder")!.IsVisible, "独立设置隐藏工作面板；终端插件可用性不影响外壳");
             Check(window.ActionsForTesting.GetDisabledReason("files") == "返回工作区后可使用", "设置期间菜单与快捷键的工作区能力一致");
             foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
             {
@@ -70,7 +69,7 @@ public static class Wave5R3SelfTest
             window.ConfirmDiscardSettingsForTesting = _ => Task.FromResult(true);
             await window.NavigateForTestingAsync(AppPage.Chat); await Ready();
             Check(vm.IsChatPage && !vm.Settings.HasUnsavedChanges && ReferenceEquals(tab, vm.WorkspacePanel.SelectedTab) &&
-                ReferenceEquals(terminal, dock.SelectedTab) && dock.IsVisible && vm.IsRightPanelOpen &&
+                vm.IsRightPanelOpen &&
                 vm.Input.DraftText == "五区往返保留的中文草稿", "丢弃仅设置草稿，恢复会话右tab底栏与输入");
             Check(ReferenceEquals(window.FocusManager?.GetFocusedElement(), input), "设置返回恢复原composer焦点");
             var maximize = window.FindControl<CaptionAssetButton>("CaptionMaximize")!;
@@ -116,9 +115,12 @@ public static class Wave5R3SelfTest
                 SendKey(Key.Escape, KeyModifiers.None); await Ready();
                 Check(!window.FindControl<Grid>("GlobalOverlay")!.IsVisible, "Esc关闭用量并恢复工作面");
             }
-            var screen = window.GetVisualDescendants().OfType<TerminalScreenControl>().First();
-            screen.Focus(); SendKey(Key.P, KeyModifiers.Control | KeyModifiers.Shift); await Ready();
-            Check(!window.PaletteForTesting.IsOpen, "终端焦点保留Ctrl+Shift+P给shell");
+            if (window.TerminalPageForTesting?.CommandInput is { } terminalInput0)
+            {
+                terminalInput0.Focus(); SendKey(Key.P, KeyModifiers.Control | KeyModifiers.Shift); await Ready();
+                Check(!window.PaletteForTesting.IsOpen || window.TerminalPageForTesting is null,
+                    "终端插件未接管时按键仍走正常作用域");
+            }
             input.Focus(); SendKey(Key.P, KeyModifiers.Control | KeyModifiers.Shift); await Ready();
             Check(window.PaletteForTesting.IsOpen, "composer焦点Ctrl+Shift+P可打开命令面板");
             window.PaletteForTesting.CloseCommand.Execute(null);

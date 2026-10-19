@@ -160,7 +160,9 @@ $backendPlugins = @(
     @{ Id = 'backend.omp'; Project = 'src/Fufucode.Plugins.Omp/Fufucode.Plugins.Omp.csproj' },
     @{ Id = 'backend.claude'; Project = 'src/Fufucode.Plugins.Claude/Fufucode.Plugins.Claude.csproj' },
     @{ Id = 'backend.codex'; Project = 'src/Fufucode.Plugins.Codex/Fufucode.Plugins.Codex.csproj' },
-    @{ Id = 'backend.dsh'; Project = 'src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj' }
+    @{ Id = 'backend.dsh'; Project = 'src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj' },
+    # 工作区页面插件：终端已按 2026-10-18 用户指令拆为可选插件。
+    @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' }
 )
 foreach ($p in $backendPlugins) {
     $proj = Join-Path $root $p.Project
@@ -174,7 +176,7 @@ foreach ($p in $backendPlugins) {
     dotnet publish $proj -c Release -o $targetDir
     if ($LASTEXITCODE -ne 0) { throw "Backend plugin $($p.Id) publish failed." }
     foreach ($pattern in @('Fufucode.Core.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*', 'Avalonia.*',
-            'Microsoft.Data.Sqlite.*', 'SQLitePCLRaw.*', 'CommunityToolkit.Mvvm.*')) {
+            'Microsoft.Web.WebView2.*', 'Microsoft.Data.Sqlite.*', 'SQLitePCLRaw.*', 'CommunityToolkit.Mvvm.*')) {
         Get-ChildItem -Path $targetDir -Filter $pattern | Remove-Item -Force -Recurse
     }
     $runtimesDir = Join-Path $targetDir 'runtimes'

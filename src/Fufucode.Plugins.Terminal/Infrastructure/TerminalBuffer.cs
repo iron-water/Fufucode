@@ -4,16 +4,32 @@ using System.Globalization;
 using System.Linq;
 using System.Text;
 
-namespace Fufucode.App.Infrastructure;
+namespace Fufucode.Plugins.Terminal.Infrastructure;
 
-public readonly record struct TerminalCell(string Text, int Foreground, int Background, bool Bold = false);
+public readonly record struct TerminalCell(
+    string Text,
+    int Foreground,
+    int Background,
+    bool Bold = false,
+    bool Underline = false,
+    bool Italic = false,
+    bool Reverse = false,
+    bool Dim = false,
+    bool Conceal = false,
+    bool Strike = false,
+    string? Link = null);
 
 public sealed record TerminalSnapshot(
     TerminalCell[][] Lines,
     int CursorColumn,
     int CursorLine,
     bool CursorVisible,
-    bool AlternateScreen = false);
+    bool AlternateScreen = false,
+    string Title = "",
+    bool BracketedPaste = false,
+    bool MouseTracking = false,
+    int CursorStyle = 0,
+    int MouseMode = 0);
 
 /// <summary>
 /// Bounded VT screen plus scrollback. Escape sequences are interpreted, never shown as raw control text.
@@ -25,7 +41,9 @@ public sealed class TerminalBuffer
     public const int DefaultForeground = 0xDEE3EC;
     public const int DefaultBackground = 0x14171D;
     private static readonly int[] Palette = { 0x20242C, 0xE06C75, 0x98C379, 0xE5C07B, 0x61AFEF, 0xC678DD, 0x56B6C2, 0xD8DEE9, 0x6F7785, 0xFF8590, 0xB4E88D, 0xFFDA91, 0x85C9FF, 0xE7A0FF, 0x80DFE8, 0xFFFFFF };
-    private const int ScrollbackLimit = 1500;
+    // Default palette for readers; OSC 4 overrides live in the per-buffer palette above.
+    public static IReadOnlyList<int> DefaultPalette => Array.AsReadOnly(Palette);
+    private const int DefaultScrollbackLimit = 1500;
 
     // Active screen. While an alternate screen runs, the primary screen lives in _mainScreen/_mainHistory.
     private List<TerminalCell[]> _screen = new();
@@ -34,16 +52,25 @@ public sealed class TerminalBuffer
     private List<TerminalCell[]> _mainHistory = new();
 
     private readonly StringBuilder _sequence = new();
-    private readonly Queue<string> _replies = new();
     private int _parseState;                // 0 ground, 1 ESC, 2 CSI, 3 OSC, 4 OSC-after-ESC
     private int _column;                    // 0-based; stays on the last column while a wrap is pending
     private int _row;                       // 0-based
     private int _savedColumn, _savedRow;
     private int _top, _bottom;              // inclusive scroll region, 0-based
     private int _foreground = DefaultForeground, _background = DefaultBackground;
-    private bool _bold, _cursorVisible = true, _wrapPending, _autoWrap = true, _originMode, _insertMode, _newLineMode;
+    private bool _bold, _underline, _italic, _reverse, _dim, _conceal, _strike;
+    private bool _cursorVisible = true, _wrapPending, _autoWrap = true, _originMode, _insertMode, _newLineMode;
+    private bool _bracketedPaste, _mouseTracking;
+    private int _mouseMode;
+    private int _cursorStyle, _scrollbackLimit = DefaultScrollbackLimit;
+    private readonly int[] _palette = (int[])Palette.Clone();
+    private string _title = string.Empty;
+    private string? _currentLink;
+    private readonly StringBuilder _osc = new();
+    private int _lastCellRow = -1, _lastCellColumn = -1, _lastCellEndColumn = -1;
     private char? _pendingSurrogate;
     private string _lastChar = string.Empty;
+    private string _replySequence = string.Empty;   // CSI reply queued by the last escape sequence
 
     public TerminalBuffer(int columns = 100, int rows = 12)
     {
@@ -56,18 +83,40 @@ public sealed class TerminalBuffer
     public int Columns { get; private set; }
     public int Rows { get; private set; }
     public bool AlternateScreen { get; private set; }
+    public string Title => _title;
+    public bool BracketedPaste => _bracketedPaste;
+    public bool MouseTracking => _mouseTracking;
+    /// <summary>Mouse tracking DEC mode last enabled (1000/1002/1003/1006); 0 when disabled.</summary>
+    public int MouseMode => _mouseMode;
+    /// <summary>DECSCUSR: 0/1 blinking block, 2 steady block, 3/4 underline, 5/6 bar.</summary>
+    public int CursorStyle => _cursorStyle;
+    public int ScrollbackLimit
+    {
+        get => _scrollbackLimit;
+        set
+        {
+            _scrollbackLimit = Math.Clamp(value, 0, 100_000);
+            foreach (var history in new[] { _history, _mainHistory })
+                if (history.Count > _scrollbackLimit) history.RemoveRange(0, history.Count - _scrollbackLimit);
+            Changed?.Invoke();
+        }
+    }
     public event Action? Changed;
+    /// <summary>BEL (0x07) from the shell; the page decides whether to beep or flash.</summary>
+    public event Action? Bell;
 
     /// <summary>
     /// Reply bytes requested by DSR/DA (for example <c>CSI 6n</c>). The session must write them back to the
-    /// shell: prompt frameworks and full-screen applications wait for the answer.
+    /// shell: prompt frameworks and full-screen applications wait for the answer. A reply is always queued for
+    /// the rest of the sequence it belongs to, because ConPTY feeds one reply through its input path and the
+    /// rest through its output painting pass.
     /// </summary>
     public string TakePendingResponse()
     {
-        if (_replies.Count == 0) return string.Empty;
-        var builder = new StringBuilder();
-        while (_replies.TryDequeue(out var reply)) builder.Append(reply);
-        return builder.ToString();
+        if (_replySequence.Length == 0) return string.Empty;
+        var reply = _replySequence;
+        _replySequence = string.Empty;
+        return reply;
     }
 
     public void Append(string text)
@@ -77,22 +126,25 @@ public sealed class TerminalBuffer
         {
             switch (_parseState)
             {
-                case 3: // OSC: discard until BEL or ESC-backslash.
-                    if (character == '\a') _parseState = 0;
+                case 3: // OSC: capture up to BEL or ESC-backslash (title and hyperlinks).
+                    if (character == '\a') { ApplyOsc(_osc.ToString()); _osc.Clear(); _parseState = 0; }
                     else if (character == '\u001b') _parseState = 4;
+                    else if (_osc.Length < 4096) _osc.Append(character);
                     continue;
                 case 4:
-                    _parseState = character == '\\' ? 0 : 3;
+                    if (character == '\\') { ApplyOsc(_osc.ToString()); _osc.Clear(); _parseState = 0; }
+                    else { _osc.Append('\u001b').Append(character); _parseState = 3; }
                     continue;
                 case 1:
                     if (character == '[') { _parseState = 2; _sequence.Clear(); continue; }
-                    if (character == ']') { _parseState = 3; continue; }
+                    if (character == ']') { _parseState = 3; _osc.Clear(); continue; }
                     ApplyEscape(character);
                     _parseState = 0;
                     continue;
                 case 2:
                     if (character >= '@' && character <= '~')
                     {
+                        _replySequence = string.Empty;
                         ApplyCsi(_sequence.ToString(), character);
                         _sequence.Clear();
                         _parseState = 0;
@@ -105,7 +157,7 @@ public sealed class TerminalBuffer
             if (character == '\u001b') { _parseState = 1; continue; }
             switch (character)
             {
-                case '\r': _column = 0; _wrapPending = false; continue;
+                case '\r': _column = 0; _wrapPending = false; _lastCellRow = -1; continue;
                 case '\n':
                     if (_newLineMode) _column = 0;
                     LineFeed();
@@ -118,6 +170,7 @@ public sealed class TerminalBuffer
                     continue;
                 case '\u000e': _newLineMode = true; continue;  // SO
                 case '\u000f': _newLineMode = false; continue; // SI
+                case '\a': Bell?.Invoke(); continue;           // BEL
             }
             if (char.IsControl(character)) continue;
             if (char.IsHighSurrogate(character)) { _pendingSurrogate = character; continue; }
@@ -145,19 +198,20 @@ public sealed class TerminalBuffer
         Changed?.Invoke();
     }
 
-    private static void ResizeScreen(List<TerminalCell[]> screen, List<TerminalCell[]> history, int columns, int rows)
+    private void ResizeScreen(List<TerminalCell[]> screen, List<TerminalCell[]> history, int columns, int rows)
     {
+        var limit = _scrollbackLimit;
         for (var i = 0; i < screen.Count; i++)
         {
             var line = screen[i];
             if (line.Length == columns) continue;
             if (columns < line.Length)
             {
-                // Trailing blank cells go first so shell history keeps its text.
-                var end = line.Length;
-                while (end > columns && IsBlank(line[end - 1])) end--;
-                var keep = Math.Max(columns, end);
-                if (keep < line.Length) line = line[..keep];
+                // Crop to the new width. A double-width glyph whose continuation cell is cut off is replaced
+                // by a blank so the row never carries half a glyph.
+                line = line[..columns];
+                if (columns > 0 && line[columns - 1].Text.Length > 0 && IsWide(line[columns - 1].Text))
+                    line[columns - 1] = BlankCell();
             }
             else
             {
@@ -172,7 +226,7 @@ public sealed class TerminalBuffer
         {
             history.Add(screen[0]);
             screen.RemoveAt(0);
-            if (history.Count > ScrollbackLimit) history.RemoveRange(0, history.Count - ScrollbackLimit);
+            if (history.Count > limit) history.RemoveRange(0, history.Count - limit);
         }
         while (screen.Count < rows) screen.Add(BlankLine(columns));
     }
@@ -183,9 +237,17 @@ public sealed class TerminalBuffer
         _column,
         _history.Count + _row,
         _cursorVisible,
-        AlternateScreen);
+        AlternateScreen,
+        _title,
+        _bracketedPaste,
+        _mouseTracking,
+        _cursorStyle,
+        _mouseMode);
 
     public string PlainText => string.Join("\n", _history.Concat(_screen).Select(line => string.Concat(line.Select(cell => cell.Text)).TrimEnd())).TrimEnd();
+
+    private TerminalCell Styled(string text) =>
+        new(text, _foreground, _background, _bold, _underline, _italic, _reverse, _dim, _conceal, _strike, _currentLink);
 
     private void Put(string glyph)
     {
@@ -210,10 +272,25 @@ public sealed class TerminalBuffer
             for (var c = Columns - 1; c >= _column + shift; c--) row[c] = row[c - shift];
             for (var c = _column; c < Math.Min(Columns, _column + shift); c++) row[c] = BlankCell();
         }
-        _screen[_row][_column] = new TerminalCell(glyph, _foreground, _background, _bold);
-        if (wide && _column + 1 < Columns) _screen[_row][_column + 1] = new TerminalCell(string.Empty, _foreground, _background, _bold);
+        else if (_column > 0 && _screen[_row][_column].Text.Length == 0)
+        {
+            // Overwriting the continuation cell of a wide glyph must not leave its owner half painted.
+            _screen[_row][_column - 1] = BlankCell();
+        }
+        if (_lastCellRow == _row && _lastCellEndColumn == _column && IsCombining(glyph))
+        {
+            // A combining mark extends the glyph of the previous cell instead of taking its own.
+            var owner = _screen[_lastCellRow][_lastCellColumn];
+            _screen[_lastCellRow][_lastCellColumn] = owner with { Text = owner.Text + glyph };
+            return;
+        }
+        _screen[_row][_column] = Styled(glyph);
+        if (wide && _column + 1 < Columns) _screen[_row][_column + 1] = Styled(string.Empty);
         _lastChar = glyph;
+        _lastCellRow = _row;
+        _lastCellColumn = _column;
         _column += wide ? 2 : 1;
+        _lastCellEndColumn = _column;
         if (_column >= Columns)
         {
             _column = Columns - 1;
@@ -221,8 +298,26 @@ public sealed class TerminalBuffer
         }
     }
 
+    /// <summary>Combining marks and joiners attach to the previous cell (approximate UAX#29 starter check).</summary>
+    private static bool IsCombining(string glyph)
+    {
+        var codepoint = char.ConvertToUtf32(glyph, 0);
+        return codepoint is 0x200D or 0xFE0E or 0xFE0F
+            || codepoint is >= 0x0300 and <= 0x036F || codepoint is >= 0x0483 and <= 0x0489
+            || codepoint is >= 0x0591 and <= 0x05BD || codepoint is >= 0x0610 and <= 0x061A
+            || codepoint is >= 0x064B and <= 0x065F || codepoint is >= 0x0E31 and <= 0x0E3A
+            || codepoint is >= 0x0E47 and <= 0x0E4E || codepoint is >= 0x1AB0 and <= 0x1AFF
+            || codepoint is >= 0x1DC0 and <= 0x1DFF || codepoint is >= 0x20D0 and <= 0x20FF
+            || codepoint is >= 0x302A and <= 0x302F || codepoint is >= 0x3099 and <= 0x309A
+            || codepoint is >= 0xFE00 and <= 0xFE0F || codepoint is >= 0xFE20 and <= 0xFE2F
+            || codepoint is >= 0xE0100 and <= 0xE01EF || codepoint is >= 0x1F3FB and <= 0x1F3FF;
+    }
+
     private void LineFeed()
     {
+        // An explicit cursor move ends the combining-mark run; a combining mark after LF starts a new cell.
+        _lastCellRow = -1;
+        _lastCellEndColumn = -1;
         _wrapPending = false;
         if (_row == _bottom) { ScrollUpRegion(1); return; }
         // A cursor below the scroll region continues toward the bottom of the screen instead of scrolling.
@@ -236,7 +331,7 @@ public sealed class TerminalBuffer
     private TerminalCell[] BlankLine() => BlankLine(Columns);
     private static TerminalCell[] BlankLine(int columns) => Enumerable.Repeat(BlankCell(), columns).ToArray();
     private static TerminalCell BlankCell() => new(" ", DefaultForeground, DefaultBackground);
-    private TerminalCell ErasedCell() => new(" ", _foreground, _background);
+    private TerminalCell ErasedCell() => new(" ", _foreground, _background, _bold, _underline, _italic, _reverse, _dim, _conceal, _strike, _currentLink);
 
     /// <summary>Scroll the scroll region up; a full-region scroll enters the bounded history.</summary>
     private void ScrollUpRegion(int count)
@@ -248,7 +343,7 @@ public sealed class TerminalBuffer
             if (_top == 0 && _bottom == Rows - 1)
             {
                 _history.Add(removed);
-                if (_history.Count > ScrollbackLimit) _history.RemoveRange(0, _history.Count - ScrollbackLimit);
+                if (_history.Count > _scrollbackLimit) _history.RemoveRange(0, _history.Count - _scrollbackLimit);
             }
             _screen.Insert(_bottom, BlankLine());
         }
@@ -265,7 +360,7 @@ public sealed class TerminalBuffer
 
     private void InsertLines(int count)
     {
-        if (_row > _bottom) return;
+        if (_row < _top || _row > _bottom) return;
         count = Math.Clamp(count, 0, _bottom - _row + 1);
         for (var n = 0; n < count; n++)
         {
@@ -276,7 +371,7 @@ public sealed class TerminalBuffer
 
     private void DeleteLines(int count)
     {
-        if (_row > _bottom) return;
+        if (_row < _top || _row > _bottom) return;
         count = Math.Clamp(count, 0, _bottom - _row + 1);
         for (var n = 0; n < count; n++)
         {
@@ -325,7 +420,77 @@ public sealed class TerminalBuffer
                 _wrapPending = false;
                 break;
             case 'c': Reset(); break;
+            case '(': case ')': case '*': case '+': break; // charset designation: UTF-8 only
+            case '=': case '>': break;                     // keypad modes: no screen effect
         }
+    }
+
+    /// <summary>OSC payload handlers. Only title and hyperlink carry visible state; the rest is discarded.</summary>
+    private void ApplyOsc(string payload)
+    {
+        var separator = payload.IndexOf(';');
+        var command = separator < 0 ? payload : payload[..separator];
+        var body = separator < 0 ? string.Empty : payload[(separator + 1)..];
+        switch (command)
+        {
+            case "0":
+            case "2":
+                _title = SanitizeTitle(body);
+                break;
+            case "1":
+                if (_title.Length == 0) _title = SanitizeTitle(body);
+                break;
+            case "8":
+                // OSC 8 ; params ; URI ST text OSC 8 ; ; ST — an empty URI ends the hyperlink.
+                // The body is "params;URI", so the URI is everything after the first separator.
+                var uriStart = body.IndexOf(';');
+                var uri = uriStart < 0 ? string.Empty : body[(uriStart + 1)..];
+                _currentLink = string.IsNullOrEmpty(uri) ? null : uri;
+                break;
+            case "4":
+                // OSC 4 ; index ; color — override a palette entry (the first 16 colors).
+                var parts = body.Split(';');
+                if (parts.Length >= 2 && int.TryParse(parts[0], out var index) && index is >= 0 and < 16 && TryParseColor(parts[1], out var value))
+                    _palette[index] = value;
+                break;
+            case "9": case "777": break; // notifications: no visual state in the terminal itself
+        }
+    }
+
+    private static string SanitizeTitle(string text)
+    {
+        var builder = new StringBuilder(Math.Min(text.Length, 120));
+        foreach (var character in text)
+        {
+            if (char.IsControl(character)) continue;
+            builder.Append(character);
+            if (builder.Length >= 120) break;
+        }
+        return builder.ToString().Trim();
+    }
+
+    private static bool TryParseColor(string text, out int color)
+    {
+        color = 0;
+        var value = text.Trim();
+        if (value.StartsWith("rgb:", StringComparison.OrdinalIgnoreCase))
+        {
+            var channels = value[4..].Split('/');
+            if (channels.Length != 3) return false;
+            var rgb = 0;
+            for (var i = 0; i < 3; i++)
+            {
+                if (!int.TryParse(channels[i], NumberStyles.HexNumber, CultureInfo.InvariantCulture, out var channel)) return false;
+                rgb = (rgb << 8) | Math.Clamp(channel, 0, 255);
+            }
+            color = rgb;
+            return true;
+        }
+        if (value.StartsWith('#') || value.Length == 6)
+        {
+            return int.TryParse(value.TrimStart('#'), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out color);
+        }
+        return false;
     }
 
     private void SaveCursor()
@@ -335,6 +500,7 @@ public sealed class TerminalBuffer
 
     private void RestoreCursor()
     {
+        _lastCellRow = -1;
         _column = Math.Clamp(_savedColumn, 0, Columns - 1);
         _row = Math.Clamp(_savedRow, 0, Rows - 1);
         _wrapPending = false;
@@ -345,17 +511,26 @@ public sealed class TerminalBuffer
         LeaveAlternateScreen();
         _foreground = DefaultForeground; _background = DefaultBackground; _bold = false;
         _cursorVisible = true; _autoWrap = true; _originMode = false; _insertMode = false; _newLineMode = false;
+        ResetAttributes();
+        _bracketedPaste = false; _mouseTracking = false; _mouseMode = 0; _cursorStyle = 0; _currentLink = null;
+        Array.Copy(Palette, _palette, Palette.Length);
         for (var i = 0; i < Rows; i++) _screen[i] = BlankLine();
         _top = 0; _bottom = Rows - 1; _row = 0; _column = 0; _wrapPending = false;
+    }
+
+    private void ResetAttributes()
+    {
+        _foreground = DefaultForeground; _background = DefaultBackground;
+        _bold = _underline = _italic = _reverse = _dim = _conceal = _strike = false;
     }
 
     private void ApplyCsi(string sequence, char command)
     {
         if (sequence.StartsWith('?')) { ApplyPrivate(sequence, command); return; }
-        if (sequence.StartsWith('>')) { if (command == 'c') _replies.Enqueue("\u001b[>0;276;0c"); return; }
+        if (sequence.StartsWith('>')) { if (command == 'c') _replySequence = "\u001b[>0;276;0c"; return; }
 
-        var values = sequence.Length == 0 ? Array.Empty<int>() : sequence.Split(';')
-            .Select(value => int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : 0)
+        var values = sequence.Length == 0 ? Array.Empty<int>() : sequence.Trim().Split(';')
+            .Select(value => int.TryParse(value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : 0)
             .ToArray();
         int Value(int index, int fallback = 1) => index >= values.Length || values[index] == 0 ? fallback : values[index];
 
@@ -368,9 +543,12 @@ public sealed class TerminalBuffer
             case 'E': MoveCursor(Value(0), 0); _column = 0; break;
             case 'F': MoveCursor(-Value(0), 0); _column = 0; break;
             case 'G': case '`': _column = Math.Clamp(Value(0) - 1, 0, Columns - 1); _wrapPending = false; break;
-            case 'd': _row = Math.Clamp(Value(0) - 1, 0, Rows - 1); _wrapPending = false; break;
+            case 'd':
+                _row = OriginRow(Value(0) - 1);
+                _wrapPending = false;
+                break;
             case 'H': case 'f':
-                _row = Math.Clamp(Value(0) - 1, 0, Rows - 1);
+                _row = OriginRow(Value(0) - 1);
                 _column = Math.Clamp(Value(1) - 1, 0, Columns - 1);
                 _wrapPending = false;
                 break;
@@ -403,17 +581,26 @@ public sealed class TerminalBuffer
             case 'l': foreach (var value in values) if (value == 4) _insertMode = false; break;
             case 'm': ApplyColors(values); break;
             case 'n':
-                if (values.Length > 0 && values[0] == 5) _replies.Enqueue("\u001b[0n");
-                else if (values.Length > 0 && values[0] == 6) _replies.Enqueue($"\u001b[{_row + 1};{_column + 1}R");
+                if (values.Length > 0 && values[0] == 5) _replySequence = "\u001b[0n";
+                else if (values.Length > 0 && values[0] == 6) _replySequence = $"\u001b[{_row + 1};{_column + 1}R";
+                break;
+            case 'q':
+                // DECSCUSR: 0..6; out-of-range values fall back to the default block cursor.
+                if (values.Length > 0 && values[0] is >= 0 and <= 6) _cursorStyle = values[0];
                 break;
             case 'c':
-                if (values.Length == 0 || values[0] == 0) _replies.Enqueue("\u001b[?1;2c");
+                if (values.Length == 0 || values[0] == 0) _replySequence = "\u001b[?1;2c";
                 break;
         }
     }
 
+    /// <summary>Map a 1-based row from CUP/VPA through DEC origin mode.</summary>
+    private int OriginRow(int zeroBased) =>
+        _originMode ? Math.Clamp(_top + zeroBased, _top, _bottom) : Math.Clamp(zeroBased, 0, Rows - 1);
+
     private void MoveCursor(int rowDelta, int columnDelta)
     {
+        _lastCellRow = -1;
         var minRow = _originMode ? _top : 0;
         var maxRow = _originMode ? _bottom : Rows - 1;
         _row = Math.Clamp(_row + rowDelta, minRow, maxRow);
@@ -443,10 +630,16 @@ public sealed class TerminalBuffer
                     break;
                 case 1049:
                     if (set) { SaveCursor(); EnterAlternateScreen(clear: true); }
-                    else LeaveAlternateScreen();
+                    else { LeaveAlternateScreen(); RestoreCursor(); }
                     break;
-                // 1/3/12 (cursor keys, blink), 1000-1006/1015 (mouse), 2004 (bracketed paste), 1004 (focus):
-                // they change input behaviour, not the rendered screen, so the screen state stays untouched.
+                case 2004: _bracketedPaste = set; break;
+                case 1000: case 1002: case 1003: case 1006:
+                    _mouseTracking = set;
+                    if (set) _mouseMode = mode;
+                    else if (_mouseMode == mode) _mouseMode = 0;
+                    break;
+                case 1: case 3: case 12: case 1004: case 1005: case 1015:
+                    break; // cursor-key/blink modes and focus events change input, not the rendered screen
             }
         }
     }
@@ -519,8 +712,6 @@ public sealed class TerminalBuffer
         for (var i = 0; i < count; i++) Put(_lastChar);
     }
 
-    private static bool IsBlank(TerminalCell cell) => string.IsNullOrWhiteSpace(cell.Text) && cell.Background == DefaultBackground;
-
     private static bool IsWide(string glyph)
     {
         var codepoint = char.ConvertToUtf32(glyph, 0);
@@ -534,15 +725,28 @@ public sealed class TerminalBuffer
         for (var i = 0; i < values.Length; i++)
         {
             var value = values[i];
-            if (value == 0) { _foreground = DefaultForeground; _background = DefaultBackground; _bold = false; }
+            if (value == 0) ResetAttributes();
             else if (value == 1) _bold = true;
-            else if (value == 22) _bold = false;
+            else if (value == 22) { _bold = false; _dim = false; }
+            else if (value == 2) _dim = true;
+            else if (value == 3) _italic = true;
+            else if (value == 23) _italic = false;
+            else if (value == 4) _underline = true;
+            else if (value == 21) _underline = true; // double underline: rendered as underline
+            else if (value == 24) _underline = false;
+            else if (value == 5 || value == 6) { } // blink: no animation for text, cursor blink is separate
+            else if (value == 7) _reverse = true;
+            else if (value == 27) _reverse = false;
+            else if (value == 8) _conceal = true;
+            else if (value == 28) _conceal = false;
+            else if (value == 9) _strike = true;
+            else if (value == 29) _strike = false;
             else if (value == 39) _foreground = DefaultForeground;
             else if (value == 49) _background = DefaultBackground;
-            else if (value is >= 30 and <= 37) _foreground = Palette[value - 30];
-            else if (value is >= 90 and <= 97) _foreground = Palette[value - 90 + 8];
-            else if (value is >= 40 and <= 47) _background = Palette[value - 40];
-            else if (value is >= 100 and <= 107) _background = Palette[value - 100 + 8];
+            else if (value is >= 30 and <= 37) _foreground = _palette[value - 30];
+            else if (value is >= 90 and <= 97) _foreground = _palette[value - 90 + 8];
+            else if (value is >= 40 and <= 47) _background = _palette[value - 40];
+            else if (value is >= 100 and <= 107) _background = _palette[value - 100 + 8];
             else if ((value == 38 || value == 48) && i + 2 < values.Length)
             {
                 int color;
@@ -556,9 +760,9 @@ public sealed class TerminalBuffer
             }
         }
     }
-    private static int PaletteColor(int index)
+    private int PaletteColor(int index)
     {
-        if (index < 16) return Palette[index];
+        if (index < 16) return _palette[index];
         if (index >= 232) { var grey = 8 + (index - 232) * 10; return (grey << 16) | (grey << 8) | grey; }
         var cube = index - 16;
         int Channel(int coordinate) => coordinate == 0 ? 0 : coordinate * 40 + 55;

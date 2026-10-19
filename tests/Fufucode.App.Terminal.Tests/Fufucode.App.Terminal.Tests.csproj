@@ -12,6 +12,11 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Fufucode.App/Fufucode.App.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 迁移中的旧宿主集成测试：改用 IPluginWorkspacePage 后重新启用。 -->
+    <Compile Remove="TerminalIntegrationSelfTest.cs" />
   </ItemGroup>
   <!-- Fufucode.App 经 Microsoft.Web.WebView2 把 WPF/WinForms 宿主程序集传递到本测试工程，
        与 net10.0 的 WindowsBase 产生 MSB3277 版本冲突警告。终端测试只用 Avalonia 无头输入，

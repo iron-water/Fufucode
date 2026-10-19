@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>
 /// Bounded, per-tab command history for the command draft box.

@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Fufucode.App.Infrastructure;
+using Fufucode.Plugins.Terminal.Infrastructure;
 
-namespace Fufucode.App.Features.TerminalExperience;
+namespace Fufucode.Plugins.Terminal.Features.TerminalExperience;
 
 /// <summary>One hit inside the bounded snapshot; cells from <see cref="StartColumn"/> to <see cref="EndColumn"/> inclusive.</summary>
 public readonly record struct TerminalSearchMatch(int Row, int StartColumn, int EndColumn);
