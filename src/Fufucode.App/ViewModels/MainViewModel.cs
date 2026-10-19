@@ -51,6 +51,9 @@ public sealed partial class MainViewModel : ViewModelBase
     public string ModeText => Session is MockChatSession ? "mock 数据演示 · 未连接真实后端" :
         "真实 " + (Session is IBackendChatSession backend ? backend.BackendName : "后端") + " 会话";
 
+    /// <summary>当前项目根：Markdown 相对图片按此解析。由组合根在切换项目时写入。</summary>
+    [ObservableProperty] private string? _projectRootPath;
+
     public TimelineViewModel Timeline { get; }
 
     public InputViewModel Input { get; }

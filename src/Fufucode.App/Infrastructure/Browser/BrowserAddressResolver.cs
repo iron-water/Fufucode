@@ -15,12 +15,18 @@ public enum BrowserTargetKind
     /// <summary>about:blank，空态。</summary>
     Blank,
 
+    /// <summary>无法识别为网址/文件的普通文字：交给搜索引擎。</summary>
+    Search,
+
     /// <summary>被安全白名单拒绝的输入，不导航。</summary>
     Rejected,
 }
 
-/// <summary>地址栏输入归一化结果。Rejected 时 Address 为空，界面只显示 Note。</summary>
-public sealed record BrowserTarget(BrowserTargetKind Kind, string? Address, string? Note)
+/// <summary>
+/// 地址栏输入归一化结果。Rejected 时 Address 为空，界面只显示 Note。
+/// Search 时 Address 是搜索 URL，Query 是原始搜索词。
+/// </summary>
+public sealed record BrowserTarget(BrowserTargetKind Kind, string? Address, string? Note, string? Query = null)
 {
     public bool IsNavigable => Kind is not BrowserTargetKind.Rejected && Address is not null;
 
@@ -30,12 +36,16 @@ public sealed record BrowserTarget(BrowserTargetKind Kind, string? Address, stri
 /// <summary>
 /// 把地址栏的任意输入归一化成可导航目标。协议白名单只有 http/https/file/about，
 /// 其余（脚本协议、外部应用协议）一律拒绝——不给第三方页面注入脚本，也不拉起外部程序。
+/// 带空格或无点号的普通文字不再拒绝，而是转成搜索 URL（与 Chrome/Codex 地址栏行为一致）。
 /// </summary>
 internal static class BrowserAddressResolver
 {
     private const string BlankTarget = "about:blank";
 
-    public static BrowserTarget Resolve(string? input, string? projectRoot = null)
+    /// <summary>默认搜索引擎模板；{0} 处填入转义后的搜索词。</summary>
+    public const string DefaultSearchTemplate = "https://www.google.com/search?q={0}";
+
+    public static BrowserTarget Resolve(string? input, string? projectRoot = null, string? searchTemplate = null)
     {
         var text = (input ?? string.Empty).Trim();
         if (text.Length == 0) return Blank();
@@ -67,10 +77,33 @@ internal static class BrowserAddressResolver
             return ToFile(text, projectRoot);
 
         var candidate = "https://" + text;
-        return Uri.TryCreate(candidate, UriKind.Absolute, out var uri) &&
-               (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp)
-            ? new(BrowserTargetKind.Web, candidate, null)
-            : BrowserTarget.Reject("无法识别为网址或本地文件。");
+        if (LooksLikeHost(candidate))
+            return new(BrowserTargetKind.Web, candidate, null);
+
+        return Search(text, searchTemplate);
+    }
+
+    /// <summary>
+    /// 主机判定：只接受单段主机或含点主机，且整段可被 Uri 解析。
+    /// "hello world"、"我的笔记" 这类输入会失败并转入搜索，而不是拼成无效主机。
+    /// </summary>
+    private static bool LooksLikeHost(string candidate) =>
+        Uri.TryCreate(candidate, UriKind.Absolute, out var uri) &&
+        (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp) &&
+        uri.Host.Length > 0 &&
+        uri.Host.All(c => char.IsLetterOrDigit(c) || c is '.' or '-' || c > 0x7F) &&
+        !uri.Host.StartsWith('.') && !uri.Host.EndsWith('.');
+
+    private static BrowserTarget Search(string query, string? template)
+    {
+        var format = string.IsNullOrWhiteSpace(template) ? DefaultSearchTemplate : template;
+        if (!format.Contains("{0}", StringComparison.Ordinal)) format = DefaultSearchTemplate;
+        string url;
+        try { url = string.Format(format, Uri.EscapeDataString(query)); }
+        catch (FormatException) { url = string.Format(DefaultSearchTemplate, Uri.EscapeDataString(query)); }
+        return Uri.TryCreate(url, UriKind.Absolute, out _)
+            ? new(BrowserTargetKind.Search, url, null, query)
+            : BrowserTarget.Reject("搜索地址无效，请在设置中修正搜索模板。");
     }
 
     /// <summary>

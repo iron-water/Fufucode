@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Fufucode.App.Infrastructure.Browser;
 
 namespace Fufucode.App.Infrastructure;
 
@@ -22,6 +23,14 @@ public sealed record BrowserSettings
     public bool ShowFullUrl { get; init; } = true;
     public string ScreenshotMode { get; init; } = "ask";
     public string DefaultDownloadDirectory { get; init; } = "";
+    /// <summary>地址栏无法识别为网址时的搜索 URL 模板；{0} 处填入转义后的搜索词。</summary>
+    public string SearchUrlTemplate { get; init; } = BrowserAddressResolver.DefaultSearchTemplate;
+    /// <summary>页面显示用自定义 UA；空 = 使用 WebView2 默认值。</summary>
+    public string UserAgent { get; init; } = "";
+
+    // ── 标注 ──
+    /// <summary>标注回传聊天时是否一并附上整页截图（截图模式为 never 时不附）。</summary>
+    public bool AnnotationIncludeScreenshot { get; init; } = true;
 
     // ── 下载 ──
     public bool PromptDownloadLocation { get; init; }
@@ -48,8 +57,19 @@ public sealed record BrowserSettings
         DefaultBrowsePermission = Pick(DefaultBrowsePermission, "approval", PermissionModes),
         DefaultDownloadPermission = Pick(DefaultDownloadPermission, "approval", PermissionModes),
         DefaultDownloadDirectory = (DefaultDownloadDirectory ?? string.Empty).Trim(),
+        SearchUrlTemplate = NormalizeTemplate(SearchUrlTemplate),
+        UserAgent = (UserAgent ?? string.Empty).Trim(),
         AllowedSites = NormalizeSites(AllowedSites),
     };
+
+    /// <summary>搜索模板必须含一个 {0} 且能格式化；否则回退默认模板，不写入非法状态。</summary>
+    private static string NormalizeTemplate(string? template)
+    {
+        var value = (template ?? string.Empty).Trim();
+        if (value.Length == 0 || !value.Contains("{0}", StringComparison.Ordinal)) return BrowserAddressResolver.DefaultSearchTemplate;
+        try { return Uri.TryCreate(string.Format(value, "test"), UriKind.Absolute, out _) ? value : BrowserAddressResolver.DefaultSearchTemplate; }
+        catch (FormatException) { return BrowserAddressResolver.DefaultSearchTemplate; }
+    }
 
     /// <summary>从旧 WorkbenchAppearance 迁移浏览器偏好（首次创建 browser-settings.json 时）。</summary>
     public static BrowserSettings FromLegacy(WorkbenchAppearance appearance)

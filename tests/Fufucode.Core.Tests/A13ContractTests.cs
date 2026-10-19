@@ -87,7 +87,7 @@ internal static class A13ContractTests
         manager.Settings.Update(s => s with { SelectedModel = "fixture/fixture-model", ThinkingLevel = "xhigh" });
         try
         {
-            await using var refused = await manager.CreateAsync(project);
+            await using var refused = await manager.CreateAsync(project, backend: BackendId.Pi);
             throw new Exception("A13 a clamped thinking level was accepted as applied");
         }
         catch (RpcException error)
@@ -98,7 +98,7 @@ internal static class A13ContractTests
                 "A13 thinking levels: session creation names the unsupported level and what Pi offers");
         }
         manager.Settings.Update(s => s with { ThinkingLevel = "medium" });
-        await using (var accepted = await manager.CreateAsync(project))
+        await using (var accepted = await manager.CreateAsync(project, backend: BackendId.Pi))
         {
             Check(accepted.Session.Id.Length > 0, "A13 thinking levels: a supported level still opens a session");
         }
@@ -307,7 +307,7 @@ internal static class A13ContractTests
         var project = Path.Combine(layout.Root, "work");
         Directory.CreateDirectory(project);
         var manager = new PersistentSessionManager(dotnet, fake, layout, requireApprovalBridge: false);
-        var parent = await manager.CreateAsync(project);
+        var parent = await manager.CreateAsync(project, backend: BackendId.Pi);
         var parentId = parent.Session.Id;
         var result = await manager.ForkAsync(parent, "entry-1");
         var child = result.Session;

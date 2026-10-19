@@ -10,14 +10,21 @@ public abstract class TextSegmentViewModel : ViewModelBase
 {
 }
 
-public sealed class PlainSegmentViewModel : TextSegmentViewModel
+public sealed partial class PlainSegmentViewModel : TextSegmentViewModel
 {
     public PlainSegmentViewModel(string text)
     {
         Text = text;
     }
 
-    public string Text { get; set; }
+    private string _text = string.Empty;
+
+    /// <summary>可观察：流式增量直接改文本，不重建集合，避免整段闪烁。</summary>
+    public string Text
+    {
+        get => _text;
+        set => SetProperty(ref _text, value);
+    }
 }
 
 public sealed partial class CodeSegmentViewModel : TextSegmentViewModel
@@ -40,9 +47,21 @@ public sealed partial class CodeSegmentViewModel : TextSegmentViewModel
         RefreshSizeUi();
     }
 
-    public string Code { get; set; }
+    private string _code = string.Empty;
+    private string _language = string.Empty;
 
-    public string Language { get; set; }
+    /// <summary>可观察：流式代码块增量更新，不重建集合。</summary>
+    public string Code
+    {
+        get => _code;
+        set => SetProperty(ref _code, value);
+    }
+
+    public string Language
+    {
+        get => _language;
+        set => SetProperty(ref _language, value);
+    }
 
     public int LineCount { get; set; }
 

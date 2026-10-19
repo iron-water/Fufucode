@@ -197,11 +197,16 @@ internal static class BrowserSettingsTests
         check(registry.ActiveToolNames.Count == 0, "Browser Use 未安装时真实调度表不暴露任何浏览器工具");
 
         store.Install("agent.browser-use");
+        // GetState 只把“有真实载荷”的条目录为已安装：这里用真实 manifest 文件提供载荷，不绕过安装语义。
+        var payload = Path.Combine(layout.PluginsDirectory, "agent.browser-use");
+        Directory.CreateDirectory(payload);
+        File.WriteAllText(Path.Combine(payload, "manifest.json"), "{\"id\":\"agent.browser-use\"}");
         var active = registry.ActiveToolNames;
         string[] expected =
         [
             BrowserUsePlugin.NavigateTool,
             BrowserUsePlugin.ClickTool,
+            BrowserUsePlugin.TypeTool,
             BrowserUsePlugin.ScreenshotTool,
             BrowserUsePlugin.EvaluateTool,
             BrowserUsePlugin.GetStateTool,

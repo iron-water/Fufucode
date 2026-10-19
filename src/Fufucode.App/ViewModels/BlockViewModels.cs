@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -53,25 +54,52 @@ public sealed class TextBlockViewModel : BlockViewModel
 
     public ObservableCollection<TextSegmentViewModel> Segments { get; } = new();
 
+    /// <summary>
+    /// 增量对齐分段：流式刷新尽量原地改文本，只在分段结构真的变化时才增删条目。
+    /// 之前每次 delta 都 Clear() 再重建，Avalonia 会销毁并重建全部文本控件，
+    /// 表现为整段文字闪一下——这是输出闪烁的根因。
+    /// </summary>
     private void RebuildSegments()
     {
-        Segments.Clear();
+        var next = new List<TextSegmentViewModel>();
         foreach (var segment in TextSegmenter.Split(Text))
         {
             if (segment.IsCode)
             {
-                Segments.Add(new CodeSegmentViewModel(_clipboard, segment.Text, segment.Language));
+                next.Add(new CodeSegmentViewModel(_clipboard, segment.Text, segment.Language));
                 continue;
             }
 
-            // 段首尾的整行空白不渲染：代码围栏两侧的 \n\n 会各自空出一行，
-            // 在视觉上把块间距放大到 ~50px；段内空行保留（属于正文排版）。
+            // 段首尾的整行空白不渲染：代码围栏两侧的空行会抬高块间距；段内空行保留。
             var plain = segment.Text.Trim('\r', '\n');
             if (plain.Length > 0)
             {
-                Segments.Add(new PlainSegmentViewModel(plain));
+                next.Add(new PlainSegmentViewModel(plain));
             }
         }
+
+        // 同类型同位置的段原地更新，保留已有控件实例（以及代码块的展开状态）。
+        var shared = Math.Min(Segments.Count, next.Count);
+        for (var index = 0; index < shared; index++)
+        {
+            switch (Segments[index], next[index])
+            {
+                case (PlainSegmentViewModel existing, PlainSegmentViewModel updated):
+                    existing.Text = updated.Text;
+                    break;
+                case (CodeSegmentViewModel existing, CodeSegmentViewModel updated):
+                    existing.Language = updated.Language;
+                    existing.Code = updated.Code;
+                    break;
+                default:
+                    while (Segments.Count > index) Segments.RemoveAt(Segments.Count - 1);
+                    for (var remainder = index; remainder < next.Count; remainder++) Segments.Add(next[remainder]);
+                    return;
+            }
+        }
+
+        while (Segments.Count > next.Count) Segments.RemoveAt(Segments.Count - 1);
+        for (var index = shared; index < next.Count; index++) Segments.Add(next[index]);
     }
 }
 

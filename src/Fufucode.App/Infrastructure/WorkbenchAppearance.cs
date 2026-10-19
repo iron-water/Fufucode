@@ -103,7 +103,7 @@ public sealed record WorkbenchAppearance
             FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 11, 24) : 13,
             Density = Choose(Density, "cozy", "compact", "cozy", "airy"),
             Radius = Choose(Radius, "mid", "none", "mid", "high"),
-            ReadingWidth = Choose(ReadingWidth, "standard", "narrow", "standard", "free"),
+            ReadingWidth = Choose(ReadingWidth, "standard", "narrow", "standard", "wide", "free"),
             MessageActions = Choose(MessageActions, "hover", "show", "hover", "hide"),
             Composer = Choose(Composer, "wide", "wide", "reading", "hidden"),
             UserName = Name(UserName, "你"), AssistantName = Name(AssistantName, "Fufucode"),
@@ -118,7 +118,13 @@ public sealed record WorkbenchAppearance
                 .ToDictionary(p => p.Key, p => p.Value with { Order = Math.Clamp(p.Value.Order, -1000, 1000) }, StringComparer.Ordinal)
         };
     }
-    public double ReadWidth => ReadingWidth switch { "narrow" => 560, "free" => double.PositiveInfinity, _ => 768 };
+    public double ReadWidth => ReadingWidth switch
+    {
+        "narrow" => 560,
+        "wide" => 1100,
+        "free" => double.PositiveInfinity,
+        _ => 768,
+    };
     public double Corner => Radius switch { "none" => 0, "high" => 8, _ => 4 };
     public double RowHeight => Density switch { "compact" => 32, "airy" => 48, _ => 40 };
     /// <summary>当前生效布局里某停靠区是否为隐藏。供设置控件取值使用。</summary>

@@ -37,12 +37,54 @@ public abstract class TimelineEntryViewModel : ObservableObject
 public sealed class UserMessageViewModel : TimelineEntryViewModel
 {
     private string _text = string.Empty;
+    private bool _isPending;
+    private bool _isFailed;
+    private bool _showAckHint;
+    private bool _isPinned;
 
     public string Text
     {
         get => _text;
         set => SetProperty(ref _text, value);
     }
+
+    /// <summary>在左侧轮次刻度里固定这一轮，便于快速跳回。</summary>
+    public bool IsPinned
+    {
+        get => _isPinned;
+        set => SetProperty(ref _isPinned, value);
+    }
+
+    /// <summary>本地乐观显示、尚未收到后端确认的用户消息。</summary>
+    public bool IsPending
+    {
+        get => _isPending;
+        set
+        {
+            if (!SetProperty(ref _isPending, value)) return;
+            OnPropertyChanged(nameof(ShowAckHint));
+        }
+    }
+
+    /// <summary>发送被后端拒绝；气泡保留并显示失败态，草稿由输入区回填。</summary>
+    public bool IsFailed
+    {
+        get => _isFailed;
+        set
+        {
+            if (!SetProperty(ref _isFailed, value)) return;
+            OnPropertyChanged(nameof(ShowAckHint));
+        }
+    }
+
+    /// <summary>确认延迟超过后端阈值时显示"发送中…"。</summary>
+    public bool ShowAckHint
+    {
+        get => _showAckHint;
+        set => SetProperty(ref _showAckHint, value);
+    }
+
+    public bool IsConfirmed => !IsPending && !IsFailed;
 
     public void UpdateFrom(ChatMessage message)
     {
@@ -78,6 +120,9 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     private string? _model;
     private TurnPhase _phase = TurnPhase.Streaming;
     private bool _isComplete;
+    private bool _isAwaitingFirstEvent = true;
+    private bool _showAwaitingIndicator;
+    private string _awaitingText = "正在等待响应…";
 
     public AssistantMessageViewModel(IClipboardService clipboard)
     {
@@ -170,6 +215,35 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     }
 
     public bool IsStreaming => Phase == TurnPhase.Streaming;
+
+    /// <summary>回合已开始但还没有收到任何内容块。</summary>
+    public bool IsAwaitingFirstEvent
+    {
+        get => _isAwaitingFirstEvent;
+        internal set
+        {
+            if (!SetProperty(ref _isAwaitingFirstEvent, value)) return;
+            if (value) return;
+            ShowAwaitingIndicator = false;
+        }
+    }
+
+    /// <summary>超过后端宽限阈值后显示等待指示器（三点动画）。</summary>
+    public bool ShowAwaitingIndicator
+    {
+        get => _showAwaitingIndicator;
+        set => SetProperty(ref _showAwaitingIndicator, value);
+    }
+
+    /// <summary>等待文案：慢启动后端显示具体名称，其余显示通用文案。</summary>
+    public string AwaitingText
+    {
+        get => _awaitingText;
+        set => SetProperty(ref _awaitingText, value);
+    }
+
+    /// <summary>后端声明呈现时序；UI 只读取，不判断后端类型。</summary>
+    public BackendPresentationProfile Presentation { get; set; } = BackendPresentationProfile.Default;
     public bool IsComplete => _isComplete;
 
     /// <summary>输出结束后才出现底部卡片（用量/模型/时间/操作）。</summary>
@@ -193,11 +267,29 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     /// </summary>
     public ObservableCollection<object> DisplayBlocks { get; } = new();
 
+    /// <summary>本回合的文件改动总结卡（Codex 风格），由 TimelineViewModel 在回合结束时填充。</summary>
+    public TurnChangeSummaryViewModel ChangeCard { get; } = new();
+
     private string _changeSummary = "", _artifactSummary = "";
     public string ChangeSummary { get => _changeSummary; set { if (SetProperty(ref _changeSummary, value)) OnPropertyChanged(nameof(HasChangeSummary)); } }
-    public string ArtifactSummary { get => _artifactSummary; set { if (SetProperty(ref _artifactSummary, value)) OnPropertyChanged(nameof(HasArtifactSummary)); } }
+    public string ArtifactSummary
+    {
+        get => _artifactSummary;
+        set
+        {
+            if (!SetProperty(ref _artifactSummary, value)) return;
+            OnPropertyChanged(nameof(HasArtifactSummary));
+            OnPropertyChanged(nameof(ShowArtifactBlock));
+        }
+    }
     public bool HasChangeSummary => ChangeSummary.Length > 0;
     public bool HasArtifactSummary => ArtifactSummary.Length > 0;
+
+    /// <summary>变更卡已经逐文件列出产物时不再重复；没有产物时整块不出现。</summary>
+    public bool ShowArtifactBlock => HasArtifactSummary && !ChangeCard.HasChanges;
+
+    /// <summary>变更卡内容变化后，产物块的可见性可能跟着变。</summary>
+    internal void RaiseSummariesChanged() => OnPropertyChanged(nameof(ShowArtifactBlock));
 
     /// <summary>摘要卡折叠状态。展开显示明细，折叠后只留一个简洁入口，仍参与正常布局。</summary>
     private bool _summaryExpanded = true;
@@ -223,6 +315,7 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         if (message.CumulativeUsage is { } usage) Usage = usage;
 
         if (!_messageOrder.Contains(message.Id)) _messageOrder.Add(message.Id);
+        if (message.Blocks.Count > 0) IsAwaitingFirstEvent = false;
 
         var alive = new HashSet<int>();
         for (var index = 0; index < message.Blocks.Count; index++)
@@ -370,6 +463,13 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         _groups.Add(group);
         DisplayBlocks.Add(group);
         return group;
+    }
+
+    /// <summary>从时间线移除前解除子工具订阅，避免残留通知。</summary>
+    internal void DetachForRemoval()
+    {
+        foreach (var group in _groups) group.Detach();
+        _groups.Clear();
     }
 
     /// <summary>

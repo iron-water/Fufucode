@@ -580,6 +580,14 @@
     </Style>
 
     <!-- ================= 时间线 ================= -->
+    <!-- 乐观气泡：等待确认时降低存在感；失败时只加错误描边，不改变布局。 -->
+    <Style Selector="Border.userBubble.pending">
+      <Setter Property="Opacity" Value="0.72"/>
+    </Style>
+    <Style Selector="Border.userBubble.failed">
+      <Setter Property="BorderBrush" Value="{DynamicResource AppCriticalForeground}"/>
+      <Setter Property="BorderThickness" Value="1"/>
+    </Style>
     <Style Selector="Border.userBubble">
         <Setter Property="Background" Value="{DynamicResource AppUserBubble}"/>
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>

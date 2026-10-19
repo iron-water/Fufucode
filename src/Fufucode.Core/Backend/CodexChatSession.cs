@@ -14,7 +14,7 @@ namespace Fufucode.Core.Backend;
 /// Codex 官方 CLI 的协议适配会话：把 `codex exec --json` 输出的事件流
 /// 规范化为统一的 IChatSession 契约与 SessionEvent 事件，并维护本地历史与 --resume 续接。
 /// </summary>
-public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IAsyncDisposable, IDisposable
+public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly string _executablePath;
     private readonly string _workingDirectory;
@@ -48,6 +48,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
     }
 
     public string BackendId => "codex";
+    public BackendPresentationProfile Presentation => BackendPresentationProfile.Codex;
     public string BackendName => "Codex";
     public SessionConnection Connection { get { lock (_gate) return _connection; } }
     public SessionActivity Activity { get { lock (_gate) return _activity; } }
@@ -126,6 +127,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
 
     private async Task ReadProcessOutputAsync(Process process, CancellationToken cancellationToken)
     {
+        var turnSettledEmitted = false;
         try
         {
             var stderrTask = Task.Run(async () =>
@@ -137,7 +139,6 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
             var messageId = Guid.NewGuid().ToString("N");
             var assistantEmitted = false;
             var assistantText = new System.Text.StringBuilder();
-            var turnSettledEmitted = false;
 
             using var reader = process.StandardOutput;
             string? line;
@@ -251,6 +252,21 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
             {
                 Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
                 Emit(new SessionEvent.TurnSettled(_outcome ?? SessionOutcome.Completed, _lastError));
+            }
+        }
+        catch (Exception ex)
+        {
+            lock (_gate)
+            {
+                _activity = SessionActivity.Idle;
+                _outcome = SessionOutcome.Failed;
+                _lastError = ex.Message;
+            }
+            if (!turnSettledEmitted)
+            {
+                turnSettledEmitted = true;
+                Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
+                Emit(new SessionEvent.TurnSettled(SessionOutcome.Failed, ex.Message));
             }
         }
         finally

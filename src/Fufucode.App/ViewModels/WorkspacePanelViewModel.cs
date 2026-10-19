@@ -99,6 +99,31 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     }
 
     public event EventHandler? CloseRequested;
+
+    /// <summary>请求把当前图表保存为图片；由视图执行渲染与文件选择。</summary>
+    public event EventHandler? DiagramDownloadRequested;
+
+    [ObservableProperty] private bool _isDiagramPreview;
+    [ObservableProperty] private string _diagramSource = "";
+    [ObservableProperty] private string _diagramError = "";
+
+    /// <summary>喂给富文本渲染器的 Mermaid 围栏文本。</summary>
+    public string DiagramMarkdown => IsDiagramPreview && DiagramSource.Length > 0
+        ? "```mermaid" + (char)10 + DiagramSource + (char)10 + "```"
+        : string.Empty;
+
+    public bool HasDiagramError => DiagramError.Length > 0;
+
+    partial void OnDiagramErrorChanged(string value) => OnPropertyChanged(nameof(HasDiagramError));
+    /// <summary>浏览器预览的可见性；用正向属性避免运行期绑定不支持取反。</summary>
+    public bool IsBrowserPreviewVisible => !IsDiagramPreview;
+
+    partial void OnIsDiagramPreviewChanged(bool value)
+    {
+        OnPropertyChanged(nameof(DiagramMarkdown));
+        OnPropertyChanged(nameof(IsBrowserPreviewVisible));
+    }
+    partial void OnDiagramSourceChanged(string value) => OnPropertyChanged(nameof(DiagramMarkdown));
     public ObservableCollection<WorkspacePanelTabViewModel> Tabs { get; } = new();
     public ObservableCollection<WorkspacePanelChangedFileViewModel> Changes { get; } = new();
     public ObservableCollection<WorkspacePanelFileItemViewModel> Files { get; } = new();
@@ -130,7 +155,54 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _previewFileDetail = string.Empty;
 
     [RelayCommand]
-    public void CloseFilePreview() => IsFilePreviewOpen = false;
+    public void CloseFilePreview()
+    {
+        IsFilePreviewOpen = false;
+        IsDiagramPreview = false;
+        DiagramSource = string.Empty;
+    }
+
+    /// <summary>.mermaid/.mmd 文件不走浏览器预览，直接渲染成图表并给出下载/复制。</summary>
+    private void UpdateDiagramPreview(string full)
+    {
+        var extension = System.IO.Path.GetExtension(full);
+        var isDiagram = extension.Equals(".mermaid", StringComparison.OrdinalIgnoreCase)
+            || extension.Equals(".mmd", StringComparison.OrdinalIgnoreCase);
+        if (!isDiagram)
+        {
+            IsDiagramPreview = false;
+            DiagramSource = string.Empty;
+            return;
+        }
+
+        try
+        {
+            var info = new FileInfo(full);
+            // 图表源文件通常几 KB；超大文件不解析，避免界面卡死。
+            if (!info.Exists || info.Length > 2 * 1024 * 1024)
+            {
+                IsDiagramPreview = false;
+                DiagramSource = string.Empty;
+                return;
+            }
+
+            DiagramSource = File.ReadAllText(full);
+            IsDiagramPreview = true;
+        }
+        catch (Exception ex)
+        {
+            IsDiagramPreview = false;
+            DiagramSource = string.Empty;
+            DiagramError = ex.Message;
+        }
+    }
+
+    [RelayCommand]
+    private async Task CopyDiagramSourceAsync() => await _clipboard.SetTextAsync(DiagramSource);
+
+    /// <summary>下载交给视图：只有视图能拿到已渲染的控件并保存为图片。</summary>
+    [RelayCommand]
+    private void DownloadDiagram() => DiagramDownloadRequested?.Invoke(this, EventArgs.Empty);
 
     public void OpenFilePreview(string path)
     {
@@ -144,6 +216,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             PreviewFileSize = info.Exists ? FormatFileSize(info.Length) : "文件不存在";
             PreviewFileDetail = info.Exists ? $"修改时间 {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}" : "无法获取文件信息";
             IsFilePreviewOpen = true;
+            UpdateDiagramPreview(full);
         }
         catch (Exception ex)
         {

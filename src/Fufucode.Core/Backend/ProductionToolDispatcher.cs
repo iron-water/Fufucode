@@ -159,6 +159,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     /// <summary>是否为原生内置工具名（插件不得同名覆盖）。`skill` 也属于保留名。</summary>
     public static bool IsBuiltinToolName(string toolName) =>
         string.Equals(toolName, SkillRegistry.ToolName, StringComparison.Ordinal) ||
+        string.Equals(toolName, McpGatewayDispatcher.ToolName, StringComparison.Ordinal) ||
+        string.Equals(toolName, SubagentDispatcher.ToolName, StringComparison.Ordinal) ||
         GetBuiltinToolDefinitions().Any(d => string.Equals(d.Name, toolName, StringComparison.Ordinal));
 
     public async Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default)
@@ -395,6 +397,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             if (existing is { } decoded) encoding = decoded.Encoding;
         }
 
+        FileChangeJournal.Capture(call.Id, target);
         await WriteAllTextAtomicAsync(target, content, encoding, ct).ConfigureAwait(false);
         return new PureToolResult(call.Id, true, $"已成功写入文件 '{relPath}'（{content.Length} 字符）。");
     }
@@ -470,6 +473,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var replacedContent = replaceAll
             ? rawContent.Replace(chosenOld, chosenNew!, StringComparison.Ordinal)
             : ReplaceFirst(rawContent, chosenOld, chosenNew!);
+        FileChangeJournal.Capture(call.Id, target);
         await WriteAllTextAtomicAsync(target, replacedContent, fileEncoding, ct).ConfigureAwait(false);
 
         return new PureToolResult(call.Id, true, $"已成功更新 '{relPath}'（替换了 {count} 处）。");

@@ -561,8 +561,9 @@ public sealed class PersistentSessionManager
 
             coordinator.RestoreHistory(history, interrupted);
 
-            var opened = new PersistentSession(session, project, coordinator, history, _metadata, lease, file,
-                chat, diagnosticLog);
+            // 新会话的文件可能尚未写入；仍把预定路径暴露给调用方（恢复/删除/诊断都依赖它）。
+            var opened = new PersistentSession(session with { FilePath = file }, project, coordinator, history,
+                _metadata, lease, file, chat, diagnosticLog);
             return opened;
         }
         catch
