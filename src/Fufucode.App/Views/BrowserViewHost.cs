@@ -489,7 +489,7 @@ public sealed class BrowserViewHost : Control, IDisposable
     }
 
     private static bool IsControllerGone(Exception error) =>
-        error is COMException or InvalidOperationException or ObjectDisposedException;
+        error is COMException or InvalidOperationException or ObjectDisposedException or SEHException;
 
     private void RaiseState(bool loading)
     {
