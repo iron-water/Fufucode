@@ -12,8 +12,11 @@ namespace Fufucode.App.Mock;
 /// 演示范围：流式输出（ delta 节奏）、分块消息重建、工具卡片（成功/失败）、
 /// 错误条目、排队、停止（清空队列并回传待恢复草稿）。
 /// </summary>
-public sealed class MockChatSession : IChatSession, IPromptSteering
+public sealed class MockChatSession : IChatSession, IPromptSteering, IPresentationProfiled
 {
+    /// <summary>演示会话由脚本即时产生事件，不需要等待提示。</summary>
+    public BackendPresentationProfile Presentation => BackendPresentationProfile.Scripted;
+
     private const string ErrorTriggerMarker = "失败";
 
     private readonly object _gate = new();

@@ -18,6 +18,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
     public const string EvaluateTool = "browser_evaluate";
     public const string NavigateTool = "browser_navigate";
     public const string ClickTool = "browser_click";
+    public const string TypeTool = "browser_type";
     public const string ScreenshotTool = "browser_screenshot";
     public const string GetStateTool = "browser_get_state";
 
@@ -33,6 +34,12 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
 
     private const string ClickSchema =
         "{\"type\":\"object\",\"properties\":{\"selector\":{\"type\":\"string\",\"description\":\"CSS 选择器，例如 #submit 或 .card > a。\"}},\"required\":[\"selector\"]}";
+
+    private const string TypeSchema =
+        "{\"type\":\"object\",\"properties\":{\"selector\":{\"type\":\"string\",\"description\":\"目标输入元素的 CSS 选择器。\"}," +
+        "\"text\":{\"type\":\"string\",\"description\":\"要输入的文本。\"}," +
+        "\"clear\":{\"type\":\"boolean\",\"description\":\"是否先清空已有内容，默认 false。\"}}," +
+        "\"required\":[\"selector\",\"text\"]}";
 
     private const string ScreenshotSchema =
         "{\"type\":\"object\",\"properties\":{\"format\":{\"type\":\"string\",\"enum\":[\"png\",\"jpeg\"],\"description\":\"图片格式，默认 png。\"}}}";
@@ -60,6 +67,9 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         new PluginToolRegistration(ClickTool,
             "在内置浏览器当前页面里点击匹配 CSS 选择器的元素。",
             ClickSchema, PluginCapability.BrowserControl),
+        new PluginToolRegistration(TypeTool,
+            "向匹配 CSS 选择器的输入元素输入文本（可先清空）。",
+            TypeSchema, PluginCapability.BrowserControl),
         new PluginToolRegistration(ScreenshotTool,
             "截取内置浏览器当前可视区域的图片（base64）。",
             ScreenshotSchema, PluginCapability.BrowserControl),
@@ -86,6 +96,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
                 EvaluateTool => await EvaluateAsync(call, arguments, cancellationToken).ConfigureAwait(false),
                 NavigateTool => await NavigateAsync(call, arguments, cancellationToken).ConfigureAwait(false),
                 ClickTool => await ClickAsync(call, arguments, cancellationToken).ConfigureAwait(false),
+                TypeTool => await TypeAsync(call, arguments, cancellationToken).ConfigureAwait(false),
                 ScreenshotTool => await ScreenshotAsync(call, arguments, cancellationToken).ConfigureAwait(false),
                 GetStateTool => await GetStateAsync(call, cancellationToken).ConfigureAwait(false),
                 _ => new PureToolResult(call.Id, false, $"未知的浏览器控制工具：'{call.Name}'。"),
@@ -171,6 +182,26 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         }
 
         var result = await Bridge!.ClickAsync(selector, cancellationToken).ConfigureAwait(false);
+        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+    }
+
+    private async Task<PureToolResult> TypeAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
+    {
+        using var doc = JsonDocument.Parse(arguments);
+        var root = doc.RootElement;
+        if (root.ValueKind != JsonValueKind.Object ||
+            !root.TryGetProperty("selector", out var selectorElement) ||
+            selectorElement.ValueKind != JsonValueKind.String ||
+            selectorElement.GetString() is not { Length: > 0 } selector)
+        {
+            return new PureToolResult(call.Id, false, "参数错误：'browser_type' 需要 selector。");
+        }
+        if (!root.TryGetProperty("text", out var textElement) || textElement.ValueKind != JsonValueKind.String)
+            return new PureToolResult(call.Id, false, "参数错误：'browser_type' 需要 text。");
+        var text = textElement.GetString() ?? string.Empty;
+        var clear = root.TryGetProperty("clear", out var clearElement) && clearElement.ValueKind == JsonValueKind.True;
+
+        var result = await Bridge!.TypeAsync(selector, text, clear, cancellationToken).ConfigureAwait(false);
         return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
     }
 

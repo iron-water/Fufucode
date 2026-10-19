@@ -163,6 +163,20 @@ foreach ($xml in $docXmls) {
     }
 }
 
+# 零代价清理（不改变任何运行时能力）：
+# - PDB 已单独归档，DiaSymReader 只服务于 PDB 符号读取；
+# - DesignerSupport 只服务于 XAML 设计器；
+# - WebView2Loader 在 runtimes/<rid>/native 已有 deps.json 指向的唯一副本。
+foreach ($name in @('Microsoft.DiaSymReader.Native.amd64.dll', 'Avalonia.DesignerSupport.dll')) {
+    $target = Join-Path $appDir $name
+    if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
+}
+$rootLoader = Join-Path $appDir 'WebView2Loader.dll'
+$ridLoader = Join-Path $appDir "runtimes/$RuntimeIdentifier/native/WebView2Loader.dll"
+if ((Test-Path -LiteralPath $rootLoader) -and (Test-Path -LiteralPath $ridLoader)) {
+    Remove-Item -LiteralPath $rootLoader -Force
+}
+
 # --- 2. 原生包不得包含任何 Node/Pi 载荷 ---
 # 这些路径一旦出现，说明发布把托管运行时又带了回来，必须在打包期失败而不是留到安装后。
 $forbidden = @('runtime', 'extensions', 'notices')

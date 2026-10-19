@@ -632,6 +632,21 @@
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
   </Style>
 
+  <!-- 左侧轮次刻度：常态低存在感，悬停或固定时高亮。 -->
+  <Style Selector="Button.rulerTick">
+    <Setter Property="Opacity" Value="0.5"/>
+  </Style>
+  <Style Selector="Button.rulerTick:pointerover">
+    <Setter Property="Opacity" Value="1"/>
+  </Style>
+  <Style Selector="Button.rulerTick.pinned">
+    <Setter Property="Opacity" Value="1"/>
+  </Style>
+  <Style Selector="Button.rulerTick.pinned TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
   <!-- 沉浸式：输入区收起后的浮起按钮，压在时间线内容之上。 -->
   <Style Selector="Button.composerReveal">
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
@@ -639,6 +654,35 @@
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="15"/>
     <Setter Property="Opacity" Value="0.92"/>
+  </Style>
+
+  <!-- 变更卡：整行可点开内联 diff。 -->
+  <Style Selector="Button.changeFileRow">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
+  <Style Selector="Button.changeFileRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+  </Style>
+  <Style Selector="Border.diffWell">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
+  <Style Selector="TextBlock.diffLine">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+  <Style Selector="TextBlock.diffLine.added">
+    <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+  </Style>
+  <Style Selector="TextBlock.diffLine.removed">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="TextBlock.diffLine.note">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="FontStyle" Value="Italic"/>
   </Style>
 
   <!-- 表格：去掉全网格竖线，只保留行分隔与表头强调，贴近正文排版而不是电子表格。 -->

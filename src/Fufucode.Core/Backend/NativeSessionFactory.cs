@@ -20,7 +20,8 @@ public static class NativeSessionFactory
         IPureToolDispatcher? toolRegistry = null, IPluginSystemPromptProvider? systemPromptProvider = null,
         string? persistFilePath = null, string? apiKey = null,
         Func<IReadOnlyList<IPureToolDispatcher>>? pluginProviders = null,
-        bool supportsImages = true, SkillRegistry? skills = null)
+        bool supportsImages = true, SkillRegistry? skills = null, McpManager? mcp = null,
+        SubagentRunner? subagents = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var current = settings.Current;
@@ -47,7 +48,16 @@ public static class NativeSessionFactory
 
         // 技能是轻量的 Markdown 资源：发现失败不影响会话；skill 工具统一由注册表处理。
         skills ??= SkillRegistry.Discover(workspaceRoot);
-        var dispatcher = new SkillAwareDispatcher(baseDispatcher, skills);
+        mcp ??= McpManager.Load(workspaceRoot);
+        // 子代理使用独立的内置工具调度器（不继承插件/MCP），只按 agent 定义放行工具。
+        if (subagents is null && client is not null)
+            subagents = new SubagentRunner(AgentRegistry.Discover(workspaceRoot), client, builtin, modelId, workspaceRoot);
+
+        // 调度链：MCP → Skill → Subagent → 插件/内置。
+        IPureToolDispatcher chain = baseDispatcher;
+        if (subagents is not null) chain = new SubagentDispatcher(chain, subagents);
+        chain = new SkillAwareDispatcher(chain, skills);
+        var dispatcher = new McpGatewayDispatcher(chain, mcp);
 
         var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations: 10);
         return new NativeCSharpChatSession(
@@ -56,7 +66,9 @@ public static class NativeSessionFactory
             pluginTools: pluginCatalog,
             persistFilePath: persistFilePath,
             supportsImages: supportsImages,
-            skills: skills);
+            skills: skills,
+            mcp: mcp,
+            subagents: subagents);
     }
 
     /// <summary>FUMO 会话的持久化文件相对路径（按项目与会话 id 存放）。</summary>

@@ -300,7 +300,7 @@ public sealed class WorkbenchSectionsView : UserControl
             ToggleRow("助手名称", null, s => s.ShowAssistantNames, value => vm.Change(s => s with { ShowAssistantNames = value })),
             ToggleRow("消息时间", "未知时间不显示占位值", s => s.ShowMessageTimes, value => vm.Change(s => s with { ShowMessageTimes = value })));
         Group(rows, "输入区",
-            ChoiceRow(vm, "输入区宽度", "跟随阅读宽度时输入区与正文同宽", new[] { "全宽", "跟随阅读宽度", "隐藏" }, s => s.Composer, (s, v) => s with { Composer = v }, "Edit", "wide", "reading", "hidden"));
+            ChoiceRow(vm, "输入区宽度", "跟随阅读宽度时与正文同宽；沉浸式会收起输入区，只在底部留一个上箭头按钮", new[] { "全宽", "跟随阅读宽度", "沉浸式" }, s => s.Composer, (s, v) => s with { Composer = v }, "Edit", "wide", "reading", "hidden"));
     }
 
     private void RenderNames(WorkbenchCustomizationViewModel vm, StackPanel rows)
@@ -355,6 +355,12 @@ public sealed class WorkbenchSectionsView : UserControl
                 () => browser.ShowFullUrl, value => browser.ShowFullUrl = value, "Search"),
             HostChoiceRow("截图策略", "向模型提供网页上下文时的截图策略",
                 new[] { "始终包含", "询问", "从不" }, () => browser.ScreenshotModeIndex, v => browser.ScreenshotModeIndex = v, "Document"),
+            HostTextFieldRow("搜索地址模板", "地址栏输入普通文字时使用的搜索 URL；{0} 会被替换为搜索词",
+                () => browser.SearchUrlTemplate, v => browser.SearchUrlTemplate = v),
+            HostTextFieldRow("页面 User-Agent", "留空使用 WebView2 默认值；填写后所有页签立即生效",
+                () => browser.UserAgent, v => browser.UserAgent = v),
+            HostToggleRow("标注时附带区域截图", "关闭后只发送网页地址、元素与文字说明",
+                () => browser.AnnotationIncludeScreenshot, value => browser.AnnotationIncludeScreenshot = value, "ArrowDownload"),
             BuildBrowserClearRow(browser),
             BuildBrowserHistoryRow(browser));
 
@@ -376,7 +382,9 @@ public sealed class WorkbenchSectionsView : UserControl
                 new[] { "需要批准", "始终允许", "禁止访问" }, () => browser.DefaultBrowsePermissionIndex, v => browser.DefaultBrowsePermissionIndex = v, "ShieldCheckmark"),
             HostChoiceRow("智能体下载权限", "智能体通过网页下载外部文件时的默认权限",
                 new[] { "需要批准", "始终允许", "禁止下载" }, () => browser.DefaultDownloadPermissionIndex, v => browser.DefaultDownloadPermissionIndex = v, "ArrowDownload"),
-            BuildBrowserSitesRow(browser));
+            BuildBrowserSitesRow(browser),
+            SettingsLayout.Note("浏览器扩展目录：" + browser.ExtensionsDirectory +
+                "（放入含 manifest.json 的未打包扩展，重开浏览器页后加载）"));
 
         // ── 开发者模式 ──
         Group(rows, "开发者模式",

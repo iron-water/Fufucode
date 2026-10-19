@@ -43,6 +43,18 @@ public partial class MainWindow
     private IChatSession? _workspaceSession;
     private string? _layoutContext;
     private bool _applyingWorkspaceLayout;
+    private bool _browserFullView;
+
+    /// <summary>
+    /// 浏览器全宽查看：右栏临时横跨整个工作区（左导航栏保留），不移动到别的宿主，
+    /// 因此 WebView2 controller 不重建、DOM/历史保留。退出时走正常布局恢复。
+    /// </summary>
+    private void SetBrowserFullView(bool full)
+    {
+        if (_browserFullView == full) return;
+        _browserFullView = full;
+        ApplyWorkspaceLayout();
+    }
     private bool _resizingDock;
     private bool _syncingDockState;
     private bool _leftDrawerOpen;
@@ -69,6 +81,31 @@ public partial class MainWindow
         var message = applied
             ? "资料引用已插入当前主聊天草稿，尚未发送。"
             : "当前主聊天已有草稿；资料引用已保存为待恢复文本，未覆盖草稿。";
+        target.Timeline.AddNotification(message);
+        _chatPage.Input.Focus();
+        return message;
+    }
+
+    /// <summary>
+    /// 浏览器引用/标注进入当前主聊天草稿：与资料库引用同一套“不覆盖已有草稿”语义。
+    /// 标注截图先真实落盘，再由聊天附件读取；发送失败如实提示，不伪造成功。
+    /// </summary>
+    internal async Task<string> AcceptBrowserReferenceAsync(BrowserChatReference reference)
+    {
+        if (_vm is not { IsChatPage: true } target)
+            return "网页引用已复制；请先打开目标主聊天会话，再生成引用。";
+        if (reference.ImagePath is { Length: > 0 } path)
+        {
+            try { target.Input.AddAttachment(await AttachedFile.LoadAsync(path)); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException)
+            {
+                target.Timeline.AddNotification("标注截图附加失败：" + error.Message);
+            }
+        }
+        var applied = target.Input.ApplyExternalText(reference.Text);
+        var message = applied
+            ? "网页内容已插入当前主聊天草稿，尚未发送。"
+            : "当前主聊天已有草稿；网页内容已保存为待恢复文本，未覆盖草稿。";
         target.Timeline.AddNotification(message);
         _chatPage.Input.Focus();
         return message;
@@ -556,6 +593,21 @@ public partial class MainWindow
                 _drawerReturnFocus = null;
             }
             _drawerWasVisible = drawerVisible;
+
+            if (_browserFullView && right && _dockLayout.Find("browser") == DockZone.Right)
+            {
+                // 浏览器全宽：盖住聊天与终端，只保留左侧导航栏；controller 仍挂在原右栏宿主里。
+                Grid.SetColumn(RightPanelBorder, 0);
+                Grid.SetColumnSpan(RightPanelBorder, 3);
+                Grid.SetRowSpan(RightPanelBorder, 3);
+                RightPanelBorder.ZIndex = 12;
+                RightPanelBorder.IsVisible = true;
+                RightPanelBorder.Width = double.NaN;
+                RightPanelBorder.HorizontalAlignment = HorizontalAlignment.Stretch;
+                RightPanelBorder.Margin = default;
+                RightPanelSplitter.IsVisible = false;
+                RightDrawerScrim.IsVisible = false;
+            }
         }
         finally { _applyingWorkspaceLayout = false; }
     }
@@ -565,7 +617,7 @@ public partial class MainWindow
     private void CaptureWorkspaceDimensions()
     {
         if (SidebarBorder.IsVisible && Bounds.Width >= 1100) _dockLayout.LeftWidth = ShellGrid.ColumnDefinitions[0].ActualWidth;
-        if (RightPanelBorder.IsVisible && !IsRightDrawerForTesting) _dockLayout.RightWidth = WorkspaceShell.ColumnDefinitions[2].ActualWidth;
+        if (RightPanelBorder.IsVisible && !IsRightDrawerForTesting && !_browserFullView) _dockLayout.RightWidth = WorkspaceShell.ColumnDefinitions[2].ActualWidth;
         if (TerminalBorder.IsVisible) _dockLayout.BottomHeight = WorkspaceShell.RowDefinitions[2].ActualHeight;
         SaveWorkspaceDimensions();
     }

@@ -38,13 +38,26 @@ public static class TextSegmenter
             var fenceEnd = afterFence.IndexOf(Fence, StringComparison.Ordinal);
             if (fenceEnd < 0)
             {
-                // 未闭合的围栏（流式中）：当作代码段展示，等后续 delta 补齐
-                AddCode(segments, afterFence, string.Empty);
+                // 未闭合的围栏（流式中）：先看语言；图表类要整段留给 Markdown 渲染器，
+                // 否则闭合的一瞬间会从代码块切换成图表，产生一次跳变。
+                var openLanguage = FirstLine(afterFence);
+                if (IsRichFence(openLanguage)) AddPlain(segments, remaining[fenceStart..]);
+                else AddCode(segments, afterFence, string.Empty);
                 break;
             }
 
             var code = afterFence[..fenceEnd];
             var language = ExtractLanguage(ref code);
+
+            // Mermaid 围栏不能当普通代码块切走：它是图表，必须整段交给 Markdown 渲染器。
+            if (IsRichFence(language))
+            {
+                var blockEnd = fenceStart + Fence.Length + fenceEnd + Fence.Length;
+                AddPlain(segments, remaining[fenceStart..blockEnd]);
+                remaining = remaining[blockEnd..];
+                continue;
+            }
+
             AddCode(segments, code, language);
             remaining = afterFence[(fenceEnd + Fence.Length)..];
         }
@@ -66,6 +79,16 @@ public static class TextSegmenter
         {
             segments.Add(new TextSegment(true, code.Trim('\r', '\n'), language));
         }
+    }
+
+    /// <summary>这些语言由 Markdown 渲染器处理（图表等），不按代码块切分。</summary>
+    private static bool IsRichFence(string language) =>
+        language.Equals("mermaid", StringComparison.OrdinalIgnoreCase);
+
+    private static string FirstLine(string text)
+    {
+        var newline = text.IndexOfAny(new[] { (char)10, (char)13 });
+        return (newline < 0 ? text : text[..newline]).Trim();
     }
 
     private static string ExtractLanguage(ref string code)

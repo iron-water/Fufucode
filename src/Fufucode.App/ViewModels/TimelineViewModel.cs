@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -32,6 +34,9 @@ public sealed partial class TimelineViewModel : ViewModelBase
     // 当前回合容器：同一用户提交后的连续 assistant 消息都合并到这里。
     private AssistantMessageViewModel? _currentTurn;
     private DateTimeOffset _currentTurnStartedAt;
+    // 本地乐观显示、等待后端确认的用户消息。
+    private UserMessageViewModel? _pendingUser;
+    private CancellationTokenSource? _submissionCts;
 
     public TimelineViewModel(IChatSession session, IRefreshScheduler scheduler, IClipboardService clipboard)
     {
@@ -55,7 +60,12 @@ public sealed partial class TimelineViewModel : ViewModelBase
     [ObservableProperty]
     private int _pendingSinceScrollUp;
 
-    public bool ShowBackToLatest => !IsAtBottom;
+    /// <summary>离底超过阈值才显示"回到最新"，避免轻微滚动就弹按钮。</summary>
+    [ObservableProperty] private bool _backToLatestVisible;
+
+    public bool ShowBackToLatest => BackToLatestVisible;
+
+    public void SetBackToLatestVisible(bool visible) => BackToLatestVisible = visible;
 
     public string BackToLatestLabel => PendingSinceScrollUp > 0
         ? $"回到最新（+{PendingSinceScrollUp}）"
@@ -64,6 +74,9 @@ public sealed partial class TimelineViewModel : ViewModelBase
     /// <summary>请求视图滚动到底部（视图订阅后调用 ScrollViewer.ScrollToEnd）。</summary>
     public event Action? ScrollToEndRequested;
 
+    /// <summary>显式的"回到最新"操作：界面可对它做平滑滚动。</summary>
+    public event Action? ScrollToEndSmoothRequested;
+
     /// <summary>新建会话：清空时间线与重建器。</summary>
     public void Reset()
     {
@@ -71,6 +84,9 @@ public sealed partial class TimelineViewModel : ViewModelBase
         _byId.Clear();
         _rebuilder.Reset();
         _currentTurn = null;
+        _pendingUser = null;
+        _submissionCts?.Cancel();
+        _submissionCts = null;
         PendingSinceScrollUp = 0;
         IsAtBottom = true;
     }
@@ -136,6 +152,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
         if (atBottom)
         {
             PendingSinceScrollUp = 0;
+            BackToLatestVisible = false;
         }
     }
 
@@ -147,7 +164,17 @@ public sealed partial class TimelineViewModel : ViewModelBase
         ScrollToEndRequested?.Invoke();
     }
 
-    partial void OnIsAtBottomChanged(bool value) => OnPropertyChanged(nameof(ShowBackToLatest));
+    /// <summary>用户主动"回到最新"：走平滑滚动；流式自动跟随仍用瞬时滚动，避免互相打断。</summary>
+    [RelayCommand]
+    private void ScrollToLatestSmooth()
+    {
+        IsAtBottom = true;
+        PendingSinceScrollUp = 0;
+        BackToLatestVisible = false;
+        ScrollToEndSmoothRequested?.Invoke();
+    }
+
+    partial void OnBackToLatestVisibleChanged(bool value) => OnPropertyChanged(nameof(ShowBackToLatest));
 
     partial void OnPendingSinceScrollUpChanged(int value)
     {
@@ -191,6 +218,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
             ApplyBatch();
             if (e is SessionEvent.TurnSettled settled)
             {
+                ConfirmPendingUser();
                 FinalizeCurrentTurn(settled.Outcome);
                 RefreshTurnSummaries();
             }
@@ -204,9 +232,13 @@ public sealed partial class TimelineViewModel : ViewModelBase
 
         foreach (var entry in batch.AddedEntries)
         {
-            // 用户消息是硬边界：先收敛上一回合，再开新回合。
+            // 用户消息是硬边界；若已有本地乐观气泡，则复用它而不是再插一条。
             if (entry.Kind == TimelineEntryKind.UserMessage)
             {
+                if (TryReconcilePendingUser(entry)) continue;
+                // MessageStarted 先到时还没有正文：先认领乐观气泡，等 MessageFinished 再比对文本，
+                // 否则会多插一条重复的用户消息，并把回合占位提前终结成空回合。
+                if (AdoptPendingUserUntilText(entry)) continue;
                 FinalizeCurrentTurn(SessionOutcome.Unknown);
             }
 
@@ -243,6 +275,7 @@ public sealed partial class TimelineViewModel : ViewModelBase
                     break;
                 case (UserMessageViewModel user, ChatMessage message, _):
                     user.UpdateFrom(message);
+                    if (ReferenceEquals(user, _pendingUser)) ConfirmPendingUser();
                     break;
                 case (ErrorEntryViewModel error, _, ErrorEntry errorEntry):
                     error.UpdateFrom(errorEntry);
@@ -266,9 +299,146 @@ public sealed partial class TimelineViewModel : ViewModelBase
     }
 
     /// <summary>
+    /// 发送开始：立即显示用户气泡与回合占位，不等待后端回执。
+    /// 这样所有后端的进入动画从同一时刻开始，差异只体现在"等待提示"出现的时间。
+    /// </summary>
+    public void BeginSubmission(string text)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => BeginSubmission(text));
+            return;
+        }
+
+        FinalizeCurrentTurn(SessionOutcome.Unknown);
+        _submissionCts?.Cancel();
+        _submissionCts = new CancellationTokenSource();
+        var cancellation = _submissionCts.Token;
+
+        var profile = (_session as IPresentationProfiled)?.Presentation ?? BackendPresentationProfile.Default;
+
+        var pending = new UserMessageViewModel
+        {
+            Id = "pending-" + Guid.NewGuid().ToString("N"),
+            Timestamp = DateTimeOffset.Now,
+            Text = text,
+            IsPending = true,
+        };
+        _pendingUser = pending;
+        Entries.Add(pending);
+
+        var turn = new AssistantMessageViewModel(_clipboard)
+        {
+            Id = "turn-" + Guid.NewGuid().ToString("N"),
+            Timestamp = DateTimeOffset.Now,
+            Presentation = profile,
+            IsAwaitingFirstEvent = true,
+            AwaitingText = profile.HasSlowStartup ? $"正在启动 {profile.Name}…" : "正在等待响应…",
+        };
+        _currentTurn = turn;
+        _currentTurnStartedAt = turn.Timestamp;
+        Entries.Add(turn);
+
+        if (IsAtBottom) ScrollToEndRequested?.Invoke();
+
+        _ = ShowAckHintAfterAsync(pending, profile, cancellation);
+        _ = ShowAwaitingAfterAsync(turn, profile, cancellation);
+    }
+
+    /// <summary>后端拒绝发送：保留气泡并转失败态，移除尚未开始的回合占位。</summary>
+    public void FailSubmission()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(FailSubmission);
+            return;
+        }
+
+        _submissionCts?.Cancel();
+        if (_pendingUser is { } pending)
+        {
+            pending.IsPending = false;
+            pending.IsFailed = true;
+            pending.ShowAckHint = false;
+            _pendingUser = null;
+        }
+
+        if (_currentTurn is { IsAwaitingFirstEvent: true } turn)
+        {
+            turn.DetachForRemoval();
+            Entries.Remove(turn);
+            _currentTurn = null;
+        }
+    }
+
+    private async Task ShowAckHintAfterAsync(UserMessageViewModel pending,
+        BackendPresentationProfile profile, CancellationToken cancellationToken)
+    {
+        if (profile.AckHintDelayMs <= 0) return;
+        try
+        {
+            await Task.Delay(profile.AckHintDelayMs, cancellationToken);
+        }
+        catch (OperationCanceledException) { return; }
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+            if (ReferenceEquals(_pendingUser, pending) && pending.IsPending) pending.ShowAckHint = true;
+        });
+    }
+
+    private async Task ShowAwaitingAfterAsync(AssistantMessageViewModel turn,
+        BackendPresentationProfile profile, CancellationToken cancellationToken)
+    {
+        var delay = profile.HasSlowStartup ? 0 : profile.AwaitFirstEventGraceMs;
+        if (delay > 0)
+        {
+            try { await Task.Delay(delay, cancellationToken); }
+            catch (OperationCanceledException) { return; }
+        }
+
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (cancellationToken.IsCancellationRequested) return;
+            if (ReferenceEquals(_currentTurn, turn) && turn.IsAwaitingFirstEvent)
+                turn.ShowAwaitingIndicator = true;
+        });
+    }
+
+    /// <summary>
     /// 把一条 assistant 消息并入当前回合；回合不存在或已结束时新建。
     /// 这是"一个回合一个头像"的根：同一用户提交产生的多条消息不再各建条目。
     /// </summary>
+    /// <summary>把后端回传的用户消息与本地乐观气泡合并，避免重复显示。</summary>
+    /// <summary>
+    /// 用户消息条目尚无正文时，先把后端条目 id 映射到乐观气泡，
+    /// 这样它后续的增量会落在同一个气泡上，不会重复插入。
+    /// </summary>
+    private bool AdoptPendingUserUntilText(TimelineEntry entry)
+    {
+        if (_pendingUser is not { } pending || entry.Message is not { } message) return false;
+        if (message.Blocks.OfType<TextBlock>().Any()) return false;
+        _byId[entry.Id] = pending;
+        return true;
+    }
+
+    private bool TryReconcilePendingUser(TimelineEntry entry)
+    {
+        if (_pendingUser is not { } pending || entry.Message is not { } message) return false;
+        var text = message.Blocks.OfType<TextBlock>().FirstOrDefault()?.Text ?? string.Empty;
+        if (!string.Equals(pending.Text, text, StringComparison.Ordinal)) return false;
+
+        pending.UpdateFrom(message);
+        pending.IsPending = false;
+        pending.IsFailed = false;
+        pending.ShowAckHint = false;
+        _byId[entry.Id] = pending;
+        _pendingUser = null;
+        _submissionCts?.Cancel();
+        return true;
+    }
+
     private AssistantMessageViewModel MergeIntoTurn(TimelineEntry entry, ChatMessage message)
     {
         if (_currentTurn is null || _currentTurn.IsComplete)
@@ -279,8 +449,20 @@ public sealed partial class TimelineViewModel : ViewModelBase
             Entries.Add(_currentTurn);
         }
 
+        // 后端已开始产出：用户消息视为确认，等待提示停止。
+        ConfirmPendingUser();
+        _submissionCts?.Cancel();
         _currentTurn.MergeMessage(message);
         return _currentTurn;
+    }
+
+    private void ConfirmPendingUser()
+    {
+        if (_pendingUser is not { } pending) return;
+        pending.IsPending = false;
+        pending.IsFailed = false;
+        pending.ShowAckHint = false;
+        _pendingUser = null;
     }
 
     /// <summary>回合结束：定阶段、算耗时、收起未固定的工具组与思考块。</summary>

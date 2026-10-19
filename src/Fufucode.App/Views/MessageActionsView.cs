@@ -148,6 +148,13 @@ public sealed class MessageActionsView : UserControl
             }
         };
         PointerExited += (_, _) => UpdateVisibility();
+
+        // 底部卡只在回合结束后出现；出现时做一次淡入，避免突然插入造成滚动跳动。
+        PropertyChanged += (_, e) =>
+        {
+            if (e.Property == IsVisibleProperty && IsVisible) Motion.AnimateFooter(this);
+        };
+        AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
     }
 
     private static void SetFeedback(Button like, Button dislike, bool positive)

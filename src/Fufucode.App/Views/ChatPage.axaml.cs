@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -16,6 +17,9 @@ public partial class ChatPage : UserControl
     private readonly ImeEnterGuard _imeGuard = new();
     private bool _preeditHooked;
     private bool _programmaticScroll;
+    private Avalonia.Threading.DispatcherTimer? _scrollTimer;
+    private long _programmaticUntilTicks;
+    private long _lastUserInputTicks;
     private MainViewModel? _attachedViewModel;
 
     public ChatPage()
@@ -39,7 +43,7 @@ public partial class ChatPage : UserControl
         DataContextChanged += (_, _) =>
         {
             if (_attachedViewModel is { } previous)
-            { previous.Input.FocusRequested -= OnInputFocusRequested; previous.Input.PropertyChanged -= ComposerChanged; previous.Timeline.Entries.CollectionChanged -= TimelineChanged; }
+            { previous.Input.FocusRequested -= OnInputFocusRequested; previous.Input.PropertyChanged -= ComposerChanged; previous.Timeline.Entries.CollectionChanged -= TimelineChanged; previous.Timeline.ScrollToEndSmoothRequested -= AnimateScrollToEnd; }
             _attachedViewModel = DataContext as MainViewModel;
             // 命令填入后聚焦输入框（H3 命令 Flyout / 扩展页「填入」）。
             if (DataContext is MainViewModel vm)
@@ -47,10 +51,63 @@ public partial class ChatPage : UserControl
                 vm.Input.FocusRequested += OnInputFocusRequested;
                 vm.Input.PropertyChanged += ComposerChanged;
                 vm.Timeline.Entries.CollectionChanged += TimelineChanged;
+                vm.Timeline.ScrollToEndSmoothRequested += AnimateScrollToEnd;
                 RefreshComposerTools();
             }
         };
         AddHandler(PointerReleasedEvent, SelectionReleased, RoutingStrategies.Bubble, handledEventsToo: true);
+
+        // 滚动跟随：用户一操作就标记时间，150ms 内不抢滚动；程序化滚动有短暂 latch。
+        TimelineScroller.PointerWheelChanged += (_, _) => MarkUserScrollInput();
+        TimelineScroller.PointerPressed += (_, _) => MarkUserScrollInput();
+        TimelineScroller.KeyDown += (_, _) => MarkUserScrollInput();
+    }
+
+    private void MarkUserScrollInput() => _lastUserInputTicks = Stopwatch.GetTimestamp();
+
+    /// <summary>消息/回合首次挂到可视树时播放进入动画；流式刷新不会重播。</summary>
+    private void OnMessageEntryLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control) return;
+        control.Loaded -= OnMessageEntryLoaded;
+        Motion.AnimateIn(control);
+    }
+
+    /// <summary>变更卡的"查看变更"：打开工作区的变更面板。变更来源由 WorkspacePanel 自己判断。</summary>
+    private void OnViewChanges(object? sender, RoutedEventArgs e)
+    {
+        if (TopLevel.GetTopLevel(this) is not MainWindow window) return;
+        window.OpenDockPage("changes", DockZone.Right);
+    }
+
+    /// <summary>撤销本轮文件改动：回到每个文件在本回合首次写入前的状态。</summary>
+    private void OnUndoChanges(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: AssistantMessageViewModel message })
+            message.ChangeCard.Undo();
+    }
+
+    /// <summary>展开/收起变更卡的文件列表。</summary>
+    private void OnToggleChangeList(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: AssistantMessageViewModel message })
+            message.ChangeCard.ToggleExpanded();
+    }
+
+    /// <summary>沉浸式模式下展开被收起的输入区，并把焦点交给输入框。</summary>
+    private void OnExpandComposer(object? sender, RoutedEventArgs e)
+    {
+        ComposerCard.IsVisible = true;
+        ComposerRevealButton.IsVisible = false;
+        InputBox.Focus();
+        if (DataContext is MainViewModel { Timeline.IsAtBottom: true })
+            TimelineScroller.ScrollToEnd();
+    }
+
+    /// <summary>展开/收起某个文件的内联 diff。</summary>
+    private void OnToggleFileDiff(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: TurnFileChangeViewModel file }) file.ToggleDiff();
     }
 
     private void UpdateComposerToolbar()
@@ -102,9 +159,58 @@ public partial class ChatPage : UserControl
     /// <summary>会话头/输入区几何变化通知（窗口层重算抽屉避让带）。</summary>
     internal event EventHandler? ContentBandChanged;
 
+    /// <summary>
+    /// 显式"回到最新"：220ms 缓出滚动，比瞬移更容易看清落点。
+    /// 流式自动跟随仍走 <see cref="ScrollToEnd"/> 的瞬时滚动，两者互不打断。
+    /// </summary>
+    private void AnimateScrollToEnd() =>
+        AnimateScrollTo(Math.Max(0, TimelineScroller.Extent.Height - TimelineScroller.Viewport.Height));
+
+    /// <summary>
+    /// 缓出滚动到目标偏移。滚动期间标记为程序化滚动，
+    /// 避免被"用户滚动"判定打断自动跟随。
+    /// </summary>
+    private void AnimateScrollTo(double target)
+    {
+        if (MotionPreference.ReducedMotion)
+        {
+            TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, target);
+            return;
+        }
+
+        var start = TimelineScroller.Offset.Y;
+        var distance = target - start;
+        if (Math.Abs(distance) < 4)
+        {
+            TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, target);
+            return;
+        }
+
+        _scrollTimer?.Stop();
+        var startedAt = Stopwatch.GetTimestamp();
+        const double durationMs = 220;
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _scrollTimer = timer;
+        timer.Tick += (_, _) =>
+        {
+            var elapsed = (Stopwatch.GetTimestamp() - startedAt) * 1000.0 / Stopwatch.Frequency;
+            var t = Math.Clamp(elapsed / durationMs, 0, 1);
+            var eased = 1 - Math.Pow(1 - t, 3);
+            _programmaticScroll = true;
+            _programmaticUntilTicks = Stopwatch.GetTimestamp() + (long)(Stopwatch.Frequency * 0.12);
+            TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, start + distance * eased);
+            if (t < 1) return;
+            timer.Stop();
+            if (ReferenceEquals(_scrollTimer, timer)) _scrollTimer = null;
+        };
+        timer.Start();
+    }
+
     public void ScrollToEnd()
     {
         _programmaticScroll = true;
+        // 不能立即复位：ScrollChanged 是异步到达的，立即复位会把程序化滚动误判为用户滚动。
+        _programmaticUntilTicks = Stopwatch.GetTimestamp() + (long)(Stopwatch.Frequency * 0.12);
         try
         {
             TimelineScroller.ScrollToEnd();
@@ -125,14 +231,18 @@ public partial class ChatPage : UserControl
 
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_programmaticScroll || DataContext is not MainViewModel vm)
+        if (_programmaticScroll ||
+            Stopwatch.GetTimestamp() < _programmaticUntilTicks ||
+            Stopwatch.GetTimestamp() - _lastUserInputTicks < Stopwatch.Frequency * 0.15 ||
+            DataContext is not MainViewModel vm)
         {
             return;
         }
 
         var scroller = (ScrollViewer)sender!;
         var distanceToBottom = scroller.Extent.Height - scroller.Viewport.Height - scroller.Offset.Y;
-        vm.Timeline.SetAutoScrollAtBottom(distanceToBottom <= 32);
+        vm.Timeline.SetAutoScrollAtBottom(distanceToBottom <= 40);
+        vm.Timeline.SetBackToLatestVisible(distanceToBottom > 120);
     }
 
     /// <summary>把输入框模板内 TextPresenter 的真实组合状态（PreeditText）接入回车守卫。</summary>

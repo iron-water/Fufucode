@@ -118,10 +118,18 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
     }
 
     private ProductionToolDispatcher? ResolveProductionDispatcher() =>
-        _toolDispatcher switch
+        ResolveProductionDispatcher(_toolDispatcher);
+
+    /// <summary>沿调度链向下找到真正的生产调度器（权限模式与计划状态都在它上面）。</summary>
+    private static ProductionToolDispatcher? ResolveProductionDispatcher(IPureToolDispatcher? dispatcher) =>
+        dispatcher switch
         {
-            ProductionToolDispatcher dispatcher => dispatcher,
-            Plugins.PluginToolRegistry registry => registry.InnerDispatcher as ProductionToolDispatcher,
+            ProductionToolDispatcher production => production,
+            Plugins.PluginToolRegistry registry => ResolveProductionDispatcher(registry.InnerDispatcher),
+            SkillAwareDispatcher skill => ResolveProductionDispatcher(skill.Inner),
+            McpGatewayDispatcher mcp => ResolveProductionDispatcher(mcp.Inner),
+            SubagentDispatcher subagent => ResolveProductionDispatcher(subagent.Inner),
+            NativeToolComposite composite => ResolveProductionDispatcher(composite.Builtin),
             _ => null
         };
 

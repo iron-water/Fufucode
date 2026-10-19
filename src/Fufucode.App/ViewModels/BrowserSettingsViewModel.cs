@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
@@ -28,6 +29,10 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
 
     public string SettingsPath => _store?.Path ?? "（未连接数据根，改动仅保留在内存）";
     public bool IsConnected => _store is not null;
+
+    /// <summary>未打包 WebView2 扩展目录；不存在时由 Attach 创建。</summary>
+    private string _extensionsDirectory = "";
+    public string ExtensionsDirectory => _extensionsDirectory;
 
     /// <summary>设置文件加载失败的真实原因；null 表示无错误。</summary>
     public string? LoadError => _store?.LastLoadError;
@@ -67,6 +72,26 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
     {
         get => IndexOf(BrowserSettings.ScreenshotModes, Current.ScreenshotMode);
         set => Set(value, _ => { }, v => Persist(s => s with { ScreenshotMode = Pick(BrowserSettings.ScreenshotModes, v, "ask") }));
+    }
+
+    /// <summary>地址栏搜索模板；{0} 是转义后的搜索词。非法模板在保存时收敛回默认值。</summary>
+    public string SearchUrlTemplate
+    {
+        get => Current.SearchUrlTemplate;
+        set => Set(value, _ => { }, v => Persist(s => s with { SearchUrlTemplate = v ?? string.Empty }));
+    }
+
+    /// <summary>页面 UA；空 = WebView2 默认。仅影响网页显示，不改变下载/权限判断。</summary>
+    public string UserAgent
+    {
+        get => Current.UserAgent;
+        set => Set(value, _ => { }, v => Persist(s => s with { UserAgent = v ?? string.Empty }));
+    }
+
+    public bool AnnotationIncludeScreenshot
+    {
+        get => Current.AnnotationIncludeScreenshot;
+        set => Set(value, _ => { }, v => Persist(s => s with { AnnotationIncludeScreenshot = v }));
     }
 
     // ── 下载 ──
@@ -137,6 +162,15 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
         try
         {
             _store = dataRoot is { Length: > 0 } root ? new BrowserSettingsStore(root) : null;
+            if (dataRoot is { Length: > 0 })
+            {
+                try { _extensionsDirectory = BrowserExtensionLoader.EnsureDirectory(BrowserUserDataLayout.Resolve(dataRoot)); }
+                catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+                {
+                    _extensionsDirectory = BrowserExtensionLoader.ResolveDirectory(BrowserUserDataLayout.Resolve(dataRoot));
+                    Status = "浏览器扩展目录不可用：" + error.Message;
+                }
+            }
         }
         catch (Exception error)
         {
@@ -255,7 +289,9 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
         foreach (var name in new[]
         {
             nameof(IsConnected), nameof(SettingsPath), nameof(LoadError), nameof(HasLoadError), nameof(Status),
+            nameof(ExtensionsDirectory),
             nameof(BrowserUseEnabled), nameof(WebUrlOpenTargetIndex), nameof(LocalUrlOpenTargetIndex), nameof(ShowFullUrl),
+            nameof(SearchUrlTemplate), nameof(UserAgent), nameof(AnnotationIncludeScreenshot),
             nameof(ScreenshotModeIndex), nameof(PromptDownloadLocation), nameof(DownloadHistoryEnabled),
             nameof(DefaultDownloadDirectory), nameof(EnableSiteTools), nameof(DefaultBrowsePermissionIndex),
             nameof(DefaultDownloadPermissionIndex), nameof(AllowedSitesText), nameof(EnableFullCdpAccess),

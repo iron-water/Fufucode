@@ -74,7 +74,7 @@ internal static class CliSettingsTests
             Check(parsed.RootElement.EnumerateObject().Count() == 1 && parsed.RootElement.GetProperty("theme").GetString() == "light",
                 "CLI settings get key returns exactly one field");
 
-        await using (var session = await manager.CreateAsync(project))
+        await using (var session = await manager.CreateAsync(project, backend: BackendId.Pi))
         {
             var state = (await session.Coordinator.QueryStateAsync()).Data!.Value;
             Check(state.GetProperty("model").GetProperty("id").GetString() == "fixture-model" &&
@@ -144,7 +144,7 @@ internal static class CliSettingsTests
         using (var parsed = JsonDocument.Parse(await Settings(true, "get", "endpointCredentialConfigured")))
             Check(!parsed.RootElement.GetProperty("endpointCredentialConfigured").GetBoolean(),
                 "CLI cleared endpoint reports no configured credential");
-        await using (var cleared = await manager.CreateAsync(project))
+        await using (var cleared = await manager.CreateAsync(project, backend: BackendId.Pi))
         {
             var state = (await cleared.Coordinator.QueryStateAsync()).Data!.Value;
             Check(state.GetProperty("model").ValueKind == JsonValueKind.Null &&

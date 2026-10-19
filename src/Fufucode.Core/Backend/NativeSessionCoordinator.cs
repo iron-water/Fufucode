@@ -243,6 +243,24 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
             commands.AddRange(plugins.ActiveRegistrations
                 .Select(r => new { name = r.Name, description = r.Description, source = "plugin" }));
         }
+        if (_session.Mcp is { HasServers: true })
+        {
+            commands.Add(new
+            {
+                name = McpGatewayDispatcher.ToolName,
+                description = "MCP 服务器：list_servers / list_tools / call",
+                source = "mcp"
+            });
+        }
+        if (_session.Subagents is { } subagents)
+        {
+            commands.AddRange(subagents.Agents.Select(agent => new
+            {
+                name = "subagent:" + agent.Name,
+                description = agent.Description,
+                source = "subagent"
+            }));
+        }
         if (_session.Skills is { } skills)
         {
             commands.AddRange(skills.All

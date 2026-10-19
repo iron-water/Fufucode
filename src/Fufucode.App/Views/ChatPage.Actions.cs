@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -36,7 +37,17 @@ public partial class ChatPage
     {
         if (DataContext is not MainViewModel vm) return;
         var entry = vm.Timeline.Entries.FirstOrDefault(entry => entry.Id == id);
-        if (entry is not null) TimelineItems.ScrollIntoView(entry);
+        if (entry is null) return;
+
+        // 已实现的行：按它相对滚动区的位置平滑滚过去；未实现时退回框架的定位。
+        if (TimelineItems.ContainerFromItem(entry) is Avalonia.Visual container &&
+            container.TranslatePoint(new Point(0, 0), TimelineScroller) is { } point)
+        {
+            AnimateScrollTo(Math.Max(0, TimelineScroller.Offset.Y + point.Y - 12));
+            return;
+        }
+
+        TimelineItems.ScrollIntoView(entry);
     }
 
     private void SelectionReleased(object? sender, PointerReleasedEventArgs e)

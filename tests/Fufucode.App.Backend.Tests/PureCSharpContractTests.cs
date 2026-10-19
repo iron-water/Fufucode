@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
@@ -536,6 +537,255 @@ internal static class PureCSharpContractTests
                 "{\"command\":\"" + cwdCommand + "\",\"cwd\":\"../outside\"}"));
             checks.Check(!badCwd.Success && badCwd.Content.Contains("超出工作区"),
                 "run_command 的 cwd 仍受工作区沙箱约束");
+
+            // ════════════════ MCP：stdio 客户端 + 网关工具 ════════════════
+            var mcpHome = Path.Combine(tempDir, "mcp-home");
+            Directory.CreateDirectory(mcpHome);
+            var processPath = Environment.ProcessPath ?? "dotnet";
+            var stdioArgs = new List<string>();
+            if (string.Equals(Path.GetFileNameWithoutExtension(processPath), "dotnet",
+                    StringComparison.OrdinalIgnoreCase))
+                stdioArgs.Add(typeof(PureCSharpContractTests).Assembly.Location);
+            stdioArgs.Add("--fake-mcp-stdio");
+
+            await using (var stdioManager = McpManager.Create(new[]
+                         {
+                             new McpServerConfig("fake", "stdio", Command: processPath,
+                                 Args: stdioArgs, TimeoutSeconds: 20)
+                         }, mcpHome))
+            {
+                var stdioTools = await stdioManager.ListToolsAsync("fake", CancellationToken.None);
+                checks.Check(stdioTools.Any(tool => tool.Name == "echo") &&
+                             stdioTools.Any(tool => tool.Name == "fail"),
+                    "MCP stdio：tools/list 返回服务器声明的工具");
+                var echo = await stdioManager.CallAsync("fake", "echo",
+                    JsonSerializer.SerializeToElement(new { text = "ping" }), CancellationToken.None);
+                checks.Check(echo.Success && echo.Content.Contains("echo:ping"),
+                    "MCP stdio：tools/call 返回文本内容");
+                var failed = await stdioManager.CallAsync("fake", "fail",
+                    JsonSerializer.SerializeToElement(new { }), CancellationToken.None);
+                checks.Check(!failed.Success && failed.Content.Contains("expected failure"),
+                    "MCP isError 映射为失败结果");
+
+                var gateway = new McpGatewayDispatcher(new ProductionToolDispatcher(tempDir), stdioManager);
+                var listServers = await gateway.DispatchAsync(new PureToolCall("m1", "mcp",
+                    "{\"action\":\"list_servers\"}"));
+                checks.Check(listServers.Success && listServers.Content.Contains("fake"), "MCP 网关列出服务器");
+                var listTools = await gateway.DispatchAsync(new PureToolCall("m2", "mcp",
+                    "{\"action\":\"list_tools\",\"server\":\"fake\"}"));
+                checks.Check(listTools.Success && listTools.Content.Contains("echo") &&
+                             listTools.Content.Contains("inputSchema"), "MCP 网关按需返回工具与 Schema");
+                var gatewayCall = await gateway.DispatchAsync(new PureToolCall("m3", "mcp",
+                    "{\"action\":\"call\",\"server\":\"fake\",\"tool\":\"echo\",\"arguments\":{\"text\":\"gw\"}}"));
+                checks.Check(gatewayCall.Success && gatewayCall.Content.Contains("echo:gw") &&
+                             gatewayCall.Content.Contains("[MCP fake/echo]"),
+                    "MCP 网关调用工具并标注来源");
+            }
+
+            // ════════════════ MCP：Streamable HTTP（JSON 与 SSE） ════════════════
+            using (var httpServer = new FakeMcpHttpServer())
+            {
+                await using var httpManager = McpManager.Create(new[]
+                {
+                    new McpServerConfig("http", "http", Url: httpServer.McpUrl, TimeoutSeconds: 10)
+                }, mcpHome);
+                var httpCall = await httpManager.CallAsync("http", "echo",
+                    JsonSerializer.SerializeToElement(new { text = "json" }), CancellationToken.None);
+                checks.Check(httpCall.Success && httpCall.Content.Contains("echo:json"),
+                    "MCP HTTP：JSON 响应可正常调用");
+                checks.Check(httpServer.McpRequestCount >= 3, "MCP HTTP 完成 initialize/list/call 往返");
+            }
+
+            using (var sseServer = new FakeMcpHttpServer { UseSse = true })
+            {
+                await using var sseManager = McpManager.Create(new[]
+                {
+                    new McpServerConfig("sse", "http", Url: sseServer.McpUrl, TimeoutSeconds: 10)
+                }, mcpHome);
+                var sseCall = await sseManager.CallAsync("sse", "echo",
+                    JsonSerializer.SerializeToElement(new { text = "sse" }), CancellationToken.None);
+                checks.Check(sseCall.Success && sseCall.Content.Contains("echo:sse"),
+                    "MCP HTTP：SSE 响应可正常调用");
+            }
+
+            // ════════════════ MCP：Bearer 与 OAuth ════════════════
+            using (var bearerServer = new FakeMcpHttpServer { RequiredBearerToken = "test-token" })
+            {
+                await using var bearerManager = McpManager.Create(new[]
+                {
+                    new McpServerConfig("bearer", "http", Url: bearerServer.McpUrl, TimeoutSeconds: 10,
+                        Headers: new Dictionary<string, string> { ["Authorization"] = "Bearer test-token" })
+                }, mcpHome);
+                var bearerCall = await bearerManager.CallAsync("bearer", "echo",
+                    JsonSerializer.SerializeToElement(new { text = "bearer" }), CancellationToken.None);
+                checks.Check(bearerCall.Success, "MCP HTTP：显式 Bearer 头通过认证");
+            }
+
+            using (var oauthServer = new FakeMcpHttpServer { RequiredBearerToken = "test-token" })
+            {
+                var oauthConfig = new McpServerConfig("oauth", "http", Url: oauthServer.McpUrl,
+                    TimeoutSeconds: 10,
+                    Auth: new McpAuthConfig("oauth", GrantType: "client_credentials",
+                        TokenUrl: oauthServer.TokenUrl, ClientId: "client", ClientSecret: "secret"));
+                await using var oauthManager = McpManager.Create(new[] { oauthConfig }, mcpHome);
+                var oauthCall = await oauthManager.CallAsync("oauth", "echo",
+                    JsonSerializer.SerializeToElement(new { text = "oauth" }), CancellationToken.None);
+                checks.Check(oauthCall.Success, "MCP OAuth client_credentials 获取令牌并调用成功");
+                checks.Check(oauthServer.TokenRequests.Any(body => body.Contains("grant_type=client_credentials")),
+                    "OAuth 令牌请求使用 client_credentials");
+            }
+
+            using (var codeServer = new FakeMcpHttpServer())
+            {
+                string? authorizationUrlSeen = null;
+                var codeConfig = new McpAuthConfig("oauth", GrantType: "authorization_code",
+                    TokenUrl: codeServer.TokenUrl, AuthorizationUrl: "http://127.0.0.1:1/authorize",
+                    ClientId: "client", Scopes: new[] { "read" });
+                var provider = new OAuthTokenProvider("code-test", codeConfig, mcpHome, openBrowser: url =>
+                {
+                    authorizationUrlSeen = url;
+                    var queryIndex = url.IndexOf('?');
+                    var query = url[(queryIndex + 1)..];
+                    var values = query.Split('&').Select(pair => pair.Split('=', 2))
+                        .ToDictionary(parts => Uri.UnescapeDataString(parts[0]),
+                            parts => parts.Length > 1 ? Uri.UnescapeDataString(parts[1]) : string.Empty);
+                    _ = Task.Run(async () =>
+                    {
+                        await Task.Delay(50);
+                        using var browser = new HttpClient();
+                        await browser.GetAsync($"{values["redirect_uri"]}?code=abc&state={values["state"]}");
+                    });
+                    return Task.CompletedTask;
+                });
+                var token = await provider.GetAccessTokenAsync(CancellationToken.None);
+                checks.Check(token == "test-token", "OAuth authorization_code + PKCE 回调换取令牌");
+                checks.Check(authorizationUrlSeen?.Contains("code_challenge_method=S256") == true,
+                    "授权 URL 携带 PKCE challenge");
+                checks.Check(codeServer.TokenRequests.Any(body => body.Contains("grant_type=authorization_code") &&
+                                                                 body.Contains("code_verifier=")),
+                    "令牌交换使用授权码与 PKCE verifier");
+            }
+
+            // ════════════════ MCP：项目配置信任门禁 ════════════════
+            var projectMcpDir = Path.Combine(tempDir, ".fumo");
+            Directory.CreateDirectory(projectMcpDir);
+            await File.WriteAllTextAsync(Path.Combine(projectMcpDir, "mcp.json"),
+                "{\"servers\":{\"project-server\":{\"transport\":\"stdio\",\"command\":\"echo\"}}}");
+            await File.WriteAllTextAsync(McpConfigLoader.UserConfigPath(mcpHome),
+                "{\"trustProjectConfig\":false,\"servers\":{\"user-server\":{\"transport\":\"stdio\",\"command\":\"echo\"}}}");
+            var untrusted = McpConfigLoader.Load(tempDir, mcpHome);
+            checks.Check(untrusted.Any(s => s.Name == "user-server") && !untrusted.Any(s => s.Name == "project-server"),
+                "默认不加载项目级 MCP 服务器");
+            await File.WriteAllTextAsync(McpConfigLoader.UserConfigPath(mcpHome),
+                "{\"trustProjectConfig\":true,\"servers\":{\"user-server\":{\"transport\":\"stdio\",\"command\":\"echo\"}}}");
+            var trusted = McpConfigLoader.Load(tempDir, mcpHome);
+            checks.Check(trusted.Any(s => s.Name == "project-server"),
+                "用户显式信任后加载项目级 MCP 服务器");
+
+            // ════════════════ MCP：会话声明与系统提示 ════════════════
+            var mcpCapturing = new CapturingTextClient("mcp 答复");
+            await using (var mcpManager = McpManager.Create(new[]
+                         {
+                             new McpServerConfig("listed", "stdio", Command: "unused")
+                         }, mcpHome))
+            {
+                var mcpDispatcher = new McpGatewayDispatcher(
+                    new SkillAwareDispatcher(dispatcher, skills), mcpManager);
+                var mcpEngine = new PureCSharpAgentEngine(mcpDispatcher, mcpCapturing);
+                var mcpSession = new NativeCSharpChatSession(mcpEngine, "mcp-session", "m",
+                    skills: skills, mcp: mcpManager);
+                var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                mcpSession.Event += (_, e) => { if (e is SessionEvent.TurnSettled) settled.TrySetResult(); };
+                await mcpSession.SendAsync("你好");
+                await settled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+                var mcpRequest = mcpCapturing.Requests[^1];
+                checks.Check(mcpRequest.ToolNames.Contains("mcp"), "配置 MCP 服务器后会话声明 mcp 工具");
+                checks.Check(mcpRequest.ToolDefinitions?.Any(d => d.Name == "mcp") == true, "mcp 工具携带参数 Schema");
+                checks.Check(mcpRequest.Messages[0].Role == PureAgentRole.System &&
+                             mcpRequest.Messages[0].Content.Contains("MCP 服务器"),
+                    "系统提示注入 MCP 服务器目录");
+                await mcpSession.DisposeAsync();
+            }
+
+            // ════════════════ 子代理：定义发现与工具白名单 ════════════════
+            var agentDir = Path.Combine(tempDir, ".fumo", "agents");
+            Directory.CreateDirectory(agentDir);
+            await File.WriteAllTextAsync(Path.Combine(agentDir, "reviewer.md"),
+                "---\nname: reviewer\ndescription: 只读代码审查\ntools: read_file, grep_search\nmaxTurns: 5\n---\n你是只读审查子代理。");
+            var agents = AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home"));
+            checks.Check(agents.TryGet("explore", out var exploreAgent) &&
+                         exploreAgent.Tools.Contains("read_file") && !exploreAgent.Tools.Contains("run_command"),
+                "内置 explore 子代理只有只读工具");
+            checks.Check(agents.TryGet("reviewer", out var reviewerAgent) &&
+                         reviewerAgent.Tools.SequenceEqual(new[] { "read_file", "grep_search" }) &&
+                         reviewerAgent.MaxTurns == 5,
+                "发现 Markdown 子代理定义并解析工具白名单与轮次");
+            checks.Check(agents.BuildPromptSection().Contains("explore") &&
+                         agents.BuildPromptSection().Contains("reviewer"),
+                "系统提示目录列出可用子代理");
+
+            // ════════════════ 子代理：隔离上下文与工具过滤 ════════════════
+            var recording = new RecordingDispatcher();
+            var runCommandCall = new PureToolCall("sc1", "run_command", "{\"command\":\"echo hi\"}");
+            var exploreRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                new FixedToolCallClient(runCommandCall, "子代理完成"), recording, "m");
+            var exploreResult = await exploreRunner.RunAsync("explore", "检查项目", null, CancellationToken.None);
+            checks.Check(exploreResult.Success && exploreResult.Content.Contains("子代理完成"),
+                "子代理返回最终文本");
+            checks.Check(recording.Calls.Count == 0,
+                "explore 子代理的越权 run_command 被工具白名单拦截");
+
+            var generalRecording = new RecordingDispatcher();
+            var generalRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                new FixedToolCallClient(runCommandCall, "通用子代理完成"), generalRecording, "m");
+            var generalResult = await generalRunner.RunAsync("general", "执行命令", null, CancellationToken.None);
+            checks.Check(generalResult.Success && generalRecording.Calls.Count == 1 &&
+                         generalResult.ToolCalls == 1,
+                "general 子代理按定义执行允许的工具");
+
+            var unknownAgent = await exploreRunner.RunAsync("missing", "任务", null, CancellationToken.None);
+            checks.Check(!unknownAgent.Success && unknownAgent.Error?.Contains("未知子代理") == true,
+                "未知子代理明确失败而不是回退");
+
+            // ════════════════ 子代理：工具入口与会话声明 ════════════════
+            var subagentDispatcher = new SubagentDispatcher(new RecordingDispatcher(), exploreRunner);
+            var subagentList = await subagentDispatcher.DispatchAsync(new PureToolCall("sa1", "subagent", "{}"));
+            checks.Check(subagentList.Success && subagentList.Content.Contains("explore"),
+                "subagent 工具缺省 prompt 时列出可用子代理");
+            var subagentCall = await subagentDispatcher.DispatchAsync(new PureToolCall("sa2", "subagent",
+                "{\"agent\":\"explore\",\"prompt\":\"查找入口\"}"));
+            checks.Check(subagentCall.Success && subagentCall.Content.Contains("[子代理 explore]") &&
+                         subagentCall.Content.Contains("子代理完成"),
+                "subagent 工具调用返回带来源标记的结论");
+
+            var subCapturing = new CapturingTextClient("父会话答复");
+            var subSession = new NativeCSharpChatSession(
+                new PureCSharpAgentEngine(new SubagentDispatcher(new RecordingDispatcher(), exploreRunner),
+                    subCapturing),
+                "subagent-session", "m", subagents: exploreRunner);
+            var subSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            subSession.Event += (_, e) => { if (e is SessionEvent.TurnSettled) subSettled.TrySetResult(); };
+            await subSession.SendAsync("你好");
+            await subSettled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var subRequest = subCapturing.Requests[^1];
+            checks.Check(subRequest.ToolNames.Contains("subagent"), "会话声明 subagent 工具");
+            checks.Check(subRequest.ToolDefinitions?.Any(d => d.Name == "subagent") == true,
+                "subagent 工具携带参数 Schema");
+            checks.Check(subRequest.Messages[0].Content.Contains("可用子代理"),
+                "系统提示注入子代理目录");
+            await subSession.DisposeAsync();
+
+            // ════════════════ 权限模式穿透调度链 ════════════════
+            await using (var chainMcp = McpManager.Create(Array.Empty<McpServerConfig>(), mcpHome))
+            {
+                var chained = new McpGatewayDispatcher(
+                    new SkillAwareDispatcher(new SubagentDispatcher(dispatcher, exploreRunner), skills), chainMcp);
+                var chainedEngine = new PureCSharpAgentEngine(chained, new FixedTextClient("x"));
+                chainedEngine.Mode = PermissionMode.Plan;
+                checks.Equal(PermissionMode.Plan, dispatcher.Mode,
+                    "Plan 模式穿过 MCP/Skill/Subagent 包装器作用于真实调度器");
+                chainedEngine.Mode = PermissionMode.Default;
+            }
 
             // ════════════════ 会话原子落盘（版本信封） ════════════════
             var persistPath = Path.Combine(tempDir, "persist-session.json");

@@ -148,14 +148,22 @@ internal static class CodexDshIntegrationTests
             var turnSettled = false;
             session.Chat.Event += (_, ev) =>
             {
-                if (ev is SessionEvent.TurnSettled settled && settled.Outcome == SessionOutcome.Completed)
+                if (ev is SessionEvent.TurnSettled)
                     turnSettled = true;
             };
 
             await session.Coordinator.SendPromptAsync("say hello");
-            await Wait(() => session.Coordinator.Snapshot.LastResult == TaskResult.Completed && turnSettled);
+            try
+            {
+                await Wait(() => turnSettled);
+            }
+            catch (TimeoutException)
+            {
+                throw new Exception($"DSH 首轮等待超时。LastResult={session.Coordinator.Snapshot.LastResult}, LastError={session.Coordinator.Snapshot.LastError}, ChatOutcome={session.Chat.LastOutcome}");
+            }
 
-            Check(session.Coordinator.Snapshot.LastResult == TaskResult.Completed, "DSH 会话首轮对话成功完成");
+            Check(session.Coordinator.Snapshot.LastResult == TaskResult.Completed,
+                $"DSH 会话首轮对话成功完成 (Result={session.Coordinator.Snapshot.LastResult}, Error={session.Coordinator.Snapshot.LastError})");
             backendSessionId = session.Session.BackendSessionId;
             Check(!string.IsNullOrEmpty(backendSessionId), "DSH 会话成功获取并绑定 backendSessionId");
 
@@ -172,14 +180,22 @@ internal static class CodexDshIntegrationTests
             var turnSettled = false;
             resumed.Chat.Event += (_, ev) =>
             {
-                if (ev is SessionEvent.TurnSettled settled && settled.Outcome == SessionOutcome.Completed)
+                if (ev is SessionEvent.TurnSettled)
                     turnSettled = true;
             };
 
             await resumed.Coordinator.SendPromptAsync("say hello again");
-            await Wait(() => resumed.Coordinator.Snapshot.LastResult == TaskResult.Completed && turnSettled);
+            try
+            {
+                await Wait(() => turnSettled);
+            }
+            catch (TimeoutException)
+            {
+                throw new Exception($"DSH 第二轮等待超时。LastResult={resumed.Coordinator.Snapshot.LastResult}, LastError={resumed.Coordinator.Snapshot.LastError}, ChatOutcome={resumed.Chat.LastOutcome}");
+            }
 
-            Check(resumed.Coordinator.Snapshot.LastResult == TaskResult.Completed, "DSH 恢复会话成功完成第二轮交互");
+            Check(resumed.Coordinator.Snapshot.LastResult == TaskResult.Completed,
+                $"DSH 恢复会话成功完成第二轮交互 (Result={resumed.Coordinator.Snapshot.LastResult}, Error={resumed.Coordinator.Snapshot.LastError})");
         }
     }
 

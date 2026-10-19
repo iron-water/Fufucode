@@ -3,10 +3,13 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fufucode.App.Features.BrowserExperience;
+using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
+using Fufucode.App.Views;
 
 namespace Fufucode.App.ViewModels;
 
@@ -38,9 +41,12 @@ public sealed partial class BrowserViewModel : ViewModelBase
 {
     private static int _tabCounter;
 
-    public BrowserViewModel()
+    public BrowserViewModel(BrowserBookmarkStore? bookmarks = null, BrowserHistoryStore? history = null)
     {
         RuntimeLink = WebView2RuntimeGate.RuntimeDownloadUrl;
+        _bookmarkStore = bookmarks;
+        _historyStore = history;
+        if (_bookmarkStore is not null) _bookmarkStore.Changed += OnBookmarkStoreChanged;
         ActiveTab = CreateTab();
     }
 
@@ -80,8 +86,9 @@ public sealed partial class BrowserViewModel : ViewModelBase
 
     public ObservableCollection<BrowserTab> Tabs { get; } = new();
 
-    /// <summary>已收藏的地址集合（按真实导航地址比较）；只存地址，不落盘到浏览器 profile。</summary>
-    private readonly HashSet<string> _bookmarks = new(StringComparer.Ordinal);
+    /// <summary>收藏与历史的落盘存储；未注入时为 null（无头测试不触碰用户数据）。</summary>
+    private readonly BrowserBookmarkStore? _bookmarkStore;
+    private readonly BrowserHistoryStore? _historyStore;
 
     [ObservableProperty] private BrowserTab _activeTab;
 
@@ -110,7 +117,7 @@ public sealed partial class BrowserViewModel : ViewModelBase
 
     /// <summary>当前真实地址是否已收藏；用于星标按钮状态。</summary>
     public bool IsCurrentBookmarked =>
-        ActiveTab.NavigationAddress is { Length: > 0 } address && _bookmarks.Contains(address);
+        ActiveTab.NavigationAddress is { Length: > 0 } address && (_bookmarkStore?.Contains(address) ?? false);
     public string BookmarkToolTip => IsCurrentBookmarked ? "取消收藏当前页面" : "收藏当前页面";
 
     /// <summary>由设置页同步“显示完整网址”策略到全部页签（含后续新建页签）。</summary>
@@ -121,7 +128,15 @@ public sealed partial class BrowserViewModel : ViewModelBase
         OnPropertyChanged(nameof(DisplayAddress));
     }
 
+    /// <summary>同步地址栏搜索模板；后续新建页签也使用同一模板。</summary>
+    public void ApplySearchUrlTemplate(string? template)
+    {
+        _searchUrlTemplate = string.IsNullOrWhiteSpace(template) ? BrowserAddressResolver.DefaultSearchTemplate : template;
+        foreach (var tab in Tabs) tab.ApplySearchUrlTemplate(_searchUrlTemplate);
+    }
+
     private bool _showFullUrl = true;
+    private string _searchUrlTemplate = BrowserAddressResolver.DefaultSearchTemplate;
 
     // ---- 当前页签门面（兼容既有单页调用方） ----
 
@@ -204,6 +219,7 @@ public sealed partial class BrowserViewModel : ViewModelBase
     {
         var tab = new BrowserTab(id);
         tab.ApplyShowFullUrl(_showFullUrl);
+        tab.ApplySearchUrlTemplate(_searchUrlTemplate);
         Attach(tab);
         Tabs.Add(tab);
         if (select) ActiveTab = tab;
@@ -294,6 +310,159 @@ public sealed partial class BrowserViewModel : ViewModelBase
     /// <summary>当前页签在页签栏中的序号（1 基），供“第 N 个页签”等文本使用。</summary>
     public int ActiveTabOrdinal => Tabs.IndexOf(ActiveTab) + 1;
 
+    // ---- 地址栏下拉（收藏 + 真实浏览历史） ----
+
+    public ObservableCollection<BrowserSuggestion> Suggestions { get; } = new();
+    [ObservableProperty] private bool _isSuggestionsOpen;
+    [ObservableProperty] private BrowserSuggestion? _selectedSuggestion;
+
+    /// <summary>按输入过滤收藏与历史；query 为空时显示最近访问/收藏。</summary>
+    public void RefreshSuggestions(string? query)
+    {
+        Suggestions.Clear();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_bookmarkStore is not null)
+        {
+            foreach (var entry in _bookmarkStore.Entries)
+            {
+                if (!Matches(entry.Address, entry.Title, query) || !seen.Add(entry.Address)) continue;
+                Suggestions.Add(new BrowserSuggestion(entry.Address, entry.Title, true, string.Empty));
+            }
+        }
+        if (_historyStore is not null)
+        {
+            foreach (var entry in _historyStore.Search(query, 12))
+            {
+                if (!seen.Add(entry.Address)) continue;
+                Suggestions.Add(new BrowserSuggestion(entry.Address, entry.Title, false,
+                    entry.LastVisitedAt.ToLocalTime().ToString("MM-dd HH:mm")));
+            }
+        }
+        if (Suggestions.Count > 12) while (Suggestions.Count > 12) Suggestions.RemoveAt(Suggestions.Count - 1);
+        IsSuggestionsOpen = Suggestions.Count > 0;
+        SelectedSuggestion = Suggestions.FirstOrDefault();
+    }
+
+    private static bool Matches(string address, string title, string? query)
+    {
+        var text = (query ?? string.Empty).Trim();
+        return text.Length == 0 ||
+               address.Contains(text, StringComparison.OrdinalIgnoreCase) ||
+               title.Contains(text, StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void CloseSuggestions() => IsSuggestionsOpen = false;
+
+    /// <summary>键盘上下移动候选；返回是否有候选可移动。</summary>
+    public bool MoveSuggestion(int delta)
+    {
+        if (!IsSuggestionsOpen || Suggestions.Count == 0) return false;
+        var current = SelectedSuggestion is null ? -1 : Suggestions.IndexOf(SelectedSuggestion);
+        var next = Math.Clamp(current + delta, 0, Suggestions.Count - 1);
+        SelectedSuggestion = Suggestions[next];
+        return true;
+    }
+
+    /// <summary>采用一条候选并立即导航；草稿地址与真实导航地址保持一致。</summary>
+    [RelayCommand]
+    private void AcceptSuggestion(BrowserSuggestion? suggestion)
+    {
+        if (suggestion is null) return;
+        IsSuggestionsOpen = false;
+        ActiveTab.AddressText = suggestion.Address;
+        if (ActiveTab.NavigateCommand.CanExecute(null)) ActiveTab.NavigateCommand.Execute(null);
+    }
+
+    // ---- 下载列表（真实 WebView2 进度） ----
+
+    public ObservableCollection<BrowserDownloadItem> Downloads { get; } = new();
+    public bool HasDownloads => Downloads.Count > 0;
+    public string DownloadSummary => Downloads.Count == 0
+        ? "暂无下载"
+        : Downloads.Any(item => item.IsActive) ? "正在下载…" : $"最近 {Downloads.Count} 个下载";
+
+    public void ApplyDownloadProgress(BrowserDownloadProgress progress)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ApplyDownloadProgress(progress));
+            return;
+        }
+        var item = Downloads.FirstOrDefault(download => download.Id == progress.Id);
+        if (item is null)
+        {
+            item = new BrowserDownloadItem(progress.Id, progress.FileName);
+            Downloads.Insert(0, item);
+            OnPropertyChanged(nameof(HasDownloads));
+            OnPropertyChanged(nameof(DownloadSummary));
+            IsDownloadsOpen = true;   // 有真实下载开始时自动展开，用户可随时关闭
+        }
+        item.Apply(progress);
+        OnPropertyChanged(nameof(DownloadSummary));
+    }
+
+    [ObservableProperty] private bool _isDownloadsOpen;
+    [RelayCommand] private void CloseDownloads() => IsDownloadsOpen = false;
+    [RelayCommand] private void ToggleDownloads() => IsDownloadsOpen = !IsDownloadsOpen;
+
+    // ---- 全宽查看（对标 Codex 的 full view；默认仍是聊天 + 浏览器分屏） ----
+
+    [ObservableProperty] private bool _isFullView;
+    [ObservableProperty] private bool _isCompact;
+    public bool ShowWideTools => !IsCompact;
+    public string FullViewToolTip => IsFullView ? "退出全宽查看" : "全宽查看";
+    public event EventHandler<bool>? FullViewChanged;
+
+    [RelayCommand]
+    private void ToggleFullView()
+    {
+        IsFullView = !IsFullView;
+        FullViewChanged?.Invoke(this, IsFullView);
+    }
+
+    partial void OnIsFullViewChanged(bool value) => OnPropertyChanged(nameof(FullViewToolTip));
+    partial void OnIsCompactChanged(bool value) => OnPropertyChanged(nameof(ShowWideTools));
+
+    public void RemoveDownload(BrowserDownloadItem item)
+    {
+        if (Downloads.Remove(item))
+        {
+            OnPropertyChanged(nameof(HasDownloads));
+            OnPropertyChanged(nameof(DownloadSummary));
+        }
+    }
+
+    public BrowserSiteRules SiteRules => _siteRules;
+    private BrowserSiteRules _siteRules = new(BrowserSettings.Default);
+
+    /// <summary>由组合根下发最新站点规则，供 Agent 审批闸门读取。</summary>
+    public void ApplySiteRules(BrowserSiteRules rules) => _siteRules = rules ?? new BrowserSiteRules(BrowserSettings.Default);
+
+    public void RecordVisit(string? address, string? title) => _historyStore?.Record(address, title);
+
+    /// <summary>智能体审批用主机名（当前页签）。</summary>
+    public string SecureHostForAgent => Infrastructure.Browser.BrowserSiteRules.HostOf(ActiveTab.NavigationAddress) ?? string.Empty;
+
+    public void UpdateVisitTitle(string? address, string? title)
+    {
+        _historyStore?.UpdateTitle(address, title);
+        if (address is { Length: > 0 }) _bookmarkStore?.UpdateTitle(address, title);
+    }
+
+    /// <summary>清空地址栏下拉（导航开始时调用，避免旧候选遮挡新页面）。</summary>
+    public void DismissSuggestions()
+    {
+        IsSuggestionsOpen = false;
+        Suggestions.Clear();
+        SelectedSuggestion = null;
+    }
+
+    private void OnBookmarkStoreChanged()
+    {
+        if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(OnBookmarkStoreChanged); return; }
+        NotifyBookmark();
+    }
+
     [RelayCommand] private void ZoomIn() => ApplyZoom(ActiveTab.ZoomPercent + 10);
     [RelayCommand] private void ZoomOut() => ApplyZoom(ActiveTab.ZoomPercent - 10);
     [RelayCommand] private void ZoomReset() => ApplyZoom(100);
@@ -330,7 +499,12 @@ public sealed partial class BrowserViewModel : ViewModelBase
             ReportStatus("当前页面还没有可收藏的地址。");
             return;
         }
-        var bookmarked = _bookmarks.Contains(address) ? !_bookmarks.Remove(address) : _bookmarks.Add(address);
+        if (_bookmarkStore is null)
+        {
+            ReportStatus("当前浏览器实例没有连接收藏存储。");
+            return;
+        }
+        var bookmarked = _bookmarkStore.Toggle(address, ActiveTab.DocumentTitle);
         NotifyBookmark();
         ReportStatus(bookmarked ? "已收藏当前页面。" : "已取消收藏当前页面。");
     }
@@ -382,6 +556,7 @@ public sealed partial class BrowserViewModel : ViewModelBase
     private void OnTabNavigationRequested(object? sender, BrowserNavigationRequest request)
     {
         if (sender is not BrowserTab tab) return;
+        DismissSuggestions();
         TabNavigationRequested?.Invoke(this, (tab, request));
         if (ReferenceEquals(tab, ActiveTab)) NavigationRequested?.Invoke(this, request);
         NotifyFacade();
@@ -424,6 +599,8 @@ public sealed partial class BrowserViewModel : ViewModelBase
             nameof(BrowserTab.DisplayAddress) => nameof(DisplayAddress),
             _ => e.PropertyName ?? string.Empty,
         });
+        if (ReferenceEquals(sender, ActiveTab) && e.PropertyName == nameof(BrowserTab.DocumentTitle))
+            UpdateVisitTitle(ActiveTab.NavigationAddress, ActiveTab.DocumentTitle);
         if (ReferenceEquals(sender, ActiveTab) &&
             e.PropertyName is nameof(BrowserTab.Security) or nameof(BrowserTab.NavigationAddress))
         {
@@ -474,6 +651,7 @@ public sealed partial class BrowserViewModel : ViewModelBase
     partial void OnActiveTabChanged(BrowserTab value)
     {
         value.ApplyShowFullUrl(_showFullUrl);
+        value.ApplySearchUrlTemplate(_searchUrlTemplate);
         SyncSelection();
         NotifyFacade();
         OnPropertyChanged(nameof(NavigateCommand));

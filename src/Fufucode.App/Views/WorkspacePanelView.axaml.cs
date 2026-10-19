@@ -1,7 +1,12 @@
 using System;
+using System.IO;
+using System.Threading.Tasks;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform.Storage;
 using Fufucode.App.ViewModels;
 
 namespace Fufucode.App.Views;
@@ -9,6 +14,46 @@ namespace Fufucode.App.Views;
 public partial class WorkspacePanelView : UserControl
 {
     public event Action? PreviewRequested;
+
+    /// <summary>
+    /// 把当前渲染好的 Mermaid 图表保存为 PNG。
+    /// 用 2 倍像素渲染，避免在高 DPI 屏幕上导出图发虚。
+    /// </summary>
+    private async void OnDownloadDiagram(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not WorkspacePanelViewModel model) return;
+        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+
+        try
+        {
+            var suggested = Path.GetFileNameWithoutExtension(model.PreviewFileName) + ".png";
+            var target = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "保存图表",
+                SuggestedFileName = suggested,
+                DefaultExtension = "png",
+                FileTypeChoices = [new FilePickerFileType("PNG 图片") { Patterns = ["*.png"] }],
+            });
+            if (target is null) return;
+
+            var diagram = this.FindControl<RichMarkdownView>("DiagramPreview");
+            var size = diagram?.Bounds.Size ?? default;
+            if (diagram is null || size.Width < 1 || size.Height < 1) return;
+
+            const double scale = 2;
+            var pixelSize = new PixelSize(
+                Math.Max(1, (int)Math.Ceiling(size.Width * scale)),
+                Math.Max(1, (int)Math.Ceiling(size.Height * scale)));
+            using var bitmap = new RenderTargetBitmap(pixelSize, new Vector(96 * scale, 96 * scale));
+            bitmap.Render(diagram);
+            await using var stream = await target.OpenWriteAsync();
+            bitmap.Save(stream);
+        }
+        catch (Exception error)
+        {
+            model.DiagramError = "导出失败：" + error.Message;
+        }
+    }
 
     internal (Control Files, Control Changes) TakeDockPages()
     {

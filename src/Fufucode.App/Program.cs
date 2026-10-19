@@ -97,6 +97,13 @@ internal static class Program
             Console.WriteLine("待重启部署收尾失败：" + error.Message);
         }
 
+        // 撤销备份只服务最近几轮；启动时顺手清掉过期文件，避免无限增长。
+        try { Fufucode.Core.Backend.FileChangeJournal.PruneExpired(); }
+        catch (Exception error)
+        {
+            Console.WriteLine("撤销备份清理失败：" + error.Message);
+        }
+
         // 默认后端为 FUMO 原生内核；--mock 回到脚本化演示会话
         BuildAvaloniaApp(AppOptions.Parse(args)).StartWithClassicDesktopLifetime(args);
     }

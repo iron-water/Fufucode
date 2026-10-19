@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Fufucode.App.Features.BrowserExperience;
 using Fufucode.App.Infrastructure;
+using Fufucode.App.Infrastructure.Browser;
 using Fufucode.App.ViewModels;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
@@ -14,6 +16,9 @@ namespace Fufucode.App;
 public partial class MainWindow
 {
     private BrowserSettingsHost _browserSettings = null!;
+    private BrowserBookmarkStore? _browserBookmarks;
+    private BrowserHistoryStore? _browserHistory;
+    private BrowserDownloadHistory? _browserDownloads;
     private PluginToolRegistry? _browserToolRegistry;
     private PluginPackageManager? _pluginPackageManager;
     private WebView2BrowserUseBridge? _wiredBridge;
@@ -32,6 +37,7 @@ public partial class MainWindow
             ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata")
             : _options.CreateAppDataLayout().Root;
         _browserSettings = new BrowserSettingsHost(root);
+        EnsureBrowserStores();
         MigrateLegacyBrowserSettings();
         _browserSettings.ViewModel.Changed += ApplyBrowserSettings;
         _settingsPage.AttachBrowserSettings(_browserSettings.ViewModel);
@@ -58,6 +64,23 @@ public partial class MainWindow
         _pluginPackageManager.InitializeInstalledPlugins(_host?.ProjectPath);
     }
 
+    /// <summary>
+    /// 浏览器页可能在设置宿主之前由工作区注册表惰性创建；存储必须可重复安全初始化，
+    /// 否则先创建的页会拿到 null 下载历史，表现为“下载完成但不落历史”。
+    /// </summary>
+    private void EnsureBrowserStores()
+    {
+        var root = _browserSettingsRoot();
+        _browserBookmarks ??= BrowserBookmarkStore.ForRoot(root);
+        _browserHistory ??= BrowserHistoryStore.ForRoot(root);
+        if (_browserDownloads is not null) return;
+        try { _browserDownloads = new BrowserDownloadHistory(root); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            _vm?.Timeline.AddNotification("下载历史不可用：" + error.Message);
+        }
+    }
+
     private string _browserSettingsRoot() =>
         Program.SelfTestMode
             ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata")
@@ -67,13 +90,67 @@ public partial class MainWindow
     private void ApplyBrowserSettings(BrowserSettings settings)
     {
         if (_closed) return;
+        _lastBrowserSettings = settings.Normalize();
         foreach (var view in BrowserViews())
         {
             view.ViewModel.ApplyShowFullUrl(settings.ShowFullUrl);
             view.ApplyAgentControl(settings, _browserSettings.Store, _browserSettings.ViewModel);
+            view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
             AttachBridge(view);
         }
     }
+
+    private BrowserSettings _lastBrowserSettings = BrowserSettings.Default;
+
+    /// <summary>新创建的浏览器视图（如 XAML 预览页）在挂载时读取最近一次下发的设置。</summary>
+    private void ApplyLatestBrowserSettings(Views.BrowserView view)
+    {
+        view.ViewModel.ApplyShowFullUrl(_lastBrowserSettings.ShowFullUrl);
+        view.ApplyAgentControl(_lastBrowserSettings, _browserSettings?.Store, _browserSettings?.ViewModel);
+        view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
+    }
+
+    /// <summary>
+    /// 智能体浏览器动作的人工审批：复用现有“扩展 UI 确认”卡片（非模态，关闭即拒绝）。
+    /// 审批必须在 UI 线程弹窗，判定结果原样返回给桥，不在 auto/full 模式放行。
+    /// </summary>
+    private Task<bool> ApproveBrowserAgentActionAsync(BrowserApprovalRequest request,
+        System.Threading.CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            try
+            {
+                var payload = System.Text.Json.JsonSerializer.SerializeToElement(new
+                {
+                    title = "智能体浏览器动作确认",
+                    message = $"{request.Action} → {request.Host}\n{request.Address}\n\n允许本次操作？",
+                });
+                var uiRequest = new Fufucode.Core.ExtensionUiRequest(Guid.NewGuid(), Guid.NewGuid().ToString("N"), "confirm",
+                    payload, DateTimeOffset.UtcNow, WebView2BrowserUseBridge.ApprovalTimeout);
+                var window = new ExtensionUiDialogWindow(uiRequest,
+                    (_, response) =>
+                    {
+                        completion.TrySetResult(response.Confirmed == true);
+                        return Task.CompletedTask;
+                    });
+                window.Closed += (_, _) => completion.TrySetResult(false);
+                if (this.IsVisible) window.Show(this); else window.Show();
+            }
+            catch (Exception error)
+            {
+                _vm?.Timeline.AddNotification("浏览器动作确认卡片打开失败：" + error.Message);
+                completion.TrySetResult(false);
+            }
+        });
+        cancellationToken.Register(() => completion.TrySetResult(false));
+        return completion.Task;
+    }
+
+    /// <summary>浏览器引用/标注进入当前主聊天草稿（与资料库引用同一套不覆盖语义）。</summary>
+    private void OnChatReferenceRequested(Views.BrowserView view, Views.BrowserChatReference reference)
+        => _ = AcceptBrowserReferenceAsync(reference);
 
     /// <summary>
     /// 首次创建 browser-settings.json 时，把旧的 WorkbenchAppearance 浏览器偏好迁移过来，

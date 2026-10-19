@@ -182,6 +182,10 @@ public sealed partial class InputViewModel : ViewModelBase
     /// <summary>Local notification run begins before the RPC may emit events; acknowledgements are not completion.</summary>
     public event Func<long>? SubmissionStarting;
     public event Action<long>? SubmissionRejected;
+    /// <summary>发送已开始：UI 据此立即显示乐观气泡，不等待后端回执。</summary>
+    public event Action<string>? SubmissionStarted;
+    /// <summary>发送被拒绝：UI 据此把乐观气泡转为失败态。</summary>
+    public event Action? SubmissionFailed;
 
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
@@ -199,6 +203,7 @@ public sealed partial class InputViewModel : ViewModelBase
         DraftText = string.Empty;
         ReferenceContext = string.Empty;
         Attachments.Clear(); OnPropertyChanged(nameof(HasAttachments));
+        SubmissionStarted?.Invoke(text);
         try
         {
             var images = files.Where(f => f.Image is not null).Select(f => f.Image!).ToArray();
@@ -212,6 +217,7 @@ public sealed partial class InputViewModel : ViewModelBase
         catch (Exception ex)
         {
             SubmissionRejected?.Invoke(notificationRun);
+            SubmissionFailed?.Invoke();
             // 发送未被接受：回填草稿（不覆盖用户其间新输入），并显式报告，不静默吞掉。
             ApplyExternalText(draft);
             ReferenceContext = string.IsNullOrEmpty(ReferenceContext) ? reference : ReferenceContext + "\n" + reference;

@@ -47,7 +47,7 @@ public static class ProcessLauncher
             var targetJs = TryFindNpmTargetJs(executable);
             if (targetJs is not null)
             {
-                startInfo.FileName = "node";
+                startInfo.FileName = ResolveNodePath();
                 startInfo.ArgumentList.Add(targetJs);
                 foreach (var arg in arguments) startInfo.ArgumentList.Add(arg);
                 return startInfo;
@@ -95,6 +95,14 @@ public static class ProcessLauncher
         }
         catch { }
         return null;
+    }
+
+    private static string ResolveNodePath()
+    {
+        var pf = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+        var standard = Path.Combine(pf, "nodejs", OperatingSystem.IsWindows() ? "node.exe" : "node");
+        if (File.Exists(standard)) return standard;
+        return "node";
     }
 
     private static string ResolveDotnetHost()

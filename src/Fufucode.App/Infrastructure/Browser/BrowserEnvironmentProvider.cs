@@ -24,7 +24,13 @@ internal static class BrowserEnvironmentProvider
             if (Cache.TryGetValue(userDataFolder, out var existing) && !existing.IsFaulted && !existing.IsCanceled)
                 return await existing.ConfigureAwait(false);
 
-            var created = CoreWebView2Environment.CreateAsync(null, userDataFolder, null);
+            // 扩展能力是 WebView2 的环境级选项，必须与 user data folder 一起保持一致。
+            // 扩展能力是 WebView2 的环境级选项，必须与 user data folder 一起保持一致。
+            var options = new CoreWebView2EnvironmentOptions
+            {
+                AreBrowserExtensionsEnabled = true,
+            };
+            var created = CoreWebView2Environment.CreateAsync(null, userDataFolder, options);
             Cache[userDataFolder] = created;
             try
             {

@@ -78,8 +78,9 @@
         <Button Classes="iconButton" Width="28" Height="28" Command="{Binding ReloadCommand}" ToolTip.Tip="刷新" AutomationProperties.Name="浏览器刷新"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" Command="{Binding StopCommand}" IsVisible="{Binding IsLoading}" ToolTip.Tip="停止" AutomationProperties.Name="浏览器停止"><PathIcon Data="{DynamicResource Icon.RecordStop}" Width="13" Height="13"/></Button>
       </StackPanel>
-      <!-- 一体化胶囊：锁/不安全图标 + 星标 + 地址输入 + 分享 -->
-      <Border Grid.Column="1" Classes="omniBar" VerticalAlignment="Center">
+      <!-- 一体化胶囊：锁/不安全图标 + 星标 + 地址输入 + 分享；下方浮出收藏/历史候选 -->
+      <Grid Grid.Column="1">
+      <Border Classes="omniBar" VerticalAlignment="Center">
         <Grid ColumnDefinitions="Auto,Auto,*,Auto">
           <Panel Grid.Column="0" Margin="4,0,2,0" VerticalAlignment="Center" ToolTip.Tip="{Binding SecurityToolTip}" IsVisible="{Binding ShowSecurity}">
             <PathIcon Data="{DynamicResource Icon.ShieldCheckmark}" Width="13" Height="13" IsVisible="{Binding IsSecure}" Foreground="{DynamicResource AppSuccessForeground}"/>
@@ -88,12 +89,38 @@
           <Button Grid.Column="1" Classes="omniAction" Classes.bookmarked="{Binding IsCurrentBookmarked}" Margin="2,0" Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="{Binding BookmarkToolTip}" AutomationProperties.Name="浏览器收藏当前页面">
             <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12" Foreground="{DynamicResource AppTextSecondary}"/>
           </Button>
-          <TextBox Grid.Column="2" Text="{Binding AddressText}" MinWidth="0" PlaceholderText="输入网址或本地文件路径…" KeyDown="Address_KeyDown" AutomationProperties.Name="浏览器地址栏" VerticalContentAlignment="Center"/>
+          <TextBox Grid.Column="2" x:Name="AddressBox" Text="{Binding AddressText}" MinWidth="0" PlaceholderText="输入网址、搜索词或本地文件路径…" KeyDown="Address_KeyDown" AutomationProperties.Name="浏览器地址栏" VerticalContentAlignment="Center"/>
           <Button Grid.Column="3" Classes="omniAction" Margin="2,0,4,0" Command="{Binding ShareCommand}" ToolTip.Tip="分享当前页面地址" AutomationProperties.Name="浏览器分享"><PathIcon Data="{DynamicResource Icon.Share}" Width="12" Height="12"/></Button>
         </Grid>
       </Border>
+        <!-- 地址栏候选：用 Popup（独立窗口）浮在 WebView2 原生子窗口之上，不挤压页面布局 -->
+        <Popup x:Name="SuggestionPopup" PlacementTarget="{Binding #AddressBox}" Placement="BottomEdgeAlignedLeft"
+               IsOpen="{Binding IsSuggestionsOpen}" IsLightDismissEnabled="True">
+          <Border Background="{DynamicResource AppCardBackground}" BorderBrush="{DynamicResource AppBorderBrush}"
+                  BorderThickness="1" CornerRadius="8" Width="440" MaxHeight="260" Padding="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+              <ItemsControl ItemsSource="{Binding Suggestions}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="bx:BrowserSuggestion">
+                    <Button HorizontalAlignment="Stretch" Height="34" Padding="8,0" Background="Transparent" BorderThickness="0"
+                            Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).AcceptSuggestionCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding Address}" AutomationProperties.Name="{Binding Header}">
+                      <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                        <TextBlock Grid.Column="0" Text="{Binding Badge}" FontSize="10" Classes="caption" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="{Binding Header}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="2" Text="{Binding Description}" FontSize="10" Classes="caption" Opacity="0.7" MaxWidth="200" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      </Grid>
+                    </Button>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </ScrollViewer>
+          </Border>
+        </Popup>
+      </Grid>
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-        <Button Classes="iconButton" Width="28" Height="28" Click="InspectElement_Click" ToolTip.Tip="检查与拾取页面元素 (Inspect)" AutomationProperties.Name="浏览器检查元素"><PathIcon Data="{DynamicResource Icon.Code}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Command="{Binding ToggleFullViewCommand}" ToolTip.Tip="{Binding FullViewToolTip}" AutomationProperties.Name="浏览器全宽查看"><PathIcon Data="{DynamicResource Icon.FullScreenMaximize}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="Download_Click" ToolTip.Tip="{Binding DownloadSummary}" AutomationProperties.Name="浏览器下载"><PathIcon Data="{DynamicResource Icon.ArrowDownload}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="InspectElement_Click" ToolTip.Tip="检查与拾取页面元素 (Inspect)" AutomationProperties.Name="浏览器检查元素"><PathIcon Data="{DynamicResource Icon.Code}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" Click="OpenFile_Click" ToolTip.Tip="打开本地文件" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" Click="More_Click" ToolTip.Tip="更多操作" AutomationProperties.Name="浏览器更多操作"><PathIcon Data="{DynamicResource Icon.More}" Width="13" Height="13"/></Button>
       </StackPanel>
@@ -110,6 +137,32 @@
     </Border>
     <Grid Grid.Row="3">
       <Grid x:Name="HostLayer"/>
+      <!-- 下载列表：叠在页面之上，不移动原生子窗口；关闭后回到页面 -->
+      <Border IsVisible="{Binding IsDownloadsOpen}" Background="{DynamicResource AppCardBackground}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="8" Margin="12" VerticalAlignment="Top" HorizontalAlignment="Right" Width="360" MaxHeight="320" Padding="10">
+        <Grid RowDefinitions="Auto,*">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,6">
+            <TextBlock Text="下载" Classes="bodyStrong" VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="1" Text="{Binding DownloadSummary}" Classes="caption" Opacity="0.7" VerticalAlignment="Center" Margin="0,0,8,0"/>
+            <Button Grid.Column="2" Classes="iconButton" Width="22" Height="22" Click="CloseDownloads_Click" ToolTip.Tip="关闭下载列表" AutomationProperties.Name="关闭下载列表"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/></Button>
+          </Grid>
+          <ScrollViewer Grid.Row="1">
+            <ItemsControl ItemsSource="{Binding Downloads}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="bx:BrowserDownloadItem">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,4">
+                    <StackPanel Grid.Column="0" Spacing="2">
+                      <TextBlock Text="{Binding FileName}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                      <TextBlock Text="{Binding ProgressText}" FontSize="10" Classes="caption" Opacity="0.75"/>
+                      <ProgressBar Value="{Binding ProgressPercent}" Maximum="100" Height="3" IsVisible="{Binding IsActive}"/>
+                    </StackPanel>
+                    <Button Grid.Column="1" Classes="caption" Content="取消" IsVisible="{Binding CanCancel}" Click="CancelDownload_Click" Tag="{Binding Id}" VerticalAlignment="Center"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
       <Border IsVisible="{Binding HasRuntimeNotice}" Background="{DynamicResource AppCardBackground}" Margin="12" Padding="12">
         <StackPanel Spacing="8">
           <TextBlock Classes="bodyStrong" Text="浏览器运行时不可用"/>
