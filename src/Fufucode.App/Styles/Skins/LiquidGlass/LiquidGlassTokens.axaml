@@ -47,11 +47,16 @@
 
       <!-- 玻璃表面专用：LiquidGlassAdapter/样式层按主题从这里取玻璃参数色。
            TintColor 是玻璃染色（v1 adapter 未读，留作 v2 钩子的默认基调）。 -->
-      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#66F7F7F9"/>
-      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#4DF7F7F9"/>
+      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#59F7F7F9"/>
+      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#40F7F7F9"/>
       <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#1A007AFF"/>
       <SolidColorBrush x:Key="LiquidGlassHighlightColor"  Color="#E6FFFFFF"/>
-      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#66F2F2F7"/>
+      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#59F2F2F7"/>
+      <!-- 玻璃底下的页面底色：snapshot 采样需要窗内真实内容可折射；
+           LiquidGlass 把 AppMicaPageBackground 设为 Transparent 让 AcrylicBlur 透桌面，
+           PageHost 不能再纯透明（否则侧栏底下采到 alpha=0，折射无素材走实块）。 -->
+      <SolidColorBrush x:Key="LiquidGlassPageUnderGlass"  Color="#FFF2F2F7"/>
+      <SolidColorBrush x:Key="LiquidGlassShadowColor"     Color="#52000000"/>
 
       <!-- 文本/墨水：iOS label / secondaryLabel(60%) / tertiaryLabel(30%) -->
       <SolidColorBrush x:Key="AppTextPrimary"   Color="#FF000000"/>
@@ -213,11 +218,13 @@
       <SolidColorBrush x:Key="AppMicaSidebarBackground"   Color="#FF1C1C1E"/>
       <SolidColorBrush x:Key="LiquidGlassFallbackPageBackground" Color="#FF000000"/>
 
-      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#661C1C1E"/>
-      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#4D1C1C1E"/>
+      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#591C1C1E"/>
+      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#401C1C1E"/>
       <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#1A0A84FF"/>
       <SolidColorBrush x:Key="LiquidGlassHighlightColor"  Color="#66FFFFFF"/>
-      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#662C2C2E"/>
+      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#592C2C2E"/>
+      <SolidColorBrush x:Key="LiquidGlassPageUnderGlass"  Color="#FF000000"/>
+      <SolidColorBrush x:Key="LiquidGlassShadowColor"     Color="#73000000"/>
 
       <SolidColorBrush x:Key="AppTextPrimary"   Color="#FFFFFFFF"/>
       <SolidColorBrush x:Key="AppTextSecondary" Color="#99EBEBF5"/>

@@ -32,19 +32,20 @@
        浮在"桌面"上的明证；没有缝时面板与内容平铺一色，玻璃感全闷死。
        margin 从 splitter 列宽挤出来：splitter 列 5px，dockHost 该侧留 8+5 缝。 -->
   <Style Selector="Border.liquidGlass.dockLeft">
-    <Setter Property="Margin" Value="8,0,8,8"/>
+    <!-- 顶部让出 caption 玻璃条 48 + 8 呼吸缝；底部让出状态条 26 + 8；左右各 8 缝。 -->
+    <Setter Property="Margin" Value="8,56,8,34"/>
     <Setter Property="BorderThickness" Value="0.5"/>
-    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="CornerRadius" Value="14"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockRight">
-    <Setter Property="Margin" Value="8,0,8,8"/>
+    <Setter Property="Margin" Value="8,56,8,34"/>
     <Setter Property="BorderThickness" Value="0.5"/>
-    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="CornerRadius" Value="14"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockBottom">
-    <Setter Property="Margin" Value="8,0,8,8"/>
+    <Setter Property="Margin" Value="8,56,8,34"/>
     <Setter Property="BorderThickness" Value="0.5"/>
-    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="CornerRadius" Value="14"/>
   </Style>
   <!-- 底栏/状态条同浮起（贴底窄条玻璃） -->
   <Style Selector="Border.liquidGlassCaption.statusStrip, Border.liquidGlass.statusStrip">
@@ -61,8 +62,17 @@
   <!-- 中央内容区收边：工作区离开窗口底/右缘 8px，让底栏/右栏玻璃缝连贯成一周；
        内容卡片保持实底（iOS 语义：正文不透明，玻璃只在 chrome）。 -->
   <Style Selector="Grid#WorkspaceShell">
-    <!-- ShellGrid 全窗时工作区从标题栏玻璃下方开始（48 玻璃条 + 8 呼吸缝）；右/底同 8px 缝。 -->
+    <!-- 玻璃模式下 WorkspaceShell 铺满全窗（dock 浮层在上），Margin 留给四边呼吸缝；
+         dock 玻璃浮在它上面时底下能采到页边折射素材。 -->
     <Setter Property="Margin" Value="0,56,8,8"/>
+  </Style>
+  <!-- 页面内容延伸到玻璃底下需要"有可折射的真实底色"——AppMicaPageBackground 透明
+       是为了 AcrylicBlur 透桌面（玻璃缝/边缘呼吸缝）；PageHost 内页若也透明，侧栏
+       玻璃底下 snapshot 只采到 alpha=0，折射/模糊无素材走实色块。
+       LiquidGlassPageUnderGlass 给 PageHost 一个不透明底色，让 snapshot 在侧栏区域
+       采到真实页面像素（含延伸到列边界的列表项/气泡）。 -->
+  <Style Selector="TransitioningContentControl#PageHost">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassPageUnderGlass}"/>
   </Style>
 
   <!-- ================= 内容延伸到玻璃底下（iOS NSBackgroundExtensionView 语义） =================
