@@ -11,7 +11,8 @@
           shader 玻璃留给 v2）。 -->
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:avaprimitives="using:Avalonia.Controls.Primitives">
+        xmlns:avaprimitives="using:Avalonia.Controls.Primitives"
+        xmlns:lg="using:Fufucode.App.Features.Skins.LiquidGlass">
   <StyleInclude Source="../SkinShellStyles.axaml"/>
 
   <Style Selector="Window">
@@ -60,7 +61,38 @@
   <!-- 中央内容区收边：工作区离开窗口底/右缘 8px，让底栏/右栏玻璃缝连贯成一周；
        内容卡片保持实底（iOS 语义：正文不透明，玻璃只在 chrome）。 -->
   <Style Selector="Grid#WorkspaceShell">
-    <Setter Property="Margin" Value="0,0,8,8"/>
+    <!-- ShellGrid 全窗时工作区从标题栏玻璃下方开始（48 玻璃条 + 8 呼吸缝）；右/底同 8px 缝。 -->
+    <Setter Property="Margin" Value="0,56,8,8"/>
+  </Style>
+
+  <!-- ================= 内容延伸到玻璃底下（iOS NSBackgroundExtensionView 语义） =================
+       非玻璃皮肤仍按 ChromeRoot 行网格布局；LiquidGlass 生效时把 ShellGrid 抬高到全窗
+       （Grid.Row=0 + RowSpan=3），玻璃标题栏/状态条经玻璃面 ZIndex 浮在其上：
+       侧栏/右栏/底栏玻璃面随之贴到窗边，dock 宿主的内边距把交互内容推到
+       玻璃条下方——滚动列表的内容可延伸进玻璃区域（iOS "content under bars"）。 -->
+  <Style Selector="Grid#ShellGrid">
+    <Setter Property="Grid.Row" Value="0"/>
+    <Setter Property="Grid.RowSpan" Value="3"/>
+  </Style>
+  <!-- 玻璃面（adapter 包覆的表层）在 ChromeRoot 内抬高，盖在 ShellGrid 上；
+       行/列位由 adapter 从宿主 attached 属性拷贝，这里只补 Z 序与对齐。 -->
+  <Style Selector="lg|LiquidGlassSurface.glassCaptionSurface">
+    <Setter Property="ZIndex" Value="10"/>
+  </Style>
+  <Style Selector="lg|LiquidGlassSurface.glassStatusSurface">
+    <Setter Property="ZIndex" Value="10"/>
+  </Style>
+  <!-- dock 宿主内容内推：交互区离开标题栏（48）/状态条（32）玻璃条下方。
+       dock 玻璃面自身贴满列/行高——上半部分玻璃体直接贴窗顶，页面内容
+       （如设置页侧栏/会话列表）滚动时可延伸进玻璃区。 -->
+  <Style Selector="Border.liquidGlass.dockLeft">
+    <Setter Property="Padding" Value="0,48,0,32"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.dockRight">
+    <Setter Property="Padding" Value="0,48,0,32"/>
+  </Style>
+  <Style Selector="Border.liquidGlass.dockBottom">
+    <Setter Property="Padding" Value="0,0,0,32"/>
   </Style>
   <!-- 标题栏：贴顶无边框感，底部一条 hairline 分隔（iOS nav bar 语义） -->
   <Style Selector="Border.liquidGlassCaption">
