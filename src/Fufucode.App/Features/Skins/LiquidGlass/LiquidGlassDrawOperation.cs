@@ -705,9 +705,11 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             if (_parameters.TintColor.A > 0)
             {
                 Color tint = _parameters.TintColor;
+                // Hue 混合按 tint alpha 缩放强度：此前恒用 255 会把整面重度染色，
+                // 玻璃读成"有色塑料板"而不是"带环境色的磨砂"。
                 using SKPaint huePaint = new()
                 {
-                    Color = new SKColor(tint.R, tint.G, tint.B, 255),
+                    Color = new SKColor(tint.R, tint.G, tint.B, tint.A),
                     IsAntialias = true,
                     BlendMode = SKBlendMode.Hue
                 };
@@ -732,6 +734,29 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                     BlendMode = SKBlendMode.SrcOver
                 };
                 canvas.DrawRect(rect, paint);
+            }
+
+            // 玻璃受光面：顶部一层极淡白雾向下衰减（iOS "光从上方来"），
+            // 底部一条极淡暗带压边，让平面读得出厚度而不是纯色板。
+            using (SKPaint sheen = new()
+            {
+                Shader = SKShader.CreateLinearGradient(
+                    new SKPoint(0, 0),
+                    new SKPoint(0, rect.Height),
+                    new[]
+                    {
+                        new SKColor(255, 255, 255, 26),
+                        new SKColor(255, 255, 255, 8),
+                        new SKColor(255, 255, 255, 0),
+                        new SKColor(0, 0, 0, 12),
+                    },
+                    new[] { 0f, 0.18f, 0.62f, 1f },
+                    SKShaderTileMode.Clamp),
+                IsAntialias = true,
+                BlendMode = SKBlendMode.SrcOver,
+            })
+            {
+                canvas.DrawRect(rect, sheen);
             }
         }
 

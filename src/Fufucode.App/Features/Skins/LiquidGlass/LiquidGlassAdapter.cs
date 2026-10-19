@@ -6,6 +6,7 @@ using Avalonia.Layout;
 using Avalonia.LogicalTree;
 using Avalonia.Media;
 using Avalonia.Platform;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 
 namespace Fufucode.App.Features.Skins.LiquidGlass
@@ -121,6 +122,15 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 };
                 host.PropertyChanged += state.LayoutForwarder;
 
+                // 主题切换后按新变体重解析玻璃色（令牌在 ThemeDictionaries 里）。
+                state.SurfaceColorKey = isCaption ? "LiquidGlassCaptionSurfaceColor" : "LiquidGlassDockSurfaceColor";
+                state.ThemeChangedHandler = (_, _) =>
+                {
+                    if (state.Surface is { } themed)
+                        ApplyThemedColors(themed, host, state.SurfaceColorKey);
+                };
+                host.ActualThemeVariantChanged += state.ThemeChangedHandler;
+
                 Shared[host] = state;
                 var adapter = new LiquidGlassAdapter(state);
                 adapter.StartAdaptiveLuminance();
@@ -177,7 +187,7 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 !reducedTransparency && !IsCaptionHost(_state.Host);
             surface.HighlightOpacity = reducedTransparency
                 ? 0.9
-                : (IsCaptionHost(_state.Host) ? 0.7 : 0.55);
+                : (IsCaptionHost(_state.Host) ? 0.8 : 0.7);
 
             if (surface is LiquidGlassInteractiveSurface interactive)
             {
@@ -202,6 +212,11 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             {
                 _state.Host.PropertyChanged -= _state.LayoutForwarder;
                 _state.LayoutForwarder = null;
+            }
+            if (_state.ThemeChangedHandler is not null)
+            {
+                _state.Host.ActualThemeVariantChanged -= _state.ThemeChangedHandler;
+                _state.ThemeChangedHandler = null;
             }
 
             if (_state.Parent is { } parent && _state.Surface is { } surface)
@@ -315,18 +330,18 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
         private static void ApplySurfaceParameters(LiquidGlassSurface surface, Border host, bool isCaption)
         {
             // iOS 玻璃语义：chrome 取较强折射与边缘高光；dock/面板略弱。
-            // BlurRadius 用真实 iOS 量级（UIVisualEffect sigma ≈ 20-30）；Vibrancy 克制到 1.25
+            // BlurRadius 用真实 iOS 量级（UIVisualEffect sigma ≈ 20-30）；Vibrancy 克制到 1.4
             // （1.6 过饱和会把底下弱色块放大成脏色晕）；折射带 10/12 + amount 22/30 让侧栏
             // 边缘有可见"凸透镜"弯折；HighlightAngle 115° 对齐 iOS 左上光源。
-            surface.BlurRadius = isCaption ? 28.0 : 28.0;
-            surface.Vibrancy = 1.25;
+            surface.BlurRadius = 28.0;
+            surface.Vibrancy = 1.4;
             surface.RefractionHeight = isCaption ? 12.0 : 10.0;
             surface.RefractionAmount = isCaption ? 30.0 : 22.0;
             surface.ChromaticAberration = true;
             surface.DepthEffect = true;
             surface.HighlightEnabled = true;
             surface.HighlightWidth = 1.0;
-            surface.HighlightOpacity = isCaption ? 0.7 : 0.55;
+            surface.HighlightOpacity = isCaption ? 0.8 : 0.7;
             surface.HighlightAngle = 115.0;
             surface.HighlightFalloff = 1.6;
             surface.ShadowEnabled = !isCaption; // caption 不外投影（Vista/iOS 顶栏贴边）
@@ -343,11 +358,11 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             surface.ProgressiveTintIntensity = 0.08;
 
             // 玻璃面实色取自令牌（主题化）：caption 更薄透，dock/面板比 caption 稍实。
-            var resourceKey = isCaption ? "LiquidGlassCaptionSurfaceColor" : "LiquidGlassDockSurfaceColor";
-            surface[!LiquidGlassSurface.SurfaceColorProperty] =
-                new Avalonia.Data.Binding { Source = host, Path = $"Resources[{resourceKey}]", Converter = ColorResourceConverter.Instance };
-            var tintBinding = new Avalonia.Data.Binding { Source = host, Path = "Resources[LiquidGlassTintColor]", Converter = ColorResourceConverter.Instance };
-            surface[!LiquidGlassSurface.TintColorProperty] = tintBinding;
+            // 注意不能用 Resources[key] 索引器绑定——令牌在 ThemeDictionaries 里，
+            // 索引器不带变体解析不到，绑定永远拿到 null → 玻璃全透明（用户实测"没质感"）。
+            // 这里显式按当前变体查找，并在主题切换时刷新。
+            ApplyThemedColors(surface, host,
+                isCaption ? "LiquidGlassCaptionSurfaceColor" : "LiquidGlassDockSurfaceColor");
 
             // Grid/Canvas/ZIndex：salin nilai awal + terus disinkron lewat forwarder
             // PropertyChanged di Attach — ApplyWorkspaceLayout mengubah nilai-nilai ini
@@ -379,6 +394,32 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 new Avalonia.Data.Binding(nameof(Layoutable.HorizontalAlignment)) { Source = host });
             surface.Bind(Layoutable.VerticalAlignmentProperty,
                 new Avalonia.Data.Binding(nameof(Layoutable.VerticalAlignment)) { Source = host });
+        }
+
+        /// <summary>
+        /// 按当前主题变体解析玻璃令牌并写入 surface。ThemeDictionaries 里的键必须带变体，
+        /// 裸 Resources[key] 索引器解析不到（这正是玻璃面恒透明的根因）。
+        /// </summary>
+        private static void ApplyThemedColors(LiquidGlassSurface surface, Border host, string surfaceColorKey)
+        {
+            var variant = host.ActualThemeVariant;
+            surface.SurfaceColor = ResolveColor(host, surfaceColorKey, variant, Colors.Transparent);
+            surface.TintColor = ResolveColor(host, "LiquidGlassTintColor", variant, Colors.Transparent);
+            surface.ShadowColor = ResolveColor(host, "LiquidGlassShadowColor", variant, Color.FromArgb(26, 0, 0, 0));
+        }
+
+        private static Color ResolveColor(Control host, string key, ThemeVariant variant, Color fallback)
+        {
+            if (host.TryFindResource(key, variant, out var value))
+            {
+                return value switch
+                {
+                    ISolidColorBrush brush => brush.Color,
+                    Color color => color,
+                    _ => fallback,
+                };
+            }
+            return fallback;
         }
 
         private static void CopyAttached(Control from, Control to, AvaloniaProperty property)
@@ -431,6 +472,10 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             public Panel? Parent { get; set; }
 
             public EventHandler<AvaloniaPropertyChangedEventArgs>? LayoutForwarder { get; set; }
+
+            public string SurfaceColorKey { get; set; } = "LiquidGlassDockSurfaceColor";
+
+            public EventHandler? ThemeChangedHandler { get; set; }
         }
     }
 }

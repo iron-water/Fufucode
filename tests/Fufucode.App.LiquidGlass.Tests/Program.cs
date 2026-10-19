@@ -65,7 +65,7 @@ try
     Check(probe.ResolvedColor("AppSurfaceBackground") == Color.Parse("#FFFFFFFF"), "亮色内容面 iOS 白");
     Check(probe.ResolvedColor("AppTextPrimary") == Color.Parse("#FF000000"), "亮色 label 黑");
     Check(probe.ResolvedColor("LiquidGlassAccent") == Color.Parse("#FF007AFF"), "探针键 iOS systemBlue #007AFF");
-    Check(probe.ResolvedColor("LiquidGlassSurfaceColor") == Color.Parse("#59F7F7F9"), "玻璃表面色半透明 iOS 灰");
+    Check(probe.ResolvedColor("LiquidGlassSurfaceColor") == Color.Parse("#A6FFFFFF"), "玻璃表面色半透明 iOS 灰");
     Check(probe.ResolvedCorner("ControlCornerRadius") == new CornerRadius(10), "ControlCornerRadius=10");
     Check(probe.ResolvedCorner("AppCornerCard") == new CornerRadius(14), "AppCornerCard=14");
     Check(probe.ResolvedCorner("AppCornerPill") == new CornerRadius(20), "AppCornerPill=20");
@@ -157,7 +157,7 @@ try
     Harness.PumpTicks();
     Check(probe.ResolvedColor("AppWindowBackground") == Color.Parse("#FF000000"), "暗色窗口底 iOS 黑");
     Check(probe.ResolvedColor("LiquidGlassAccent") == Color.Parse("#FF0A84FF"), "暗色探针键 iOS 暗蓝 #0A84FF");
-    Check(probe.ResolvedColor("LiquidGlassSurfaceColor") == Color.Parse("#591C1C1E"), "暗色玻璃表面 iOS 深灰");
+    Check(probe.ResolvedColor("LiquidGlassSurfaceColor") == Color.Parse("#7A1C1C22"), "暗色玻璃表面 iOS 深灰");
     Check(Harness.Screenshot(probe.Window, Path.Combine(evidenceRoot, "liquidglass-dark-900x640.png")), "写出 LiquidGlass 暗色帧");
     // 选中行必须可读：AppAccentSubtle 淡底 vs AccentTextFillColorPrimaryBrush 字色不能同色
     // （未注入 accent 的工装环境靠令牌字典的 iOS 淡色兜底保证对比——这是回归点）。
