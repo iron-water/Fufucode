@@ -587,6 +587,153 @@
     <Setter Property="ClipToBounds" Value="True"/>
   </Style>
 
+  <!-- ===== 会话灵动岛（Fluent，顶栏中央活态显示）=====
+       紧凑胶囊 = AppSubtleBackground 云母感 + AppCardStroke 细描边 + 16 圆角 + FluentPillShadow；
+       几何/颜色变化即信号：运行呼吸点、空闲灰点、失败 critical。 -->
+  <Style Selector="Border.sessionIsland">
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.15"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Border.sessionIsland:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Border.sessionIsland TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Border.sessionIsland PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <!-- 状态圆点：语义色（accent 运行 / 灰空闲 / critical 失败），运行带呼吸缩放。 -->
+  <Style Selector="Border.sessionIsland Border.running">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Style.Animations>
+      <Animation Duration="0:0:1.5" IterationCount="Infinite" PlaybackDirection="Alternate">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+        <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.45"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+  <Style Selector="Border.sessionIsland Border.idle">
+    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Opacity" Value="0.6"/>
+  </Style>
+  <Style Selector="Border.sessionIsland Border.failed">
+    <Setter Property="Background" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Border.sessionIsland Border:not(.running):not(.idle):not(.failed)">
+    <Setter Property="Background" Value="{DynamicResource AppCardStroke}"/>
+  </Style>
+  <!-- 卫星点：次级活动（排队数）的微缩圆，仅在有排队时出现。 -->
+  <Style Selector="Border.islandSatellite">
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.15"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Border.islandSatellite:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="RenderTransform" Value="scale(1.08)"/>
+  </Style>
+  <Style Selector="Border.islandSatellite TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+  </Style>
+  <!-- 展开面板：MenuSurfaceBrush + AppCardStroke + OverlayCornerRadius + FluentFlyoutShadow。 -->
+  <Style Selector="Border.islandPanel">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentFlyoutShadow}"/>
+  </Style>
+  <Style Selector="Border.islandPanel TextBlock.meta">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="Border.islandBackendTile">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="Border.islandBackendTile PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentForeground}"/>
+  </Style>
+  <!-- 磁贴：Subtle 底 + 悬停描边，语义同 Windows 设置行内卡。 -->
+  <Style Selector="Button.islandTile">
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.12"/>
+        <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.islandTile:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.islandTile PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+  <Style Selector="Button.islandTile:pointerover PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <!-- 实时活动条：Subtle 浅底，失败时转 critical 边框/文字。 -->
+  <Style Selector="Border.islandLiveBar">
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="10,8"/>
+  </Style>
+  <Style Selector="Border.islandLiveBar.failed">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Border.islandLiveBar.failed TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Border.islandLiveBar Border.running">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="Border.islandLiveBar Border.idle">
+    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="Border.islandLiveBar Border.failed">
+    <Setter Property="Background" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Button.islandBarButton">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.12"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.islandBarButton:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+
   <!-- 中央会话：元信息退为三级文字；助手正文不加卡片 -->
   <Style Selector="TextBlock.meta">
     <Setter Property="FontSize" Value="11"/>
