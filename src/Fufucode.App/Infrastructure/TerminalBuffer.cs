@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Text;
+using Fufucode.App.Integration;
 
 namespace Fufucode.App.Infrastructure;
 
@@ -29,6 +30,9 @@ public sealed class TerminalBuffer
         Rows = Math.Clamp(rows, 3, 160);
         for (var i = 0; i < Rows; i++) _screen.Add(BlankLine());
     }
+
+    /// <summary>回滚行数上限；低内存模式为 500，默认 1500。</summary>
+    public int HistoryLimit { get; set; } = MemoryProfile.ReduceTerminalScrollback ? 500 : 1500;
 
     public int Columns { get; private set; }
     public int Rows { get; private set; }
@@ -123,7 +127,7 @@ public sealed class TerminalBuffer
     private void AddHistory(TerminalCell[] line)
     {
         _history.Add(line);
-        if (_history.Count > 1500) _history.RemoveRange(0, _history.Count - 1500);
+        if (_history.Count > HistoryLimit) _history.RemoveRange(0, _history.Count - HistoryLimit);
     }
     private TerminalCell[] BlankLine() => Enumerable.Repeat(new TerminalCell(" ", DefaultForeground, DefaultBackground), Columns).ToArray();
     private TerminalCell ErasedCell() => new(" ", _foreground, _background);

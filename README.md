@@ -67,6 +67,18 @@ pwsh scripts/packaging/package-toolchain.ps1 -Id pi
 
 `plugins-dist/` and `runtimes/` are separate download assets. Build output is not committed.
 
+## Performance and memory
+
+Settings → 性能与内存 provides opt-in switches; the default is high performance.
+
+| Switch | Effect | Applies |
+|---|---|---|
+| 软件渲染 | Skips ANGLE/D3D and the GPU driver stack; ~130–140 MB less working set | after restart |
+| 关闭视觉特效 | Stops glass/blur luminance sampling | immediately |
+| 减少终端回滚 | Terminal history 1500 → 500 lines | new terminals |
+
+Measured idle build: 327 MB working set (default) vs 189 MB (low-memory preset).
+
 ## Verify
 
 ```bash

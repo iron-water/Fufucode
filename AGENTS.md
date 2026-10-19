@@ -51,6 +51,7 @@
 - 打包脚本写标记：`FUFUCODE_BUILD_CHANNEL`（默认 `local`，发布用 `github`）与 `FUFUCODE_GITHUB_REPOSITORY` 是发布渠道的注入点；`dotnet run` 无标记时 `BuildInfo.ResolveCurrent` 回退到程序集版本并视为本地构建。
 - 设置页"构建与更新"是单一入口：按当前构建渠道分派部署或更新，不展示另一条路径的入口。
 - 原生包按 RID 构建：`package-native.ps1 -RuntimeIdentifier`（默认 `win-x64`）。Release 自包含发布启用 `PublishTrimmed=partial`，App 与 CLI 共用一份裁剪运行时（`System.Console` 已 root，打包期做 CLI 启动冒烟）。跨平台保持同一源码按 RID 分别出包，不把其它平台载荷放进 Windows 安装。
+- 内存优化模式：`settings.json` 的 `performance`（`softwareRendering` / `disableVisualEffects` / `reduceTerminalScrollback`）默认全关；运行时只读 `MemoryProfile`。软件渲染需重启，其余即时生效。新增可能显著占用内存的功能时，优先接入该开关而不是默认开启。
 - 默认发自包含包（无需 .NET）；已有 .NET 10 Runtime 的用户可选 `-FrameworkDependent` 瘦身包（`out/build-native-slim`，安装器 `Fufucode-Native-Slim-Setup.exe`）。瘦身包不裁剪，按 RID 手工移除其它平台后端。
 
 ## 插件化优先（用户2026-10-16明确要求）
