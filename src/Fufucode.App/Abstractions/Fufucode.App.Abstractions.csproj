@@ -17,4 +17,9 @@
     由 Fufucode.App.csproj 显式排除，仅由本工程编译。
   -->
 
+  <!--
+    Automation/ExecutionBaseLibrary.cs 与 Automation/Harnesses 是自动开发插件的宿主面契约：
+    Core（本地审查）与插件实现共同引用，避免宿主静态依赖可卸载的执行器。
+  -->
+
 </Project>

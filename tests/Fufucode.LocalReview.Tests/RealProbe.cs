@@ -1,10 +1,13 @@
 using System.Text;
 using System.Text.Json;
+using Fufucode.App.Abstractions.Automation;
 using Fufucode.App.Integration;
 using Fufucode.Core;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Features.LocalReview;
+using Fufucode.Plugins.AutoDev;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 
 namespace Fufucode.LocalReview.Tests;
 
@@ -67,10 +70,10 @@ internal static class RealProbe
             var agent = Environment.GetEnvironmentVariable("FUFUCODE_E1_AGENT_DIR");
             var runtime = new HarnessRuntime("local-pi", "pi", node, [cli, "--no-tools"], version,
                 agent is null ? null : new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] = agent });
-            var store = Path.Combine(root, "automation.db");
+            BatchHarnessAdapters.Register();
+            ExecutionBaseLibrary.Register(new AutoDevExecutionOwner(_ => runtime));
             var executor = new LocalReviewHarnessExecutor(
-                () => new AutomationStore(store), runtime, Path.Combine(root, "review-data"),
-                "e1-probe-project", Model, Provider);
+                Path.Combine(root, "review-data"), "e1-probe-project", Model, Provider);
             Console.WriteLine($"dispatching: harness=pi model={Model} provider={Provider} runtime={version}");
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(180));
             var started = DateTimeOffset.UtcNow;

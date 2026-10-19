@@ -61,7 +61,9 @@ public partial class MainWindow
             if (type == typeof(BrowserUseBridge)) return _wiredBridge;
             return null;
         });
+        _pluginPackageManager.PagesChanged += AttachAutomationPluginPage;
         _pluginPackageManager.InitializeInstalledPlugins(_host?.ProjectPath);
+        AttachAutomationPluginPage();
     }
 
     /// <summary>
