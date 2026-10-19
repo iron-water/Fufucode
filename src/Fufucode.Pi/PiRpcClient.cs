@@ -11,6 +11,57 @@ using System.Threading.Channels;
 namespace Fufucode.Pi;
 
 
+/// <summary>Fixed-capacity char ring for the last 65,536 stderr chars; O(1) append, no shifting.</summary>
+internal sealed class StderrTailBuffer
+{
+    public const int Capacity = 65536;
+    private readonly char[] _buffer = new char[Capacity];
+    private int _start;
+    private int _count;
+
+    public int Length => _count;
+
+    public void Append(char[] source, int offset, int count)
+    {
+        while (count > 0)
+        {
+            var take = Math.Min(count, Capacity - _count);
+            if (take > 0)
+            {
+                var write = (_start + _count) % Capacity;
+                var first = Math.Min(take, Capacity - write);
+                Array.Copy(source, offset, _buffer, write, first);
+                if (take > first) Array.Copy(source, offset + first, _buffer, 0, take - first);
+                _count += take;
+                offset += take;
+                count -= take;
+                continue;
+            }
+            // Full: overwrite the oldest chars (drop from the head, keep the tail).
+            var drop = Math.Min(count, Capacity);
+            _start = (_start + drop) % Capacity;
+            _count -= drop;
+            var writeEnd = (_start + _count) % Capacity;
+            var firstPart = Math.Min(drop, Capacity - writeEnd);
+            Array.Copy(source, offset, _buffer, writeEnd, firstPart);
+            if (drop > firstPart) Array.Copy(source, offset + firstPart, _buffer, 0, drop - firstPart);
+            _count += drop;
+            offset += drop;
+            count -= drop;
+        }
+    }
+
+    public override string ToString()
+    {
+        if (_count == 0) return string.Empty;
+        var first = Math.Min(_count, Capacity - _start);
+        return first == _count
+            ? new string(_buffer, _start, _count)
+            : string.Concat(_buffer.AsSpan(_start, first), _buffer.AsSpan(0, _count - first));
+    }
+}
+
+
 /// <summary>One RPC connection owns exactly one Pi process and one project directory.</summary>
 public sealed class PiRpcClient : IRpcClient
 {
@@ -21,7 +72,7 @@ public sealed class PiRpcClient : IRpcClient
     private readonly ArrayBufferWriter<byte> _writeBuffer = new(4096);
     private readonly Channel<JsonElement> _records;
     private readonly Channel<RpcEvent> _events;
-    private readonly StringBuilder _stderr = new();
+    private readonly StderrTailBuffer _stderr = new();
     private readonly object _diagnosticLock = new();
     private readonly Task _stdoutTask;
     private readonly Task _stderrTask;
@@ -307,10 +358,7 @@ public sealed class PiRpcClient : IRpcClient
             int count;
             while ((count = await _process.StandardError.ReadAsync(chars)) > 0)
                 lock (_diagnosticLock)
-                {
                     _stderr.Append(chars, 0, count);
-                    if (_stderr.Length > 65536) _stderr.Remove(0, _stderr.Length - 65536);
-                }
         }
         catch (Exception error) { Fail(error); }
     }

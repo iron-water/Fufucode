@@ -14,6 +14,8 @@ namespace Fufucode.Core.Plugins;
 public sealed class PluginPackageManager : IAsyncDisposable
 {
     public static IRemoteControlService? ActiveRemoteControlService { get; set; }
+    // 进程级工厂登记表：键是插件 id，数量受市场目录限制；提供注销入口供测试/卸载清理，
+    // 避免宿主生命周期内重复登记留下无法回收的闭包。
     private static readonly ConcurrentDictionary<string, Func<IPluginPackage>> _registeredFactories = new(StringComparer.OrdinalIgnoreCase);
     private readonly AppDataLayout _layout;
     private readonly PluginToolRegistry _toolRegistry;
@@ -60,6 +62,13 @@ public sealed class PluginPackageManager : IAsyncDisposable
     {
         PluginPathGuard.Segment(pluginId);
         _registeredFactories[pluginId] = factory ?? throw new ArgumentNullException(nameof(factory));
+    }
+
+    /// <summary>注销进程级包工厂；未登记时为空操作。</summary>
+    public static void UnregisterPackageFactory(string pluginId)
+    {
+        if (string.IsNullOrWhiteSpace(pluginId)) return;
+        _registeredFactories.TryRemove(pluginId, out _);
     }
     private string Target(string id) => PluginPathGuard.Within(_layout.PluginsDirectory, PluginPathGuard.Segment(id));
     private static void Known(string id)
