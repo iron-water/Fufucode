@@ -1,4 +1,4 @@
-// Progressive alpha-mask + tint stage
+// Progressive alpha-mask + tint stage (Apple scroll-edge / top-edge soft fade).
 // Adapted for SKRuntimeEffect and premultiplied output.
 
 uniform shader content;
@@ -19,11 +19,10 @@ float smoothstepSafe(float edge0, float edge1, float x) {
 }
 
 half4 main(float2 coord) {
-    float edge0 = size.y * end;
-    float edge1 = size.y * start;
-
-    // Keep the top region fully visible and fade towards the bottom.
-    float alpha = smoothstepSafe(edge0, edge1, coord.y);
+    // 顶部边缘渐隐（iOS scroll-edge 语义）：
+    // y=0 边缘处柔和淡入，y >= end*size.y 之后为 1.0 满幅度通透玻璃。
+    float fadeHeight = max(size.y * max(end, 0.01), 1.0);
+    float alpha = smoothstepSafe(0.0, fadeHeight, coord.y);
 
     half4 base = content.eval(coord) * half(alpha);
 

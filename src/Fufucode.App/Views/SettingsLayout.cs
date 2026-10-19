@@ -72,20 +72,27 @@ internal static class SettingsLayout
     }
 
     /// <summary>
-    /// 一组设置项。Windows 11 设置里每项是一张独立圆角卡、卡间留缝，
-    /// 所以这里只做纵向排列，不再把整组合成一张大卡。
+    /// 一组设置项。在默认/Win11 模式下为无边框分组容器；
+    /// 在 Apple Inset Grouped / LiquidGlass 下作为一体化连续圆角卡片渲染（组内发丝分割线）。
     /// </summary>
     public static Control Group(params Control[] rows)
     {
-        var host = new StackPanel();
-        host.Classes.Add("settingsGroupList");
+        var inner = new StackPanel();
+        inner.Classes.Add("settingsGroupList");
         for (var index = 0; index < rows.Length; index++)
         {
             var row = rows[index];
-            if (row is Border border && index == rows.Length - 1) border.Classes.Add("last");
-            host.Children.Add(row);
+            if (row is Border border)
+            {
+                if (index == 0) border.Classes.Add("first");
+                if (index == rows.Length - 1) border.Classes.Add("last");
+                else border.Classes.Add("hasDivider");
+            }
+            inner.Children.Add(row);
         }
-        return host;
+        var group = new Border { Child = inner };
+        group.Classes.Add("settingsGroup");
+        return group;
     }
 
     /// <summary>普通行：标题 + 说明，右侧放控件。</summary>

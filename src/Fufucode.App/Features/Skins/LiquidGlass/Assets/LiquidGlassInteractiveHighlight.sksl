@@ -1,16 +1,20 @@
-// Liquid Glass Interactive Highlight Shader
-// Radial highlight used for interactive press feedback.
+// Liquid Glass interior glow (规范 §7.3 状态参数表 Internal Glow)：
+//   Hover：整面极弱环境晕（alpha ≈ 0.08），中心偏向指针
+//   Press：指针处中心微光斑（alpha ≈ 0.20），像光从玻璃内部被"点亮"
+// 两者叠加，强度由弹簧驱动的 hover/press 进度给出。
 
 uniform float2 size;
-uniform float4 color;   // RGBA (0..1)
-uniform float radius;
-uniform float2 position;
+uniform float2 position;     // 指针局部坐标
+uniform float hover;         // 0..1
+uniform float press;         // 0..1
+uniform float radius;        // 光斑半径
 
 half4 main(float2 coord) {
-    float dist = distance(coord, position);
-    float intensity = smoothstep(radius, radius * 0.5, dist);
-    // Skia expects premultiplied output colors.
-    half a = half(color.a * intensity);
-    half3 rgb = half3(color.rgb) * a;
-    return half4(rgb, a);
+    float d = distance(coord, position);
+    // Hover 环境晕：大半径、低强度。
+    float ambient = smoothstep(radius * 2.4, 0.0, d) * 0.08 * hover;
+    // Press 中心光斑：小半径、高强度。
+    float spot = smoothstep(radius, radius * 0.15, d) * 0.20 * press;
+    float a = clamp(ambient + spot, 0.0, 1.0);
+    return half4(half3(1.0) * half(a), half(a));
 }

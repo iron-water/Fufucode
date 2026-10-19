@@ -56,8 +56,9 @@
   </Style>
   <!-- 设置页左侧导航宿主：同样浮起成玻璃板（透明底侧栏 → 让窗底/内容缝透出模糊折射） -->
   <Style Selector="Border.liquidGlass.settingsNavHost">
-    <Setter Property="Margin" Value="0,0,8,8"/>
-    <Setter Property="CornerRadius" Value="16"/>
+    <Setter Property="Margin" Value="0,0,8,24"/>
+    <Setter Property="Padding" Value="8"/>
+    <Setter Property="CornerRadius" Value="20"/>
     <Setter Property="BorderThickness" Value="0"/>
   </Style>
   <!-- 中央内容区收边：工作区离开窗口底/右缘 8px，让底栏/右栏玻璃缝连贯成一周；
@@ -198,7 +199,7 @@
 
   <!-- ================= 输入（iOS 搜索框语义：浅灰井、聚焦细强调描边） ================= -->
   <Style Selector="TextBox">
-    <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFill}"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
@@ -206,7 +207,7 @@
     <Setter Property="SelectionBrush" Value="{DynamicResource AppAccent}"/>
   </Style>
   <Style Selector="TextBox:pointerover">
-    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
   </Style>
   <Style Selector="TextBox:focus">
     <Setter Property="Background" Value="{DynamicResource ControlFillColorInputActiveBrush}"/>
@@ -219,15 +220,15 @@
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
   </Style>
 
-  <Style Selector="ComboBox">
-    <Setter Property="Background" Value="{DynamicResource ControlFillColorDefaultBrush}"/>
+  <Style Selector="ComboBox, Border.settingsRow ComboBox">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFill}"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerInput}"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
-  <Style Selector="ComboBox:pointerover">
-    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
+  <Style Selector="ComboBox:pointerover, Border.settingsRow ComboBox:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
   </Style>
   <Style Selector="ComboBox:focus, ComboBox:focus-within">
     <Setter Property="BorderBrush" Value="{DynamicResource AppFocusBrush}"/>
@@ -311,15 +312,90 @@
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerPill}"/>
   </Style>
 
-  <!-- ================= 卡片/行（iOS 分组列表：14 圆角、hairline、组间留白由外层 margin 表达） ================= -->
+  <!-- ================= Apple 风格侧栏导航（macOS / iPadOS 浮动侧栏规范） ================= -->
+  <Style Selector="TextBox#SettingsSearchBox">
+    <Setter Property="CornerRadius" Value="18"/>
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFill}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="MinHeight" Value="36"/>
+    <Setter Property="Margin" Value="4,4,4,12"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem">
+    <Setter Property="Margin" Value="4,2"/>
+    <Setter Property="CornerRadius" Value="10"/>
+    <Setter Property="MinHeight" Value="38"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem Border.navFill">
+    <Setter Property="CornerRadius" Value="10"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected Border.navFill">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected:pointerover Border.navFill">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:pointerover Border.navFill">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem Border.navAccent">
+    <Setter Property="IsVisible" Value="False"/>
+  </Style>
+  <Style Selector="ListBox.settingsNav ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="#FFFFFFFF"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+
+  <!-- ================= Apple Inset Grouped 设置卡片（HIG Inset Grouped Table View） =================
+       彻底淘汰 Material 3 的碎片化黑方块！整组设置是一个连续一体的圆角玻璃卡片（CornerRadius 16），
+       内部各行无缝贴合（Spacing 0），行间带 0.5px 发丝分割线。 -->
+  <Style Selector="Border.settingsGroup">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassMaterialColor}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="16"/>
+    <Setter Property="Margin" Value="0,0,0,16"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+  <Style Selector="Border.settingsGroup > StackPanel, Border.settingsGroup StackPanel.settingsGroupList">
+    <Setter Property="Spacing" Value="0"/>
+    <Setter Property="Margin" Value="0"/>
+  </Style>
+  <Style Selector="Border.settingsGroup Border.settingsRow">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0,0,0,0.5"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="Margin" Value="0"/>
+    <Setter Property="Padding" Value="18,12"/>
+    <Setter Property="MinHeight" Value="52"/>
+  </Style>
+  <Style Selector="Border.settingsGroup Border.settingsRow.last">
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Border.settingsGroup Border.settingsRow.clickable:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
+  </Style>
+
+  <!-- 独立设置卡（非组内行）：如面板、关于卡等 -->
+  <Style Selector="Border.settingsPanel">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassMaterialColor}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="16"/>
+    <Setter Property="Margin" Value="0,0,0,16"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+
+  <!-- 孤立未入组的 settingsRow 兜底样式 -->
   <Style Selector="Border.settingsRow">
-    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassMaterialColor}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
     <Setter Property="BorderThickness" Value="0.5"/>
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
   </Style>
   <Style Selector="Border.settingsRow.clickable:pointerover">
-    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
   </Style>
   <Style Selector="Border.settingsRow.error">
     <Setter Property="BorderBrush" Value="{DynamicResource AppErrorBorder}"/>
@@ -329,6 +405,14 @@
   </Style>
   <Style Selector="Border.settingsRow.disabled">
     <Setter Property="Opacity" Value="0.6"/>
+  </Style>
+  <!-- 套了 Standard Material 的卡片：宿主外壳透明，模糊/鲜明度/顶光由内层 LiquidGlassSurface 绘制 -->
+  <Style Selector="Border.glassMaterialHost">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Border.glassMaterialHost.clickable:pointerover">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
   </Style>
   <Style Selector="Border.card, Border.composerCard, Border.toolCard, Border.queueStrip, Border.restoreInfo, Border.userBubble, Border.codeCard, Border.errorCard, Border.thinkingBlock">
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
@@ -404,4 +488,22 @@
       </FocusAdornerTemplate>
     </Setter>
   </Style>
+
+
+  <!-- ================= Apple iOS 原生开关（44x24 胶囊轨道 + 正圆投影滑块） ================= -->
+  <Style Selector="ToggleSwitch /template/ Border#SwitchKnobBounds">
+    <Setter Property="CornerRadius" Value="14"/>
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFill}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="ToggleSwitch:checked /template/ Border#SwitchKnobBounds">
+    <Setter Property="Background" Value="{DynamicResource AppSuccessForeground}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="ToggleSwitch /template/ Ellipse#SwitchKnobOff, ToggleSwitch /template/ Ellipse#SwitchKnobOn">
+    <Setter Property="Fill" Value="#FFFFFFFF"/>
+    <Setter Property="Width" Value="20"/>
+    <Setter Property="Height" Value="20"/>
+  </Style>
+
 </Styles>

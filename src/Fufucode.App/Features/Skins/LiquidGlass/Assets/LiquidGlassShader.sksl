@@ -107,9 +107,9 @@ half4 main(float2 coord) {
     if (chromaticAberration <= 0.001) {
         result = content.eval(refractedCoord);
     } else {
-        float denom = max(halfSize.x * halfSize.y, 0.001);
-        float dispersionIntensity = chromaticAberration * ((centeredCoord.x * centeredCoord.y) / denom);
-        float2 dispersedCoord = d * grad * dispersionIntensity;
+        // 规范 §2.4 / 卷四 §1 微棱镜色散：色散位移量沿表面法线 grad 展开（R+0.75px, B-0.75px），
+        // 呈现珠宝级晶莹光泽；旧代码用 x*y 导致轴线上色散为零且象限颠倒。
+        float2 dispersedCoord = grad * (abs(d) * 0.15 + 0.75 * chromaticAberration);
         result = sampleDispersed(refractedCoord, dispersedCoord);
     }
     return result;
