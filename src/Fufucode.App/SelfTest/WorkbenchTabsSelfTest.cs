@@ -46,6 +46,13 @@ internal static class WorkbenchTabsSelfTest
             await workspace.RefreshAsync();
             foreach (var id in WorkbenchLayoutState.KnownPages)
             {
+                // "terminal" is an optional plugin page now; without the plugin payload it must not exist.
+                if (!window.PageAvailableForTesting(id))
+                {
+                    Check(id == "terminal" && window.TerminalPageForTesting is null,
+                        id + " is absent because its optional plugin is not installed");
+                    continue;
+                }
                 window.MoveDockPage(id, DockZone.Left); await Ready();
                 var page = window.PageForTesting(id);
                 Check(page.IsEffectivelyVisible && page.Bounds.Width > 0, id + " opens in left sidebar");

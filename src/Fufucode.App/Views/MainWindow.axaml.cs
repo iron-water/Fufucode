@@ -82,6 +82,7 @@ public partial class MainWindow : Window
         // BRW-1：在 _customization 就绪后创建浏览器设置，便于一次性迁移旧偏好。
         InitializeBrowserSettings();
         InitializeShortcuts();
+        InitializePluginPages();
         InitializeStorage();
         InitializeLocalPlugins();
         // SEEP-1：Seep 逆向工作台插件的组合根接线（未安装时不启动任何子进程）。
@@ -1133,7 +1134,7 @@ public partial class MainWindow : Window
         try { SaveModulePreferences(); }
         catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
         { LayoutStateText.Text = "模块状态保存失败：" + error.Message; }
-        foreach (var terminal in _projectTerminals.Values) terminal.Dispose();
+        _pluginPageHost?.Dispose();
         foreach (var page in _workbenchPages.Values)
             foreach (var browser in page.Content.GetVisualDescendants().OfType<Views.BrowserViewHost>()) browser.Dispose();
         _workbenchPages.Dispose();

@@ -198,7 +198,8 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.RemoteControl.dll',
     'Fufucode.Plugins.CronSchedules.dll',
     'Fufucode.Plugins.AeroSkin.dll',
-    'Fufucode.Plugins.AutoDev.dll'
+    'Fufucode.Plugins.AutoDev.dll',
+    'Fufucode.Plugins.Terminal.dll'
 )
 foreach ($dll in $forbiddenPluginDlls) {
     if (Test-Path -LiteralPath (Join-Path $packageRoot "app/$dll")) {
@@ -337,6 +338,7 @@ $plugins = @(
     @{ Id = 'automation.cron'; Project = 'src/Fufucode.Plugins.CronSchedules/Fufucode.Plugins.CronSchedules.csproj' },
     @{ Id = 'skin.aero'; Project = 'src/Fufucode.Plugins.AeroSkin/Fufucode.Plugins.AeroSkin.csproj' },
     @{ Id = 'automation.auto-dev'; Project = 'src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj' },
+    @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
     # 五类后端插件结构完全同级；各自携带协议适配器，运行时由用户安装或按需下发。
     @{ Id = 'backend.pi'; Project = 'src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj' },
     @{ Id = 'backend.omp'; Project = 'src/Fufucode.Plugins.Omp/Fufucode.Plugins.Omp.csproj' },
@@ -352,6 +354,7 @@ $hostAssemblies = @(
     'Fufucode.App.*',
     'Fufucode.App.Abstractions.*',
     'Avalonia.*',
+    'Microsoft.Web.WebView2.*',
     'Microsoft.Data.Sqlite.*',
     'SQLitePCLRaw.*',
     'CommunityToolkit.Mvvm.*'

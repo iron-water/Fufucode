@@ -11,10 +11,13 @@ using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
-using Fufucode.App.Features.TerminalExperience;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
+using Fufucode.Plugins.Terminal.Features.TerminalExperience;
+using Fufucode.Plugins.Terminal.Infrastructure;
+using Fufucode.Plugins.Terminal.ViewModels;
+using Fufucode.Plugins.Terminal.Views;
 
 namespace Fufucode.App.Terminal.Tests;
 
@@ -27,22 +30,41 @@ internal static class Program
 {
     private static int _passed;
 
-    private static int Main()
+    private static int Main(string[] args)
     {
         // Avalonia 的 avares 资源解析按“已加载程序集名的最短前缀匹配”选程序集
         // （Avalonia.Base AssemblyDescriptorResolver.GetAssembly）。本测试程序集名
         // Fufucode.App.Terminal.Tests 同样以 Fufucode.App 开头；若产品程序集尚未加载，
         // 解析会命中错误程序集并使 FufucodeTheme.axaml 无法预编译加载。先显式触达产品类型。
+        _ = typeof(Fufucode.App.MainWindow).Assembly;
         _ = typeof(TerminalScreenControl).Assembly;
         AppBuilder.Configure<SmokeApp>()
             .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
             .SetupWithoutStarting();
         try
         {
+            if (args.Contains("--conpty-p0"))
+            {
+                // Run off the headless dispatcher thread: blocking it would deadlock the async smoke.
+                Console.WriteLine(Task.Run(() => Fufucode.Plugins.Terminal.SelfTest.TerminalSelfTest
+                    .RunConPtyP0SmokeAsync(Environment.CurrentDirectory)).GetAwaiter().GetResult());
+                return 0;
+            }
+            if (args.Contains("--conpty"))
+            {
+                Console.WriteLine(Task.Run(() => Fufucode.Plugins.Terminal.SelfTest.TerminalSelfTest
+                    .RunConPtySmokeAsync(Environment.CurrentDirectory)).GetAwaiter().GetResult());
+                return 0;
+            }
             RunFirstCharacterChecks();
             RunClipboardChecks();
             RunHistoryChecks();
             RunCompositionChecks();
+            RunVtP0Checks();
+            RunPluginPageChecks();
+            RunEnhancementChecks();
+            RunHostWithoutTerminalPlugin();
+            RunMainWindowPluginIntegration();
             Console.WriteLine($"\n全部通过：{_passed} 项断言");
             return 0;
         }
@@ -149,13 +171,24 @@ internal static class Program
         Check(harness.Tab.InputText == "keep-me\npaste-😀\nline2" && session.Writes.Count == 1,
             "terminal-ctrl-v-pastes-into-draft-only");
 
+        // Direct paste to the shell: without bracketed paste line breaks become CR; with bracketed paste
+        // the text is wrapped so interactive programs receive it as one paste.
+        var writesBeforeDirect = session.Writes.Count;
+        harness.ClipboardReader = () => "line1\nline2";
+        Check(harness.Surface.PasteToShellAsync().GetAwaiter().GetResult() &&
+              session.Writes[^1] == "line1\rline2", "terminal-direct-paste-sends-to-shell");
+        harness.Tab.Buffer.Append("\u001b[?2004h");
+        harness.Surface.PasteToShellAsync().GetAwaiter().GetResult();
+        Check(session.Writes[^1] == "\u001b[200~line1\nline2\u001b[201~", "terminal-direct-paste-honors-bracketed-paste");
+        Check(session.Writes.Count == writesBeforeDirect + 2, "terminal-direct-paste-count");
+
         // Shift+Insert 同义。
         harness.ClipboardReader = () => "shift-insert";
         harness.Surface.Focus();
         harness.Ready();
         harness.Press(Key.Insert, RawInputModifiers.Shift, PhysicalKey.Insert);
         harness.Ready();
-        Check(harness.Tab.InputText.EndsWith("shift-insert", StringComparison.Ordinal) && session.Writes.Count == 1,
+        Check(harness.Tab.InputText.EndsWith("shift-insert", StringComparison.Ordinal) && session.Writes.Count == writesBeforeDirect + 2,
             "terminal-shift-insert-pastes-into-draft");
 
         // 复制 → 粘贴往返：粘贴内容与冻结选区文本逐字一致。
@@ -173,10 +206,12 @@ internal static class Program
         Check(harness.Tab.InputText == captured && harness.Tab.OutputSelection.Text == captured,
             "terminal-copy-paste-round-trip");
 
-        // 右键菜单结构：复制/粘贴/清屏。
+        // 右键菜单结构：复制/粘贴草稿/直接粘贴/全选/打开链接/清屏。
         var items = harness.ContextMenu.Items.OfType<Control>().ToArray();
-        Check(items.Length == 4 && items[0] is MenuItem { Header: "复制" } && items[1] is MenuItem { Header: "粘贴" } &&
-              items[2] is Separator && items[3] is MenuItem { Header: "清屏" },
+        Check(items.Length == 7 && items[0] is MenuItem { Header: "复制" } &&
+              items[1] is MenuItem { Header: "粘贴到命令草稿" } && items[2] is MenuItem { Header: "粘贴到终端（直接发送）" } &&
+              items[3] is MenuItem { Header: "全选" } && items[4] is MenuItem { Header: "打开链接" } &&
+              items[5] is Separator && items[6] is MenuItem { Header: "清屏" },
             "terminal-context-menu-has-copy-paste-clear");
         Check(harness.CopyItem.Header?.ToString() == "复制" && harness.ClearItem.Header?.ToString() == "清屏",
             "terminal-context-menu-items-named");
@@ -316,6 +351,391 @@ internal static class Program
             "terminal-ime-preview-clears");
     }
 
+    // ---------- 5. P0：备用屏、DSR/DA 应答、滚动区域与行/字符编辑 ----------
+    private static void RunVtP0Checks()
+    {
+        // DSR/DA: prompt frameworks and full-screen apps wait for these replies.
+        var replies = new TerminalBuffer(20, 6);
+        replies.Append("abc\u001b[2;3H\u001b[6n");
+        Check(replies.TakePendingResponse() == "\u001b[2;3R", "terminal-dsr-cursor-position-reply");
+        replies.Append("\u001b[c");
+        Check(replies.TakePendingResponse() == "\u001b[?1;2c", "terminal-da-primary-reply");
+        replies.Append("\u001b[>c");
+        Check(replies.TakePendingResponse() == "\u001b[>0;276;0c", "terminal-da-secondary-reply");
+        Check(replies.TakePendingResponse().Length == 0, "terminal-replies-drain-once");
+
+        // The view model must answer a DSR query by writing the reply back to the shell.
+        var recording = new RecordingSession();
+        using (var tab = new TerminalTabViewModel(1, isMock: false, recording))
+        {
+            tab.Start(Environment.CurrentDirectory);
+            recording.Emit("\u001b[1;1H\u001b[6n");
+            Check(recording.Writes.Count > 0 && recording.Writes[^1] == "\u001b[1;1R",
+                "terminal-session-writes-dsr-reply");
+        }
+
+        // Alternate screen: full-screen apps get a clean screen, and leaving it restores the primary
+        // content and its scrollback unchanged.
+        var alt = new TerminalBuffer(20, 4);
+        alt.Append("primary-line\r\nsecond");
+        var primaryText = alt.PlainText;
+        var primaryLines = alt.Snapshot().Lines.Length;
+        alt.Append("\u001b[?1049h");
+        Check(alt.AlternateScreen && alt.PlainText.Length == 0, "terminal-alt-screen-starts-empty");
+        alt.Append("\u001b[1;1Hvim-screen\r\nrow2\r\nrow3\r\nrow4\r\nrow5");
+        Check(alt.PlainText.StartsWith("vim-screen", StringComparison.Ordinal), "terminal-alt-screen-renders");
+        alt.Append("\u001b[?1049l");
+        Check(!alt.AlternateScreen && alt.PlainText == primaryText && alt.Snapshot().Lines.Length == primaryLines,
+            "terminal-alt-screen-restores-primary");
+
+        // Scrolling inside an alternate screen must never enter the primary scrollback.
+        var isolation = new TerminalBuffer(12, 3);
+        for (var i = 0; i < 10; i++) isolation.Append($"p{i}\r\n");
+        var isolatedText = isolation.PlainText;
+        var isolatedLines = isolation.Snapshot().Lines.Length;
+        isolation.Append("\u001b[?1049h");
+        for (var i = 0; i < 20; i++) isolation.Append($"a{i}\r\n");
+        isolation.Append("\u001b[?1049l");
+        Check(isolation.PlainText == isolatedText && isolation.Snapshot().Lines.Length == isolatedLines,
+            "terminal-alt-screen-keeps-primary-scrollback");
+
+        // Scroll region (DECSTBM): a line feed at the region bottom scrolls only the region.
+        var region = new TerminalBuffer(12, 6);
+        region.Append("\u001b[1;1HrowA\u001b[2;1HrowB\u001b[3;1HrowC\u001b[4;1HrowD\u001b[5;1HrowE\u001b[6;1HrowF");
+        region.Append("\u001b[3;5r\u001b[5;1H\n");
+        var regionSnapshot = region.Snapshot();
+        Check(RowText(regionSnapshot, 0) == "rowA" && RowText(regionSnapshot, 1) == "rowB" && RowText(regionSnapshot, 5) == "rowF",
+            "terminal-scroll-region-leaves-outside-rows");
+        Check(RowText(regionSnapshot, 2) == "rowD" && RowText(regionSnapshot, 3) == "rowE" && RowText(regionSnapshot, 4).Length == 0
+            && regionSnapshot.Lines.Length == 6,
+            "terminal-scroll-region-scrolls-only-inside");
+
+        // IL/DL: insert and delete whole lines inside the active region.
+        var lines = new TerminalBuffer(10, 4);
+        lines.Append("a\r\nb\r\nc\r\nd");
+        lines.Append("\u001b[2;1H\u001b[L");
+        var inserted = lines.Snapshot();
+        Check(RowText(inserted, 0) == "a" && RowText(inserted, 1).Length == 0 && RowText(inserted, 2) == "b" && RowText(inserted, 3) == "c",
+            "terminal-insert-line");
+        lines.Append("\u001b[2;1H\u001b[M");
+        var deleted = lines.Snapshot();
+        Check(RowText(deleted, 0) == "a" && RowText(deleted, 1) == "b" && RowText(deleted, 2) == "c" && RowText(deleted, 3).Length == 0,
+            "terminal-delete-line");
+
+        // ICH/DCH/ECH: edit characters in place without touching the rest of the row.
+        var chars = new TerminalBuffer(10, 2);
+        chars.Append("abcdef");
+        chars.Append("\u001b[1;3H\u001b[2P");
+        Check(RowText(chars.Snapshot(), 0).StartsWith("abef", StringComparison.Ordinal), "terminal-delete-chars");
+        chars.Append("\u001b[1;3H\u001b[2@");
+        Check(RowText(chars.Snapshot(), 0).StartsWith("ab  ef", StringComparison.Ordinal), "terminal-insert-chars");
+        chars.Append("\u001b[1;4H\u001b[2X");
+        Check(RowText(chars.Snapshot(), 0).StartsWith("ab   f", StringComparison.Ordinal), "terminal-erase-chars");
+
+        // Deferred wrap (xterm semantics): the cursor stays on the last column until the next printable char.
+        var wrap = new TerminalBuffer(10, 3);
+        wrap.Append("abcdefghij");
+        var filled = wrap.Snapshot();
+        Check(filled.CursorLine == 0 && filled.CursorColumn == 9, "terminal-wrap-pending-cursor-stays-on-last-column");
+        wrap.Append("k");
+        var wrapped = wrap.Snapshot();
+        Check(RowText(wrapped, 0) == "abcdefghij" && RowText(wrapped, 1) == "k" && wrapped.CursorLine == 1,
+            "terminal-wrap-moves-on-next-printable");
+
+        // Resize keeps each line's text (cropping trailing blanks first) and the scrollback stays usable.
+        var shrinking = new TerminalBuffer(20, 4);
+        shrinking.Append("keep-this-text\r\nsecond-line\r\nthird");
+        shrinking.Resize(12, 4);
+        var resized = shrinking.Snapshot();
+        Check(RowText(resized, 0) == "keep-this-te" && RowText(resized, 1) == "second-line" && RowText(resized, 2) == "third"
+            && resized.Lines.All(line => line.Length == 12),
+            "terminal-resize-crops-trailing-blank-cells-first");
+        shrinking.Resize(12, 2);
+        var shrunk = shrinking.Snapshot();
+        Check(shrunk.Lines.Length == 4 && RowText(shrunk, 0) == "keep-this-te" && RowText(shrunk, 2) == "third",
+            "terminal-resize-shrinks-into-scrollback");
+
+        // Origin mode (DECOM): cursor addressing is relative to the scroll region.
+        var origin = new TerminalBuffer(12, 6);
+        origin.Append("\u001b[2;5r\u001b[?6h\u001b[1;1Horigin");
+        Check(RowText(origin.Snapshot(), 1).StartsWith("origin", StringComparison.Ordinal), "terminal-origin-mode-addressing");
+    }
+
+    // ---------- 5b. 增强：SGR、标题、链接、设置、选择 ----------
+    private static void RunEnhancementChecks()
+    {
+        // SGR attributes survive into the snapshot and reset correctly.
+        var sgr = new TerminalBuffer(20, 3);
+        sgr.Append("\u001b[4;3;9mA\u001b[0mB\u001b[7mC\u001b[27mD");
+        var line = sgr.Snapshot().Lines[0];
+        Check(line[0].Underline && line[0].Italic && line[0].Strike, "terminal-sgr-underline-italic-strike");
+        Check(!line[1].Underline && !line[1].Italic, "terminal-sgr-reset-clears-attributes");
+        Check(line[2].Reverse && !line[3].Reverse, "terminal-sgr-reverse-toggle");
+        var dim = new TerminalBuffer(10, 2);
+        dim.Append("\u001b[2;8mE");
+        Check(dim.Snapshot().Lines[0][0].Dim && dim.Snapshot().Lines[0][0].Conceal, "terminal-sgr-dim-conceal");
+
+        // OSC title and hyperlink.
+        var osc = new TerminalBuffer(20, 3);
+        osc.Append("\u001b]2;Build · 构建\a\u001b]8;;https://example.com/x\u001b\\link\u001b]8;;\u001b\\ tail");
+        var oscSnapshot = osc.Snapshot();
+        Check(oscSnapshot.Title == "Build · 构建", "terminal-osc-title");
+        Check(oscSnapshot.Lines[0][0].Link == "https://example.com/x", "terminal-osc8-link-attached");
+        Check(oscSnapshot.Lines[0].Skip(4).All(cell => cell.Link is null), "terminal-osc8-link-ended");
+
+        // Modes and cursor shape are reported to the page.
+        var modes = new TerminalBuffer(20, 3);
+        modes.Append("\u001b[?2004h\u001b[?1000h\u001b[3 q");
+        var modesSnapshot = modes.Snapshot();
+        Check(modesSnapshot.BracketedPaste && modesSnapshot.MouseTracking && modesSnapshot.MouseMode == 1000 && modesSnapshot.CursorStyle == 3,
+            "terminal-modes-and-cursor-style");
+
+        // BEL raises the bell event.
+        var bell = 0;
+        var bellBuffer = new TerminalBuffer(10, 2);
+        bellBuffer.Bell += () => bell++;
+        bellBuffer.Append("a\ab");
+        Check(bell == 1, "terminal-bel-event");
+
+        // Combining marks stay in the owning cell; overwriting a wide continuation clears the owner.
+        var combining = new TerminalBuffer(10, 2);
+        combining.Append("é");
+        Check(combining.Snapshot().Lines[0][0].Text == "é" && combining.Snapshot().Lines[0][1].Text.Trim().Length == 0,
+            "terminal-combining-mark-joins-cell");
+        var wide = new TerminalBuffer(10, 2);
+        wide.Append("你");
+        wide.Append("\u001b[1;2Hx");
+        Check(wide.Snapshot().Lines[0][0].Text == " " && wide.Snapshot().Lines[0][1].Text == "x",
+            "terminal-overwrite-wide-continuation-clears-owner");
+
+        // Palette override (OSC 4) affects SGR 31 output.
+        var palette = new TerminalBuffer(10, 2);
+        palette.Append("\u001b]4;1;#123456\u001b\\\u001b[31mR");
+        Check(palette.Snapshot().Lines[0][0].Foreground == 0x123456, "terminal-osc4-palette-override");
+
+        // Selection helpers: select-all, double-click word, triple-click row.
+        var text = new TerminalBuffer(20, 3);
+        text.Append("alpha beta gamma\r\nsecond line");
+        var textSnapshot = text.Snapshot();
+        var selection = new TerminalOutputSelection();
+        Check(selection.SelectAll(textSnapshot) && selection.Text.Contains("alpha beta gamma", StringComparison.Ordinal)
+            && selection.Text.Contains("second line", StringComparison.Ordinal), "terminal-selection-select-all");
+        var word = new TerminalOutputSelection();
+        Check(word.SelectWord(textSnapshot, new TerminalCellPosition(0, 7)) && word.Text == "beta", "terminal-selection-double-click-word");
+        var row = new TerminalOutputSelection();
+        Check(row.SelectRow(textSnapshot, 1) && row.Text == "second line", "terminal-selection-triple-click-row");
+
+        // Settings normalize unknown values and round-trip through the plugin store.
+        var normalized = (TerminalSettings.Default with
+        {
+            ShellProfile = "no-such-shell", FontSize = 999, ScrollbackLines = -4, Bell = "loud"
+        }).Normalize();
+        Check(normalized.ShellProfile == "cmd" && normalized.FontSize == 28 && normalized.ScrollbackLines == 0 && normalized.Bell == "visual",
+            "terminal-settings-normalize");
+        var settingsRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-settings-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new TerminalSettingsStore(settingsRoot);
+            Check(store.Load() == TerminalSettings.Default, "terminal-settings-default-when-missing");
+            store.Save(TerminalSettings.Default with { ShellProfile = "powershell", FontSize = 16, ConfirmClose = false });
+            var loaded = store.Load();
+            Check(loaded.ShellProfile == "powershell" && loaded.FontSize == 16 && !loaded.ConfirmClose, "terminal-settings-round-trip");
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(settingsRoot)) System.IO.Directory.Delete(settingsRoot, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        // Built-in shell profiles resolve their real executable paths on Windows.
+        if (OperatingSystem.IsWindows())
+        {
+            var cmd = ShellProfiles.Find("cmd")!;
+            var powershell = ShellProfiles.Find("powershell")!;
+            Check(ShellProfiles.Resolve(cmd) is { Length: > 0 }, "terminal-shell-cmd-resolves");
+            Check(ShellProfiles.Resolve(powershell) is { Length: > 0 }, "terminal-shell-powershell-resolves");
+            Check(ShellProfiles.BuildCommandLine(cmd, ShellProfiles.Resolve(cmd), null).Contains("cmd.exe", StringComparison.OrdinalIgnoreCase),
+                "terminal-shell-command-line");
+        }
+
+        // A shell that cannot be resolved produces an explicit start error, not a silent cmd fallback.
+        var profile = ShellProfiles.Find("definitely-not-installed");
+        Check(profile is null, "terminal-unknown-shell-profile-is-null");
+        var unavailable = new UnavailableSession("所选 shell 不可用：测试");
+        using var unavailableTab = new TerminalTabViewModel(1, isMock: false, unavailable);
+        unavailableTab.Start(Environment.CurrentDirectory);
+        Check(!unavailableTab.IsRunning && unavailableTab.Buffer.PlainText.Contains("所选 shell 不可用", StringComparison.Ordinal),
+            "terminal-unavailable-shell-reports-reason");
+
+        // The plugin page persists settings and applies display values.
+        var pageRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-page-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            using var page = new Fufucode.Plugins.Terminal.TerminalDockPage(pageRoot);
+            page.ApplySettings(TerminalSettings.Default with { FontSize = 18, ScrollbackLines = 42, ShellProfile = "powershell" });
+            var persisted = new TerminalSettingsStore(pageRoot).Load();
+            Check(persisted.FontSize == 18 && persisted.ScrollbackLines == 42 && persisted.ShellProfile == "powershell",
+                "terminal-page-persists-settings");
+            page.SetProject(Environment.CurrentDirectory, useMock: true);
+            page.CreateTerminal();
+            Check(page.HasTabs, "terminal-page-uses-settings-for-new-tab");
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(pageRoot)) System.IO.Directory.Delete(pageRoot, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+
+        // Tab titles are user-editable; the shell title remains separate.
+        using (var titled = new TerminalTabViewModel(1, isMock: true, new TerminalMockSession()))
+        {
+            titled.Title = "构建终端";
+            Check(titled.Title == "构建终端", "terminal-tab-title-renamable");
+        }
+
+        // Scrollback limit is configurable per buffer.
+        var bounded = new TerminalBuffer(10, 3) { ScrollbackLimit = 5 };
+        for (var i = 0; i < 40; i++) bounded.Append($"r{i}\r\n");
+        Check(bounded.Snapshot().Lines.Length <= 8, "terminal-scrollback-limit-configurable");
+    }
+
+    // ---------- 6. 插件页面契约：插件包 → 宿主页面 → 项目级状态 ----------
+    private static void RunPluginPageChecks()
+    {
+        var package = new Fufucode.Plugins.Terminal.TerminalPluginPackage();
+        Check(package.Id == "workspace.terminal" && package.Version == "2.0.0", "terminal-plugin-identity");
+        var contribution = package.CreatePageContribution(
+            new Fufucode.Core.Plugins.PluginPackageContext("workspace.terminal", Environment.CurrentDirectory, null));
+        Check(contribution is { PageId: "terminal", Title: "终端", IconKey: "Terminal" }, "terminal-plugin-page-contribution");
+
+        using var page = (Fufucode.Plugins.Terminal.TerminalDockPage)contribution!.CreateView();
+        page.SetProject(Environment.CurrentDirectory, useMock: true);
+        Check(!page.HasTabs && page.CommandInput is not null, "terminal-page-starts-empty-with-command-input");
+        page.CreateTerminal();
+        Check(page.HasTabs && page.IsVisible && page.HasRunningTab, "terminal-page-creates-running-tab");
+        var stateEvents = 0;
+        page.StateChanged += (_, _) => stateEvents++;
+        page.Hide();
+        Check(!page.IsVisible && stateEvents > 0, "terminal-page-state-changes-reach-host");
+        page.Show();
+        Check(page.IsVisible, "terminal-page-show-restores-visibility");
+        page.Dispose();
+
+        // Full host path: marketplace install -> page contribution -> workbench page registration.
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-plugin-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var layout = new Fufucode.Core.AppDataLayout(root);
+            var store = new Fufucode.Core.Plugins.PluginStateStore(layout);
+            Fufucode.Core.Plugins.PluginPackageManager.RegisterPackageFactory(
+                "workspace.terminal", () => new Fufucode.Plugins.Terminal.TerminalPluginPackage());
+            var manager = new Fufucode.Core.Plugins.PluginPackageManager(
+                layout, new Fufucode.Core.Plugins.PluginToolRegistry(new Fufucode.Core.Plugins.PluginCapabilityGateway(store)), store);
+            manager.InstallPackage("workspace.terminal");
+            using var registry = new Fufucode.App.Views.WorkbenchPageRegistry();
+            using var host = new Fufucode.App.Features.Plugins.PluginWorkspacePageHost(root, registry, () => true, manager);
+            host.Start(Environment.CurrentDirectory);
+            Check(host.TryGet("terminal", out var hosted) && hosted.HasTabs == false, "terminal-plugin-host-registers-page");
+            Check(registry.ContainsKey("terminal"), "terminal-plugin-page-is-in-workbench-registry");
+        }
+        finally
+        {
+            try { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    // ---------- 7. 真实宿主：未安装插件时终端不存在 ----------
+    private static void RunHostWithoutTerminalPlugin()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-no-terminal-" + Guid.NewGuid().ToString("N"));
+        var previousRoot = Fufucode.App.Program.SelfTestDataRoot;
+        try
+        {
+            Fufucode.App.Program.SelfTestDataRoot = root;
+            var window = new Fufucode.App.MainWindow(Fufucode.App.Integration.AppOptions.Mock with { AppDataRootOverride = root })
+            {
+                Width = 1100,
+                Height = 760
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Check(!window.TerminalPluginAvailableForTesting, "host-without-terminal-plugin-has-no-page");
+            Check(!window.PageAvailableForTesting("terminal"), "host-without-terminal-plugin-has-no-workbench-page");
+            Check(window.ActionsForTesting.GetDisabledReason("terminal.interrupt") == "没有运行中的终端",
+                "host-without-terminal-plugin-disables-terminal-actions-honestly");
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            Fufucode.App.Program.SelfTestDataRoot = previousRoot;
+            try { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    // ---------- 7. 真实宿主：安装插件后 MainWindow 动态接入终端页 ----------
+    private static void RunMainWindowPluginIntegration()
+    {
+        var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-host-" + Guid.NewGuid().ToString("N"));
+        var previousRoot = Fufucode.App.Program.SelfTestDataRoot;
+        try
+        {
+            var configured = Environment.GetEnvironmentVariable("FUFUCODE_TERMINAL_PLUGIN_DIR");
+            var target = System.IO.Path.Combine(root, "plugins", "workspace.terminal");
+            System.IO.Directory.CreateDirectory(target);
+            if (!string.IsNullOrWhiteSpace(configured) && System.IO.Directory.Exists(configured))
+            {
+                // Verify a real (lean, published) plugin payload loaded by the host.
+                foreach (var file in System.IO.Directory.GetFiles(configured))
+                    System.IO.File.Copy(file, System.IO.Path.Combine(target, System.IO.Path.GetFileName(file)), true);
+            }
+            else
+            {
+                var pluginSource = System.IO.Path.GetDirectoryName(typeof(Fufucode.Plugins.Terminal.TerminalPluginPackage).Assembly.Location)!;
+                foreach (var file in new[] { "Fufucode.Plugins.Terminal.dll", "manifest.json" })
+                    System.IO.File.Copy(System.IO.Path.Combine(pluginSource, file), System.IO.Path.Combine(target, file), true);
+            }
+            var layout = new Fufucode.Core.AppDataLayout(root);
+            new Fufucode.Core.Plugins.PluginStateStore(layout).Install("workspace.terminal");
+            Fufucode.App.Program.SelfTestDataRoot = root;
+
+            var window = new Fufucode.App.MainWindow(Fufucode.App.Integration.AppOptions.Mock with { AppDataRootOverride = root })
+            {
+                Width = 1280,
+                Height = 820
+            };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+            Check(window.TerminalPluginAvailableForTesting, "host-loads-installed-terminal-plugin");
+            Check(window.PageAvailableForTesting("terminal"), "host-registers-terminal-workbench-page");
+            window.OpenDockPage("terminal", Fufucode.App.Infrastructure.DockZone.Bottom);
+            Dispatcher.UIThread.RunJobs();
+            var page = window.TerminalPageForTesting!;
+            page.CreateTerminal();
+            Dispatcher.UIThread.RunJobs();
+            Check(page.HasTabs && page.HasRunningTab, "host-terminal-page-owns-a-running-tab");
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+        finally
+        {
+            Fufucode.App.Program.SelfTestDataRoot = previousRoot;
+            try { if (System.IO.Directory.Exists(root)) System.IO.Directory.Delete(root, true); }
+            catch (System.IO.IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
+    private static string RowText(TerminalSnapshot snapshot, int row) =>
+        row < 0 || row >= snapshot.Lines.Length ? string.Empty
+            : string.Concat(snapshot.Lines[row].Select(cell => cell.Text)).TrimEnd();
+
     private static void Check(bool condition, string name)
     {
         if (!condition) throw new Exception("FAIL " + name);
@@ -437,8 +857,8 @@ internal static class Program
         {
             var x = column == int.MaxValue
                 ? Math.Max(TerminalScreenControl.OriginX, Surface.Bounds.Width - 2)
-                : TerminalScreenControl.OriginX + column * TerminalScreenControl.CellWidth + 2;
-            var y = TerminalScreenControl.OriginY + row * TerminalScreenControl.CellHeight + 8;
+                : TerminalScreenControl.OriginX + column * Surface.CellWidth + 2;
+            var y = TerminalScreenControl.OriginY + row * Surface.CellHeight + 8;
             return Surface.TranslatePoint(new Point(x, y), Window) ?? new Point(x, y);
         }
 
@@ -466,6 +886,9 @@ internal static class Program
 
         public void Write(string text) => Writes.Add(text);
         public void Resize(int columns, int rows) { }
+
+        /// <summary>Feed bytes as if the shell had produced them (used for DSR/DA reply checks).</summary>
+        public void Emit(string text) => Output?.Invoke(text);
 
         public void Dispose()
         {
