@@ -29,17 +29,20 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
         private readonly LiquidGlassDrawParameters _parameters;
         private readonly LiquidGlassBackdropSnapshot? _backdropSnapshot;
         private readonly LiquidGlassDrawPass _pass;
+        private readonly Rect? _topLevelBounds;
 
         public LiquidGlassDrawOperation(
             Rect bounds,
             LiquidGlassDrawParameters parameters,
             LiquidGlassBackdropSnapshot? snapshot,
-            LiquidGlassDrawPass pass)
+            LiquidGlassDrawPass pass,
+            Rect? topLevelBounds = null)
         {
             _bounds = bounds;
             _parameters = parameters;
             _backdropSnapshot = snapshot is not null && snapshot.TryAddLease() ? snapshot : null;
             _pass = pass;
+            _topLevelBounds = topLevelBounds;
         }
 
         public void Dispose()
@@ -138,6 +141,19 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             {
                 DrawFallback(canvas);
                 return;
+            }
+
+            // Snapshot 全透明防御：玻璃底下若整片透明（layout 未把内容伸到下面，
+            // 或首帧 snapshot 未捕获时），lens 采 alpha=0 → 叠 SurfaceColor 成实色块。
+            // 此时改走 fallback 磨砂渐变，保住"玻璃浮起"观感。
+            if (_topLevelBounds is { } topLevel)
+            {
+                double avgAlpha = _backdropSnapshot.SampleAverageAlpha(topLevel);
+                if (avgAlpha < 0.05)
+                {
+                    DrawFallback(canvas);
+                    return;
+                }
             }
 
             SKMatrix currentTransform = canvas.TotalMatrix;
@@ -799,13 +815,26 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             canvas.Save();
             canvas.ClipPath(path, SKClipOperation.Intersect, true);
 
-            if (_parameters.SurfaceColor.A > 0)
+            // 磨砂基色：SurfaceColor 顶部略亮到底部原 alpha 的竖向渐变，模拟模糊后的环境色。
+            // 即便没有 snapshot 也读得出"浮起磨砂"而非"实色块"（iOS 玻璃在无内容处的近似观感）。
+            Color surface = _parameters.SurfaceColor;
+            if (surface.A > 0)
             {
-                Color surface = _parameters.SurfaceColor;
+                byte topAlpha = (byte)Clamp(surface.A * 0.85 + 30, 0, 255);
+                byte bottomAlpha = (byte)Clamp(surface.A * 0.85, 0, 255);
                 using SKPaint fill = new()
                 {
-                    Color = new SKColor(surface.R, surface.G, surface.B, surface.A),
-                    IsAntialias = true
+                    Shader = SKShader.CreateLinearGradient(
+                        new SKPoint(0, 0),
+                        new SKPoint(0, size.Height),
+                        new[]
+                        {
+                            new SKColor(surface.R, surface.G, surface.B, topAlpha),
+                            new SKColor(surface.R, surface.G, surface.B, bottomAlpha),
+                        },
+                        null,
+                        SKShaderTileMode.Clamp),
+                    IsAntialias = true,
                 };
                 canvas.DrawRect(rect, fill);
             }
@@ -820,7 +849,22 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 canvas.DrawRect(rect, mist);
             }
 
-            // 细描边高光（降级版边缘高光）
+            // 底部内阴影带（顶 80% 到底 100%）：给"浮起"的离地暗示。
+            using (SKPaint shade = new()
+            {
+                Shader = SKShader.CreateLinearGradient(
+                    new SKPoint(0, size.Height * 0.8f),
+                    new SKPoint(0, size.Height),
+                    new[] { new SKColor(0, 0, 0, 0), new SKColor(0, 0, 0, 20) },
+                    null,
+                    SKShaderTileMode.Clamp),
+                IsAntialias = true,
+            })
+            {
+                canvas.DrawRect(rect, shade);
+            }
+
+            // 细描边高光（降级版边缘高光）+ 顶部 1.5px 受光棱线。
             if (_parameters.HighlightEnabled && _parameters.HighlightOpacity > 0.001)
             {
                 float alpha = (float)Clamp(_parameters.HighlightOpacity * 0.6, 0.0, 1.0);
@@ -832,6 +876,15 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                     StrokeWidth = 1.0f
                 };
                 canvas.DrawPath(path, stroke);
+
+                // 顶部内嵌 hairline：模拟左上受光棱的亮线，是 iOS 玻璃最关键的"浮起"暗示。
+                using SKPaint hairline = new()
+                {
+                    Color = new SKColor(255, 255, 255, (byte)Clamp(_parameters.HighlightOpacity * 0.9f * 255f, 0f, 255f)),
+                    IsAntialias = true,
+                    StrokeWidth = 1.5f,
+                };
+                canvas.DrawLine(0, 0.75f, size.Width, 0.75f, hairline);
             }
 
             canvas.Restore();

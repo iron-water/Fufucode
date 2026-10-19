@@ -1,3 +1,4 @@
+using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -64,6 +65,13 @@ public class DeadZoneGridSplitter : GridSplitter
         base.OnDragStarted(e);
     }
 
+    /// <summary>
+    /// LiquidGlass 玻璃布局下，dock 宿主不再由 Grid 列宽承载（列全塌成 `*`/0），
+    /// GridSplitter 基类改列宽不再有效。此委托接管拖增量 —— 返回 true 表示已处理，
+    /// 跳掉基类的列宽写入。非玻璃皮肤为 null，行为不变。
+    /// </summary>
+    public Func<Vector, bool>? ManualResizeDelta { get; set; }
+
     protected override void OnDragDelta(VectorEventArgs e)
     {
         var (swallow, accumulated, open) = EvaluateDelta(_pointerInitiated, _accumulated, _open,
@@ -73,6 +81,13 @@ public class DeadZoneGridSplitter : GridSplitter
         if (swallow)
         {
             // 仍在死区内：本次增量不改变布局、不触发重排。
+            e.Handled = true;
+            return;
+        }
+
+        if (ManualResizeDelta?.Invoke(e.Vector) == true)
+        {
+            // 玻璃模式接管：增量已写进 dock 状态，不走基类列宽路径。
             e.Handled = true;
             return;
         }
