@@ -98,7 +98,17 @@ internal static class Program
         }
 
         // 默认后端为 FUMO 原生内核；--mock 回到脚本化演示会话
-        BuildAvaloniaApp(AppOptions.Parse(args)).StartWithClassicDesktopLifetime(args);
+        var options = AppOptions.Parse(args);
+        try
+        {
+            // 启动前读取内存优化开关：软件渲染必须在 Avalonia 初始化之前决定。
+            MemoryProfile.Apply(new Fufucode.Core.AppSettingsStore(options.CreateAppDataLayout()).Current.Performance);
+        }
+        catch (Exception error)
+        {
+            Console.WriteLine("读取内存优化设置失败：" + error.Message);
+        }
+        BuildAvaloniaApp(options).StartWithClassicDesktopLifetime(args);
     }
 
     private static int RunSelfTestHeadless(string[] args)
@@ -155,8 +165,19 @@ internal static class Program
         => BuildAvaloniaApp(AppOptions.Mock);
 
     public static AppBuilder BuildAvaloniaApp(AppOptions options)
-        => AppBuilder.Configure(() => new App(options))
+    {
+        var builder = AppBuilder.Configure(() => new App(options))
             .UsePlatformDetect()
             .WithInterFont()
             .LogToTrace();
+        // 低内存模式：不初始化 ANGLE/D3D，不加载显卡驱动的大块模块。
+        if (MemoryProfile.SoftwareRendering)
+        {
+            builder = builder.With(new Win32PlatformOptions
+            {
+                RenderingMode = new[] { Win32RenderingMode.Software },
+            });
+        }
+        return builder;
+    }
 }

@@ -13,7 +13,20 @@ public static class SettingKeys
     public const string UpdateFeedUrl = "updateFeedUrl";
     public const string AutoCheckUpdates = "autoCheckUpdates";
     public const string GitHubRepository = "githubRepository";
+    public const string Performance = "performance";
 }
+
+/// <summary>
+/// 可选的内存优化开关。默认全部关闭 = 高性能模式；
+/// 每项都可独立开启，开启后由各子系统在运行时读取。
+/// </summary>
+public sealed record PerformanceSettings(
+    // 软件渲染：不加载 ANGLE/D3D/显卡驱动，工作集可降 130 MB 以上；需要重启。
+    bool SoftwareRendering = false,
+    // 关闭玻璃/模糊等重特效采样；立即生效。
+    bool DisableVisualEffects = false,
+    // 终端回滚从 1500 行降到 500 行；对新终端生效。
+    bool ReduceTerminalScrollback = false);
 
 /// <summary>
 /// 一个 OpenAI 兼容端点。ModelId 是当前选中的模型；Models 是该端点可用的模型清单
@@ -41,7 +54,9 @@ public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     // 模型选择器里置顶的模型 id（可跨多个提供商）。
     IReadOnlyList<string>? PinnedModels = null,
     // 用户在模型选择器里关闭掉的关键字快捷项。
-    IReadOnlyList<string>? DismissedModelKeywords = null);
+    IReadOnlyList<string>? DismissedModelKeywords = null,
+    // 内存优化开关；null 视为全部关闭（高性能模式）。
+    PerformanceSettings? Performance = null);
 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(AppSettings))]
