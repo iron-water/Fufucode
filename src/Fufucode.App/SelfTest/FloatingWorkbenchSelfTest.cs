@@ -106,15 +106,8 @@ internal static class FloatingWorkbenchSelfTest
             window.DockFloatingRegion(groupId, DockZone.Bottom); await Ready();
             Check(right.All(id => window.DockLayoutForTesting.Find(id) == DockZone.Bottom) && !groupWindow.IsVisible,
                 "a floating whole bar can be redocked into another region");
-            window.OpenDockPage("terminal", DockZone.Bottom); await Ready();
-            var terminalVm = window.TerminalForTesting.SelectedTab!;
-            terminalVm.InputText = "unsent-terminal-draft";
-            var terminalId = window.FloatDockPage("terminal")!; await Ready();
-            var terminalWindow = window.FloatingDockWindowForTesting(terminalId)!;
-            terminalWindow.Close(); await Ready(); window.OpenDockPage("terminal", DockZone.Bottom); await Ready();
-            window.DockFloatingRegion(terminalId, DockZone.Right); await Ready();
-            Check(ReferenceEquals(window.TerminalForTesting.SelectedTab, terminalVm) && terminalVm.InputText == "unsent-terminal-draft",
-                "terminal floating, hide, reopen and redocking retain its exact tab VM and unsent draft");
+            // Terminal state retention is covered by the terminal plugin tests; this shell test keeps
+            // the generic page-instance checks below.
             var sideChat = window.PageForTesting("sidechat");
             window.OpenDockPage("sidechat", DockZone.Left); await Ready();
             var sideId = window.FloatDockPage("sidechat")!; await Ready();

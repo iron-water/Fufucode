@@ -24,8 +24,6 @@ public partial class MainWindow
         _shortcutActions = _actions.Actions.Select(action => new ShortcutAction(action.Id, action.Title, action.Group,
             ShortcutDefaults.ScopeOf(action.Id), ShortcutDefaults.DefaultGestures(action.Id), action.Description)).ToArray();
         _shortcuts.SetActions(_shortcutActions, _actions.GetDisabledReason);
-        TerminalDock.ShortcutMatches = (id, e) => _shortcutActions.FirstOrDefault(action => action.Id == id) is { } action &&
-            _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers);
         _shortcuts.Changed += UpdateShortcutLabels;
         _shortcutsPage = new(_shortcuts) { CompositionProbe = IsShortcutCompositionActive };
         _actions.Changed += OnShortcutCapabilitiesChanged;
@@ -35,7 +33,7 @@ public partial class MainWindow
     private void UpdateShortcutLabels()
     {
         _actions.UpdateShortcutLabels(Label);
-        TerminalDock.UpdateShortcutLabels(Label);
+        _terminalPage?.UpdateShortcutLabels(Label);
         string Label(string id) => _shortcutActions.FirstOrDefault(action => action.Id == id) is { } action ? _shortcuts.BindingText(action) : string.Empty;
     }
 
@@ -53,7 +51,8 @@ public partial class MainWindow
     private bool RouteConfiguredShortcut(KeyEventArgs e, Control? focused)
     {
         if (_shortcuts is null) return false;
-        if (focused is Views.TerminalScreenControl || focused?.GetVisualAncestors().Any(x => x is Views.TerminalDockView) == true)
+        if (_terminalPage is { } terminalPage &&
+            (ReferenceEquals(focused, terminalPage.View) || focused?.GetVisualAncestors().Any(x => ReferenceEquals(x, terminalPage.View)) == true))
             return TryScope(ShortcutScope.Terminal);
         if (focused is TextBox && TryScope(ShortcutScope.Editor)) return true;
         if (focused?.GetVisualAncestors().Any(x => x is Views.BrowserView) == true && TryScope(ShortcutScope.Browser)) return true;
@@ -66,7 +65,7 @@ public partial class MainWindow
                 _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers)).ToArray();
             if (candidates.Length == 0) return false;
             if (candidates.Length == 1 && candidates[0].Id == "terminal.copy-or-interrupt" && focused is TextBox text &&
-                (text != TerminalDock.FindControl<TextBox>("TerminalInput") || !string.IsNullOrEmpty(text.SelectedText))) return false;
+                (!ReferenceEquals(text, _terminalPage?.CommandInput) || !string.IsNullOrEmpty(text.SelectedText))) return false;
             if (candidates.Length > 1)
             {
                 _vm?.Timeline.AddNotification("快捷键冲突，请在设置中修改：" + string.Join("、", candidates.Select(action => action.Title)));
