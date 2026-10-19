@@ -156,12 +156,20 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     private const double CollapsedOutputHeight = 160;
 
+    /// <summary>展示用输出上限：首尾各保留 8 KB，超出部分以标记代替，避免大输出长期驻留 UI 层。</summary>
+    internal const int OutputDisplayHeadChars = 8 * 1024;
+    internal const int OutputDisplayTailChars = 8 * 1024;
+
     private string _toolCallId = string.Empty;
     private string _toolName = string.Empty;
     private string _inputJson = string.Empty;
     private string? _statusText;
     private ToolCallStatus _status = ToolCallStatus.Pending;
     private string? _output;
+    private string? _fullOutput;
+    private ToolCallBlock? _sourceBlock;
+    private ToolCallBlock? _lastSnapshot;
+    private string? _lastSnapshotOutput;
     private bool _isErrorOutput;
     private bool _outputExpanded;
     private int _outputLineCount;
@@ -221,16 +229,11 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     public bool IsRunning { get; private set; }
 
+    /// <summary>展示用输出文本（已按首尾 8 KB 截断）。完整文本见 <see cref="GetFullOutput"/>。</summary>
     public string? Output
     {
         get => _output;
-        set
-        {
-            if (SetProperty(ref _output, value))
-            {
-                RecomputeOutputCollapse();
-            }
-        }
+        set => SetOutput(value, null, value);
     }
 
     public bool IsErrorOutput
@@ -240,6 +243,9 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     }
 
     public bool HasOutput => !string.IsNullOrEmpty(Output);
+
+    /// <summary>输出是否被截断展示。</summary>
+    public bool IsOutputTruncated { get; private set; }
 
     public bool CanCollapseOutput { get; private set; }
 
@@ -267,8 +273,59 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
         InputJson = block.InputJson;
         Status = block.Status;
         StatusText = block.StatusText;
-        Output = block.Output;
+        // 同一快照重复应用（如 ToolCallStatusChanged 带来的重复刷新）不重复截断/分配
+        if (!ReferenceEquals(block, _lastSnapshot) || !ReferenceEquals(block.Output, _lastSnapshotOutput))
+        {
+            _lastSnapshot = block;
+            _lastSnapshotOutput = block.Output;
+            SetOutput(block.Output, block, null);
+        }
         IsErrorOutput = block.IsErrorOutput;
+    }
+
+    /// <summary>
+    /// 返回完整输出（供复制/导出）。未截断时退回展示文本；截断时优先读取保留的源快照，
+    /// 源快照已被替换后，另存的完整文本是兜底。
+    /// </summary>
+    public string? GetFullOutput()
+    {
+        if (!IsOutputTruncated) return _output;
+        return _sourceBlock?.Output ?? _fullOutput ?? _output;
+    }
+
+    private void SetOutput(string? value, ToolCallBlock? sourceBlock, string? rememberFull)
+    {
+        var display = CapOutput(value, out var truncated);
+        if (truncated != IsOutputTruncated)
+        {
+            IsOutputTruncated = truncated;
+            OnPropertyChanged(nameof(IsOutputTruncated));
+        }
+
+        _sourceBlock = truncated ? sourceBlock : null;
+        _fullOutput = truncated ? rememberFull : null;
+
+        if (SetProperty(ref _output, display, nameof(Output)))
+        {
+            RecomputeOutputCollapse();
+        }
+    }
+
+    /// <summary>首尾各保留 <see cref="OutputDisplayHeadChars"/>/<see cref="OutputDisplayTailChars"/> 字符，中间以标记代替。</summary>
+    internal static string? CapOutput(string? value, out bool truncated)
+    {
+        truncated = false;
+        if (value is null || value.Length <= OutputDisplayHeadChars + OutputDisplayTailChars)
+        {
+            return value;
+        }
+
+        truncated = true;
+        var omitted = value.Length - OutputDisplayHeadChars - OutputDisplayTailChars;
+        return string.Concat(
+            value.AsSpan(0, OutputDisplayHeadChars),
+            $"\n… 已省略 {omitted:N0} 个字符（复制获取完整输出）…\n",
+            value.AsSpan(value.Length - OutputDisplayTailChars));
     }
 
     private void RecomputeOutputCollapse()

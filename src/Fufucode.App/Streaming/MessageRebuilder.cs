@@ -23,14 +23,31 @@ public sealed class MessageRebuilder
     private readonly List<TimelineEntry> _pendingAdded = new();
     private readonly HashSet<string> _pendingUpdated = new();
 
-    public IReadOnlyList<TimelineEntry> Timeline => _entries;
+    /// <summary>最近一次构建的快照视图；脏消息在读取时按需重建（不改变脏标记）。</summary>
+    public IReadOnlyList<TimelineEntry> Timeline
+    {
+        get
+        {
+            MaterializeDirty();
+            return _entries;
+        }
+    }
 
-    /// <summary>按条目 Id 取最新快照（不存在返回 null）。</summary>
+    /// <summary>按条目 Id 取最新快照（不存在返回 null）。未 Flush 的脏消息按需构建一次。</summary>
     public TimelineEntry? GetEntry(string id)
     {
-        return _entryIndexById.TryGetValue(id, out var index) && index < _entries.Count
-            ? _entries[index]
-            : null;
+        if (!_entryIndexById.TryGetValue(id, out var index) || index >= _entries.Count)
+        {
+            return null;
+        }
+
+        var entry = _entries[index];
+        if (_pendingUpdated.Contains(id) && entry.Message is not null
+            && _messages.TryGetValue(id, out var builder))
+        {
+            return entry with { Message = builder.ToSnapshot() };
+        }
+        return entry;
     }
 
     /// <summary>应用一个事件，更新内部状态（不产生通知）。</summary>
@@ -70,12 +87,44 @@ public sealed class MessageRebuilder
     }
 
     /// <summary>提交累积的变更并返回本次批次，随后清空脏标记。</summary>
+    /// <remarks>每个脏消息在此期间只构建一次展示快照（delta 期间只改内部缓冲）。</remarks>
     public TimelineBatch Flush()
     {
+        MaterializeDirty();
         var batch = new TimelineBatch(_pendingAdded.ToArray(), _pendingUpdated.ToArray());
         _pendingAdded.Clear();
         _pendingUpdated.Clear();
         return batch;
+    }
+
+    /// <summary>把脏消息的内部缓冲一次性构建为展示快照（Flush/读取入口共用）。</summary>
+    private void MaterializeDirty()
+    {
+        if (_pendingUpdated.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var messageId in _pendingUpdated)
+        {
+            UpdateSnapshot(messageId);
+        }
+    }
+
+    private void UpdateSnapshot(string messageId)
+    {
+        if (!_entryIndexById.TryGetValue(messageId, out var index) || index >= _entries.Count)
+        {
+            return;
+        }
+
+        var existing = _entries[index];
+        if (existing.Message is null || !_messages.TryGetValue(messageId, out var builder))
+        {
+            return;
+        }
+
+        _entries[index] = existing with { Message = builder.ToSnapshot() };
     }
 
     /// <summary>清空全部状态（新建会话时使用）。</summary>
@@ -121,21 +170,31 @@ public sealed class MessageRebuilder
         return builder;
     }
 
-    private BlockBuilder EnsureBlock(string messageId, int contentIndex, MessageBlockKind kind, string? toolCallId, string? toolName)
+    private void EnsureBlock(string messageId, int contentIndex, MessageBlockKind kind, string? toolCallId, string? toolName)
     {
         var message = GetMessage(messageId);
+        if (message.IsFinalized)
+        {
+            return;
+        }
+
         if (!message.Blocks.TryGetValue(contentIndex, out var block))
         {
             block = new BlockBuilder(contentIndex, kind, toolCallId, toolName);
             message.Blocks[contentIndex] = block;
+            MarkDirty(messageId);
         }
-        MarkUpdated(messageId);
-        return block;
     }
 
     private void AppendToBlock(string messageId, int contentIndex, string delta)
     {
         var message = GetMessage(messageId);
+        if (message.IsFinalized)
+        {
+            // 终态消息是唯一事实来源；其后的 delta 不再重建缓冲
+            return;
+        }
+
         if (!message.Blocks.TryGetValue(contentIndex, out var block))
         {
             // 未知块种类时无法安全归类，记为文本块（最保守的展示方式）
@@ -143,33 +202,42 @@ public sealed class MessageRebuilder
             message.Blocks[contentIndex] = block;
         }
         block.AppendText(delta);
-        MarkUpdated(messageId);
+        MarkDirty(messageId);
     }
 
     private void ApplyToolStatus(SessionEvent.ToolCallStatusChanged e)
     {
         var message = GetMessage(e.MessageId);
-        if (message.Blocks.TryGetValue(e.ContentIndex, out var block) && block.Kind == MessageBlockKind.ToolCall)
+        if (message.TryApplyToolStatus(e.ContentIndex, e.Status, e.StatusText))
         {
-            block.Status = e.Status;
-            block.StatusText = e.StatusText;
-            MarkUpdated(e.MessageId);
+            MarkDirty(e.MessageId);
         }
     }
 
     private void ApplyBlockFinished(SessionEvent.BlockFinished e)
     {
         var message = GetMessage(e.MessageId);
+        // 终态消息已整体替换（消息结束后仍可能补发工具块终态）：直接补丁终态快照，
+        // 不再复制一份 BlockBuilder 缓冲。
+        if (message.IsFinalized)
+        {
+            if (message.TryApplyFinalBlock(e.ContentIndex, e.FinalBlock))
+            {
+                MarkDirty(e.MessageId);
+            }
+            return;
+        }
+
         var tool = e.FinalBlock as ToolCallBlock;
-        var block = EnsureBlock(e.MessageId, e.ContentIndex, e.FinalBlock.Kind,
-            tool?.ToolCallId, tool?.ToolName);
+        var block = new BlockBuilder(e.ContentIndex, e.FinalBlock.Kind, tool?.ToolCallId, tool?.ToolName);
         block.ApplyFinal(e.FinalBlock);
-        MarkUpdated(e.MessageId);
+        message.Blocks[e.ContentIndex] = block;
+        MarkDirty(e.MessageId);
     }
 
     private void ApplyMessageFinished(SessionEvent.MessageFinished e)
     {
-        // 整体替换：以终态消息为准重建分块，不沿用任何临时累积，避免重复追加
+        // 整体替换：以终态消息为准，丢弃全部流式缓冲，终态内容只保留一份
         if (!_messages.TryGetValue(e.MessageId, out var message))
         {
             message = new MessageBuilder(e.MessageId, e.FinalMessage.Role, e.FinalMessage.Model);
@@ -178,7 +246,7 @@ public sealed class MessageRebuilder
 
         message.ApplyFinal(e.FinalMessage);
         message.Usage = e.CumulativeUsage ?? message.Usage;
-        MarkUpdated(e.MessageId);
+        MarkDirty(e.MessageId);
     }
 
     private void ApplySessionError(SessionEvent.SessionError e)
@@ -194,7 +262,11 @@ public sealed class MessageRebuilder
         _pendingAdded.Add(entry);
     }
 
-    private void MarkUpdated(string messageId)
+    /// <summary>
+    /// 只标记消息为脏；展示快照推迟到 <see cref="Flush"/>（或读取入口）一次性构建，
+    /// 避免每个 delta 都复制整条消息的字符串、列表与记录。
+    /// </summary>
+    private void MarkDirty(string messageId)
     {
         if (!_entryIndexById.TryGetValue(messageId, out var index) || index >= _entries.Count)
         {
@@ -202,13 +274,11 @@ public sealed class MessageRebuilder
         }
 
         var existing = _entries[index];
-        if (existing.Message is null || !_messages.TryGetValue(messageId, out var builder))
+        if (existing.Message is null || !_messages.ContainsKey(messageId))
         {
             return;
         }
 
-        // 整体替换展示快照：终态消息与流式累积都以最新快照为准
-        _entries[index] = existing with { Message = builder.ToSnapshot() };
         _pendingUpdated.Add(messageId);
     }
 
@@ -224,37 +294,86 @@ public sealed class MessageRebuilder
         public string Id { get; }
         public MessageRole Role { get; set; }
         public string? Model { get; set; }
-        public Dictionary<int, BlockBuilder> Blocks { get; } = new();
+        public SortedDictionary<int, BlockBuilder> Blocks { get; } = new();
         public UsageInfo? Usage { get; set; }
         public bool IsComplete { get; set; }
 
+        /// <summary>
+        /// 终态消息本体。非 null 时它就是唯一的事实来源：不再保留任何 BlockBuilder 缓冲，
+        /// 之后的 Flush/GetEntry 直接返回它（仅在有增量补丁时整体替换）。
+        /// </summary>
+        public ChatMessage? Final { get; private set; }
+
+        public bool IsFinalized => Final is not null;
+
         public ChatMessage ToSnapshot()
         {
-            var indices = new List<int>(Blocks.Keys);
-            indices.Sort();
-            var blocks = new List<MessageBlock>(indices.Count);
-            foreach (var index in indices)
+            if (Final is { } final)
             {
-                blocks.Add(Blocks[index].ToBlock());
+                return Usage is null || ReferenceEquals(Usage, final.CumulativeUsage)
+                    ? final
+                    : final with { CumulativeUsage = Usage };
+            }
+
+            // SortedDictionary 直接按 contentIndex 有序枚举，无需复制键集再排序
+            var blocks = new MessageBlock[Blocks.Count];
+            var index = 0;
+            foreach (var block in Blocks.Values)
+            {
+                blocks[index++] = block.ToBlock();
             }
             return new ChatMessage(Id, Role, Model, blocks, Usage, IsComplete);
         }
 
-        /// <summary>整条消息整体替换：以 message_end 的终态消息为准，丢弃全部临时累积。</summary>
+        /// <summary>
+        /// 整条消息整体替换：以 message_end 的终态消息为准。
+        /// 丢弃全部流式缓冲（<see cref="Blocks"/>），终态内容只保留一份。
+        /// </summary>
         public void ApplyFinal(ChatMessage final)
         {
             Role = final.Role;
             Model = final.Model ?? Model;
             IsComplete = true;
             Blocks.Clear();
-            for (var index = 0; index < final.Blocks.Count; index++)
+            Final = final;
+        }
+
+        /// <summary>终态消息之后补发的工具状态：按 contentIndex 在终态副本上替换该块。</summary>
+        public bool TryApplyToolStatus(int contentIndex, ToolCallStatus status, string? statusText)
+        {
+            if (Final is not { } final || contentIndex < 0 || contentIndex >= final.Blocks.Count
+                || final.Blocks[contentIndex] is not ToolCallBlock tool)
             {
-                var block = final.Blocks[index];
-                var tool = block as ToolCallBlock;
-                var builder = new BlockBuilder(index, block.Kind, tool?.ToolCallId, tool?.ToolName);
-                builder.ApplyFinal(block);
-                Blocks[index] = builder;
+                return false;
             }
+
+            if (tool.Status == status && tool.StatusText == statusText) return false;
+            return ReplaceFinalBlock(tool, tool with { Status = status, StatusText = statusText });
+        }
+
+        /// <summary>终态消息之后补发的块终态：在终态副本上原地替换该块。</summary>
+        public bool TryApplyFinalBlock(int contentIndex, MessageBlock block)
+        {
+            if (Final is not { } final || contentIndex < 0 || contentIndex >= final.Blocks.Count)
+            {
+                return false;
+            }
+
+            var existing = final.Blocks[contentIndex];
+            if (existing == block) return false;
+            return ReplaceFinalBlock(existing, block);
+        }
+
+        private bool ReplaceFinalBlock(MessageBlock existing, MessageBlock replacement)
+        {
+            if (Final is not { } final) return false;
+            var list = new List<MessageBlock>(final.Blocks.Count);
+            foreach (var item in final.Blocks)
+            {
+                list.Add(ReferenceEquals(item, existing) ? replacement : item);
+            }
+            Final = final with { Blocks = list };
+            return true;
         }
     }
 

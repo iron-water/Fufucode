@@ -538,26 +538,25 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var history = _engine.GetState().History;
         if (history is not { Count: > 0 }) return;
 
+        var modelId = _modelId;
+        var thinkingLevel = _thinkingLevel;
+        var executionMode = ExecutionMode;
         try
         {
             lock (_persistGate)
             {
-                var dir = Path.GetDirectoryName(_persistFilePath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                var json = JsonSerializer.Serialize(new
-                    {
-                        version = 2,
-                        messages = history,
-                        modelId = _modelId,
-                        thinkingLevel = _thinkingLevel,
-                        executionMode = ExecutionMode
-                    },
-                    new JsonSerializerOptions { WriteIndented = true });
-                var temp = _persistFilePath + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
-                File.WriteAllText(temp, json);
-                File.Move(temp, _persistFilePath, overwrite: true);
+                AtomicJsonFile.Write(_persistFilePath, writer =>
+                {
+                    writer.WriteStartObject();
+                    writer.WriteNumber("version", 2);
+                    writer.WritePropertyName("messages");
+                    JsonSerializer.Serialize(writer, history);
+                    if (modelId is null) writer.WriteNull("modelId");
+                    else writer.WriteString("modelId", modelId);
+                    writer.WriteString("thinkingLevel", thinkingLevel);
+                    writer.WriteString("executionMode", executionMode);
+                    writer.WriteEndObject();
+                });
             }
         }
         catch (Exception ex)

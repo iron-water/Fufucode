@@ -24,9 +24,12 @@ public sealed class MessageTimeline
     private int? _activeIndex;
     private PiMessage? _activeBase;
     private PiUsage? _currentUsage;
+    // 不可变快照缓存：只在集合变化时重建，供协调器在每个 Publish 时复用而不必逐次复制。
+    private IReadOnlyList<PiMessage> _messagesSnapshot = [];
+    private IReadOnlyList<PiToolCard> _toolsSnapshot = [];
 
-    public IReadOnlyList<PiMessage> Messages => _messages.ToArray();
-    public IReadOnlyList<PiToolCard> Tools => _tools.Values.ToArray();
+    public IReadOnlyList<PiMessage> Messages => _messagesSnapshot;
+    public IReadOnlyList<PiToolCard> Tools => _toolsSnapshot;
     public PiUsage? CurrentResponseUsage => _currentUsage;
 
     /// <summary>Final-message usage projection; an active streamed assistant is explicitly excluded.</summary>
@@ -37,7 +40,9 @@ public sealed class MessageTimeline
         if (_activeIndex is not null) throw new InvalidOperationException("Cannot restore during a message stream.");
         _messages.Clear();
         _messages.AddRange(messages);
+        _messagesSnapshot = _messages.ToArray();
         _tools.Clear();
+        _toolsSnapshot = [];
         _blocks.Clear();
         _activeBase = null;
         _currentUsage = messages.LastOrDefault(m => m.Role == "assistant")?.Usage;
@@ -56,6 +61,7 @@ public sealed class MessageTimeline
                 for (var i = 0; i < start.Message.Content.Count; i++)
                     _blocks[i] = FromBlock(start.Message.Content[i]);
                 _messages.Add(start.Message);
+                _messagesSnapshot = _messages.ToArray();
                 break;
             case PiMessageUpdateEvent update:
                 ApplyUpdate(update);
@@ -64,6 +70,7 @@ public sealed class MessageTimeline
                 if (_activeIndex is { } index)
                     _messages[index] = end.Message; // Authoritative final message, never append reconstructed text.
                 else _messages.Add(end.Message);
+                _messagesSnapshot = _messages.ToArray();
                 _activeIndex = null;
                 _activeBase = null;
                 _currentUsage = end.Message.Usage;
@@ -104,6 +111,7 @@ public sealed class MessageTimeline
                 block.Final = update.CompletedBlock ?? throw new RpcException("Content end lacks a final block.");
         }
         _messages[index] = _activeBase with { Content = _blocks.Values.Select(ToBlock).ToArray(), Usage = _currentUsage };
+        _messagesSnapshot = _messages.ToArray();
     }
 
     private static DraftBlock FromBlock(PiContentBlock block)
@@ -131,5 +139,6 @@ public sealed class MessageTimeline
             ev.Args ?? previous?.Args,
             ev.Result ?? previous?.DisplayResult, // Partial result is latest state, not universal append-only text.
             ev.Type == "tool_execution_end", ev.IsError ?? previous?.IsError);
+        _toolsSnapshot = _tools.Values.ToArray();
     }
 }

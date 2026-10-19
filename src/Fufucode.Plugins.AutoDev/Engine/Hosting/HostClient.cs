@@ -25,7 +25,15 @@ public sealed class HostClient : IAsyncDisposable
     private readonly StreamWriter _writer;
     private readonly SemaphoreSlim _sendGate = new(1, 1);
     private readonly ConcurrentDictionary<string, TaskCompletionSource<HostFrame>> _pending = new();
-    private readonly Channel<HostFrame> _pushed = Channel.CreateUnbounded<HostFrame>();
+    // 有界推送队列：消费者不读取时丢弃最旧事件，内存不会无限增长。
+    private const int PushedCapacity = 256;
+    private readonly Channel<HostFrame> _pushed = Channel.CreateBounded<HostFrame>(
+        new BoundedChannelOptions(PushedCapacity)
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.DropOldest,
+        });
     private readonly CancellationTokenSource _closed = new();
     private readonly Task _pump;
     private long _nextId;
