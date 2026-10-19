@@ -15,4 +15,12 @@
     <ProjectReference Include="../../src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj" />
     <PackageReference Include="Avalonia.Headless" Version="12.1.3" />
   </ItemGroup>
+  <!-- 与 Fufucode.App 相同：WebView2 的 targets 会把 WPF/WinForms 托管程序集一并注入引用，
+       本工程只用 Core；未剥离时 WindowsBase 4/5 版本冲突（MSB3277）。 -->
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\1.0.4258.31\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\1.0.4258.31\buildTransitive\..\\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
 </Project>
