@@ -621,3 +621,12 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 - 瘦身包不裁剪（框架程序集来自系统），打包期按 RID 手工移除 X11/FreeDesktop/macOS 后端。
 - 实测：下载 19.45 → 12.2 MB，安装后 62.18 → 37.60 MB；节省 7.25 MB 下载 / 24.58 MB 安装。代价是目标机必须已安装 Microsoft.NETCore.App 10.x；缺失时 apphost 会给出标准提示。
 - 瘦身包 selftest 与自包含包一致（同一组 11 项既有失败），CLI help/json/runtime、完整性清单、平台后端清理均通过。
+
+2026-10-19 内存优化模式决定：
+- 新增 `PerformanceSettings`（写入 settings.json）与 `MemoryProfile`（运行时只读快照），默认全部关闭 = 高性能模式。
+- 设置页新增「性能与内存」（基础类），提供三个独立开关与低内存/高性能预设：
+  1. 软件渲染：Avalonia 使用 `Win32RenderingMode.Software`，不初始化 ANGLE/D3D；需重启。
+  2. 关闭视觉特效：LiquidGlass 自适应亮度采样直接跳过；立即生效。
+  3. 减少终端回滚：`TerminalBuffer.HistoryLimit` 从 1500 降到 500；对新建终端生效。
+- 实测（Debug，空闲、无会话）：高性能 327 MB WS / 234 MB 私有 / GPU 模块 130 MB / 61 线程；低内存 189 MB WS / 111 MB 私有 / GPU 模块 0 / 18 线程。降幅约 138 MB WS、123 MB 私有。
+- 未纳入本轮：图片缓存上限、浏览器隐藏挂起、非活动会话 LRU。会话主机实际只保留一个 current 会话，切换时释放；图片缓存与浏览器新功能在主检出未提交代码中，待合并后补。

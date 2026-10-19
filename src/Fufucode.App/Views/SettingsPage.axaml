@@ -224,6 +224,56 @@
 
             <ContentControl IsVisible="{Binding ShowShortcuts}" Content="{Binding ShortcutsContent}"/>
             <ContentControl IsVisible="{Binding ShowStorage}" Content="{Binding StorageContent}"/>
+            <StackPanel IsVisible="{Binding ShowPerformance}" Spacing="0">
+              <TextBlock Classes="settingsGroupHeader first" Text="内存优化"/>
+              <Border Classes="settingsGroup">
+                <StackPanel>
+                  <Border Classes="settingsRow">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Settings}" Width="18" Height="18" VerticalAlignment="Center"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="软件渲染"/>
+                        <TextBlock Classes="settingsRowDesc" Text="不加载 GPU/ANGLE，工作集可降低约 130 MB；需要重启，滚动与动画性能会下降。" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding SoftwareRendering, Mode=TwoWay}"/>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Settings}" Width="18" Height="18" VerticalAlignment="Center"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="关闭视觉特效"/>
+                        <TextBlock Classes="settingsRowDesc" Text="停止玻璃/模糊采样；界面立即生效，外观会变得更简洁。" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding DisableVisualEffects, Mode=TwoWay}"/>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Settings}" Width="18" Height="18" VerticalAlignment="Center"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="减少终端回滚"/>
+                        <TextBlock Classes="settingsRowDesc" Text="终端历史从 1500 行降到 500 行；对新建终端生效。" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding ReduceTerminalScrollback, Mode=TwoWay}"/>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
+                      <StackPanel Spacing="2">
+                        <TextBlock Classes="settingsRowTitle" Text="预设"/>
+                        <TextBlock Classes="settingsRowDesc" Text="{Binding PerformanceStateText, FallbackValue='默认高性能模式：所有优化关闭'}" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                        <Button Classes="subtle" Padding="12,4" Content="低内存预设" Command="{Binding ApplyLowMemoryPresetCommand}"/>
+                        <Button Classes="subtle" Padding="12,4" Content="恢复高性能" Command="{Binding ApplyHighPerformancePresetCommand}"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </StackPanel>
+              </Border>
+              <TextBlock Classes="meta" Text="开关写入 settings.json；软件渲染需要重启，其余立即生效。" TextWrapping="Wrap" Margin="4,8,4,0"/>
+            </StackPanel>
             <StackPanel IsVisible="{Binding ShowModels}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="模型"/>
               <Border Classes="settingsGroup">

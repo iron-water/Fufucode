@@ -99,6 +99,13 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [ObservableProperty] private string? _networkStateText;
     [ObservableProperty] private bool _isModelApplying;
     [ObservableProperty] private bool _isEndpointSaving;
+    // ── 性能与内存（默认全部关闭 = 高性能模式） ──
+    [ObservableProperty] private bool _softwareRendering;
+    [ObservableProperty] private bool _disableVisualEffects;
+    [ObservableProperty] private bool _reduceTerminalScrollback;
+    [ObservableProperty] private SettingSaveState _performanceState;
+    [ObservableProperty] private string? _performanceStateText;
+    private bool _suppressPerformanceSave;
     private EndpointDraft? _endpointDraftBaseline;
     private bool _hasEndpointKeyDraft;
     private bool _suppressDraftTracking;
@@ -222,6 +229,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             : null;
 
     public bool ShowStorage => SelectedCategory?.Id == "storage";
+    public bool ShowPerformance => SelectedCategory?.Id == "performance";
     [ObservableProperty] private Avalonia.Controls.Control? _storageContent;
     /// <summary>「其他」收纳桶页：右侧列二级功能入口卡，点击进入对应设置页。</summary>
     /// <summary>「其他」桶页：选中占位项时列出小功能入口卡。</summary>
@@ -293,7 +301,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private void NotifyCategoryVisibility()
     {
         foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowLookColumn), nameof(ShowArrangementColumn), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowAbout), nameof(ShowModules),
-                     nameof(ShowStorage), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
+                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
 
@@ -1688,6 +1696,15 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         ThemeIndex = IndexFor(context.Store.Current.Theme);
         _suppressThemeApply = false;
         var current = context.Store.Current;
+        var performance = current.Performance ?? new PerformanceSettings();
+        _suppressPerformanceSave = true;
+        SoftwareRendering = performance.SoftwareRendering;
+        DisableVisualEffects = performance.DisableVisualEffects;
+        ReduceTerminalScrollback = performance.ReduceTerminalScrollback;
+        _suppressPerformanceSave = false;
+        MemoryProfile.Apply(performance);
+        PerformanceState = SettingSaveState.Unchanged;
+        PerformanceStateText = null;
         ProxySummary = current.ProxyUrl is { } proxy ? $"已设置（{proxy}）" : "未设置";
         ProxyInput = current.ProxyUrl;
         ProxyError = null;
@@ -1908,5 +1925,55 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             NodeVersion: NodeVersion));
         await ctx.CopyText(summary);
         CopyStatus = "已复制到剪贴板";
+    }
+
+    // ── 性能与内存 ──
+
+    partial void OnSoftwareRenderingChanged(bool value) => SavePerformance(restartRequired: true);
+    partial void OnDisableVisualEffectsChanged(bool value) => SavePerformance();
+    partial void OnReduceTerminalScrollbackChanged(bool value) => SavePerformance();
+
+    /// <summary>把三个开关写回 settings.json，并立即更新运行时读数。</summary>
+    private void SavePerformance(bool restartRequired = false)
+    {
+        if (_suppressPerformanceSave || _context is null) return;
+        try
+        {
+            var next = _context.Store.Update(current => current with
+            {
+                Performance = new PerformanceSettings(
+                    SoftwareRendering, DisableVisualEffects, ReduceTerminalScrollback),
+            });
+            MemoryProfile.Apply(next.Performance);
+            PerformanceState = restartRequired ? SettingSaveState.RestartRequired : SettingSaveState.Applied;
+            PerformanceStateText = restartRequired ? "已保存 · 重启后生效" : "已保存 · 已应用";
+        }
+        catch (Exception ex)
+        {
+            PerformanceState = SettingSaveState.Failed;
+            PerformanceStateText = "保存失败：" + ex.GetBaseException().Message;
+        }
+    }
+
+    [RelayCommand]
+    private void ApplyLowMemoryPreset()
+    {
+        _suppressPerformanceSave = true;
+        SoftwareRendering = true;
+        DisableVisualEffects = true;
+        ReduceTerminalScrollback = true;
+        _suppressPerformanceSave = false;
+        SavePerformance(restartRequired: true);
+    }
+
+    [RelayCommand]
+    private void ApplyHighPerformancePreset()
+    {
+        _suppressPerformanceSave = true;
+        SoftwareRendering = false;
+        DisableVisualEffects = false;
+        ReduceTerminalScrollback = false;
+        _suppressPerformanceSave = false;
+        SavePerformance(restartRequired: true);
     }
 }

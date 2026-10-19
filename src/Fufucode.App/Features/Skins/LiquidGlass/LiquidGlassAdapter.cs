@@ -206,6 +206,8 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
 
         private void UpdateAdaptiveLuminance()
         {
+            // 低内存模式：关闭玻璃/模糊采样，玻璃渲染本身仍在。
+            if (Fufucode.App.Integration.MemoryProfile.DisableVisualEffects) return;
             if (!IsLuminanceVisible()) return;
             if (_state.Surface is not { } surface) return;
             var snapshot = LiquidGlassBackdropProvider.TryGetSnapshot(surface);
