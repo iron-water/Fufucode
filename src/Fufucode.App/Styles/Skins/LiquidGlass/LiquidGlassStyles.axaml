@@ -24,8 +24,9 @@
        必须透明；hairline 交给 surface 的 highlight pass 画。 -->
   <Style Selector="Border.liquidGlass">
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource LiquidGlassHighlightColor}"/>
-    <Setter Property="BorderThickness" Value="0.5"/>
+    <!-- 禁止四周等宽单色描边（HIG PROHIBIT_UNIFORM_BORDER）：
+         边缘光由 surface 的 shader 按 SDF 法线生成（顶亮底暗）。 -->
+    <Setter Property="BorderThickness" Value="0"/>
   </Style>
   <!-- 液态玻璃版式：dock/侧栏/右栏/底栏玻璃面板浮起，与窗口边/内容区留缝（参考 macOS
        Finder/Dock）——缝间露出的是 LiquidGlass 令牌底，玻璃面折射窗内内容，缝就是玻璃
@@ -34,30 +35,30 @@
   <Style Selector="Border.liquidGlass.dockLeft">
     <!-- 顶部让出 caption 玻璃条 48 + 8 呼吸缝；底部让出状态条 26 + 8；左右各 8 缝。 -->
     <Setter Property="Margin" Value="8,56,8,34"/>
-    <Setter Property="BorderThickness" Value="0.5"/>
-    <Setter Property="CornerRadius" Value="14"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="16"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockRight">
     <Setter Property="Margin" Value="8,56,8,34"/>
-    <Setter Property="BorderThickness" Value="0.5"/>
-    <Setter Property="CornerRadius" Value="14"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="16"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockBottom">
     <Setter Property="Margin" Value="8,0,8,34"/>
-    <Setter Property="BorderThickness" Value="0.5"/>
-    <Setter Property="CornerRadius" Value="14"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="16"/>
   </Style>
   <!-- 底栏/状态条同浮起（贴底窄条玻璃） -->
   <Style Selector="Border.liquidGlassCaption.statusStrip, Border.liquidGlass.statusStrip">
     <Setter Property="Margin" Value="8,2,8,6"/>
     <Setter Property="CornerRadius" Value="10"/>
-    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="BorderThickness" Value="0"/>
   </Style>
   <!-- 设置页左侧导航宿主：同样浮起成玻璃板（透明底侧栏 → 让窗底/内容缝透出模糊折射） -->
   <Style Selector="Border.liquidGlass.settingsNavHost">
     <Setter Property="Margin" Value="0,0,8,8"/>
-    <Setter Property="CornerRadius" Value="12"/>
-    <Setter Property="BorderThickness" Value="0.5"/>
+    <Setter Property="CornerRadius" Value="16"/>
+    <Setter Property="BorderThickness" Value="0"/>
   </Style>
   <!-- 中央内容区收边：工作区离开窗口底/右缘 8px，让底栏/右栏玻璃缝连贯成一周；
        内容卡片保持实底（iOS 语义：正文不透明，玻璃只在 chrome）。 -->
