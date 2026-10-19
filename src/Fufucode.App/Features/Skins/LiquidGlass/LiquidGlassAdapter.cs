@@ -356,8 +356,12 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             surface.CornerRadius = isCaption ? new CornerRadius(0) : new CornerRadius(16);
 
             // Progressive blur：dock/侧栏顶部向内容渐隐（iOS scroll edge soft 语义）；
-            // 顶部 28% 渐隐成雾（强度 0.08 的淡白），面板底下内容滚过去时不是硬切边。
+            // 修复后的着色器在顶部 15% 柔和淡入，主体保持 100% 满幅度通透玻璃。
             surface.ProgressiveBlurEnabled = !isCaption;
+            surface.ProgressiveBlurStart = 0.0;
+            surface.ProgressiveBlurEnd = 0.15;
+            surface.ProgressiveTintColor = Color.FromArgb(20, 255, 255, 255);
+            surface.ProgressiveTintIntensity = 0.08;
             surface.ProgressiveBlurStart = 0.0;
             surface.ProgressiveBlurEnd = 0.28;
             surface.ProgressiveTintColor = Color.FromArgb(20, 255, 255, 255);

@@ -224,7 +224,9 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 }
 
                 float refractionHeight = (float)Clamp(_parameters.RefractionHeight, 0.0, Math.Min(size.Width, size.Height) * 0.5);
-                float refractionAmount = (float)_parameters.RefractionAmount;
+                // 状态机（§7.3）：Hover 折射 ×1.15、Press ×1.35（内部应力扭曲）。
+                float refractionAmount = (float)(_parameters.RefractionAmount
+                    * (1.0 + 0.15 * _parameters.HoverProgress + 0.20 * _parameters.PressProgress));
                 bool applyLens = refractionHeight > 0.001f && Math.Abs(refractionAmount) > 0.001f;
 
                 SKShader? lensShader = null;
@@ -345,7 +347,10 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             float exposureEv = (float)Clamp(parameters.ExposureEv, -8.0, 8.0);
             float opacity = (float)Clamp(parameters.BackdropOpacity, 0.0, 1.0);
 
-            float blurSigmaPx = (float)(Clamp(parameters.BlurRadius, 0.0, 256.0) * snapshot.Scaling);
+            // 状态机：Hover 模糊 ×1.05、Press ×0.90（按下时更透亮）。量化到 4% 档位避免滤波缓存抖动。
+            double blurGain = 1.0 + 0.05 * parameters.HoverProgress - 0.15 * parameters.PressProgress;
+            blurGain = Math.Round(blurGain * 25.0) / 25.0;
+            float blurSigmaPx = (float)(Clamp(parameters.BlurRadius * blurGain, 0.0, 256.0) * snapshot.Scaling);
 
             bool isIdentity =
                 Math.Abs(brightness) < 0.0005f
@@ -646,11 +651,16 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             };
             uniforms["cornerRadii"] = cornerRadii;
 
-            float alpha = (float)Clamp(_parameters.HighlightOpacity, 0.0, 1.0);
+            // 状态机：Hover 边缘光 +20%（0.60→0.80）、Press 再升至 0.95。
+            float alpha = (float)Clamp(_parameters.HighlightOpacity
+                * (1.0 + 0.25 * _parameters.HoverProgress + 0.20 * _parameters.PressProgress), 0.0, 1.0);
             uniforms["color"] = new[]
             {
                 1.0f, 1.0f, 1.0f, alpha
             };
+            uniforms["pointer"] = new[] { (float)_parameters.PointerLocal.X, (float)_parameters.PointerLocal.Y };
+            uniforms["pointerPresence"] = (float)Clamp(_parameters.PointerPresence, 0.0, 1.0);
+            uniforms["glintRadius"] = (float)Math.Clamp(Math.Min(size.Width, size.Height) * 0.9, 28.0, 120.0);
 
             float angleRad = (float)(_parameters.HighlightAngleDegrees * (Math.PI / 180.0));
             uniforms["angle"] = angleRad;
@@ -759,8 +769,9 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             if (s_interactiveHighlightEffect is null)
                 return;
 
-            float progress = (float)Clamp(_parameters.InteractiveProgress, 0.0, 1.0);
-            if (progress <= 0.001f)
+            float hover = (float)Clamp(_parameters.HoverProgress, 0.0, 1.0);
+            float press = (float)Clamp(_parameters.PressProgress, 0.0, 1.0);
+            if (hover <= 0.001f && press <= 0.001f)
                 return;
 
             SKSize size = new((float)_bounds.Width, (float)_bounds.Height);
@@ -776,35 +787,19 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             canvas.Save();
             canvas.ClipPath(clipPath, SKClipOperation.Intersect, true);
 
-            // 按压时先从指尖发白雾，再叠一层径向高光（iOS "illuminate from within" 语义）。
-            using (SKPaint basePaint = new()
-                {
-                    Color = new SKColor(255, 255, 255, (byte)Clamp(0.08f * progress * 255f, 0f, 255f)),
-                    BlendMode = SKBlendMode.Plus,
-                    IsAntialias = true
-                })
-            {
-                canvas.DrawRect(rect, basePaint);
-            }
-
             using SKRuntimeEffectUniforms uniforms = new(s_interactiveHighlightEffect);
-            uniforms["size"] = new[]
-            {
-                size.Width, size.Height
-            };
-            uniforms["color"] = new[]
-            {
-                1.0f, 1.0f, 1.0f, (float)Clamp(0.15 * progress, 0.0, 1.0)
-            };
-            uniforms["radius"] = Math.Min(size.Width, size.Height) * 1.5f;
+            uniforms["size"] = new[] { size.Width, size.Height };
             uniforms["position"] = new[]
             {
-                (float)Clamp(_parameters.InteractivePosition.X, 0.0, size.Width), (float)Clamp(_parameters.InteractivePosition.Y, 0.0, size.Height)
+                (float)Clamp(_parameters.PointerLocal.X, 0.0, size.Width),
+                (float)Clamp(_parameters.PointerLocal.Y, 0.0, size.Height)
             };
+            uniforms["hover"] = hover;
+            uniforms["press"] = press;
+            uniforms["radius"] = (float)Math.Clamp(Math.Min(size.Width, size.Height) * 0.8, 36.0, 160.0);
 
             using SKRuntimeEffectChildren children = new(s_interactiveHighlightEffect);
             using SKShader? shader = s_interactiveHighlightEffect.ToShader(uniforms, children);
-
             if (shader is not null)
             {
                 using SKPaint paint = new()
