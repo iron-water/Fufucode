@@ -76,8 +76,8 @@ public static class Program
             case "open": return OpenGui(options);
             case "changes": return await CliReportCommands.ChangesAsync(options, Console.Out, cancellationToken);
             case "usage": return await CliReportCommands.UsageAsync(options, Console.Out);
-            case "control": return await CliControlCommands.RunAsync(options, Console.Out, cancellationToken);
-            case "host": return await CliHostCommands.RunAsync(options, Console.Out, cancellationToken);
+            case "control": return await AutomationPluginCommands.RunControlAsync(options, Console.Out, cancellationToken);
+            case "host": return await AutomationPluginCommands.RunHostAsync(options, Console.Out, cancellationToken);
             case "ui":
                 if (options.SessionId is not null) throw new ArgumentException("ui preview cannot attach a real session.");
                 return await CliUiCommands.RunAsync(args, Console.Out, Console.Error, cancellationToken);

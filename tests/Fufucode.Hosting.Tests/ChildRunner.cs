@@ -2,6 +2,7 @@ using System.Text.Json;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Automation.Hosting;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 
 namespace Fufucode.Hosting.Tests;
 
@@ -33,6 +34,7 @@ internal static class ChildRunner
 {
     public static async Task<int> Run(string[] args)
     {
+        BatchHarnessAdapters.Register();
         var role = args[1];
         var counter = args[2];
         File.AppendAllText(counter, "started\n");

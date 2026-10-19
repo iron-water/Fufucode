@@ -29,10 +29,7 @@ public partial class ChatPage
         TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12, 16, 28), "airy" => new Thickness(28, 24, 28, 40), _ => new Thickness(24, 20, 24, 32) };
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
         ComposerCard.IsVisible = settings.Composer != "hidden";
-        // 沉浸式：输入区收起时留一个上箭头按钮，避免只能回设置里改回来。
-        ComposerRevealButton.IsVisible = settings.Composer == "hidden";
-        // 沉浸式：输入区收起时留一个上箭头按钮，避免"只能去设置里改回来"。
-        ComposerRevealButton.IsVisible = settings.Composer == "hidden";
+        // 沉浸式收起时由窗口层保留重新展开入口；这里只控制卡片本身。
         ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
