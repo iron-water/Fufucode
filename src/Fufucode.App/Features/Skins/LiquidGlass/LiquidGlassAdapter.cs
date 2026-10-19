@@ -104,6 +104,23 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 state.Surface = surface;
                 state.Parent = parent;
 
+                // Terus salin properti layout host → surface: ApplyWorkspaceLayout
+                // (mode浮层) mengubah Column/Span/ZIndex/Alignment SETELAH attach.
+                state.LayoutForwarder = (_, e) =>
+                {
+                    var prop = e.Property;
+                    if (prop == Grid.RowProperty || prop == Grid.ColumnProperty
+                        || prop == Grid.RowSpanProperty || prop == Grid.ColumnSpanProperty
+                        || prop == Canvas.LeftProperty || prop == Canvas.TopProperty
+                        || prop == Canvas.RightProperty || prop == Canvas.BottomProperty
+                        || prop == Visual.ZIndexProperty)
+                    {
+                        if (host.IsSet(prop)) surface.SetValue(prop, e.NewValue);
+                        else surface.ClearValue(prop);
+                    }
+                };
+                host.PropertyChanged += state.LayoutForwarder;
+
                 Shared[host] = state;
                 var adapter = new LiquidGlassAdapter(state);
                 adapter.StartAdaptiveLuminance();
@@ -151,16 +168,16 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             // 平台已给窗后模糊（AcrylicBlur/Blur/Mica/Transparent）时，玻璃面自身的 SurfaceColor
             // 保持较低不透明度让窗后透出；无平台模糊时提高 SurfaceColor 的不透明度，靠折射+色散
             // 单独撑起玻璃感（快照里只有窗内内容）。高对比等同"降低透明度"——彻底实色。
-            surface.BackdropOpacity = reducedTransparency ? 1.0 : (hasPlatformBlur ? 0.85 : 1.0);
+            surface.BackdropOpacity = reducedTransparency ? 1.0 : (hasPlatformBlur ? 0.92 : 1.0);
             surface.ChromaticAberration = !reducedTransparency;
             surface.RefractionAmount = reducedTransparency
                 ? 0.0
-                : (IsCaptionHost(_state.Host) ? 26.0 : 16.0);
+                : (IsCaptionHost(_state.Host) ? 30.0 : 22.0);
             surface.ProgressiveBlurEnabled =
                 !reducedTransparency && !IsCaptionHost(_state.Host);
             surface.HighlightOpacity = reducedTransparency
                 ? 0.9
-                : (IsCaptionHost(_state.Host) ? 0.7 : 0.5);
+                : (IsCaptionHost(_state.Host) ? 0.7 : 0.55);
 
             if (surface is LiquidGlassInteractiveSurface interactive)
             {
@@ -180,6 +197,12 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             if (_state.RefCount > 0) return;
 
             Shared.Remove(_state.Host);
+
+            if (_state.LayoutForwarder is not null)
+            {
+                _state.Host.PropertyChanged -= _state.LayoutForwarder;
+                _state.LayoutForwarder = null;
+            }
 
             if (_state.Parent is { } parent && _state.Surface is { } surface)
             {
@@ -292,32 +315,32 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
         private static void ApplySurfaceParameters(LiquidGlassSurface surface, Border host, bool isCaption)
         {
             // iOS 玻璃语义：chrome 取较强折射与边缘高光；dock/面板略弱。
-            // BlurRadius 用真实 iOS 量级（UIVisualEffect 半径远高于 2）才有"液"感；
-            // SurfaceColor 经 DynamicResource 绑到 LiquidGlass*SurfaceColor 令牌，alpha
-            // 决定玻璃面实色占比——alpha 越低窗后/窗内模糊越透。
-            surface.BlurRadius = isCaption ? 22.0 : 16.0;
-            surface.Vibrancy = 1.6;
-            surface.RefractionHeight = isCaption ? 12.0 : 8.0;
-            surface.RefractionAmount = isCaption ? 26.0 : 16.0;
+            // BlurRadius 用真实 iOS 量级（UIVisualEffect sigma ≈ 20-30）；Vibrancy 克制到 1.25
+            // （1.6 过饱和会把底下弱色块放大成脏色晕）；折射带 10/12 + amount 22/30 让侧栏
+            // 边缘有可见"凸透镜"弯折；HighlightAngle 115° 对齐 iOS 左上光源。
+            surface.BlurRadius = isCaption ? 28.0 : 28.0;
+            surface.Vibrancy = 1.25;
+            surface.RefractionHeight = isCaption ? 12.0 : 10.0;
+            surface.RefractionAmount = isCaption ? 30.0 : 22.0;
             surface.ChromaticAberration = true;
             surface.DepthEffect = true;
             surface.HighlightEnabled = true;
-            surface.HighlightWidth = 0.75;
-            surface.HighlightOpacity = isCaption ? 0.7 : 0.5;
-            surface.HighlightAngle = 90.0;
-            surface.HighlightFalloff = 1.2;
+            surface.HighlightWidth = 1.0;
+            surface.HighlightOpacity = isCaption ? 0.7 : 0.55;
+            surface.HighlightAngle = 115.0;
+            surface.HighlightFalloff = 1.6;
             surface.ShadowEnabled = !isCaption; // caption 不外投影（Vista/iOS 顶栏贴边）
-            surface.ShadowRadius = 24.0;
+            surface.ShadowRadius = 32.0;
             surface.ShadowOpacity = 0.5;
-            surface.CornerRadius = isCaption ? new CornerRadius(0) : new CornerRadius(12);
+            surface.CornerRadius = isCaption ? new CornerRadius(0) : new CornerRadius(14);
 
             // Progressive blur：dock/侧栏顶部向内容渐隐（iOS scroll edge soft 语义）；
-            // 顶部 35% 渐隐到透明，面板底下内容滚过去时不是硬切边。
+            // 顶部 28% 渐隐成雾（强度 0.08 的淡白），面板底下内容滚过去时不是硬切边。
             surface.ProgressiveBlurEnabled = !isCaption;
             surface.ProgressiveBlurStart = 0.0;
-            surface.ProgressiveBlurEnd = 0.35;
-            surface.ProgressiveTintColor = Color.FromArgb(0, 0, 0, 0);
-            surface.ProgressiveTintIntensity = 0.0;
+            surface.ProgressiveBlurEnd = 0.28;
+            surface.ProgressiveTintColor = Color.FromArgb(20, 255, 255, 255);
+            surface.ProgressiveTintIntensity = 0.08;
 
             // 玻璃面实色取自令牌（主题化）：caption 更薄透，dock/面板比 caption 稍实。
             var resourceKey = isCaption ? "LiquidGlassCaptionSurfaceColor" : "LiquidGlassDockSurfaceColor";
@@ -326,6 +349,9 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             var tintBinding = new Avalonia.Data.Binding { Source = host, Path = "Resources[LiquidGlassTintColor]", Converter = ColorResourceConverter.Instance };
             surface[!LiquidGlassSurface.TintColorProperty] = tintBinding;
 
+            // Grid/Canvas/ZIndex：salin nilai awal + terus disinkron lewat forwarder
+            // PropertyChanged di Attach — ApplyWorkspaceLayout mengubah nilai-nilai ini
+            // SETELAH attach (mode浮层), surface harus mengikuti nilai host.
             CopyAttached(host, surface, Grid.RowProperty);
             CopyAttached(host, surface, Grid.ColumnProperty);
             CopyAttached(host, surface, Grid.RowSpanProperty);
@@ -335,22 +361,24 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             CopyAttached(host, surface, Canvas.RightProperty);
             CopyAttached(host, surface, Canvas.BottomProperty);
             CopyAttached(host, surface, Visual.ZIndexProperty);
-
-            // Margin/IsVisible 用绑定而不是一次性拷贝：宿主的浮起边距是 .liquidGlass
-            // 类下的样式值（加类后才生效，且皮肤热切换会再写），一次拷贝拿不到；
-            // 绑定让玻璃面实时跟随宿主版式，宿主隐藏（如 ShowStatusBar=false）时玻璃面同隐。
             surface.Bind(Layoutable.MarginProperty,
                 new Avalonia.Data.Binding(nameof(Layoutable.Margin)) { Source = host });
             surface.Bind(Visual.IsVisibleProperty,
                 new Avalonia.Data.Binding(nameof(Visual.IsVisible)) { Source = host });
-            if (!double.IsNaN(host.Width)) surface.Width = host.Width;
-            if (!double.IsNaN(host.Height)) surface.Height = host.Height;
+            // Width/Height 同 Margin 一样用绑定：玻璃模式下 dock 宿主会被 ApplyWorkspaceLayout
+            // 显式写 Width/Height（浮层定位），surface 必须跟随才能同步浮起尺寸。
+            surface.Bind(Layoutable.WidthProperty,
+                new Avalonia.Data.Binding(nameof(Layoutable.Width)) { Source = host });
+            surface.Bind(Layoutable.HeightProperty,
+                new Avalonia.Data.Binding(nameof(Layoutable.Height)) { Source = host });
             surface.MinWidth = host.MinWidth;
             surface.MinHeight = host.MinHeight;
             surface.MaxWidth = host.MaxWidth;
             surface.MaxHeight = host.MaxHeight;
-            surface.HorizontalAlignment = host.HorizontalAlignment;
-            surface.VerticalAlignment = host.VerticalAlignment;
+            surface.Bind(Layoutable.HorizontalAlignmentProperty,
+                new Avalonia.Data.Binding(nameof(Layoutable.HorizontalAlignment)) { Source = host });
+            surface.Bind(Layoutable.VerticalAlignmentProperty,
+                new Avalonia.Data.Binding(nameof(Layoutable.VerticalAlignment)) { Source = host });
         }
 
         private static void CopyAttached(Control from, Control to, AvaloniaProperty property)
@@ -401,6 +429,8 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             public LiquidGlassSurface? Surface { get; set; }
 
             public Panel? Parent { get; set; }
+
+            public EventHandler<AvaloniaPropertyChangedEventArgs>? LayoutForwarder { get; set; }
         }
     }
 }

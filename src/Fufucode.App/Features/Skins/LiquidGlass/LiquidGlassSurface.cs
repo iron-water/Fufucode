@@ -6,6 +6,7 @@ using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Controls.Templates;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 
 namespace Fufucode.App.Features.Skins.LiquidGlass
 {
@@ -374,7 +375,13 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             LiquidGlassBackdropProvider.EnsureSnapshot(this);
             LiquidGlassBackdropSnapshot? snapshot = LiquidGlassBackdropProvider.TryGetSnapshot(this);
 
-            context.Custom(new LiquidGlassDrawOperation(controlBounds, parameters, snapshot, LiquidGlassDrawPass.Lens));
+            // 玻璃在 TopLevel 坐标下的位置（供 snapshot-alpha 兜底采样；本地 bounds 不含位移）。
+            Rect? topLevelBounds = null;
+            var transformed = this.GetTransformedBounds();
+            if (transformed is not null)
+                topLevelBounds = transformed.Value.Bounds.TransformToAABB(transformed.Value.Transform);
+
+            context.Custom(new LiquidGlassDrawOperation(controlBounds, parameters, snapshot, LiquidGlassDrawPass.Lens, topLevelBounds));
         }
 
         internal LiquidGlassDrawParameters CreateDrawParameters()
