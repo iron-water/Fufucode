@@ -178,16 +178,17 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             // 平台已给窗后模糊（AcrylicBlur/Blur/Mica/Transparent）时，玻璃面自身的 SurfaceColor
             // 保持较低不透明度让窗后透出；无平台模糊时提高 SurfaceColor 的不透明度，靠折射+色散
             // 单独撑起玻璃感（快照里只有窗内内容）。高对比等同"降低透明度"——彻底实色。
-            surface.BackdropOpacity = reducedTransparency ? 1.0 : (hasPlatformBlur ? 0.92 : 1.0);
+            // 玻璃自身无固有色：背景贡献保持全量（模糊+折射），颜色由底层决定。
+            surface.BackdropOpacity = 1.0;
             surface.ChromaticAberration = !reducedTransparency;
             surface.RefractionAmount = reducedTransparency
                 ? 0.0
-                : (IsCaptionHost(_state.Host) ? 30.0 : 22.0);
+                : (IsCaptionHost(_state.Host) ? 3.5 : 3.0);
             surface.ProgressiveBlurEnabled =
                 !reducedTransparency && !IsCaptionHost(_state.Host);
             surface.HighlightOpacity = reducedTransparency
                 ? 0.9
-                : (IsCaptionHost(_state.Host) ? 0.8 : 0.7);
+                : (IsCaptionHost(_state.Host) ? 0.8 : 0.75);
 
             if (surface is LiquidGlassInteractiveSurface interactive)
             {
@@ -333,21 +334,26 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             // BlurRadius 用真实 iOS 量级（UIVisualEffect sigma ≈ 20-30）；Vibrancy 克制到 1.4
             // （1.6 过饱和会把底下弱色块放大成脏色晕）；折射带 10/12 + amount 22/30 让侧栏
             // 边缘有可见"凸透镜"弯折；HighlightAngle 115° 对齐 iOS 左上光源。
-            surface.BlurRadius = 28.0;
-            surface.Vibrancy = 1.4;
-            surface.RefractionHeight = isCaption ? 12.0 : 10.0;
-            surface.RefractionAmount = isCaption ? 30.0 : 22.0;
+            // 参数取自 Apple HIG / WWDC25 光学规范：
+            //   IOR 1.492、有效厚度 8px → 边缘折射位移 ≈ (1-1/1.492)*8 ≈ 2.6px；
+            //   饱和度增益 1.35–1.8（模糊必然降低色彩方差，不补会发灰）；
+            //   顶缘 0.5–1px 纯白镜面（alpha 0.45–0.85）+ 底缘暗遮蔽 0.12–0.20；
+            //   投影 30–60px 大半径、4–10% 超低不透明度。
+            surface.BlurRadius = 32.0;
+            surface.Vibrancy = 1.45;
+            surface.RefractionHeight = 8.0;
+            surface.RefractionAmount = isCaption ? 3.5 : 3.0;
             surface.ChromaticAberration = true;
             surface.DepthEffect = true;
             surface.HighlightEnabled = true;
-            surface.HighlightWidth = 1.0;
-            surface.HighlightOpacity = isCaption ? 0.8 : 0.7;
-            surface.HighlightAngle = 115.0;
-            surface.HighlightFalloff = 1.6;
+            surface.HighlightWidth = 0.75;
+            surface.HighlightOpacity = isCaption ? 0.8 : 0.75;
+            surface.HighlightAngle = 90.0;
+            surface.HighlightFalloff = 2.2;
             surface.ShadowEnabled = !isCaption; // caption 不外投影（Vista/iOS 顶栏贴边）
-            surface.ShadowRadius = 32.0;
-            surface.ShadowOpacity = 0.5;
-            surface.CornerRadius = isCaption ? new CornerRadius(0) : new CornerRadius(14);
+            surface.ShadowRadius = 40.0;
+            surface.ShadowOpacity = 0.09;
+            surface.CornerRadius = isCaption ? new CornerRadius(0) : new CornerRadius(16);
 
             // Progressive blur：dock/侧栏顶部向内容渐隐（iOS scroll edge soft 语义）；
             // 顶部 28% 渐隐成雾（强度 0.08 的淡白），面板底下内容滚过去时不是硬切边。
