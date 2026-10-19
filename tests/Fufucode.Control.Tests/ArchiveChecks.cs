@@ -2,11 +2,38 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Fufucode.Cli;
+using Fufucode.Core;
 using Fufucode.Core.Automation;
+using Fufucode.Core.Plugins;
 using Microsoft.Data.Sqlite;
 
 internal static class ArchiveChecks
 {
+    /// <summary>
+    /// 自动开发命令现在由插件提供：CLI 子进程需要一个真实、隔离的插件安装。
+    /// 只复制命令入口程序集与清单；页面/Avalonia 类型不会被 CLI 触碰。
+    /// </summary>
+    internal static readonly string CliDataRoot = PrepareCliDataRoot();
+
+    private static string PrepareCliDataRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fufucode-cli-plugin-" + Guid.NewGuid().ToString("N"));
+        var layout = new AppDataLayout(root);
+        var pluginId = "automation.auto-dev";
+        var dir = layout.PluginDirectory(pluginId);
+        Directory.CreateDirectory(dir);
+        var payload = typeof(Fufucode.Plugins.AutoDev.AutoDevPluginPackage).Assembly.Location;
+        File.Copy(payload, Path.Combine(dir, "Fufucode.Plugins.AutoDev.dll"), true);
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), """
+            {"id":"automation.auto-dev","name":"自动开发工作台","version":"1.0.0",
+             "entryAssembly":"Fufucode.Plugins.AutoDev.dll",
+             "packageType":"Fufucode.Plugins.AutoDev.AutoDevPluginPackage",
+             "commandHostType":"Fufucode.Plugins.AutoDev.AutoDevCommandHost","category":"Automation"}
+            """);
+        new PluginStateStore(layout).Install(pluginId);
+        return root;
+    }
+
     internal static async Task Run(string root, Action<bool, string> check)
     {
         void Refused<T>(Action action, string label) where T : Exception
@@ -136,6 +163,7 @@ internal static class ArchiveChecks
             RedirectStandardOutput = true, RedirectStandardError = true
         };
         info.ArgumentList.Add(typeof(Fufucode.Cli.Program).Assembly.Location);
+        info.Environment["FUFUCODE_DATA_ROOT"] = CliDataRoot;
         foreach (var arg in args) info.ArgumentList.Add(arg);
         using var process = System.Diagnostics.Process.Start(info)!;
         var output = process.StandardOutput.ReadToEndAsync();

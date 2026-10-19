@@ -100,6 +100,7 @@ internal static class RepairChecks
         async Task<string> Cli()
         {
             var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            start.Environment["FUFUCODE_DATA_ROOT"] = ArchiveChecks.CliDataRoot;
             foreach (var arg in new[] { typeof(Fufucode.Cli.CliOptions).Assembly.Location, "control", "consume-repair", db, file }) start.ArgumentList.Add(arg);
             using var p = Process.Start(start)!; var output = p.StandardOutput.ReadToEndAsync(); var error = p.StandardError.ReadToEndAsync();
             await p.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); var text = await output; var detail = await error;

@@ -85,6 +85,7 @@ internal static class ReconsiderChecks
         async Task<string> Cli()
         {
             var start = new ProcessStartInfo("dotnet") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
+            start.Environment["FUFUCODE_DATA_ROOT"] = ArchiveChecks.CliDataRoot;
             foreach (var arg in new[] { typeof(Fufucode.Cli.CliOptions).Assembly.Location, "control", "reconsider", db, file }) start.ArgumentList.Add(arg);
             using var process = Process.Start(start)!; var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
             await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); var text = await output; var detail = await error;

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using Fufucode.App.Abstractions.Automation.Harnesses;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
@@ -13,8 +14,6 @@ using Fufucode.App.Features.LocalReview;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.Core;
-using Fufucode.Core.Automation;
-using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Features.LocalReview;
 
 namespace Fufucode.App;
@@ -80,6 +79,7 @@ public partial class MainWindow
                 return Failure(scope, "审查目录与当前项目不同，请先打开该项目。");
             try
             {
+                // 执行后端由已启用的自动开发插件提供（唯一后台）；这里只解析本次审查的部署。
                 var (node, cli) = RealSessionBootstrap.ResolveRuntime(window._options);
                 var manifest = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(cli)!, "..", "..", "package.json"));
                 using var package = JsonDocument.Parse(await File.ReadAllTextAsync(manifest, cancellationToken));
@@ -89,9 +89,7 @@ public partial class MainWindow
                 var runtime = new HarnessRuntime("desktop-local-review-pi", "pi", node, [cli, "--no-tools"], version,
                     new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] = host.AgentDirectory });
                 var projectId = host.Current.Session.ProjectId;
-                var database = Path.Combine(root, "projects", projectId, "automation.db");
-                var executor = new LocalReviewHarnessExecutor(() => new AutomationStore(database), runtime,
-                    root, projectId, model);
+                var executor = new LocalReviewHarnessExecutor(root, projectId, model, runtime: runtime);
                 return await executor.ReviewAsync(scope, cancellationToken);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or JsonException)

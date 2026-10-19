@@ -1,4 +1,7 @@
 using Fufucode.Conv.Tests;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
+
+BatchHarnessAdapters.Register();
 
 // CONV-1 acceptance harness: the managed worktree lifecycle, the durable cross-thread inbox and the
 // host terminal-state watchdog. Every case uses a real git repository, real child processes and a

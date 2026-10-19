@@ -86,6 +86,8 @@
   <ItemGroup>
     <!-- 契约由独立类库 Abstractions/Fufucode.App.Abstractions.csproj 编译，本工程只引用不重复编译 -->
     <Compile Remove="Abstractions\**\*.cs" />
+    <!-- 与自动开发插件共享的视图模型基类（插件链接同一份源码） -->
+    <Compile Include="..\Shared\ViewModelBase.cs" Link="ViewModels\ViewModelBase.cs" />
   </ItemGroup>
 
   <ItemGroup>

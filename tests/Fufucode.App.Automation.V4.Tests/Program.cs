@@ -3,6 +3,9 @@ using Fufucode.App.Features.Automation;
 using Fufucode.Core.Automation;
 using Fufucode.Core.Automation.Harnesses;
 using Fufucode.Core.Automation.Hosting;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
+
+BatchHarnessAdapters.Register();
 
 // CONV-2 定向验证：v4 工作台页面视图模型的状态投影、双视角切换与自动委托抽屉。
 // 运行：dotnet run --project tests/Fufucode.App.Automation.V4.Tests

@@ -1,5 +1,9 @@
 using Fufucode.Core.Automation;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 using Microsoft.Data.Sqlite;
+
+// 控制链路按 harness id 校验协议适配器；适配器实现现在随自动开发插件发布。
+BatchHarnessAdapters.Register();
 
 if (args.Length >= 2 && args[0] == "--c4-protocol")
 {
@@ -11,11 +15,11 @@ if (args.Length >= 2 && args[0] == "--conv3-protocol")
 }
 if (args.SequenceEqual(["--c4-only"]) || args.Length == 2 && args[0] == "--c4-live")
 {
-    Fufucode.Core.Automation.Harnesses.HarnessRuntime? runtime = null;
+    Fufucode.App.Abstractions.Automation.Harnesses.HarnessRuntime? runtime = null;
     if (args[0] == "--c4-live")
     {
         if (!Path.IsPathFullyQualified(args[1])) throw new ArgumentException("Explicit absolute runtime file required");
-        runtime = System.Text.Json.JsonSerializer.Deserialize<Fufucode.Core.Automation.Harnesses.HarnessRuntime>(File.ReadAllText(args[1]))
+        runtime = System.Text.Json.JsonSerializer.Deserialize<Fufucode.App.Abstractions.Automation.Harnesses.HarnessRuntime>(File.ReadAllText(args[1]))
             ?? throw new ArgumentException("Runtime file must contain an explicit deployment object; null cannot fall back to a fixture");
     }
     var evidence = Path.Combine(Path.GetTempPath(), "fufucode-c4-" + Guid.NewGuid().ToString("N")); var checks = 0;

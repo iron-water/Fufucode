@@ -107,7 +107,7 @@ Check(chat.Contains("BorderBrush=\"{DynamicResource AppDividerSubtle}\""),
 // 3d. 设置行/自动化卡内的输入控件已降级
 Check(Regex.IsMatch(workbench, "<Style Selector=\"Border\\.settingsRow TextBox\"[\\s\\S]*?BorderThickness\" Value=\"0\""),
     "A：设置行内 TextBox 降级为无框轻质填充");
-var automationPath = Path.Combine(repoRoot, "src", "Fufucode.App", "Features", "Automation",
+var automationPath = Path.Combine(repoRoot, "src", "Fufucode.Plugins.AutoDev", "Ui", "Automation",
     "AutomationControlPageView.axaml");
 var automation = File.ReadAllText(automationPath);
 Check(Regex.IsMatch(automation, "<Style Selector=\"Border\\.automationCardInner\"[\\s\\S]*?BorderThickness\" Value=\"0\""),
