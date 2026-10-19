@@ -465,21 +465,15 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         return group;
     }
 
-    /// <summary>从时间线移除前解除子工具订阅，避免残留通知。</summary>
-    internal void DetachForRemoval()
-    {
-        foreach (var group in _groups) group.Detach();
-        _groups.Clear();
-    }
-
     /// <summary>
     /// 回合结束或从时间线移除前调用：解除全部工具组对子工具的订阅。
     /// 这是旧回合最主要的驻留来源（组通过 PropertyChanged 持有子工具，进而钉住已渲染控件）；
     /// 保留块与投影本身，回合仍可正常显示，移除时随整个条目一起释放。
     /// </summary>
-    public void DetachForRemoval()
+    internal void DetachForRemoval()
     {
         foreach (var group in _groups) group.Detach();
+        _groups.Clear();
     }
 
     /// <summary>
