@@ -76,6 +76,7 @@ Settings → 性能与内存 provides opt-in switches; the default is high perfo
 | 软件渲染 | Skips ANGLE/D3D and the GPU driver stack; ~130–140 MB less working set | after restart |
 | 关闭视觉特效 | Stops glass/blur luminance sampling | immediately |
 | 减少终端回滚 | Terminal history 1500 → 500 lines | new terminals |
+| 浏览器后台降内存 | Background tabs skip early WebView2 creation and use `MemoryUsageTargetLevel.Low`; background scripts keep running | next tab switch |
 
 Measured idle build: 327 MB working set (default) vs 189 MB (low-memory preset).
 

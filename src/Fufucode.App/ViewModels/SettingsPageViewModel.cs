@@ -103,6 +103,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [ObservableProperty] private bool _softwareRendering;
     [ObservableProperty] private bool _disableVisualEffects;
     [ObservableProperty] private bool _reduceTerminalScrollback;
+    [ObservableProperty] private bool _reduceBackgroundBrowserMemory;
     [ObservableProperty] private SettingSaveState _performanceState;
     [ObservableProperty] private string? _performanceStateText;
     private bool _suppressPerformanceSave;
@@ -1701,6 +1702,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         SoftwareRendering = performance.SoftwareRendering;
         DisableVisualEffects = performance.DisableVisualEffects;
         ReduceTerminalScrollback = performance.ReduceTerminalScrollback;
+        ReduceBackgroundBrowserMemory = performance.ReduceBackgroundBrowserMemory;
         _suppressPerformanceSave = false;
         MemoryProfile.Apply(performance);
         PerformanceState = SettingSaveState.Unchanged;
@@ -1932,6 +1934,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     partial void OnSoftwareRenderingChanged(bool value) => SavePerformance(restartRequired: true);
     partial void OnDisableVisualEffectsChanged(bool value) => SavePerformance();
     partial void OnReduceTerminalScrollbackChanged(bool value) => SavePerformance();
+    partial void OnReduceBackgroundBrowserMemoryChanged(bool value) => SavePerformance();
 
     /// <summary>把三个开关写回 settings.json，并立即更新运行时读数。</summary>
     private void SavePerformance(bool restartRequired = false)
@@ -1942,7 +1945,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             var next = _context.Store.Update(current => current with
             {
                 Performance = new PerformanceSettings(
-                    SoftwareRendering, DisableVisualEffects, ReduceTerminalScrollback),
+                    SoftwareRendering, DisableVisualEffects, ReduceTerminalScrollback,
+                    ReduceBackgroundBrowserMemory),
             });
             MemoryProfile.Apply(next.Performance);
             PerformanceState = restartRequired ? SettingSaveState.RestartRequired : SettingSaveState.Applied;
@@ -1962,6 +1966,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         SoftwareRendering = true;
         DisableVisualEffects = true;
         ReduceTerminalScrollback = true;
+        ReduceBackgroundBrowserMemory = true;
         _suppressPerformanceSave = false;
         SavePerformance(restartRequired: true);
     }
@@ -1973,6 +1978,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         SoftwareRendering = false;
         DisableVisualEffects = false;
         ReduceTerminalScrollback = false;
+        ReduceBackgroundBrowserMemory = false;
         _suppressPerformanceSave = false;
         SavePerformance(restartRequired: true);
     }

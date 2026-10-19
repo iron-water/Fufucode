@@ -201,6 +201,8 @@ public sealed class BrowserViewHost : Control, IDisposable
     {
         if (_disposed || _initializeRequested || _initializing) return;
         if (!IsEffectivelyVisible) return;
+        // 低内存模式：后台页签不提前创建 controller（= 一个 renderer 进程）。
+        if (_occluded && Fufucode.App.Integration.MemoryProfile.ReduceBackgroundBrowserMemory) return;
         if (Bounds.Width <= 0 || Bounds.Height <= 0) return;
         if (VisualRoot is null) return;
         if (!OperatingSystem.IsWindows()) { StatusChanged?.Invoke(this, "内置浏览器仅支持 Windows。"); _initializeRequested = true; return; }
@@ -236,6 +238,7 @@ public sealed class BrowserViewHost : Control, IDisposable
             _controllerCreateCount++;
             _core = controller.CoreWebView2;
             WireCore(_core);
+            ApplyMemoryUsageTarget();
 
             // 创建期间父窗口可能已经换了（同一批跨窗搬移）：这里再对齐一次，改动的是同一 controller。
             SynchronizeWithParent();
@@ -521,6 +524,25 @@ public sealed class BrowserViewHost : Control, IDisposable
         var visible = !_occluded && IsEffectivelyVisible && Bounds.Width > 0 && Bounds.Height > 0 && VisualRoot is not null;
         try { _controller.IsVisible = visible; }
         catch (Exception error) when (IsControllerGone(error)) { }
+        ApplyMemoryUsageTarget();
+    }
+
+    /// <summary>
+    /// 低内存模式：后台页签设 MemoryUsageTargetLevel.Low，让 WebView2 把进程内存换出/压缩；
+    /// 不调用 TrySuspend，后台脚本与网络连接继续运行，Browser Use 不会被打断。
+    /// </summary>
+    private void ApplyMemoryUsageTarget()
+    {
+        if (_core is null) return;
+        var low = Fufucode.App.Integration.MemoryProfile.ReduceBackgroundBrowserMemory
+            && (_occluded || !IsEffectivelyVisible);
+        try
+        {
+            _core.MemoryUsageTargetLevel = low
+                ? CoreWebView2MemoryUsageTargetLevel.Low
+                : CoreWebView2MemoryUsageTargetLevel.Normal;
+        }
+        catch (Exception error) when (IsControllerGone(error)) { }
     }
 
     /// <summary>
@@ -560,7 +582,13 @@ public sealed class BrowserViewHost : Control, IDisposable
         _intendedParentInParent = IntPtr.Zero;
     }
 
-    public void SetOccluded(bool value) { _occluded = value; UpdateVisibility(); }
+    public void SetOccluded(bool value)
+    {
+        if (_occluded == value) return;
+        _occluded = value;
+        UpdateVisibility();
+        ApplyMemoryUsageTarget();
+    }
 
     /// <summary>通过 Chrome DevTools Protocol 执行 CDP 方法（Browser Use 核心驱动）。</summary>
     public async Task<string?> CallDevToolsProtocolMethodAsync(string methodName, string parametersJson)

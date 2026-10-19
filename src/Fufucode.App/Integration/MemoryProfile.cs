@@ -15,6 +15,7 @@ public static class MemoryProfile
     public static bool SoftwareRendering => _current.SoftwareRendering;
     public static bool DisableVisualEffects => _current.DisableVisualEffects;
     public static bool ReduceTerminalScrollback => _current.ReduceTerminalScrollback;
+    public static bool ReduceBackgroundBrowserMemory => _current.ReduceBackgroundBrowserMemory;
 
     public static void Apply(PerformanceSettings? settings) => _current = settings ?? new PerformanceSettings();
 }
