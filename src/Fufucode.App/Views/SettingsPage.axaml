@@ -259,6 +259,16 @@
                     </Grid>
                   </Border>
                   <Border Classes="settingsRow">
+                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Globe}" Width="18" Height="18" VerticalAlignment="Center"/>
+                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Classes="settingsRowTitle" Text="浏览器后台降内存"/>
+                        <TextBlock Classes="settingsRowDesc" Text="非活动页签不提前创建 WebView2，并设为低内存目标；后台页面继续运行，不暂停脚本。" TextWrapping="Wrap"/>
+                      </StackPanel>
+                      <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding ReduceBackgroundBrowserMemory, Mode=TwoWay}"/>
+                    </Grid>
+                  </Border>
+                  <Border Classes="settingsRow">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="14">
                       <StackPanel Spacing="2">
                         <TextBlock Classes="settingsRowTitle" Text="预设"/>

@@ -630,3 +630,9 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
   3. 减少终端回滚：`TerminalBuffer.HistoryLimit` 从 1500 降到 500；对新建终端生效。
 - 实测（Debug，空闲、无会话）：高性能 327 MB WS / 234 MB 私有 / GPU 模块 130 MB / 61 线程；低内存 189 MB WS / 111 MB 私有 / GPU 模块 0 / 18 线程。降幅约 138 MB WS、123 MB 私有。
 - 未纳入本轮：图片缓存上限、浏览器隐藏挂起、非活动会话 LRU。会话主机实际只保留一个 current 会话，切换时释放；图片缓存与浏览器新功能在主检出未提交代码中，待合并后补。
+
+2026-10-19 WebView2 内存优化（低内存模式补充）：
+- 每个浏览器页签持有独立 `BrowserViewHost`/controller，等于一个独立 renderer 进程；仅设 `IsVisible=false` 不会释放进程内存。
+- 新增 `ReduceBackgroundBrowserMemory`：低内存模式下后台页签不提前创建 controller；已存在的后台 controller 设 `CoreWebView2.MemoryUsageTargetLevel.Low`，回到前台设 Normal。
+- 不使用 `TrySuspendAsync/Resume`，避免暂停后台脚本、网络与 Browser Use 自动化；改用官方建议的 MemoryUsageTargetLevel 组合，二者不混用。
+- 未做：后台标签超时销毁重建、WebView2 独立 `--disable-gpu`、JS 堆上限、缓存上限；这些需要真实页面回归后再定。
