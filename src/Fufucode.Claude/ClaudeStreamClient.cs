@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO.Pipelines;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -40,6 +42,7 @@ public sealed class ClaudeStreamClient : IAsyncDisposable
     private readonly Process _process;
     private readonly ClaudeStreamOptions _options;
     private readonly SemaphoreSlim _writer = new(1, 1);
+    private readonly ArrayBufferWriter<byte> _writeBuffer = new(4096);
     private readonly Channel<JsonElement> _records;
     private readonly Channel<ClaudeStreamEvent> _events;
     private readonly StringBuilder _stderr = new();
@@ -161,12 +164,18 @@ public sealed class ClaudeStreamClient : IAsyncDisposable
 
     private async Task WriteLineAsync(string line, CancellationToken cancellationToken)
     {
-        var bytes = Encoding.UTF8.GetBytes(line + "\n");
         await _writer.WaitAsync(cancellationToken);
         try
         {
             if (_failure is { } failure) throw new ClaudeStreamException("Claude stream connection has failed.", failure);
-            await _process.StandardInput.BaseStream.WriteAsync(bytes, cancellationToken);
+            _writeBuffer.Clear();
+            var maxBytes = Encoding.UTF8.GetMaxByteCount(line.Length) + 1;
+            var span = _writeBuffer.GetSpan(maxBytes);
+            var written = Encoding.UTF8.GetBytes(line, span);
+            span[written] = (byte)'\n';
+            _writeBuffer.Advance(written + 1);
+
+            await _process.StandardInput.BaseStream.WriteAsync(_writeBuffer.WrittenMemory, cancellationToken);
             await _process.StandardInput.BaseStream.FlushAsync(cancellationToken);
         }
         catch (Exception error) when (error is IOException or ObjectDisposedException)
@@ -178,59 +187,96 @@ public sealed class ClaudeStreamClient : IAsyncDisposable
 
     private async Task ReadStdoutAsync()
     {
-        var chunk = new byte[64 * 1024];
-        using var record = new MemoryStream();
+        var pipeReader = PipeReader.Create(_process.StandardOutput.BaseStream,
+            new StreamPipeReaderOptions(bufferSize: 64 * 1024, leaveOpen: true));
         try
         {
-            int count;
-            while ((count = await _process.StandardOutput.BaseStream.ReadAsync(chunk)) != 0)
+            while (true)
             {
-                for (var i = 0; i < count; i++)
+                var readResult = await pipeReader.ReadAsync().ConfigureAwait(false);
+                var buffer = readResult.Buffer;
+
+                while (TryReadLine(ref buffer, out var lineSequence))
                 {
-                    if (chunk[i] == (byte)'\n')
+                    if (TryParseObject(lineSequence, out var parsed))
                     {
-                        var length = (int)record.Length;
-                        if (length > 0 && record.GetBuffer()[length - 1] == (byte)'\r') length--;
-                        if (length > 0)
-                        {
-                            var json = new UTF8Encoding(false, true).GetString(record.GetBuffer(), 0, length);
-                            // Claude Code 会在 stdout 混入非 JSON 的诊断行（如 unrecognized_model）。
-                            // 宽容跳过而不是让整条会话失败。
-                            if (TryParseObject(json, out var parsed))
-                            {
-                                if (!_records.Writer.TryWrite(parsed))
-                                    throw new ClaudeStreamException("Stream dispatch queue exceeded its capacity.");
-                            }
-                            else Record("stdout_non_json", errorCode: "ignored");
-                        }
-                        record.SetLength(0);
+                        if (!_records.Writer.TryWrite(parsed))
+                            throw new ClaudeStreamException("Stream dispatch queue exceeded its capacity.");
                     }
                     else
                     {
-                        if (record.Length >= _options.MaxRecordBytes)
-                            throw new ClaudeStreamException("Stream record exceeds the configured size limit.");
-                        record.WriteByte(chunk[i]);
+                        Record("stdout_non_json", errorCode: "ignored");
                     }
                 }
-            }
-            if (record.Length != 0)
-            {
-                var json = new UTF8Encoding(false, true).GetString(record.GetBuffer(), 0, (int)record.Length);
-                if (TryParseObject(json, out var tail) && !_records.Writer.TryWrite(tail))
-                    throw new ClaudeStreamException("Stream dispatch queue exceeded its capacity.");
+
+                pipeReader.AdvanceTo(buffer.Start, buffer.End);
+
+                if (readResult.IsCompleted)
+                {
+                    if (!buffer.IsEmpty && TryParseObject(buffer, out var tail))
+                    {
+                        if (!_records.Writer.TryWrite(tail))
+                            throw new ClaudeStreamException("Stream dispatch queue exceeded its capacity.");
+                    }
+                    break;
+                }
             }
         }
         catch (Exception error) { Fail(error); }
-        finally { _records.Writer.TryComplete(); }
+        finally
+        {
+            await pipeReader.CompleteAsync().ConfigureAwait(false);
+            _records.Writer.TryComplete();
+        }
     }
 
-    private static bool TryParseObject(string json, out JsonElement element)
+    private bool TryReadLine(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> lineSequence)
+    {
+        var position = buffer.PositionOf((byte)'\n');
+        if (position is null)
+        {
+            if (buffer.Length > _options.MaxRecordBytes)
+                throw new ClaudeStreamException("Stream record exceeds the configured size limit.");
+            lineSequence = default;
+            return false;
+        }
+
+        var line = buffer.Slice(0, position.Value);
+        if (line.Length > _options.MaxRecordBytes)
+            throw new ClaudeStreamException("Stream record exceeds the configured size limit.");
+
+        if (line.Length > 0 && line.Slice(line.Length - 1).FirstSpan[0] == (byte)'\r')
+        {
+            line = line.Slice(0, line.Length - 1);
+        }
+
+        lineSequence = line;
+        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
+        return true;
+    }
+
+    private static bool TryParseObject(in ReadOnlySequence<byte> lineSequence, out JsonElement element)
     {
         element = default;
-        if (!json.AsSpan().TrimStart().StartsWith("{")) return false;
+        if (lineSequence.IsEmpty) return false;
+        // 快速前缀检查：必须以 '{' 开头
+        var firstByte = (byte)0;
+        foreach (var segment in lineSequence)
+        {
+            var span = segment.Span;
+            for (var i = 0; i < span.Length; i++)
+            {
+                if (char.IsWhiteSpace((char)span[i])) continue;
+                firstByte = span[i];
+                break;
+            }
+            if (firstByte != 0) break;
+        }
+        if (firstByte != (byte)'{') return false;
+
         try
         {
-            using var document = JsonDocument.Parse(json);
+            using var document = JsonDocument.Parse(lineSequence);
             if (document.RootElement.ValueKind != JsonValueKind.Object) return false;
             element = document.RootElement.Clone();
             return true;

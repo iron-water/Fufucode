@@ -16,7 +16,7 @@ namespace Fufucode.Plugins.Claude;
 /// Claude 会话门面：包装 ClaudeChatSessionAdapter，实现统一聊天契约 IChatSession、
 /// IBackendChatSession 与 IExtensionUiSession 审批桥，并维护本地会话历史持久化。
 /// </summary>
-public sealed class ClaudeChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IAsyncDisposable, IDisposable
+public sealed class ClaudeChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly ClaudeChatSessionAdapter _adapter;
     private readonly string? _persistFilePath;
@@ -45,6 +45,7 @@ public sealed class ClaudeChatSession : IChatSession, IBackendChatSession, IExte
     }
 
     public string BackendId => "claude";
+    public BackendPresentationProfile Presentation => BackendPresentationProfile.Claude;
     public string BackendName => "Claude Code";
     public SessionConnection Connection => _adapter.Connection;
     public SessionActivity Activity => _adapter.Activity;

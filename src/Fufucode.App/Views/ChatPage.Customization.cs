@@ -43,17 +43,88 @@ public partial class ChatPage
         RefreshRuler();
         foreach (var actions in this.GetVisualDescendants().OfType<MessageActionsView>()) actions.ApplyAppearance(settings);
     }
+    /// <summary>
+    /// 左侧轮次刻度：只列用户轮次，悬停显示这一轮的指令，点击跳转，右键收藏。
+    /// 收藏只做原位高亮，不改变顺序——刻度的价值是空间记忆，重排会让位置失去意义。
+    /// </summary>
     internal void RefreshRuler()
     {
         MessageRuler.Children.Clear();
         if (DataContext is not MainViewModel vm) return;
-        var index = 0;
-        foreach (var entry in vm.Timeline.Entries.OfType<UserMessageViewModel>())
+
+        var numbered = vm.Timeline.Entries.OfType<UserMessageViewModel>()
+            .Select((entry, index) => (Entry: entry, Number: index + 1))
+            .ToList();
+
+        // 收藏按会话持久化：每次重建刻度时套用一次，重启后仍能找回固定的轮次。
+        var sessionId = vm.Sidebar.SelectedSession?.Id;
+        if (!string.IsNullOrEmpty(sessionId))
         {
-            var button = new Button { Content = (++index).ToString("00"), Width = 28, Height = 30, Padding = new Thickness(0), FontSize = 10 };
-            ToolTip.SetTip(button, entry.Text); button.Click += (_, _) => ScrollToMessage(entry.Id); MessageRuler.Children.Add(button);
+            var pinnedIds = PinnedTurnsStore.Load(sessionId);
+            foreach (var item in numbered)
+                item.Entry.IsPinned = pinnedIds.Contains(item.Entry.Id);
+        }
+
+        foreach (var (entry, number) in numbered)
+        {
+            var tick = new StackPanel { Spacing = 1, HorizontalAlignment = HorizontalAlignment.Center };
+            if (entry.IsPinned)
+            {
+                tick.Children.Add(new TextBlock
+                {
+                    Text = "●",
+                    FontSize = 6,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                });
+            }
+            tick.Children.Add(new TextBlock
+            {
+                Text = number.ToString("00"),
+                FontSize = 10,
+                HorizontalAlignment = HorizontalAlignment.Center,
+            });
+
+            var button = new Button
+            {
+                Content = tick,
+                Width = 30,
+                Height = 28,
+                Padding = new Thickness(0),
+                Background = Avalonia.Media.Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+            };
+            button.Classes.Add("rulerTick");
+            if (entry.IsPinned) button.Classes.Add("pinned");
+
+            // 悬停预览：完整显示这一轮的用户指令，长文本换行而不是截成省略号。
+            var preview = string.IsNullOrWhiteSpace(entry.Text) ? "（无文字输入）" : entry.Text.Trim();
+            var tipBlock = new TextBlock
+            {
+                Text = preview,
+                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                MaxWidth = 340,
+            };
+            ToolTip.SetTip(button, tipBlock);
+            ToolTip.SetShowDelay(button, 200);
+
+            var menu = new MenuFlyout();
+            var pin = new MenuItem { Header = entry.IsPinned ? "取消收藏" : "收藏这一轮" };
+            pin.Click += (_, _) =>
+            {
+                entry.IsPinned = !entry.IsPinned;
+                if (!string.IsNullOrEmpty(sessionId))
+                    PinnedTurnsStore.Set(sessionId, entry.Id, entry.IsPinned);
+                RefreshRuler();
+            };
+            menu.Items.Add(pin);
+            button.ContextFlyout = menu;
+
+            var id = entry.Id;
+            button.Click += (_, _) => ScrollToMessage(id);
+            MessageRuler.Children.Add(button);
         }
     }
+
     internal void FindConversation() => FindConversation_Click(HeaderActionsButton, new Avalonia.Interactivity.RoutedEventArgs());
     internal void BeginRename()
     {

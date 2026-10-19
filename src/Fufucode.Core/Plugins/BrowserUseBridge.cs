@@ -9,6 +9,9 @@ namespace Fufucode.Core.Plugins;
 /// </summary>
 public abstract class BrowserUseBridge
 {
+    /// <summary>在匹配元素中输入文本（可选先清空）；默认实现返回“未实现”，不伪造成功。</summary>
+    public virtual Task<string> TypeAsync(string selector, string text, bool clear, CancellationToken cancellationToken = default)
+        => Task.FromResult("{\"error\":\"browser_type 未实现：当前桥不提供文本输入。\"}");
     /// <summary>调用 CDP 方法并返回原始 JSON 结果。</summary>
     public abstract Task<string?> CallCdpAsync(string method, string parametersJson,
         CancellationToken cancellationToken = default);

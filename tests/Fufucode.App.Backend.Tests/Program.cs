@@ -12,6 +12,10 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        // 测试用假 MCP 服务器（stdio）：测试进程以该参数启动自身。
+        if (args.Length >= 1 && args[0] == "--fake-mcp-stdio")
+            return await FakeMcpServer.RunStdioAsync();
+
         // 可选的真实端点探针：不进默认套件（需要网络与凭据）。
         if (args.Length >= 2 && args[0] == "--live-sse")
         {

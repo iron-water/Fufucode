@@ -258,29 +258,45 @@ internal static class NativeBrowserModuleSelfTest
                  + "popup-to-new-tab path implemented but not observed natively in this run.");
         }
 
-        // ---- 6b. 默认下载策略：DownloadStarting 取消，不写系统下载目录 ----
+        // ---- 6b. 真实下载：设置里的目录 + 权限生效，写真实文件并记录进度/历史 ----
         // 独立页签直接导航到 attachment URL：这是最可靠的 DownloadStarting 触发方式，且不影响其他页签。
         browser.ViewModel.NewTabCommand.Execute(null);
         var downloadTab = browser.ViewModel.ActiveTab;
         var downloadHost = browser.HostForTabForTesting(downloadTab);
         await Until(() => downloadHost.IsReady);
+        var downloadDir = Path.Combine(root, "downloads");
+        var settings = window.BrowserSettingsForTesting;
+        settings.DefaultDownloadPermissionIndex = 1;      // allow
+        settings.DefaultDownloadDirectory = downloadDir;  // 真实目标目录
+        settings.PromptDownloadLocation = false;
+        await Task.Delay(300);
         var downloadMessages = new List<string>();
         downloadHost.StatusChanged += (_, message) => downloadMessages.Add(message);
+        Note("download settings: permission=" + settings.CurrentSettings.DefaultDownloadPermission +
+             " dir=" + settings.CurrentSettings.DefaultDownloadDirectory +
+             " view gate=" + browser.CurrentSettings.DefaultDownloadPermission);
         var downloadsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-        // loopback 对 /blocked-download.bin 返回 Content-Disposition: attachment，确保真实触发 DownloadStarting。
         var beforeDownloads = Directory.Exists(downloadsFolder)
             ? Directory.GetFiles(downloadsFolder).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         downloadHost.Navigate(loopback.Url + "blocked-download.bin");
-        var cancelled = await WaitSoftAsync(
-            () => downloadMessages.Any(message => message.Contains("已阻止自动下载", StringComparison.Ordinal)),
-            TimeSpan.FromSeconds(8));
+        var downloaded = await WaitSoftAsync(
+            () => Directory.Exists(downloadDir) && Directory.GetFiles(downloadDir).Length > 0,
+            TimeSpan.FromSeconds(15));
         var afterDownloads = Directory.Exists(downloadsFolder)
             ? Directory.GetFiles(downloadsFolder).ToHashSet(StringComparer.OrdinalIgnoreCase)
             : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        Check(cancelled, "Default download policy cancels DownloadStarting with a clear message");
+        Check(downloaded, "Download writes a real file into the configured download directory");
         Check(afterDownloads.SetEquals(beforeDownloads),
-            "Cancelled download writes nothing into the user Downloads folder");
+            "Configured download directory is used instead of the system Downloads folder");
+        var completed = await WaitSoftAsync(
+            () => browser.ViewModel.Downloads.Any(item => item.IsCompleted),
+            TimeSpan.FromSeconds(8));
+        Check(completed, "Download list observes the real Completed state");
+        Note("download files=" + (Directory.Exists(downloadDir) ? string.Join(",", Directory.GetFiles(downloadDir)) : "(none)") +
+             " messages=" + string.Join(" | ", downloadMessages));
+        var historyFile = Path.Combine(root, "browser-downloads.json");
+        Check(File.Exists(historyFile), "Download history is written to browser-downloads.json");
         browser.ViewModel.CloseTabByIdCommand.Execute(downloadTab);
         await Task.Delay(400);
 

@@ -255,6 +255,8 @@ public sealed class SkillRegistry : IPureToolDispatcher
 /// <summary>把 `skill` 工具接到现有调度器前面；其余工具原样透传。</summary>
 public sealed class SkillAwareDispatcher(IPureToolDispatcher inner, SkillRegistry skills) : IPureToolDispatcher
 {
+    public IPureToolDispatcher Inner => inner;
+
     public Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default) =>
         string.Equals(call.Name, SkillRegistry.ToolName, StringComparison.Ordinal)
             ? skills.DispatchAsync(call, cancellationToken)

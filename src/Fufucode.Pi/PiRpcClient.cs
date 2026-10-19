@@ -1,7 +1,9 @@
 using Fufucode.Core;
 
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO.Pipelines;
 using System.Text;
 using System.Text.Json;
 using System.Threading.Channels;
@@ -16,6 +18,7 @@ public sealed class PiRpcClient : IRpcClient
     private readonly PiRpcOptions _options;
     private readonly ConcurrentDictionary<string, (string Command, TaskCompletionSource<RpcResponse> Waiter)> _pending = new();
     private readonly SemaphoreSlim _writer = new(1, 1);
+    private readonly ArrayBufferWriter<byte> _writeBuffer = new(4096);
     private readonly Channel<JsonElement> _records;
     private readonly Channel<RpcEvent> _events;
     private readonly StringBuilder _stderr = new();
@@ -117,29 +120,30 @@ public sealed class PiRpcClient : IRpcClient
         if (!_pending.TryAdd(id, (command, waiter))) throw new RpcException("Duplicate request ID.");
         try
         {
-            using var buffer = new MemoryStream();
-            using (var json = new Utf8JsonWriter(buffer))
-            {
-                json.WriteStartObject();
-                json.WriteString("id", id);
-                json.WriteString("type", command);
-                if (fields is { } payload)
-                {
-                    if (payload.ValueKind != JsonValueKind.Object) throw new ArgumentException("RPC fields must be an object.", nameof(fields));
-                    foreach (var property in payload.EnumerateObject())
-                    {
-                        if (property.Name is "id" or "type") throw new ArgumentException("Reserved RPC field.", nameof(fields));
-                        property.WriteTo(json);
-                    }
-                }
-                json.WriteEndObject();
-            }
-            buffer.WriteByte((byte)'\n');
             await _writer.WaitAsync(cancellationToken);
             try
             {
                 if (_failure is { } failure) throw new RpcException("Pi RPC connection has failed.", failure);
-                await _process.StandardInput.BaseStream.WriteAsync(buffer.GetBuffer().AsMemory(0, (int)buffer.Length), cancellationToken);
+                _writeBuffer.Clear();
+                using (var json = new Utf8JsonWriter(_writeBuffer))
+                {
+                    json.WriteStartObject();
+                    json.WriteString("id", id);
+                    json.WriteString("type", command);
+                    if (fields is { } payload)
+                    {
+                        if (payload.ValueKind != JsonValueKind.Object) throw new ArgumentException("RPC fields must be an object.", nameof(fields));
+                        foreach (var property in payload.EnumerateObject())
+                        {
+                            if (property.Name is "id" or "type") throw new ArgumentException("Reserved RPC field.", nameof(fields));
+                            property.WriteTo(json);
+                        }
+                    }
+                    json.WriteEndObject();
+                }
+                _writeBuffer.GetSpan(1)[0] = (byte)'\n';
+                _writeBuffer.Advance(1);
+                await _process.StandardInput.BaseStream.WriteAsync(_writeBuffer.WrittenMemory, cancellationToken);
                 await _process.StandardInput.BaseStream.FlushAsync(cancellationToken);
             }
             finally { _writer.Release(); }
@@ -171,26 +175,27 @@ public sealed class PiRpcClient : IRpcClient
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(requestId);
         ArgumentNullException.ThrowIfNull(response);
-        using var buffer = new MemoryStream();
-        using (var json = new Utf8JsonWriter(buffer))
-        {
-            json.WriteStartObject();
-            json.WriteString("type", "extension_ui_response");
-            json.WriteString("id", requestId);
-            switch (response.Kind)
-            {
-                case PiExtensionUiResponseKind.Value: json.WriteString("value", response.Value); break;
-                case PiExtensionUiResponseKind.Confirmation: json.WriteBoolean("confirmed", response.Confirmed!.Value); break;
-                case PiExtensionUiResponseKind.Cancelled: json.WriteBoolean("cancelled", true); break;
-            }
-            json.WriteEndObject();
-        }
-        buffer.WriteByte((byte)'\n');
         await _writer.WaitAsync(cancellationToken);
         try
         {
             if (_failure is { } failure) throw new RpcException("Pi RPC connection has failed.", failure);
-            await _process.StandardInput.BaseStream.WriteAsync(buffer.GetBuffer().AsMemory(0, (int)buffer.Length), cancellationToken);
+            _writeBuffer.Clear();
+            using (var json = new Utf8JsonWriter(_writeBuffer))
+            {
+                json.WriteStartObject();
+                json.WriteString("type", "extension_ui_response");
+                json.WriteString("id", requestId);
+                switch (response.Kind)
+                {
+                    case PiExtensionUiResponseKind.Value: json.WriteString("value", response.Value); break;
+                    case PiExtensionUiResponseKind.Confirmation: json.WriteBoolean("confirmed", response.Confirmed!.Value); break;
+                    case PiExtensionUiResponseKind.Cancelled: json.WriteBoolean("cancelled", true); break;
+                }
+                json.WriteEndObject();
+            }
+            _writeBuffer.GetSpan(1)[0] = (byte)'\n';
+            _writeBuffer.Advance(1);
+            await _process.StandardInput.BaseStream.WriteAsync(_writeBuffer.WrittenMemory, cancellationToken);
             await _process.StandardInput.BaseStream.FlushAsync(cancellationToken);
         }
         finally { _writer.Release(); }
@@ -198,37 +203,68 @@ public sealed class PiRpcClient : IRpcClient
 
     private async Task ReadStdoutAsync()
     {
-        var chunk = new byte[32 * 1024];
-        using var record = new MemoryStream();
+        var pipeReader = PipeReader.Create(_process.StandardOutput.BaseStream,
+            new StreamPipeReaderOptions(bufferSize: 32 * 1024, leaveOpen: true));
         try
         {
-            int count;
-            while ((count = await _process.StandardOutput.BaseStream.ReadAsync(chunk)) != 0)
+            while (true)
             {
-                for (var i = 0; i < count; i++)
+                var readResult = await pipeReader.ReadAsync().ConfigureAwait(false);
+                var buffer = readResult.Buffer;
+
+                while (TryReadLine(ref buffer, out var lineSequence))
                 {
-                    if (chunk[i] == (byte)'\n')
-                    {
-                        var length = (int)record.Length;
-                        if (length > 0 && record.GetBuffer()[length - 1] == (byte)'\r') length--;
-                        if (length == 0) throw new RpcException("Empty RPC record.");
-                        var json = new UTF8Encoding(false, true).GetString(record.GetBuffer(), 0, length);
-                        using var parsed = JsonDocument.Parse(json);
-                        if (parsed.RootElement.ValueKind != JsonValueKind.Object) throw new RpcException("RPC record is not an object.");
-                        if (!_records.Writer.TryWrite(parsed.RootElement.Clone())) throw new RpcException("RPC dispatch queue exceeded its capacity.");
-                        record.SetLength(0);
-                    }
-                    else
-                    {
-                        if (record.Length >= _options.MaxRecordBytes) throw new RpcException("RPC record exceeds the configured size limit.");
-                        record.WriteByte(chunk[i]);
-                    }
+                    using var parsed = JsonDocument.Parse(lineSequence);
+                    if (parsed.RootElement.ValueKind != JsonValueKind.Object)
+                        throw new RpcException("RPC record is not an object.");
+                    if (!_records.Writer.TryWrite(parsed.RootElement.Clone()))
+                        throw new RpcException("RPC dispatch queue exceeded its capacity.");
+                }
+
+                pipeReader.AdvanceTo(buffer.Start, buffer.End);
+
+                if (readResult.IsCompleted)
+                {
+                    if (!buffer.IsEmpty)
+                        throw new RpcException("RPC stdout ended with an incomplete record.");
+                    break;
                 }
             }
-            if (record.Length != 0) throw new RpcException("RPC stdout ended with an incomplete record.");
         }
         catch (Exception error) { Fail(error); }
-        finally { _records.Writer.TryComplete(); }
+        finally
+        {
+            await pipeReader.CompleteAsync().ConfigureAwait(false);
+            _records.Writer.TryComplete();
+        }
+    }
+
+    private bool TryReadLine(ref ReadOnlySequence<byte> buffer, out ReadOnlySequence<byte> lineSequence)
+    {
+        var position = buffer.PositionOf((byte)'\n');
+        if (position is null)
+        {
+            if (buffer.Length > _options.MaxRecordBytes)
+                throw new RpcException("RPC record exceeds the configured size limit.");
+            lineSequence = default;
+            return false;
+        }
+
+        var line = buffer.Slice(0, position.Value);
+        if (line.Length > _options.MaxRecordBytes)
+            throw new RpcException("RPC record exceeds the configured size limit.");
+
+        if (line.Length > 0 && line.Slice(line.Length - 1).FirstSpan[0] == (byte)'\r')
+        {
+            line = line.Slice(0, line.Length - 1);
+        }
+
+        if (line.Length == 0)
+            throw new RpcException("Empty RPC record.");
+
+        lineSequence = line;
+        buffer = buffer.Slice(buffer.GetPosition(1, position.Value));
+        return true;
     }
 
     private async Task DispatchAsync()

@@ -14,7 +14,7 @@ namespace Fufucode.Core.Backend;
 /// DeepSeek Harness (DSH) 官方 CLI 的协议适配会话：把 `dsh --profile headless --json`
 /// 输出的事件流规范化为统一的 IChatSession 契约与 SessionEvent 事件，并维护本地历史与 --session-id 续接。
 /// </summary>
-public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IAsyncDisposable, IDisposable
+public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly string _executablePath;
     private readonly string _workingDirectory;
@@ -46,6 +46,7 @@ public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensi
     }
 
     public string BackendId => "dsh";
+    public BackendPresentationProfile Presentation => BackendPresentationProfile.Dsh;
     public string BackendName => "DeepSeek Harness";
     public SessionConnection Connection { get { lock (_gate) return _connection; } }
     public SessionActivity Activity { get { lock (_gate) return _activity; } }
@@ -117,6 +118,7 @@ public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensi
 
     private async Task ReadProcessOutputAsync(Process process, CancellationToken cancellationToken)
     {
+        var turnSettledEmitted = false;
         try
         {
             var stderrTask = Task.Run(async () =>
@@ -125,18 +127,17 @@ public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensi
                 catch { return string.Empty; }
             }, cancellationToken);
 
-        var messageId = Guid.NewGuid().ToString("N");
-        var assistantEmitted = false;
-        var assistantText = new System.Text.StringBuilder();
-        var turnSettledEmitted = false;
+            var messageId = Guid.NewGuid().ToString("N");
+            var assistantEmitted = false;
+            var assistantText = new System.Text.StringBuilder();
 
-        using var reader = process.StandardOutput;
-        string? line;
-        while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            // 跳过 npm 诊断输出（如 npm notice 等）
-            if (line.StartsWith("npm ", StringComparison.OrdinalIgnoreCase)) continue;
+            using var reader = process.StandardOutput;
+            string? line;
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                // 跳过 npm 诊断输出（如 npm notice 等）
+                if (line.StartsWith("npm ", StringComparison.OrdinalIgnoreCase)) continue;
 
             try
             {
@@ -244,6 +245,21 @@ public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensi
             Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
             Emit(new SessionEvent.TurnSettled(_outcome ?? SessionOutcome.Completed, _lastError));
         }
+        }
+        catch (Exception ex)
+        {
+            lock (_gate)
+            {
+                _activity = SessionActivity.Idle;
+                _outcome = SessionOutcome.Failed;
+                _lastError = ex.Message;
+            }
+            if (!turnSettledEmitted)
+            {
+                turnSettledEmitted = true;
+                Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
+                Emit(new SessionEvent.TurnSettled(SessionOutcome.Failed, ex.Message));
+            }
         }
         finally
         {

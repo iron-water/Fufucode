@@ -145,7 +145,7 @@ internal static class CliTests
         Directory.CreateDirectory(project); Directory.CreateDirectory(foreign);
         var manager = new PersistentSessionManager(dotnet, fake, layout, requireApprovalBridge: false);
         string id; string file;
-        await using (var session = await manager.CreateAsync(project))
+        await using (var session = await manager.CreateAsync(project, backend: BackendId.Pi))
         {
             id = session.Session.Id; file = session.Session.FilePath!;
             await CliChatRunner.RunAsync(session.Chat, null, "persist_continue", true, TextWriter.Null, new StringReader(""));

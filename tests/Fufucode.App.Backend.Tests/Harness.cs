@@ -217,3 +217,15 @@ internal sealed class CapturingTextClient(string text) : IPureModelClient
         return Task.FromResult(PureModelResponse.FromText(text));
     }
 }
+
+/// <summary>记录工具调用并返回成功的调度器（子代理测试）。</summary>
+internal sealed class RecordingDispatcher : IPureToolDispatcher
+{
+    public List<PureToolCall> Calls { get; } = new();
+
+    public Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default)
+    {
+        Calls.Add(call);
+        return Task.FromResult(new PureToolResult(call.Id, true, "recorded:" + call.Name));
+    }
+}

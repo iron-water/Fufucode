@@ -134,6 +134,9 @@ public partial class MainWindow : Window
         }
 
         _vm = vm;
+        // 发送交互：乐观气泡与等待提示只依赖 UI 事件，所有后端表现一致。
+        vm.Input.SubmissionStarted += vm.Timeline.BeginSubmission;
+        vm.Input.SubmissionFailed += vm.Timeline.FailSubmission;
         vm.NavigateRequested = NavigateWorkspaceAsync;
         vm.Timeline.ScrollToEndRequested += OnScrollToEndRequested;
         vm.PropertyChanged += OnVmPropertyChanged;

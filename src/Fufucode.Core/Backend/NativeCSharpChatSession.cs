@@ -14,12 +14,14 @@ namespace Fufucode.Core.Backend;
 
 /// <summary>将原生引擎的流式文本、工具及轮次边界映射到既有桌面会话事件。</summary>
 public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession, IExecutionModeSession,
-    IChatAttachments, IPromptHandledSession, IExtensionUiSession, IAsyncDisposable, IDisposable
+    IChatAttachments, IPromptHandledSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly IPureCSharpAgentEngine _engine;
     private readonly IPluginSystemPromptProvider? _systemPromptProvider;
     private readonly IPluginToolCatalog? _pluginTools;
     private readonly SkillRegistry? _skills;
+    private readonly McpManager? _mcp;
+    private readonly SubagentRunner? _subagents;
     private readonly object _gate = new();
     private readonly object _persistGate = new();
     private readonly List<(string Text, IReadOnlyList<PureImageAttachment>? Images)> _queue = [];
@@ -194,11 +196,15 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         IPluginToolCatalog? pluginTools = null,
         string? persistFilePath = null,
         bool supportsImages = true,
-        SkillRegistry? skills = null)
+        SkillRegistry? skills = null,
+        McpManager? mcp = null,
+        SubagentRunner? subagents = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _supportsImages = supportsImages;
         _skills = skills;
+        _mcp = mcp;
+        _subagents = subagents;
         _systemPromptProvider = systemPromptProvider;
         _pluginTools = pluginTools;
         _persistFilePath = persistFilePath;
@@ -209,6 +215,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         {
             pureEngine.ApprovalGate = RequestApprovalAsync;
             pureEngine.TakeSteering = TakeSteeringMessage;
+            if (_subagents is not null) _subagents.ApprovalGate = pureEngine.ApprovalGate;
         }
     }
 
@@ -223,9 +230,11 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         IPluginToolCatalog? pluginTools = null,
         string? persistFilePath = null,
         bool supportsImages = true,
-        SkillRegistry? skills = null)
+        SkillRegistry? skills = null,
+        McpManager? mcp = null,
+        SubagentRunner? subagents = null)
         : this(new PureCSharpAgentEngine(toolDispatcher, modelClient, maxIterations), sessionId, modelId,
-            systemPromptProvider, pluginTools, persistFilePath, supportsImages, skills)
+            systemPromptProvider, pluginTools, persistFilePath, supportsImages, skills, mcp, subagents)
     {
         ArgumentNullException.ThrowIfNull(modelClient);
     }
@@ -238,6 +247,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
 
     /// <summary>技能注册表；未接线时为 null（不声明 skill 工具）。</summary>
     public SkillRegistry? Skills => _skills;
+
+    /// <summary>MCP 服务器管理器；未配置服务器时为 null 或不含服务器。</summary>
+    public McpManager? Mcp => _mcp;
+
+    /// <summary>子代理运行器；未接线时为 null（不声明 subagent 工具）。</summary>
+    public SubagentRunner? Subagents => _subagents;
 
     /// <summary>内置工具集合：读取、写入、精确定位编辑、目录列表、正则检索、通配发现、命令执行与任务计划。</summary>
     private static readonly string[] BuiltInToolNames =
@@ -252,6 +267,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     {
         var merged = new List<string>(BuiltInToolNames);
         if (_skills?.HasModelInvocableSkills == true) merged.Add(SkillRegistry.ToolName);
+        if (_mcp?.HasServers == true) merged.Add(McpGatewayDispatcher.ToolName);
+        if (_subagents is not null) merged.Add(SubagentDispatcher.ToolName);
 
         if (_pluginTools is not { } pluginTools) return merged;
         foreach (var name in pluginTools.ActiveToolNames)
@@ -266,6 +283,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     {
         var list = new List<PureToolDefinition>();
         list.AddRange(ProductionToolDispatcher.GetBuiltinToolDefinitions());
+        if (_mcp?.HasServers == true) list.Add(McpGatewayDispatcher.Definition);
+        if (_subagents is not null) list.Add(SubagentDispatcher.Definition);
         if (_skills?.HasModelInvocableSkills == true)
         {
             list.Add(new PureToolDefinition(SkillRegistry.ToolName,
@@ -308,6 +327,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
 
         AppendSection(planSnippet);
         AppendSection(skillsSection);
+        AppendSection(_mcp?.BuildPromptSection());
+        AppendSection(_subagents?.BuildPromptSection());
 
         // 用户显式 /skill:name：把技能正文注入本轮用户消息。
         var effectiveText = _skills?.ExpandUserInvocation(text) ?? text;
@@ -327,6 +348,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public string SessionId { get; }
     public string BackendId => "fumo";
     public string BackendName => "FUMO";
+    public BackendPresentationProfile Presentation => BackendPresentationProfile.Fumo;
     public SessionConnection Connection { get { lock (_gate) return _disposed ? SessionConnection.Stopped : SessionConnection.Connected; } }
     public SessionActivity Activity { get { lock (_gate) return _activity; } }
     public SessionOutcome? LastOutcome { get { lock (_gate) return _lastOutcome; } }
@@ -631,6 +653,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         Task turn;
         lock (_gate) turn = _activeTurn;
         await turn.ConfigureAwait(false);
+        if (_mcp is not null)
+            await _mcp.DisposeAsync().ConfigureAwait(false);
     }
 
     /// <summary>每个模型轮次独立建消息，工具调用通过轮次内索引关联，执行结果通过真实调用 ID 关联。</summary>

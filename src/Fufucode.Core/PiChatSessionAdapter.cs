@@ -5,7 +5,7 @@ using Fufucode.App.Abstractions;
 namespace Fufucode.Core;
 
 /// <summary>Maps the real Pi coordinator onto the UI's frozen, UI-free chat contract.</summary>
-public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IExtensionUiSession, IPromptHandledSession, IChatAttachments, IExecutionModeSession, IAsyncDisposable
+public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IExtensionUiSession, IPromptHandledSession, IChatAttachments, IExecutionModeSession, IPresentationProfiled, IAsyncDisposable
 {
     private sealed record ToolLink(string MessageId, int Index, ToolCallBlock Block);
 
@@ -74,6 +74,9 @@ public sealed class PiChatSessionAdapter : IChatSession, IBackendChatSession, IE
 
     public SessionConnection Connection => Map(_session.Snapshot.Connection);
     public string BackendId => BackendCapabilities.StorageId(_session.Backend);
+    public BackendPresentationProfile Presentation => _session.Backend == Fufucode.Core.BackendId.Omp
+        ? BackendPresentationProfile.Omp
+        : BackendPresentationProfile.Pi;
     public string BackendName => _session.Capabilities.Name;
     public SessionActivity Activity => Map(_session.Snapshot.Activity);
     public SessionOutcome? LastOutcome

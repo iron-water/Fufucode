@@ -179,6 +179,7 @@ internal static class Program
             // ---- BRW-1：浏览器设置存储、安全态、白名单与 Browser Use 桥门禁 ----
             BrowserSettingsTests.Run(Check);
             BrowserSettingsUi.Run(Check);
+            BrowserUsabilityTests.Run(Check);
 
             // ---- 320 DIP / 浅深主题入口可达（真实控件布局） ----
             UiSmoke.Run(Check);

@@ -80,6 +80,9 @@ public sealed partial class BrowserTab : ObservableObject
     /// <summary>是否在地址栏显示完整网址（含协议/路径/查询）；关闭时只显示主机名。由浏览器设置驱动。</summary>
     public bool ShowFullUrl { get; private set; } = true;
 
+    /// <summary>地址栏普通文字的搜索 URL 模板；由设置同步。</summary>
+    public string SearchUrlTemplate { get; private set; } = BrowserAddressResolver.DefaultSearchTemplate;
+
     /// <summary>由设置同步显示策略；变化时立即重算当前显示文本，不触发导航。</summary>
     public void ApplyShowFullUrl(bool showFullUrl)
     {
@@ -87,6 +90,9 @@ public sealed partial class BrowserTab : ObservableObject
         ShowFullUrl = showFullUrl;
         RecomputeDisplayAddress(AddressText);
     }
+
+    public void ApplySearchUrlTemplate(string? template)
+        => SearchUrlTemplate = string.IsNullOrWhiteSpace(template) ? BrowserAddressResolver.DefaultSearchTemplate : template;
 
     public bool CanStop => IsLoading;
     public string ModeText => Mode == BrowserSurfaceMode.File ? "文件预览" : "自由导航";
@@ -106,11 +112,14 @@ public sealed partial class BrowserTab : ObservableObject
         ? (string.IsNullOrWhiteSpace(NavigationAddress) ? "新页签" : Shorten(NavigationAddress!))
         : DocumentTitle;
 
+    /// <summary>智能体审批用的当前页面主机名（非 web 页面为空）。</summary>
+    public string SecureHostForAgent => BrowserSiteRules.HostOf(NavigationAddress) ?? string.Empty;
+
     /// <summary>地址栏提交：归一化后交给宿主；被白名单拒绝时只提示，不改变当前页面。</summary>
     [RelayCommand]
     private void Navigate()
     {
-        var target = BrowserAddressResolver.Resolve(AddressText, ProjectRoot);
+        var target = BrowserAddressResolver.Resolve(AddressText, ProjectRoot, SearchUrlTemplate);
         if (!target.IsNavigable)
         {
             StatusText = target.Note ?? "无法导航。";
@@ -123,7 +132,7 @@ public sealed partial class BrowserTab : ObservableObject
         ApplySecurityFromAddress(target.Address);
         IsLoading = true;
         Progress = 0;
-        StatusText = "正在加载…";
+        StatusText = target.Kind == BrowserTargetKind.Search ? $"搜索：{target.Query}" : "正在加载…";
         NavigationRequested?.Invoke(this, new BrowserNavigationRequest(target.Address, null, Mode, target.Address ?? string.Empty));
     }
 

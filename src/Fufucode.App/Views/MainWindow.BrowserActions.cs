@@ -20,13 +20,17 @@ public partial class MainWindow
         control?.GetVisualAncestors().OfType<Views.BrowserView>().FirstOrDefault();
     private Views.BrowserView CreateBrowserPage()
     {
-        var view = new Views.BrowserView();
+        EnsureBrowserStores();
+        var view = new Views.BrowserView(_browserBookmarks, _browserHistory, _browserDownloads);
         view.NativeShortcutHandler = (key, modifiers) => RouteNativeBrowserShortcut(view, key, modifiers);
+        view.ChatReferenceRequested += (_, reference) => OnChatReferenceRequested(view, reference);
+        view.ViewModel.FullViewChanged += (_, full) => SetBrowserFullView(full);
         // BRW-1：新页面立即读取当前浏览器设置（显示完整网址 + Agent 控制门禁），不等下一次设置变化。
         if (_browserSettings?.ViewModel is { } settings)
         {
             view.ViewModel.ApplyShowFullUrl(settings.CurrentSettings.ShowFullUrl);
             view.ApplyAgentControl(settings.CurrentSettings, _browserSettings.Store, settings);
+            view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
             AttachBridge(view);
         }
         return view;

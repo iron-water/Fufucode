@@ -15,6 +15,7 @@ namespace Fufucode.Core.Backend;
 public sealed class NativeToolComposite : IPureToolDispatcher, IPluginToolCatalog
 {
     private readonly IPureToolDispatcher _builtin;
+    public IPureToolDispatcher Builtin => _builtin;
     private readonly Func<IReadOnlyList<IPureToolDispatcher>>? _providers;
 
     public NativeToolComposite(IPureToolDispatcher builtin,
