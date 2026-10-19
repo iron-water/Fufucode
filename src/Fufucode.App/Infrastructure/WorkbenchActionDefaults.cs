@@ -18,7 +18,8 @@ public static class WorkbenchActionDefaults
         "status.activity" => new(UiActionPosition.StatusRight, 0),
         "status.tokens" => new(UiActionPosition.StatusRight, 1),
         "status.duration" or "status.branch" or "status.project" => new(UiActionPosition.Hidden),
-        "session.side" or "session.fork" or "session.schedule" or "session.share" or "window.session" => new(UiActionPosition.HeaderMenu),
+        "session.rename" or "session.pin" or "session.side" or "session.fork" or "session.search" or "session.share" or "session.archive" or "session.schedule" => new(UiActionPosition.SessionIsland, 0),
+        "window.session" => new(UiActionPosition.HeaderMenu),
         "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
         "speech.stop" or "speech.start" or "usage" or "trace" => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("help.") || id.StartsWith("view.") || id.StartsWith("edit.") => new(UiActionPosition.MenuRight),
@@ -47,7 +48,7 @@ public static class WorkbenchActionDefaults
     public static string PositionTitle(UiActionPosition position) => position switch
     {
         UiActionPosition.TopLeft => "顶栏左侧", UiActionPosition.TopRight => "顶栏右侧",
-        UiActionPosition.TopCenter => "顶栏中间",
+        UiActionPosition.TopCenter => "顶栏中间", UiActionPosition.SessionIsland => "会话岛（顶栏中央）",
         UiActionPosition.MenuLeft => "核心功能（侧边栏）", UiActionPosition.MenuRight => "辅助功能（顶栏菜单）",
         UiActionPosition.HeaderMenu => "会话头菜单", UiActionPosition.StatusLeft => "状态栏左侧",
         UiActionPosition.StatusRight => "状态栏右侧", _ => "隐藏"

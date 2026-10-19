@@ -9,8 +9,9 @@ using Fufucode.App.Features.Skins;
 
 namespace Fufucode.App.Infrastructure;
 
-/// <summary>动作可放置的位置。TopCenter 是顶栏中间的宽敞区（用户可自选功能放这里）。</summary>
-public enum UiActionPosition { Hidden, TopLeft, TopRight, MenuLeft, MenuRight, HeaderMenu, StatusLeft, StatusRight, TopCenter }
+/// <summary>动作可放置的位置。TopCenter 是顶栏中间的宽敞区（用户可自选功能放这里）；
+/// SessionIsland 是顶栏中央的会话灵动岛，承载会话级动作磁贴（不是普通按钮槽）。</summary>
+public enum UiActionPosition { Hidden, TopLeft, TopRight, MenuLeft, MenuRight, HeaderMenu, StatusLeft, StatusRight, TopCenter, SessionIsland }
 public sealed record UiActionPlacement(UiActionPosition Position, int Order = 0);
 
 public sealed record WorkbenchAppearance

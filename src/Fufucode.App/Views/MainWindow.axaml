@@ -18,8 +18,9 @@
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <ScrollViewer MaxWidth="540" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopLeft" Orientation="Horizontal" Spacing="3" Margin="8,0" VerticalAlignment="Center"/></ScrollViewer>
         <Grid Grid.Column="1">
-          <!-- 品牌与当前会话：拖拽区，居中弱化为三级文字，不再与左右按钮竞争视觉 -->
-          <Border Background="Transparent" ClipToBounds="True">
+          <!-- 品牌与当前会话：拖拽区，居中弱化为三级文字，不再与左右按钮竞争视觉。
+               Fluent 皮肤下由会话岛（IslandHost）取代它的位置，此块隐藏。 -->
+          <Border x:Name="CaptionBrandFallback" Background="Transparent" ClipToBounds="True">
             <StackPanel Orientation="Horizontal" Spacing="6" Margin="12,0" VerticalAlignment="Center"
                         HorizontalAlignment="Center">
               <Image Source="avares://Fufucode.App/Assets/Brand/icon-small-32.png" Width="14" Height="14" Opacity="0.8"/>
@@ -32,6 +33,8 @@
                         HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
             <StackPanel x:Name="CustomTopCenter" Orientation="Horizontal" Spacing="3"/>
           </ScrollViewer>
+          <!-- 会话灵动岛：Fluent 皮肤的中央活态显示（标题+运行态+快捷磁贴展开） -->
+          <Panel x:Name="IslandHost" HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Grid>
         <StackPanel x:Name="LegacyCaptionActions" Grid.Column="2" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0" IsVisible="False">
           <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" ToolTip.Tip="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{DynamicResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>

@@ -178,14 +178,19 @@ public partial class MainWindow
         {
             var placement = settings.Actions.GetValueOrDefault(action.Id, WorkbenchActionDefaults.Placement(action.Id));
             if (placement.Position == UiActionPosition.Hidden) continue;
-            if (menus.TryGetValue(placement.Position, out var menu))
+            // 会话岛专用位置：磁贴由 BuildSessionIsland 统一渲染，不进顶栏/菜单。
+            // 非 Fluent 皮肤下岛不存在，这些动作折回左侧功能菜单，保证可达。
+            var islandSlot = UseSessionIsland(settings);
+            if (placement.Position == UiActionPosition.SessionIsland && islandSlot) continue;
+            var effective = placement.Position == UiActionPosition.SessionIsland ? UiActionPosition.MenuLeft : placement.Position;
+            if (menus.TryGetValue(effective, out var menu))
             {
                 var item = new MenuItem { Header = action.Title, Command = _actions.GetCommand(action.Id) };
                 item.Icon = Views.WorkbenchUi.IconButton(WorkbenchActionDefaults.Icon(action.Id), action.Title).Content;
                 ToolTip.SetTip(item, action.Description);
                 var group = WorkbenchActionDefaults.SubMenu(action.Id);
                 if (group is null) { menu.Items.Add(item); continue; }
-                var key = placement.Position + "/" + group;
+                var key = effective + "/" + group;
                 if (!subMenus.TryGetValue(key, out var parent))
                 {
                     parent = new MenuItem { Header = group };
@@ -200,7 +205,7 @@ public partial class MainWindow
                 parent.Items.Add(item);
                 continue;
             }
-            var panel = placement.Position switch
+            var panel = effective switch
             { UiActionPosition.TopLeft => CustomTopLeft, UiActionPosition.TopRight => CustomTopRight,
               UiActionPosition.TopCenter => CustomTopCenter,
               UiActionPosition.StatusLeft => CustomStatusLeft, _ => CustomStatusRight };
@@ -261,12 +266,14 @@ public partial class MainWindow
             more.Flyout = menus[position]; panel.Children.Add(more);
         }
         _chatPage.SetHeaderMenu(menus[UiActionPosition.HeaderMenu]);
+        BuildSessionIsland(settings, _actions.Actions);
         RefreshStatusLabels();
     }
     private void RefreshStatusLabels()
     {
         foreach (var pair in _statusLabels)
             foreach (var label in pair.Value) label.Text = StatusText(pair.Key);
+        RefreshIsland();
     }
     private string StatusText(string id) => id switch
     {
