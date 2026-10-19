@@ -26,7 +26,9 @@ public sealed record PerformanceSettings(
     // 关闭玻璃/模糊等重特效采样；立即生效。
     bool DisableVisualEffects = false,
     // 终端回滚从 1500 行降到 500 行；对新终端生效。
-    bool ReduceTerminalScrollback = false);
+    bool ReduceTerminalScrollback = false,
+    // 浏览器后台页签降内存：非活动页签设 MemoryUsageTargetLevel.Low，且不提前创建 controller。
+    bool ReduceBackgroundBrowserMemory = false);
 
 /// <summary>
 /// 一个 OpenAI 兼容端点。ModelId 是当前选中的模型；Models 是该端点可用的模型清单
