@@ -199,16 +199,32 @@ public sealed class ModelCatalogClient : IDisposable
 /// </summary>
 public static class ModelCapabilityProbe
 {
-    private static readonly ConcurrentDictionary<string, (bool? Value, DateTimeOffset At)> Cache = new();
+    /// <summary>缓存条目上限；超过后按写入顺序淘汰最旧的条目，防止长进程无限增长。</summary>
+    public const int MaxCacheEntries = 256;
+
+    private static readonly ConcurrentDictionary<string, (bool? Value, DateTimeOffset At, long Sequence)> Cache = new();
+    private static long _sequence;
+
+    /// <summary>当前缓存条目数（诊断与测试用）。</summary>
+    public static int CacheCount => Cache.Count;
+
+    /// <summary>清空缓存（测试与诊断用）。</summary>
+    public static void ClearCache() => Cache.Clear();
+
+    /// <summary>写入缓存并执行淘汰（测试与诊断用，不发起网络请求）。</summary>
+    public static void Remember(string key, bool? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(key);
+        Cache[key] = (value, DateTimeOffset.UtcNow, Interlocked.Increment(ref _sequence));
+        TrimCache();
+    }
 
     public static async Task<bool?> SupportsImageInputAsync(string baseUrl, string? apiKey, string modelId,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(modelId)) return null;
         var key = baseUrl + "|" + modelId;
-        if (Cache.TryGetValue(key, out var cached) &&
-            DateTimeOffset.UtcNow - cached.At < TimeSpan.FromMinutes(5))
-            return cached.Value;
+        if (TryGet(key, out var cached)) return cached;
 
         try
         {
@@ -218,12 +234,38 @@ public static class ModelCapabilityProbe
             var models = await client.ListAsync(baseUrl, apiKey, timeout.Token).ConfigureAwait(false);
             var value = models.FirstOrDefault(model => string.Equals(model.Id, modelId, StringComparison.Ordinal))
                 ?.SupportsImages;
-            Cache[key] = (value, DateTimeOffset.UtcNow);
+            Remember(key, value);
             return value;
         }
         catch
         {
             return null;
+        }
+    }
+
+    private static bool TryGet(string key, out bool? value)
+    {
+        value = null;
+        if (!Cache.TryGetValue(key, out var cached)) return false;
+        if (DateTimeOffset.UtcNow - cached.At >= TimeSpan.FromMinutes(5)) return false;
+        value = cached.Value;
+        return true;
+    }
+
+    /// <summary>超过上限时删除写入时间最早的条目，直到回到上限之内（并发写入时以最终计数为准）。</summary>
+    private static void TrimCache()
+    {
+        while (Cache.Count > MaxCacheEntries)
+        {
+            string? oldestKey = null;
+            var oldestSequence = long.MaxValue;
+            foreach (var pair in Cache)
+            {
+                if (pair.Value.Sequence >= oldestSequence) continue;
+                oldestSequence = pair.Value.Sequence;
+                oldestKey = pair.Key;
+            }
+            if (oldestKey is null || !Cache.TryRemove(oldestKey, out _)) break;
         }
     }
 }

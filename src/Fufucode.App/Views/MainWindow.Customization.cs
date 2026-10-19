@@ -24,6 +24,9 @@ public partial class MainWindow
     private readonly Dictionary<string, List<TextBlock>> _statusLabels = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTimeOffset _turnStarted;
+    // AttachCustomization 挂的会话事件处理器：持引用以便换会话/关闭时解除。
+    private Abstractions.IChatSession? _customizationSession;
+    private EventHandler<Abstractions.SessionEvent>? _customizationSessionHandler;
     internal WorkbenchCustomizationViewModel CustomizationForTesting => _customization;
 
     private void InitializeCustomization()
@@ -61,15 +64,31 @@ public partial class MainWindow
         vm.Settings.Customization = _customization;
         _customization.AttachProject(_host?.ProjectPath ?? (_options.Mode == Integration.AppSessionMode.Mock ? null : _options.ProjectPath));
         _turnStarted = DateTimeOffset.UtcNow;
-        vm.Session.Event += (_, e) =>
+        // 先解绑上一份：会话切换后旧 VM/旧会话的回合事件不得再驱动状态标签。
+        DetachCustomizationSession();
+        _customizationSession = vm.Session;
+        _customizationSessionHandler = (_, e) =>
         {
             if (e is Abstractions.SessionEvent.MessageStarted { Role: Abstractions.MessageRole.User }) _turnStarted = DateTimeOffset.UtcNow;
             if (e is Abstractions.SessionEvent.TurnSettled) Dispatcher.UIThread.Post(() => OnCustomizedTurnSettled(vm));
             Dispatcher.UIThread.Post(RefreshStatusLabels);
         };
+        _customizationSession.Event += _customizationSessionHandler;
         _chatPage.AttachWorkbenchActions(_actions);
         RecordNavigation();
         ApplyCustomization(_customization.Current);
+    }
+
+    /// <summary>解除 <see cref="AttachCustomization"/> 挂的会话事件处理器（重复调用安全）。</summary>
+    private void DetachCustomizationSession()
+    {
+        if (_customizationSession is not null && _customizationSessionHandler is not null)
+        {
+            _customizationSession.Event -= _customizationSessionHandler;
+        }
+
+        _customizationSession = null;
+        _customizationSessionHandler = null;
     }
     private void ApplyCustomization(WorkbenchAppearance settings)
     {

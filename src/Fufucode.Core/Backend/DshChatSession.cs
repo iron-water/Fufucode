@@ -121,11 +121,8 @@ public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensi
         var turnSettledEmitted = false;
         try
         {
-            var stderrTask = Task.Run(async () =>
-            {
-                try { return await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false); }
-                catch { return string.Empty; }
-            }, cancellationToken);
+            var stderrTask = Task.Run(
+                () => ReadStderrTailAsync(process.StandardError, cancellationToken), cancellationToken);
 
             var messageId = Guid.NewGuid().ToString("N");
             var assistantEmitted = false;
@@ -320,26 +317,49 @@ public sealed class DshChatSession : IChatSession, IBackendChatSession, IExtensi
         if (string.IsNullOrEmpty(_persistFilePath)) return;
         try
         {
-            var dir = Path.GetDirectoryName(_persistFilePath);
-            if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                Directory.CreateDirectory(dir);
-
-            var json = JsonSerializer.Serialize(new
+            AtomicJsonFile.Write(_persistFilePath, writer =>
             {
-                version = 2,
-                messages = _history,
-                modelId = CurrentModel,
-                sessionId = _sessionId
-            }, new JsonSerializerOptions { WriteIndented = true });
-
-            var temp = _persistFilePath + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
-            File.WriteAllText(temp, json);
-            File.Move(temp, _persistFilePath, overwrite: true);
+                writer.WriteStartObject();
+                writer.WriteNumber("version", 2);
+                writer.WritePropertyName("messages");
+                JsonSerializer.Serialize(writer, _history);
+                writer.WriteString("modelId", CurrentModel);
+                if (_sessionId is null) writer.WriteNull("sessionId");
+                else writer.WriteString("sessionId", _sessionId);
+                writer.WriteEndObject();
+            });
         }
         catch (Exception ex)
         {
             System.Diagnostics.Trace.TraceWarning("Failed to persist DSH session: {0}", ex);
         }
+    }
+
+    /// <summary>
+    /// 读取 stderr 但只保留尾部：持续读取以排空管道，内存上限约 16 KB，
+    /// 避免异常子进程输出海量日志时把整个输出留在内存里。
+    /// </summary>
+    private static async Task<string> ReadStderrTailAsync(StreamReader reader, CancellationToken cancellationToken)
+    {
+        const int maxCharacters = 16 * 1024;
+        var lines = new Queue<string>();
+        var retained = 0;
+        try
+        {
+            string? line;
+            while ((line = await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false)) is not null)
+            {
+                lines.Enqueue(line);
+                retained += line.Length + 1;
+                while (retained > maxCharacters && lines.Count > 0)
+                    retained -= lines.Dequeue().Length + 1;
+            }
+        }
+        catch
+        {
+            // 子进程被终止或流关闭：保留已经读取的尾部即可。
+        }
+        return string.Join('\n', lines);
     }
 
     private void Emit(SessionEvent ev) => Event?.Invoke(this, ev);

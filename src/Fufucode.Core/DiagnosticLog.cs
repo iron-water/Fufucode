@@ -76,16 +76,54 @@ public sealed class DiagnosticLog : IBackendDiagnosticSink, IAsyncDisposable
         return id;
     }
 
+    /// <summary>Entries are flushed in batches: at most 64 records or 250 ms after the batch opens.</summary>
+    private const int BatchSize = 64;
+
+    private static readonly TimeSpan BatchWindow = TimeSpan.FromMilliseconds(250);
+
     private async Task WriteAsync()
     {
         await using var stream = new FileStream(_path, FileMode.Append, FileAccess.Write, FileShare.Read,
             bufferSize: 8192, FileOptions.Asynchronous);
         await using var writer = new StreamWriter(stream);
-        await foreach (var entry in _entries.Reader.ReadAllAsync())
+        var reader = _entries.Reader;
+        var batch = new List<PiDiagnosticEvent>(BatchSize);
+        while (await reader.WaitToReadAsync())
         {
-            await writer.WriteLineAsync(JsonSerializer.Serialize(entry, DiagnosticJsonContext.Default.PiDiagnosticEvent));
+            batch.Clear();
+            var deadline = Environment.TickCount64 + (long)BatchWindow.TotalMilliseconds;
+            while (batch.Count < BatchSize)
+            {
+                if (reader.TryRead(out var entry))
+                {
+                    batch.Add(entry);
+                    continue;
+                }
+
+                var remaining = deadline - Environment.TickCount64;
+                if (remaining <= 0) break;
+                try
+                {
+                    using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(remaining));
+                    batch.Add(await reader.ReadAsync(timeout.Token));
+                }
+                catch (OperationCanceledException)
+                {
+                    break;
+                }
+                catch (ChannelClosedException)
+                {
+                    // Writer completed between WaitToReadAsync and ReadAsync: flush what we have.
+                    break;
+                }
+            }
+
+            if (batch.Count == 0) continue;
+            foreach (var entry in batch)
+                await writer.WriteLineAsync(JsonSerializer.Serialize(entry, DiagnosticJsonContext.Default.PiDiagnosticEvent));
             await writer.FlushAsync();
         }
+        // DisposeAsync completes the channel; this final flush covers the last partial batch.
         await writer.FlushAsync();
     }
 

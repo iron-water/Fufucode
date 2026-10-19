@@ -23,7 +23,15 @@ public interface ITerminalSession : IDisposable
 /// <summary>App-owned interactive shell. Its pipes are completely separate from the Pi JSONL process.</summary>
 public sealed class ConPtyTerminalSession : ITerminalSession
 {
-    private readonly Channel<string> _writes = Channel.CreateUnbounded<string>(new UnboundedChannelOptions { SingleReader = true });
+    /// <summary>Input is queued for a single reader; a stuck shell must not grow the queue without bound.</summary>
+    private const int MaxPendingWrites = 256;
+
+    private readonly Channel<string> _writes = Channel.CreateBounded<string>(new BoundedChannelOptions(MaxPendingWrites)
+    {
+        SingleReader = true,
+        FullMode = BoundedChannelFullMode.DropOldest,
+    });
+    private int _writeDropReported;
     private FileStream? _input;
     private FileStream? _output;
     private SafeFileHandle? _process;
@@ -104,8 +112,19 @@ public sealed class ConPtyTerminalSession : ITerminalSession
 
     public void Write(string text)
     {
-        if (!IsRunning || _disposed || _input is null) return;
-        _writes.Writer.TryWrite(text);
+        // Closing/disposed sessions refuse input; the completed channel rejects late writes
+        // even if this check races with Dispose.
+        if (_disposed || !IsRunning || _input is null || string.IsNullOrEmpty(text)) return;
+        if (!_writes.Writer.TryWrite(text)) return;
+
+        // DropOldest silently discards the oldest pending input when full. Report the first
+        // occurrence so a wedged shell is diagnosable instead of silently losing keystrokes.
+        if (_writes.Reader.CanCount && _writes.Reader.Count >= MaxPendingWrites &&
+            Interlocked.Exchange(ref _writeDropReported, 1) == 0)
+        {
+            System.Diagnostics.Debug.WriteLine(
+                "ConPTY input queue is full; the oldest pending input was dropped.");
+        }
     }
     public void Resize(int columns, int rows)
     {
@@ -139,6 +158,9 @@ public sealed class ConPtyTerminalSession : ITerminalSession
         }
         catch (Exception error) when (error is IOException or ObjectDisposedException)
         {
+            // The input pipe died: complete the queue so later Write calls are refused instead
+            // of accumulating input no reader will ever drain.
+            _writes.Writer.TryComplete();
             if (!_disposed) Exited?.Invoke(null, error.Message);
         }
     }

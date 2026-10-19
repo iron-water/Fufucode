@@ -34,6 +34,9 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
     private readonly MessageTimeline _timeline = new();
     private readonly List<string> _recoverableQueue = [];
     private readonly List<string> _queuedTexts = [];
+    // 不可变快照缓存：Publish 只重建发生变化的集合数组，其余复用同一列表实例。
+    private string[] _queuedSnapshot = [];
+    private string[] _recoverableSnapshot = [];
     private readonly Dictionary<string, PendingUi> _pendingUi = new(StringComparer.Ordinal);
     private IRpcClient? _client;
     private RpcProcessExit? _lastProcessExit;
@@ -326,6 +329,7 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
                 {
                     // A new submission supersedes text already handed back to the UI after Stop.
                     _recoverableQueue.Clear();
+                    _recoverableSnapshot = [];
                     _result = TaskResult.Unknown;
                     _error = null;
                     _sawAssistantEnd = _assistantFailed = _assistantInterrupted = _stopRequested = false;
@@ -352,7 +356,11 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
                 if (!response.Success) throw new RpcException($"Pi rejected prompt: {response.Error}");
                 if (delivery != PromptDelivery.Immediate)
                 {
-                    lock (_stateLock) _queuedTexts.Add(message);
+                    lock (_stateLock)
+                    {
+                        _queuedTexts.Add(message);
+                        RebuildQueuedSnapshot();
+                    }
                     Publish();
                 }
             }
@@ -465,7 +473,9 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
                 lock (_stateLock)
                 {
                     _recoverableQueue.AddRange(recovered);
+                    RebuildRecoverableSnapshot();
                     _queuedTexts.Clear();
+                    RebuildQueuedSnapshot();
                 }
                 Publish();
                 if (Backend == BackendId.Pi)
@@ -587,6 +597,7 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
                         case "agent_settled":
                             _activity = ActivityState.Idle;
                             _queuedTexts.Clear();
+                            RebuildQueuedSnapshot();
                             _result = _stopRequested || _assistantInterrupted ? TaskResult.Interrupted :
                                 _assistantFailed ? TaskResult.Failed : _sawAssistantEnd ? TaskResult.Completed : TaskResult.Unknown;
                             break;
@@ -605,7 +616,11 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
                         user.Message.Content.OfType<PiTextBlock>().FirstOrDefault() is { } userText)
                     {
                         var queuedIndex = _queuedTexts.IndexOf(userText.Text);
-                        if (queuedIndex >= 0) _queuedTexts.RemoveAt(queuedIndex);
+                        if (queuedIndex >= 0)
+                        {
+                            _queuedTexts.RemoveAt(queuedIndex);
+                            RebuildQueuedSnapshot();
+                        }
                     }
                     if (ev is PiOtherEvent { Type: "auto_retry_end" } retry &&
                         retry.Raw.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False)
@@ -781,6 +796,7 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
     {
         _activity = ActivityState.Idle;
         _queuedTexts.Clear();
+        RebuildQueuedSnapshot();
         _result = _stopRequested || _assistantInterrupted ? TaskResult.Interrupted :
             _assistantFailed ? TaskResult.Failed : _sawAssistantEnd ? TaskResult.Completed : TaskResult.Unknown;
     }
@@ -817,9 +833,12 @@ public sealed class ChatSessionCoordinator : ISessionCoordinator, IExtensionUiSe
                 ? client : throw new InvalidOperationException("Pi session is not connected.");
     }
 
+    private void RebuildQueuedSnapshot() => _queuedSnapshot = _queuedTexts.ToArray();
+    private void RebuildRecoverableSnapshot() => _recoverableSnapshot = _recoverableQueue.ToArray();
+
     private SessionSnapshot MakeSnapshot() => new(_client?.Generation, _connection, _activity, _result,
         _timeline.Messages, _timeline.Tools, _timeline.CurrentResponseUsage,
-        _queuedTexts.ToArray(), _recoverableQueue.ToArray(), _pendingUi.Values.Select(p => p.Request).ToArray(),
+        _queuedSnapshot, _recoverableSnapshot, _pendingUi.Values.Select(p => p.Request).ToArray(),
         _error, _faultKind, _approvalAvailability, _approvalDiagnostic);
 
     private void Publish()
