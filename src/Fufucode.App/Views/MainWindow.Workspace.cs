@@ -553,7 +553,8 @@ public partial class MainWindow
                 Grid.SetColumn(SidebarBorder, 0);
                 Grid.SetColumnSpan(SidebarBorder, 3);
                 SidebarBorder.ZIndex = 5;
-                SidebarBorder.Margin = default;
+                // 让 .liquidGlass.dockLeft 样式的浮起 Margin 生效（本地值会盖掉样式）。
+                SidebarBorder.ClearValue(Layoutable.MarginProperty);
                 LeftPanelSplitter.IsVisible = left;
                 LeftPanelSplitter.Margin = new Thickness(leftWidth,0,0,0);
                 LeftPanelSplitter.HorizontalAlignment = HorizontalAlignment.Left;
@@ -574,7 +575,7 @@ public partial class MainWindow
                 Grid.SetColumn(RightPanelBorder, 0);
                 Grid.SetColumnSpan(RightPanelBorder, 3);
                 RightPanelBorder.ZIndex = 5;
-                RightPanelBorder.Margin = default;
+                RightPanelBorder.ClearValue(Layoutable.MarginProperty);
                 RightPanelSplitter.IsVisible = right;
                 RightPanelSplitter.Margin = new Thickness(0,0,right ? rightWidth : 0,0);
                 RightPanelSplitter.HorizontalAlignment = HorizontalAlignment.Right;
@@ -591,7 +592,7 @@ public partial class MainWindow
                 Grid.SetRow(TerminalBorder, 0);
                 Grid.SetRowSpan(TerminalBorder, 3);
                 TerminalBorder.ZIndex = 5;
-                TerminalBorder.Margin = default;
+                TerminalBorder.ClearValue(Layoutable.MarginProperty);
                 TerminalSplitter.IsVisible = bottom;
                 TerminalSplitter.Margin = new Thickness(0,0,0,bottom ? bottomHeight : 0);
                 TerminalSplitter.VerticalAlignment = VerticalAlignment.Bottom;

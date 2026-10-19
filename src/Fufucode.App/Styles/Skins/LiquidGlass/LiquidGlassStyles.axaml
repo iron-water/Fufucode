@@ -43,7 +43,7 @@
     <Setter Property="CornerRadius" Value="14"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockBottom">
-    <Setter Property="Margin" Value="8,56,8,34"/>
+    <Setter Property="Margin" Value="8,0,8,34"/>
     <Setter Property="BorderThickness" Value="0.5"/>
     <Setter Property="CornerRadius" Value="14"/>
   </Style>
@@ -66,13 +66,10 @@
          dock 玻璃浮在它上面时底下能采到页边折射素材。 -->
     <Setter Property="Margin" Value="0,56,8,8"/>
   </Style>
-  <!-- 页面内容延伸到玻璃底下需要"有可折射的真实底色"——AppMicaPageBackground 透明
-       是为了 AcrylicBlur 透桌面（玻璃缝/边缘呼吸缝）；PageHost 内页若也透明，侧栏
-       玻璃底下 snapshot 只采到 alpha=0，折射/模糊无素材走实色块。
-       LiquidGlassPageUnderGlass 给 PageHost 一个不透明底色，让 snapshot 在侧栏区域
-       采到真实页面像素（含延伸到列边界的列表项/气泡）。 -->
-  <Style Selector="TransitioningContentControl#PageHost">
-    <Setter Property="Background" Value="{DynamicResource LiquidGlassPageUnderGlass}"/>
+  <!-- 应用内环境底（相当于 iOS 的壁纸）：铺在 ChromeRoot 最底层，页面/页面宿主
+       保持透明，玻璃面采样时才有带色差的素材。纯平黑底会让模糊/折射完全不可见。 -->
+  <Style Selector="Grid#ChromeRoot">
+    <Setter Property="Background" Value="{DynamicResource LiquidGlassAmbientBackground}"/>
   </Style>
 
   <!-- ================= 内容延伸到玻璃底下（iOS NSBackgroundExtensionView 语义） =================
@@ -92,17 +89,16 @@
   <Style Selector="lg|LiquidGlassSurface.glassStatusSurface">
     <Setter Property="ZIndex" Value="10"/>
   </Style>
-  <!-- dock 宿主内容内推：交互区离开标题栏（48）/状态条（32）玻璃条下方。
-       dock 玻璃面自身贴满列/行高——上半部分玻璃体直接贴窗顶，页面内容
-       （如设置页侧栏/会话列表）滚动时可延伸进玻璃区。 -->
+  <!-- dock 玻璃面已浮在 caption 条下方（Margin 顶部 56），不再需要额外 Padding 内推；
+       内部留 8px 呼吸边即可。 -->
   <Style Selector="Border.liquidGlass.dockLeft">
-    <Setter Property="Padding" Value="0,48,0,32"/>
+    <Setter Property="Padding" Value="8"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockRight">
-    <Setter Property="Padding" Value="0,48,0,32"/>
+    <Setter Property="Padding" Value="8"/>
   </Style>
   <Style Selector="Border.liquidGlass.dockBottom">
-    <Setter Property="Padding" Value="0,0,0,32"/>
+    <Setter Property="Padding" Value="8"/>
   </Style>
   <!-- 标题栏：贴顶无边框感，底部一条 hairline 分隔（iOS nav bar 语义） -->
   <Style Selector="Border.liquidGlassCaption">
