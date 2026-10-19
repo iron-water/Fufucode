@@ -654,36 +654,30 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
 
             float angleRad = (float)(_parameters.HighlightAngleDegrees * (Math.PI / 180.0));
             uniforms["angle"] = angleRad;
-            uniforms["falloff"] = (float)Clamp(_parameters.HighlightFalloff, 0.0, 8.0);
+            uniforms["falloff"] = (float)Clamp(_parameters.HighlightFalloff, 0.5, 8.0);
+            // 顶部镜面带严格 0.5–1.0px（HIG）；旧实现按 stroke 宽度画四周同宽描边，
+            // 是"塑料边框感"的来源。这里改为着色器内按 SDF 生成非对称光照。
+            uniforms["rimWidth"] = (float)Clamp(_parameters.HighlightWidth, 0.25, 4.0);
+            uniforms["aoStrength"] = 0.16f;    // 底部环境遮蔽（规范 0.12–0.20）
+            uniforms["bevelStrength"] = 0.14f; // 内倒角光晕（规范 0.10–0.20）
 
             using SKRuntimeEffectChildren children = new(s_highlightEffect);
             using SKShader? shader = s_highlightEffect.ToShader(uniforms, children);
             if (shader is null)
                 return;
 
-            float blurRadius = (float)Clamp(_parameters.HighlightBlurRadius, 0.0, 20.0);
-            using SKMaskFilter? maskFilter = blurRadius > 0.001f
-                ? SKMaskFilter.CreateBlur(SKBlurStyle.Normal, blurRadius)
-                : null;
-
-            float strokeWidth = (float)(Math.Ceiling(Clamp(_parameters.HighlightWidth, 0.0, 100.0)) * 2.0);
-
             using SKPaint paint = new()
             {
                 Shader = shader,
                 IsAntialias = true,
-                BlendMode = SKBlendMode.Plus,
-                Style = SKPaintStyle.Stroke,
-                StrokeJoin = SKStrokeJoin.Round,
-                StrokeCap = SKStrokeCap.Round,
-                StrokeWidth = Math.Max(0.5f, strokeWidth),
-                MaskFilter = maskFilter
+                // 光照包含白光（提亮）与底部黑遮蔽（压暗），SrcOver 才能两者兼得。
+                BlendMode = SKBlendMode.SrcOver,
+                Style = SKPaintStyle.Fill,
             };
 
             SKRect rect = SKRect.Create(0, 0, size.Width, size.Height);
             using SKPath path = CreateRoundRectPath(rect, cornerRadii);
 
-            // Pad the highlight layer to avoid edge artifacts when transformed and/or rasterized into an intermediate surface.
             const float safePad = 1.0f;
 
             canvas.Save();
@@ -693,7 +687,7 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
 
             canvas.Translate(safePad, safePad);
             canvas.ClipPath(path, SKClipOperation.Intersect, true);
-            canvas.DrawPath(path, paint);
+            canvas.DrawRect(rect, paint);
 
             canvas.Restore();
             canvas.Restore();
@@ -845,8 +839,10 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             Color surface = _parameters.SurfaceColor;
             if (surface.A > 0)
             {
-                byte topAlpha = (byte)Clamp(surface.A * 0.85 + 30, 0, 255);
-                byte bottomAlpha = (byte)Clamp(surface.A * 0.85, 0, 255);
+                // 降级路径没有真实 backdrop 可模糊，玻璃面需要自撑一层可见的磨砂底；
+                // 正常路径的 SurfaceColor 只有 8%（规范 5–15%），直接用会几乎全透。
+                byte topAlpha = (byte)Clamp(surface.A * 0.85 + 92, 0, 255);
+                byte bottomAlpha = (byte)Clamp(surface.A * 0.85 + 58, 0, 255);
                 using SKPaint fill = new()
                 {
                     Shader = SKShader.CreateLinearGradient(

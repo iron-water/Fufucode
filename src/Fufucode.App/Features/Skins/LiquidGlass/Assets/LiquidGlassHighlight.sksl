@@ -1,11 +1,18 @@
-// Liquid Glass Highlight Shader
-// Adapted for SKRuntimeEffect.
+// Liquid Glass dual-edge lighting (Apple HIG / WWDC25 optics).
+// 非对称双层边缘光照：
+//   - 顶部 0.5–1px 锐利纯白镜面反射带（天光主光源），沿侧边向下指数衰减
+//   - 内侧 1–2px 柔和倒角光晕（全反射 diffused glow）
+//   - 底部 0.5px 深色环境遮蔽（背光面）
+// 严禁四周等宽单色描边（PROHIBIT_UNIFORM_BORDER）。
 
 uniform float2 size;
-uniform float4 cornerRadii; // [topLeft, topRight, bottomRight, bottomLeft]
-uniform float4 color;       // RGBA (0..1)
-uniform float angle;        // radians
-uniform float falloff;      // >= 0
+uniform float4 cornerRadii;   // [tl, tr, br, bl]
+uniform float4 color;         // rim color + alpha (纯白, alpha 0.45–0.85)
+uniform float angle;          // light direction, radians (90° = 正上方)
+uniform float falloff;        // 沿侧边向下的垂直衰减指数
+uniform float rimWidth;       // 镜面带宽度 (px, 0.5–1.0)
+uniform float aoStrength;     // 底部环境遮蔽强度 (0.12–0.20)
+uniform float bevelStrength;  // 内倒角光晕强度 (0.10–0.20)
 
 float radiusAt(float2 centeredCoord, float4 radii) {
     if (centeredCoord.x >= 0.0) {
@@ -39,15 +46,31 @@ half4 main(float2 coord) {
     float2 centeredCoord = coord - halfSize;
     float radius = radiusAt(centeredCoord, cornerRadii);
 
-    // Compute the "surface normal" using SDF gradient.
-    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 grad = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
-    float2 normal = float2(cos(angle), sin(angle));
+    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
+    float edge = max(0.0, -sd);                 // 距内边缘的距离（内部为正）
 
-    float d = dot(grad, normal);
-    float intensity = pow(abs(d), max(falloff, 0.0));
-    // Skia expects premultiplied output colors.
-    half a = half(color.a * intensity);
-    half3 rgb = half3(color.rgb) * a;
-    return half4(rgb, a);
+    float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
+    float2 normal = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
+    // 屏幕坐标 y 向下；光源方向从 angle 换算为上方向量。
+    float2 lightDir = float2(cos(angle), -sin(angle));
+
+    // 朝向光源程度：顶边法线向上 → 1；底边 → 0。
+    float facing = max(0.0, dot(normal, lightDir));
+    // 沿侧边的垂直衰减：顶部最强，底部归零。
+    float vertical = pow(clamp(1.0 - coord.y / max(size.y, 1.0), 0.0, 1.0), max(falloff, 0.5));
+
+    // 0.5–1px 锐利镜面带。
+    float rim = smoothstep(rimWidth, 0.0, edge) * facing * vertical;
+    // 内侧倒角光晕：rim 之内 5×rimWidth 范围柔和扩散。
+    float bevel = smoothstep(rimWidth * 5.0, 0.0, edge) * (1.0 - rim) * facing * vertical;
+
+    // 底部环境遮蔽（背光面）。
+    float ao = smoothstep(rimWidth * 2.0, 0.0, edge) * max(0.0, -dot(normal, lightDir)) * aoStrength;
+
+    float whiteAlpha = clamp(rim * color.a + bevel * bevelStrength, 0.0, 1.0);
+    float alpha = clamp(whiteAlpha + ao, 0.0, 1.0);
+
+    // Premultiplied: 白光 + 黑遮蔽。
+    half3 rgb = half3(color.rgb) * half(whiteAlpha);
+    return half4(rgb, half(alpha));
 }
