@@ -1,76 +1,74 @@
-// Liquid Glass dual-edge lighting (Apple HIG / WWDC25 optics).
-// 非对称双层边缘光照：
-//   - 顶部 0.5–1px 锐利纯白镜面反射带（天光主光源），沿侧边向下指数衰减
+// Liquid Glass dual-edge lighting + pointer specular (Apple HIG / WWDC25 optics).
+//   - 顶部 0.5–1px 锐利纯白镜面带（光源方向受指针吸引），沿侧边向下衰减
 //   - 内侧 1–2px 柔和倒角光晕（全反射 diffused glow）
 //   - 底部 0.5px 深色环境遮蔽（背光面）
+//   - 指针掠射镜面斑：离指针最近的边缘局部陡然变亮（规范 §7.2 Specular Glint）
 // 严禁四周等宽单色描边（PROHIBIT_UNIFORM_BORDER）。
 
 uniform float2 size;
 uniform float4 cornerRadii;   // [tl, tr, br, bl]
-uniform float4 color;         // rim color + alpha (纯白, alpha 0.45–0.85)
-uniform float angle;          // light direction, radians (90° = 正上方)
+uniform float4 color;         // rim color + alpha
+uniform float angle;          // 默认光源方向，radians（90° = 正上方）
 uniform float falloff;        // 沿侧边向下的垂直衰减指数
-uniform float rimWidth;       // 镜面带宽度 (px, 0.5–1.0)
-uniform float aoStrength;     // 底部环境遮蔽强度 (0.12–0.20)
-uniform float bevelStrength;  // 内倒角光晕强度 (0.10–0.20)
+uniform float rimWidth;       // 镜面带宽度 (px)
+uniform float aoStrength;     // 底部环境遮蔽强度
+uniform float bevelStrength;  // 内倒角光晕强度
+uniform float2 pointer;       // 指针局部坐标
+uniform float pointerPresence;// 0..1 指针在场强度
+uniform float glintRadius;    // 镜面斑半径 (px)
 
-float radiusAt(float2 centeredCoord, float4 radii) {
-    if (centeredCoord.x >= 0.0) {
-        if (centeredCoord.y < 0.0) return radii.y;
-        else return radii.z;
-    } else {
-        if (centeredCoord.y < 0.0) return radii.x;
-        else return radii.w;
-    }
+float radiusAt(float2 c, float4 r) {
+    if (c.x >= 0.0) { return c.y < 0.0 ? r.y : r.z; }
+    return c.y < 0.0 ? r.x : r.w;
 }
 
 float sdRoundedRect(float2 coord, float2 halfSize, float radius) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
-    float outside = length(max(cornerCoord, 0.0)) - radius;
-    float inside = min(max(cornerCoord.x, cornerCoord.y), 0.0);
-    return outside + inside;
+    float2 q = abs(coord) - (halfSize - float2(radius));
+    return length(max(q, 0.0)) - radius + min(max(q.x, q.y), 0.0);
 }
 
 float2 gradSdRoundedRect(float2 coord, float2 halfSize, float radius) {
-    float2 cornerCoord = abs(coord) - (halfSize - float2(radius));
-    if (cornerCoord.x >= 0.0 || cornerCoord.y >= 0.0) {
-        return sign(coord) * normalize(max(cornerCoord, 0.0));
-    } else {
-        float gradX = step(cornerCoord.y, cornerCoord.x);
-        return sign(coord) * float2(gradX, 1.0 - gradX);
+    float2 q = abs(coord) - (halfSize - float2(radius));
+    if (q.x >= 0.0 || q.y >= 0.0) {
+        return sign(coord) * normalize(max(q, 0.0));
     }
+    float gx = step(q.y, q.x);
+    return sign(coord) * float2(gx, 1.0 - gx);
 }
 
 half4 main(float2 coord) {
     float2 halfSize = size * 0.5;
-    float2 centeredCoord = coord - halfSize;
-    float radius = radiusAt(centeredCoord, cornerRadii);
+    float2 c = coord - halfSize;
+    float radius = radiusAt(c, cornerRadii);
 
-    float sd = sdRoundedRect(centeredCoord, halfSize, radius);
-    float edge = max(0.0, -sd);                 // 距内边缘的距离（内部为正）
+    float sd = sdRoundedRect(c, halfSize, radius);
+    float edge = max(0.0, -sd);
 
     float gradRadius = min(radius * 1.5, min(halfSize.x, halfSize.y));
-    float2 normal = gradSdRoundedRect(centeredCoord, halfSize, gradRadius);
-    // 屏幕坐标 y 向下；光源方向从 angle 换算为上方向量。
-    float2 lightDir = float2(cos(angle), -sin(angle));
+    float2 normal = gradSdRoundedRect(c, halfSize, gradRadius);
 
-    // 朝向光源程度：顶边法线向上 → 1；底边 → 0。
+    // 默认主光源（屏幕 y 向下），被指针吸引：Lerp(ambient, cursorDir, 0.35·presence)。
+    float2 ambientDir = float2(cos(angle), -sin(angle));
+    float2 toPointer = pointer - halfSize;
+    float pl = length(toPointer);
+    float2 pointerDir = pl > 0.001 ? toPointer / pl : ambientDir;
+    float2 lightDir = normalize(mix(ambientDir, pointerDir, 0.35 * pointerPresence));
+
     float facing = max(0.0, dot(normal, lightDir));
-    // 沿侧边的垂直衰减：顶部最强，底部归零。
     float vertical = pow(clamp(1.0 - coord.y / max(size.y, 1.0), 0.0, 1.0), max(falloff, 0.5));
+    // 指针在场时竖向衰减放宽，让被吸引到侧边/底边的高光也能显现。
+    vertical = mix(vertical, 1.0, 0.6 * pointerPresence);
 
-    // 0.5–1px 锐利镜面带。
     float rim = smoothstep(rimWidth, 0.0, edge) * facing * vertical;
-    // 内侧倒角光晕：rim 之内 5×rimWidth 范围柔和扩散。
     float bevel = smoothstep(rimWidth * 5.0, 0.0, edge) * (1.0 - rim) * facing * vertical;
-
-    // 底部环境遮蔽（背光面）。
     float ao = smoothstep(rimWidth * 2.0, 0.0, edge) * max(0.0, -dot(normal, lightDir)) * aoStrength;
 
-    float whiteAlpha = clamp(rim * color.a + bevel * bevelStrength, 0.0, 1.0);
-    float alpha = clamp(whiteAlpha + ao, 0.0, 1.0);
+    // 掠射镜面斑：边缘带内、离指针越近越亮（水银反光，强度可达 1.0）。
+    float glintBand = smoothstep(rimWidth * 2.5, 0.0, edge);
+    float glintDist = distance(coord, pointer);
+    float glint = glintBand * smoothstep(glintRadius, 0.0, glintDist) * pointerPresence;
 
-    // Premultiplied: 白光 + 黑遮蔽。
-    half3 rgb = half3(color.rgb) * half(whiteAlpha);
-    return half4(rgb, half(alpha));
+    float whiteAlpha = clamp(rim * color.a + bevel * bevelStrength + glint, 0.0, 1.0);
+    float alpha = clamp(whiteAlpha + ao * (1.0 - whiteAlpha), 0.0, 1.0);
+    return half4(half3(color.rgb) * half(whiteAlpha), half(alpha));
 }

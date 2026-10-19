@@ -384,7 +384,7 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             context.Custom(new LiquidGlassDrawOperation(controlBounds, parameters, snapshot, LiquidGlassDrawPass.Lens, topLevelBounds));
         }
 
-        internal LiquidGlassDrawParameters CreateDrawParameters()
+        internal virtual LiquidGlassDrawParameters CreateDrawParameters()
         {
             return new LiquidGlassDrawParameters
             {
@@ -475,7 +475,8 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                     [~ContentPresenter.ContentProperty] = new TemplateBinding(ContentProperty),
                     [~ContentPresenter.ContentTemplateProperty] = new TemplateBinding(ContentTemplateProperty),
                     [~ContentPresenter.VerticalContentAlignmentProperty] = new TemplateBinding(VerticalContentAlignmentProperty),
-                    [~ContentPresenter.HorizontalContentAlignmentProperty] = new TemplateBinding(HorizontalContentAlignmentProperty)
+                    [~ContentPresenter.HorizontalContentAlignmentProperty] = new TemplateBinding(HorizontalContentAlignmentProperty),
+                    [~ContentPresenter.PaddingProperty] = new TemplateBinding(PaddingProperty)
                 }.RegisterInNameScope(ns);
 
                 LiquidGlassFrontOverlay frontOverlay = new LiquidGlassFrontOverlay

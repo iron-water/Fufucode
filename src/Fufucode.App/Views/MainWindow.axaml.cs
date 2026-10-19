@@ -282,6 +282,9 @@ public partial class MainWindow : Window
             _ => (object)_chatPage,
         };
         _vm.Sidebar.SetConversationVisible(_vm.IsChatPage);
+        // 新进入 PageHost 的页面（设置页导航等）也要挂上玻璃 chrome。
+        if (_windowSkins.TryGetValue(this, out var skinLease))
+            Dispatcher.UIThread.Post(skinLease.RescanGlassChrome, DispatcherPriority.Loaded);
     }
 
     private async void OnLoaded(object? sender, RoutedEventArgs e)
