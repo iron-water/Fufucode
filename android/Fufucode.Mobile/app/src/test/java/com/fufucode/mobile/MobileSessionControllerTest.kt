@@ -9,6 +9,8 @@ import com.fufucode.mobile.data.RemoteClient
 import com.fufucode.mobile.data.RemoteCommandResult
 import com.fufucode.mobile.data.RemotePairResult
 import com.fufucode.mobile.data.RemoteServerStatus
+import com.fufucode.mobile.data.RemoteSessionCatalog
+import com.fufucode.mobile.data.RemoteSessionInfo
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
@@ -475,5 +477,64 @@ class MobileSessionControllerTest {
         // 无凭据时不应发起任何连接请求，状态保持 Idle。
         assertEquals(0, transport.snapshotCount)
         assertEquals(LinkState.Idle, controller.state.value.link)
+    }
+
+    @Test
+    fun `session catalog is loaded and accepted switch refreshes snapshot`() = runTest(UnconfinedTestDispatcher()) {
+        val transport = FakeTransport().apply {
+            sessionsResult = RemoteClient.Result.Ok(
+                RemoteSessionCatalog(
+                    "one",
+                    listOf(
+                        RemoteSessionInfo("one", "会话一", "项目甲", "FUMO", true, false, false, false, null),
+                        RemoteSessionInfo("two", "会话二", "项目甲", "OMP", false, true, true, true, null),
+                    ),
+                ),
+            )
+            snapshotResult = RemoteClient.Result.Ok(
+                FakeTransport.emptySnapshot().copy(sessionId = "one", title = "会话一"),
+            )
+        }
+        val controller = MobileSessionController(transport, MemoryPairingStorage(), backgroundScope)
+        controller.pairAndConnect("192.168.1.5:8080", "1234")
+        advanceUntilIdle()
+        assertEquals(2, controller.state.value.sessions.size)
+        assertEquals("会话二", controller.state.value.sessions[1].title)
+
+        transport.switchResult = RemoteClient.Result.Ok(RemoteCommandResult(true, "已切换"))
+        transport.snapshotResult = RemoteClient.Result.Ok(
+            FakeTransport.emptySnapshot().copy(sessionId = "two", title = "会话二"),
+        )
+        controller.switchSession("two")
+        advanceUntilIdle()
+        assertEquals(1, transport.switchCount)
+        assertEquals("two", controller.state.value.sessionId)
+        assertEquals("会话二", controller.state.value.title)
+    }
+
+    @Test
+    fun `session switch is not claimed when desktop rejects it`() = runTest(UnconfinedTestDispatcher()) {
+        val transport = FakeTransport().apply {
+            sessionsResult = RemoteClient.Result.Ok(
+                RemoteSessionCatalog(
+                    "one",
+                    listOf(
+                        RemoteSessionInfo("one", "会话一", "项目甲", "FUMO", true, false, false, false, null),
+                        RemoteSessionInfo("two", "会话二", "项目甲", "OMP", false, false, false, true, null),
+                    ),
+                ),
+            )
+            switchResult = RemoteClient.Result.Ok(RemoteCommandResult(false, "电脑端忙碌"))
+            snapshotResult = RemoteClient.Result.Ok(
+                FakeTransport.emptySnapshot().copy(sessionId = "one", title = "会话一"),
+            )
+        }
+        val controller = MobileSessionController(transport, MemoryPairingStorage(), backgroundScope)
+        controller.pairAndConnect("192.168.1.5:8080", "1234")
+        advanceUntilIdle()
+        controller.switchSession("two")
+        advanceUntilIdle()
+        assertEquals("one", controller.state.value.sessionId)
+        assertEquals("电脑端忙碌", controller.state.value.notice)
     }
 }

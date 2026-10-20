@@ -30,6 +30,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.fufucode.mobile.data.LinkState
 import com.fufucode.mobile.data.MobileState
+import com.fufucode.mobile.data.RemoteSessionInfo
 import com.fufucode.mobile.design.MobileColors
 import com.fufucode.mobile.design.MobileDimens
 import com.fufucode.mobile.design.MobileTypography
@@ -40,14 +41,8 @@ import com.fufucode.mobile.ui.components.StatusPill
 /**
  * 界面 2：会话列表与抽屉。
  *
- * 范围边界（重要，且与桌面协议一致）：桌面远控协议的 `/api/snapshot` 只暴露
- * **当前绑定的一个会话**，没有「历史会话列表」端点（见 `IRemoteSessionBridge`）。
- * 因此：
- * - 「当前会话」来自真实快照；
- * - 「最近连接过的电脑」来自本机配对记录（真实存在，不含伪造的历史会话）；
- * - 「置顶 / 未读徽标」按真实可得数据表达：置顶 = 当前会话，未读 = 当前待审批数量。
- *
- * 界面**不**发明多会话列表或假消息预览；缺少的部分在交付记录中列为需桌面端扩展协议。
+ * 会话目录来自桌面 `/api/sessions`，切换只在桌面受理后更新；快照仍只承载
+ * 当前会话的时间线。置顶与未读来自桌面元数据，待审批数量只标记当前会话。
  */
 @Composable
 fun SessionDrawer(
@@ -56,6 +51,8 @@ fun SessionDrawer(
     onClose: () -> Unit,
     onOpenDevice: () -> Unit,
     onDisconnect: () -> Unit,
+    sessions: List<RemoteSessionInfo> = emptyList(),
+    onSwitchSession: (String) -> Unit = {},
 ) {
     Row(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -92,10 +89,10 @@ fun SessionDrawer(
                 }
             }
 
-            DrawerSection(title = "当前会话")
-            if (state.title.isBlank()) {
-                DrawerHint("尚未连接到电脑端会话。")
-            } else {
+            DrawerSection(title = "桌面会话")
+            if (sessions.isEmpty() && state.title.isBlank()) {
+                DrawerHint("电脑端尚未提供会话目录。")
+            } else if (sessions.isEmpty()) {
                 DrawerRow(
                     asset = "chat.svg",
                     title = state.title,
@@ -108,6 +105,27 @@ fun SessionDrawer(
                     badge = state.pendingApprovalCount.takeIf { it > 0 }?.toString(),
                     onClick = onClose,
                 )
+            } else {
+                sessions.forEach { session ->
+                    DrawerRow(
+                        asset = "chat.svg",
+                        title = session.title,
+                        meta = listOf(session.projectName, session.backend)
+                            .filter { it.isNotBlank() }
+                            .joinToString(" · "),
+                        selected = session.isCurrent,
+                        pinned = session.isPinned,
+                        badge = if (session.isCurrent) {
+                            state.pendingApprovalCount.takeIf { it > 0 }?.toString()
+                        } else {
+                            session.isUnread.takeIf { it }?.let { "•" }
+                        },
+                        onClick = {
+                            if (session.isCurrent) onClose() else onSwitchSession(session.sessionId)
+                        },
+                        danger = false,
+                    )
+                }
             }
 
             // 未读/待处理：只有真实待审批数量才显示徽标。

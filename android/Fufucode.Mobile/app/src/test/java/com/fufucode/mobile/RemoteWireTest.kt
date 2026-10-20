@@ -173,4 +173,25 @@ class RemoteWireTest {
         assertEquals("审批不存在或已失效。", resolution.message)
         assertEquals(ApprovalDecision.Deny, resolution.decision)
     }
+
+    @Test
+    fun `session catalog and sessions update preserve real metadata`() {
+        val catalog = RemoteWire.parseSessionCatalog(
+            """{"currentSessionId":"one","sessions":[
+              {"sessionId":"one","title":"会话一","projectName":"项目甲","backend":"FUMO","isCurrent":true,"isPinned":false,"isUnread":false,"canSwitch":false,"lastOpenedUtc":"2026-10-20T01:00:00Z"},
+              {"sessionId":"two","title":"会话二","projectName":"项目甲","backend":"OMP","isCurrent":false,"isPinned":true,"isUnread":true,"canSwitch":true,"lastOpenedUtc":"2026-10-19T01:00:00Z"}
+            ]}""",
+        )
+        assertNotNull(catalog)
+        assertEquals("one", catalog!!.currentSessionId)
+        assertEquals("项目甲", catalog.sessions[1].projectName)
+        assertTrue(catalog.sessions[1].canSwitch)
+
+        val update = RemoteWire.parseUpdate(
+            """{"type":"sessions","catalog":{"currentSessionId":"two","sessions":[
+              {"sessionId":"two","title":"会话二","projectName":"项目甲","backend":"OMP","isCurrent":true,"isPinned":true,"isUnread":false,"canSwitch":false,"lastOpenedUtc":null}
+            ]}}""",
+        )
+        assertEquals("two", (update as RemoteUpdate.Sessions).catalog.currentSessionId)
+    }
 }

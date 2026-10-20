@@ -149,6 +149,8 @@ class MobileViewModel(application: Application) : AndroidViewModel(application) 
         else com.fufucode.mobile.data.ApprovalDecision.Deny,
     )
 
+    fun switchSession(sessionId: String) = controller.switchSession(sessionId)
+
     fun dismissNotice() = controller.dismissNotice()
 
     /**

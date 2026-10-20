@@ -64,6 +64,13 @@ class RemoteClient(
     suspend fun snapshot(baseUrl: String, token: String?): Result<RemoteSessionSnapshot> =
         get(baseUrl, "/api/snapshot", token).parse { body -> RemoteWire.parseSnapshot(body) }
 
+    suspend fun sessions(baseUrl: String, token: String?): Result<RemoteSessionCatalog> =
+        get(baseUrl, "/api/sessions", token).parse { body -> RemoteWire.parseSessionCatalog(body) }
+
+    suspend fun switchSession(baseUrl: String, token: String?, sessionId: String): Result<RemoteCommandResult> =
+        post(baseUrl, "/api/sessions/switch", JSONObject().put("sessionId", sessionId), token)
+            .parse { body -> RemoteWire.parseCommandResult(body) }
+
     suspend fun sendMessage(baseUrl: String, token: String?, text: String): Result<RemoteCommandResult> =
         post(baseUrl, "/api/message", JSONObject().put("text", text), token).parse { body ->
             RemoteWire.parseCommandResult(body)

@@ -125,3 +125,98 @@ public sealed class InMemoryToolApprovalGate : IRemoteToolApprovalGate
         return entry.Completion.Task.WaitAsync(cancellationToken);
     }
 }
+
+/// <summary>
+/// 可更换底层闸门，但自身事件订阅保持不变。桌面切换会话时，远控服务已经订阅了
+/// 本包装器；若不更换订阅对象，新会话的审批事件会被旧订阅遗漏。
+/// </summary>
+public sealed class DelegatingToolApprovalGate : IRemoteToolApprovalGate, IDisposable
+{
+    private readonly object _gate = new();
+    private IRemoteToolApprovalGate _inner;
+    private bool _disposed;
+
+    public DelegatingToolApprovalGate(IRemoteToolApprovalGate inner)
+    {
+        _inner = inner ?? throw new ArgumentNullException(nameof(inner));
+        _inner.Requested += OnRequested;
+        _inner.Resolved += OnResolved;
+    }
+
+    public event EventHandler<RemoteApprovalRequest>? Requested;
+    public event EventHandler<RemoteApprovalResolution>? Resolved;
+
+    public IReadOnlyList<RemoteApprovalRequest> Pending
+    {
+        get { lock (_gate) return _inner.Pending; }
+    }
+
+    public RemoteApprovalRequest Request(string toolCallId, string toolName, string argsJson, string? summary = null)
+    {
+        IRemoteToolApprovalGate inner;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            inner = _inner;
+        }
+        return inner.Request(toolCallId, toolName, argsJson, summary);
+    }
+
+    public Task<RemoteApprovalResolution> ResolveAsync(string approvalId, RemoteApprovalDecision decision,
+        CancellationToken cancellationToken = default)
+    {
+        IRemoteToolApprovalGate inner;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            inner = _inner;
+        }
+        return inner.ResolveAsync(approvalId, decision, cancellationToken);
+    }
+
+    public Task<RemoteApprovalResolution> WaitAsync(string approvalId, CancellationToken cancellationToken = default)
+    {
+        IRemoteToolApprovalGate inner;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            inner = _inner;
+        }
+        return inner.WaitAsync(approvalId, cancellationToken);
+    }
+
+    public void Replace(IRemoteToolApprovalGate next)
+    {
+        ArgumentNullException.ThrowIfNull(next);
+        IRemoteToolApprovalGate previous;
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            previous = _inner;
+            previous.Requested -= OnRequested;
+            previous.Resolved -= OnResolved;
+            _inner = next;
+            next.Requested += OnRequested;
+            next.Resolved += OnResolved;
+        }
+
+        if (!ReferenceEquals(previous, next) && previous is IDisposable disposable) disposable.Dispose();
+    }
+
+    private void OnRequested(object? sender, RemoteApprovalRequest request) => Requested?.Invoke(this, request);
+    private void OnResolved(object? sender, RemoteApprovalResolution resolution) => Resolved?.Invoke(this, resolution);
+
+    public void Dispose()
+    {
+        IRemoteToolApprovalGate previous;
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            previous = _inner;
+            previous.Requested -= OnRequested;
+            previous.Resolved -= OnResolved;
+        }
+        if (previous is IDisposable disposable) disposable.Dispose();
+    }
+}

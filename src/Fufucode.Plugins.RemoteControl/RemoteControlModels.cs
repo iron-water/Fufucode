@@ -92,4 +92,3 @@ public sealed record RemoteSessionSnapshot(
     IReadOnlyList<RemoteApprovalRequest> PendingApprovals);
 
 /// <summary>命令（发送/停止/审批）的受理结果。受理不等于执行完成。</summary>
-public sealed record RemoteCommandResult(bool Accepted, string? Message);

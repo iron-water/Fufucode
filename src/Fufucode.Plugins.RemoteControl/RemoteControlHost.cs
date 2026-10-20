@@ -19,7 +19,7 @@ namespace Fufucode.App.Features.RemoteControl;
 /// // 面板显示：status.Pin / status.PairingUrl / host.PairingQrSvg
 /// host.Stop();                                    // 或 await host.DisposeAsync()
 /// </code>
-/// 同一会话只允许一个远控宿主；切换会话时 <see cref="Attach"/> 会替换适配器并撤销旧令牌。
+/// 同一会话只允许一个远控宿主；切换会话时保持监听与配对令牌不变，只替换适配器。
 /// </summary>
 public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteControlService
 {
@@ -29,6 +29,8 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
     private readonly SemaphoreSlim _gate = new(1, 1);
     private RemoteSessionAdapter? _adapter;
     private RemoteControlServer? _server;
+    private Func<RemoteSessionCatalog>? _sessionCatalog;
+    private Func<string, CancellationToken, Task<RemoteCommandResult>>? _switchSession;
     private bool _disposed;
 
     public RemoteControlHost(RemoteControlOptions? options = null) =>
@@ -62,7 +64,26 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
         }
     }
 
-    /// <summary>把当前会话接到远控服务。重复调用会替换会话并撤销全部既有令牌（旧手机需重新配对）。</summary>
+    /// <summary>登记桌面会话目录与切换动作；远控服务只调用该动作，不直接操作共享会话。</summary>
+    public void ConfigureSessionDirectory(
+        Func<RemoteSessionCatalog> catalog,
+        Func<string, CancellationToken, Task<RemoteCommandResult>> switchSession)
+    {
+        ArgumentNullException.ThrowIfNull(catalog);
+        ArgumentNullException.ThrowIfNull(switchSession);
+        _gate.Wait();
+        try
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            _sessionCatalog = catalog;
+            _switchSession = switchSession;
+            _server?.ConfigureSessionDirectory(catalog, switchSession);
+            _server?.Broadcast(new RemoteSessionsUpdate(catalog()));
+        }
+        finally { _gate.Release(); }
+    }
+
+    /// <summary>把当前会话接到远控服务。重复调用只替换适配器，保留监听与现有配对令牌。</summary>
     public RemoteSessionAdapter Attach(IChatSession session, string title)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -70,35 +91,17 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var server = _server;
-            var adapter = new RemoteSessionAdapter(session, title);
-            _adapter?.Dispose();
-            _adapter = adapter;
-            if (server is not null)
+            if (_adapter is null)
             {
-                // 会话切换：旧令牌随之失效，避免手机端继续操作已替换的会话。
-                var previousPort = server.Status.Port;
-                var wasRunning = server.IsRunning;
-                server.Stop();
-                _ = server.DisposeAsync();
-                var replacement = new RemoteControlServer(adapter, _options, _assets);
-                if (wasRunning)
-                {
-                    try
-                    {
-                        replacement.Start(previousPort);
-                    }
-                    catch (System.Net.Sockets.SocketException)
-                    {
-                        // 端口尚未释放时退回自动分配，配对地址由状态查询回读，不伪造固定端口。
-                        replacement.Start(0);
-                    }
-                }
-
-                _server = replacement;
+                _adapter = new RemoteSessionAdapter(session, title);
             }
-
-            return adapter;
+            else
+            {
+                _adapter.Rebind(session, title);
+            }
+            if (_server is not null && _sessionCatalog is not null)
+                _server.Broadcast(new RemoteSessionsUpdate(_sessionCatalog()));
+            return _adapter;
         }
         finally
         {
@@ -117,7 +120,8 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
                 "启动前必须先 Attach 一个会话；远控宿主不做第二会话写入者。");
             if (_server is { IsRunning: true }) return _server.Status;
             if (_server is not null) await _server.DisposeAsync().ConfigureAwait(false);
-            var server = new RemoteControlServer(adapter, _options, _assets);
+            var server = new RemoteControlServer(adapter, _options, _assets,
+                sessionCatalog: _sessionCatalog, switchSession: _switchSession);
             _server = server;
             try { return await server.StartAsync(port, cancellationToken).ConfigureAwait(false); }
             catch
@@ -158,6 +162,10 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
 
     void IRemoteControlService.Attach(IChatSession session, string sessionTitle) =>
         Attach(session, sessionTitle);
+    void IRemoteControlService.ConfigureSessionDirectory(
+        Func<RemoteSessionCatalog> catalog,
+        Func<string, CancellationToken, Task<RemoteCommandResult>> switchSession) =>
+        ConfigureSessionDirectory(catalog, switchSession);
     public void LoadHistory(System.Collections.Generic.IReadOnlyList<ChatMessage> messages) =>
         _adapter?.LoadHistory(messages);
 
