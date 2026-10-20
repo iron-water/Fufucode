@@ -25,9 +25,12 @@ public partial class MainWindow
     internal Task SwitchSessionForOverviewTestingAsync(string id) => SwitchSessionAsync(id);
     private DesktopMetadataStore? _mockOrganizationStore;
     private bool _overviewRefreshPending;
-    private SessionOrganization Organization() => new(_host?.Manager.Metadata ??
+    /// <summary>真实会话用宿主元数据；mock 用一次性临时库，保证归档页也有一致的空态。</summary>
+    private DesktopMetadataStore MetadataOrMock() => _host?.Manager.Metadata ??
         (_mockOrganizationStore ??= new(new AppDataLayout(Path.Combine(Path.GetTempPath(), "Fufucode",
-            "organization-demo-" + Guid.NewGuid().ToString("N"))))));
+            "organization-demo-" + Guid.NewGuid().ToString("N")))));
+
+    private SessionOrganization Organization() => new(MetadataOrMock());
 
     internal void RenderOverview()
     {
@@ -65,13 +68,15 @@ public partial class MainWindow
             }
             RefreshSessionList(); return Task.CompletedTask;
         }, _host is not null));
-        menu.Items.Add(OverviewMenu("归档聊天", ShowArchivesAsync, _host is not null));
+        menu.Items.Add(OverviewMenu("管理已归档…", ShowArchivesAsync, _host is not null));
         options.ContextMenu = menu;
         options.Click += (_, _) => menu.Open(options);
         Grid.SetColumn(options, 2); toolbar.Children.Add(options);
         _overview.Toolbar.Children.Add(toolbar);
+        var metadataForArchive = MetadataOrMock();
+        var archivedProjects = ProjectArchive.LoadSet(metadataForArchive);
         var all = OverviewSessions().Where(s => s.Id == CurrentSessionId ||
-            !SessionPresentation.Load(_host!.Manager.Metadata, s.Id).Archived).ToArray();
+            !SessionArchive.IsArchived(metadataForArchive, s, archivedProjects)).ToArray();
         if (state.ActivityView)
         {
             OverviewHeading("优先级");
@@ -124,7 +129,14 @@ public partial class MainWindow
             }
     }
 
-    private IReadOnlyList<ProjectRecord> OverviewProjects() => _host?.Manager.Metadata.ListProjects() ?? [];
+    private IReadOnlyList<ProjectRecord> OverviewProjects()
+    {
+        var metadata = MetadataOrMock();
+        var currentProjectId = _host?.Current.Project.Id;
+        return metadata.ListProjects()
+            .Where(project => project.Id == currentProjectId || !ProjectArchive.IsArchived(metadata, project.Id))
+            .ToArray();
+    }
     private IEnumerable<SessionRecord> OverviewSessions() => OverviewProjects()
         .SelectMany(project => _host!.Manager.Metadata.ListSessions(project.Id));
     private TextBlock OverviewHeading(string title, double indent = 0)
@@ -191,6 +203,7 @@ public partial class MainWindow
         }));
         menu.Items.Add(OverviewMenu("编辑项目", () => EditOverviewProjectAsync(project)));
         menu.Items.Add(sections);
+        menu.Items.Add(OverviewMenu("归档项目", () => ArchiveOverviewProjectAsync(project, settings)));
         menu.Items.Add(OverviewMenu("在资源管理器中打开", () => { OpenExternal(settings.Folder); return Task.CompletedTask; }));
         row.ContextMenu = menu; _overview.Body.Children.Add(row);
         foreach (var session in sessions.Where(s => organization.Placement(s.Id).ProjectId == project.Id)
@@ -276,7 +289,31 @@ public partial class MainWindow
             await ArchiveCurrentAsync();
         }
         else SetOverviewPresentation(session.Id, p => p with { Archived = true });
+        _archivePage?.Refresh();
         RenderOverview();
+    }
+
+    /// <summary>
+    /// 归档整个项目：只写显示状态，不动目录与会话。若归档的是当前项目，
+    /// 优先切到另一个仍存在且未归档的最近项目；没有则保留当前会话并提示。
+    /// </summary>
+    private async Task ArchiveOverviewProjectAsync(ProjectRecord project, SessionProjectOptions settings)
+    {
+        if (_host is null) return;
+        var metadata = _host.Manager.Metadata;
+        var isCurrent = RealSessionHost.PathEquals(_host.ProjectPath, settings.Folder);
+        if (isCurrent && IdleReal() is { } reason) throw new InvalidOperationException(reason);
+        ProjectArchive.SetArchived(metadata, project.Id, true);
+        if (isCurrent)
+        {
+            var next = ProjectPreferences.LoadRecent(metadata)
+                .FirstOrDefault(path => !RealSessionHost.PathEquals(path, settings.Folder) &&
+                    Directory.Exists(path) && !ProjectArchive.IsArchivedPath(metadata, path));
+            if (next is not null) await SwitchProjectAsync(next);
+            else _vm?.Timeline.AddNotification("当前项目已归档；关闭应用后不会再自动打开。可在 设置 › 已归档 恢复。");
+        }
+        _archivePage?.Refresh();
+        RefreshSessionList();
     }
     private async Task EditSectionAsync(SessionSection? section)
     {
@@ -289,13 +326,23 @@ public partial class MainWindow
     private async Task<string?> OverviewNameDialogAsync(string title, string value)
     {
         var input = new TextBox { Text = value, MaxLength = 120 };
-        var save = new Button { Content = "保存", IsDefault = true, Classes = { "accent" } };
-        var cancel = new Button { Content = "取消", IsCancel = true };
-        var dialog = new Window { Title = title, Width = 400, SizeToContent = SizeToContent.Height,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel { Margin = new Thickness(20), Spacing = 12, Children = { input,
-                new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-                    Spacing = 8, Children = { cancel, save } } } } };
+        var save = new Button { Content = "保存", IsDefault = true, Classes = { "accent" }, MinWidth = 88 };
+        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 88 };
+        var dialog = Views.AppDialog.Create(title, 440);
+        var body = new StackPanel
+        {
+            Spacing = 12,
+            Children = { Views.AppDialog.Field("分区名称", input, "分区用于在会话管理中归类项目与会话。") },
+        };
+        var root = new Grid { RowDefinitions = new("Auto,Auto,Auto") };
+        root.Children.Add(Views.AppDialog.Header("Icon.AppsList", title, "给会话与项目一个固定归类。"));
+        var content = Views.AppDialog.Body(Views.AppDialog.Card(body));
+        Grid.SetRow(content, 1);
+        root.Children.Add(content);
+        var footer = Views.AppDialog.Footer(cancel, save);
+        Grid.SetRow(footer, 2);
+        root.Children.Add(footer);
+        dialog.Content = root;
         save.Click += (_, _) => { if (!string.IsNullOrWhiteSpace(input.Text)) dialog.Close(input.Text.Trim()); };
         cancel.Click += (_, _) => dialog.Close(null);
         dialog.Opened += (_, _) => { input.Focus(); input.SelectAll(); };
@@ -312,21 +359,47 @@ public partial class MainWindow
             var selected = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions { Title = "项目文件夹" });
             if (selected.Count > 0 && selected[0].TryGetLocalPath() is { } path) folder.Text = path;
         });
-        var folderRow = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 6, Children = { folder, pick } };
+        var folderRow = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 8, Children = { folder, pick } };
         Grid.SetColumn(pick, 1);
-        var error = new TextBlock { TextWrapping = TextWrapping.Wrap };
-        var save = new Button { Content = "保存", IsDefault = true, Classes = { "accent" } };
-        var cancel = new Button { Content = "取消", IsCancel = true };
-        var dialog = new Window { Title = "编辑项目", Width = 520, SizeToContent = SizeToContent.Height,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel { Margin = new Thickness(20), Spacing = 10, Children = {
-                new TextBlock { Text = "名称" }, name, new TextBlock { Text = "新会话文件夹" }, folderRow, error,
-                new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right,
-                    Spacing = 8, Children = { cancel, save } } } } };
+        var error = Views.AppDialog.ErrorText();
+        var save = new Button { Content = "保存", IsDefault = true, Classes = { "accent" }, MinWidth = 88 };
+        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 88 };
+        var dialog = Views.AppDialog.Create("编辑项目", 560);
+        var body = new StackPanel
+        {
+            Spacing = 14,
+            Children =
+            {
+                Views.AppDialog.Field("名称", name, "仅影响应用内列表显示。"),
+                Views.AppDialog.Field("新会话文件夹", folderRow,
+                    "只影响之后新建的会话；当前会话的工作目录保持不变。"),
+                error,
+            },
+        };
+        var root = new Grid { RowDefinitions = new("Auto,Auto,Auto") };
+        root.Children.Add(Views.AppDialog.Header("Icon.Folder", "编辑项目",
+            "调整项目在会话管理中的显示方式。"));
+        var content = Views.AppDialog.Body(Views.AppDialog.Card(body));
+        Grid.SetRow(content, 1);
+        root.Children.Add(content);
+        var footer = Views.AppDialog.Footer(cancel, save);
+        Grid.SetRow(footer, 2);
+        root.Children.Add(footer);
+        dialog.Content = root;
+        dialog.Opened += (_, _) => { name.Focus(); name.SelectAll(); };
         save.Click += (_, _) =>
         {
-            try { organization.EditProject(project, name.Text ?? "", folder.Text ?? "", settings.SectionId); dialog.Close(); RenderOverview(); }
-            catch (Exception ex) { error.Text = ex.Message; }
+            try
+            {
+                organization.EditProject(project, name.Text ?? "", folder.Text ?? "", settings.SectionId);
+                dialog.Close();
+                RenderOverview();
+            }
+            catch (Exception ex)
+            {
+                error.Text = ex.Message;
+                error.IsVisible = true;
+            }
         };
         cancel.Click += (_, _) => dialog.Close();
         await Fufucode.App.Views.SkinDialog.ShowAsync(dialog, this);

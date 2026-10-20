@@ -188,6 +188,19 @@
 
             <!-- ═══ 插件市场 → 分类（第二层） ═══ -->
             <StackPanel IsVisible="{Binding ShowMarketplaceGroup}" Spacing="0">
+              <!-- 默认 Agent 内核：新建聊天直接使用这里的值，不再弹出选择窗。 -->
+              <Border Classes="settingsPanel" IsVisible="{Binding ShowBackendCard}" Margin="0,0,0,8">
+                <StackPanel Spacing="8">
+                  <TextBlock Classes="bodyStrong" Text="默认 Agent 内核"/>
+                  <TextBlock Classes="caption" Text="{Binding BackendStatusText}" TextWrapping="Wrap"/>
+                  <ComboBox HorizontalAlignment="Stretch" MinWidth="220"
+                            ItemsSource="{Binding BackendEngineChoices}"
+                            SelectedIndex="{Binding SelectedBackendIndex}"
+                            ToolTip.Tip="新建聊天使用的默认核心。已有会话保持创建时的后端。"/>
+                  <TextBlock Classes="meta" TextWrapping="Wrap"
+                             Text="新建聊天直接使用此内核；六类后端都会列出，插件未安装或运行时缺失时新建会回退到 FUMO 并提示原因。"/>
+                </StackPanel>
+              </Border>
               <ItemsControl ItemsSource="{Binding MarketplaceGroupPlugins}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="vm:PluginItemViewModel">
@@ -233,25 +246,16 @@
 
             <ContentControl IsVisible="{Binding ShowShortcuts}" Content="{Binding ShortcutsContent}"/>
             <ContentControl IsVisible="{Binding ShowStorage}" Content="{Binding StorageContent}"/>
+            <ContentControl IsVisible="{Binding ShowArchive}" Content="{Binding ArchiveContent}"/>
+            <StackPanel IsVisible="{Binding ShowArchiveEmpty}" Spacing="8" Margin="12,20">
+              <TextBlock Classes="subtitle" Text="归档管理尚未就绪"/>
+              <TextBlock Classes="caption" Text="连接真实会话后可在此查看和管理已归档的项目与会话。"
+                         TextWrapping="Wrap"/>
+            </StackPanel>
             <StackPanel IsVisible="{Binding ShowModels}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="模型"/>
               <Border Classes="settingsGroup">
                 <StackPanel>
-                                    <!-- 默认 Agent 内核（Pi / OMP / Codex / DSH） -->
-                  <Border Classes="settingsRow" IsVisible="{Binding ShowBackendCard}">
-                    <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Brain}" Width="18" Height="18"
-                                VerticalAlignment="Center"/>
-                      <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                        <TextBlock Classes="settingsRowTitle" Text="默认 Agent 内核"/>
-                        <TextBlock Classes="settingsRowDesc" Text="{Binding BackendStatusText}" TextWrapping="Wrap"/>
-                      </StackPanel>
-                      <ComboBox Grid.Column="2" MinWidth="200" VerticalAlignment="Center"
-                                ItemsSource="{Binding BackendEngineChoices}"
-                                SelectedIndex="{Binding SelectedBackendIndex}"
-                                ToolTip.Tip="选择新建会话时的默认核心。会话内可随时在标题栏一键无损切换。"/>
-                    </Grid>
-                  </Border>
                   <Border Classes="settingsRow" IsVisible="{Binding ShowModelRow}">
                     <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
                       <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Sparkle}" Width="18" Height="18"

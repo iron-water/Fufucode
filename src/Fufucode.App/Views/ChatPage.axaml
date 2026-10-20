@@ -48,9 +48,9 @@
         </Grid>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- 当前会话后端徽标。切换后端必须新开会话（会话创建后固定后端），
-               因此这里只读显示；新建时由“新聊天”对话框选择。 -->
+               因此这里只读显示；新建聊天使用“设置 › 插件市场 › 后端内核”中的默认值。 -->
           <Border Classes="subtle" Padding="6,2" VerticalAlignment="Center"
-                  ToolTip.Tip="当前会话后端（新建聊天时可选择）">
+                  ToolTip.Tip="当前会话后端（默认值在 设置 › 插件市场 › 后端内核 修改）">
             <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
               <Border Width="8" Height="8" CornerRadius="4" Background="{Binding CurrentBackendBadgeColor, FallbackValue='#8B5CF6'}"/>
               <TextBlock Text="{Binding CurrentBackendName, FallbackValue='FUMO'}" FontSize="11" FontWeight="SemiBold"/>

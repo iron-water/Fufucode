@@ -185,28 +185,22 @@ public partial class MainWindow
     {
         if (_host is null) return;
         var id = _host.Current.Session.Id;
-        var next = _host.Sessions.FirstOrDefault(s => s.Id != id && !SessionPresentation.Load(_host.Manager.Metadata, s.Id).Archived);
+        var archivedProjects = ProjectArchive.LoadSet(_host.Manager.Metadata);
+        var next = _host.Sessions.FirstOrDefault(s => s.Id != id &&
+            !SessionArchive.IsArchived(_host.Manager.Metadata, s, archivedProjects));
         if (next is null) await SwitchSessionAsync(null); else await SwitchSessionAsync(next.Id);
         if (CurrentSessionId == id) throw new InvalidOperationException("当前会话未切换，不会归档正在使用的会话。");
         SessionPresentation.Save(_host.Manager.Metadata, id, SessionPresentation.Load(_host.Manager.Metadata, id) with { Archived = true });
         _vm?.Sidebar.UpdateSessions(BuildSessionItems(_host), _host.Current.Session.Id, _host.Current.Session.Name ?? "");
         RenderOverview();
     }
-    private Task ShowArchivesAsync()
+    /// <summary>“已归档”入口：打开设置中的归档管理页（项目与会话统一管理）。</summary>
+    private async Task ShowArchivesAsync()
     {
-        var panel = new StackPanel { Spacing = 8 };
-        foreach (var session in _host!.Sessions.Where(s => SessionPresentation.Load(_host.Manager.Metadata, s.Id).Archived))
-        {
-            var button = new Button { Content = session.Name ?? session.Id, HorizontalAlignment = HorizontalAlignment.Stretch };
-            button.Click += async (_, _) =>
-            {
-                SessionPresentation.Save(_host.Manager.Metadata, session.Id, SessionPresentation.Load(_host.Manager.Metadata, session.Id) with { Archived = false });
-                await SwitchSessionAsync(session.Id);
-                if (TopLevel.GetTopLevel(button) is Window dialog && dialog != this) dialog.Close();
-            };
-            panel.Children.Add(button);
-        }
-        return ShowPanelAsync("已归档会话", panel);
+        if (_vm is null) return;
+        _vm.Settings.SelectCategory("archived");
+        await NavigateWorkspaceAsync(AppPage.Settings);
+        _archivePage?.Refresh();
     }
     private void RecordNavigation()
     {
@@ -234,7 +228,9 @@ public partial class MainWindow
     private async Task AdjacentSessionAsync(int direction)
     {
         if (_host is null) return;
-        var sessions = _host.Sessions.Where(s => !SessionPresentation.Load(_host.Manager.Metadata, s.Id).Archived).ToArray();
+        var archivedProjects = ProjectArchive.LoadSet(_host.Manager.Metadata);
+        var sessions = _host.Sessions.Where(s =>
+            !SessionArchive.IsArchived(_host.Manager.Metadata, s, archivedProjects)).ToArray();
         var current = Array.FindIndex(sessions, s => s.Id == CurrentSessionId);
         var index = current + direction;
         if (index >= 0 && index < sessions.Length) await SwitchSessionAsync(sessions[index].Id);
