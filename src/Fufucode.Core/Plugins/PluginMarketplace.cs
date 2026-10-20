@@ -152,6 +152,14 @@ public static class PluginMarketplaceCatalog
             "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],
             DefaultInstalled: false, DefaultEnabled: false),
 
+        new("performance.monitor", "性能监控", PluginCategory.ToolExtension,
+            "逐回合追踪 harness 每一次模型请求、工具与命令执行、审批等待、上下文压缩、会话持久化与界面线程卡顿，" +
+            "提供瀑布图、慢调用、异常规则与脱敏诊断包导出。未启用时埋点开销仅为一次空判断。",
+            "1.0.0", "Fufucode Team",
+            ["读取进程 CPU/内存/线程/GC 采样", "写入应用数据目录下的性能记录（默认脱敏）", "导出诊断包到数据目录"],
+            // 默认安装并启用（用户 2026-10-20 明确）：可在插件市场随时停用或卸载。
+            DefaultInstalled: true, DefaultEnabled: true),
+
         // ── 后台服务插件 ──
         new("service.remote-control", "手机远程控制服务", PluginCategory.Service,
             "提供局域网配对与远程会话管理服务，支持 WorkBuddy 手机客户端通过动态配对码连接操控桌面 Agent。",
@@ -288,6 +296,15 @@ public sealed class PluginStateStore
     /// 获取指定插件的生效状态。已安装但没有真实载荷的条目一律报告为未安装，
     /// 避免旧 plugins.json 或目录默认值制造“已安装但不可用”的假状态。
     /// </summary>
+    /// <summary>
+    /// 读取磁盘上“显式保存过”的状态；没有条目时返回 false。
+    /// 用于区分“从未安装（走目录默认值）”与“用户明确卸载”，随包默认插件据此决定是否重新部署载荷。
+    /// </summary>
+    public bool TryGetStoredState(string pluginId, out PluginState state)
+    {
+        lock (_gate) return _states.TryGetValue(pluginId, out state!);
+    }
+
     public PluginState GetState(string pluginId)
     {
         lock (_gate)

@@ -47,8 +47,12 @@ public static class NativeSessionFactory
                             ?? baseDispatcher as Plugins.IPluginToolCatalog;
 
         // 技能是轻量的 Markdown 资源：发现失败不影响会话；skill 工具统一由注册表处理。
+        Diagnostics.StartupProbe.Mark("fumo.skills.begin", "discover skills");
         skills ??= SkillRegistry.Discover(workspaceRoot);
+        Diagnostics.StartupProbe.Mark("fumo.skills.end", $"{skills.All.Count} skills" );
+        Diagnostics.StartupProbe.Mark("fumo.mcp.begin", "load MCP manager");
         mcp ??= McpManager.Load(workspaceRoot);
+        Diagnostics.StartupProbe.Mark("fumo.mcp.end", $"{mcp.Servers.Count} MCP servers");
         // 能力链：插件/内置 → Skill → MCP。子代理可按定义白名单使用这些能力。
         IPureToolDispatcher capabilities = new SkillAwareDispatcher(baseDispatcher, skills);
         capabilities = new McpGatewayDispatcher(capabilities, mcp);

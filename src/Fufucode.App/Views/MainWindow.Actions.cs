@@ -28,8 +28,6 @@ public partial class MainWindow
     private int _navigationIndex = -1;
     private bool _historyMoving;
     private double _zoom = 1;
-    private Stopwatch? _performanceWatch;
-    private readonly List<(DateTimeOffset Time, long Memory, TimeSpan Cpu)> _performanceSamples = new();
     internal string? CurrentSessionId => _host?.Current.Session.Id;
     private string? Ready() => _vm is null ? "会话尚未就绪" : null;
     private string? IdleReal() => _host is null ? "Mock 没有持久 Pi 会话" : _switching || _vm?.Input.IsTurnActive == true ? "请等待当前回合结束" : null;
@@ -91,13 +89,10 @@ public partial class MainWindow
         Action("project.open", "打开文件夹", "项目", OpenProjectAsync);
         Action("project.openWith", "打开方式", "项目", ShowOpenWithAsync);
         Action("session.foreground", "前台运行", "会话", () => { Activate(); return NavigateWorkspaceAsync(AppPage.Chat); }, Ready);
-        Action("trace", "查看调用轨迹", "诊断", ShowTraceAsync);
         Action("diagnostics.export", "导出完整诊断包", "诊断", ExportDiagnosticsAsync);
         Action("help.shortcuts", "键盘快捷键", "帮助", () => ShowTextAsync("键盘快捷键", string.Join("\n", _actions.Actions.Where(a => a.Shortcut.Length > 0).Select(a => a.Shortcut + "    " + a.Title))));
         Action("help.troubleshoot", "故障排除", "帮助", ShowDiagnosticsAsync);
         Action("help.status", "系统状态", "帮助", ShowDiagnosticsAsync);
-        Action("help.tasks", "运行状态与资源", "帮助", ShowTaskManagerAsync);
-        Action("help.performance", "开始/结束性能跟踪", "帮助", TogglePerformanceAsync);
         Action("help.update", "检查更新", "帮助", CheckUpdatesAsync);
         Action("help.about", "关于 Fufucode", "帮助", ShowAboutAsync);
         Action("auth.manage", "模型认证管理", "设置", ShowAuthenticationAsync, Ready);
@@ -375,10 +370,6 @@ public partial class MainWindow
         return ShowPanelAsync("关于 Fufucode", panel);
     }
     private string DiagnosticSummary() => $"应用：{typeof(MainWindow).Assembly.GetName().Version}\n.NET：{Environment.Version}\n系统：{Environment.OSVersion}\n{_vm?.StatusBar.ConnectionText}\n{_vm?.StatusBar.ActivityText}\n审批：{_vm?.StatusBar.ApprovalText}\n数据：{_options.CreateAppDataLayout().Root}\n日志：{_host?.Current.DiagnosticFilePath ?? "无"}\nUI 配置：{_customization.ScopePath}\nUI 诊断：{_customization.Status}";
-    private async Task ShowTraceAsync()
-    {
-        await ShowTracePanelAsync();
-    }
     private async Task ExportDiagnosticsAsync()
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "导出诊断包", SuggestedFileName = "fufucode-diagnostics.zip", DefaultExtension = "zip" });
@@ -388,24 +379,6 @@ public partial class MainWindow
             typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown");
         await ShowTextAsync("诊断包已导出", $"已导出 {count} 条脱敏调用记录。未包含凭据、环境变量值、会话正文或原始配置。");
     }
-    private Task ShowTaskManagerAsync()
-    {
-        using var process = Process.GetCurrentProcess();
-        return ShowTextAsync("运行状态与资源", $"Fufucode PID {process.Id}\n内存 {process.WorkingSet64 / 1024 / 1024} MB\nCPU {process.TotalProcessorTime}\n终端插件 {(_terminalPage is null ? "未安装或未启用" : _terminalPage.HasTabs ? "已打开" : "已就绪")}\n当前会话：{CurrentSessionId ?? "Mock"}\n{_vm?.StatusBar.ActivityText}");
-    }
-    private Task TogglePerformanceAsync()
-    {
-        if (_performanceWatch is null)
-        {
-            _performanceSamples.Clear(); _performanceWatch = Stopwatch.StartNew();
-            _statusTimer.Tick += SamplePerformance; return Task.CompletedTask;
-        }
-        _statusTimer.Tick -= SamplePerformance; _performanceWatch.Stop();
-        var duration = _performanceWatch.Elapsed; _performanceWatch = null;
-        return ShowTextAsync("性能跟踪", "时长 " + duration + "\n" + string.Join("\n", _performanceSamples.Select(s => $"{s.Time:O}  内存 {s.Memory / 1024 / 1024} MB  CPU {s.Cpu}")));
-    }
-    private void SamplePerformance(object? sender, EventArgs e)
-    { using var process = Process.GetCurrentProcess(); if (_performanceSamples.Count < 3600) _performanceSamples.Add((DateTimeOffset.UtcNow, process.WorkingSet64, process.TotalProcessorTime)); }
     private async Task CheckUpdatesAsync()
     {
         var layout = _options.CreateAppDataLayout();

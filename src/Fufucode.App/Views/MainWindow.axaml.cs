@@ -5,6 +5,8 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Animation;
+using Avalonia.Animation.Easings;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -71,21 +73,31 @@ public partial class MainWindow : Window
 
     public MainWindow(AppOptions options)
     {
+        Program.Startup?.Mark("window.ctor.begin", options.Mode.ToString());
         _options = options;
         if (Program.SelfTestMode)
             ConfirmDiscardSettingsForTesting = _ => Task.FromResult(true);
         InitializeComponent();
+        Core.Diagnostics.StartupProbe.Mark("window.xaml", "InitializeComponent done");
         InitializeWorkspaceShell();
+        Core.Diagnostics.StartupProbe.Mark("window.workspace-shell", "dock/workbench pages registered");
         InitializeCaption();
         InitializeGlobalWorkspace();
+        Core.Diagnostics.StartupProbe.Mark("window.global", "caption and global workspace ready");
         InitializeCustomization();
+        Core.Diagnostics.StartupProbe.Mark("window.customization", "customization/skin initialized");
         // BRW-1：在 _customization 就绪后创建浏览器设置，便于一次性迁移旧偏好。
         InitializeBrowserSettings();
+        Core.Diagnostics.StartupProbe.Mark("window.browser-settings", "browser settings initialized");
         InitializeShortcuts();
+        Program.Startup?.Mark("window.shell", "workspace shell, caption and global workspace ready");
         InitializePluginPages();
+        Core.Diagnostics.StartupProbe.Mark("window.plugin-pages", "plugin pages synchronized");
         InitializeStorage();
+        Core.Diagnostics.StartupProbe.Mark("window.storage", "storage page initialized");
         InitializeLocalPlugins();
         // SEEP-1：Seep 逆向工作台插件的组合根接线（未安装时不启动任何子进程）。
+        Program.Startup?.Mark("window.plugins", "plugin pages and reverse lab wired");
         InitializeReverseLabPlugin();
 
         // 把已安装插件的工具与人格接入 FUMO 原生会话。延迟读取，安装/卸载后立即生效。
@@ -117,6 +129,7 @@ public partial class MainWindow : Window
             ShowStartup("正在启动会话…", inProgress: true);
         }
 
+        Program.Startup?.Mark("window.ctor.end", "MainWindow constructed");
         Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
@@ -135,12 +148,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        Core.Diagnostics.StartupProbe.Mark("attach.vm.begin", "MainViewModel construction");
         var vm = new MainViewModel(
             session,
             new AvaloniaClipboardService(),
             new DispatcherRefreshScheduler(TimeSpan.FromMilliseconds(33)),
             sessions,
             callbacks);
+        Core.Diagnostics.StartupProbe.Mark("attach.vm.ctor", "MainViewModel constructed");
         // Set before binding PageHost; session rebuild must not briefly mount a different page.
         vm.CurrentPage = initialPage;
         // P2-17：steer 旁路——真实会话由 AttachRealSession 显式注入；mock 会话自身实现 IPromptSteering。
@@ -174,16 +189,25 @@ public partial class MainWindow : Window
         }
 
         vm.Extensions.SetStartupFailure(_lastStartupFailure);
+        Core.Diagnostics.StartupProbe.Mark("attach.settings", "settings context begin");
         AttachSettingsContext(vm);
+        Core.Diagnostics.StartupProbe.Mark("attach.settings.done", "settings context ready");
         WireSettingsReturn(vm);
+        Core.Diagnostics.StartupProbe.Mark("attach.settings-return", "settings return wiring");
         DataContext = vm;
+        Core.Diagnostics.StartupProbe.Mark("attach.datacontext", "window DataContext set");
+        Core.Diagnostics.StartupProbe.Mark("attach.workspace.begin", "workspace context");
         AttachWorkspaceContext(vm);
+        Core.Diagnostics.StartupProbe.Mark("attach.workspace.done", "workspace context ready");
         AttachGlobalContext(vm);
+        Core.Diagnostics.StartupProbe.Mark("attach.global.done", "global context ready");
         InitializeSessionManagement();
+        Core.Diagnostics.StartupProbe.Mark("attach.session-mgmt", "session management ready");
         // 常驻页面：ChatPage 继承窗口 DataContext（MainViewModel），扩展/设置页绑定自己的 VM。
         _extensionsPage.DataContext = vm.Extensions;
         _settingsPage.DataContext = vm.Settings;
         UpdatePageHost();
+        Core.Diagnostics.StartupProbe.Mark("attach.page-host", "page host updated");
 
         // 每个新 VM 只允许一条提交接线；旧 VM 的订阅随其输入对象一起丢弃。
         vm.Input.SubmissionStarting += _notifications.BeginSubmission;
@@ -342,10 +366,13 @@ public partial class MainWindow : Window
                 }
             }
 
+            Program.Startup?.Mark("session.bootstrap", "real session bootstrap begins");
             await BootstrapRealAsync();
             return;
         }
 
+        Program.Startup?.Mark("session.ready", "mock session ready");
+        Program.Startup?.FinishAfterRender();
         if (DataContext is MainViewModel vm)
         {
             await vm.InitializeCommand.ExecuteAsync(null);
@@ -364,12 +391,14 @@ public partial class MainWindow : Window
         {
             StartupRetryButton.IsVisible = false;
             ShowStartup("正在启动会话…", inProgress: true);
+            Core.Diagnostics.StartupProbe.Mark("session.open.begin", "RealSessionHost.OpenAsync");
             var host = await ProjectTrustFlow.RunAsync(
                 () => OpenHostForTesting is { } testOpen
                     ? testOpen(_bootstrapCts.Token)
                     : RealSessionHost.OpenAsync(_options, _bootstrapCts.Token),
                 AskTrustAsync,
                 (status, decision) => RealSessionHost.SaveTrustDecision(_options, status, decision));
+            Core.Diagnostics.StartupProbe.Mark("session.open.end", "RealSessionHost.OpenAsync returned");
             if (_closed)
             {
                 await host.DisposeAsync();
@@ -380,9 +409,11 @@ public partial class MainWindow : Window
             _dialogHost = new ExtensionUiDialogHost(this);
             AttachRealSession();
             ProjectPreferences.RecordOpened(host.Manager.Metadata, host.ProjectPath);
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             StartupPickProject.IsVisible = false;
             ScrollToEnd();
+            Core.Diagnostics.StartupProbe.Mark("session.ready", "startup overlay hidden, timeline scrolled");
+            Program.Startup?.FinishAfterRender();
         }
         catch (OperationCanceledException)
         {
@@ -521,19 +552,19 @@ public partial class MainWindow : Window
             await previous.DisposeAsync();
             AttachRealSession();
             ProjectPreferences.RecordOpened(_host.Manager.Metadata, _host.ProjectPath);
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             StartupPickProject.IsVisible = false;
             ScrollToEnd();
         }
         catch (ProjectTrustDeclinedException)
         {
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             (DataContext as MainViewModel)?.Timeline.AddNotification(
                 "未切换项目：未作出信任决定，已保留当前会话。");
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             (DataContext as MainViewModel)?.Timeline.AddNotification(
                 $"未切换项目：{ex.GetBaseException().Message}");
         }
@@ -624,9 +655,13 @@ public partial class MainWindow : Window
 
         AttachSession(host.Chat, BuildSessionItems(host), callbacks,
             new RealPromptSteering(host), page);
-        RenderOverview();
+        Core.Diagnostics.StartupProbe.Mark("session.viewmodel", "main view model attached");
+        // 概览不是进入会话的必要内容：放到空闲优先级，等首帧与布局队列排空后再计算。
+        Dispatcher.UIThread.Post(RenderOverview, DispatcherPriority.ApplicationIdle);
+        Core.Diagnostics.StartupProbe.Mark("session.overview", "overview queued");
         var vm = (MainViewModel)DataContext!;
         vm.Timeline.LoadHistory(host.CurrentTranscript());
+        Core.Diagnostics.StartupProbe.Mark("session.history", "timeline history replayed");
         vm.RemoteHistory = host.CurrentTranscript;
         if (host.Diagnostic is { } diagnostic)
         {
@@ -642,6 +677,7 @@ public partial class MainWindow : Window
         vm.Input.DraftText = host.LoadDraft() ?? string.Empty;
         WireDraftPersistence(vm);
 
+        _perfWiring?.AttachSession(host.Chat);
         _dialogHost!.Attach(host.Chat);
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Attach(host.Chat, host.ProjectPath);
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.LoadHistory(host.CurrentTranscript());
@@ -676,6 +712,7 @@ public partial class MainWindow : Window
             manage: manage);
         _localPluginViewModel.NotifyHostChanged();
         _ = _localPluginViewModel.RefreshHostAsync();
+        Core.Diagnostics.StartupProbe.Mark("session.attach.end", "dialogs, extensions and plugins wired");
     }
 
     /// <summary>“添加扩展…”文件夹选择（Pi 目录入口：index.ts/index.js 或 package.json pi.extensions）。</summary>
@@ -736,12 +773,12 @@ public partial class MainWindow : Window
                 // 已回滚到旧启用列表：会话恢复可用，隐藏遮罩，把失败明细还给 VM 行展示。
                 // 旧Chat已在安全重启中释放；必须重新接恢复后的真实连接，不能留指向已退出进程的VM。
                 if (ReferenceEquals(target, _host) && target.HasLiveSession) AttachRealSession(preservePage: true);
-                StartupOverlay.IsVisible = false;
+                HideStartupOverlay();
                 return failure;
             }
 
             AttachRealSession(preservePage: true);
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             ScrollToEnd();
             _startupRetry = null;
             return null;
@@ -751,7 +788,7 @@ public partial class MainWindow : Window
             if (target.HasLiveSession)
             {
                 // 信任预检在释放前抛出：旧会话仍然存活，仅提示并保留 pending。
-                StartupOverlay.IsVisible = false;
+                HideStartupOverlay();
                 if (DataContext is MainViewModel declined)
                 {
                     declined.Timeline.AddNotification("未作出信任决定，扩展变更未应用。");
@@ -773,7 +810,7 @@ public partial class MainWindow : Window
                 if (target.HasLiveSession)
                 {
                     AttachRealSession(preservePage: true);
-                    StartupOverlay.IsVisible = false;
+                    HideStartupOverlay();
                 }
                 else
                 {
@@ -791,7 +828,7 @@ public partial class MainWindow : Window
             if (target.HasLiveSession)
             {
                 // 未走到释放阶段的失败：会话仍可用，不盖遮罩。
-                StartupOverlay.IsVisible = false;
+                HideStartupOverlay();
             }
             else
             {
@@ -865,7 +902,7 @@ public partial class MainWindow : Window
                 AttachRealSession();
             }
 
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             ScrollToEnd();
             _startupRetry = null;
         }
@@ -987,13 +1024,13 @@ public partial class MainWindow : Window
             var presentation = SessionPresentation.Load(_host.Manager.Metadata, _host.Current.Session.Id);
             if (presentation.Unread) SessionPresentation.Save(_host.Manager.Metadata, _host.Current.Session.Id, presentation with { Unread = false });
             AttachRealSession();
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             ScrollToEnd();
         }
         catch (ProjectTrustDeclinedException)
         {
             // 信任决定被放弃：旧会话保持可用（RealSessionHost 先开后放），仅提示。
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             if (DataContext is MainViewModel declined)
             {
                 declined.Timeline.AddNotification("未作出信任决定，已保留当前会话。");
@@ -1002,7 +1039,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             // 切换失败：旧会话保持可用（RealSessionHost 先开后放），如实报告。
-            StartupOverlay.IsVisible = false;
+            HideStartupOverlay();
             if (DataContext is MainViewModel vm)
             {
                 vm.Timeline.AddNotification($"切换会话失败：{ex.GetBaseException().Message}");
@@ -1102,7 +1139,77 @@ public partial class MainWindow : Window
             StartupOpenOtherButton.IsVisible = false;
         }
 
+        StartupOverlay.Opacity = 1;
         StartupOverlay.IsVisible = true;
+        if (inProgress) StartStartupAnimation(); else StopStartupAnimation();
+    }
+
+    private DispatcherTimer? _startupPulseTimer;
+    private DispatcherTimer? _startupFadeTimer;
+
+    /// <summary>
+    /// 启动动画只做一次 900ms 的透明度呼吸，不跑逐帧布局：开销可忽略，也不会推迟会话打开。
+    /// 系统开启“减少动画”或自测模式下直接静态显示。
+    /// </summary>
+    private void StartStartupAnimation()
+    {
+        if (Program.SelfTestMode || MotionPreference.ReducedMotion) return;
+        if (StartupWordmark.Transitions is not { Count: > 0 })
+            StartupWordmark.Transitions = new Transitions
+            {
+                new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(450), Easing = new CubicEaseOut() },
+            };
+        _startupPulseTimer ??= CreatePulseTimer();
+        StartupWordmark.Opacity = 0.55;
+        _startupPulseTimer.Start();
+    }
+
+    private DispatcherTimer CreatePulseTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
+        timer.Tick += (_, _) =>
+            StartupWordmark.Opacity = StartupWordmark.Opacity > 0.7 ? 0.55 : 1.0;
+        return timer;
+    }
+
+    private void StopStartupAnimation()
+    {
+        _startupPulseTimer?.Stop();
+        StartupWordmark.Opacity = 1;
+    }
+
+    /// <summary>启动页淡出：180ms 透明度过渡期间不阻塞 UI；结束后从可视化树移除。</summary>
+    private void HideStartupOverlay()
+    {
+        if (!StartupOverlay.IsVisible) return;
+        StopStartupAnimation();
+        if (Program.SelfTestMode || MotionPreference.ReducedMotion || _closed)
+        {
+            StartupOverlay.IsVisible = false;
+            StartupOverlay.Opacity = 1;
+            return;
+        }
+        if (StartupOverlay.Transitions is not { Count: > 0 })
+            StartupOverlay.Transitions = new Transitions
+            {
+                new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(180), Easing = new CubicEaseOut() },
+            };
+        StartupOverlay.Opacity = 0;
+        _startupFadeTimer ??= CreateFadeTimer();
+        _startupFadeTimer.Stop();
+        _startupFadeTimer.Start();
+    }
+
+    private DispatcherTimer CreateFadeTimer()
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            StartupOverlay.IsVisible = false;
+            StartupOverlay.Opacity = 1;
+        };
+        return timer;
     }
 
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
@@ -1135,6 +1242,7 @@ public partial class MainWindow : Window
         catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
         { LayoutStateText.Text = "模块状态保存失败：" + error.Message; }
         _pluginPageHost?.Dispose();
+        DisposePerformance();
         foreach (var page in _workbenchPages.Values)
             foreach (var browser in page.Content.GetVisualDescendants().OfType<Views.BrowserViewHost>()) browser.Dispose();
         _workbenchPages.Dispose();

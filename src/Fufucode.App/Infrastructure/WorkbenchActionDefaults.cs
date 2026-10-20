@@ -20,7 +20,7 @@ public static class WorkbenchActionDefaults
         "status.duration" or "status.branch" or "status.project" => new(UiActionPosition.Hidden),
         "session.side" or "session.fork" or "session.schedule" or "session.share" or "window.session" => new(UiActionPosition.HeaderMenu),
         "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
-        "usage" or "trace" or "diagnostics.export" => new(UiActionPosition.MenuRight),
+        "usage" or "perf" or "diagnostics.export" => new(UiActionPosition.MenuRight),
         "layout.reset" or "composer.toggle" or "summary.toggle" => new(UiActionPosition.MenuRight),
         "page.automation" or "page.local-review" => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("speech.") => new(UiActionPosition.MenuRight),
@@ -40,7 +40,7 @@ public static class WorkbenchActionDefaults
         _ when id.StartsWith("edit.") => "编辑",
         "view.fullscreen" or "view.zoomIn" or "view.zoomOut" or "view.zoomReset" or "layout.reset" or "composer.toggle" or "summary.toggle" => "视图与布局",
         _ when id.StartsWith("speech.") => "语音朗读",
-        "page.automation" or "page.local-review" or "trace" or "diagnostics.export" or "help.troubleshoot" or "help.status" or "help.tasks" or "help.performance" => "诊断与系统",
+        "page.automation" or "page.local-review" or "perf" or "diagnostics.export" or "help.troubleshoot" or "help.status" => "诊断与系统",
         "help.shortcuts" or "help.update" or "help.about" or "auth.manage" or "window.new" or "window.session" => "帮助与全局",
         _ => null,
     };
@@ -48,7 +48,7 @@ public static class WorkbenchActionDefaults
     /// <summary>子菜单内的排序：父项（可双击执行的默认项）排第一。</summary>
     public static int SubMenuOrder(string id) => id switch
     {
-        "session.export" or "session.fork" or "copy.id" or "session.search" or "edit.undo" or "view.fullscreen" or "speech.start" or "trace" or "help.about" => 0,
+        "session.export" or "session.fork" or "copy.id" or "session.search" or "edit.undo" or "view.fullscreen" or "speech.start" or "perf" or "help.about" => 0,
         _ => 10,
     };
 
@@ -87,7 +87,7 @@ public static class WorkbenchActionDefaults
         "view.zoomIn" => "ZoomIn", "view.zoomOut" => "ZoomOut", "view.zoomReset" => "ArrowClockwise", "view.fullscreen" => "FullScreenMaximize",
         "session.archives" => "Archive", "session.foreground" => "Open", "project.explorer" => "Folder",
         "help.shortcuts" => "Keyboard",
-        "trace" => "History", "help.tasks" => "AppsList", "help.troubleshoot" => "Wrench", "help.status" => "Info",
+        "perf" => "Speedometer", "help.troubleshoot" => "Wrench", "help.status" => "Info",
         "diagnostics.export" => "ArrowDownload",
         _ when id.StartsWith("status.") => "Info",
         _ when id.StartsWith("copy.") => "Copy", _ => "AppsList"

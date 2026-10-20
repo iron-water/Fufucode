@@ -6,6 +6,8 @@ using System.Threading;
 using System.Threading.Tasks;
 
 
+using Fufucode.Core.Diagnostics;
+
 namespace Fufucode.Core.Backend;
 
 /// <summary>纯 C# 模型客户端契约。</summary>
@@ -151,7 +153,12 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
+        using var turnSpan = PerfTracer.Step("engine.turn", "model", request.ModelId);
+        turnSpan.Tag("historyMessages", request.Messages.Count);
+        turnSpan.Tag("toolSchema", request.ToolDefinitions?.Count ?? request.ToolNames.Count);
+        var waitStarted = System.Diagnostics.Stopwatch.GetTimestamp();
         await _turnGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        turnSpan.Tag("gateWaitMs", (long)System.Diagnostics.Stopwatch.GetElapsedTime(waitStarted).TotalMilliseconds);
 
         // 回合直接推进实时历史：回合闸门保证同一时刻只有一个写者，读取方（GetState）在锁内取副本。
         // 不复制整段历史，也不再在结束时合并副本。
@@ -177,7 +184,12 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
                 }
             }
 
-            await CompactIfNeededAsync(_history, request.ModelId ?? _modelId, cancellationToken).ConfigureAwait(false);
+            using (var compactSpan = PerfTracer.Step("context.compact"))
+            {
+                compactSpan.Tag("historyMessages", _history.Count);
+                await CompactIfNeededAsync(_history, request.ModelId ?? _modelId, cancellationToken).ConfigureAwait(false);
+                compactSpan.Tag("historyAfter", _history.Count);
+            }
 
             cancellationToken.ThrowIfCancellationRequested();
 
@@ -251,6 +263,8 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         string summary;
         try
         {
+            // 压缩摘要是一次隐藏的模型调用：单独计时，避免它拉高“回合变慢”却无从定位。
+            using var summarizeSpan = PerfTracer.Step("model.summarize", "omittedMessages", PerfTracer.Invariant(omitted));
             var response = await _modelClient.GenerateAsync(new PureModelRequest(
                 new[]
                 {
