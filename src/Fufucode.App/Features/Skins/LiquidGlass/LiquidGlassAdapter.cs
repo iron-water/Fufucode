@@ -181,9 +181,10 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             // 玻璃自身无固有色：背景贡献保持全量（模糊+折射），颜色由底层决定。
             surface.BackdropOpacity = 1.0;
             surface.ChromaticAberration = !reducedTransparency;
+            bool isComposer = _state.Host.Name == "ComposerCard" || _state.Host.Classes.Contains("composerCard");
             surface.RefractionAmount = reducedTransparency
                 ? 0.0
-                : (IsCaptionHost(_state.Host) ? 3.5 : 3.0);
+                : (IsCaptionHost(_state.Host) ? 8.0 : (isComposer ? 8.0 : 6.0));
             surface.ProgressiveBlurEnabled =
                 !reducedTransparency && !IsCaptionHost(_state.Host);
             surface.HighlightOpacity = reducedTransparency
@@ -302,10 +303,11 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
         public static bool IsGlassHost(Border host) => host.Name switch
         {
             "CustomCaption" or "SidebarBorder" or "RightPanelBorder" or "TerminalBorder"
-                or "CustomStatusBar" or "NotificationPrompt" => true,
+                or "CustomStatusBar" or "NotificationPrompt" or "ComposerCard" => true,
             _ => host.Classes.Contains("chromeBar")
                  || host.Classes.Contains("dockHost")
                  || host.Classes.Contains("settingsNavHost")
+                 || host.Classes.Contains("composerCard")
                  || host.Classes.Contains("floatingToolbar")
                  || host.Classes.Contains("toast")
                  || host.Classes.Contains("overlayPanel"),
@@ -334,15 +336,15 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             // BlurRadius 用真实 iOS 量级（UIVisualEffect sigma ≈ 20-30）；Vibrancy 克制到 1.4
             // （1.6 过饱和会把底下弱色块放大成脏色晕）；折射带 10/12 + amount 22/30 让侧栏
             // 边缘有可见"凸透镜"弯折；HighlightAngle 115° 对齐 iOS 左上光源。
-            // 参数取自 Apple HIG / WWDC25 光学规范：
-            //   IOR 1.492、有效厚度 8px → 边缘折射位移 ≈ (1-1/1.492)*8 ≈ 2.6px；
-            //   饱和度增益 1.35–1.8（模糊必然降低色彩方差，不补会发灰）；
-            //   顶缘 0.5–1px 纯白镜面（alpha 0.45–0.85）+ 底缘暗遮蔽 0.12–0.20；
-            //   投影 30–60px 大半径、4–10% 超低不透明度。
-            surface.BlurRadius = 32.0;
+            // 参数严格按 Apple HIG / WWDC25 规范 §5.2 双变体体系与光学定律：
+            //   Clear Glass（Caption / ComposerCard）：Blur 14px，Refraction 8.0px，通透清晰；
+            //   Regular Glass（侧栏 / 底栏）：Blur 18px，Refraction 6.0px；
+            //   ComposerCard：CornerRadius 24（悬浮胶囊），阴影 32px，不透明度 0.12。
+            bool isComposer = host.Name == "ComposerCard" || host.Classes.Contains("composerCard");
+            surface.BlurRadius = isCaption ? 18.0 : (isComposer ? 14.0 : 18.0);
             surface.Vibrancy = 1.45;
-            surface.RefractionHeight = 8.0;
-            surface.RefractionAmount = isCaption ? 3.5 : 3.0;
+            surface.RefractionHeight = 10.0;
+            surface.RefractionAmount = isCaption ? 8.0 : (isComposer ? 8.0 : 6.0);
             surface.ChromaticAberration = true;
             surface.DepthEffect = true;
             surface.HighlightEnabled = true;
@@ -350,10 +352,10 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             surface.HighlightOpacity = isCaption ? 0.8 : 0.75;
             surface.HighlightAngle = 90.0;
             surface.HighlightFalloff = 2.2;
-            surface.ShadowEnabled = !isCaption; // caption 不外投影（Vista/iOS 顶栏贴边）
-            surface.ShadowRadius = 40.0;
-            surface.ShadowOpacity = 0.09;
-            surface.CornerRadius = isCaption ? new CornerRadius(0) : new CornerRadius(16);
+            surface.ShadowEnabled = !isCaption;
+            surface.ShadowRadius = isComposer ? 32.0 : 40.0;
+            surface.ShadowOpacity = isComposer ? 0.12 : 0.09;
+            surface.CornerRadius = isCaption ? new CornerRadius(0) : (isComposer ? new CornerRadius(24) : new CornerRadius(16));
 
             // Progressive blur：dock/侧栏顶部向内容渐隐（iOS scroll edge soft 语义）；
             // 修复后的着色器在顶部 15% 柔和淡入，主体保持 100% 满幅度通透玻璃。
