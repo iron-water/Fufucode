@@ -124,7 +124,7 @@ public partial class MainWindow
         Resources["AccentFillColorSecondaryBrush"] = new SolidColorBrush(AccentColor(darkTheme ? "SystemAccentColorLight1" : "SystemAccentColorDark1"));
         Resources["AccentFillColorTertiaryBrush"] = new SolidColorBrush(darkTheme ? accent : AccentColor("SystemAccentColorDark2"));
         Resources["AccentButtonForeground"] = new SolidColorBrush(contrast);
-        Resources["AppUserBubble"] = new SolidColorBrush(accent, darkTheme ? .16 : .12);
+        Resources["AppUserBubble"] = new SolidColorBrush(accent, darkTheme ? .30 : .20);
         Resources["SystemAccentColor"] = accent;
         Resources["AppAccent"] = new SolidColorBrush(fill);
         Resources["AppAccentText"] = new SolidColorBrush(textFill);
