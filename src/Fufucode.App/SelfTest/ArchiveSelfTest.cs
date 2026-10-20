@@ -41,6 +41,8 @@ internal static class ArchiveSelfTest
             Check(ProjectArchive.IsArchived(store, second.Id) && SessionArchive.IsArchived(store, b1) &&
                 ProjectArchive.IsArchivedPath(store, secondPath),
                 "project archive hides its sessions and resolves by path");
+            Check(!ProjectArchive.IsArchivedPath(store, Path.Combine(root, "deleted-project")),
+                "missing recent project path is not archived and does not throw");
 
             SessionRecord? openedSession = null;
             string? openedProject = null;
