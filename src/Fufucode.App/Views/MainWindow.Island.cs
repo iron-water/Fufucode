@@ -42,6 +42,13 @@ public partial class MainWindow
     private Border? _islandLiveBar;
     private TextBlock? _islandPanelTitle;
     private TextBlock? _islandPanelSubtitle;
+    // Popup 树内画刷（Classes 样式失效，RefreshIsland 显式切色用）。
+    private IBrush? _islandBrushAccent;
+    private IBrush? _islandBrushCritical;
+    private IBrush? _islandBrushTextDim;
+    private IBrush? _islandBrushTextSecondary;
+    private IBrush? _islandBrushDivider;
+    private IBrush? _islandBrushSubtle;
 
     /// <summary>当前皮肤是否使用会话岛（仅 Fluent 实现了专属岛视觉）。</summary>
     private bool UseSessionIsland(WorkbenchAppearance settings) =>
@@ -150,28 +157,75 @@ public partial class MainWindow
 
     private Control BuildIslandPanel(IEnumerable<Infrastructure.AppActionDefinition> actions)
     {
+        // Popup 是独立 top-level 视觉树：窗口级 Styles（Border.islandPanel 等 class selector）
+        // 根本不作用在 popup 树内——一切样式必须显式赋值，不能用 Classes 匹配。
+        // 主窗 Resources 里拿实体画刷/圆角/阴影，硬灌给 popup 内控件。
+        var menuSurface = Res<IBrush>("MenuSurfaceBrush") ?? new SolidColorBrush(Color.Parse("#FF2C2C2C"));
+        var cardStroke = Res<IBrush>("AppCardStroke") ?? new SolidColorBrush(Color.Parse("#3DFFFFFF"));
+        var subtleBg = Res<IBrush>("AppSubtleBackground") ?? new SolidColorBrush(Color.Parse("#0DFFFFFF"));
+        var hoverBg = Res<IBrush>("AppHover") ?? new SolidColorBrush(Color.Parse("#1AFFFFFF"));
+        var textPrimary = Res<IBrush>("AppTextPrimary") ?? Brushes.White;
+        var textSecondary = Res<IBrush>("AppTextSecondary") ?? new SolidColorBrush(Color.Parse("#B3FFFFFF"));
+        var textDim = Res<IBrush>("AppTextDim") ?? new SolidColorBrush(Color.Parse("#80FFFFFF"));
+        var accent = Res<IBrush>("AppAccent") ?? new SolidColorBrush(Color.Parse("#FF4C9BE8"));
+        var accentText = Res<IBrush>("AppAccentText") ?? new SolidColorBrush(Color.Parse("#FF4C9BE8"));
+        var dividerSubtle = Res<IBrush>("AppDividerSubtle") ?? new SolidColorBrush(Color.Parse("#14FFFFFF"));
+        var criticalFg = Res<IBrush>("AppCriticalForeground") ?? new SolidColorBrush(Color.Parse("#FFFF99A4"));
+        // 值类型资源用 object 取再 unbox；引用类型走泛型 Res<T>。
+        var flyoutShadow = ResObj("FluentFlyoutShadow") as BoxShadows?;
+        var overlayRadius = ResObj("OverlayCornerRadius") as CornerRadius? ?? new CornerRadius(8);
+        var controlRadius = ResObj("ControlCornerRadius") as CornerRadius? ?? new CornerRadius(4);
+        // 存字段给 RefreshIsland 显式切色。
+        _islandBrushAccent = accent;
+        _islandBrushCritical = criticalFg;
+        _islandBrushTextDim = textDim;
+        _islandBrushTextSecondary = textSecondary;
+        _islandBrushDivider = dividerSubtle;
+        _islandBrushSubtle = subtleBg;
+
         // 头部：subtle 底 + accent 描边的小方块 + 标题 + 副标，右侧实时元信息。
-        var backendTile = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(7), VerticalAlignment = VerticalAlignment.Center };
-        backendTile.Classes.Add("islandBackendTile");
-        var backendIcon = new PathIcon { Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var backendTile = new Border
+        {
+            Width = 30, Height = 30, CornerRadius = new CornerRadius(7),
+            VerticalAlignment = VerticalAlignment.Center,
+            Background = subtleBg,
+            BorderBrush = accent,
+            BorderThickness = new Thickness(1),
+        };
+        var backendIcon = new PathIcon
+        {
+            Width = 15, Height = 15,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = accentText,
+        };
         backendIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.Sparkle"));
         backendTile.Child = backendIcon;
 
-        _islandPanelTitle = new TextBlock { FontSize = 13, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandPanelSubtitle = new TextBlock { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandPanelSubtitle.Classes.Add("meta");
+        _islandPanelTitle = new TextBlock
+        {
+            FontSize = 13, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = textPrimary,
+        };
+        _islandPanelSubtitle = new TextBlock
+        {
+            FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = textDim,
+        };
         var who = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         who.Children.Add(_islandPanelTitle); who.Children.Add(_islandPanelSubtitle);
 
-        _islandLiveMeta = new TextBlock { FontSize = 11, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
-        _islandLiveMeta.Classes.Add("meta");
+        _islandLiveMeta = new TextBlock
+        {
+            FontSize = 11, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = textDim,
+        };
 
         var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 10 };
         header.Children.Add(backendTile);
         Grid.SetColumn(who, 1); header.Children.Add(who);
         Grid.SetColumn(_islandLiveMeta, 2); header.Children.Add(_islandLiveMeta);
 
-        // 磁贴网格：UniformGrid 4 列保证每格等大——Win10 磁贴语义的"整齐矩阵"。
+        // 磁贴网格：UniformGrid 4 列等大矩阵。
         var tiles = new Avalonia.Controls.Primitives.UniformGrid
         {
             Columns = 4,
@@ -179,34 +233,52 @@ public partial class MainWindow
         };
         var preferred = new[] { "session.rename", "session.pin", "session.side", "session.fork",
                                 "session.search", "session.share", "session.archive", "session.schedule" };
-        var byId = actions.Where(a => a.Id.StartsWith("session.", StringComparison.Ordinal))
+        var allActions = actions.ToList();
+        var byId = allActions.Where(a => a.Id.StartsWith("session.", StringComparison.Ordinal))
             .GroupBy(a => a.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var action in preferred.Where(byId.ContainsKey).Select(id => byId[id]))
-            tiles.Children.Add(BuildIslandTile(action));
+            tiles.Children.Add(BuildIslandTile(action, subtleBg, cardStroke, hoverBg, textSecondary, textPrimary, controlRadius));
 
         // 实时活动条：仅在真实活动（运行/失败/有排队/有用量）时出现；空闲整条隐藏。
         _islandLiveDot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center };
-        _islandLiveText = new TextBlock { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandLiveText.Classes.Add("meta");
-        _islandSteerButton = new Button { Content = "插入", FontSize = 11, Padding = new Thickness(10, 4), MinHeight = 0 };
-        _islandSteerButton.Classes.Add("islandBarButton");
-        _islandStopButton = new Button { Content = "停止", FontSize = 11, Padding = new Thickness(10, 4), MinHeight = 0 };
-        _islandStopButton.Classes.Add("islandBarButton");
+        _islandLiveText = new TextBlock
+        {
+            FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
+            Foreground = textSecondary,
+        };
+        _islandSteerButton = new Button
+        {
+            Content = "插入", FontSize = 11, Padding = new Thickness(10, 4), MinHeight = 0,
+            Background = hoverBg, BorderBrush = cardStroke, BorderThickness = new Thickness(1),
+            Foreground = textPrimary, CornerRadius = controlRadius,
+        };
+        _islandStopButton = new Button
+        {
+            Content = "停止", FontSize = 11, Padding = new Thickness(10, 4), MinHeight = 0,
+            Background = hoverBg, BorderBrush = cardStroke, BorderThickness = new Thickness(1),
+            Foreground = textPrimary, CornerRadius = controlRadius,
+        };
         var liveRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
         liveRow.Children.Add(_islandLiveDot);
         Grid.SetColumn(_islandLiveText, 1); liveRow.Children.Add(_islandLiveText);
         Grid.SetColumn(_islandSteerButton, 2); liveRow.Children.Add(_islandSteerButton);
         Grid.SetColumn(_islandStopButton, 3); liveRow.Children.Add(_islandStopButton);
-        _islandLiveBar = new Border { Child = liveRow };
-        _islandLiveBar.Classes.Add("islandLiveBar");
+        _islandLiveBar = new Border
+        {
+            Child = liveRow,
+            Background = subtleBg,
+            BorderBrush = dividerSubtle,
+            BorderThickness = new Thickness(1),
+            CornerRadius = controlRadius,
+            Padding = new Thickness(10, 8),
+        };
 
         var body = new StackPanel();
         body.Children.Add(header);
         body.Children.Add(tiles);
         body.Children.Add(_islandLiveBar);
 
-        // 尾指 + 卡：tail 旋转菱形先占位（Margin 负值探出 panel 顶缘指向 pill），
-        // 卡用 Margin 顶 6 给 tail 留位——两层同底色同描边，接缝被 tail 底边盖住。
+        // 尾指 + 卡：显式赋主窗画刷/圆角/阴影。
         var tail = new Border
         {
             Width = 12, Height = 12,
@@ -214,42 +286,54 @@ public partial class MainWindow
             RenderTransform = new RotateTransform(45),
             RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
             Margin = new Thickness(0, 0, 0, -7),
+            Background = menuSurface,
+            BorderBrush = cardStroke,
+            BorderThickness = new Thickness(1),
         };
-        tail.Classes.Add("islandPanelTail");
 
-        var card = new Border { Width = 396, Padding = new Thickness(16, 14), Child = body };
-        card.Classes.Add("islandPanel");
+        var card = new Border
+        {
+            Width = 396, Padding = new Thickness(16, 14), Child = body,
+            Background = menuSurface,
+            BorderBrush = cardStroke,
+            BorderThickness = new Thickness(1),
+            CornerRadius = overlayRadius,
+        };
+        if (flyoutShadow.HasValue) card.BoxShadow = flyoutShadow.Value;
 
         var inner = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
         inner.Children.Add(tail);
         inner.Children.Add(card);
-
-        // Popup 是独立视觉树，DynamicResource 查不到主窗口 Resources 里的
-        // MenuSurfaceBrush / AppCardStroke / FluentFlyoutShadow —— 回退到 Fluent 默认变白底。
-        // 从主窗 ResourceLookup 拿到的具体画刷挂到 inner.Resources；同时把 popup 的
-        // theme variant 固定到主窗 variant，双保险防止 Light 变体漏进来。
-        var app = Avalonia.Application.Current;
-        foreach (var key in new[]
-        {
-            "MenuSurfaceBrush", "MenuDividerBrush", "AppCardStroke", "AppSubtleBackground",
-            "AppHover", "AppTextPrimary", "AppTextSecondary", "AppTextDim", "AppAccent",
-            "AppAccentText", "AppAccentForeground", "AppAccentSubtle", "AppListSelected",
-            "AppCriticalForeground", "AppDividerSubtle", "FluentFlyoutShadow",
-            "OverlayCornerRadius", "ControlCornerRadius",
-        })
-        {
-            if (TryGetResource(key, ActualThemeVariant, out var res) && res is not null)
-                inner.Resources[key] = res;
-            else if (app is not null && app.TryGetResource(key, ActualThemeVariant, out var appRes) && appRes is not null)
-                inner.Resources[key] = appRes;
-        }
         return inner;
+
+        // 主窗 resource lookup：先主窗，拿不到再 Application。
+        T? Res<T>(string key) where T : class
+        {
+            if (TryGetResource(key, ActualThemeVariant, out var res) && res is T t) return t;
+            var app = Avalonia.Application.Current;
+            if (app is not null && app.TryGetResource(key, ActualThemeVariant, out var appRes) && appRes is T at) return at;
+            return null;
+        }
+        object? ResObj(string key)
+        {
+            if (TryGetResource(key, ActualThemeVariant, out var res)) return res;
+            var app = Avalonia.Application.Current;
+            if (app is not null && app.TryGetResource(key, ActualThemeVariant, out var appRes)) return appRes;
+            return null;
+        }
     }
 
-    private Control BuildIslandTile(Infrastructure.AppActionDefinition action)
+    private Control BuildIslandTile(Infrastructure.AppActionDefinition action,
+        IBrush subtleBg, IBrush cardStroke, IBrush hoverBg, IBrush textSecondary, IBrush textPrimary, CornerRadius radius)
     {
         // Win10 磁贴语义：整齐等大方格 + 居中图标 + 名称下沉 tooltip。
-        var icon = new PathIcon { Width = 18, Height = 18, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        // Popup 树里 class selector 不生效，画刷全部显式赋。
+        var icon = new PathIcon
+        {
+            Width = 18, Height = 18,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+            Foreground = textSecondary,
+        };
         icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + WorkbenchActionDefaults.Icon(action.Id)));
         var button = new Button
         {
@@ -261,9 +345,16 @@ public partial class MainWindow
             VerticalContentAlignment = VerticalAlignment.Center,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             Command = _actions.GetCommand(action.Id),
+            Background = subtleBg,
+            BorderBrush = Brushes.Transparent,
+            BorderThickness = new Thickness(1),
+            CornerRadius = radius,
+            Foreground = textPrimary,
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
-        button.Classes.Add("islandTile");
-        // 描述与标题相同（如"会话内查找"）时只显示一行，不重复。
+        // Hover 用 VisualState 在 popup 里同样不工作——PointerEntered/Exited 手动切背景。
+        button.PointerEntered += (_, _) => { button.Background = hoverBg; button.BorderBrush = cardStroke; icon.Foreground = textPrimary; };
+        button.PointerExited += (_, _) => { button.Background = subtleBg; button.BorderBrush = Brushes.Transparent; icon.Foreground = textSecondary; };
         var tip = string.IsNullOrEmpty(action.Description) || action.Description == action.Title
             ? action.Title : $"{action.Title}\n{action.Description}";
         ToolTip.SetTip(button, tip);
@@ -330,13 +421,19 @@ public partial class MainWindow
             : failed ? outcome
             : string.IsNullOrEmpty(usage) ? ""
             : "上次回合 " + usage.Replace("会话累计：", ""));
+        // Popup 树内 Classes 失效——dot/liveBar 显式切画刷。
         if (_islandLiveDot is not null)
         {
-            _islandLiveDot.Classes.Remove("running"); _islandLiveDot.Classes.Remove("failed"); _islandLiveDot.Classes.Remove("idle");
-            _islandLiveDot.Classes.Add(running ? "running" : failed ? "failed" : "idle");
+            _islandLiveDot.Background = running ? _islandBrushAccent
+                : failed ? _islandBrushCritical
+                : _islandBrushTextDim;
         }
-        _islandLiveBar?.Classes.Remove("failed");
-        if (failed) _islandLiveBar?.Classes.Add("failed");
+        if (_islandLiveBar is not null)
+        {
+            _islandLiveBar.BorderBrush = failed ? _islandBrushCritical : _islandBrushDivider;
+            if (_islandLiveText is not null)
+                _islandLiveText.Foreground = failed ? _islandBrushCritical : _islandBrushTextSecondary;
+        }
         // 空闲整条隐藏：活动条只在 running/failed/有排队/有用量 时出现。
         var liveBarVisible = running || failed || hasQueue || !string.IsNullOrEmpty(usage);
         _islandLiveBar?.SetValue(Visual.IsVisibleProperty, liveBarVisible);
