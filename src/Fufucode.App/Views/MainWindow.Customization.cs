@@ -90,14 +90,34 @@ public partial class MainWindow
         _customizationSession = null;
         _customizationSessionHandler = null;
     }
+    /// <summary>上一次完整应用的配置签名；同一配置重复调用时直接跳过整套样式重建。</summary>
+    private string? _appliedCustomization;
+
     private void ApplyCustomization(WorkbenchAppearance settings)
     {
         if (_closed) return;
+        // 启动期会先由 InitializeCustomization 应用一次、再由 AttachCustomization 应用一次；
+        // 样式重建会触发整棵可视化树重新求值（实测约 0.6~0.9 秒），视觉配置相同就不应重复。
+        // 布局单独判断：项目布局由 AttachWorkspaceContext 先行恢复，不应为了布局重放整套样式。
+        var signature = (settings with { Layout = null }).Serialize();
+        if (signature == _appliedCustomization)
+        {
+            if (settings.Layout is not null && settings.Layout.Serialize() != _dockLayout.Serialize())
+            {
+                _dockLayout = WorkbenchLayoutState.Restore(settings.Layout.Serialize(), _workbenchPages.KnownPageIds);
+                RenderDockPages();
+            }
+            return;
+        }
+        _appliedCustomization = signature;
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.release-skin.begin", "release previous skin");
         ReleaseWindowSkin(this);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.release-skin.end", "previous skin released");
         if (settings.Layout is not null && settings.Layout.Serialize() != _dockLayout.Serialize())
         {
             _dockLayout = WorkbenchLayoutState.Restore(settings.Layout.Serialize(), _workbenchPages.KnownPageIds);
             RenderDockPages();
+            Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.dock-render", "dock pages rendered from saved layout");
         }
         RequestedThemeVariant = SettingsPageViewModel.ThemeVariantFor(settings.Theme);
         // Surface 旧轴下线后：皮肤自己管理材质；Fluent 保留 Mica 基线；
@@ -148,7 +168,9 @@ public partial class MainWindow
         Add(s => s.OfType<Button>().Class("dockTab"), TemplatedControl.HeightProperty, settings.RowHeight - 2);
         Add(s => s.OfType<ListBoxItem>(), TemplatedControl.MinHeightProperty, settings.RowHeight);
         Styles.Add(_customStyles);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.styles", "custom styles rebuilt");
         ApplyWindowSkin(this, settings);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.skin", "window skin applied");
         CustomStatusBar.IsVisible = settings.ShowStatusBar;
         ChromeRoot.RowDefinitions[2].Height = new GridLength(settings.ShowStatusBar ? 26 : 0);
         _chatPage.ApplyAppearance(settings);
@@ -158,8 +180,11 @@ public partial class MainWindow
             ? $"用户希望称呼为 {settings.UserName}。助手显示名称为 {settings.AssistantName}。" : "";
         if (_vm is not null) _vm.Input.IdentityContext = identity;
         if (_sideChatPage.DataContext is MainViewModel side) { side.Input.IdentityContext = identity; _sideChatPage.ApplyAppearance(settings); }
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.docks", "dock appearances applied");
         BuildActionSurfaces(settings);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.actions", "action surfaces rebuilt");
         ApplyWorkspaceLayout();
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.layout", "workspace layout applied");
 
         void Add(Func<Selector?, Selector> selector, AvaloniaProperty property, object value)
         { var style = new Style(selector); style.Setters.Add(new Setter(property, value)); _customStyles.Add(style); }
@@ -195,7 +220,7 @@ public partial class MainWindow
                 {
                     parent = new MenuItem { Header = group };
                     parent.Icon = Views.WorkbenchUi.IconButton(
-                        group switch { "工作区页面" => "AppsList", "复制" => "Copy", "导出" => "ArrowDownload", "分叉" => "Branch", _ => "Folder" }, group).Content;
+                        group switch { "工作区页面" => "AppsList", "复制" => "Copy", "导出" => "ArrowDownload", "分叉" => "Branch", "诊断与系统" => "Wrench", _ => "Folder" }, group).Content;
                     subMenus.Add(key, parent);
                     menu.Items.Add(parent);
                 }

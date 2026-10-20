@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Fufucode.Core.Diagnostics;
 
 namespace Fufucode.Core.Backend;
 
@@ -81,6 +82,7 @@ public sealed class NativeAgentLoop
         {
             iterations++;
             cancellationToken.ThrowIfCancellationRequested();
+            using var iterationSpan = PerfTracer.Step("agent.iteration", "n", PerfTracer.Invariant(iterations));
 
             if (iterations > _maxIterations)
             {
@@ -107,12 +109,19 @@ public sealed class NativeAgentLoop
             PureModelResponse response;
             try
             {
-                response = await RequestModelAsync(request, streamCallbacks, cancellationToken).ConfigureAwait(false);
+                using (var modelSpan = PerfTracer.Step("model.request", "tools", PerfTracer.Invariant(toolNames.Count)))
+                {
+                    modelSpan.Tag("streaming", _streamingEnabled);
+                    modelSpan.Tag("historyMessages", conversationHistory.Count);
+                    response = await RequestModelAsync(request, streamCallbacks, cancellationToken).ConfigureAwait(false);
+                }
                 CompletedModelCalls++;
                 lastUsage = response.Usage ?? lastUsage;
+                iterationSpan.Tag("toolCalls", response.ToolCalls.Count);
             }
             catch (OperationCanceledException)
             {
+                iterationSpan.Cancel();
                 throw;
             }
             catch (Exception ex)
@@ -178,21 +187,38 @@ public sealed class NativeAgentLoop
                 {
                     var needsApproval = !ProductionToolDispatcher.IsConcurrencySafe(call.Name) &&
                                         !string.Equals(call.Name, "update_plan", StringComparison.Ordinal);
+                    using var toolSpan = PerfTracer.Step("tool", "tool", call.Name);
                     if (approvalGate is not null && needsApproval)
                     {
-                        var approved = await approvalGate(call, cancellationToken).ConfigureAwait(false);
+                        bool approved;
+                        using (var approvalSpan = PerfTracer.Step("tool.approval", "tool", call.Name))
+                        {
+                            approvalSpan.Tag("safe", ProductionToolDispatcher.IsConcurrencySafe(call.Name));
+                            approved = await approvalGate(call, cancellationToken).ConfigureAwait(false);
+                            approvalSpan.Tag("approved", approved);
+                            if (!approved) approvalSpan.Cancel();
+                        }
                         if (!approved)
+                        {
+                            toolSpan.Fail("approval_denied");
+                            toolSpan.Tag("ok", false);
                             return new PureToolResult(call.Id, false,
                                 "<tool_use_error>用户拒绝了本次工具调用。</tool_use_error>");
+                        }
                     }
 
                     try
                     {
-                        return await _toolDispatcher.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
+                        var result = await _toolDispatcher.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
+                        toolSpan.Tag("ok", result.Success);
+                        toolSpan.Tag("outputChars", result.Content?.Length ?? 0);
+                        if (!result.Success) toolSpan.Fail("tool_failed");
+                        return result;
                     }
-                    catch (OperationCanceledException) { throw; }
+                    catch (OperationCanceledException) { toolSpan.Cancel(); throw; }
                     catch (Exception ex)
                     {
+                        toolSpan.Fail(ex.GetType().Name);
                         return new PureToolResult(call.Id, false,
                             $"<tool_use_error>工具执行异常: {ex.Message}</tool_use_error>");
                     }
@@ -222,6 +248,7 @@ public sealed class NativeAgentLoop
                             }
                             else
                             {
+                                using var batchSpan = PerfTracer.Step("tool.batch", "count", PerfTracer.Invariant(batch.Count));
                                 foreach (var b in batch) onToolStarting?.Invoke(b);
                                 var results = await Task.WhenAll(batch.Select(ExecuteOneAsync)).ConfigureAwait(false);
                                 for (var j = 0; j < batch.Count; j++) Record(batch[j], results[j]);

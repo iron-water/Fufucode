@@ -25,6 +25,9 @@ internal sealed class PluginWorkspacePageHost : IDisposable
     private bool _started;
     private bool _disposed;
 
+    /// <summary>性能监控插件 id：页面由宿主包装（持久化 sink、设置页内容、导出动作）。</summary>
+    public const string PerformancePluginId = "performance.monitor";
+
     public PluginWorkspacePageHost(string dataRoot, WorkbenchPageRegistry pages, Func<bool> useMock,
         PluginPackageManager? manager = null)
     {
@@ -48,6 +51,9 @@ internal sealed class PluginWorkspacePageHost : IDisposable
     public event Action? PagesChanged;
 
     public IReadOnlyDictionary<string, IPluginWorkspacePage> ActivePages => _active;
+
+    /// <summary>底层插件管理器（宿主组合根据此注入服务解析器）。</summary>
+    public PluginPackageManager Manager => _manager;
 
     /// <summary>插件加载失败原因（按插件 ID）；成功时不存在。</summary>
     public IReadOnlyDictionary<string, string> LoadErrors => _loadErrors;
@@ -102,7 +108,10 @@ internal sealed class PluginWorkspacePageHost : IDisposable
             if (_active.ContainsKey(pluginId)) continue;
             try
             {
-                if (contribution.CreateView() is not IPluginWorkspacePage page)
+                var created = contribution.CreateView();
+                // 插件可以返回完整契约对象，也可以返回页面提供者（PluginPageView：不引用 Fufucode.App 的插件走这条）。
+                if (created is IPluginPageProvider provider) created = provider.CreatePluginPage();
+                if (created is not IPluginWorkspacePage page)
                     throw new InvalidOperationException("页面贡献没有实现宿主工作区页面契约。");
                 page.SetProject(_projectPath, _useMock());
                 _active[pluginId] = page;

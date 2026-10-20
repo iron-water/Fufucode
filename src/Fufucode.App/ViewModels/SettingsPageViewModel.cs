@@ -223,6 +223,19 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     public bool ShowStorage => SelectedCategory?.Id == "storage";
     [ObservableProperty] private Avalonia.Controls.Control? _storageContent;
+    /// <summary>性能监控设置页：内容由性能监控插件提供，未安装时显示安装提示。</summary>
+    public bool ShowPerformance => SelectedCategory?.Id == "performance";
+    /// <summary>性能插件未启用时，设置页显示真实原因而不是空白。</summary>
+    public bool ShowPerformanceHint => ShowPerformance && (!PerformancePluginAvailable || PerformanceContent is null);
+    public string PerformanceHintText => PerformanceDiagnostic ?? "性能监控插件未安装或未启用。";
+    [ObservableProperty] private Avalonia.Controls.Control? _performanceContent;
+
+    /// <summary>性能监控插件是否已启用（决定设置页显示插件视图还是安装提示）。</summary>
+    [ObservableProperty] private bool _performancePluginAvailable;
+    /// <summary>插件不可用时的具体原因（设置页直接展示，不显示空白）。</summary>
+    [ObservableProperty] private string? _performanceDiagnostic;
+    partial void OnPerformancePluginAvailableChanged(bool value) => OnPropertyChanged(nameof(ShowPerformanceHint));
+    partial void OnPerformanceDiagnosticChanged(string? value) => OnPropertyChanged(nameof(PerformanceHintText));
     /// <summary>「其他」收纳桶页：右侧列二级功能入口卡，点击进入对应设置页。</summary>
     /// <summary>「其他」桶页：选中占位项时列出小功能入口卡。</summary>
     public bool ShowOtherHub => SelectedCategory?.Id == OtherHubId;
@@ -293,7 +306,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private void NotifyCategoryVisibility()
     {
         foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowLookColumn), nameof(ShowArrangementColumn), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowAbout), nameof(ShowModules),
-                     nameof(ShowStorage), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
+                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
 

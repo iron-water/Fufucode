@@ -14,6 +14,7 @@ using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Fufucode.App.Abstractions;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 
@@ -24,7 +25,12 @@ public static class HeadlessUiRunner
 {
     public static int RunProcess(string[] args)
     {
-        var data = Path.Combine(Path.GetTempPath(), "fufucode-ui-" + Guid.NewGuid().ToString("N"));
+        // --results <dir>：保留隔离数据根并把性能诊断输出写进去（用于性能监控端到端验证）。
+        var resultsIndex = Array.IndexOf(args, "--results");
+        var results = resultsIndex >= 0 && resultsIndex + 1 < args.Length ? args[resultsIndex + 1] : null;
+        var data = results is null
+            ? Path.Combine(Path.GetTempPath(), "fufucode-ui-" + Guid.NewGuid().ToString("N"))
+            : Path.Combine(results, "data");
         // DESK-1：在窗口创建前把选定皮肤/主题写进隔离数据根，让真实渲染截图对准目标皮肤。
         var previewSkin = ValueAfter(args, "--skin") ?? "fluent";
         var previewTheme = ValueAfter(args, "--theme") ?? "dark";
@@ -59,9 +65,25 @@ public static class HeadlessUiRunner
         catch (Exception error) { Console.Error.WriteLine(error.GetBaseException().Message); return 3; }
         finally
         {
-            try { if (Directory.Exists(data)) Directory.Delete(data, recursive: true); }
-            catch (IOException) { Console.Error.WriteLine("Preview data cleanup failed: " + data); }
-            catch (UnauthorizedAccessException) { Console.Error.WriteLine("Preview data cleanup failed: " + data); }
+            try
+            {
+                if (results is not null)
+                {
+                    Directory.CreateDirectory(results);
+                    var perfDir = Path.Combine(data, "perf");
+                    var perf = Directory.Exists(perfDir);
+                    File.WriteAllText(Path.Combine(results, "perf-exists.txt"),
+                        perf + " | " + (perf ? string.Join(",", Directory.GetFiles(perfDir).Select(p => Path.GetFileName(p) + ":" + new FileInfo(p).Length)) : "-"));
+                    var pages = File.Exists(Path.Combine(data, "plugins.json")) ? File.ReadAllText(Path.Combine(data, "plugins.json")) : "";
+                    File.WriteAllText(Path.Combine(results, "plugins.json"), pages);
+                }
+                else if (Directory.Exists(data))
+                {
+                    Directory.Delete(data, recursive: true);
+                }
+            }
+            catch (IOException error) { Console.Error.WriteLine("Preview data cleanup failed: " + error.Message); }
+            catch (UnauthorizedAccessException error) { Console.Error.WriteLine("Preview data cleanup failed: " + error.Message); }
         }
     }
 
@@ -85,6 +107,8 @@ public static class HeadlessUiRunner
             if (themeIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --theme value.");
             theme = arguments[themeIndex + 1]; arguments.RemoveRange(themeIndex, 2);
         }
+        var resultsIndex = arguments.IndexOf("--results");
+        if (resultsIndex >= 0) arguments.RemoveRange(resultsIndex, Math.Min(2, arguments.Count - resultsIndex));
         var pageIndex = arguments.IndexOf("--page");
         if (pageIndex >= 0)
         {
@@ -106,6 +130,8 @@ public static class HeadlessUiRunner
             if (pageSubIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --settings-page value.");
             settingsPage = arguments[pageSubIndex + 1]; arguments.RemoveRange(pageSubIndex, 2);
         }
+        var perfTurnIndex = arguments.IndexOf("--perf-turn");
+        if (perfTurnIndex >= 0) arguments.RemoveAt(perfTurnIndex);
         string? shortcutsGroup = null;
         var groupIndex = arguments.IndexOf("--shortcuts-group");
         if (groupIndex >= 0)
@@ -113,10 +139,11 @@ public static class HeadlessUiRunner
             if (groupIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --shortcuts-group value.");
             shortcutsGroup = arguments[groupIndex + 1]; arguments.RemoveRange(groupIndex, 2);
         }
+        var allowAction = arguments.Remove("--allow-action");
         var valid = arguments.Count == 1 && arguments[0] == "snapshot" ||
             arguments.Count == 2 && arguments[0] is "screenshot" or "invoke";
-        if (!valid) throw new ArgumentException("Usage: ui snapshot | screenshot <new.png> | invoke nav.<page> [--page <page>].");
-        if (arguments[0] == "invoke" && arguments[1] is not ("nav.chat" or "nav.extensions" or "nav.settings"))
+        if (!valid) throw new ArgumentException("Usage: ui snapshot | screenshot <new.png> | invoke nav.<page>|action [--allow-action] [--page <page>].");
+        if (arguments[0] == "invoke" && !allowAction && arguments[1] is not ("nav.chat" or "nav.extensions" or "nav.settings"))
             throw new ArgumentException("Only nav.chat, nav.extensions and nav.settings can be invoked in preview.");
         var lifetime = (IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
         var window = lifetime.MainWindow as MainWindow ?? throw new InvalidOperationException("Preview window is missing.");
@@ -126,8 +153,28 @@ public static class HeadlessUiRunner
         var navigation = new Dictionary<string, string>
         { ["nav.chat"] = "chat", ["nav.extensions"] = "extensions", ["nav.settings"] = "settings" };
         await NavigateAsync("nav." + page);
-        if (arguments[0] == "invoke") await NavigateAsync(arguments[1]);
+        if (arguments[0] == "invoke")
+        {
+            var target = arguments[1];
+            if (navigation.ContainsKey(target)) await NavigateAsync(target);
+            else if (window.ActionsForTesting.GetDisabledReason(target) is { } reason) throw new InvalidOperationException(reason);
+            else await window.ActionsForTesting.ExecuteAsync(target);
+            await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
+        }
         var currentPage = ((MainViewModel)window.DataContext!).CurrentPage.ToString().ToLowerInvariant();
+        if (perfTurnIndex >= 0)
+        {
+            // 性能监控 e2e：先跑一个 mock 回合，再打开性能停靠页并截图。
+            var session = ((MainViewModel)window.DataContext!).Session;
+            await session.SendAsync("性能验证回合");
+            var until = DateTime.UtcNow + TimeSpan.FromSeconds(20);
+            while (DateTime.UtcNow < until)
+            {
+                await Task.Delay(200);
+                if (session.Activity == SessionActivity.Idle) break;
+            }
+            await Task.Delay(2500);
+        }
         if (settingsCategory is not null && ((MainViewModel)window.DataContext!).Settings is { } settingsVm)
         {
             settingsVm.SelectCategory(settingsCategory);

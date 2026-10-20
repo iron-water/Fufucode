@@ -29,18 +29,23 @@ public sealed partial class MainViewModel : ViewModelBase
     {
         Session = session;
         Timeline = new TimelineViewModel(session, refreshScheduler, clipboard);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.timeline", "TimelineViewModel");
         Input = new InputViewModel(session);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.input", "InputViewModel");
         StatusBar = new StatusBarViewModel(session);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.statusbar", "StatusBarViewModel");
         Sidebar = new SidebarViewModel(session, Timeline, sessions, sidebarCallbacks);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.sidebar", "SidebarViewModel");
         Extensions = new ExtensionsPageViewModel();
         Settings = new SettingsPageViewModel();
         Settings.RemoteSession = () => (Session, Sidebar.SelectedSession?.Title ?? "当前会话");
         Settings.RemoteHistory = () => RemoteHistory();
         WorkspacePanel = new WorkspacePanelViewModel(clipboard);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.rest", "extensions/settings/workspace");
 
         // 发送/停止失败在真实链路下必须显式可见（不静默吞异常）。
         Input.OperationFailed += message => Timeline.AddNotification(message);
-
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.wire", "input failure wiring");
     }
 
     /// <summary>当前会话：mock 为脚本化演示；真实实现由当前后端（默认 FUMO 原生内核）提供。</summary>

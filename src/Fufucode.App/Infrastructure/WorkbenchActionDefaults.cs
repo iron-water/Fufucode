@@ -21,7 +21,7 @@ public static class WorkbenchActionDefaults
         "session.rename" or "session.pin" or "session.side" or "session.fork" or "session.search" or "session.share" or "session.archive" or "session.schedule" => new(UiActionPosition.SessionIsland, 0),
         "window.session" => new(UiActionPosition.HeaderMenu),
         "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
-        "speech.stop" or "speech.start" or "usage" or "trace" => new(UiActionPosition.MenuRight),
+        "speech.stop" or "speech.start" or "usage" or "perf" or "diagnostics.export" => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("help.") || id.StartsWith("view.") || id.StartsWith("edit.") => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("status.") => new(UiActionPosition.Hidden),
         _ => new(UiActionPosition.MenuLeft)
@@ -35,13 +35,15 @@ public static class WorkbenchActionDefaults
         "session.export" or "session.export.markdown" or "session.export.metadata" or "session.export.pdf" => "导出",
         "session.fork" or "session.fork.worktree" => "分叉",
         "project.open" or "project.explorer" or "project.openWith" => "项目",
+        // 性能监控取代旧的“调用轨迹 / 性能跟踪 / 运行状态与资源”，统一收进诊断子菜单。
+        "page.automation" or "page.local-review" or "perf" or "diagnostics.export" or "help.troubleshoot" or "help.status" => "诊断与系统",
         _ => null,
     };
 
     /// <summary>子菜单内的排序：父项（可双击执行的默认项）排第一。</summary>
     public static int SubMenuOrder(string id) => id switch
     {
-        "session.export" or "session.fork" or "copy.id" => 0,
+        "session.export" or "session.fork" or "copy.id" or "perf" => 0,
         _ => 10,
     };
 
@@ -77,7 +79,7 @@ public static class WorkbenchActionDefaults
         "view.zoomIn" => "ZoomIn", "view.zoomOut" => "ZoomOut", "view.zoomReset" => "ArrowClockwise", "view.fullscreen" => "FullScreenMaximize",
         "speech.stop" => "RecordStop", "session.archives" => "Archive", "session.foreground" => "Open", "project.explorer" => "Folder",
         "help.shortcuts" => "Keyboard",
-        "trace" => "History", "help.tasks" => "AppsList", "help.troubleshoot" => "Wrench", "help.status" => "Info",
+        "perf" => "Speedometer", "help.troubleshoot" => "Wrench", "help.status" => "Info",
         _ when id.StartsWith("status.") => "Info",
         _ when id.StartsWith("copy.") => "Copy", _ => "AppsList"
     };
