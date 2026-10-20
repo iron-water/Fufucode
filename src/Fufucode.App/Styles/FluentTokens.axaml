@@ -28,7 +28,7 @@
             <!-- Text fill -->
             <SolidColorBrush x:Key="TextFillColorPrimaryBrush"   Color="#E4000000"/>
             <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#9E000000"/>
-            <SolidColorBrush x:Key="TextFillColorTertiaryBrush"  Color="#72000000"/>
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush"  Color="#8A000000"/>
             <SolidColorBrush x:Key="TextFillColorDisabledBrush"  Color="#5C000000"/>
             <SolidColorBrush x:Key="TextFillColorInverseBrush"   Color="#FFFFFFFF"/>
             <!-- Text on accent -->
@@ -104,6 +104,8 @@
             <BoxShadows x:Key="FluentFlyoutShadow">0 8 24 0 #29000000</BoxShadows>
             <BoxShadows x:Key="FluentToastShadow">0 4 16 0 #33000000</BoxShadows>
             <BoxShadows x:Key="FluentPillShadow">0 4 12 0 #26000000</BoxShadows>
+            <!-- 设置卡/内容卡的极轻浮起阴影：对齐 Win11 设置页"卡比底色高一线"的层次。 -->
+            <BoxShadows x:Key="FluentCardShadow">0 1 2 0 #12000000</BoxShadows>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <!-- Accent fills (lighter accents on dark bg) -->
@@ -126,7 +128,7 @@
             <!-- Text fill -->
             <SolidColorBrush x:Key="TextFillColorPrimaryBrush"   Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="TextFillColorSecondaryBrush" Color="#C5FFFFFF"/>
-            <SolidColorBrush x:Key="TextFillColorTertiaryBrush"  Color="#87FFFFFF"/>
+            <SolidColorBrush x:Key="TextFillColorTertiaryBrush"  Color="#A6FFFFFF"/>
             <SolidColorBrush x:Key="TextFillColorDisabledBrush"  Color="#5DFFFFFF"/>
             <SolidColorBrush x:Key="TextFillColorInverseBrush"   Color="#E4000000"/>
             <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush"   Color="#000000"/>
@@ -199,6 +201,7 @@
             <BoxShadows x:Key="FluentFlyoutShadow">0 8 24 0 #66000000</BoxShadows>
             <BoxShadows x:Key="FluentToastShadow">0 4 18 0 #80000000</BoxShadows>
             <BoxShadows x:Key="FluentPillShadow">0 4 12 0 #55000000</BoxShadows>
+            <BoxShadows x:Key="FluentCardShadow">0 1 3 0 #4D000000</BoxShadows>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>
