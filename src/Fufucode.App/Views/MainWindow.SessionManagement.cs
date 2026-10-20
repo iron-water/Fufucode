@@ -75,40 +75,38 @@ public partial class MainWindow : ISessionManagement
         var session = _host.Sessions.FirstOrDefault(s => s.Id == id);
         if (session is null) return;
         var box = new TextBox { Text = session.Name ?? "", MinWidth = 280, MaxLength = 120 };
-        var save = new Button { Content = "保存", Classes = { "accent" } };
-        var cancel = new Button { Content = "取消" };
-        var dialog = new Window
+        var save = new Button { Content = "保存", Classes = { "accent" }, IsDefault = true, MinWidth = 88 };
+        var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 88 };
+        var dialog = Views.AppDialog.Create("重命名会话", 460);
+        var body = new StackPanel
         {
-            Title = "重命名会话", SizeToContent = SizeToContent.Height, Width = 420,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Content = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 14, Children = {
-                new TextBlock { Text = "会话名称", FontWeight = Avalonia.Media.FontWeight.SemiBold }, box,
-                new StackPanel { Orientation = Avalonia.Layout.Orientation.Horizontal, Spacing = 10, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Right, Children = { cancel, save } } } }
+            Spacing = 14,
+            Children = { Views.AppDialog.Field("会话名称", box, "名称会显示在侧栏与会话管理中。") },
         };
+        var root = new Grid { RowDefinitions = new("Auto,Auto,Auto") };
+        root.Children.Add(Views.AppDialog.Header("Icon.Edit", "重命名会话",
+            "给这个会话一个容易识别的名字。"));
+        var content = Views.AppDialog.Body(Views.AppDialog.Card(body));
+        Grid.SetRow(content, 1);
+        root.Children.Add(content);
+        var footer = Views.AppDialog.Footer(cancel, save);
+        Grid.SetRow(footer, 2);
+        root.Children.Add(footer);
+        dialog.Content = root;
         dialog.Opened += (_, _) => { box.Focus(); box.SelectAll(); };
         cancel.Click += (_, _) => dialog.Close();
-        save.Click += async (_, _) =>
+        void Commit()
         {
             var name = (box.Text ?? "").Trim();
-            if (name.Length == 0) { dialog.Close(); return; }
             dialog.Close();
-            try
-            {
-                // Pi 的 set_session_name 只作用于当前会话：先切换到目标会话再改名。
-                if (id != _host.Current.Session.Id) await SwitchSessionAsync(id);
-                await _host.RenameCurrentAsync(name);
-                RefreshSessionList();
-            }
-            catch (Exception error) { _vm?.Timeline.AddNotification("重命名失败：" + error.Message); }
-        };
+            if (name.Length > 0) _ = RenameAndRefreshAsync(name, id);
+        }
+        save.Click += (_, _) => Commit();
         box.KeyDown += (_, e) =>
         {
             if (e.Key != Avalonia.Input.Key.Enter) return;
             e.Handled = true;
-            var value = (box.Text ?? "").Trim();
-            if (value.Length == 0) { dialog.Close(); return; }
-            dialog.Close();
-            _ = RenameAndRefreshAsync(value, id);
+            Commit();
         };
         await Fufucode.App.Views.SkinDialog.ShowAsync(dialog, this);
     }
@@ -132,9 +130,12 @@ public partial class MainWindow : ISessionManagement
         SessionPresentation.Save(_host.Manager.Metadata, id, current with { Archived = true });
         if (id == _host.Current.Session.Id)
         {
-            var next = _host.Sessions.FirstOrDefault(s => s.Id != id && !SessionPresentation.Load(_host.Manager.Metadata, s.Id).Archived);
+            var archivedProjects = ProjectArchive.LoadSet(_host.Manager.Metadata);
+            var next = _host.Sessions.FirstOrDefault(s => s.Id != id &&
+                !SessionArchive.IsArchived(_host.Manager.Metadata, s, archivedProjects));
             if (next is null) await SwitchSessionAsync(null); else await SwitchSessionAsync(next.Id);
         }
+        _archivePage?.Refresh();
         RefreshSessionList();
     }
 
