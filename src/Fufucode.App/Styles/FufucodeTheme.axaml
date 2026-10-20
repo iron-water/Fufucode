@@ -17,7 +17,7 @@
                          浅色侧栏用纯白浮于页面底(#F3F3F3)之上（Win11 浅色设置的 NavigationView 面）。 -->
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
-                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
@@ -57,9 +57,9 @@
                     <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
                     <SolidColorBrush x:Key="AppScrimBackground" Color="#33000000"/>
-                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
-                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
-                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <!-- 轻质填充块：徽章底、内联说明区，弱于卡片底、不带边框。 -->
                     <StaticResource x:Key="AppSubtleBackground"   ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
@@ -84,7 +84,7 @@
                          由此导航与内容产生 8% 明度差，无需任何描边即可分栏。 -->
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
@@ -122,10 +122,10 @@
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
                     <SolidColorBrush x:Key="AppScrimBackground" Color="#4D000000"/>
                     <!-- chrome/停靠与侧栏同层（#2C2C2C）；内容区由 AppMicaPageBackground→Base 提供。 -->
-                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
-                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
-                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppSubtleBackground"   ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppWarningForeground"  ResourceKey="SystemFillColorCautionBrush"/>
@@ -494,6 +494,7 @@
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
     </Style>
     <Style Selector="Border.innerWell">
         <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
@@ -645,6 +646,18 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
         <Setter Property="Padding" Value="12,10,12,8"/>
+        <!-- 输入卡悬浮于页面之上：轻阴影 + 聚焦时 accent 描边，与"卡比底色高一线"一致。 -->
+        <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.1"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <!-- 聚焦时描边转 accent：一眼看出焦点在输入区（Windows 文本框同语义）。 -->
+    <Style Selector="Border.composerCard:focus-within">
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
     </Style>
     <Style Selector="TextBox.composerInput">
         <Setter Property="Background" Value="Transparent"/>

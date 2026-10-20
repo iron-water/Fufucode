@@ -39,6 +39,8 @@
     <Setter Property="Padding" Value="18,12"/>
     <Setter Property="MinHeight" Value="64"/>
     <Setter Property="Margin" Value="0"/>
+    <!-- 卡片的极轻浮起阴影：让同色系的卡与页底之间有"高一线"的层次。 -->
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
     <Setter Property="Transitions">
       <Transitions>
         <BrushTransition Property="Background" Duration="0:0:0.083"/>
@@ -54,6 +56,9 @@
   </Style>
   <Style Selector="Border.settingsRow.clickable:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Border.settingsRow.clickable:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
   <!-- 「其他」入口卡：Button 版 settingsRow（同款卡片外观，Button 自带点击语义）。 -->
   <Style Selector="Button.settingsRow">
@@ -71,11 +76,16 @@
     <Setter Property="Transitions">
       <Transitions>
         <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.083"/>
       </Transitions>
     </Setter>
   </Style>
   <Style Selector="Button.settingsRow:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Button.settingsRow:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    <Setter Property="RenderTransform" Value="scale(0.995)"/>
   </Style>
   <Style Selector="Border.settingsRow.last">
     <Setter Property="Margin" Value="0,0,0,0"/>
@@ -591,7 +601,7 @@
        紧凑胶囊 = AppSubtleBackground 云母感 + AppCardStroke 细描边 + 16 圆角 + FluentPillShadow；
        几何/颜色变化即信号：运行呼吸点、空闲灰点、失败 critical。 -->
   <Style Selector="Border.sessionIsland">
-    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
@@ -609,7 +619,7 @@
   </Style>
   <!-- 胶囊内次级信息（模型短名/用时/用量）压暗一档：是背景信号不是主标题。 -->
   <Style Selector="Border.sessionIsland TextBlock.dim">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
   </Style>
   <Style Selector="Border.sessionIsland PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
@@ -637,7 +647,7 @@
   </Style>
   <!-- 卫星点：次级活动（排队数）的微缩圆，仅在有排队时出现。 -->
   <Style Selector="Border.islandSatellite">
-    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
@@ -670,7 +680,7 @@
     <Setter Property="BorderThickness" Value="1"/>
   </Style>
   <Style Selector="Border.islandPanel TextBlock.meta">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
   </Style>
   <!-- 后端标识块：subtle 底 + accent 描边，不再实心 accent（与标题争视觉权重）。
        PathIcon 用 accent 文本色点题，不做反白。 -->
@@ -682,31 +692,55 @@
   <Style Selector="Border.islandBackendTile PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
   </Style>
-  <!-- 磁贴：Subtle 底 + 悬停描边，语义同 Windows 设置行内卡。 -->
+  <!-- 磁贴：岛面本身已是"第 2 层"（卡片色），磁贴再用 subtle 会糊成一片；
+       底降到透明 + 悬停才给填充，图标升到"第 3 层"并直接用强调色（对齐 Win11
+       设置里"卡内图标用主题色"的做法），按下有短延迟 + 微形变。 -->
   <Style Selector="Button.islandTile">
-    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Transitions">
       <Transitions>
         <BrushTransition Property="Background" Duration="0:0:0.12"/>
         <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09"/>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.12"/>
       </Transitions>
     </Setter>
   </Style>
   <Style Selector="Button.islandTile:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
-    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
+  <Style Selector="Button.islandTile:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    <Setter Property="RenderTransform" Value="scale(0.94)"/>
+  </Style>
+  <!-- 禁用态：Fluent 模板会给禁用按钮刷灰底，在岛面里像一块块补丁；
+       压回透明，只用低透明度图标表达不可用。 -->
+  <Style Selector="Button.islandTile:disabled">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.islandTile:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.islandTile:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Opacity" Value="0.45"/>
+  </Style>
+  <!-- 图标=第 3 层：强调色常驻；悬停提亮到满不透明。 -->
   <Style Selector="Button.islandTile PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+    <Setter Property="Opacity" Value="0.92"/>
   </Style>
   <Style Selector="Button.islandTile:pointerover PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+    <Setter Property="Opacity" Value="1"/>
   </Style>
   <!-- 实时活动条：Subtle 浅底，失败时转 critical 边框/文字。 -->
   <Style Selector="Border.islandLiveBar">
