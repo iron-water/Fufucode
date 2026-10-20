@@ -41,7 +41,7 @@
                     <SolidColorBrush x:Key="AppNavAccentBrush" Color="#0067C0"/>
                     <!-- Win11 设置侧栏面（浅色）：白底浮起。 -->
                     <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#FAFAFA"/>
-                    <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.12"/>
+                    <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.20"/>
                     <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppCodeBackground"     ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
@@ -105,7 +105,7 @@
                     <SolidColorBrush x:Key="AppNavAccentBrush" Color="#4CC2FF"/>
                     <!-- Win11 设置侧栏面：实色 #2C2C2C（Quaternary 是透明叠加，不透明这里不浮起）。 -->
                     <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#2C2C2C"/>
-                    <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.16"/>
+                    <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.30"/>
                     <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppCodeBackground"     ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
