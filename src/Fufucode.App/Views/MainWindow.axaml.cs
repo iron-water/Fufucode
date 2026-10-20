@@ -53,6 +53,9 @@ public partial class MainWindow : Window
     private readonly Views.ChatPage _chatPage = new();
     private readonly Views.ExtensionsPage _extensionsPage = new();
     private readonly Views.SettingsPage _settingsPage = new();
+    // 设置 → 已归档：项目与会话的归档管理控件（按数据根重建）。
+    private Features.Archive.ArchivePage? _archivePage;
+    private string? _archiveStorePath;
     private MainViewModel? _vm;
     private AppSettingsStore? _settingsStore;
 
@@ -296,7 +299,9 @@ public partial class MainWindow : Window
             if (_options.ProjectPath is null)
             {
                 var metadata = new DesktopMetadataStore(_options.CreateAppDataLayout());
-                var recent = ProjectPreferences.LoadRecent(metadata);
+                var recent = ProjectPreferences.LoadRecent(metadata)
+                    .Where(path => !ProjectArchive.IsArchivedPath(metadata, path))
+                    .ToArray();
                 var resolved = ProjectPreferences.ResolveStartupProject(
                     _options.ProjectPath, recent, Directory.Exists);
                 if (resolved is not null)
@@ -588,7 +593,9 @@ public partial class MainWindow : Window
             CurrentSessionId: current.Id,
             SwitchProjectRequested: path => SwitchProjectAsync(path),
             OpenProjectRequested: () => OpenProjectAsync(),
-            RecentProjects: ProjectPreferences.LoadRecent(host.Manager.Metadata));
+            RecentProjects: ProjectPreferences.LoadRecent(host.Manager.Metadata)
+                .Where(path => !ProjectArchive.IsArchivedPath(host.Manager.Metadata, path))
+                .ToArray());
 
         AttachSession(host.Chat, BuildSessionItems(host), callbacks,
             new RealPromptSteering(host), page);
@@ -878,7 +885,9 @@ public partial class MainWindow : Window
     {
         var currentId = host.Current.Session.Id;
         var currentModel = host.Chat.CurrentModel;
-        return host.Sessions.Where(record => record.Id == currentId || !SessionPresentation.Load(host.Manager.Metadata, record.Id).Archived)
+        var archivedProjects = ProjectArchive.LoadSet(host.Manager.Metadata);
+        return host.Sessions.Where(record => record.Id == currentId ||
+                !SessionArchive.IsArchived(host.Manager.Metadata, record, archivedProjects))
             .OrderByDescending(record => SessionPresentation.Load(host.Manager.Metadata, record.Id).Pinned).Select(record =>
         {
             var isCurrent = record.Id == currentId;
@@ -913,8 +922,13 @@ public partial class MainWindow : Window
         _switching = true;
         try
         {
-            var backend = sessionId is null ? await ChooseNewBackendAsync() : null;
-            if (sessionId is null && backend is null) return;
+            // 新建聊天不再弹后端选择窗：直接使用设置里的默认 Agent 内核。
+            var newBackend = BackendId.NativeCSharp;
+            string? backendNote = null;
+            if (sessionId is null)
+            {
+                (newBackend, backendNote) = ResolveNewSessionBackend();
+            }
             if (!await ConfirmLeaveSettingsAsync())
             {
                 if (_vm is { } retained)
@@ -934,7 +948,7 @@ public partial class MainWindow : Window
                 {
                     if (sessionId is null)
                     {
-                        await _host!.NewSessionAsync(cancellationToken: _bootstrapCts.Token, backend: backend!.Value);
+                        await _host!.NewSessionAsync(cancellationToken: _bootstrapCts.Token, backend: newBackend);
                     }
                     else
                     {
@@ -949,6 +963,7 @@ public partial class MainWindow : Window
             var presentation = SessionPresentation.Load(_host.Manager.Metadata, _host.Current.Session.Id);
             if (presentation.Unread) SessionPresentation.Save(_host.Manager.Metadata, _host.Current.Session.Id, presentation with { Unread = false });
             AttachRealSession();
+            if (backendNote is not null) _vm?.Timeline.AddNotification(backendNote);
             StartupOverlay.IsVisible = false;
             ScrollToEnd();
         }

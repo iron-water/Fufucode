@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Fufucode.App.Features.Skins;
 
@@ -18,6 +19,10 @@ internal static class SkinDialog
         foreach (var resource in owner.Resources) dialog.Resources[resource.Key] = resource.Value;
         dialog.FontFamily = owner.FontFamily;
         using var lease = SkinLease.Apply(dialog, SkinCatalog.Resolve(SkinCatalog.Get(skin).StorageKey), owner.RequestedThemeVariant);
+        // 代码构建的 Window 默认没有主题底色，深色下会显示成纯黑。
+        // 所有经这里展示的对话框统一使用应用对话框底色；显式设过背景的保持原样。
+        if (!dialog.IsSet(Window.BackgroundProperty))
+            dialog.Bind(Window.BackgroundProperty, new DynamicResourceExtension("AppDialogBackground"));
         if (skin != SkinId.Fluent)
         {
             dialog.WindowDecorations = WindowDecorations.BorderOnly;

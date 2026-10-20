@@ -365,6 +365,20 @@ public partial class MainWindow
                 _shortcutsPage.SyncGroup(vm.Settings.ShortcutsGroupId);
         };
         vm.Settings.StorageContent = _storagePage;
+        // 设置 → 已归档：项目/会话归档管理。宿主更换或数据根变化时重建控件。
+        var metadata = MetadataOrMock();
+        if (_archivePage is null ||
+            !string.Equals(_archiveStorePath, metadata.DatabasePath, StringComparison.OrdinalIgnoreCase))
+        {
+            _archivePage = new Features.Archive.ArchivePage(new Features.Archive.ArchiveViewModel(
+                metadata,
+                record => ActivateOverviewSessionAsync(record),
+                path => SwitchProjectAsync(path),
+                RefreshSessionList));
+            _archiveStorePath = metadata.DatabasePath;
+        }
+        vm.Settings.ArchiveContent = _archivePage;
+        _archivePage.Refresh();
         _ = vm.WorkspacePanel.RefreshAsync();
     }
 

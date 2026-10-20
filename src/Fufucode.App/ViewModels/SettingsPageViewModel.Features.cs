@@ -172,7 +172,9 @@ public sealed partial class SettingsPageViewModel
     [ObservableProperty] private int _selectedBackendIndex = 0; // 0=NativeCSharp, 1=Pi, 2=OMP, 3=Codex, 4=DSH, 5=Claude
     [ObservableProperty] private string _backendStatusText = "当前默认：FUMO（原生内核 · 纯 C# 实现 · 零外部依赖）";
 
-    public bool ShowBackendCard => ShowModels && MatchesOption("模型与思考 内核 后端 backend engine Pi OMP Codex DSH Native C#");
+    /// <summary>默认 Agent 内核只在「插件市场 → 后端内核」二级页出现；
+    /// 新建聊天不再弹窗，直接使用这里的默认值。</summary>
+    public bool ShowBackendCard => ShowMarketplaceGroup && MarketplaceGroupId == "backend";
 
     public IReadOnlyList<string> BackendEngineChoices { get; } =
     [
