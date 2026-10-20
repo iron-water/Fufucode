@@ -21,7 +21,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     private readonly IPluginToolCatalog? _pluginTools;
     private readonly SkillRegistry? _skills;
     private readonly McpManager? _mcp;
-    private readonly SubagentRunner? _subagents;
+    private readonly INativeSubagentRuntime? _subagents;
     private readonly object _gate = new();
     private readonly object _persistGate = new();
     private readonly List<(string Text, IReadOnlyList<PureImageAttachment>? Images)> _queue = [];
@@ -198,7 +198,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         bool supportsImages = true,
         SkillRegistry? skills = null,
         McpManager? mcp = null,
-        SubagentRunner? subagents = null)
+        INativeSubagentRuntime? subagents = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _supportsImages = supportsImages;
@@ -215,7 +215,15 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         {
             pureEngine.ApprovalGate = RequestApprovalAsync;
             pureEngine.TakeSteering = TakeSteeringMessage;
-            if (_subagents is not null) _subagents.ApprovalGate = pureEngine.ApprovalGate;
+            if (_subagents is not null)
+            {
+                _subagents.ApprovalGate = pureEngine.ApprovalGate;
+                _subagents.ParentMode = () => pureEngine.Mode;
+                _subagents.SetTier(NativeSubagentRegistry.Tier);
+                _subagents.HistoryProvider = () => pureEngine.GetState().History ?? [];
+                _subagents.Progress = progress => Emit(new SessionEvent.SubagentUpdated(
+                    progress.JobId, progress.Agent, progress.Kind, progress.Detail));
+            }
         }
     }
 
@@ -232,7 +240,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         bool supportsImages = true,
         SkillRegistry? skills = null,
         McpManager? mcp = null,
-        SubagentRunner? subagents = null)
+        INativeSubagentRuntime? subagents = null)
         : this(new PureCSharpAgentEngine(toolDispatcher, modelClient, maxIterations), sessionId, modelId,
             systemPromptProvider, pluginTools, persistFilePath, supportsImages, skills, mcp, subagents)
     {
@@ -252,7 +260,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public McpManager? Mcp => _mcp;
 
     /// <summary>子代理运行器；未接线时为 null（不声明 subagent 工具）。</summary>
-    public SubagentRunner? Subagents => _subagents;
+    public INativeSubagentRuntime? Subagents => _subagents;
 
     /// <summary>内置工具集合：读取、写入、精确定位编辑、目录列表、正则检索、通配发现、命令执行与任务计划。</summary>
     private static readonly string[] BuiltInToolNames =
@@ -268,7 +276,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var merged = new List<string>(BuiltInToolNames);
         if (_skills?.HasModelInvocableSkills == true) merged.Add(SkillRegistry.ToolName);
         if (_mcp?.HasServers == true) merged.Add(McpGatewayDispatcher.ToolName);
-        if (_subagents is not null) merged.Add(SubagentDispatcher.ToolName);
+        if (_subagents is not null) merged.Add(NativeSubagentContract.ToolName);
 
         if (_pluginTools is not { } pluginTools) return merged;
         foreach (var name in pluginTools.ActiveToolNames)
@@ -284,20 +292,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var list = new List<PureToolDefinition>();
         list.AddRange(ProductionToolDispatcher.GetBuiltinToolDefinitions());
         if (_mcp?.HasServers == true) list.Add(McpGatewayDispatcher.Definition);
-        if (_subagents is not null) list.Add(SubagentDispatcher.Definition);
-        if (_skills?.HasModelInvocableSkills == true)
-        {
-            list.Add(new PureToolDefinition(SkillRegistry.ToolName,
-                "加载指定技能的完整操作说明（SKILL.md）。技能通常描述如何用 CLI/API 完成某类任务。",
-                """
-                {
-                    "type": "object",
-                    "properties": {
-                        "name": { "type": "string", "description": "技能名称；省略时列出可用技能" }
-                    }
-                }
-                """));
-        }
+        if (_subagents is not null) list.Add(NativeSubagentContract.Definition);
+        if (_skills?.HasModelInvocableSkills == true) list.Add(SkillRegistry.Definition);
         if (_pluginTools is { } pt)
         {
             foreach (var reg in pt.ActiveRegistrations)
@@ -621,7 +617,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             if (cts is not null && _activity != SessionActivity.Cancelling)
                 _activity = SessionActivity.Cancelling;
         }
-
         if (cleared.Length > 0)
         {
             Emit(new SessionEvent.QueueCleared(cleared));

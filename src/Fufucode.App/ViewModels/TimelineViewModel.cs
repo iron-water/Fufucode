@@ -209,6 +209,18 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
                 or SessionConnection.Stopped }:
                 _inStopWindow = false;
                 break;
+            case SessionEvent.SubagentUpdated updated:
+                var detail = string.IsNullOrWhiteSpace(updated.Detail) ? string.Empty : "：" + updated.Detail;
+                AddNotification(updated.Kind switch
+                {
+                    "tool_start" => $"子代理 {updated.Agent} 调用 {updated.Detail}",
+                    "tool_end" => $"子代理 {updated.Agent} 完成 {updated.Detail}",
+                    "completed" => $"子代理 {updated.Agent} 已完成",
+                    "failed" => $"子代理 {updated.Agent} 失败{detail}",
+                    "assistant" => $"子代理 {updated.Agent}：{updated.Detail}",
+                    _ => $"子代理 {updated.Agent} 运行中{detail}"
+                });
+                break;
         }
 
         // 停止窗口内的"中止"错误归一为用户取消（Core 后续改为直接发 UserCancelled 时此处即成空操作）。

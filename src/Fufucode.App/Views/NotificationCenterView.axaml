@@ -8,6 +8,10 @@
     <Style Selector="TextBlock.notificationCompleted"><Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/></Style>
     <Style Selector="TextBlock.notificationFailed"><Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/></Style>
     <Style Selector="TextBlock.notificationApproval"><Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/></Style>
+    <Style Selector="Button.notificationFilter.selected">
+      <Setter Property="Background" Value="{DynamicResource AppAccentSubtle}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    </Style>
   </UserControl.Styles>
   <Border Classes="overlayPanel">
     <Grid RowDefinitions="Auto,Auto,*,Auto">
@@ -16,13 +20,23 @@
         <Button Grid.Column="1" x:Name="ClosePageButton" Classes="iconButton" Content="×" Width="32" Height="32"
                 Command="{Binding CloseCommand}" AutomationProperties.Name="关闭通知中心"/>
       </Grid>
-      <Border Grid.Row="1" x:Name="ChannelPrompt" IsVisible="False" Margin="12,0,12,8" Padding="10"
-              Background="{DynamicResource AppAccentSubtle}" AutomationProperties.Name="通知页提醒">
-        <TextBlock x:Name="ChannelPromptText" Classes="caption" TextWrapping="Wrap"/>
-      </Border>
+      <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,8">
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="16,0,16,0" AutomationProperties.Name="通知过滤">
+          <Button Classes="subtle notificationFilter" Classes.selected="{Binding IsAllFilter}" Content="全部"
+                  MinHeight="28" Padding="10,2" Command="{Binding SetFilterCommand}" CommandParameter="all"/>
+          <Button Classes="subtle notificationFilter" Classes.selected="{Binding IsUnreadFilter}" Content="未读"
+                  MinHeight="28" Padding="10,2" Command="{Binding SetFilterCommand}" CommandParameter="unread"/>
+          <Button Classes="subtle notificationFilter" Classes.selected="{Binding IsActionableFilter}" Content="失败与待处理"
+                  MinHeight="28" Padding="10,2" Command="{Binding SetFilterCommand}" CommandParameter="actionable"/>
+        </StackPanel>
+        <Border x:Name="ChannelPrompt" IsVisible="False" Margin="12,0,12,0" Padding="10"
+                Background="{DynamicResource AppAccentSubtle}" AutomationProperties.Name="通知页提醒">
+          <TextBlock x:Name="ChannelPromptText" Classes="caption" TextWrapping="Wrap"/>
+        </Border>
+      </StackPanel>
       <Grid Grid.Row="2" MinHeight="80">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl ItemsSource="{Binding Items}" Margin="16,0,16,8">
+          <ItemsControl ItemsSource="{Binding FilteredItems}" Margin="16,0,16,8">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:NotificationItemViewModel">
                 <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="0,12">
@@ -46,7 +60,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </ScrollViewer>
-        <TextBlock Classes="caption" Text="暂无通知" IsVisible="{Binding !HasItems}" Margin="16,16"/>
+        <TextBlock Classes="caption" Text="{Binding FilteredEmptyText}" IsVisible="{Binding !HasVisibleItems}" Margin="16,16"/>
       </Grid>
       <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
         <StackPanel Spacing="8">

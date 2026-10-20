@@ -34,6 +34,8 @@ internal static class BrowserSurfaceActions
     public const string CopyAddress = "browser.copy-address";
     public const string OpenExternal = "browser.open-external";
     public const string DevTools = "browser.devtools";
+    public const string FocusAddress = "browser.focus-address";
+    public const string ToggleFullView = "browser.toggle-full-view";
 
     public static IReadOnlyList<BrowserSurfaceActionDescriptor> Catalog { get; } = new[]
     {
@@ -50,6 +52,8 @@ internal static class BrowserSurfaceActions
         new BrowserSurfaceActionDescriptor(CopyAddress, "复制当前地址", ScopeName, "", "复制真实导航地址，而非草稿"),
         new BrowserSurfaceActionDescriptor(OpenExternal, "在默认浏览器打开", ScopeName, "", "显式外部打开当前地址"),
         new BrowserSurfaceActionDescriptor(DevTools, "打开开发者工具", ScopeName, "F12", "真实调用运行时，仅用户操作触发"),
+        new BrowserSurfaceActionDescriptor(FocusAddress, "聚焦地址栏", ScopeName, "Ctrl+L", "选中当前地址，便于直接输入"),
+        new BrowserSurfaceActionDescriptor(ToggleFullView, "切换浏览器全宽", ScopeName, "Ctrl+Shift+B", "在聊天分屏与浏览器全宽之间切换"),
     };
 
     /// <summary>动作在当前状态下不可用的原因；null 表示可用。</summary>
@@ -92,6 +96,8 @@ internal static class BrowserSurfaceActions
             case CopyAddress: vm.CopyAddressCommand.Execute(null); return true;
             case OpenExternal: vm.OpenExternalCommand.Execute(null); return true;
             case DevTools: vm.OpenDevToolsCommand.Execute(null); return true;
+            case FocusAddress: view.FocusAddress(); return true;
+            case ToggleFullView: vm.ToggleFullViewCommand.Execute(null); return true;
             default: return false;
         }
     }

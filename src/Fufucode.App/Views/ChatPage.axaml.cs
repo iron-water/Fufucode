@@ -1,9 +1,13 @@
 using System;
 using System.Diagnostics;
+using System.IO;
 using System.Linq;
+using System.Text;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
@@ -42,6 +46,7 @@ public partial class ChatPage : UserControl
 
         DataContextChanged += (_, _) =>
         {
+            PluginContentBridge.Reset();
             if (_attachedViewModel is { } previous)
             { previous.Input.FocusRequested -= OnInputFocusRequested; previous.Input.PropertyChanged -= ComposerChanged; previous.Timeline.Entries.CollectionChanged -= TimelineChanged; previous.Timeline.ScrollToEndSmoothRequested -= AnimateScrollToEnd; }
             _attachedViewModel = DataContext as MainViewModel;
@@ -52,6 +57,9 @@ public partial class ChatPage : UserControl
                 vm.Input.PropertyChanged += ComposerChanged;
                 vm.Timeline.Entries.CollectionChanged += TimelineChanged;
                 vm.Timeline.ScrollToEndSmoothRequested += AnimateScrollToEnd;
+                // 富内容插件只拿到这两个窄回调：提交一段文本、填入输入框。
+                PluginContentBridge.SubmitAsync = text => vm.Input.SubmitExternalAsync(text);
+                PluginContentBridge.InsertDraft = text => vm.Input.DraftText = text;
                 RefreshComposerTools();
             }
         };
@@ -108,6 +116,39 @@ public partial class ChatPage : UserControl
     private void OnToggleFileDiff(object? sender, RoutedEventArgs e)
     {
         if (sender is Control { DataContext: TurnFileChangeViewModel file }) file.ToggleDiff();
+    }
+
+    /// <summary>复制工具输出原文，便于在别处继续处理。</summary>
+    private async void OnCopyToolOutput(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: ToolCallBlockViewModel tool }) return;
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+        try { await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, tool.Output ?? string.Empty); }
+        catch (Exception) { }
+    }
+
+    /// <summary>引用 chip：链接在内置浏览器打开，失败退回系统浏览器。</summary>
+    private void OnOpenMessageLink(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: MessageLinkViewModel link }) return;
+        if (!Uri.TryCreate(link.Url, UriKind.Absolute, out var uri)) return;
+
+        if (TopLevel.GetTopLevel(this) is MainWindow window && window.OpenUrlInBrowser(link.Url)) return;
+        if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher) _ = launcher.LaunchUriAsync(uri);
+    }
+
+    /// <summary>引用 chip：文件在侧栏预览；相对路径按当前项目根解析。</summary>
+    private void OnOpenMessageFile(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: MessageFileViewModel file }) return;
+        if (DataContext is not MainViewModel vm) return;
+
+        var path = file.Path;
+        if (!Path.IsPathRooted(path) && !string.IsNullOrWhiteSpace(vm.ProjectRootPath))
+            path = Path.Combine(vm.ProjectRootPath, path);
+
+        vm.WorkspacePanel.OpenFilePreview(path);
+        if (TopLevel.GetTopLevel(this) is MainWindow window) window.OpenDockPage("files", DockZone.Right);
     }
 
     private void UpdateComposerToolbar()
@@ -272,9 +313,24 @@ public partial class ChatPage : UserControl
         };
     }
 
+    /// <summary>超过该字符数的粘贴转为会话临时附件，避免长文本挤占输入框。</summary>
+    private const int LargePasteThreshold = 600;
+
+    /// <summary>附件内嵌文本上限；超过时只保留前缀并明确说明截断。</summary>
+    internal const int MaxEmbeddedPasteChars = 200_000;
+
     // Tunnel 阶段调用（见构造函数注释）：先于 TextBox 自身处理。
     private void InputBox_KeyDown(object? sender, KeyEventArgs e)
     {
+        // 大段粘贴：先接管 Ctrl+V，读完剪贴板再决定是普通粘贴还是转为附件。
+        if (e.Key == Key.V &&
+            (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift | KeyModifiers.Alt)) == KeyModifiers.Control)
+        {
+            e.Handled = true;
+            _ = PasteComposerAsync();
+            return;
+        }
+
         // UI-1 CJK 输入法双重互锁，第二重：VK 229 在 Avalonia 里映射为 Key.ImeProcessed
         // （对齐 Web 侧 keyCode === 229）。合成键不进入发送分支，直接吞掉——即使它一旦
         // 被归一化成 Enter 也不会误发。
@@ -325,6 +381,62 @@ public partial class ChatPage : UserControl
             }
 
             e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// 构造大段粘贴附件的上下文。内容直接内嵌，确保 Agent 不依赖读取 workspace 外的临时文件；
+    /// 超过上限时保留前缀并明确标注截断与完整文件位置。
+    /// </summary>
+    internal static string PastedAttachmentContext(string text, string path)
+    {
+        if (text.Length <= MaxEmbeddedPasteChars) return "粘贴内容：\n" + text;
+        return "粘贴内容（已截断）：\n" + text[..MaxEmbeddedPasteChars] +
+               $"\n\n[粘贴内容过长，仅内嵌前 {MaxEmbeddedPasteChars:N0} 字符；完整内容已保存到 {path}]";
+    }
+
+    /// <summary>
+    /// Ctrl+V 的统一入口：短文本走 TextBox 原生粘贴；长文本写成会话临时文件并作为附件引用。
+    /// 临时文件只落在系统临时目录，不写入项目工作区。
+    /// </summary>
+    private async Task PasteComposerAsync()
+    {
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard is null)
+        {
+            InputBox.Paste();
+            return;
+        }
+
+        string? text = null;
+        try { text = await clipboard.TryGetTextAsync(); }
+        catch { /* 剪贴板不可读时退回原生粘贴 */ }
+
+        if (string.IsNullOrEmpty(text) || text.Length <= LargePasteThreshold)
+        {
+            InputBox.Paste();
+            return;
+        }
+
+        try
+        {
+            var directory = Path.Combine(Path.GetTempPath(), "fufucode", "pasted");
+            Directory.CreateDirectory(directory);
+            var path = Path.Combine(directory,
+                $"pasted-{DateTime.Now:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.txt");
+            await File.WriteAllTextAsync(path, text, new UTF8Encoding(false));
+            if (DataContext is MainViewModel vm)
+            {
+                // 直接构造附件上下文：临时文件在 workspace 外，不能只给 Agent 一个读不到的路径。
+                vm.Input.AddAttachment(new AttachedFile(path, PastedAttachmentContext(text, path)));
+                vm.Timeline.AddNotification($"粘贴内容较长（{text.Length:N0} 字符），已转为附件，发送时一并引用。");
+                OnInputFocusRequested();
+            }
+        }
+        catch (Exception error)
+        {
+            ReportActionError("大段粘贴转附件失败：" + error.GetBaseException().Message);
+            InputBox.Paste();
         }
     }
 

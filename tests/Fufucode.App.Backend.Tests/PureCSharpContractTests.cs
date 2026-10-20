@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Backend;
+using Fufucode.Plugins.Subagents;
 
 namespace Fufucode.App.Backend.Tests;
 
@@ -707,73 +708,69 @@ internal static class PureCSharpContractTests
                 await mcpSession.DisposeAsync();
             }
 
-            // ════════════════ 子代理：定义发现与工具白名单 ════════════════
+            // ════════════════ 子代理：定义、read 快速模式与只读不变量 ════════════════
             var agentDir = Path.Combine(tempDir, ".fumo", "agents");
             Directory.CreateDirectory(agentDir);
             await File.WriteAllTextAsync(Path.Combine(agentDir, "reviewer.md"),
-                "---\nname: reviewer\ndescription: 只读代码审查\ntools: read_file, grep_search\nmaxTurns: 5\n---\n你是只读审查子代理。");
+                "---\nname: reviewer\ndescription: 只读代码审查\ntools: read_file, grep_search\nmaxTurns: 5\ntimeoutSeconds: 45\n---\n你是只读审查子代理。");
+            await File.WriteAllTextAsync(Path.Combine(agentDir, "sneaky.md"),
+                "---\nname: sneaky\ndescription: read 模式但声明了写工具\ntools: write_file, read_file\n---\n尝试写入。");
             var agents = AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home"));
             checks.Check(agents.TryGet("explore", out var exploreAgent) &&
+                         exploreAgent.Mode == SubagentMode.Read &&
                          exploreAgent.Tools.Contains("read_file") && !exploreAgent.Tools.Contains("run_command"),
-                "内置 explore 子代理只有只读工具");
+                "内置 explore 是只读 read 模式");
+            checks.Check(agents.TryGet("general", out var generalAgent) &&
+                         generalAgent.Mode == SubagentMode.Patch &&
+                         generalAgent.Tools.Contains("write_file"),
+                "内置 general 是 patch 模式");
             checks.Check(agents.TryGet("reviewer", out var reviewerAgent) &&
                          reviewerAgent.Tools.SequenceEqual(new[] { "read_file", "grep_search" }) &&
-                         reviewerAgent.MaxTurns == 5,
-                "发现 Markdown 子代理定义并解析工具白名单与轮次");
+                         reviewerAgent.MaxTurns == 5 && reviewerAgent.TimeoutSeconds == 45 &&
+                         reviewerAgent.Mode == SubagentMode.Read,
+                "发现 Markdown 子代理定义并解析工具白名单、轮次、超时与模式");
             checks.Check(agents.BuildPromptSection().Contains("explore") &&
-                         agents.BuildPromptSection().Contains("reviewer"),
-                "系统提示目录列出可用子代理");
+                         agents.BuildPromptSection().Contains("reviewer") &&
+                         agents.BuildPromptSection().Contains("read"),
+                "系统提示目录列出子代理与模式");
 
-            // ════════════════ 子代理：隔离上下文与工具过滤 ════════════════
+            // ════════════════ 子代理：read 模式只读、快速返回 ════════════════
             var recording = new RecordingDispatcher();
             var runCommandCall = new PureToolCall("sc1", "run_command", "{\"command\":\"echo hi\"}");
-            var exploreRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+            var exploreRunner = new SubagentRunner(agents,
                 new FixedToolCallClient(runCommandCall, "子代理完成"), recording, "m");
             var exploreResult = await exploreRunner.RunAsync("explore", "检查项目", null, CancellationToken.None);
-            checks.Check(exploreResult.Success && exploreResult.Content.Contains("子代理完成"),
-                "子代理返回最终文本");
+            checks.Check(exploreResult.Success && exploreResult.Mode == SubagentMode.Read &&
+                         exploreResult.Content.Contains("子代理完成") && exploreResult.DurationMs >= 0,
+                "read 子代理返回最终文本、模式与耗时");
             checks.Check(recording.Calls.Count == 0,
                 "explore 子代理的越权 run_command 被工具白名单拦截");
 
-            var generalRecording = new RecordingDispatcher();
-            var generalRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
-                new FixedToolCallClient(runCommandCall, "通用子代理完成"), generalRecording, "m");
-            var generalResult = await generalRunner.RunAsync("general", "执行命令", null, CancellationToken.None);
-            checks.Check(generalResult.Success && generalRecording.Calls.Count == 1 &&
-                         generalResult.ToolCalls == 1,
-                "general 子代理按定义执行允许的工具");
-
-            var unknownAgent = await exploreRunner.RunAsync("missing", "任务", null, CancellationToken.None);
-            checks.Check(!unknownAgent.Success && unknownAgent.Error?.Contains("未知子代理") == true,
-                "未知子代理明确失败而不是回退");
+            var sneakyCall = new PureToolCall("sc2", "write_file",
+                "{\"path\":\"sneaky.txt\",\"content\":\"x\"}");
+            var sneakyRecording = new RecordingDispatcher();
+            var sneakyRunner = new SubagentRunner(agents,
+                new FixedToolCallClient(sneakyCall, "尝试完成"), sneakyRecording, "m", tempDir);
+            var sneakyResult = await sneakyRunner.RunAsync("sneaky", "写文件", null, CancellationToken.None);
+            checks.Check(sneakyResult.Success && sneakyResult.Mode == SubagentMode.Read &&
+                         sneakyRecording.Calls.Count == 0 && !File.Exists(Path.Combine(tempDir, "sneaky.txt")),
+                "read 模式强制过滤写工具，不因定义声明而放开");
 
             // ════════════════ 子代理：工具入口与会话声明 ════════════════
             var subagentDispatcher = new SubagentDispatcher(new RecordingDispatcher(), exploreRunner);
             var subagentList = await subagentDispatcher.DispatchAsync(new PureToolCall("sa1", "subagent", "{}"));
-            checks.Check(subagentList.Success && subagentList.Content.Contains("explore"),
-                "subagent 工具缺省 prompt 时列出可用子代理");
+            checks.Check(subagentList.Success && subagentList.Content.Contains("explore") &&
+                         subagentList.Content.Contains("[read]"),
+                "subagent 工具缺省 prompt 时列出可用子代理与模式");
             var subagentCall = await subagentDispatcher.DispatchAsync(new PureToolCall("sa2", "subagent",
                 "{\"agent\":\"explore\",\"prompt\":\"查找入口\"}"));
-            checks.Check(subagentCall.Success && subagentCall.Content.Contains("[子代理 explore]") &&
+            checks.Check(subagentCall.Success && subagentCall.Content.Contains("[子代理 explore · read]") &&
                          subagentCall.Content.Contains("子代理完成"),
-                "subagent 工具调用返回带来源标记的结论");
+                "subagent 工具调用返回带模式标记的结论");
 
-            var subCapturing = new CapturingTextClient("父会话答复");
-            var subSession = new NativeCSharpChatSession(
-                new PureCSharpAgentEngine(new SubagentDispatcher(new RecordingDispatcher(), exploreRunner),
-                    subCapturing),
-                "subagent-session", "m", subagents: exploreRunner);
-            var subSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            subSession.Event += (_, e) => { if (e is SessionEvent.TurnSettled) subSettled.TrySetResult(); };
-            await subSession.SendAsync("你好");
-            await subSettled.Task.WaitAsync(TimeSpan.FromSeconds(10));
-            var subRequest = subCapturing.Requests[^1];
-            checks.Check(subRequest.ToolNames.Contains("subagent"), "会话声明 subagent 工具");
-            checks.Check(subRequest.ToolDefinitions?.Any(d => d.Name == "subagent") == true,
-                "subagent 工具携带参数 Schema");
-            checks.Check(subRequest.Messages[0].Content.Contains("可用子代理"),
-                "系统提示注入子代理目录");
-            await subSession.DisposeAsync();
+            checks.Check(NativeSubagentContract.Definition.Name == "subagent" &&
+                         NativeSubagentContract.Definition.ParametersJsonSchema.Contains("prompt"),
+                "Subagent 插件提供统一 subagent 工具契约");
 
             // ════════════════ 权限模式穿透调度链 ════════════════
             await using (var chainMcp = McpManager.Create(Array.Empty<McpServerConfig>(), mcpHome))
@@ -782,10 +779,170 @@ internal static class PureCSharpContractTests
                     new SkillAwareDispatcher(new SubagentDispatcher(dispatcher, exploreRunner), skills), chainMcp);
                 var chainedEngine = new PureCSharpAgentEngine(chained, new FixedTextClient("x"));
                 chainedEngine.Mode = PermissionMode.Plan;
-                checks.Equal(PermissionMode.Plan, dispatcher.Mode,
-                    "Plan 模式穿过 MCP/Skill/Subagent 包装器作用于真实调度器");
+                checks.Equal(PermissionMode.Default, dispatcher.Mode,
+                    "Subagent 插件未安装时不改变真实调度器权限链");
                 chainedEngine.Mode = PermissionMode.Default;
             }
+
+            // ════════════════ 子代理：结构化输出 / fork / 嵌套 / 能力工具 ════════════════
+            await File.WriteAllTextAsync(Path.Combine(agentDir, "structured.md"),
+                "---\nname: structured\n" +
+                "description: 返回结构化结论\n" +
+                "tools: read_file\n" +
+                "outputSchema: {\"type\":\"object\",\"required\":[\"answer\"]}\n---\n只返回 JSON。");
+            var structuredAgents = AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home"));
+
+            var structuredRunner = new SubagentRunner(structuredAgents,
+                new FixedTextClient("{\"answer\":\"ok\"}"), recording, "m");
+            var structuredResult = await structuredRunner.RunAsync("structured", "给结论", null,
+                CancellationToken.None);
+            checks.Check(structuredResult.Success && structuredResult.StructuredOutput == "{\"answer\":\"ok\"}",
+                "outputSchema 校验通过并返回结构化结果");
+
+            var badSchemaRunner = new SubagentRunner(structuredAgents,
+                new FixedTextClient("not json"), recording, "m");
+            var badSchemaResult = await badSchemaRunner.RunAsync("structured", "给结论", null,
+                CancellationToken.None);
+            checks.Check(!badSchemaResult.Success && badSchemaResult.Error?.Contains("JSON") == true,
+                "不符合 outputSchema 的子代理结果明确失败");
+
+            var forkCapturing = new CapturingTextClient("fork 完成");
+            var forkRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                forkCapturing, recording, "m", tempDir, historyProvider: () => new[]
+                {
+                    new PureAgentMessage(PureAgentRole.User, "父会话历史标记"),
+                    new PureAgentMessage(PureAgentRole.Assistant, "父会话答复")
+                });
+            var forkResult = await forkRunner.RunAsync("explore", "继续分析", null, CancellationToken.None, fork: true);
+            checks.Check(forkResult.Success &&
+                         forkCapturing.Requests[0].Messages.Any(m => m.Content.Contains("父会话历史标记")),
+                "fork 子代理继承父会话最近历史");
+            checks.Check(forkCapturing.Requests[0].ReasoningEffort is null,
+                "read 子代理不强制低推理强度，沿用模型默认");
+
+            await File.WriteAllTextAsync(Path.Combine(agentDir, "lead.md"),
+                "---\nname: lead\ndescription: 嵌套探索\ntools: read_file, subagent\nmode: read\n---\n组织探索。");
+            var nestedProgress = new List<SubagentProgress>();
+            var nestedCall = new PureToolCall("nest1", "subagent",
+                "{\"agent\":\"explore\",\"prompt\":\"再派一个\"}");
+            var nestedRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                new FixedToolCallClient(nestedCall, "嵌套完成"), new RecordingDispatcher(), "m", tempDir,
+                depth: 0, maxDepth: 1)
+            {
+                Progress = nestedProgress.Add
+            };
+            nestedRunner.SetTier(SubagentTier.Stronger);
+            var nestedResult = await nestedRunner.RunAsync("lead", "开始", null, CancellationToken.None);
+            checks.Check(nestedResult.Success &&
+                         nestedProgress.Count(p => p.Kind == "started") >= 2,
+                "read 子代理在 maxDepth 内可继续派生只读子代理");
+
+            var capabilityAgentDir = Path.Combine(tempDir, ".fumo", "agents");
+            await File.WriteAllTextAsync(Path.Combine(capabilityAgentDir, "plugin-user.md"),
+                "---\nname: plugin-user\ndescription: 使用插件工具\ntools: browser_click\n---\n调用插件工具。");
+            var pluginCapabilityAgent = AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home"));
+            var capabilityRecording = new RecordingDispatcher();
+            var capabilityDefs = new[]
+            {
+                new PureToolDefinition("browser_click", "点击网页元素", "{\"type\":\"object\"}")
+            };
+            var capabilityRunner = new SubagentRunner(pluginCapabilityAgent,
+                new FixedToolCallClient(new PureToolCall("cap1", "browser_click", "{}"), "插件完成"),
+                capabilityRecording, "m", tempDir, capabilityDefs);
+            var capabilityResult = await capabilityRunner.RunAsync("plugin-user", "点一下", null,
+                CancellationToken.None);
+            checks.Check(capabilityResult.Success && capabilityRecording.Calls.Count == 1,
+                "read 子代理可按定义使用显式声明的能力工具");
+
+            // ════════════════ 子代理：patch 模式在隔离 worktree 中返回补丁 ════════════════
+            var gitRepo = Path.Combine(tempDir, "wt-repo");
+            Directory.CreateDirectory(gitRepo);
+            var gitOk = RunGit(gitRepo, "init") && RunGit(gitRepo, "config user.email test@example.com") &&
+                        RunGit(gitRepo, "config user.name Test");
+            if (gitOk)
+            {
+                await File.WriteAllTextAsync(Path.Combine(gitRepo, "base.txt"), "base");
+                gitOk = RunGit(gitRepo, "add .") && RunGit(gitRepo, "commit -m init");
+            }
+            if (gitOk)
+            {
+                var readInRepo = new SubagentRunner(agents, new FixedTextClient("只读完成"),
+                    new ProductionToolDispatcher(gitRepo), "m", gitRepo);
+                var readRepoResult = await readInRepo.RunAsync("explore", "只读检查", null,
+                    CancellationToken.None);
+                var worktreeStore = Path.Combine(gitRepo, ".git", "worktrees");
+                checks.Check(readRepoResult.Success && readRepoResult.Mode == SubagentMode.Read &&
+                             readRepoResult.Patch is null &&
+                             (!Directory.Exists(worktreeStore) ||
+                              Directory.GetDirectories(worktreeStore).Length == 0),
+                    "read 子代理在 git 工作区中也不创建 worktree");
+
+                await File.WriteAllTextAsync(Path.Combine(tempDir, ".fumo", "agents", "writer.md"),
+                    "---\nname: writer\ndescription: 隔离写入\ntools: write_file, read_file\nmode: patch\n---\n写入文件。");
+                var writerAgents = AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home"));
+                checks.Check(writerAgents.TryGet("writer", out var writerDefinition) &&
+                             writerDefinition.Mode == SubagentMode.Patch,
+                    "Markdown 定义可声明 patch 模式");
+                var wtWriteCall = new PureToolCall("wt1", "write_file",
+                    "{\"path\":\"new.txt\",\"content\":\"isolated\"}");
+                var writerRunner = new SubagentRunner(writerAgents,
+                    new FixedToolCallClient(wtWriteCall, "写入完成"), new ProductionToolDispatcher(gitRepo),
+                    "m", gitRepo);
+                var wtResult = await writerRunner.RunAsync("writer", "写入新文件", null, CancellationToken.None);
+                checks.Check(wtResult.Success && wtResult.Mode == SubagentMode.Patch &&
+                             wtResult.Patch?.Contains("new.txt") == true &&
+                             wtResult.ChangedFiles?.Contains("new.txt") == true &&
+                             wtResult.BaseHead is { Length: > 0 } &&
+                             wtResult.PatchPath is { Length: > 0 } patchFile && File.Exists(patchFile),
+                    "patch 子代理返回 unified diff、补丁文件、改动文件与基线 HEAD");
+                checks.Check(!File.Exists(Path.Combine(gitRepo, "new.txt")),
+                    "patch 子代理的改动未写入父工作区");
+
+                var cleanRunner = new SubagentRunner(writerAgents, new FixedTextClient("无改动"),
+                    new ProductionToolDispatcher(gitRepo), "m", gitRepo);
+                var cleanResult = await cleanRunner.RunAsync("writer", "只读思考", null, CancellationToken.None);
+                checks.Check(cleanResult.Success && cleanResult.Patch is null &&
+                             cleanResult.ChangedFiles is { Count: 0 },
+                    "无改动的 patch 子代理返回空补丁并清理 worktree");
+
+                var generalRunner = new SubagentRunner(writerAgents,
+                    new FixedToolCallClient(runCommandCall, "通用子代理完成"),
+                    new ProductionToolDispatcher(gitRepo), "m", gitRepo);
+                var generalResult = await generalRunner.RunAsync("general", "执行命令", null,
+                    CancellationToken.None);
+                checks.Check(generalResult.Success && generalResult.Mode == SubagentMode.Patch &&
+                             generalResult.Patch is null,
+                    "patch 子代理允许 run_command 且无文件改动时返回空补丁");
+
+                var planRunner = new SubagentRunner(writerAgents, new FixedTextClient("不应执行"),
+                    new ProductionToolDispatcher(gitRepo), "m", gitRepo)
+                {
+                    ParentMode = () => PermissionMode.Plan
+                };
+                var planResult = await planRunner.RunAsync("writer", "写文件", null, CancellationToken.None);
+                checks.Check(!planResult.Success && planResult.Error?.Contains("Plan 模式") == true,
+                    "Plan 模式拒绝 patch 子代理，只允许 read");
+                checks.Check(ProductionToolDispatcher.IsConcurrencySafe(SubagentDispatcher.ToolName),
+                    "subagent 工具可并行派发（read 只读、patch 独立 worktree）");
+
+                var patchDispatcher = new SubagentDispatcher(new RecordingDispatcher(), writerRunner);
+                var mismatch = await patchDispatcher.DispatchAsync(new PureToolCall("sa3", "subagent",
+                    "{\"agent\":\"explore\",\"mode\":\"patch\",\"prompt\":\"写\"}"));
+                checks.Check(!mismatch.Success && mismatch.Content.Contains("read 模式"),
+                    "显式 mode 与代理定义冲突时明确拒绝");
+            }
+
+            // ════════════════ 子代理：会话进度事件 ════════════════
+            var progressEvents = new List<SubagentProgress>();
+            var progressRunner = new SubagentRunner(AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                new FixedTextClient("进度结论"), new RecordingDispatcher(), "m", tempDir)
+            {
+                Progress = progressEvents.Add
+            };
+            await progressRunner.RunAsync("explore", "检查", null, CancellationToken.None);
+            checks.Check(progressEvents.Any(e => e.Kind == "started") &&
+                         progressEvents.Any(e => e.Kind == "completed"),
+                "子代理进度上报开始与完成事件");
 
             // ════════════════ 会话原子落盘（版本信封） ════════════════
             var persistPath = Path.Combine(tempDir, "persist-session.json");
@@ -820,7 +977,33 @@ internal static class PureCSharpContractTests
         }
         finally
         {
-            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+            // git worktree 元数据在 Windows 上可能是只读的；清理失败不影响断言结果。
+            try { if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true); }
+            catch { }
+        }
+    }
+
+    private static bool RunGit(string workingDirectory, string arguments)
+    {
+        try
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "git",
+                Arguments = arguments,
+                WorkingDirectory = workingDirectory,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            using var process = System.Diagnostics.Process.Start(psi)!;
+            process.WaitForExit();
+            return process.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
         }
     }
 }

@@ -8,6 +8,9 @@ const authError = document.getElementById("auth-error");
 const collectBtn = document.getElementById("collect-btn");
 const inspectBtn = document.getElementById("inspect-btn");
 const retryBtn = document.getElementById("retry-btn");
+const hostInput = document.getElementById("host-input");
+const saveHostBtn = document.getElementById("save-host-btn");
+const hostHint = document.getElementById("host-hint");
 
 function showPanel(panel) {
   authPanel.classList.add("hidden");
@@ -97,6 +100,21 @@ inspectBtn.addEventListener("click", async () => {
 });
 
 retryBtn.addEventListener("click", updateStatus);
+
+saveHostBtn.addEventListener("click", () => {
+  let host = (hostInput.value || "").trim();
+  if (!host) return;
+  if (!/^https?:\/\//i.test(host)) host = "http://" + host;
+  chrome.runtime.sendMessage({ type: "SET_HOST", host: host }, () => {
+    hostHint.textContent = "已保存，正在重新连接…";
+    updateStatus();
+  });
+});
+
+chrome.runtime.sendMessage({ type: "CHECK_STATUS" }, res => {
+  const config = res && res.status ? res.status : null;
+  if (config && config.port) hostInput.value = "http://127.0.0.1:" + config.port;
+});
 
 // 初始化检测
 updateStatus();

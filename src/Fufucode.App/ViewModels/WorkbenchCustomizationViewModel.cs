@@ -21,12 +21,9 @@ public sealed class WorkbenchCustomizationViewModel : ViewModelBase
     public string DataRoot => System.IO.Path.GetDirectoryName(_store.GlobalPath)!;
     public string Json { get => _json; set => SetProperty(ref _json, value); }
     public string Status { get => _status; set => SetProperty(ref _status, value); }
-    /// <summary>外部设置提示文本（例如"请先选择重置范围"）。</summary>
-    public void Notify(string message) => Status = message;
     public ObservableCollection<AppActionDefinition> Actions { get; } = new();
     public Func<WorkbenchLayoutState>? LayoutSnapshot { get; set; }
     public WorkbenchLayoutState Layout => WorkbenchLayoutState.Restore((Current.Layout ?? LayoutSnapshot?.Invoke() ?? new()).Serialize(), WorkbenchLayoutState.KnownPages);
-    public string Section { get; set; } = "appearance";
     public void EditLayout(Action<WorkbenchLayoutState> edit)
     {
         var layout = Layout; edit(layout); Change(s => s with { Layout = layout });

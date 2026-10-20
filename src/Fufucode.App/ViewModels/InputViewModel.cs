@@ -187,6 +187,26 @@ public sealed partial class InputViewModel : ViewModelBase
     /// <summary>发送被拒绝：UI 据此把乐观气泡转为失败态。</summary>
     public event Action? SubmissionFailed;
 
+    /// <summary>
+    /// 供消息内交互组件调用：把一段文本作为用户消息发送。
+    /// 发送前会暂存用户当前草稿，发送后原样还回，避免吞掉正在写的内容。
+    /// </summary>
+    public async Task<bool> SubmitExternalAsync(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var backup = DraftText;
+        DraftText = text;
+        if (!CanSend)
+        {
+            DraftText = backup;
+            return false;
+        }
+
+        await SendAsync();
+        if (backup.Length > 0 && DraftText.Length == 0) DraftText = backup;
+        return true;
+    }
+
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {

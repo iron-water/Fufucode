@@ -18,30 +18,37 @@ public static class WorkbenchActionDefaults
         "status.activity" => new(UiActionPosition.StatusRight, 0),
         "status.tokens" => new(UiActionPosition.StatusRight, 1),
         "status.duration" or "status.branch" or "status.project" => new(UiActionPosition.Hidden),
-        "session.rename" or "session.pin" or "session.side" or "session.fork" or "session.search" or "session.share" or "session.archive" or "session.schedule" => new(UiActionPosition.SessionIsland, 0),
-        "window.session" => new(UiActionPosition.HeaderMenu),
+        "session.side" or "session.fork" or "session.schedule" or "session.share" or "window.session" => new(UiActionPosition.HeaderMenu),
         "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
-        "speech.stop" or "speech.start" or "usage" or "trace" => new(UiActionPosition.MenuRight),
+        "usage" or "trace" or "diagnostics.export" => new(UiActionPosition.MenuRight),
+        "layout.reset" or "composer.toggle" or "summary.toggle" => new(UiActionPosition.MenuRight),
+        "page.automation" or "page.local-review" => new(UiActionPosition.MenuRight),
+        _ when id.StartsWith("speech.") => new(UiActionPosition.MenuRight),
         _ when id.StartsWith("help.") || id.StartsWith("view.") || id.StartsWith("edit.") => new(UiActionPosition.MenuRight),
-        _ when id.StartsWith("status.") => new(UiActionPosition.Hidden),
+        _ when id.StartsWith("status.") || id.StartsWith("terminal.") || id.StartsWith("browser.") => new(UiActionPosition.Hidden),
         _ => new(UiActionPosition.MenuLeft)
     };
     /// <summary>菜单二级分组：同一父名下的动作收进一个子菜单；null 表示直接平铺。</summary>
     public static string? SubMenu(string id) => id switch
     {
-        _ when id.StartsWith("browser.") => "浏览器操作",
         "chat" or "files" or "changes" or "browser" or "terminal" or "extensions" => "工作区页面",
         "copy.session" or "copy.id" or "copy.task" or "copy.project" or "copy.log" or "copy.deeplink" or "copy.markdown" or "copy.workdir" => "复制",
         "session.export" or "session.export.markdown" or "session.export.metadata" or "session.export.pdf" => "导出",
         "session.fork" or "session.fork.worktree" => "分叉",
-        "project.open" or "project.explorer" or "project.openWith" => "项目",
+        "project.open" or "project.explorer" or "project.openWith" or "library" => "项目",
+        "session.search" or "session.rename" or "session.previous" or "session.next" or "session.pin" or "session.unread" or "session.archive" or "session.archives" or "session.foreground" => "会话管理",
+        _ when id.StartsWith("edit.") => "编辑",
+        "view.fullscreen" or "view.zoomIn" or "view.zoomOut" or "view.zoomReset" or "layout.reset" or "composer.toggle" or "summary.toggle" => "视图与布局",
+        _ when id.StartsWith("speech.") => "语音朗读",
+        "page.automation" or "page.local-review" or "trace" or "diagnostics.export" or "help.troubleshoot" or "help.status" or "help.tasks" or "help.performance" => "诊断与系统",
+        "help.shortcuts" or "help.update" or "help.about" or "auth.manage" or "window.new" or "window.session" => "帮助与全局",
         _ => null,
     };
 
     /// <summary>子菜单内的排序：父项（可双击执行的默认项）排第一。</summary>
     public static int SubMenuOrder(string id) => id switch
     {
-        "session.export" or "session.fork" or "copy.id" => 0,
+        "session.export" or "session.fork" or "copy.id" or "session.search" or "edit.undo" or "view.fullscreen" or "speech.start" or "trace" or "help.about" => 0,
         _ => 10,
     };
 
@@ -60,24 +67,28 @@ public static class WorkbenchActionDefaults
         "browser.zoom-in" => "ZoomIn", "browser.zoom-out" => "ZoomOut", "browser.copy-address" => "Copy",
         "browser.open-external" => "Open", "browser.devtools" => "Wrench",
         "page.local-review" => "ShieldCheckmark",
+        "page.automation" => "Automation",
+        "library" => "Folder",
         "commands" or "session.search" => "Search", "settings" => "Settings",
                 "toggle.left" => "PanelLeft", "toggle.right" => "PanelRight", "toggle.bottom" => "PanelBottom", "terminal" => "Terminal",
         "session.new" => "Add", "navigate.back" => "ArrowLeft", "navigate.forward" => "ArrowRight",
+        "session.previous" => "ArrowLeft", "session.next" => "ArrowRight",
         "session.rename" => "Edit", "session.pin" => "Pin", "session.archive" => "Archive",
         "session.unread" or "chat" or "session.side" => "Chat", "session.fork" => "Branch", "session.export" => "ArrowDownload", "session.share" => "Share",
         "session.schedule" or "tasks" => "Calendar", "notifications" => "Alert", "browser" => "Globe", "files" or "project.open" => "Folder",
         "extensions" => "PuzzlePiece", "window.new" or "window.session" => "WindowNew", "usage" => "Info",
         "auth.manage" => "Key", "project.openWith" => "Open",
-        "speech.start" or "speech.settings" => "Speaker", "speech.pause" => "Pause", "speech.resume" => "Play",
-        "session.export.metadata" => "Document",
+        "speech.start" or "speech.settings" => "Speaker", "speech.pause" => "Pause", "speech.resume" => "Play", "speech.stop" => "RecordStop",
+        "session.export.metadata" => "Document", "session.export.pdf" => "Document",
         "session.fork.worktree" => "Branch", "copy.deeplink" => "Share", "copy.markdown" => "Copy", "copy.workdir" => "Folder",
         "help.about" or "help.update" or "help.performance" => "Info",
-        "composer.toggle" => "Edit", "layout.reset" => "ArrowClockwise", "edit.undo" => "ArrowUndo", "edit.redo" => "ArrowRedo",
+        "composer.toggle" => "Edit", "layout.reset" => "ArrowClockwise", "summary.toggle" => "Document", "edit.undo" => "ArrowUndo", "edit.redo" => "ArrowRedo",
         "edit.cut" => "Cut", "edit.copy" => "Copy", "edit.paste" => "ClipboardPaste", "edit.delete" => "Dismiss", "edit.selectAll" => "Document",
         "view.zoomIn" => "ZoomIn", "view.zoomOut" => "ZoomOut", "view.zoomReset" => "ArrowClockwise", "view.fullscreen" => "FullScreenMaximize",
-        "speech.stop" => "RecordStop", "session.archives" => "Archive", "session.foreground" => "Open", "project.explorer" => "Folder",
+        "session.archives" => "Archive", "session.foreground" => "Open", "project.explorer" => "Folder",
         "help.shortcuts" => "Keyboard",
         "trace" => "History", "help.tasks" => "AppsList", "help.troubleshoot" => "Wrench", "help.status" => "Info",
+        "diagnostics.export" => "ArrowDownload",
         _ when id.StartsWith("status.") => "Info",
         _ when id.StartsWith("copy.") => "Copy", _ => "AppsList"
     };

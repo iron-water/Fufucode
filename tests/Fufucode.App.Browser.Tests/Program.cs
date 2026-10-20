@@ -180,6 +180,7 @@ internal static class Program
             BrowserSettingsTests.Run(Check);
             BrowserSettingsUi.Run(Check);
             BrowserUsabilityTests.Run(Check);
+            ExternalBrowserBridgeTests.Run(Check);
 
             // ---- 320 DIP / 浅深主题入口可达（真实控件布局） ----
             UiSmoke.Run(Check);

@@ -237,9 +237,26 @@ public sealed class PluginPackageManager : IAsyncDisposable
     public void InitializeInstalledPlugins(string? projectPath = null)
     {
         lock (_gate)
+        {
+            // 默认安装的插件随包分发：首次启动（或数据目录被清空）时从程序目录的 plugins/<id> 播种，
+            // 之后按正常安装状态加载。缺载荷只记录错误，不影响其它插件。
+            // 注意不能先判断 IsActive：状态库把"没有载荷"视为未安装，
+            // 那样默认插件永远等不到播种。这里只按"默认安装且用户没做过显式选择"处理。
+            foreach (var def in PluginMarketplaceCatalog.All.Where(d => d.DefaultInstalled && !d.IsCoreBuiltin && !_stateStore.HasExplicitState(d.Id)))
+            {
+                if (HasPhysicalPayload(def.Id)) continue;
+                try
+                {
+                    InstallPackage(def.Id);
+                    if (def.DefaultEnabled) _stateStore.SetEnabled(def.Id, true);
+                }
+                catch (Exception error) { _loadErrors[def.Id] = error.Message; }
+            }
+
             foreach (var def in PluginMarketplaceCatalog.All.Where(d => _stateStore.IsActive(d.Id) && HasPhysicalPayload(d.Id)))
                 try { ActivatePluginLocked(def.Id, projectPath); _loadErrors.Remove(def.Id); }
                 catch (Exception e) { _loadErrors[def.Id] = e.Message; }
+        }
     }
     private void SyncActivePlugins()
     {
@@ -308,6 +325,8 @@ public sealed class PluginPackageManager : IAsyncDisposable
             handler = package.CreateToolHandler(context);
             if (handler is not null) _toolRegistry.Register(handler);
             page = package.CreatePageContribution(context);
+            var content = package.CreateContentContribution(context);
+            if (content is not null) PluginContentRegistry.Register(id, content);
             _activePlugins.Add(id, (package, handler, context));
             if (loadContext is not null) _loadContexts[id] = loadContext;
             if (page is not null) _pageContributions[id] = page;
@@ -324,6 +343,8 @@ public sealed class PluginPackageManager : IAsyncDisposable
     }
     private void DeactivatePluginLocked(string id)
     {
+        // 先摘掉渲染贡献：即使后续 shutdown 失败，也不能让已停用插件的控件继续被创建。
+        PluginContentRegistry.Unregister(id);
         if (!_activePlugins.TryGetValue(id, out var entry)) return;
         if (entry.Handler is not null) _toolRegistry.Unregister(entry.Handler);
         // Preserve the entry when shutdown fails so a later stop can retry.

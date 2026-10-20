@@ -183,6 +183,11 @@
                                                         Markdown="{Binding Text}"
                                                         ImageBasePath="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ProjectRootPath}" />
                               </DataTemplate>
+                              <!-- 插件富内容：```ui 等围栏由插件渲染；插件缺失时显示原文。 -->
+                              <DataTemplate DataType="vm:PluginContentSegmentViewModel" x:DataType="vm:PluginContentSegmentViewModel">
+                                <views:PluginContentView Language="{Binding Language}"
+                                                         Payload="{Binding Payload}" Margin="0,4"/>
+                              </DataTemplate>
                               <DataTemplate DataType="vm:CodeSegmentViewModel" x:DataType="vm:CodeSegmentViewModel">
                                 <Border Classes="codeCard" Margin="0,4">
                                   <StackPanel>
@@ -283,11 +288,21 @@
                                                   Classes.neutral="{Binding BadgeIsNeutral}">
                                             <TextBlock Text="{Binding StatusText, FallbackValue='运行中'}"/>
                                           </Border>
+                                          <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
+                                                     IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
+                                          <Button Classes="iconButton" Width="22" Height="18" Padding="0"
+                                                  Click="OnCopyToolOutput" IsVisible="{Binding HasOutput}"
+                                                  ToolTip.Tip="复制工具输出">
+                                            <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
+                                                      Foreground="{DynamicResource AppTextDim}"/>
+                                          </Button>
                                         </StackPanel>
                                         <TextBlock Classes="caption mono" Text="{Binding InputJson}"
                                                    TextWrapping="Wrap" MaxLines="3" Margin="12,0,12,4"
                                                    Foreground="{DynamicResource AppTextDim}"/>
-                                        <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding HasOutput}">
+                                        <views:ToolImageView SourceText="{Binding ImageOutputSource}"
+                                                           IsVisible="{Binding HasImageOutput}" Margin="12,0,12,8"/>
+                                        <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
                                           <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                                         VerticalScrollBarVisibility="Auto"
                                                         MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
@@ -321,12 +336,22 @@
                                         Classes.neutral="{Binding BadgeIsNeutral}">
                                   <TextBlock Text="{Binding StatusText, FallbackValue='运行中'}"/>
                                 </Border>
+                                <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
+                                           IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
+                                <Button Classes="iconButton" Width="22" Height="18" Padding="0"
+                                        Click="OnCopyToolOutput" IsVisible="{Binding HasOutput}"
+                                        ToolTip.Tip="复制工具输出">
+                                  <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
+                                            Foreground="{DynamicResource AppTextDim}"/>
+                                </Button>
                               </StackPanel>
                               <TextBlock Classes="caption mono" Text="{Binding InputJson}"
                                          TextWrapping="Wrap" MaxLines="3" Margin="12,0,12,6"
                                          Foreground="{DynamicResource AppTextDim}"/>
                               <!-- UI-1 单闭合边框原则：toolCard 已闭合，内部输出区降级为无框轻质填充。 -->
-                              <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding HasOutput}">
+                              <views:ToolImageView SourceText="{Binding ImageOutputSource}"
+                                                           IsVisible="{Binding HasImageOutput}" Margin="12,0,12,8"/>
+                                        <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto"
                                               MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
@@ -343,6 +368,46 @@
 
                       </ItemsControl.DataTemplates>
                     </ItemsControl>
+                  <!-- 引用 chip：链接点击打开浏览器，文件点击在侧栏预览。 -->
+                  <ItemsControl ItemsSource="{Binding Links}" IsVisible="{Binding HasLinks}" Margin="0,6,0,0">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:MessageLinkViewModel" x:DataType="vm:MessageLinkViewModel">
+                        <Button Classes="referenceChip" Click="OnOpenMessageLink" Margin="0,0,6,6"
+                                ToolTip.Tip="{Binding Url}">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Data="{DynamicResource Icon.Globe}" Width="12" Height="12"
+                                      VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                            <TextBlock Classes="caption" Text="{Binding Title}" MaxWidth="240"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <TextBlock Classes="meta" Text="{Binding Domain}" VerticalAlignment="Center"
+                                       IsVisible="{Binding ShowDomain}"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding HasFiles}" Margin="0,2,0,0">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
+                        <Button Classes="referenceChip" Click="OnOpenMessageFile" Margin="0,0,6,6"
+                                ToolTip.Tip="{Binding Path}">
+                          <StackPanel Orientation="Horizontal" Spacing="6">
+                            <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
+                                      VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                            <TextBlock Classes="mono" FontSize="12" Text="{Binding DisplayName}"/>
+                            <TextBlock Classes="meta" Text="{Binding Folder}" VerticalAlignment="Center"
+                                       MaxWidth="200" TextTrimming="CharacterEllipsis"/>
+                          </StackPanel>
+                        </Button>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
                   <!-- 变更卡已逐文件列出产物时不再重复；没有产物时整块不出现。 -->
                   <Border IsVisible="{Binding ShowArtifactBlock}" Classes="turnSummary">
                     <StackPanel IsVisible="{DynamicResource UiShowArtifactSummary}" Spacing="4">

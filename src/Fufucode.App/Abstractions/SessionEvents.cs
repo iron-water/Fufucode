@@ -53,4 +53,7 @@ public abstract record SessionEvent
 
     /// <summary>停止时被清空的队列内容。订阅者将其保存为待恢复草稿文本，不得覆盖用户已有草稿。</summary>
     public sealed record QueueCleared(IReadOnlyList<string> ClearedTexts) : SessionEvent;
+
+    /// <summary>子代理/后台任务进度。用于界面提示，不进入消息时间线。</summary>
+    public sealed record SubagentUpdated(string JobId, string Agent, string Kind, string? Detail) : SessionEvent;
 }

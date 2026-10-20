@@ -43,6 +43,10 @@
 
   <ItemGroup>
     <Content Include="..\..\assets\licenses\FLUENT-SYSTEM-ICONS-LICENSE.txt" Link="Licenses\FLUENT-SYSTEM-ICONS-LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- 设备自带浏览器扩展：随应用输出，首次启动复制到应用数据目录供用户加载。 -->
+    <Content Include="..\..\extensions\browser-extension-mv3\**\*"
+             Link="extensions\browser-extension-mv3\%(RecursiveDir)%(Filename)%(Extension)"
+             CopyToOutputDirectory="PreserveNewest" />
     <!-- G 品牌/空态资产（轨道 G 所有）：Link 引用，不复制不修改 -->
     <AvaloniaResource Include="..\..\assets\icon\fufucode.ico" Link="Assets\Brand\fufucode.ico" />
     <AvaloniaResource Include="..\..\assets\icon\icon-256.png" Link="Assets\Brand\icon-256.png" />

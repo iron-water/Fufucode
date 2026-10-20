@@ -112,6 +112,11 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: false, DefaultEnabled: false),
 
         // ── 智能体高级能力（默认未安装，按需从市场安装） ──
+        new("workspace.subagents", "Subagent 子代理", PluginCategory.AgentCapability,
+            "可选子代理运行时：安装后默认使用 faster，stronger 由用户手动切换。",
+            "1.0.0", "Fufucode Team", ["模型调用", "独立 Agent 上下文"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("agent.browser-use", "Browser Use 浏览器控制", PluginCategory.AgentCapability,
             "赋予智能体自动化网页操作、CDP 协议调用、DOM 元素提取与页面状态交互能力。",
             "1.0.0", "Fufucode Team", ["WebView2 CDP 控制", "页面 DOM 读取", "网络导航"],
@@ -134,6 +139,12 @@ public static class PluginMarketplaceCatalog
         {
             SystemPromptFragment = SeepReverseLabAssets.SystemPromptFragment,
         },
+
+        // ── 对话增强插件（随包分发并默认启用） ──
+        new("chat.interactive-ui", "交互增强", PluginCategory.ToolExtension,
+            "把模型输出的 ```ui 围栏渲染成原生交互组件：滑块、下拉、开关、多选、输入、评分、进度与提交按钮。",
+            "1.0.0", "Fufucode Team", ["读取消息正文", "把汇总文本作为用户消息提交"],
+            DefaultInstalled: true, DefaultEnabled: true),
 
         // ── 工作区页面插件（默认未安装，按需从市场安装） ──
         new("workspace.terminal", "交互终端", PluginCategory.ToolExtension,
@@ -295,6 +306,12 @@ public sealed class PluginStateStore
     }
 
     /// <summary>插件是否处于“已安装且已启用”的可用态；未安装或已停用均为 false。</summary>
+    /// <summary>用户是否对该插件做过显式选择（安装/启用状态曾落盘）。</summary>
+    public bool HasExplicitState(string pluginId)
+    {
+        lock (_gate) return _states.ContainsKey(pluginId);
+    }
+
     public bool IsActive(string pluginId)
     {
         var state = GetState(pluginId);

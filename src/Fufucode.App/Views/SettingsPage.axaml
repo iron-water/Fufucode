@@ -10,22 +10,6 @@
              x:DataType="{x:Type vm:SettingsPageViewModel}"
              Background="{DynamicResource AppMicaPageBackground}">
 
-  <UserControl.Styles>
-    <!-- 行内响应式重排钩子：窄窗口下行内控件换行。 -->
-    <Style Selector="Grid.settingsControlRow">
-      <Setter Property="RowSpacing" Value="8"/>
-    </Style>
-    <!-- 设置页里所有 ItemsControl 的行都应是 settingsGroupList 节奏（8px），
-         否则默认 StackPanel 无间距、卡片贴死——市场组、提供商、模块、相关设置全中招。 -->
-    <Style Selector="ItemsControl">
-      <Setter Property="ItemsPanel">
-        <Setter.Value>
-          <ItemsPanelTemplate><StackPanel Classes="settingsGroupList"/></ItemsPanelTemplate>
-        </Setter.Value>
-      </Setter>
-    </Style>
-  </UserControl.Styles>
-
   <Grid RowDefinitions="Auto,*">
     <!-- 页头：Win11 设置布局——返回箭头 + 大标题居左，右侧搜索摘要；
          搜索框移到左侧导航顶部（Win11 设置主页的查找位置），与导航同层。 -->
@@ -112,20 +96,20 @@
               <TextBlock Classes="caption" Text="试试“主题”“代理”或“通知”。"/>
             </StackPanel>
 
-            <Border Classes="errorCard info" IsVisible="{Binding HasUnsavedChanges}" Margin="0,0,0,12">
+            <Border Classes="errorCard info" IsVisible="{Binding HasUnsavedChanges}" Margin="0,0,0,8">
               <StackPanel Spacing="4">
                 <TextBlock Classes="bodyStrong" Text="有未保存的草稿"/>
                 <TextBlock Classes="caption" Text="{Binding UnsavedChangesText}" TextWrapping="Wrap"/>
                 <TextBlock Classes="caption" Text="保存各项设置，或返回时选择继续编辑、丢弃草稿。" TextWrapping="Wrap"/>
               </StackPanel>
             </Border>
-            <Border Classes="errorCard" IsVisible="{Binding HasAppearanceError}" Margin="0,0,0,12">
+            <Border Classes="errorCard" IsVisible="{Binding HasAppearanceError}" Margin="0,0,0,8">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <PathIcon Data="{DynamicResource Icon.ErrorCircle}" Width="15" Height="15" VerticalAlignment="Top"/>
                 <TextBlock Classes="body" TextWrapping="Wrap" Text="{Binding AppearanceError}"/>
               </StackPanel>
             </Border>
-            <Border Classes="errorCard" IsVisible="{Binding HasSettingsLoadError}" Margin="0,0,0,12">
+            <Border Classes="errorCard" IsVisible="{Binding HasSettingsLoadError}" Margin="0,0,0,8">
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <PathIcon Data="{DynamicResource Icon.Warning}" Width="15" Height="15" VerticalAlignment="Top"/>
                 <TextBlock Classes="body" TextWrapping="Wrap"
@@ -142,7 +126,7 @@
 
             <!-- ═══ 模型与思考 ═══ -->
                         <!-- ═══ 插件市场（Plugin Marketplace） ═══ -->
-            <StackPanel IsVisible="{Binding ShowMarketplace}" Spacing="10">
+            <StackPanel IsVisible="{Binding ShowMarketplace}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="插件市场"/>
               <Border Classes="settingsPanel">
                 <StackPanel Spacing="6">
@@ -196,18 +180,27 @@
                         <StackPanel Grid.Column="0" Spacing="4">
                           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                             <TextBlock Classes="bodyStrong" Text="{Binding Name}"/>
-                            <Border Classes="badge" Background="{DynamicResource AppSubtleBackground}" Padding="6,1" CornerRadius="4">
+                            <Border Classes="badge">
                               <TextBlock Classes="caption" Text="{Binding CategoryName}"/>
                             </Border>
-                            <Border Classes="badge" Background="{DynamicResource AppSubtleBackground}" Padding="6,1" CornerRadius="4">
+                            <Border Classes="badge">
                               <TextBlock Classes="caption mono" Text="{Binding Version, StringFormat='v{0}'}"/>
                             </Border>
-                            <Border Classes="badge" Background="{DynamicResource AppSubtleBackground}" Padding="6,1" CornerRadius="4">
+                            <Border Classes="badge">
                               <TextBlock Classes="caption" Text="{Binding StatusBadgeText}"/>
                             </Border>
                           </StackPanel>
                           <TextBlock Classes="caption" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                           <TextBlock Classes="meta" Text="{Binding PermissionsSummary}" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding HasPermissions}"/>
+                          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowSubagentTier}">
+                            <TextBlock Classes="meta" Text="档位" VerticalAlignment="Center"/>
+                            <Button Classes="subtle" Content="faster" Padding="8,2"
+                                    Command="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SetSubagentFasterCommand}"
+                                    CommandParameter="{Binding}"/>
+                            <Button Classes="subtle" Content="stronger" Padding="8,2"
+                                    Command="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SetSubagentStrongerCommand}"
+                                    CommandParameter="{Binding}"/>
+                          </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -345,10 +338,10 @@
             <!-- ═══ 模型与思考 → 提供商 → 添加提供商（预设选择） ═══ -->
             <StackPanel IsVisible="{Binding ShowPresetPicker}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="添加提供商"/>
-              <TextBlock Classes="settingsRowDesc" Margin="2,0,0,10" TextWrapping="Wrap"
+              <TextBlock Classes="settingsGroupDesc"
                          Text="选择一个预填好的提供商，或自定义任意 OpenAI 兼容端点。"/>
               <Border Classes="settingsGroup">
-                <StackPanel Spacing="0">
+                <StackPanel Spacing="8">
                   <Border Classes="settingsRow">
                     <TextBox Text="{Binding PresetFilter}" PlaceholderText="搜索提供商…"/>
                   </Border>
@@ -386,7 +379,7 @@
             <StackPanel IsVisible="{Binding ShowProviderList}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="提供商"/>
               <Border Classes="settingsGroup">
-                <StackPanel Spacing="0">
+                <StackPanel Spacing="8">
                   <Border Classes="settingsRow" IsVisible="{Binding HasEndpointProviders}">
                     <TextBox Text="{Binding ProviderFilter}" PlaceholderText="搜索提供商或 Base URL…"/>
                   </Border>
@@ -494,14 +487,15 @@
                     <TextBlock Classes="meta" Text="正在获取模型…" VerticalAlignment="Center"
                                IsVisible="{Binding IsLoadingEndpointModels}"/>
                   </StackPanel>
-                  <Border BorderThickness="1" BorderBrush="{DynamicResource AppDivider}"
-                          CornerRadius="4" MaxHeight="320" IsVisible="{Binding HasAvailableEndpointModels}">
+                  <Border Classes="innerWell" BorderThickness="1" BorderBrush="{DynamicResource AppDividerSubtle}"
+                          CornerRadius="{DynamicResource ControlCornerRadius}" MaxHeight="320"
+                          IsVisible="{Binding HasAvailableEndpointModels}">
                     <ScrollViewer>
                       <ItemsControl ItemsSource="{Binding AvailableEndpointModels}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:EndpointModelOption">
                             <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding IsSelected}"
-                                      ToolTip.Tip="{Binding Id}" Margin="10,1" FontSize="12"/>
+                                      ToolTip.Tip="{Binding Id}" Margin="10,1"/>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
@@ -528,7 +522,7 @@
 
             <!-- ═══ 网络与端点 ═══ -->
             <StackPanel IsVisible="{Binding ShowNetwork}" Spacing="0">
-              <Border Classes="errorCard info" IsVisible="{Binding HasRestartNotice}" Margin="0,12,0,0">
+              <Border Classes="errorCard info" IsVisible="{Binding HasRestartNotice}" Margin="0,8,0,0">
                 <Grid ColumnDefinitions="*,Auto">
                   <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                     <PathIcon Data="{DynamicResource Icon.Info}" Width="15" Height="15" VerticalAlignment="Center"/>
@@ -641,7 +635,7 @@
                           <SelectableTextBlock Classes="meta mono" Text="{Binding RemotePairingUrl}"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                          <Border Background="{DynamicResource AppAccent}" CornerRadius="4" Padding="10,4">
+                          <Border Background="{DynamicResource AppAccent}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="10,4">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                               <TextBlock Text="4位配对PIN:" Foreground="White"/>
                               <TextBlock Text="{Binding RemotePin}" FontWeight="SemiBold" Foreground="White"/>
@@ -651,7 +645,7 @@
                         </StackPanel>
                       </Grid>
 
-                      <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="4"
+                      <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource ControlCornerRadius}"
                               Padding="12" Background="White" HorizontalAlignment="Center" IsVisible="{Binding ShowRemoteQr}">
                         <StackPanel Spacing="8" HorizontalAlignment="Center">
                           <TextBlock Classes="caption" Foreground="Black" Text="用手机相机或浏览器扫码免输地址：" HorizontalAlignment="Center"/>
@@ -739,10 +733,8 @@
             <!-- ═══ 关于 ═══ -->
             <StackPanel IsVisible="{Binding ShowAbout}" Spacing="0">
               <!-- 中断或回滚提示横幅 -->
-              <Border IsVisible="{Binding HasInterruptedNotice}"
-                      Background="{DynamicResource AppSubtleBackground}"
-                      BorderBrush="{DynamicResource AppBorderBrush}"
-                      BorderThickness="1" CornerRadius="6" Padding="12" Margin="0,0,0,12">
+              <Border Classes="settingsPanel subtle" IsVisible="{Binding HasInterruptedNotice}"
+                      Margin="0,0,0,12">
                 <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="10">
                   <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Warning}" Width="16" Height="16"
                             Foreground="{DynamicResource AppWarningForeground}" VerticalAlignment="Center"/>
@@ -850,7 +842,7 @@
 
                       <!-- 发现更新时的更新说明与下载入口 -->
                       <StackPanel Grid.Row="1" Grid.ColumnSpan="2" IsVisible="{Binding HasUpdateAvailable}" Spacing="8" Margin="0,8,0,0">
-                        <Border Background="{DynamicResource AppSubtleBackground}" CornerRadius="4" Padding="10">
+                        <Border Classes="settingsPanel subtle">
                           <StackPanel Spacing="4">
                             <TextBlock FontWeight="SemiBold" Text="{Binding UpdateManifest.Version, StringFormat='新版本 v{0}'}"/>
                             <TextBlock Classes="caption" Text="{Binding UpdateManifest.ReleaseNotes}" TextWrapping="Wrap"/>
@@ -906,14 +898,14 @@
             </StackPanel>
 
             <!-- ═══ 目录已登记、内容页尚未接线的分类（终端/文件管理/自动开发/用量）═══ -->
-            <StackPanel IsVisible="{Binding ShowCategoryPlaceholder}" Spacing="6" Margin="12,20">
+            <StackPanel IsVisible="{Binding ShowCategoryPlaceholder}" Spacing="8" Margin="12,20">
               <TextBlock Classes="subtitle" Text="该设置页尚未接线"/>
               <TextBlock Classes="caption" TextWrapping="Wrap"
                          Text="分类已在设置侧栏三级架构中登记，内容页由主控 M 统一接线。"/>
             </StackPanel>
 
             <!-- ═══ 在侧栏显示为一级分类：小功能页内的开关 ═══ -->
-            <StackPanel IsVisible="{Binding ShowPinSection}" Spacing="0" Margin="0,20,0,0">
+            <StackPanel IsVisible="{Binding ShowPinSection}" Spacing="0" Margin="0,24,0,0">
               <TextBlock Classes="settingsGroupHeader" Text="侧栏"/>
               <Border Classes="settingsRow">
                 <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
@@ -933,7 +925,7 @@
             </StackPanel>
 
             <!-- ═══ 相关设置 ═══ -->
-            <StackPanel IsVisible="{Binding HasRelatedSettings}" Spacing="0" Margin="0,20,0,0">
+            <StackPanel IsVisible="{Binding HasRelatedSettings}" Spacing="0" Margin="0,24,0,0">
               <TextBlock Classes="settingsGroupHeader" Text="相关设置"/>
               <ItemsControl ItemsSource="{Binding RelatedLinks}">
                 <ItemsControl.ItemTemplate>

@@ -15,6 +15,7 @@
     <ProjectReference Include="../../src/Fufucode.Plugins.BrowserUse/Fufucode.Plugins.BrowserUse.csproj" />
     <ProjectReference Include="../../src/Fufucode.Plugins.ComputerUse/Fufucode.Plugins.ComputerUse.csproj" />
     <ProjectReference Include="../../src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Subagents/Fufucode.Plugins.Subagents.csproj" />
     <ProjectReference Include="../../src/Fufucode.Plugins.AeroSkin/Fufucode.Plugins.AeroSkin.csproj" />
   </ItemGroup>
   <!-- 真实 seep MCP tools/list 录制清单：驱动 23 工具映射与门禁测试，避免硬编码工具名。 -->

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Fufucode.App.Infrastructure.Browser;
 
 namespace Fufucode.App.Infrastructure;
@@ -27,10 +28,24 @@ public sealed record BrowserSettings
     public string SearchUrlTemplate { get; init; } = BrowserAddressResolver.DefaultSearchTemplate;
     /// <summary>页面显示用自定义 UA；空 = 使用 WebView2 默认值。</summary>
     public string UserAgent { get; init; } = "";
+    /// <summary>通用表单自动填充（姓名、地址、电话等）。</summary>
+    public bool EnableAutofill { get; init; } = true;
+    /// <summary>密码自动保存（WebView2 内置密码管理）。</summary>
+    public bool EnablePasswordAutosave { get; init; } = true;
 
     // ── 标注 ──
     /// <summary>标注回传聊天时是否一并附上整页截图（截图模式为 never 时不附）。</summary>
     public bool AnnotationIncludeScreenshot { get; init; } = true;
+
+    // ── 设备自带浏览器控制扩展 ──
+    /// <summary>是否启动外部浏览器桥（本机回环服务 + Chrome/Edge 扩展）。</summary>
+    public bool ExternalBrowserEnabled { get; init; } = true;
+    /// <summary>外部浏览器桥首选端口；被占用时实际端口从设置页状态读取。</summary>
+    public int ExternalBrowserPort { get; init; } = 54321;
+    /// <summary>扩展配对用的 4 位 PIN；为空时由应用生成并落盘。</summary>
+    public string ExternalBrowserPin { get; init; } = "";
+    /// <summary>扩展配对后使用的长期令牌；为空时由应用生成并落盘。</summary>
+    public string ExternalBrowserToken { get; init; } = "";
 
     // ── 下载 ──
     public bool PromptDownloadLocation { get; init; }
@@ -59,8 +74,17 @@ public sealed record BrowserSettings
         DefaultDownloadDirectory = (DefaultDownloadDirectory ?? string.Empty).Trim(),
         SearchUrlTemplate = NormalizeTemplate(SearchUrlTemplate),
         UserAgent = (UserAgent ?? string.Empty).Trim(),
+        ExternalBrowserPort = ExternalBrowserPort is >= 1024 and <= 65535 ? ExternalBrowserPort : 54321,
+        ExternalBrowserPin = NormalizePin(ExternalBrowserPin),
+        ExternalBrowserToken = (ExternalBrowserToken ?? string.Empty).Trim(),
         AllowedSites = NormalizeSites(AllowedSites),
     };
+
+    private static string NormalizePin(string? pin)
+    {
+        var digits = new string((pin ?? string.Empty).Where(char.IsDigit).ToArray());
+        return digits.Length == 4 ? digits : string.Empty;
+    }
 
     /// <summary>搜索模板必须含一个 {0} 且能格式化；否则回退默认模板，不写入非法状态。</summary>
     private static string NormalizeTemplate(string? template)

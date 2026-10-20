@@ -12,6 +12,7 @@ using CommunityToolkit.Mvvm.Input;
 using Fufucode.App.Features.SettingsExperience;
 using Fufucode.App.Integration;
 using Fufucode.Core;
+using Fufucode.Core.Backend;
 
 namespace Fufucode.App.ViewModels;
 
@@ -1683,6 +1684,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         AttachNavPreference(context.DataRoot);
         SyncBackendPreference(context.DataRoot);
         SyncPlugins(context.DataRoot);
+        NativeSubagentRegistry.Tier = context.Store.Current.SubagentTier == "stronger"
+            ? SubagentTier.Stronger : SubagentTier.Faster;
         _suppressDraftTracking = true;
         _suppressThemeApply = true;
         ThemeIndex = IndexFor(context.Store.Current.Theme);

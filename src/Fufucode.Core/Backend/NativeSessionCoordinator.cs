@@ -268,7 +268,7 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
             commands.AddRange(subagents.Agents.Select(agent => new
             {
                 name = "subagent:" + agent.Name,
-                description = agent.Description,
+                description = "[" + agent.Mode + "] " + agent.Description,
                 source = "subagent"
             }));
         }
