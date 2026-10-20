@@ -198,11 +198,10 @@ public partial class MainWindow
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             Foreground = accentText,
         };
-        // Popup 树里 DynamicResource 找不到 Icon.*，显式从主窗取 StreamGeometry。
-        if (TryGetResource("Icon.Sparkle", ActualThemeVariant, out var sparkleGeo) && sparkleGeo is Geometry sg)
+        // Popup 树里 DynamicResource 找不到 Icon.*，直接从 Application.Resources 取 StreamGeometry
+        // （Icons.axaml 在 FufucodeTheme.axaml → Application.Resources，Window.TryGetResource 不一定命中）。
+        if (Avalonia.Application.Current?.TryGetResource("Icon.Sparkle", ActualThemeVariant, out var sparkleGeo) == true && sparkleGeo is Geometry sg)
             backendIcon.Data = sg;
-        else if (Avalonia.Application.Current?.TryGetResource("Icon.Sparkle", ActualThemeVariant, out var appSg) == true && appSg is Geometry asg)
-            backendIcon.Data = asg;
         backendTile.Child = backendIcon;
 
         _islandPanelTitle = new TextBlock
@@ -334,9 +333,8 @@ public partial class MainWindow
         // Popup 树里 class selector/资源 lookup 都不生效，画刷与图标几何全部显式赋。
         var iconKey = "Icon." + WorkbenchActionDefaults.Icon(action.Id);
         Geometry? iconData = null;
-        if (TryGetResource(iconKey, ActualThemeVariant, out var geo) && geo is Geometry g)
-            iconData = g;
-        else if (Avalonia.Application.Current?.TryGetResource(iconKey, ActualThemeVariant, out var appGeo) == true && appGeo is Geometry ag)
+        // Icon.* 在 Application.Resources（Icons.axaml 经 FufucodeTheme 挂在 app 级）。
+        if (Avalonia.Application.Current?.TryGetResource(iconKey, ActualThemeVariant, out var appGeo) == true && appGeo is Geometry ag)
             iconData = ag;
         var icon = new PathIcon
         {
