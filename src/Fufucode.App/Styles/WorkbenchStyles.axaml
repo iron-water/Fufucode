@@ -659,14 +659,24 @@
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
     <Setter Property="BoxShadow" Value="{DynamicResource FluentFlyoutShadow}"/>
   </Style>
+  <!-- 尾指：与 panel 同底色同描边的小菱形，视觉上把 panel 锚到 pill。 -->
+  <Style Selector="Border.islandPanelTail">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
   <Style Selector="Border.islandPanel TextBlock.meta">
     <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
   </Style>
+  <!-- 后端标识块：subtle 底 + accent 描边，不再实心 accent（与标题争视觉权重）。
+       PathIcon 用 accent 文本色点题，不做反白。 -->
   <Style Selector="Border.islandBackendTile">
-    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
   </Style>
   <Style Selector="Border.islandBackendTile PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppAccentForeground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
   </Style>
   <!-- 磁贴：Subtle 底 + 悬停描边，语义同 Windows 设置行内卡。 -->
   <Style Selector="Button.islandTile">
