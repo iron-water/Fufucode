@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Fufucode.Core.Diagnostics;
 
 namespace Fufucode.Core.Backend;
 
@@ -123,10 +124,22 @@ public sealed class SubagentRunner
     public async Task<SubagentResult> RunAsync(string agentName, string prompt, string? modelOverride,
         CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null)
     {
+        // 子代理在独立上下文中运行：开启新的根 span，内部模型/工具调用挂在它下面。
+        using var span = PerfTracer.Step("subagent", "agent", agentName);
+        span.Tag("mode", mode?.ToString() ?? "default");
+        span.Tag("fork", fork == true);
         var started = Stopwatch.GetTimestamp();
-        var result = await RunDispatchAsync(agentName, prompt, modelOverride, cancellationToken, fork, mode)
-            .ConfigureAwait(false);
-        return result with { DurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds };
+        try
+        {
+            var result = await RunDispatchAsync(agentName, prompt, modelOverride, cancellationToken, fork, mode)
+                .ConfigureAwait(false);
+            span.Tag("ok", result.Success);
+            span.Tag("toolCalls", result.ToolCalls);
+            if (!result.Success) span.Fail(result.Error ?? "failed");
+            return result with { DurationMs = (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds };
+        }
+        catch (OperationCanceledException) { span.Cancel(); throw; }
+        catch (Exception error) { span.Fail(error.GetType().Name); throw; }
     }
 
     private async Task<SubagentResult> RunDispatchAsync(string agentName, string prompt, string? modelOverride,
