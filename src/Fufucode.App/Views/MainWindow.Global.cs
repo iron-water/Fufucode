@@ -105,8 +105,12 @@ public partial class MainWindow
         vm.Settings.AttachNotificationPreferences(_notificationPreferences);
         if (_host is { } host)
         {
+            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.usage.begin", "usage context");
             _usage.AttachRealContext(host.Manager.Layout, host.ProjectPath, host.Current.Session.Id, host.Current.Coordinator);
+            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.usage.end", "usage context ready");
+            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.notifications.begin", "notification context");
             _notifications.Attach(host.Current.Session.Id, host.Current.Coordinator.Snapshot.Generation ?? Guid.Empty, vm.Session);
+            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.notifications.end", "notification context ready");
         }
         else
         {
@@ -119,7 +123,9 @@ public partial class MainWindow
         _globalVmPropertyChanged = (_, args) => { if (args.PropertyName == nameof(MainViewModel.CurrentPage)) _actions.RefreshCapabilities(); };
         vm.PropertyChanged += _globalVmPropertyChanged;
         _actions.RefreshCapabilities();
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("global.customization.begin", "customization attach");
         AttachCustomization(vm);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("global.customization.end", "customization attached");
     }
 
     private async Task OpenWorkspaceTabAsync(WorkspacePanelKind kind)

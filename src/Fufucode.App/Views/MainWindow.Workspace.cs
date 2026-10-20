@@ -363,8 +363,10 @@ public partial class MainWindow
         _workspaceSession = vm.Session;
         _workspaceSession.Event += OnWorkspaceSessionEvent;
         var key = Path.GetFullPath(path);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.project.begin", key);
         _pluginPageHost?.SetProject(key, _options.Mode == AppSessionMode.Mock);
         SyncTerminalPageReference();
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.project.pages", "plugin pages project switched");
         if (_layoutContext != key)
         {
             if (_layoutContext is not null)
@@ -404,10 +406,12 @@ public partial class MainWindow
             catch (Exception error) when (error is IOException or Microsoft.Data.Sqlite.SqliteException)
             { _modulePreferencesCanWrite = false; vm.Timeline.AddNotification("布局或模块设置读取失败：" + error.Message); _dockLayout = new(); }
         }
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.modules", "module preferences restored");
         _syncingDockState = true;
         try { vm.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]); }
         finally { _syncingDockState = false; }
         RenderDockPages();
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.dock-render", "dock pages rendered");
         UpdateLocalReviewProject(path);
         vm.Settings.AttachBuiltInModules([_browserModule, _libraryModule, _localReviewModule, _automationModule]);
         vm.Settings.ShortcutsContent = _shortcutsPage;
@@ -423,6 +427,7 @@ public partial class MainWindow
         };
         vm.Settings.StorageContent = _storagePage;
         _ = vm.WorkspacePanel.RefreshAsync();
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.attach.end", "workspace context attached");
     }
 
     private string LayoutPreferenceKey() => "workbench:layout:v1:" + _layoutContext;

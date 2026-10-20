@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Fufucode.Core.Diagnostics;
 namespace Fufucode.Core.Backend;
 
 /// <summary>一次子代理执行结果。</summary>
@@ -86,14 +87,20 @@ public sealed class SubagentRunner
             modelOverride ?? agent.ModelId ?? _defaultModelId,
             definitions);
 
+        // 子代理在独立上下文上运行：这里开启新根 span，子代理内部的模型/工具调用挂在它下面。
+        using var span = PerfTracer.Step("subagent", "agent", agent.Name);
+        span.Tag("tools", allowed.Length);
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(RunTimeout);
         try
         {
             var result = await engine.RunTurnAsync(request, timeout.Token).ConfigureAwait(false);
             if (result.Status == PureAgentTurnStatus.Failed)
+            {
+                span.Fail(result.Error ?? "failed");
                 return new SubagentResult(false, agent.Name, result.Response.Text ?? string.Empty,
                     result.ToolResults.Count, result.Error ?? "子代理执行失败。");
+            }
 
             var content = result.Response.Text ?? string.Empty;
             if (content.Length == 0)
@@ -104,6 +111,7 @@ public sealed class SubagentRunner
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            span.Fail("timeout");
             return new SubagentResult(false, agent.Name, string.Empty, 0,
                 $"子代理执行超时（{RunTimeout.TotalMinutes:0} 分钟）。");
         }

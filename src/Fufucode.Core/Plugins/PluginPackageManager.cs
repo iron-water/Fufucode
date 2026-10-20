@@ -21,13 +21,38 @@ public sealed class PluginPackageManager : IAsyncDisposable
     private readonly PluginToolRegistry _toolRegistry;
     private readonly PluginStateStore _stateStore;
     private readonly PluginDependencyStore _dependencyStore;
-    private readonly Func<Type, object?>? _serviceResolver;
+    private volatile Func<Type, object?>? _serviceResolver;
+
+    /// <summary>
+    /// 宿主服务解析器：组合根可以在构造后注入（例如性能监控插件需要的宿主桥）。
+    /// 插件激活时通过 <see cref="PluginPackageContext.GetService{T}"/> 取得。
+    /// </summary>
+    public Func<Type, object?>? ServiceResolver
+    {
+        get => _serviceResolver;
+        set => _serviceResolver = value;
+    }
     private readonly Dictionary<string, (IPluginPackage Package, IPluginToolHandler? Handler, PluginPackageContext Context)> _activePlugins = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PluginPageContribution> _pageContributions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AssemblyLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// 页面贡献装饰钩子：宿主可包装插件返回的贡献（例如把页面包装进自己的持久化层、
+    /// 为设置页提供额外内容）。Core 不引用任何具体插件。
+    /// </summary>
+    public static Func<string, IPluginPackage, PluginPageContribution?, PluginPageContribution?>? PageDecorator { get; set; }
+
     /// <summary>已激活插件的页面贡献发生变化（激活、停用、更新）。宿主据此挂载/卸载页面。</summary>
     public event Action? PagesChanged;
+
+    /// <summary>诊断：当前已激活的插件 id。</summary>
+    public IReadOnlyCollection<string> GetActivePluginIds()
+    {
+        lock (_gate) return _activePlugins.Keys.ToArray();
+    }
+
+    /// <summary>页面贡献被宿主就地替换后，让页面宿主重新同步（不触发插件激活/停用事件）。</summary>
+    public void RequestPageResync() => PageContributionsChanged?.Invoke();
 
     /// <summary>指定插件的页面贡献；未激活或未贡献页面时返回 null。</summary>
     public PluginPageContribution? PageContribution(string pluginId)
@@ -307,7 +332,8 @@ public sealed class PluginPackageManager : IAsyncDisposable
             package.InitializeAsync(context).GetAwaiter().GetResult();
             handler = package.CreateToolHandler(context);
             if (handler is not null) _toolRegistry.Register(handler);
-            page = package.CreatePageContribution(context);
+            var rawPage = package.CreatePageContribution(context);
+            page = PageDecorator is { } decorator ? decorator(id, package, rawPage) : rawPage;
             _activePlugins.Add(id, (package, handler, context));
             if (loadContext is not null) _loadContexts[id] = loadContext;
             if (page is not null) _pageContributions[id] = page;

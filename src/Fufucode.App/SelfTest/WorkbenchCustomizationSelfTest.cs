@@ -116,7 +116,7 @@ internal static class WorkbenchCustomizationSelfTest
                 "the export submenu offers markdown and metadata with a default");
             Check(leftFlyout.Items.OfType<MenuItem>().All(i => i.Header?.ToString() != "临时聊天" && i.Header?.ToString() != "审查"),
                 "temporary chat and review are gone from the left auxiliary menu");
-            Check(new[] { "session.pin", "session.unread", "session.archive", "session.rename", "session.fork", "session.side", "session.schedule", "session.share", "window.session", "copy.log", "trace", "help.update", "help.performance", "edit.undo", "speech.start", "session.fork.worktree", "session.export.metadata", "copy.markdown", "copy.workdir" }.All(actions.Contains),
+            Check(new[] { "session.pin", "session.unread", "session.archive", "session.rename", "session.fork", "session.side", "session.schedule", "session.share", "window.session", "copy.log", "perf", "help.update", "edit.undo", "speech.start", "session.fork.worktree", "session.export.metadata", "copy.markdown", "copy.workdir" }.All(actions.Contains),
                 "requested functional actions are registered in the shared catalog");
             Check(!new[] { "session.temporary", "review", "view.chatTabs", "view.navigation", "window.close", "app.quit", "ruler.toggle", "help.changes", "docs", "feedback" }.Any(actions.Contains),
                 "redundant and meaningless actions are gone from the catalog");

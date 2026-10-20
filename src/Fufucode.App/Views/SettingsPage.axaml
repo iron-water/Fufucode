@@ -233,6 +233,12 @@
 
             <ContentControl IsVisible="{Binding ShowShortcuts}" Content="{Binding ShortcutsContent}"/>
             <ContentControl IsVisible="{Binding ShowStorage}" Content="{Binding StorageContent}"/>
+            <StackPanel IsVisible="{Binding ShowPerformance}" Spacing="10" Margin="0,4,0,4">
+                <ContentControl IsVisible="{Binding ShowPerformanceHint}">
+                    <TextBlock TextWrapping="Wrap" Classes="caption" Text="{Binding PerformanceHintText}"/>
+                </ContentControl>
+                <ContentControl IsVisible="{Binding PerformancePluginAvailable}" Content="{Binding PerformanceContent}"/>
+            </StackPanel>
             <StackPanel IsVisible="{Binding ShowModels}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="模型"/>
               <Border Classes="settingsGroup">

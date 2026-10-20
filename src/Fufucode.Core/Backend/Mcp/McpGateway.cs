@@ -6,6 +6,8 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Fufucode.Core.Diagnostics;
+
 namespace Fufucode.Core.Backend;
 
 /// <summary>
@@ -107,8 +109,16 @@ public sealed class McpGatewayDispatcher(IPureToolDispatcher inner, McpManager m
                     if (arguments.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
                         arguments = JsonSerializer.SerializeToElement(new { });
 
-                    var result = await manager.CallAsync(server!, tool!, arguments.Clone(), cancellationToken)
-                        .ConfigureAwait(false);
+                    McpCallResult result;
+                    using (var mcpSpan = PerfTracer.Step("mcp.call", "server", server))
+                    {
+                        mcpSpan.Tag("tool", tool);
+                        result = await manager.CallAsync(server!, tool!, arguments.Clone(), cancellationToken)
+                            .ConfigureAwait(false);
+                        mcpSpan.Tag("ok", result.Success);
+                        mcpSpan.Tag("resultChars", result.Content?.Length ?? 0);
+                        if (!result.Success) mcpSpan.Fail("mcp_failed");
+                    }
                     // MCP 输出视为不可信数据，显式标注来源。
                     var content = $"[MCP {server}/{tool}]\n{result.Content}";
                     return new PureToolResult(call.Id, result.Success, Cap(content));

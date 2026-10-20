@@ -42,6 +42,7 @@ public sealed class RealSessionHost : IAsyncDisposable
     {
         var projectPath = AppDataLayout.NormalizeProjectPath(options.ProjectPath ?? Environment.CurrentDirectory);
         var appDataLayout = layout ?? new AppDataLayout(options.AppDataRootOverride);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.project", projectPath);
 
         // FUMO 原生内核（默认）不需要 Node/Pi，因此只在显式要外部后端时才解析运行时。
         var backendPreference = new Fufucode.Core.Backend.BackendPreferenceStore(appDataLayout).DefaultBackend;
@@ -51,6 +52,7 @@ public sealed class RealSessionHost : IAsyncDisposable
         var (node, cli) = wantsExternal
             ? RealSessionBootstrap.ResolveRuntime(options, required: false)
             : (string.Empty, string.Empty);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.runtime", wantsExternal ? "external backend runtime resolved" : "native backend (no runtime)");
 
         // 产品路径默认要求审批桥接 Verified 才能提交 prompt（decisions.md [轨道A] 桥接探针）。
         // 数据根：显式 layout 优先；否则尊重 AppDataRootOverride（自测隔离），产品参数为默认根。
@@ -62,16 +64,20 @@ public sealed class RealSessionHost : IAsyncDisposable
             dshExecutablePath: RealSessionBootstrap.ResolveDshRuntime(options));
         manager.NativePluginToolProviders = NativeBackendWiring.ToolProviders;
         manager.NativeSystemPromptProvider = NativeBackendWiring.SystemPromptProvider;
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.manager", "PersistentSessionManager constructed");
         var project = manager.Metadata.GetOrCreateProject(projectPath);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.project-metadata", project.Id);
 
         // H4：按项目持久化的启用列表 → 过滤掉磁盘已不存在的路径（仍留在持久列表，
         // UI 显示"路径缺失，已跳过"）→ 下一次 Pi 进程显式加载。
         var enabled = ExtensionPreferences.LoadEnabled(manager.Metadata, project.Id);
         var (existingPaths, missingPaths) = FilterExisting(enabled);
         manager.UserExtensionPaths = existingPaths;
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.extensions", $"{existingPaths.Length} enabled, {missingPaths.Length} missing");
 
         string? diagnostic = null;
         PersistentSession session;
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.session.open.begin", options.SessionId ?? "recent-or-new");
         if (options.SessionId is { Length: > 0 } sessionId)
         {
             if (manager.Metadata.GetSession(sessionId).ProjectId != project.Id)
@@ -114,6 +120,7 @@ public sealed class RealSessionHost : IAsyncDisposable
             }
         }
 
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("host.session.open.end", session.Session.Id);
         // 打开成功：实际加载的路径不再保留旧的加载失败记录。
         ExtensionPreferences.ClearErrors(manager.Metadata, project.Id, existingPaths);
         return new RealSessionHost(manager, project, session)

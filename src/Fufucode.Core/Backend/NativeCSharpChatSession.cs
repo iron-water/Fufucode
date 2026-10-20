@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -8,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
+using Fufucode.Core.Diagnostics;
 using Fufucode.Core.Plugins;
 
 namespace Fufucode.Core.Backend;
@@ -39,8 +41,11 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public bool SupportsExecutionModes => true;
     public string ExecutionMode { get; private set; } = "manual";
     public event Action<string>? ExecutionModeChanged;
-    private readonly bool _supportsImages;
+    private volatile bool _supportsImages;
     public bool CanSendImages => _supportsImages;
+
+    /// <summary>图片能力探测在后台完成后回写；不影响已建立会话的历史。</summary>
+    internal void SetSupportsImages(bool value) => _supportsImages = value;
     public event Action? PromptHandled;
 
     // ── 会话内工具审批（复用扩展 UI 请求通道，无外部审批桥） ──
@@ -430,11 +435,20 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         _activity = SessionActivity.Running;
         _activeCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var cts = _activeCts;
-        _activeTurn = Task.Run(() => RunTurnAsync(text, images, cts), CancellationToken.None);
+        var queuedAt = Stopwatch.GetTimestamp();
+        _activeTurn = Task.Run(() => RunTurnAsync(text, images, cts, queuedAt), CancellationToken.None);
     }
 
-    private async Task RunTurnAsync(string text, IReadOnlyList<PureImageAttachment>? images, CancellationTokenSource cts)
+    private async Task RunTurnAsync(string text, IReadOnlyList<PureImageAttachment>? images, CancellationTokenSource cts,
+        long? queuedAt = null)
     {
+        // 回合根 span：所有模型请求、工具、审批、持久化都挂在它下面（trace id 即回合 id）。
+        using var turnSpan = PerfTracer.Step("turn", "model", _modelId);
+        turnSpan.Tag("executionMode", ExecutionMode);
+        turnSpan.Tag("promptChars", text.Length);
+        turnSpan.Tag("images", images?.Count ?? 0);
+        turnSpan.Tag("backend", "fumo");
+        if (queuedAt is { } start) turnSpan.Tag("queueMs", (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         var recorder = new RoundRecorder(this);
         var outcome = SessionOutcome.Failed;
         string? summary = null;
@@ -443,12 +457,20 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             Emit(new SessionEvent.ActivityChanged(SessionActivity.Running));
             ReplayMessage(MessageRole.User, text);
             // 会话构建请求时动态读取当前启用插件的人格片段（停用插件后下一次请求立即不再携带）。
-            var request = new PureModelRequest(
-                BuildTurnMessages(text, images),
-                BuildToolNames(),
-                _modelId,
-                BuildToolDefinitions(),
-                _thinkingLevel == "off" ? null : _thinkingLevel);
+            PureModelRequest request;
+            using (var buildSpan = PerfTracer.Step("context.build"))
+            {
+                var messages = BuildTurnMessages(text, images);
+                var toolDefinitions = BuildToolDefinitions();
+                request = new PureModelRequest(
+                    messages,
+                    BuildToolNames(),
+                    _modelId,
+                    toolDefinitions,
+                    _thinkingLevel == "off" ? null : _thinkingLevel);
+                buildSpan.Tag("messages", messages.Count);
+                buildSpan.Tag("toolDefinitions", toolDefinitions.Count);
+            }
             PureAgentTurnResult result;
             if (_engine is IObservablePureCSharpAgentEngine observable)
             {
@@ -478,18 +500,23 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             }
             outcome = result.Status == PureAgentTurnStatus.Failed ? SessionOutcome.Failed : SessionOutcome.Completed;
             summary = result.Error ?? (outcome == SessionOutcome.Completed ? "已完成" : "模型请求失败。");
+            turnSpan.Tag("toolCalls", result.ToolResults.Count);
+            if (outcome == SessionOutcome.Failed) turnSpan.Fail(result.Error ?? "model_failed");
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
             outcome = SessionOutcome.Interrupted;
             summary = "已中断";
+            turnSpan.Cancel();
         }
         catch (Exception error)
         {
             summary = error.Message;
+            turnSpan.Fail(error.GetType().Name);
         }
         finally
         {
+            turnSpan.Tag("outcome", outcome.ToString());
             recorder.Finish(outcome);
             PersistHistory();
 
@@ -541,6 +568,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var modelId = _modelId;
         var thinkingLevel = _thinkingLevel;
         var executionMode = ExecutionMode;
+        using var span = PerfTracer.Step("persist.history", "messages", PerfTracer.Invariant(history.Count));
         try
         {
             lock (_persistGate)
@@ -557,10 +585,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                     writer.WriteString("executionMode", executionMode);
                     writer.WriteEndObject();
                 });
+                if (span.TraceId != 0) span.Tag("bytes", new System.IO.FileInfo(_persistFilePath).Length);
             }
         }
         catch (Exception ex)
         {
+            span.Fail(ex.GetType().Name);
             System.Diagnostics.Trace.TraceWarning("Failed to persist FUMO session: {0}", ex);
         }
     }

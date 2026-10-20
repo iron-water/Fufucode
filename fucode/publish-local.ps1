@@ -25,7 +25,9 @@ param(
     [string]$RuntimeIdentifier = 'win-x64',
     [switch]$NoDeploy,
     [switch]$NoRun,
-    [switch]$NoRestore
+    [switch]$NoRestore,
+    # ReadyToRun：预编译 IL 为原生代码，冷启动可省约 1 秒 JIT；发布体积增加约 6 MB。
+    [switch]$ReadyToRun
 )
 
 $ErrorActionPreference = 'Stop'
@@ -106,6 +108,7 @@ $dotnetArgs = @('publish', (Join-Path $root 'src/Fufucode.App/Fufucode.App.cspro
     '-c', $Configuration, '-r', $RuntimeIdentifier, '--self-contained', 'false',
     '-o', $stagingApp, '--nologo', '-v', 'q')
 if ($NoRestore) { $dotnetArgs += '--no-restore' }
+if ($ReadyToRun) { $dotnetArgs += @('-p:PublishReadyToRun=true') }
 Write-Host "Publishing Fufucode.App ($Configuration) -> staging ..."
 & dotnet @dotnetArgs
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.App publish failed.' }
@@ -115,6 +118,7 @@ $cliArgs = @('publish', (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj')
     '-c', $Configuration, '-r', $RuntimeIdentifier, '--self-contained', 'false',
     '-o', $stagingCli, '--nologo', '-v', 'q')
 if ($NoRestore) { $cliArgs += '--no-restore' }
+if ($ReadyToRun) { $cliArgs += @('-p:PublishReadyToRun=true') }
 & dotnet @cliArgs
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.Cli publish failed.' }
 
