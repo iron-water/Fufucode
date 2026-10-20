@@ -224,15 +224,23 @@ public partial class MainWindow
         inner.Children.Add(tail);
         inner.Children.Add(card);
 
-        // Popup 开独立视觉树，不继承主窗口的 RequestedThemeVariant——
-        // 导致 MenuSurfaceBrush 在 dark 主题下解析到 Light 变体变白底黑字。
-        // ThemeVariantScope 在 popup 树里圈出与主窗口一致的 variant。
-        var wrapper = new ThemeVariantScope
+        // Popup 是独立视觉树，DynamicResource 查不到主窗口 Resources 里的
+        // MenuSurfaceBrush / AppCardStroke / FluentFlyoutShadow —— 回退到 Fluent 默认变白底。
+        // 从主窗 Resources 显式取画刷挂到 inner.Resources，让 islandPanel/islandPanelTail
+        // 的 {DynamicResource ...} 在 popup 树里也能解析到深色变体。
+        foreach (var key in new[]
         {
-            RequestedThemeVariant = ActualThemeVariant,
-            Child = inner,
-        };
-        return wrapper;
+            "MenuSurfaceBrush", "MenuDividerBrush", "AppCardStroke", "AppSubtleBackground",
+            "AppHover", "AppTextPrimary", "AppTextSecondary", "AppTextDim", "AppAccent",
+            "AppAccentText", "AppAccentForeground", "AppAccentSubtle", "AppListSelected",
+            "AppCriticalForeground", "AppDividerSubtle", "FluentFlyoutShadow",
+            "OverlayCornerRadius", "ControlCornerRadius",
+        })
+        {
+            if (TryGetResource(key, ActualThemeVariant, out var res) && res is not null)
+                inner.Resources[key] = res;
+        }
+        return inner;
     }
 
     private Control BuildIslandTile(Infrastructure.AppActionDefinition action)
