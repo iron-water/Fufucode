@@ -131,6 +131,19 @@
   <Style Selector="StackPanel.settingsGroupList">
     <Setter Property="Spacing" Value="8"/>
   </Style>
+  <!-- 行内响应式重排钩子：窄窗口下行内控件换行（code-behind 依类名重排）。 -->
+  <Style Selector="Grid.settingsControlRow">
+    <Setter Property="RowSpacing" Value="8"/>
+  </Style>
+  <!-- 设置内容区里的列表统一走 8px 节奏；限定在 settingsContentHost 内，
+       避免污染页面外的 ItemsControl。 -->
+  <Style Selector="Border.settingsContentHost ItemsControl">
+    <Setter Property="ItemsPanel">
+      <Setter.Value>
+        <ItemsPanelTemplate><StackPanel Classes="settingsGroupList"/></ItemsPanelTemplate>
+      </Setter.Value>
+    </Setter>
+  </Style>
 
   <!-- 左侧导航宿主（Windows 设置度量）：浮为侧栏面，比内容区亮一档形成明度差。
        深色下走 AppSettingsNavBackground（FufucodeTheme 里定义为实色 #2C2C2C，
@@ -294,6 +307,13 @@
   </Style>
   <Style Selector="TextBlock.settingsGroupHeader.first">
     <Setter Property="Margin" Value="0,0,0,10"/>
+  </Style>
+  <!-- 组级说明：出现在组头与行卡之间，与行说明同字号但保留独立的上文间距。 -->
+  <Style Selector="TextBlock.settingsGroupDesc">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+    <Setter Property="Margin" Value="2,0,0,10"/>
   </Style>
   <!-- 可折叠组头按钮：透明底、悬停弱填充，行式卡内嵌套时无自身描边。 -->
   <Style Selector="Button.settingsGroupToggle">
@@ -738,7 +758,7 @@
     <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
     <Setter Property="Opacity" Value="0.45"/>
   </Style>
-  <!-- 图标=第 3 层：强调色常驻；悬停提亮到满不透明。 -->
+  <!-- 图标=第 3 层：强调色常驻、满不透明；悬停再提亮一档。 -->
   <Style Selector="Button.islandTile PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
     <Setter Property="Opacity" Value="0.92"/>
@@ -859,6 +879,19 @@
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="15"/>
     <Setter Property="Opacity" Value="0.92"/>
+  </Style>
+
+  <!-- 消息引用 chip：链接与文件路径，低存在感但可点。 -->
+  <Style Selector="Button.referenceChip">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="6"/>
+    <Setter Property="Padding" Value="8,3"/>
+    <Setter Property="MinHeight" Value="0"/>
+  </Style>
+  <Style Selector="Button.referenceChip:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
   </Style>
 
   <!-- 变更卡：整行可点开内联 diff。 -->

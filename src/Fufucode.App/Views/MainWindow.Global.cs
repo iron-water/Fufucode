@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
@@ -8,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Fufucode.App.Features.SettingsExperience;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 
@@ -39,7 +41,21 @@ public partial class MainWindow
             : _options.CreateAppDataLayout().Root;
         _notificationPreferences = new(new NotificationPreferencesStore(Path.Combine(dataRoot, "notification-preferences.json")));
         _notifications = new(_notificationPreferences);
-        _palette = new(_actions);
+        _palette = new(_actions)
+        {
+            SessionSource = PaletteSessions,
+            SettingSource = PaletteSettings,
+        };
+        _palette.SessionActivated += async id =>
+        {
+            if (_host is not null && _host.Current.Session.Id != id) await SwitchSessionAsync(id);
+            if (_host is null || _host.Current.Session.Id == id) await NavigateWorkspaceAsync(AppPage.Chat);
+        };
+        _palette.SettingActivated += async id =>
+        {
+            await NavigateWorkspaceAsync(AppPage.Settings);
+            _vm?.Settings.SelectCategory(id);
+        };
         _paletteView.DataContext = _palette;
         _usageView.DataContext = _usage;
         _notificationsView.DataContext = _notifications;
@@ -62,7 +78,7 @@ public partial class MainWindow
         string? SessionUnavailable() => _vm is null ? "会话尚未就绪" : null;
         string? WorkAreaUnavailable() => _vm is null ? "会话尚未就绪" : _vm.IsSettingsPage ? "返回工作区后可使用" : null;
         RegisterBrowserActions();
-        Register("commands", "命令面板", "全局", "Ctrl+K / Ctrl+Shift+P", "搜索应用动作，与输入框斜杠命令独立", () => { OpenGlobalOverlay("commands"); _palette.Open(); return Task.CompletedTask; });
+        Register("commands", "命令面板", "全局", "Ctrl+K / Ctrl+Shift+P", "搜索动作、会话与设置；输入框斜杠命令仍归 composer", () => { OpenGlobalOverlay("commands"); _palette.Open(); return Task.CompletedTask; });
         Register("settings", "设置", "全局", "", "切换设置与工作区", () => NavigateWorkspaceAsync(_vm?.IsSettingsPage == true ? AppPage.Chat : AppPage.Settings), SessionUnavailable);
         Register("chat", "返回对话", "导航", "", "返回当前会话", () => NavigateWorkspaceAsync(AppPage.Chat), SessionUnavailable);
         Register("extensions", "扩展", "导航", "", "管理已安装的扩展", () => NavigateWorkspaceAsync(AppPage.Extensions), SessionUnavailable);
@@ -99,6 +115,30 @@ public partial class MainWindow
 
     private void Register(string id, string title, string group, string shortcut, string description,
         Func<Task> action, Func<string?>? disabled = null) => _actions.Register(new(id, title, group, shortcut, description, action, disabled));
+
+    /// <summary>命令面板的会话结果：只列当前项目内仍在会话列表中的条目。</summary>
+    private IReadOnlyList<CommandPaletteItemViewModel> PaletteSessions()
+    {
+        if (_vm is null) return Array.Empty<CommandPaletteItemViewModel>();
+        return _vm.Sidebar.Sessions
+            .Where(item => item.HasId)
+            .Select(item => new CommandPaletteItemViewModel(
+                item.Id!, item.Title, "会话", item.Subtitle, string.Empty,
+                null, false, false, CommandPaletteItemKind.Session)
+            {
+                SearchText = item.Subtitle + " " + item.StatusDescription,
+            })
+            .ToArray();
+    }
+
+    /// <summary>命令面板的设置结果：目录条目直接作为可跳转项。</summary>
+    private static IReadOnlyList<CommandPaletteItemViewModel> PaletteSettings() =>
+        SettingsNavCatalog.All.Select(item => new CommandPaletteItemViewModel(
+            item.Id, item.Title, "设置", SettingsNavCatalog.TierTitle(item.Tier), string.Empty,
+            null, false, false, CommandPaletteItemKind.Setting)
+        {
+            SearchText = item.SearchTerms,
+        }).ToArray();
 
     private void AttachGlobalContext(MainViewModel vm)
     {

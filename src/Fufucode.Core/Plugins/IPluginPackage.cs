@@ -28,6 +28,25 @@ public sealed record PluginPageContribution(
     Action<object, string?>? OnProjectChanged = null);
 
 /// <summary>
+/// 消息正文里的富内容渲染能力。插件声明一个围栏语言（例如 "ui"），
+/// 聊天渲染遇到该围栏时把原文交给插件创建控件。
+/// </summary>
+public sealed record PluginContentContribution(
+    string FenceLanguage,
+    Func<PluginContentContext, object> CreateView);
+
+/// <summary>
+/// 富内容插件的渲染上下文。
+/// Submit：把文本作为一条新的用户消息发给当前会话；返回是否被接受。
+/// InsertDraft：把文本填进输入框但不发送。
+/// </summary>
+public sealed record PluginContentContext(
+    string Language,
+    string Payload,
+    Func<string, Task<bool>> Submit,
+    Action<string> InsertDraft);
+
+/// <summary>
 /// 插件贡献的个性化皮肤定义。
 /// </summary>
 public sealed record PluginSkinContribution(
@@ -75,6 +94,11 @@ public interface IPluginPackage
     /// 插件贡献的工作区页面（可选）。
     /// </summary>
     PluginPageContribution? CreatePageContribution(PluginPackageContext context) => null;
+
+    /// <summary>
+    /// 插件贡献的消息富内容渲染（可选）。
+    /// </summary>
+    PluginContentContribution? CreateContentContribution(PluginPackageContext context) => null;
 
     /// <summary>
     /// 插件贡献的主题皮肤（可选）。

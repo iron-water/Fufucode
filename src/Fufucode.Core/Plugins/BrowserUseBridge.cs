@@ -33,4 +33,29 @@ public abstract class BrowserUseBridge
     /// <summary>读取当前浏览器状态 JSON。</summary>
     public virtual Task<string> GetStateAsync(CancellationToken cancellationToken = default) =>
         Task.FromResult("{\"error\":\"宿主未实现 browser_get_state。\"}");
+
+    /// <summary>按像素滚动页面。</summary>
+    public virtual Task<string> ScrollAsync(int deltaX, int deltaY, CancellationToken cancellationToken = default) =>
+        Task.FromResult("{\"error\":\"宿主未实现 browser_scroll。\"}");
+
+    /// <summary>把鼠标悬停到匹配元素上。</summary>
+    public virtual Task<string> HoverAsync(string selector, CancellationToken cancellationToken = default) =>
+        Task.FromResult("{\"error\":\"宿主未实现 browser_hover。\"}");
+
+    /// <summary>向当前焦点/指定元素派发按键。</summary>
+    public virtual Task<string> KeyAsync(string key, string? selector = null, bool ctrl = false, bool shift = false,
+        bool alt = false, bool meta = false, CancellationToken cancellationToken = default) =>
+        Task.FromResult("{\"error\":\"宿主未实现 browser_key。\"}");
+
+    /// <summary>选择下拉框选项。</summary>
+    public virtual Task<string> SelectAsync(string selector, string value, CancellationToken cancellationToken = default) =>
+        Task.FromResult("{\"error\":\"宿主未实现 browser_select。\"}");
+
+    /// <summary>等待元素出现。</summary>
+    public virtual Task<string> WaitAsync(string selector, int timeoutMs, CancellationToken cancellationToken = default) =>
+        Task.FromResult("{\"error\":\"宿主未实现 browser_wait。\"}");
+
+    /// <summary>读取页面 DOM 文本/HTML 快照。</summary>
+    public virtual Task<string> GetDomAsync(string? selector, int maxText, int maxHtml, CancellationToken cancellationToken = default) =>
+        Task.FromResult("{\"error\":\"宿主未实现 browser_get_dom。\"}");
 }

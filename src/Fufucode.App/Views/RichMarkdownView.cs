@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.VisualTree;
 using LiveMarkdown.Avalonia;
 
@@ -40,6 +41,9 @@ public sealed class RichMarkdownView : ContentControl
         AddHandler(PointerWheelChangedEvent, OnRichWheel, RoutingStrategies.Tunnel);
         AddHandler(PointerPressedEvent, OnRichPressed, RoutingStrategies.Tunnel);
         PointerExited += (_, _) => _diagramPinned = false;
+
+        // 链接：优先在内置浏览器打开，失败再交给系统默认浏览器。
+        _renderer.LinkClick += (_, e) => OpenLink(e.HRef);
 
         AttachedToVisualTree += (_, _) =>
         {
@@ -82,8 +86,40 @@ public sealed class RichMarkdownView : ContentControl
         }
     }
 
-    private void OnRichPressed(object? sender, PointerPressedEventArgs e) =>
-        _diagramPinned = IsWithinDiagram(e.Source as Visual);
+    private void OnRichPressed(object? sender, PointerPressedEventArgs e)
+    {
+        var source = e.Source as Visual;
+        _diagramPinned = IsWithinDiagram(source);
+
+        // 点图片放大：消息里的图通常很小，需要看清时不必另存。
+        if (FindImage(source) is { Source: { } imageSource })
+        {
+            ShowImagePreview(imageSource);
+            e.Handled = true;
+        }
+    }
+
+    private static Image? FindImage(Visual? source)
+    {
+        for (var current = source; current is not null; current = current.GetVisualParent())
+        {
+            if (current is Image image) return image;
+        }
+        return null;
+    }
+
+    private void ShowImagePreview(IImage source) => ImageLightbox.Show(this, source);
+
+    private void OpenLink(Uri? uri)
+    {
+        if (uri is null) return;
+        if (uri.Scheme is "http" or "https")
+        {
+            if (TopLevel.GetTopLevel(this) is MainWindow window && window.OpenUrlInBrowser(uri.ToString())) return;
+            if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher) { _ = launcher.LaunchUriAsync(uri); return; }
+        }
+        if (TopLevel.GetTopLevel(this)?.Launcher is { } fallback) _ = fallback.LaunchUriAsync(uri);
+    }
 
     private void OnRichWheel(object? sender, PointerWheelEventArgs e)
     {

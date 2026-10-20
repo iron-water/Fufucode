@@ -128,7 +128,7 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
             Plugins.PluginToolRegistry registry => ResolveProductionDispatcher(registry.InnerDispatcher),
             SkillAwareDispatcher skill => ResolveProductionDispatcher(skill.Inner),
             McpGatewayDispatcher mcp => ResolveProductionDispatcher(mcp.Inner),
-            SubagentDispatcher subagent => ResolveProductionDispatcher(subagent.Inner),
+            INativeSubagentDispatcher subagent => ResolveProductionDispatcher(subagent.Inner),
             NativeToolComposite composite => ResolveProductionDispatcher(composite.Builtin),
             _ => null
         };

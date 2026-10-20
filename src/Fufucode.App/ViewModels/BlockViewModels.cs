@@ -66,7 +66,10 @@ public sealed class TextBlockViewModel : BlockViewModel
         {
             if (segment.IsCode)
             {
-                next.Add(new CodeSegmentViewModel(_clipboard, segment.Text, segment.Language));
+                // 插件声明过的围栏语言交给插件渲染；未安装插件时退回代码块，内容不丢。
+                next.Add(Fufucode.Core.Plugins.PluginContentRegistry.IsContentLanguage(segment.Language)
+                    ? new PluginContentSegmentViewModel(segment.Language, segment.Text)
+                    : new CodeSegmentViewModel(_clipboard, segment.Text, segment.Language));
                 continue;
             }
 
@@ -173,6 +176,11 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     private bool _isErrorOutput;
     private bool _outputExpanded;
     private int _outputLineCount;
+    private DateTimeOffset? _startedAt;
+    private DateTimeOffset? _finishedAt;
+
+    /// <summary>块创建即视为工具开始时间；后端协议里没有可靠的起止时间戳。</summary>
+    public ToolCallBlockViewModel() => _startedAt = DateTimeOffset.Now;
 
     /// <summary>工具调用 id：工具组用它做稳定身份与结果回填。</summary>
     public string ToolCallId
@@ -207,6 +215,19 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
         {
             if (SetProperty(ref _status, value))
             {
+                // 工具卡耗时：进入终态时记一次结束时间，供界面显示"用了多久"。
+                if (value is ToolCallStatus.Pending or ToolCallStatus.Running)
+                {
+                    _startedAt ??= DateTimeOffset.Now;
+                }
+                else
+                {
+                    _startedAt ??= DateTimeOffset.Now;
+                    _finishedAt ??= DateTimeOffset.Now;
+                    OnPropertyChanged(nameof(HasDuration));
+                    OnPropertyChanged(nameof(DurationText));
+                }
+
                 BadgeTone = StatusColors.ForToolCall(value);
                 IsRunning = value is ToolCallStatus.Pending or ToolCallStatus.Running;
                 OnPropertyChanged(nameof(BadgeTone));
@@ -229,6 +250,19 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     public bool IsRunning { get; private set; }
 
+    /// <summary>工具耗时只在终态显示；没有精确起止时间时不猜。</summary>
+    public bool HasDuration => _startedAt is { } start && _finishedAt is { } end && end >= start;
+
+    public string DurationText
+    {
+        get
+        {
+            if (!HasDuration) return string.Empty;
+            var seconds = (_finishedAt!.Value - _startedAt!.Value).TotalSeconds;
+            return seconds < 10 ? seconds.ToString("0.0") + "s" : ((int)Math.Round(seconds)) + "s";
+        }
+    }
+
     /// <summary>展示用输出文本（已按首尾 8 KB 截断）。完整文本见 <see cref="GetFullOutput"/>。</summary>
     public string? Output
     {
@@ -243,6 +277,28 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     }
 
     public bool HasOutput => !string.IsNullOrEmpty(Output);
+
+    /// <summary>输出是单张图片（data URI / 图片地址 / 本地图片路径）时显示缩略图。</summary>
+    public bool HasImageOutput => IsImageReference(GetFullOutput());
+
+    /// <summary>缩略图数据源：用完整输出，避免长 data URI 被展示截断。</summary>
+    public string? ImageOutputSource => HasImageOutput ? GetFullOutput() : null;
+
+    /// <summary>图片输出只用缩略图呈现，不再重复显示路径文本。</summary>
+    public bool ShowTextOutput => HasOutput && !HasImageOutput;
+
+    private static bool IsImageReference(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        var value = text.Trim();
+        if (value.Contains('\n', StringComparison.Ordinal)) return false;
+        if (value.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)) return true;
+
+        var path = value.Split('?')[0];
+        var extension = System.IO.Path.GetExtension(path).ToLowerInvariant();
+        if (extension is not (".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" or ".bmp" or ".svg")) return false;
+        return value.StartsWith("http", StringComparison.OrdinalIgnoreCase) || System.IO.File.Exists(value);
+    }
 
     /// <summary>输出是否被截断展示。</summary>
     public bool IsOutputTruncated { get; private set; }
@@ -308,6 +364,10 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
         if (SetProperty(ref _output, display, nameof(Output)))
         {
             RecomputeOutputCollapse();
+            OnPropertyChanged(nameof(HasOutput));
+            OnPropertyChanged(nameof(HasImageOutput));
+            OnPropertyChanged(nameof(ShowTextOutput));
+            OnPropertyChanged(nameof(ImageOutputSource));
         }
     }
 

@@ -205,7 +205,9 @@ public partial class MainWindow
             HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 34,
             Content = new TextBlock { Text = title, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis,
                 FontWeight = session.Id == CurrentSessionId ? FontWeight.SemiBold : FontWeight.Normal } };
-        ToolTip.SetTip(button, _host.Manager.Metadata.GetProject(session.ProjectId).Path);
+        var projectPath = _host.Manager.Metadata.GetProject(session.ProjectId).Path;
+        ToolTip.SetTip(button, OverviewSessionCard(session, presentation, projectPath, title));
+        ToolTip.SetShowDelay(button, 500);
         AutomationProperties.SetAutomationId(button, "session.row." + session.Id);
         button.Click += (_, _) => OverviewRun(() => ActivateOverviewSessionAsync(session));
         row.Children.Add(button);
@@ -252,6 +254,49 @@ public partial class MainWindow
         menu.Items.Add(OverviewMenu("归档", () => ArchiveOverviewSessionAsync(session)));
         button.ContextMenu = menu; _overview.Body.Children.Add(row);
     }
+    /// <summary>会话行悬停卡：标题、状态、后端、项目、更新时间与分叉信息。</summary>
+    private Control OverviewSessionCard(SessionRecord session, SessionPresentation presentation,
+        string projectPath, string title)
+    {
+        var card = new StackPanel { Spacing = 3, MaxWidth = 320 };
+        card.Children.Add(new TextBlock
+        {
+            Text = title,
+            FontWeight = FontWeight.SemiBold,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        var status = session.Id == CurrentSessionId ? "当前会话"
+            : session.WasActive ? "上次运行中断"
+            : presentation.Unread ? "有未读结果"
+            : presentation.Pinned ? "已置顶"
+            : "空闲";
+        card.Children.Add(new TextBlock { Text = status, Classes = { "caption" } });
+        card.Children.Add(new TextBlock
+        {
+            Text = "后端：" + BackendCapabilities.For(session.Backend).Name,
+            Classes = { "caption" },
+        });
+        card.Children.Add(new TextBlock
+        {
+            Text = projectPath,
+            Classes = { "caption", "mono" },
+            TextWrapping = TextWrapping.Wrap,
+        });
+        card.Children.Add(new TextBlock
+        {
+            Text = "更新：" + session.LastOpened.LocalDateTime.ToString("yyyy-MM-dd HH:mm"),
+            Classes = { "caption" },
+        });
+        if (session.IsFork)
+            card.Children.Add(new TextBlock { Text = "由其他会话分叉", Classes = { "caption" } });
+        card.Children.Add(new TextBlock
+        {
+            Text = "会话 " + session.Id[..Math.Min(8, session.Id.Length)],
+            Classes = { "caption", "mono" },
+        });
+        return card;
+    }
+
     private void SetOverviewPresentation(string id, Func<SessionPresentation, SessionPresentation> change)
     {
         var store = _host!.Manager.Metadata;

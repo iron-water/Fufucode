@@ -24,6 +24,18 @@ public sealed class SkillRegistry : IPureToolDispatcher
 {
     public const string ToolName = "skill";
 
+    public static PureToolDefinition Definition { get; } = new(
+        ToolName,
+        "加载指定技能的完整操作说明（SKILL.md）。技能通常描述如何用 CLI/API 完成某类任务。",
+        """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string", "description": "技能名称；省略时列出可用技能" }
+            }
+        }
+        """);
+
     private readonly Dictionary<string, SkillDefinition> _skills;
 
     private SkillRegistry(Dictionary<string, SkillDefinition> skills) => _skills = skills;

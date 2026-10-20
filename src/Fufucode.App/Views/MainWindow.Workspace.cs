@@ -96,6 +96,7 @@ public partial class MainWindow
     {
         if (_vm is not { IsChatPage: true } target)
             return "网页引用已复制；请先打开目标主聊天会话，再生成引用。";
+        var imageMarkdown = string.Empty;
         if (reference.ImagePath is { Length: > 0 } path)
         {
             try { target.Input.AddAttachment(await AttachedFile.LoadAsync(path)); }
@@ -103,8 +104,10 @@ public partial class MainWindow
             {
                 target.Timeline.AddNotification("标注截图附加失败：" + error.Message);
             }
+            // 聊天时间线渲染 Markdown：用绝对路径引用，用户消息气泡里直接能看到标注截图。
+            imageMarkdown = "\n\n![网页标注](" + path.Replace("\\", "/") + ")";
         }
-        var applied = target.Input.ApplyExternalText(reference.Text);
+        var applied = target.Input.ApplyExternalText(reference.Text + imageMarkdown);
         var message = applied
             ? "网页内容已插入当前主聊天草稿，尚未发送。"
             : "当前主聊天已有草稿；网页内容已保存为待恢复文本，未覆盖草稿。";

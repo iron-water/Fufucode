@@ -8,6 +8,11 @@ public static class BrowserUseActionNames
     public const string Navigate = "browser_navigate";
     public const string Click = "browser_click";
     public const string Type = "browser_type";
+    public const string Scroll = "browser_scroll";
+    public const string Hover = "browser_hover";
+    public const string Key = "browser_key";
+    public const string Select = "browser_select";
+    public const string Wait = "browser_wait";
     public const string Screenshot = "browser_screenshot";
     public const string GetDom = "browser_get_dom";
     public const string GetState = "browser_get_state";

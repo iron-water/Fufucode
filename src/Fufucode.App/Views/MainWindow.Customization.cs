@@ -195,7 +195,21 @@ public partial class MainWindow
                 {
                     parent = new MenuItem { Header = group };
                     parent.Icon = Views.WorkbenchUi.IconButton(
-                        group switch { "工作区页面" => "AppsList", "复制" => "Copy", "导出" => "ArrowDownload", "分叉" => "Branch", _ => "Folder" }, group).Content;
+                        group switch
+                        {
+                            "工作区页面" => "AppsList",
+                            "复制" => "Copy",
+                            "导出" => "ArrowDownload",
+                            "分叉" => "Branch",
+                            "项目" => "Folder",
+                            "会话管理" => "Chat",
+                            "编辑" => "Edit",
+                            "视图与布局" => "WindowNew",
+                            "语音朗读" => "Speaker",
+                            "诊断与系统" => "Wrench",
+                            "帮助与全局" => "Info",
+                            _ => "Folder"
+                        }, group).Content;
                     subMenus.Add(key, parent);
                     menu.Items.Add(parent);
                 }

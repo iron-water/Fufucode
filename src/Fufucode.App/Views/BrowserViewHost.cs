@@ -20,6 +20,9 @@ public sealed record BrowserHostNavigationState(bool CanGoBack, bool CanGoForwar
 /// <summary>一次真实导航完成的结果；只有 IsSuccess 且 http/https 才写入浏览历史。</summary>
 public sealed record BrowserHostNavigationCompleted(bool IsSuccess, string? Source, string? Title);
 
+/// <summary>页签音频状态：是否在播放、是否被静音。</summary>
+public sealed record BrowserAudioState(bool Playing, bool Muted);
+
 public enum BrowserDownloadState { InProgress, Completed, Interrupted }
 
 /// <summary>下载决策：取消，或写入指定路径（null = 保留 WebView2 的默认路径）。</summary>
@@ -151,6 +154,9 @@ public sealed class BrowserViewHost : Control, IDisposable
     public event EventHandler<BrowserHostNavigationCompleted>? NavigationCompleted;
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<string>? DocumentTitleChanged;
+    /// <summary>真实 favicon PNG 字节；null 表示页面没有图标。</summary>
+    public event EventHandler<byte[]?>? FaviconChanged;
+    public event EventHandler<BrowserAudioState>? AudioStateChanged;
 
     /// <summary>右键菜单里的应用动作；参数是动作 ID（send-page / send-selection / annotate / open-external / copy-address）。</summary>
     public event EventHandler<string>? ContextMenuActionRequested;
@@ -415,6 +421,33 @@ public sealed class BrowserViewHost : Control, IDisposable
         }
     }
 
+    private async Task LoadFaviconAsync(CoreWebView2 core)
+    {
+        try
+        {
+            using var stream = await core.GetFaviconAsync(CoreWebView2FaviconImageFormat.Png).ConfigureAwait(true);
+            if (stream is null) { FaviconChanged?.Invoke(this, null); return; }
+            using var memory = new MemoryStream();
+            await stream.CopyToAsync(memory).ConfigureAwait(true);
+            FaviconChanged?.Invoke(this, memory.ToArray());
+        }
+        catch (Exception error) when (error is COMException or InvalidOperationException or ObjectDisposedException or IOException)
+        {
+            FaviconChanged?.Invoke(this, null);
+        }
+    }
+
+    /// <summary>静音/取消静音当前页签。</summary>
+    public bool ToggleMute()
+    {
+        if (_core is not { } core) return false;
+        try { core.IsMuted = !core.IsMuted; AudioStateChanged?.Invoke(this, new BrowserAudioState(SafeIsPlayingAudio(), SafeIsMuted())); return true; }
+        catch (Exception error) when (IsControllerGone(error)) { return false; }
+    }
+
+    private bool SafeIsPlayingAudio() { try { return _core?.IsDocumentPlayingAudio ?? false; } catch (Exception e) when (IsControllerGone(e)) { return false; } }
+    private bool SafeIsMuted() { try { return _core?.IsMuted ?? false; } catch (Exception e) when (IsControllerGone(e)) { return false; } }
+
     private async Task LoadExtensionsAsync(string userDataFolder)
     {
         if (_core is not { } core) return;
@@ -442,6 +475,7 @@ public sealed class BrowserViewHost : Control, IDisposable
             settings.IsScriptEnabled = true;          // 网页需要脚本，但本应用自身不注入任何脚本
             settings.AreDefaultScriptDialogsEnabled = true;
             ApplyUserAgent(settings);
+            ApplyAutofill(settings);
         }
         void OnNavigationStarting(object? _, CoreWebView2NavigationStartingEventArgs e)
         {
@@ -466,6 +500,9 @@ public sealed class BrowserViewHost : Control, IDisposable
         void OnDownload(object? sender, CoreWebView2DownloadStartingEventArgs e) => OnDownloadStarting(sender, e);
         void OnContextMenu(object? sender, CoreWebView2ContextMenuRequestedEventArgs e) => OnContextMenuRequested(e);
         void OnPermission(object? sender, CoreWebView2PermissionRequestedEventArgs e) => OnPermissionRequested(e);
+        void OnFavicon(object? sender, object e) => _ = LoadFaviconAsync(core);
+        void OnAudio(object? sender, object e) => AudioStateChanged?.Invoke(this,
+            new BrowserAudioState(SafeIsPlayingAudio(), SafeIsMuted()));
 
         core.NavigationStarting += OnNavigationStarting;
         core.HistoryChanged += OnHistoryChanged;
@@ -476,6 +513,9 @@ public sealed class BrowserViewHost : Control, IDisposable
         core.DownloadStarting += OnDownload;
         core.ContextMenuRequested += OnContextMenu;
         core.PermissionRequested += OnPermission;
+        core.FaviconChanged += OnFavicon;
+        core.IsDocumentPlayingAudioChanged += OnAudio;
+        core.IsMutedChanged += OnAudio;
 
         _coreDetachers.Add(() => core.NavigationStarting -= OnNavigationStarting);
         _coreDetachers.Add(() => core.HistoryChanged -= OnHistoryChanged);
@@ -486,6 +526,9 @@ public sealed class BrowserViewHost : Control, IDisposable
         _coreDetachers.Add(() => core.DownloadStarting -= OnDownload);
         _coreDetachers.Add(() => core.ContextMenuRequested -= OnContextMenu);
         _coreDetachers.Add(() => core.PermissionRequested -= OnPermission);
+        _coreDetachers.Add(() => core.FaviconChanged -= OnFavicon);
+        _coreDetachers.Add(() => core.IsDocumentPlayingAudioChanged -= OnAudio);
+        _coreDetachers.Add(() => core.IsMutedChanged -= OnAudio);
     }
 
     private string? _userAgent;
@@ -495,6 +538,22 @@ public sealed class BrowserViewHost : Control, IDisposable
     {
         _userAgent = string.IsNullOrWhiteSpace(userAgent) ? null : userAgent.Trim();
         if (_core?.Settings is { } settings) ApplyUserAgent(settings);
+    }
+
+    private bool? _autofill;
+    private bool? _passwordAutosave;
+
+    public void SetAutofill(bool enabled) { _autofill = enabled; if (_core?.Settings is { } settings) ApplyAutofill(settings); }
+    public void SetPasswordAutosave(bool enabled) { _passwordAutosave = enabled; if (_core?.Settings is { } settings) ApplyAutofill(settings); }
+
+    private void ApplyAutofill(CoreWebView2Settings settings)
+    {
+        try
+        {
+            if (_autofill is { } autofill) settings.IsGeneralAutofillEnabled = autofill;
+            if (_passwordAutosave is { } password) settings.IsPasswordAutosaveEnabled = password;
+        }
+        catch (Exception error) when (error is COMException or InvalidOperationException or NotSupportedException or ObjectDisposedException) { }
     }
 
     private void ApplyUserAgent(CoreWebView2Settings settings)
@@ -1019,6 +1078,8 @@ public sealed class BrowserViewHost : Control, IDisposable
         NavigationCompleted = null;
         StatusChanged = null;
         DocumentTitleChanged = null;
+        FaviconChanged = null;
+        AudioStateChanged = null;
         NewWindowRequested = null;
         ContextMenuActionRequested = null;
         DownloadRequested = null;

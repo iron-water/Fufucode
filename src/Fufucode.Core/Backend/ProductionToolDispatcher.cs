@@ -146,6 +146,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     public static bool IsConcurrencySafe(string toolName) => toolName switch
     {
         "read_file" or "list_dir" or "grep_search" or "glob_files" => true,
+        // 子代理各自持有独立上下文；read 天然只读，patch 的写入被限制在独立 worktree。
+        // worktree 创建在运行器内部串行化，因此多次派发可以并行。
+        NativeSubagentContract.ToolName => true,
         _ => false,
     };
 
@@ -160,7 +163,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     public static bool IsBuiltinToolName(string toolName) =>
         string.Equals(toolName, SkillRegistry.ToolName, StringComparison.Ordinal) ||
         string.Equals(toolName, McpGatewayDispatcher.ToolName, StringComparison.Ordinal) ||
-        string.Equals(toolName, SubagentDispatcher.ToolName, StringComparison.Ordinal) ||
+        string.Equals(toolName, NativeSubagentContract.ToolName, StringComparison.Ordinal) ||
         GetBuiltinToolDefinitions().Any(d => string.Equals(d.Name, toolName, StringComparison.Ordinal));
 
     public async Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default)

@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using Avalonia.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fufucode.App.Infrastructure.Browser;
@@ -32,6 +33,7 @@ public enum BrowserTabAction
     FindPrevious,
     CloseFind,
     OpenDevTools,
+    ToggleMute,
 }
 
 /// <summary>
@@ -69,6 +71,10 @@ public sealed partial class BrowserTab : ObservableObject
     [ObservableProperty] private int _zoomPercent = 100;
     [ObservableProperty] private string? _navigationAddress;
     [ObservableProperty] private bool _isSelected;
+    [ObservableProperty] private Bitmap? _faviconSource;
+    [ObservableProperty] private bool _isPlayingAudio;
+    [ObservableProperty] private bool _isMuted;
+    private byte[]? _faviconBytes;
     /// <summary>地址栏来源的安全态：null/空 = 不显示锁图标（文件预览、about:blank 与新页签）。</summary>
     [ObservableProperty] private BrowserSecurityState _security = BrowserSecurityState.None;
     /// <summary>当前页签的地址显示文本：显示完整网址关闭时只显示主机名。</summary>
@@ -227,6 +233,42 @@ public sealed partial class BrowserTab : ObservableObject
     [RelayCommand] private void FindPrevious() => ActionRequested?.Invoke(this, BrowserTabAction.FindPrevious);
     [RelayCommand] private void CloseFind() { IsFindOpen = false; FindStatus = string.Empty; ActionRequested?.Invoke(this, BrowserTabAction.CloseFind); }
     [RelayCommand] private void OpenDevTools() => ActionRequested?.Invoke(this, BrowserTabAction.OpenDevTools);
+    [RelayCommand] private void ToggleMute() => ActionRequested?.Invoke(this, BrowserTabAction.ToggleMute);
+
+    /// <summary>接收真实 favicon PNG；相同字节不重复解码。</summary>
+    public void ApplyFavicon(byte[]? bytes)
+    {
+        if (bytes is null || bytes.Length == 0)
+        {
+            if (FaviconSource is null) return;
+            FaviconSource = null;
+            _faviconBytes = null;
+            return;
+        }
+        if (_faviconBytes is not null && _faviconBytes.AsSpan().SequenceEqual(bytes)) return;
+        _faviconBytes = bytes;
+        try
+        {
+            using var stream = new MemoryStream(bytes);
+            FaviconSource = new Bitmap(stream);
+        }
+        catch (Exception error) when (error is ArgumentException or NotSupportedException or IOException)
+        {
+            FaviconSource = null;
+        }
+    }
+
+    public void ApplyAudioState(bool playing, bool muted)
+    {
+        IsPlayingAudio = playing;
+        IsMuted = muted;
+    }
+
+    public bool HasFavicon => FaviconSource is not null;
+    public bool ShowsAudio => IsPlayingAudio || IsMuted;
+    partial void OnFaviconSourceChanged(Bitmap? value) => OnPropertyChanged(nameof(HasFavicon));
+    partial void OnIsPlayingAudioChanged(bool value) => OnPropertyChanged(nameof(ShowsAudio));
+    partial void OnIsMutedChanged(bool value) => OnPropertyChanged(nameof(ShowsAudio));
 
     partial void OnCanGoBackChanged(bool value) => BackCommand.NotifyCanExecuteChanged();
     partial void OnCanGoForwardChanged(bool value) => ForwardCommand.NotifyCanExecuteChanged();

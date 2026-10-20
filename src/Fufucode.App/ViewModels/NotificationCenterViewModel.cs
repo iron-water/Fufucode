@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
+using System.ComponentModel;
 using System.Linq;
 using System.Threading;
 using System.Threading.Channels;
@@ -46,6 +48,13 @@ public sealed partial class NotificationItemViewModel : ViewModelBase
     partial void OnRequiresActionChanged(bool value) => OnPropertyChanged(nameof(RouteLabel));
 }
 
+public enum NotificationFilter
+{
+    All,
+    Unread,
+    Actionable,
+}
+
 /// <summary>
 /// Reliable TurnSettled or explicit process fault only. RPC callbacks enqueue small records without
 /// waiting for UI. Identity is session + connection generation + local submission/run number.
@@ -85,18 +94,59 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
     public NotificationCenterViewModel(NotificationPreferencesViewModel preferences)
     {
         Preferences = preferences;
-        Items.CollectionChanged += (_, _) => NotifyCounts();
+        Items.CollectionChanged += OnItemsChanged;
         _consumer = Task.Run(ConsumeAsync);
     }
     public NotificationPreferencesViewModel Preferences { get; }
     public ObservableCollection<NotificationItemViewModel> Items { get; } = new();
+
+    /// <summary>按当前过滤条件显示的行；Items 仍是完整记录。</summary>
+    public ObservableCollection<NotificationItemViewModel> FilteredItems { get; } = new();
     [ObservableProperty] private bool _isOpen;
     [ObservableProperty] private NotificationItemViewModel? _latestPrompt;
     public bool HasItems => Items.Count > 0;
+    public bool HasVisibleItems => FilteredItems.Count > 0;
     public int UnreadCount => Items.Count(item => !item.IsRead);
     public int PendingActionCount => Items.Count(item => item.RequiresAction);
     public string SummaryText => PendingActionCount > 0 ? $"{PendingActionCount} 项待处理" : UnreadCount > 0 ? $"{UnreadCount} 条新通知" : "通知";
     public bool HasPrompt => LatestPrompt is not null;
+
+    private NotificationFilter _filter = NotificationFilter.All;
+    public NotificationFilter Filter
+    {
+        get => _filter;
+        private set
+        {
+            if (_filter == value) return;
+            _filter = value;
+            OnPropertyChanged(nameof(Filter));
+            OnPropertyChanged(nameof(IsAllFilter));
+            OnPropertyChanged(nameof(IsUnreadFilter));
+            OnPropertyChanged(nameof(IsActionableFilter));
+            OnPropertyChanged(nameof(FilteredEmptyText));
+            RebuildFilteredItems();
+        }
+    }
+    public bool IsAllFilter => _filter == NotificationFilter.All;
+    public bool IsUnreadFilter => _filter == NotificationFilter.Unread;
+    public bool IsActionableFilter => _filter == NotificationFilter.Actionable;
+    public string FilteredEmptyText => _filter switch
+    {
+        NotificationFilter.Unread => "没有未读通知",
+        NotificationFilter.Actionable => "没有失败或待处理通知",
+        _ => "暂无通知",
+    };
+
+    [RelayCommand]
+    private void SetFilter(string? value)
+    {
+        Filter = value switch
+        {
+            "unread" => NotificationFilter.Unread,
+            "actionable" => NotificationFilter.Actionable,
+            _ => NotificationFilter.All,
+        };
+    }
     public bool HasDroppedNotices => Volatile.Read(ref _dropped) != 0;
     public string DroppedNoticeText => HasDroppedNotices ? "部分提醒未显示，请以会话状态为准。" : string.Empty;
     public event Action<string>? SessionRequested;
@@ -270,6 +320,39 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
         if (proactive) LatestPrompt = row;
         NotifyCounts();
     }
+    private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.OldItems is not null)
+            foreach (NotificationItemViewModel item in e.OldItems) item.PropertyChanged -= OnItemPropertyChanged;
+        if (e.NewItems is not null)
+            foreach (NotificationItemViewModel item in e.NewItems) item.PropertyChanged += OnItemPropertyChanged;
+        NotifyCounts();
+        RebuildFilteredItems();
+    }
+
+    private void OnItemPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is not (nameof(NotificationItemViewModel.IsRead) or nameof(NotificationItemViewModel.RequiresAction))) return;
+        NotifyCounts();
+        RebuildFilteredItems();
+    }
+
+    private void RebuildFilteredItems()
+    {
+        FilteredItems.Clear();
+        foreach (var item in Items)
+        {
+            var visible = _filter switch
+            {
+                NotificationFilter.Unread => !item.IsRead,
+                NotificationFilter.Actionable => item.RequiresAction || item.IsFailed,
+                _ => true,
+            };
+            if (visible) FilteredItems.Add(item);
+        }
+        OnPropertyChanged(nameof(HasVisibleItems));
+    }
+
     private void NotifyCounts()
     {
         OnPropertyChanged(nameof(HasItems)); OnPropertyChanged(nameof(UnreadCount));

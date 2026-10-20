@@ -68,6 +68,12 @@ public sealed partial class PluginItemViewModel : ObservableObject
     public string StatusBadgeText => !IsInstalled ? "未安装" : IsEnabled ? "已启用" : "已停用";
     public string ActionButtonText => !IsInstalled ? "安装" : IsCoreBuiltin ? "核心内置" : "卸载";
     public bool CanUninstall => !IsCoreBuiltin && IsInstalled;
+    public bool IsSubagent => string.Equals(Id, "workspace.subagents", StringComparison.OrdinalIgnoreCase);
+    public string SubagentTier => NativeSubagentRegistry.Tier.ToString().ToLowerInvariant();
+    public bool ShowSubagentTier => IsSubagent && IsInstalled && IsEnabled;
+    public string SubagentTierLabel => "当前档位：" + SubagentTier;
+
+    public void RefreshSubagentTier() => OnPropertyChanged(nameof(SubagentTier));
 
     public PluginItemViewModel(PluginDefinition definition, bool isInstalled, bool isEnabled)
     {
@@ -305,6 +311,10 @@ public sealed partial class SettingsPageViewModel
 
     private void NotifyCapabilityState()
     {
+        foreach (var item in MarketplacePlugins.Where(item => item.IsSubagent))
+        {
+            item.RefreshSubagentTier();
+        }
         OnPropertyChanged(nameof(IsBrowserUseInstalled));
         OnPropertyChanged(nameof(BrowserUseAdvancedEnabled));
         OnPropertyChanged(nameof(BrowserUseUnavailableMessage));
@@ -423,6 +433,12 @@ public sealed partial class SettingsPageViewModel
                 manager.InstallPackage(item.Id);
                 item.IsInstalled = true;
                 item.IsEnabled = true;
+                if (item.IsSubagent && _context is { } context)
+                {
+                    context.Store.Update(current => current with { SubagentTier = "faster" });
+                    NativeSubagentRegistry.Tier = SubagentTier.Faster;
+                    item.RefreshSubagentTier();
+                }
                 item.StatusMessage = "已物理安装并激活";
             }
             catch (Exception ex)
@@ -433,6 +449,30 @@ public sealed partial class SettingsPageViewModel
             }
         }
         NotifyCapabilityState();
+    }
+
+    private void SetSubagentTier(PluginItemViewModel item, string tier)
+    {
+        if (!item.IsSubagent || !item.IsInstalled || !item.IsEnabled) return;
+        try
+        {
+            _context?.Store.Update(current => current with { SubagentTier = tier });
+            NativeSubagentRegistry.Tier = tier == "stronger" ? SubagentTier.Stronger : SubagentTier.Faster;
+            item.RefreshSubagentTier();
+        }
+        catch (Exception ex) { item.StatusMessage = "档位保存失败：" + ex.GetBaseException().Message; }
+    }
+
+    [RelayCommand]
+    public void SetSubagentFaster(PluginItemViewModel? item)
+    {
+        if (item is not null) SetSubagentTier(item, "faster");
+    }
+
+    [RelayCommand]
+    public void SetSubagentStronger(PluginItemViewModel? item)
+    {
+        if (item is not null) SetSubagentTier(item, "stronger");
     }
 
     [RelayCommand]

@@ -59,6 +59,17 @@ if ($LASTEXITCODE -ne 0) { throw "Fufucode.Cli publish failed." }
 
 Write-Host "Publishing Fufucode.App into shared app layout (self-contained=$selfContained)..."
 dotnet publish (Join-Path $root 'src/Fufucode.App/Fufucode.App.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained -o $appDir
+if ($LASTEXITCODE -ne 0) { throw 'Fufucode.App publish failed.' }
+
+# 默认随包分发的对话增强插件：宿主首次启动从 app/plugins/<id> 播种到数据目录。
+$interactiveUiDir = Join-Path $appDir 'plugins/chat.interactive-ui'
+dotnet publish (Join-Path $root 'src/Fufucode.Plugins.InteractiveUI/Fufucode.Plugins.InteractiveUI.csproj') -c Release -o $interactiveUiDir
+if ($LASTEXITCODE -ne 0) { throw 'Interactive UI plugin publish failed.' }
+Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.InteractiveUI.dll' } |
+    Remove-Item -Force
+Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+if (Test-Path (Join-Path $interactiveUiDir 'runtimes')) { Remove-Item -LiteralPath (Join-Path $interactiveUiDir 'runtimes') -Recurse -Force }
 if ($LASTEXITCODE -ne 0) { throw "Fufucode.App publish failed." }
 
 # 只并入 CLI 入口相关文件；共享框架程序集以 App 的裁剪结果为准。
@@ -193,6 +204,7 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.Pi.dll',
     # 可选功能插件。
     'Fufucode.Plugins.BrowserUse.dll',
+    'Fufucode.Plugins.Subagents.dll',
     'Fufucode.Plugins.ComputerUse.dll',
     'Fufucode.Plugins.Speech.dll',
     'Fufucode.Plugins.RemoteControl.dll',
@@ -331,6 +343,7 @@ $sharedDistPool = Join-Path $distRoot '.shared-packages'
 New-Item -ItemType Directory -Force $sharedDistPool | Out-Null
 
 $plugins = @(
+    @{ Id = 'workspace.subagents'; Project = 'src/Fufucode.Plugins.Subagents/Fufucode.Plugins.Subagents.csproj' },
     @{ Id = 'agent.browser-use'; Project = 'src/Fufucode.Plugins.BrowserUse/Fufucode.Plugins.BrowserUse.csproj' },
     @{ Id = 'agent.computer-use'; Project = 'src/Fufucode.Plugins.ComputerUse/Fufucode.Plugins.ComputerUse.csproj' },
     @{ Id = 'service.speech-synthesis'; Project = 'src/Fufucode.Plugins.Speech/Fufucode.Plugins.Speech.csproj' },
