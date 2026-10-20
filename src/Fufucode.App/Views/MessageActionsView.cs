@@ -171,12 +171,14 @@ public sealed class MessageActionsView : UserControl
         var assistant = DataContext as AssistantMessageViewModel;
         var timeline = DataContext as TimelineEntryViewModel;
 
-        // 与主流客户端一致：用户消息只提供"复制"和"更多"，不出现点赞/朗读等助手专属操作。
+        // 与主流客户端一致：用户消息只提供"复制"与"编辑成草稿"；
+        // "更多"里的分叉/重试/侧边提问都是对助手输出的操作，用户消息不出现。
         _edit.IsVisible = isUser;
         _like.IsVisible = !isUser;
         _dislike.IsVisible = !isUser;
         _speak.IsVisible = !isUser && FindChat()?.SpeechService is not null;
         _quote.IsVisible = !isUser;
+        _more.IsVisible = !isUser;
         _model.IsVisible = assistant?.HasModel == true;
         _model.Text = assistant?.ModelText ?? string.Empty;
         _usage.IsVisible = assistant?.HasUsage == true;
