@@ -607,6 +607,10 @@
   <Style Selector="Border.sessionIsland TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
+  <!-- 胶囊内次级信息（模型短名/用时/用量）压暗一档：是背景信号不是主标题。 -->
+  <Style Selector="Border.sessionIsland TextBlock.dim">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
   <Style Selector="Border.sessionIsland PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
   </Style>
