@@ -137,6 +137,21 @@ Get-ChildItem -LiteralPath $pluginOut -Filter 'Fufucode.*.dll' |
 Get-ChildItem -LiteralPath $pluginOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 if (Test-Path (Join-Path $pluginOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $pluginOut 'runtimes') -Recurse -Force }
 
+# 默认启用的性能监控插件：发布到 app/plugins-dist/<id>，启动时由 PluginBootstrapper 幂等播种。
+Write-Host "Publishing performance.monitor plugin -> staging ..."
+$perfOut = Join-Path $stagingApp 'plugins-dist/performance.monitor'
+$perfArgs = @('publish', (Join-Path $root 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj'),
+    '-c', $Configuration, '-o', $perfOut, '--nologo', '-v', 'q')
+if ($NoRestore) { $perfArgs += '--no-restore' }
+& dotnet @perfArgs
+if ($LASTEXITCODE -ne 0) { throw 'Performance monitor plugin publish failed.' }
+Get-ChildItem -LiteralPath $perfOut -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.PerformanceMonitor.dll' } |
+    Remove-Item -Force
+Get-ChildItem -LiteralPath $perfOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+Get-ChildItem -LiteralPath $perfOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+if (Test-Path (Join-Path $perfOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $perfOut 'runtimes') -Recurse -Force }
+
 # 本地调试只需要自有程序集的 PDB；Skia/HarfBuzz 的原生 PDB 合计约 100 MB，删掉。
 Get-ChildItem -LiteralPath $stagingApp -Recurse -File -Filter *.pdb |
     Where-Object { $_.Name -notlike 'Fufucode.*.pdb' } |
