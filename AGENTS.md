@@ -53,6 +53,12 @@
 - 原生包按 RID 构建：`package-native.ps1 -RuntimeIdentifier`（默认 `win-x64`）。Release 自包含发布启用 `PublishTrimmed=partial`，App 与 CLI 共用一份裁剪运行时（`System.Console` 已 root，打包期做 CLI 启动冒烟）。跨平台保持同一源码按 RID 分别出包，不把其它平台载荷放进 Windows 安装。
 - 默认发自包含包（无需 .NET）；已有 .NET 10 Runtime 的用户可选 `-FrameworkDependent` 瘦身包（`out/build-native-slim`，安装器 `Fufucode-Native-Slim-Setup.exe`）。瘦身包不裁剪，按 RID 手工移除其它平台后端。
 
+## 后台常驻与单实例（2026-10-20）
+
+- 默认仍是关窗即退出。`AppSettings.Background.CloseToTray`（默认 false）开启后，标题栏关闭/Alt+F4 只隐藏主窗口与浮动辅助栏，会话与后端子进程继续运行；托盘左键恢复，菜单含显示主窗口/退出；只有托盘退出或显式退出结束进程。
+- 单实例按登录会话生效（`Local\` 命名 Mutex + 激活事件）；第二个进程唤醒已有窗口后自行退出。自测、无头预览、原生模块自测与探针模式不参与单实例。
+- 隐藏时不销毁会话、不暂停 Browser Use/CDP 页面；WebView2 降内存依赖既有可见性/遮挡路径（内存优化分支）。托盘创建失败时不隐藏窗口，设置被关闭时若窗口隐藏会先恢复。
+
 ## 插件化优先（用户2026-10-16明确要求）
 
 - 最新拆分范围：按用户“通通拆出来，除了……”的指令，工作面板组（内嵌浏览器、资料库、代码审查、文件预览、Git变更面板）以及文档提取、系统通知、用量统计、储存诊断、高级界面定制保留内置（原例外中的终端已按用户2026-10-18的新指令拆为可选插件 `workspace.terminal`，见 `docs/decisions.md`）；其余审计候选由M组织真实插件化。此具体范围优先于下文一般性插件化建议，不据旧候选表把例外擅自拆走。文件预览是工作面板默认能力，不作为独立功能页/tab或可选插件；具体修正及证据见 `docs/tasks/plugin-extraction-scope-2026-10-16.md`。

@@ -75,6 +75,10 @@ pwsh scripts/packaging/native-start-smoke.ps1 -PackageRoot out/build-native
 pwsh scripts/packaging/test-native-channel.ps1
 ```
 
+## Background mode
+
+Closing the window exits Fufucode by default. Enable **Settings → Other → Background and tray** to keep the process, sessions and backend subprocesses running after the window closes: the tray icon restores the window, and its menu can show the window or exit. Only one Fufucode process runs per login session; launching it again brings the existing window forward (even from the tray) and the second process exits.
+
 ## Status
 
 Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
