@@ -17,7 +17,8 @@
     <Border x:Name="CustomCaption" Classes="chromeBar" Background="Transparent" PointerPressed="CaptionDrag_PointerPressed">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
         <ScrollViewer MaxWidth="540" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopLeft" Orientation="Horizontal" Spacing="3" Margin="8,0" VerticalAlignment="Center"/></ScrollViewer>
-        <Grid Grid.Column="1">
+        <!-- 中间列必须裁剪：窄窗时胶囊超宽，不裁会压到左右两侧按钮上。 -->
+        <Grid Grid.Column="1" ClipToBounds="True">
           <!-- 品牌与当前会话：拖拽区，居中弱化为三级文字，不再与左右按钮竞争视觉。
                Fluent 皮肤下由会话岛（IslandHost）取代它的位置，此块隐藏。 -->
           <Border x:Name="CaptionBrandFallback" Background="Transparent" ClipToBounds="True">

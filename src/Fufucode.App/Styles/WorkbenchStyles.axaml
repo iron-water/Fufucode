@@ -742,6 +742,11 @@
     <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
     <Setter Property="Opacity" Value="1"/>
   </Style>
+  <!-- 焦点描边只给键盘导航（focus-visible）；鼠标点完移开不留白边。 -->
+  <Style Selector="Button.islandTile:focus:not(:focus-visible) /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
   <!-- 实时活动条：Subtle 浅底，失败时转 critical 边框/文字。 -->
   <Style Selector="Border.islandLiveBar">
     <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>

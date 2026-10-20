@@ -227,6 +227,7 @@ public partial class MainWindow
             Command = _actions.GetCommand(action.Id),
         };
         button.Classes.Add("islandTile");
+        button.FocusAdorner = null;
         var tip = string.IsNullOrEmpty(action.Description) || action.Description == action.Title
             ? action.Title : $"{action.Title}\n{action.Description}";
         ToolTip.SetTip(button, tip);
@@ -252,15 +253,23 @@ public partial class MainWindow
         var hasQueue = vm?.StatusBar.HasQueue == true;
 
         // ── 紧凑胶囊 ──
+        // 窄窗分级收缩：先丢模型，再丢用量，最后只留"点 + 名称 + 展开"。
+        // 中间列本身也裁剪，三者合起来保证顶栏永不互相压字。
+        var windowWidth = Bounds.Width > 0 ? Bounds.Width : Width;
+        var narrow = windowWidth < 1000;
+        var tighter = windowWidth < 900;
+        var minimal = windowWidth < 820;
+        if (_islandPill is not null)
+            _islandPill.MaxWidth = Math.Max(150, windowWidth - 560);
         _islandTitle?.SetValue(TextBlock.TextProperty, title);
         _islandModel?.SetValue(TextBlock.TextProperty, ShortModelName(model));
-        _islandModel?.SetValue(Visual.IsVisibleProperty, !string.IsNullOrEmpty(model));
+        _islandModel?.SetValue(Visual.IsVisibleProperty, !string.IsNullOrEmpty(model) && !narrow);
         if (_islandDot is not null)
         {
             _islandDot.Classes.Remove("running"); _islandDot.Classes.Remove("failed"); _islandDot.Classes.Remove("idle");
             _islandDot.Classes.Add(running ? "running" : failed ? "failed" : "idle");
         }
-        var showLive = running || failed;
+        var showLive = (running || failed) && !minimal;
         _islandSep?.SetValue(Visual.IsVisibleProperty, showLive);
         _islandActivity?.SetValue(Visual.IsVisibleProperty, showLive);
         _islandElapsed?.SetValue(Visual.IsVisibleProperty, showLive);
@@ -268,7 +277,7 @@ public partial class MainWindow
         _islandElapsed?.SetValue(TextBlock.TextProperty, showLive ? "⏱ " + (DateTimeOffset.UtcNow - _turnStarted).ToString(@"mm\:ss") : "");
         var usageShort = string.IsNullOrEmpty(usage) ? "" : "⚡" + usage.Replace("会话累计：", "").Trim();
         _islandUsage?.SetValue(TextBlock.TextProperty, usageShort);
-        _islandUsage?.SetValue(Visual.IsVisibleProperty, !string.IsNullOrEmpty(usage));
+        _islandUsage?.SetValue(Visual.IsVisibleProperty, !string.IsNullOrEmpty(usage) && !tighter);
 
         // 卫星点：有排队时亮起并显示数量
         _islandSatellite?.SetValue(Visual.IsVisibleProperty, hasQueue);
