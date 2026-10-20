@@ -8,6 +8,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.Threading;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
@@ -119,7 +120,26 @@ public partial class MainWindow
 
         // ── 展开面板（Fluent 浮出层：MenuSurfaceBrush + 尾指 + 磁贴网格 + 实时活动条）──
         var panel = BuildIslandPanel(actions);
-        _islandFlyout = new Flyout { Content = panel, Placement = PlacementMode.Bottom, ShowMode = FlyoutShowMode.Transient };
+        _islandFlyout = new Flyout
+        {
+            Content = panel,
+            Placement = PlacementMode.Bottom,
+            ShowMode = FlyoutShowMode.Transient,
+        };
+        // Flyout 默认 FlyoutPresenter 自带 12px padding + MenuFlyoutPresenterBackground，
+        // 透出成"浅灰底外圈黑边"。自定义 presenter theme 清掉 padding，让 islandPanel 全权绘制。
+        var presenterTheme = new ControlTheme(typeof(FlyoutPresenter))
+        {
+            Setters =
+            {
+                new Setter(TemplatedControl.PaddingProperty, new Thickness(0)),
+                new Setter(TemplatedControl.BackgroundProperty, Brushes.Transparent),
+                new Setter(TemplatedControl.BorderBrushProperty, Brushes.Transparent),
+                new Setter(TemplatedControl.BorderThicknessProperty, new Thickness(0)),
+                new Setter(TemplatedControl.CornerRadiusProperty, new CornerRadius(0)),
+            },
+        };
+        _islandFlyout.FlyoutPresenterTheme = presenterTheme;
         _islandFlyout.Opened += (_, _) => RefreshIsland();
 
         RefreshIsland();
@@ -148,20 +168,19 @@ public partial class MainWindow
         Grid.SetColumn(who, 1); header.Children.Add(who);
         Grid.SetColumn(_islandLiveMeta, 2); header.Children.Add(_islandLiveMeta);
 
-        // 磁贴网格：会话级动作精选 4×2（按使用频率排，非字母序）。
-        var tiles = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), RowDefinitions = new RowDefinitions("Auto,Auto"), ColumnSpacing = 6, RowSpacing = 6, Margin = new Thickness(0, 12, 0, 12) };
+        // 磁贴网格：WrapPanel + 固定方形 tile 保证等大，避免 Grid * 列被内容撑开。
+        // 4 列布局通过 panel 宽度与 tile 宽度协同约束（380-28 pad / 4 ≈ 88，两排）。
+        var tiles = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 12) };
         var preferred = new[] { "session.rename", "session.pin", "session.side", "session.fork",
                                 "session.search", "session.share", "session.archive", "session.schedule" };
         var byId = actions.Where(a => a.Id.StartsWith("session.", StringComparison.Ordinal))
             .GroupBy(a => a.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var islandActions = preferred.Where(byId.ContainsKey).Select(id => byId[id]).ToArray();
-        int index = 0;
         foreach (var action in islandActions)
         {
             var tile = BuildIslandTile(action);
-            Grid.SetColumn(tile, index % 4); Grid.SetRow(tile, index / 4);
+            tile.Margin = new Thickness(4);
             tiles.Children.Add(tile);
-            index++;
         }
 
         // 实时活动条：仅在真实活动（运行/失败/有排队/有用量）时出现；空闲整条隐藏。
@@ -212,21 +231,23 @@ public partial class MainWindow
 
     private Control BuildIslandTile(Infrastructure.AppActionDefinition action)
     {
-        var icon = new PathIcon { Width = 13, Height = 13, HorizontalAlignment = HorizontalAlignment.Center };
+        // 纯图标磁贴：去文字（入 tooltip），图标放大更清爽，固定方形确保所有 tile 等大。
+        var icon = new PathIcon { Width = 16, Height = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + WorkbenchActionDefaults.Icon(action.Id)));
-        var label = new TextBlock { Text = action.Title, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        var content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
-        content.Children.Add(icon); content.Children.Add(label);
         var button = new Button
         {
-            Content = content,
-            Padding = new Thickness(4, 7, 4, 6),
+            Content = icon,
+            Width = 44, Height = 40,
+            Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
             Command = _actions.GetCommand(action.Id),
         };
         button.Classes.Add("islandTile");
-        ToolTip.SetTip(button, action.Description);
+        // 动作名 + 描述合并进 tooltip，信息更完整且不占布局。
+        ToolTip.SetTip(button, $"{action.Title}\n{action.Description}");
         Avalonia.Automation.AutomationProperties.SetAutomationId(button, "island-" + action.Id);
+        Avalonia.Automation.AutomationProperties.SetName(button, action.Title);
         return button;
     }
 
