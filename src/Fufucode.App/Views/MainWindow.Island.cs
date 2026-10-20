@@ -198,7 +198,11 @@ public partial class MainWindow
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             Foreground = accentText,
         };
-        backendIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.Sparkle"));
+        // Popup 树里 DynamicResource 找不到 Icon.*，显式从主窗取 StreamGeometry。
+        if (TryGetResource("Icon.Sparkle", ActualThemeVariant, out var sparkleGeo) && sparkleGeo is Geometry sg)
+            backendIcon.Data = sg;
+        else if (Avalonia.Application.Current?.TryGetResource("Icon.Sparkle", ActualThemeVariant, out var appSg) == true && appSg is Geometry asg)
+            backendIcon.Data = asg;
         backendTile.Child = backendIcon;
 
         _islandPanelTitle = new TextBlock
@@ -281,11 +285,11 @@ public partial class MainWindow
         // 尾指 + 卡：显式赋主窗画刷/圆角/阴影。
         var tail = new Border
         {
-            Width = 12, Height = 12,
+            Width = 11, Height = 11,
             HorizontalAlignment = HorizontalAlignment.Center,
             RenderTransform = new RotateTransform(45),
             RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-            Margin = new Thickness(0, 0, 0, -7),
+            Margin = new Thickness(0, 0, 0, -6),
             Background = menuSurface,
             BorderBrush = cardStroke,
             BorderThickness = new Thickness(1),
@@ -301,7 +305,7 @@ public partial class MainWindow
         };
         if (flyoutShadow.HasValue) card.BoxShadow = flyoutShadow.Value;
 
-        var inner = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        var inner = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
         inner.Children.Add(tail);
         inner.Children.Add(card);
         return inner;
@@ -327,14 +331,20 @@ public partial class MainWindow
         IBrush subtleBg, IBrush cardStroke, IBrush hoverBg, IBrush textSecondary, IBrush textPrimary, CornerRadius radius)
     {
         // Win10 磁贴语义：整齐等大方格 + 居中图标 + 名称下沉 tooltip。
-        // Popup 树里 class selector 不生效，画刷全部显式赋。
+        // Popup 树里 class selector/资源 lookup 都不生效，画刷与图标几何全部显式赋。
+        var iconKey = "Icon." + WorkbenchActionDefaults.Icon(action.Id);
+        Geometry? iconData = null;
+        if (TryGetResource(iconKey, ActualThemeVariant, out var geo) && geo is Geometry g)
+            iconData = g;
+        else if (Avalonia.Application.Current?.TryGetResource(iconKey, ActualThemeVariant, out var appGeo) == true && appGeo is Geometry ag)
+            iconData = ag;
         var icon = new PathIcon
         {
             Width = 18, Height = 18,
             HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
             Foreground = textSecondary,
+            Data = iconData,
         };
-        icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + WorkbenchActionDefaults.Icon(action.Id)));
         var button = new Button
         {
             Content = icon,
