@@ -69,6 +69,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             new("marketplace.automation", "工作流与自动化", "自动化与任务", "自动化 工作流 automation workflow"),
             new("marketplace.theme", "个性皮肤", "主题与皮肤", "皮肤 主题 theme skin"),
             new("marketplace.tools", "工具扩展", "其他工具插件", "工具 扩展 tools extension"),
+            new("storage.archive", "已归档", "归档项目与归档会话", "归档 已归档 项目 会话 恢复 打开 列表 archive archived project session restore"),
         ];
         // 模型清单变化时同步重建选择器的筛选结果与供应商快捷项。
         ModelChoices.CollectionChanged += (_, _) => RebuildFilteredModels();
@@ -204,6 +205,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         && CurrentPageId is "models.providers" or "models.providers.add" or "models.providers.edit";
     public bool ShowNetwork => SelectedCategory?.Id == "network";
     public bool ShowNotifications => SelectedCategory?.Id == "notifications";
+    /// <summary>后台与托盘：关闭窗口时是否常驻。</summary>
+    public bool ShowBackground => SelectedCategory?.Id == "background";
     public bool ShowAbout => SelectedCategory?.Id == "about";
     public bool ShowModules => SelectedCategory?.Id == "modules";
     public bool ShowShortcuts => SelectedCategory?.Id == "shortcuts";
@@ -222,7 +225,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             ? Uri.UnescapeDataString(CurrentPageId["shortcuts.".Length..])
             : null;
 
-    public bool ShowStorage => SelectedCategory?.Id == "storage";
+    /// <summary>储存首页：只在没有进入二级页时显示。</summary>
+    public bool ShowStorage => SelectedCategory?.Id == "storage" && CurrentPageId.Length == 0;
     [ObservableProperty] private Avalonia.Controls.Control? _storageContent;
     /// <summary>性能监控设置页：内容由性能监控插件提供，未安装时显示安装提示。</summary>
     public bool ShowPerformance => SelectedCategory?.Id == "performance";
@@ -238,8 +242,12 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     partial void OnPerformancePluginAvailableChanged(bool value) => OnPropertyChanged(nameof(ShowPerformanceHint));
     partial void OnPerformanceDiagnosticChanged(string? value) => OnPropertyChanged(nameof(PerformanceHintText));
 
-    /// <summary>设置 → 已归档：归档项目与会话的统一管理页。</summary>
-    public bool ShowArchive => SelectedCategory?.Id == "archived";
+    /// <summary>储存 → 已归档（二级页）：归档项目与会话的统一管理页。</summary>
+    public bool ShowArchive => SelectedCategory?.Id == "storage" && CurrentPageId == "storage.archive";
+
+    /// <summary>从储存首页进入「已归档」二级页。</summary>
+    [RelayCommand]
+    public void OpenArchivePage() => OpenPage("storage.archive");
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowArchiveEmpty))]
     private Avalonia.Controls.Control? _archiveContent;
@@ -265,6 +273,35 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     public bool IsSettingsBusy => IsModelApplying || IsEndpointSaving;
     public bool ShowEndpointForm => ShowEndpointRow && EndpointFormOpen;
     public string UnsavedChangesText => string.Join("、", new[] { HasProxyDraft ? "代理草稿" : null, HasEndpointDraft ? "端点草稿" : null }.Where(x => x is not null));
+
+    // ── 后台与托盘 ──
+    /// <summary>关闭窗口时最小化到托盘。默认关闭（关窗即退出）。由主窗口订阅设置存储即时生效。</summary>
+    [ObservableProperty] private bool _closeToTray;
+    [ObservableProperty] private string? _backgroundSaveError;
+    public bool HasBackgroundSaveError => BackgroundSaveError is not null;
+    private bool _suppressBackgroundApply;
+
+    partial void OnCloseToTrayChanged(bool value)
+    {
+        if (_suppressBackgroundApply || _context is null) return;
+        try
+        {
+            _context.Store.Update(settings => settings with
+            {
+                Background = (settings.Background ?? new BackgroundSettings()) with { CloseToTray = value },
+            });
+            BackgroundSaveError = null;
+        }
+        catch (Exception error)
+        {
+            // 写入失败时把开关退回真实值，避免视图与磁盘不一致。
+            BackgroundSaveError = "保存失败：" + error.GetBaseException().Message;
+            _suppressBackgroundApply = true;
+            CloseToTray = !value;
+            _suppressBackgroundApply = false;
+        }
+    }
+    partial void OnBackgroundSaveErrorChanged(string? value) => OnPropertyChanged(nameof(HasBackgroundSaveError));
 
     public void AttachNotificationPreferences(NotificationPreferencesViewModel preferences) => NotificationPreferences = preferences;
     partial void OnNotificationPreferencesChanged(NotificationPreferencesViewModel? value) => OnPropertyChanged(nameof(HasNotificationPreferences));
@@ -314,7 +351,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool MatchesOption(string terms) => SearchText.Trim().Length == 0 || terms.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase);
     private void NotifyCategoryVisibility()
     {
-        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowLookColumn), nameof(ShowArrangementColumn), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowAbout), nameof(ShowModules),
+        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowLookColumn), nameof(ShowArrangementColumn), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
                      nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
@@ -1712,6 +1749,10 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         ThemeIndex = IndexFor(context.Store.Current.Theme);
         _suppressThemeApply = false;
         var current = context.Store.Current;
+        _suppressBackgroundApply = true;
+        CloseToTray = current.Background?.CloseToTray ?? false;
+        _suppressBackgroundApply = false;
+        BackgroundSaveError = null;
         ProxySummary = current.ProxyUrl is { } proxy ? $"已设置（{proxy}）" : "未设置";
         ProxyInput = current.ProxyUrl;
         ProxyError = null;
