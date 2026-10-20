@@ -237,6 +237,14 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [ObservableProperty] private string? _performanceDiagnostic;
     partial void OnPerformancePluginAvailableChanged(bool value) => OnPropertyChanged(nameof(ShowPerformanceHint));
     partial void OnPerformanceDiagnosticChanged(string? value) => OnPropertyChanged(nameof(PerformanceHintText));
+
+    /// <summary>设置 → 已归档：归档项目与会话的统一管理页。</summary>
+    public bool ShowArchive => SelectedCategory?.Id == "archived";
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowArchiveEmpty))]
+    private Avalonia.Controls.Control? _archiveContent;
+    /// <summary>归档页内容尚未接线（mock 或真实会话尚未就绪）。</summary>
+    public bool ShowArchiveEmpty => ShowArchive && ArchiveContent is null;
     /// <summary>「其他」收纳桶页：右侧列二级功能入口卡，点击进入对应设置页。</summary>
     /// <summary>「其他」桶页：选中占位项时列出小功能入口卡。</summary>
     public bool ShowOtherHub => SelectedCategory?.Id == OtherHubId;
@@ -307,7 +315,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private void NotifyCategoryVisibility()
     {
         foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowLookColumn), nameof(ShowArrangementColumn), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowAbout), nameof(ShowModules),
-                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
+                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
 
