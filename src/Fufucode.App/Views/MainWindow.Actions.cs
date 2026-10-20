@@ -198,7 +198,8 @@ public partial class MainWindow
     private async Task ShowArchivesAsync()
     {
         if (_vm is null) return;
-        _vm.Settings.SelectCategory("archived");
+        _vm.Settings.SelectCategory("storage");
+        _vm.Settings.OpenPage("storage.archive");
         await NavigateWorkspaceAsync(AppPage.Settings);
         _archivePage?.Refresh();
     }
