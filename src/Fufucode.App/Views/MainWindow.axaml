@@ -124,5 +124,14 @@
       <Button Background="Transparent" BorderThickness="0" CornerRadius="0" Click="GlobalScrim_Click"/>
       <ContentControl x:Name="GlobalOverlayHost" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="24" MinWidth="440" MaxWidth="680" Focusable="True" KeyboardNavigation.TabNavigation="Cycle"/>
     </Grid>
+    <!-- 会话岛展开面板：主窗内的 overlay 层（不是 Popup）——
+         Popup 是独立 top-level 视觉树，窗口 Styles/Resources 全部失效，样式与图标渲染不了。
+         放在主窗树里，类选择器、DynamicResource、悬停状态全部照常工作。 -->
+    <Panel x:Name="IslandOverlay" Grid.RowSpan="3" ZIndex="40" IsVisible="False">
+      <Button x:Name="IslandScrim" Background="Transparent" BorderThickness="0" CornerRadius="0" Click="IslandScrim_Click">
+        <Button.Template><ControlTemplate><Border Background="{TemplateBinding Background}"/></ControlTemplate></Button.Template>
+      </Button>
+      <ContentControl x:Name="IslandOverlayHost" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,52,0,0"/>
+    </Panel>
   </Grid>
 </Window>
