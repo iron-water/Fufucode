@@ -105,7 +105,7 @@ public sealed class ChatCompletionSseParser
         }
     }
 
-    private static PureUsage? ReadUsage(JsonElement usage)
+    internal static PureUsage? ReadUsage(JsonElement usage)
     {
         var input = TryReadLong(usage, "prompt_tokens") ?? TryReadLong(usage, "input_tokens");
         var output = TryReadLong(usage, "completion_tokens") ?? TryReadLong(usage, "output_tokens");

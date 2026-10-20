@@ -76,11 +76,12 @@
           <Button.Template><ControlTemplate><Border Background="{TemplateBinding Background}"/></ControlTemplate></Button.Template>
         </Button>
       </Grid>
-      <Border x:Name="StartupOverlay" Grid.ColumnSpan="3" Background="{DynamicResource AppMicaPageBackground}" IsVisible="False" ZIndex="20">
+      <!-- 启动遮罩使用不透明底色：Mica 皮肤会把 AppMicaPageBackground 变透明，导致半成品侧栏透出来。 -->
+      <Border x:Name="StartupOverlay" Grid.ColumnSpan="3" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" IsVisible="False" ZIndex="20">
         <Grid>
         <StackPanel x:Name="StartupSummary" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="520">
           <Image x:Name="StartupArt" Source="{DynamicResource StartupArtBitmap}" Width="200" Height="125" IsVisible="False"/>
-          <TextBlock Text="Fufucode" Classes="subtitle" HorizontalAlignment="Center"/>
+          <TextBlock x:Name="StartupWordmark" Text="Fufucode" Classes="subtitle" HorizontalAlignment="Center"/>
           <ProgressBar x:Name="StartupProgress" IsIndeterminate="True" Width="240"/>
           <TextBlock x:Name="StartupText" Classes="secondary" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
           <StackPanel x:Name="StartupPickProject" IsVisible="False" Spacing="10">

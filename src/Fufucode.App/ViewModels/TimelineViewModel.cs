@@ -237,6 +237,8 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private void ApplyBatch()
     {
         if (_disposed) return;
+        // 性能监控：只测量本批在 UI 线程上的处理耗时；接收端未启用时为零开销。
+        using var perfBatch = TimelineBatchTimer.Measure();
         var batch = _rebuilder.Flush();
         var hasChanges = batch.AddedEntries.Count > 0 || batch.UpdatedEntryIds.Count > 0;
 
