@@ -6,6 +6,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Fufucode.Core.Diagnostics;
 
 namespace Fufucode.Core.Backend;
 
@@ -15,7 +16,7 @@ namespace Fufucode.Core.Backend;
 /// 同时支持一次性（stream=false）与真实 Server-Sent Events 流式（stream=true）响应，
 /// 流式路径增量派发 delta.content 与 delta.tool_calls 分片，并在 data: [DONE] 处收束。
 /// </summary>
-public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClient
+public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClient
 {
     private readonly HttpClient _httpClient;
     private readonly string _baseUrl;
@@ -53,9 +54,34 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
         cancellationToken.ThrowIfCancellationRequested();
 
         using var httpRequest = CreateRequest(request, streaming: false);
-        using var response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+        using var span = PerfTracer.Step("model.http", "mode", "non-streaming");
+        HttpResponseMessage? response = null;
+        try
+        {
+            response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            span.Tag("status", (long)response.StatusCode);
+            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+            span.Tag("responseChars", (long)responseJson.Length);
+            return ParseNonStreaming(response, responseJson, span);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            span.Cancel();
+            throw;
+        }
+        catch (Exception error)
+        {
+            span.Fail(error.GetType().Name);
+            throw;
+        }
+        finally
+        {
+            response?.Dispose();
+        }
+    }
 
-        var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+    private static PureModelResponse ParseNonStreaming(HttpResponseMessage response, string responseJson, PerfSpan span)
+    {
         ThrowIfStreamError(responseJson);
 
         using var doc = JsonDocument.Parse(responseJson);
@@ -110,7 +136,21 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
             }
         }
 
+        span.Tag("toolCalls", toolCalls.Count);
+        span.Tag("textChars", text?.Length ?? 0);
+        if (root.TryGetProperty("usage", out var usageRoot) && usageRoot.ValueKind == JsonValueKind.Object)
+            RecordUsage(span, ChatCompletionSseParser.ReadUsage(usageRoot));
         return new PureModelResponse(text, toolCalls);
+    }
+
+    private static void RecordUsage(PerfSpan span, PureUsage? usage)
+    {
+        if (usage is not { IsEmpty: false }) return;
+        if (usage.InputTokens is { } input) span.Tag("promptTokens", input);
+        if (usage.OutputTokens is { } output) span.Tag("completionTokens", output);
+        if (usage.TotalTokens is { } total) span.Tag("totalTokens", total);
+        if (usage.CacheReadTokens is { } cached) span.Tag("cachedTokens", cached);
+        if (usage.CacheWriteTokens is { } cacheWrite) span.Tag("cacheWriteTokens", cacheWrite);
     }
 
     /// <summary>
@@ -139,9 +179,43 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
         cancellationToken.ThrowIfCancellationRequested();
 
         using var httpRequest = CreateRequest(request, streaming: true);
-        using var response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+        using var http = PerfTracer.Step("model.http", "mode", "streaming");
+        HttpResponseMessage response;
+        try
+        {
+            response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            http.Cancel();
+            throw;
+        }
+        catch (Exception error)
+        {
+            http.Fail(error.GetType().Name);
+            throw;
+        }
+        using (response)
+        {
+            http.Tag("status", (long)response.StatusCode);
+            return await ReadStreamAsync(response, callbacks, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>读取 SSE 流：逐帧解析，并在启用埋点时统计帧数、TTFT 与帧间隔。</summary>
+    private async Task<StreamedCompletion> ReadStreamAsync(HttpResponseMessage response,
+        ModelStreamCallbacks? callbacks, CancellationToken cancellationToken)
+    {
+        using var streamSpan = PerfTracer.Step("model.stream");
 
         var parser = new ChatCompletionSseParser();
+        // 帧间隔统计：最大间隔定位“流式卡顿”，p95 反映整体抖动。只在启用时维护，未启用时零开销。
+        var gapWatch = PerfTracer.Enabled ? System.Diagnostics.Stopwatch.StartNew() : null;
+        var frameCount = 0;
+        long maxGapMs = 0;
+        long firstDataMs = -1;
+        var gaps = gapWatch is null ? null : new BoundedGapHistogram();
+
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
 
         try
@@ -156,21 +230,46 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
                         break;
                     }
 
+                    if (gapWatch is not null)
+                    {
+                        var now = gapWatch.ElapsedMilliseconds;
+                        if (firstDataMs < 0) firstDataMs = now;
+                        else
+                        {
+                            var gap = now - gaps!.LastMs;
+                            if (gap > maxGapMs) maxGapMs = gap;
+                            gaps.Add(gap);
+                        }
+                        gaps!.LastMs = now;
+                        frameCount++;
+                    }
+
                     parser.TryApply(sse, callbacks);
                 }
             }
         }
-        catch (ModelClientException)
+        catch (ModelClientException error)
         {
+            streamSpan.Fail(error.GetType().Name);
             throw;
         }
         catch (OperationCanceledException)
         {
+            streamSpan.Cancel();
             throw;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
+            streamSpan.Fail(ex.GetType().Name);
             throw ModelClientErrorMapper.FromTransport(ex);
+        }
+
+        if (gapWatch is not null)
+        {
+            streamSpan.Tag("frames", frameCount);
+            streamSpan.Tag("ttftMs", firstDataMs < 0 ? 0 : firstDataMs);
+            streamSpan.Tag("maxGapMs", maxGapMs);
+            if (gaps is { Count: > 0 }) streamSpan.Tag("p95GapMs", gaps.Percentile(95));
         }
 
         if (!parser.Completion.SawDone)
@@ -178,6 +277,7 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
             // 没有 [DONE] 但有有效增量：部分网关直接关流；只要已解析出内容就按正常结束处理。
             if (parser.Completion.EventCount == 0)
             {
+                streamSpan.Fail("Transport");
                 throw new ModelClientException(
                     ModelClientErrorKind.Transport,
                     "流式响应在收到任何数据帧之前结束。");
@@ -196,6 +296,7 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
                     }
                     catch (JsonException)
                     {
+                        streamSpan.Fail("Transport");
                         throw new ModelClientException(ModelClientErrorKind.Transport,
                             "流式响应在工具参数传输完成前中断，本次工具调用未执行。");
                     }
@@ -203,6 +304,7 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
             }
         }
 
+        if (parser.Completion.Usage is not null) RecordUsage(streamSpan, parser.Completion.Usage);
         callbacks?.OnCompleted?.Invoke();
         return parser.Completion;
     }
@@ -239,7 +341,8 @@ public sealed class OpenAiCompatibleModelClient : IPureModelClient, IStreamingMo
         return httpRequest;
     }
 
-    private async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    /// <summary>发送 HTTP 请求。virtual 供本机/离线环境注入脚本化响应（测试与诊断探针）。</summary>
+    protected virtual async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         HttpResponseMessage response;
         try

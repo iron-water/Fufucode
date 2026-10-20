@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
 using Avalonia.Threading;
+using Fufucode.App.Features.Performance;
 using Fufucode.App.Integration;
 
 namespace Fufucode.App;
@@ -26,12 +27,27 @@ internal static class Program
         SelfTestDataRoot = dataRoot;
     }
 
+    /// <summary>当前进程的启动追踪；为 null 表示数据根不可写或未启动。</summary>
+    internal static StartupTrace? Startup { get; private set; }
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
     [STAThread]
     public static void Main(string[] args)
     {
+        // 尽早解析数据根：自定义 --data-root 时启动记录也落到同一处，而不是全局默认目录。
+        var startupOptions = AppOptions.Parse(args);
+        // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。
+        var isolatedRun = args.Contains("--selftest") || args.Contains("--headless-ui") || args.Contains("--native-module-selftest");
+        if (!isolatedRun)
+        {
+            Startup = StartupTrace.Start(startupOptions.CreateAppDataLayout());
+            if (Startup is { } startupTrace)
+                Fufucode.Core.Diagnostics.StartupProbe.Handler = startupTrace.Mark;
+            Startup?.Mark("process.main", "Program.Main entered");
+        }
+
         // 用户按需安装到 Fufucode 的工具链（node/bun/python/git-bash 等）对子进程可见；
         // 系统已有工具链时排在最前，不改变现有行为。
         try
@@ -71,10 +87,12 @@ internal static class Program
                     lifetime.Shutdown(code);
                 }
             }, DispatcherPriority.Background);
+            Startup?.Mark("avalonia.native-selftest", "native module selftest");
             BuildAvaloniaApp(AppOptions.Mock with { AppDataRootOverride = SelfTestDataRoot })
                 .StartWithClassicDesktopLifetime(Array.Empty<string>());
             Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
         }
+        Startup?.Mark("avalonia.headless", "headless preview");
         if (args.Length > 0 && args[0] == "--headless-ui")
         {
             SelfTestMode = true;
@@ -82,6 +100,7 @@ internal static class Program
         }
 
         // --selftest：无头自测入口，不依赖交互式桌面会话即可验证界面与 mock 会话
+        Startup?.Mark("avalonia.selftest", "headless selftest");
         if (Array.IndexOf(args, "--selftest") >= 0)
         {
             SelfTestMode = true;
@@ -92,6 +111,7 @@ internal static class Program
         // 否则会一直读到旧程序集、且 restart-pending.json 永远残留。
         try
         {
+            Startup?.Mark("deploy.pending", "pending update apply");
             new Fufucode.Core.Updates.BuildDeploymentService(
                 new Fufucode.Core.AppDataLayout()).ApplyPendingOnStartup();
         }
@@ -107,8 +127,11 @@ internal static class Program
             Console.WriteLine("撤销备份清理失败：" + error.Message);
         }
 
+        Startup?.Mark("deploy.cleanup", "journal prune");
+        Startup?.Mark("avalonia.setup", "Avalonia app builder configured");
         // 默认后端为 FUMO 原生内核；--mock 回到脚本化演示会话
-        BuildAvaloniaApp(AppOptions.Parse(args)).StartWithClassicDesktopLifetime(args);
+        BuildAvaloniaApp(startupOptions).StartWithClassicDesktopLifetime(args);
+        Startup?.Mark("avalonia.exited", "desktop lifetime returned");
     }
 
     private static int RunSelfTestHeadless(string[] args)

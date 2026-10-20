@@ -172,7 +172,9 @@ $backendPlugins = @(
     @{ Id = 'backend.codex'; Project = 'src/Fufucode.Plugins.Codex/Fufucode.Plugins.Codex.csproj' },
     @{ Id = 'backend.dsh'; Project = 'src/Fufucode.Plugins.Dsh/Fufucode.Plugins.Dsh.csproj' },
     # 工作区页面插件：终端已按 2026-10-18 用户指令拆为可选插件。
-    @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' }
+    @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
+    # 性能监控插件（2026-10-19）：可选安装。
+    @{ Id = 'performance.monitor'; Project = 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj' }
 )
 foreach ($p in $backendPlugins) {
     $proj = Join-Path $root $p.Project

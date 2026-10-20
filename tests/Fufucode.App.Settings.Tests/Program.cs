@@ -31,7 +31,8 @@ try
     // 插件市场（MKT 轨道）在目录中已是大功能一级条目，此处按实际目录核对，不再沿用旧四条目断言。
     Check(features.SequenceEqual(new[] { "marketplace", "browser", "terminal", "files", "automation" }),
         "大功能包含插件市场/浏览器/终端/文件管理/自动开发");
-    Check(other.SequenceEqual(new[] { "notifications", "config", "usage", "modules", "functions" }),
+    // 性能监控（2026-10-19）在“其他”中加入 performance 条目。
+    Check(other.SequenceEqual(new[] { "notifications", "config", "usage", "performance", "modules", "functions" }),
         "其他包含通知/配置/用量/辅助工具等二级小功能");
     Check(SettingsNavCatalog.DefaultCategoryId == "appearance", "默认选中外观分类");
     Check(SettingsNavCatalog.Find("browser") is { Title: "浏览器", Icon: "Globe" },
@@ -94,7 +95,7 @@ try
               .SequenceEqual(new[] { "marketplace", "terminal", "files", "automation", "notifications", "usage" }),
         "升级的小功能并入大功能组");
     Check(movedGroups.Single(g => g.Tier == "other").Items.Select(i => i.Id)
-              .SequenceEqual(new[] { "browser", "config", "modules", "functions" }),
+              .SequenceEqual(new[] { "browser", "config", "performance", "modules", "functions" }),
         "降级的大功能收纳进其他组");
 
     // VM 层：命令写盘后新实例恢复同一层级。

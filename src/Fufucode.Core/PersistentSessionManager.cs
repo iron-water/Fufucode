@@ -252,12 +252,16 @@ public sealed class PersistentSessionManager
 
     public async Task<PersistentSession> ResumeAsync(string sessionId, CancellationToken cancellationToken = default)
     {
+        Diagnostics.StartupProbe.Mark("resume.begin", sessionId);
         var session = _metadata.GetSession(sessionId);
+        Diagnostics.StartupProbe.Mark("resume.metadata", session.Backend.ToString());
         RequireBackend(session.Backend);
         var project = _metadata.GetProject(session.ProjectId);
         if (!Directory.Exists(project.Path)) throw new DirectoryNotFoundException(project.Path);
         var userExtensions = session.Backend == BackendId.Pi ? ValidateUserExtensions() : [];
+        Diagnostics.StartupProbe.Mark("resume.before-trust", project.Path);
         var trust = RequireTrustDecision(project, userExtensions);
+        Diagnostics.StartupProbe.Mark("resume.after-trust", trust.Decision?.ToString() ?? "no-decision");
         return await OpenAsync(project, session, trust, userExtensions, createNew: false, cancellationToken);
     }
 
@@ -379,9 +383,12 @@ public sealed class PersistentSessionManager
             _ => _layout.ProjectSessionsDirectory(project.Id),
         };
         Directory.CreateDirectory(sessionDirectory);
+        Diagnostics.StartupProbe.Mark("open.session-dir", sessionDirectory);
         if (session.FilePath is { } previous && !AppDataLayout.IsUnderDirectory(previous, sessionDirectory))
             throw new InvalidOperationException("Stored session path is outside its project directory.");
+        Diagnostics.StartupProbe.Mark("open.lease.begin", session.Id);
         var lease = SessionLease.Acquire(sessionDirectory, session.Id);
+        Diagnostics.StartupProbe.Mark("open.lease.end", "lease acquired");
         if (session.Backend == BackendId.NativeCSharp)
             return await OpenNativeAsync(project, session, sessionDirectory, lease, cancellationToken)
                 .ConfigureAwait(false);
@@ -500,37 +507,61 @@ public sealed class PersistentSessionManager
     /// FUMO 原生内核的会话打开路径：不启动外部进程、不写 Pi 配置。
     /// 会话历史由桌面元数据记录；原生引擎通过设置页端点访问模型。
     /// </summary>
+    /// <summary>后台探测端点是否支持图片输入；失败保持默认“支持”，不阻塞会话打开。</summary>
+    private static async Task ProbeImageSupportAsync(NativeCSharpChatSession chat, CompatibleEndpoint endpoint,
+        string? apiKey, string modelId)
+    {
+        try
+        {
+            var probed = await ModelCapabilityProbe.SupportsImageInputAsync(endpoint.BaseUrl, apiKey, modelId)
+                .ConfigureAwait(false);
+            if (probed is { } known) chat.SetSupportsImages(known);
+        }
+        catch
+        {
+            // 探测失败不影响会话；保留默认值。
+        }
+        finally
+        {
+            Diagnostics.StartupProbe.Mark("native.image-probe.end", "background probe finished");
+        }
+    }
+
     private async Task<PersistentSession> OpenNativeAsync(ProjectRecord project, SessionRecord session,
         string sessionDirectory, SessionLease lease, CancellationToken cancellationToken)
     {
         var diagnosticLog = new DiagnosticLog(_layout);
         try
         {
+            Diagnostics.StartupProbe.Mark("native.open.begin", "OpenNativeAsync");
             var file = NativeSessionFactory.SessionFilePath(_layout, project.Id, session.Id);
             var endpoint = _settings.Current.Endpoint;
+            Diagnostics.StartupProbe.Mark("native.credentials.begin", "resolve api key");
             var apiKey = endpoint is null
                 ? null
                 : await _credentials.ResolveAsync(endpoint.ApiKeyEnvironmentVariable, cancellationToken)
                     .ConfigureAwait(false);
+            Diagnostics.StartupProbe.Mark("native.credentials.end", apiKey is null ? "no key" : "key resolved");
 
-            var supportsImages = true;
-            if (endpoint is not null)
-            {
-                var resolvedModel = string.IsNullOrWhiteSpace(endpoint.ModelId)
-                    ? _settings.Current.SelectedModel
-                    : endpoint.ModelId;
-                var probed = await ModelCapabilityProbe.SupportsImageInputAsync(
-                    endpoint.BaseUrl, apiKey, resolvedModel ?? string.Empty, cancellationToken).ConfigureAwait(false);
-                if (probed is { } known) supportsImages = known;
-            }
-
+            var resolvedModel = endpoint is null
+                ? null
+                : string.IsNullOrWhiteSpace(endpoint.ModelId) ? _settings.Current.SelectedModel : endpoint.ModelId;
+            // 图片能力探测是可选能力，不是打开会话的前置条件：本地网关未就绪时会白等 2 秒。
+            // 先按“支持图片”创建会话，探测在后台完成后再更新能力位。
             var chat = (NativeCSharpChatSession)NativeSessionFactory.Create(
                 _settings, session.Id, project.Path, persistFilePath: file, apiKey: apiKey,
                 systemPromptProvider: NativeSystemPromptProvider,
                 pluginProviders: NativePluginToolProviders,
-                supportsImages: supportsImages);
+                supportsImages: true);
+            if (endpoint is not null && !string.IsNullOrWhiteSpace(resolvedModel))
+            {
+                Diagnostics.StartupProbe.Mark("native.image-probe.begin", resolvedModel);
+                _ = ProbeImageSupportAsync(chat, endpoint, apiKey, resolvedModel);
+            }
+            Diagnostics.StartupProbe.Mark("native.factory.end", "NativeSessionFactory.Create returned");
             var coordinator = new NativeSessionCoordinator(chat, settings: _settings, endpointApiKey: apiKey);
             await coordinator.StartAsync(cancellationToken).ConfigureAwait(false);
+            Diagnostics.StartupProbe.Mark("native.coordinator.start", "native coordinator started");
             _metadata.BindBackendSession(session.Id, session.Id);
             session = session with { BackendSessionId = session.Id };
             _metadata.UpdateSessionFile(session.Id, file);
@@ -538,6 +569,7 @@ public sealed class PersistentSessionManager
 
             var history = new SessionHistory();
             var interrupted = session.WasActive;
+            Diagnostics.StartupProbe.Mark("native.history.begin", File.Exists(file) ? "loading saved history" : "no saved history");
             if (File.Exists(file))
             {
                 var saved = LoadNativeMessages(file);
