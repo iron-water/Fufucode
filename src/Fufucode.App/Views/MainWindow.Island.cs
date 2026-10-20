@@ -220,9 +220,18 @@ public partial class MainWindow
         var card = new Border { Width = 396, Padding = new Thickness(16, 14), Child = body };
         card.Classes.Add("islandPanel");
 
-        var wrapper = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
-        wrapper.Children.Add(tail);
-        wrapper.Children.Add(card);
+        var inner = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        inner.Children.Add(tail);
+        inner.Children.Add(card);
+
+        // Popup 开独立视觉树，不继承主窗口的 RequestedThemeVariant——
+        // 导致 MenuSurfaceBrush 在 dark 主题下解析到 Light 变体变白底黑字。
+        // ThemeVariantScope 在 popup 树里圈出与主窗口一致的 variant。
+        var wrapper = new ThemeVariantScope
+        {
+            RequestedThemeVariant = ActualThemeVariant,
+            Child = inner,
+        };
         return wrapper;
     }
 
