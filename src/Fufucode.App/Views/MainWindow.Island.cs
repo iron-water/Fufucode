@@ -226,8 +226,9 @@ public partial class MainWindow
 
         // Popup 是独立视觉树，DynamicResource 查不到主窗口 Resources 里的
         // MenuSurfaceBrush / AppCardStroke / FluentFlyoutShadow —— 回退到 Fluent 默认变白底。
-        // 从主窗 Resources 显式取画刷挂到 inner.Resources，让 islandPanel/islandPanelTail
-        // 的 {DynamicResource ...} 在 popup 树里也能解析到深色变体。
+        // 从主窗 ResourceLookup 拿到的具体画刷挂到 inner.Resources；同时把 popup 的
+        // theme variant 固定到主窗 variant，双保险防止 Light 变体漏进来。
+        var app = Avalonia.Application.Current;
         foreach (var key in new[]
         {
             "MenuSurfaceBrush", "MenuDividerBrush", "AppCardStroke", "AppSubtleBackground",
@@ -239,6 +240,8 @@ public partial class MainWindow
         {
             if (TryGetResource(key, ActualThemeVariant, out var res) && res is not null)
                 inner.Resources[key] = res;
+            else if (app is not null && app.TryGetResource(key, ActualThemeVariant, out var appRes) && appRes is not null)
+                inner.Resources[key] = appRes;
         }
         return inner;
     }
