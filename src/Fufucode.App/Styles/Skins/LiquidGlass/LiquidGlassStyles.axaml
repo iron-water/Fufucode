@@ -414,7 +414,17 @@
   <Style Selector="Border.glassMaterialHost.clickable:pointerover">
     <Setter Property="Background" Value="{DynamicResource LiquidGlassControlFillHover}"/>
   </Style>
-  <Style Selector="Border.card, Border.composerCard, Border.toolCard, Border.queueStrip, Border.restoreInfo, Border.userBubble, Border.codeCard, Border.errorCard, Border.thinkingBlock">
+    <!-- ================= 主会话悬浮输入胶囊（HIG Floating Capsule / Dynamic Island） ================= -->
+  <Style Selector="Border.composerCard">
+    <Setter Property="CornerRadius" Value="24"/>
+    <Setter Property="Margin" Value="16,4,16,16"/>
+    <Setter Property="Padding" Value="14,10"/>
+    <Setter Property="MaxWidth" Value="820"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+
+  <Style Selector="Border.card, Border.toolCard, Border.queueStrip, Border.restoreInfo, Border.userBubble, Border.codeCard, Border.errorCard, Border.thinkingBlock">
     <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
   </Style>
   <Style Selector="Border.innerWell">

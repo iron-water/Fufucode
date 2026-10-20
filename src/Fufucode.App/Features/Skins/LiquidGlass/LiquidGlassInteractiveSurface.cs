@@ -73,7 +73,7 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 moving |= _pointerSpring.Step(dt);
 
                 ApplyDeformation();
-                InvalidateSubscriberVisual();
+                InvalidateVisual();
                 FrontOverlay?.InvalidateVisual();
                 InteractiveOverlay?.InvalidateVisual();
 
