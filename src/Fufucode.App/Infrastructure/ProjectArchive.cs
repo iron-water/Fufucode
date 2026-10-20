@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
 using Fufucode.Core;
@@ -30,9 +31,15 @@ public static class ProjectArchive
     public static bool IsArchived(DesktopMetadataStore store, string projectId) =>
         projectId.Length > 0 && LoadSet(store).Contains(projectId);
 
-    /// <summary>按路径判断：尚未登记为项目的路径不算归档。</summary>
-    public static bool IsArchivedPath(DesktopMetadataStore store, string projectPath) =>
-        store.TryGetProject(projectPath) is { } project && IsArchived(store, project.Id);
+    /// <summary>
+    /// 按路径判断：尚未登记为项目、或磁盘上已不存在的路径一律不算归档。
+    /// 最近项目列表允许包含已删除目录，这里不能因为路径不存在而抛异常中断启动。
+    /// </summary>
+    public static bool IsArchivedPath(DesktopMetadataStore store, string projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath) || !Directory.Exists(projectPath)) return false;
+        return store.TryGetProject(projectPath) is { } project && IsArchived(store, project.Id);
+    }
 
     public static void SetArchived(DesktopMetadataStore store, string projectId, bool archived)
     {
