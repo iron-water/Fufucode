@@ -95,6 +95,17 @@ object RemoteWire {
         null
     }
 
+    fun parseSessionCatalog(body: String): RemoteSessionCatalog? = try {
+        val json = JSONObject(body)
+        RemoteSessionCatalog(
+            currentSessionId = json.optStringOrNull("currentSessionId").orEmpty(),
+            sessions = json.optJSONArray("sessions").mapObjects(::parseSessionInfo),
+        )
+    } catch (error: JSONException) {
+        note("sessions", error.message ?: "invalid json")
+        null
+    }
+
     /** 期望 `snapshot` 类型；其他类型返回 null 并记录。 */
     fun parseUpdate(body: String): RemoteUpdate? = try {
         val json = JSONObject(body)
@@ -116,6 +127,14 @@ object RemoteWire {
                 queuedCount = json.optInt("queuedCount", 0),
             )
             "notice" -> RemoteUpdate.Notice(json.optStringOrNull("message").orEmpty())
+            "sessions" -> json.optJSONObject("catalog")?.let {
+                RemoteUpdate.Sessions(
+                    RemoteSessionCatalog(
+                        currentSessionId = it.optStringOrNull("currentSessionId").orEmpty(),
+                        sessions = it.optJSONArray("sessions").mapObjects(::parseSessionInfo),
+                    ),
+                )
+            } ?: recordUnknown("update", "sessions 帧缺少 catalog")
             null -> recordUnknown("update", "帧缺少 type 字段")
             else -> recordUnknown("update", "未知 type=$type")
         }
@@ -140,6 +159,18 @@ object RemoteWire {
         queuedCount = json.optInt("queuedCount", 0),
         entries = json.optJSONArray("entries").mapObjects(::parseEntry),
         pendingApprovals = json.optJSONArray("pendingApprovals").mapObjects(::parseApproval),
+    )
+
+    private fun parseSessionInfo(json: JSONObject) = RemoteSessionInfo(
+        sessionId = json.optStringOrNull("sessionId").orEmpty(),
+        title = json.optStringOrNull("title").orEmpty(),
+        projectName = json.optStringOrNull("projectName").orEmpty(),
+        backend = json.optStringOrNull("backend").orEmpty(),
+        isCurrent = json.optBoolean("isCurrent", false),
+        isPinned = json.optBoolean("isPinned", false),
+        isUnread = json.optBoolean("isUnread", false),
+        canSwitch = json.optBoolean("canSwitch", false),
+        lastOpenedUtc = json.optStringOrNull("lastOpenedUtc"),
     )
 
     private fun parseEntry(json: JSONObject) = RemoteTimelineEntry(

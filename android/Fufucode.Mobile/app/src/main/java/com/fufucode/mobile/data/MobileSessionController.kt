@@ -41,6 +41,8 @@ data class MobileState(
     val sendInFlight: Boolean = false,
     val stopInFlight: Boolean = false,
     val diagnostics: List<WireDiagnostic> = emptyList(),
+    val sessions: List<RemoteSessionInfo> = emptyList(),
+    val switchInFlight: Boolean = false,
 ) {
     /** 只有真正在线且服务端声明可发送时才允许写入；其余状态一律只读。 */
     val writable: Boolean get() = link == LinkState.Online && canSend
@@ -162,6 +164,7 @@ class MobileSessionController(
                 notice = null,
                 sendInFlight = false,
                 stopInFlight = false,
+                switchInFlight = false,
                 canSend = false,
                 canStop = false,
             )
@@ -173,6 +176,7 @@ class MobileSessionController(
                 is RemoteClient.Result.Ok -> {
                     if (mine != generation) return@launch
                     applySnapshot(snapshot.value)
+                    refreshSessions(base, token, mine)
                 }
                 is RemoteClient.Result.Http -> {
                     if (mine != generation) return@launch
@@ -221,6 +225,18 @@ class MobileSessionController(
         }
     }
 
+    private suspend fun refreshSessions(base: String, token: String, mine: Int) {
+        when (val result = transport.sessions(base, token)) {
+            is RemoteClient.Result.Ok -> {
+                if (mine == generation) _state.update { it.copy(sessions = result.value.sessions) }
+            }
+            is RemoteClient.Result.Http -> {
+                if (mine == generation && result.status == 401) onTokenRejected()
+            }
+            is RemoteClient.Result.Network -> Unit
+        }
+    }
+
     private fun onStreamEnded(mine: Int, reason: String) {
         if (mine != generation) return
         _state.update { it.copy(link = LinkState.Reconnecting, canSend = false, canStop = false) }
@@ -259,6 +275,7 @@ class MobileSessionController(
                 approvals = emptyList(),
                 sendInFlight = false,
                 stopInFlight = false,
+                switchInFlight = false,
                 notice = "配对令牌已失效，请在电脑端读取新的 4 位配对码后重新配对",
             )
         }
@@ -271,7 +288,7 @@ class MobileSessionController(
         generation++
         storage.clearPairing()
         _state.update {
-            MobileState(link = LinkState.Idle, notice = "已断开与电脑的连接，本机令牌已清除")
+            MobileState(link = LinkState.Idle, sessions = emptyList(), notice = "已断开与电脑的连接，本机令牌已清除")
         }
     }
 
@@ -470,6 +487,67 @@ class MobileSessionController(
 
     fun dismissNotice() = _state.update { it.copy(notice = null) }
 
+    /** 切换桌面会话；桌面确认受理后才提示成功，不把请求发出当作切换完成。 */
+    fun switchSession(sessionId: String) {
+        val target = _state.value.sessions.firstOrNull { it.sessionId == sessionId }
+        if (target == null) {
+            setNotice("会话目录中没有这个会话")
+            return
+        }
+        if (target.isCurrent || _state.value.switchInFlight) return
+        if (!target.canSwitch) {
+            setNotice("电脑端当前不允许切换到这个会话")
+            return
+        }
+        if (_state.value.link != LinkState.Online) {
+            setNotice("离线状态不能切换会话")
+            return
+        }
+
+        val base = storage.baseUrl ?: return
+        val token = storage.token ?: return
+        val mine = generation
+        _state.update { it.copy(switchInFlight = true) }
+        scope.launch {
+            try {
+                when (val result = transport.switchSession(base, token, sessionId)) {
+                    is RemoteClient.Result.Ok -> {
+                        if (mine != generation) return@launch
+                        _state.update {
+                            it.copy(
+                                notice = if (result.value.accepted) {
+                                    result.value.message ?: "已切换会话"
+                                } else {
+                                    result.value.message ?: "电脑端未切换会话"
+                                },
+                            )
+                        }
+                        if (result.value.accepted) {
+                            refreshSessions(base, token, mine)
+                            when (val snapshot = transport.snapshot(base, token)) {
+                                is RemoteClient.Result.Ok -> applySnapshot(snapshot.value)
+                                is RemoteClient.Result.Http ->
+                                    if (snapshot.status == 401) onTokenRejected()
+                                is RemoteClient.Result.Network -> Unit
+                            }
+                        }
+                    }
+                    is RemoteClient.Result.Http -> {
+                        if (mine != generation) return@launch
+                        if (result.status == 401) onTokenRejected()
+                        else _state.update { it.copy(notice = result.message) }
+                    }
+                    is RemoteClient.Result.Network -> {
+                        if (mine != generation) return@launch
+                        _state.update { it.copy(notice = "切换请求未送达：${result.message}") }
+                    }
+                }
+            } finally {
+                if (mine == generation) _state.update { it.copy(switchInFlight = false) }
+            }
+        }
+    }
+
     private fun setNotice(text: String) = _state.update { it.copy(notice = text) }
 
     private fun applySnapshot(snapshot: RemoteSessionSnapshot) {
@@ -505,6 +583,7 @@ class MobileSessionController(
                         queuedCount = update.queuedCount,
                     )
                     is RemoteUpdate.Notice -> current.copy(notice = update.message)
+                    is RemoteUpdate.Sessions -> current.copy(sessions = update.catalog.sessions)
                 }
             }
             next.copy(diagnostics = RemoteWire.diagnostics_)

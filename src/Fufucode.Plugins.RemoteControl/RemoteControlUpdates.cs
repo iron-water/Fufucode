@@ -13,6 +13,7 @@ namespace Fufucode.Core.RemoteControl;
 [JsonDerivedType(typeof(RemoteApprovalResolvedUpdate), "approvalResolved")]
 [JsonDerivedType(typeof(RemoteStatusUpdate), "status")]
 [JsonDerivedType(typeof(RemoteNoticeUpdate), "notice")]
+[JsonDerivedType(typeof(RemoteSessionsUpdate), "sessions")]
 public abstract record RemoteUpdate;
 
 /// <summary>整会话快照（连接建立或重连补齐）。</summary>
@@ -32,6 +33,9 @@ public sealed record RemoteStatusUpdate(string Activity, string Connection, bool
 
 /// <summary>提示性消息（例如停止后清空的队列内容）。</summary>
 public sealed record RemoteNoticeUpdate(string Message) : RemoteUpdate;
+
+/// <summary>桌面会话目录变化；当前会话内容仍以 snapshot/entry/status 为准。</summary>
+public sealed record RemoteSessionsUpdate(RemoteSessionCatalog Catalog) : RemoteUpdate;
 
 /// <summary>远控线协议 JSON 选项（camelCase，大小写不敏感，含多态判别字段）。</summary>
 public static class RemoteWire

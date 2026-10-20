@@ -1,3 +1,5 @@
+- **2026-10-20 手机远控会话联动**：新增桌面会话目录与切换端点；稳定重绑适配器，切换不重启监听或作废手机令牌；Android 抽屉显示跨项目会话并只在桌面受理后刷新快照。远控回环 139 项、Android 46 项通过；App 隔离构建 0 errors、4 条既有警告。详见 `docs/records/M1-remote-session-directory-2026-10-20.md`。
+
 - **2026-10-17 手机远控代码审核**：修复鉴权/启停/队列、Android配对代次与草稿、Web重连和错误反馈，接通真实confirm审批及历史快照。回环130断言、Android31单元用例、Web生产JS三场景通过。App强构建被既有 TimelineEntryViewModels.cs:245 CS1717阻挡。原生跨设备操作未验证；未更新现用安装。记录见 `docs/records/remote-control-audit-2026-10-17.md`。主区混合改动受保护，本轮未提交。
 
 - **2026-10-15 第87轮：AND-1 独立 Android 移动 App 对标研发审核收编（提交 de7df55）**：

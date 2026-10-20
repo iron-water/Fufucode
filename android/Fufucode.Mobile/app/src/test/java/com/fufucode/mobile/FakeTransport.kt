@@ -9,6 +9,8 @@ import com.fufucode.mobile.data.RemoteCommandResult
 import com.fufucode.mobile.data.RemotePairResult
 import com.fufucode.mobile.data.RemoteServerStatus
 import com.fufucode.mobile.data.RemoteSessionSnapshot
+import com.fufucode.mobile.data.RemoteSessionCatalog
+import com.fufucode.mobile.data.RemoteSessionInfo
 import com.fufucode.mobile.data.RemoteTransport
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -52,12 +54,18 @@ open class FakeTransport : RemoteTransport {
         RemoteClient.Result.Ok(RemoteCommandResult(true, null))
     var approvalResult: RemoteClient.Result<RemoteApprovalResolution> =
         RemoteClient.Result.Ok(RemoteApprovalResolution("a", "t", ApprovalDecision.Approve, true, null))
+    var sessionsResult: RemoteClient.Result<RemoteSessionCatalog> =
+        RemoteClient.Result.Ok(RemoteSessionCatalog("", emptyList()))
+    var switchResult: RemoteClient.Result<RemoteCommandResult> =
+        RemoteClient.Result.Ok(RemoteCommandResult(true, "已切换"))
 
     /** 提交调用的计数，用于断言在途去重确实生效。 */
     var sendCount = 0
     var stopCount = 0
     var approvalCount = 0
     var snapshotCount = 0
+    var sessionsCount = 0
+    var switchCount = 0
 
     /** 每次调用额外延时的毫秒数，用于构造在途窗口。 */
     var callDelayMillis: Long = 0
@@ -107,6 +115,22 @@ open class FakeTransport : RemoteTransport {
         delay(callDelayMillis)
         snapshotCount++
         return snapshotResult
+    }
+
+    override suspend fun sessions(baseUrl: String, token: String?): RemoteClient.Result<RemoteSessionCatalog> {
+        delay(callDelayMillis)
+        sessionsCount++
+        return sessionsResult
+    }
+
+    override suspend fun switchSession(
+        baseUrl: String,
+        token: String?,
+        sessionId: String,
+    ): RemoteClient.Result<RemoteCommandResult> {
+        delay(callDelayMillis)
+        switchCount++
+        return switchResult
     }
 
     override suspend fun sendMessage(

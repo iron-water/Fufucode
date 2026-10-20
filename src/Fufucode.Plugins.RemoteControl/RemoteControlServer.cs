@@ -30,20 +30,38 @@ public sealed class RemoteControlServer : IAsyncDisposable
     private DateTimeOffset? _startedAt;
     private int _connectionCount;
     private bool _disposed;
+    private Func<RemoteSessionCatalog>? _sessionCatalog;
+    private Func<string, CancellationToken, Task<RemoteCommandResult>>? _switchSession;
 
     public RemoteControlServer(
         IRemoteSessionBridge bridge,
         RemoteControlOptions? options = null,
         IRemoteWebAssets? assets = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        Func<RemoteSessionCatalog>? sessionCatalog = null,
+        Func<string, CancellationToken, Task<RemoteCommandResult>>? switchSession = null)
     {
         _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
         _options = options ?? new RemoteControlOptions();
         _assets = assets;
         _auth = new RemoteControlAuth(_options, clock);
+        _sessionCatalog = sessionCatalog;
+        _switchSession = switchSession;
         _bridge.Updated += OnBridgeUpdated;
         _bridge.Approvals.Requested += OnApprovalRequested;
         _bridge.Approvals.Resolved += OnApprovalResolved;
+    }
+
+    /// <summary>更新会话目录提供器；服务运行中也可安全替换。</summary>
+    public void ConfigureSessionDirectory(
+        Func<RemoteSessionCatalog>? catalog,
+        Func<string, CancellationToken, Task<RemoteCommandResult>>? switchSession)
+    {
+        lock (_gate)
+        {
+            _sessionCatalog = catalog;
+            _switchSession = switchSession;
+        }
     }
 
     /// <summary>当前服务状态（IP、端口、连接数、配对 URL 与 PIN）。</summary>
@@ -317,6 +335,53 @@ public sealed class RemoteControlServer : IAsyncDisposable
             case "/api/snapshot":
                 await WriteResponseAsync(stream, request, 200,
                     RemoteWire.Serialize(_bridge.Snapshot()), cancellationToken).ConfigureAwait(false);
+                return;
+            case "/api/sessions":
+                var catalogProvider = _sessionCatalog;
+                if (catalogProvider is null)
+                {
+                    await WriteResponseAsync(stream, request, 503,
+                        RemoteWire.Serialize(new RemoteCommandResult(false, "桌面未提供会话目录。")),
+                        cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                try
+                {
+                    await WriteResponseAsync(stream, request, 200,
+                        RemoteWire.Serialize(catalogProvider()), cancellationToken).ConfigureAwait(false);
+                }
+                catch (Exception error)
+                {
+                    await WriteResponseAsync(stream, request, 500,
+                        RemoteWire.Serialize(new RemoteCommandResult(false, "读取会话目录失败：" + error.Message)),
+                        cancellationToken).ConfigureAwait(false);
+                }
+                return;
+            case "/api/sessions/switch":
+                if (request.Method != "POST")
+                {
+                    await WriteResponseAsync(stream, request, 405, null, cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                var switchHandler = _switchSession;
+                if (switchHandler is null)
+                {
+                    await WriteResponseAsync(stream, request, 503,
+                        RemoteWire.Serialize(new RemoteCommandResult(false, "桌面未提供会话切换。")),
+                        cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                var sessionId = ReadField(request.Body, "sessionId");
+                if (string.IsNullOrWhiteSpace(sessionId))
+                {
+                    await WriteResponseAsync(stream, request, 400,
+                        RemoteWire.Serialize(new RemoteCommandResult(false, "会话 ID 为空。")),
+                        cancellationToken).ConfigureAwait(false);
+                    return;
+                }
+                var switched = await switchHandler(sessionId, cancellationToken).ConfigureAwait(false);
+                await WriteResponseAsync(stream, request, switched.Accepted ? 200 : 409,
+                    RemoteWire.Serialize(switched), cancellationToken).ConfigureAwait(false);
                 return;
             case "/api/message":
                 if (request.Method != "POST")
