@@ -127,10 +127,10 @@ public partial class MainWindow
 
     private Border BuildIslandPanel(IEnumerable<Infrastructure.AppActionDefinition> actions)
     {
-        // 头部：后端块 + 标题 + 副标（模型 · 项目 · 分支），右侧实时元信息（用时 · token）。
-        var backendTile = new Border { Width = 26, Height = 26, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center };
+        // 头部：subtle 底 + accent 描边的小方块（替代实心绿块，避免与标题争视觉权重）。
+        var backendTile = new Border { Width = 24, Height = 24, CornerRadius = new CornerRadius(6), VerticalAlignment = VerticalAlignment.Center };
         backendTile.Classes.Add("islandBackendTile");
-        var backendIcon = new PathIcon { Width = 13, Height = 13, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var backendIcon = new PathIcon { Width = 12, Height = 12, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         backendIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.Sparkle"));
         backendTile.Child = backendIcon;
 
@@ -164,7 +164,8 @@ public partial class MainWindow
             index++;
         }
 
-        // 实时活动条：呼吸点 + 当前状态 + 插入/停止。失败时整条升 critical 色。
+        // 实时活动条：仅在真实活动（运行/失败/有排队/有用量）时出现；空闲整条隐藏。
+        // 呼吸点 + 当前状态 + 插入/停止。失败时整条升 critical 色。
         _islandLiveDot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center };
         _islandLiveText = new TextBlock { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandLiveText.Classes.Add("meta");
@@ -187,20 +188,39 @@ public partial class MainWindow
 
         var card = new Border { Width = 380, Padding = new Thickness(14), Child = body };
         card.Classes.Add("islandPanel");
-        return card;
+
+        // 尾指：旋转 45° 的小方块指向 pill，让 panel 视觉上"长"在岛上而不是悬空对话框。
+        // 与 card 同底色同描边，底边盖住 panel 顶缘无缝衔接。
+        var tail = new Border
+        {
+            Width = 12, Height = 12,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(0, -6, 0, 0),
+            RenderTransform = new RotateTransform(45),
+            RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
+            ZIndex = 1,
+        };
+        tail.Classes.Add("islandPanelTail");
+
+        var wrapper = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto") };
+        Grid.SetRow(card, 1); wrapper.Children.Add(card);
+        Grid.SetRow(tail, 1); wrapper.Children.Add(tail);  // 同行叠放，tail 后加在上层
+
+        return new Border { Child = wrapper, Background = Brushes.Transparent };
     }
 
     private Control BuildIslandTile(Infrastructure.AppActionDefinition action)
     {
-        var icon = new PathIcon { Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center };
+        var icon = new PathIcon { Width = 13, Height = 13, HorizontalAlignment = HorizontalAlignment.Center };
         icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + WorkbenchActionDefaults.Icon(action.Id)));
         var label = new TextBlock { Text = action.Title, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
-        var content = new StackPanel { Spacing = 5, HorizontalAlignment = HorizontalAlignment.Center };
+        var content = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
         content.Children.Add(icon); content.Children.Add(label);
         var button = new Button
         {
             Content = content,
-            Padding = new Thickness(4, 9, 4, 8),
+            Padding = new Thickness(4, 7, 4, 6),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             Command = _actions.GetCommand(action.Id),
         };
@@ -217,7 +237,9 @@ public partial class MainWindow
         var vm = _vm;
         var running = vm?.StatusBar.IsRunning == true;
         var activity = vm?.StatusBar.ActivityText ?? "空闲";
-        var title = vm?.Sidebar.SelectedSession?.Title ?? vm?.Sidebar.CurrentName ?? "会话";
+        // 标题：已命名会话用 CurrentName（真实 Name）；未命名不显示裸 hex ID，用「新会话」占位。
+        var named = vm?.Sidebar.CurrentName;
+        var title = string.IsNullOrWhiteSpace(named) ? "新会话" : named!;
         var queued = vm?.StatusBar.QueueText;
         var outcome = vm?.StatusBar.OutcomeText;
         var failed = outcome?.Contains("失败") == true;
@@ -241,16 +263,23 @@ public partial class MainWindow
         _islandSatellite?.SetValue(Visual.IsVisibleProperty, hasQueue);
         _islandSatCount?.SetValue(TextBlock.TextProperty, queued?.Replace("队列：", "") ?? "");
 
-        // 展开面板
+        // 展开面板副标：模型 · 项目；分支只在已查询到时附加（"未查询"是噪音）。
         _islandPanelTitle?.SetValue(TextBlock.TextProperty, title);
-        _islandPanelSubtitle?.SetValue(TextBlock.TextProperty, $"{vm?.StatusBar.ModelText ?? ""} · {vm?.Sidebar.ProjectName ?? "Fufucode"} · {_branchLabel.Replace("Git：", "")}");
+        var model = vm?.StatusBar.ModelText;
+        var project = vm?.Sidebar.ProjectName;
+        var branch = _branchLabel.Replace("Git：", "");
+        var parts = new List<string>(3);
+        if (!string.IsNullOrEmpty(model)) parts.Add(model);
+        if (!string.IsNullOrEmpty(project)) parts.Add(project);
+        if (!string.IsNullOrEmpty(branch) && branch != "未查询") parts.Add(branch);
+        _islandPanelSubtitle?.SetValue(TextBlock.TextProperty, string.Join(" · ", parts));
         var usage = vm?.StatusBar.UsageText;
         _islandLiveMeta?.SetValue(TextBlock.TextProperty,
             (showLive ? "⏱ " + (DateTimeOffset.UtcNow - _turnStarted).ToString(@"mm\:ss") : activity) + (string.IsNullOrEmpty(usage) ? "" : "\n" + usage.Replace("会话累计：", "")));
         _islandLiveText?.SetValue(TextBlock.TextProperty,
             running ? $"{activity} · {queued ?? "执行中"}"
             : failed ? outcome
-            : string.IsNullOrEmpty(usage) ? "会话空闲，无进行中的活动" : "上次回合 " + usage.Replace("会话累计：", ""));
+            : "上次回合 " + usage.Replace("会话累计：", ""));
         if (_islandLiveDot is not null)
         {
             _islandLiveDot.Classes.Remove("running"); _islandLiveDot.Classes.Remove("failed"); _islandLiveDot.Classes.Remove("idle");
@@ -258,6 +287,9 @@ public partial class MainWindow
         }
         _islandLiveBar?.Classes.Remove("failed");
         if (failed) _islandLiveBar?.Classes.Add("failed");
+        // 空闲整条隐藏：活动条只在 running/failed/有排队/有用量 时出现，避免死占位文字。
+        var liveBarVisible = running || failed || hasQueue || !string.IsNullOrEmpty(usage);
+        _islandLiveBar?.SetValue(Visual.IsVisibleProperty, liveBarVisible);
         _islandStopButton?.SetValue(Visual.IsVisibleProperty, running);
         _islandSteerButton?.SetValue(Visual.IsVisibleProperty, running);
         if (vm is not null)
