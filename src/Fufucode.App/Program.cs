@@ -30,6 +30,9 @@ internal static class Program
     /// <summary>当前进程的启动追踪；为 null 表示数据根不可写或未启动。</summary>
     internal static StartupTrace? Startup { get; private set; }
 
+    /// <summary>本进程持有的单实例守卫；自测/探针或命名对象不可用时为 null。</summary>
+    internal static SingleInstanceGuard? SingleInstance { get; private set; }
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
@@ -40,6 +43,21 @@ internal static class Program
         var startupOptions = AppOptions.Parse(args);
         // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。
         var isolatedRun = args.Contains("--selftest") || args.Contains("--headless-ui") || args.Contains("--native-module-selftest");
+
+        // 单实例：同一登录会话只允许一个 Fufucode。第二个实例先唤醒已有窗口（可能在托盘），
+        // 再自己退出；不在用户数据目录留下启动记录。自测/探针可并行，不参与单实例。
+        var probeRun = args.Contains("--speech-probe") || args.Contains("--windows-toast-probe");
+        if (!isolatedRun && !probeRun)
+        {
+            var singleInstance = SingleInstanceGuard.TryAcquire(null, out var guard);
+            if (singleInstance == SingleInstanceAcquireResult.AlreadyRunning)
+            {
+                SingleInstanceGuard.SignalExisting(null);
+                return;
+            }
+            if (singleInstance == SingleInstanceAcquireResult.Acquired) SingleInstance = guard;
+        }
+
         if (!isolatedRun)
         {
             Startup = StartupTrace.Start(startupOptions.CreateAppDataLayout());

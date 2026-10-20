@@ -117,6 +117,12 @@ public static class SelfTestRunner
             Console.WriteLine($"Notification page failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
+        if (args.Contains("--background-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => BackgroundModeSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Background mode failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
 
         if (args.Contains("--terminal-integration-only") || args.Contains("--conpty-only") || args.Contains("--conpty-p0-only"))
         {
@@ -245,6 +251,7 @@ public static class SelfTestRunner
 
         // 界面可构建并渲染
         await RunOnHeadlessUiThreadAsync(TestWindowRendersAsync);
+        await RunOnHeadlessUiThreadAsync(() => BackgroundModeSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(TestEnterKeyAsync);
         await RunOnHeadlessUiThreadAsync(TestSteerKeyboardAsync);
         await RunOnHeadlessUiThreadAsync(TestPageRoundTripAsync);
