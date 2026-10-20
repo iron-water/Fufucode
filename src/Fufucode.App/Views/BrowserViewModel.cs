@@ -248,6 +248,15 @@ public sealed partial class BrowserViewModel : ViewModelBase
         ActiveTab = tab;
     }
 
+    /// <summary>拖动排序页签；只移动集合顺序，不重建宿主，DOM/历史保持。</summary>
+    public void MoveTab(BrowserTab tab, int targetIndex)
+    {
+        var from = Tabs.IndexOf(tab);
+        if (from < 0 || targetIndex < 0 || targetIndex >= Tabs.Count || from == targetIndex) return;
+        Tabs.Move(from, targetIndex);
+        OnTabCollectionChanged();
+    }
+
     public void PreviewFile(string? path)
     {
         ActiveTab.PreviewFile(path);
@@ -404,6 +413,48 @@ public sealed partial class BrowserViewModel : ViewModelBase
     [ObservableProperty] private bool _isDownloadsOpen;
     [RelayCommand] private void CloseDownloads() => IsDownloadsOpen = false;
     [RelayCommand] private void ToggleDownloads() => IsDownloadsOpen = !IsDownloadsOpen;
+
+    // ---- 浏览历史面板（真实落盘数据，可搜索、重开、删除） ----
+
+    public ObservableCollection<BrowserHistoryEntry> HistoryEntries { get; } = new();
+    [ObservableProperty] private bool _isHistoryOpen;
+    [ObservableProperty] private string _historyQuery = string.Empty;
+
+    public void RefreshHistory()
+    {
+        HistoryEntries.Clear();
+        if (_historyStore is null) return;
+        foreach (var entry in _historyStore.Search(HistoryQuery, 100)) HistoryEntries.Add(entry);
+    }
+
+    [RelayCommand]
+    private void ToggleHistory()
+    {
+        IsHistoryOpen = !IsHistoryOpen;
+        if (IsHistoryOpen) RefreshHistory();
+    }
+
+    [RelayCommand]
+    private void CloseHistory() => IsHistoryOpen = false;
+
+    [RelayCommand]
+    private void OpenHistoryEntry(BrowserHistoryEntry? entry)
+    {
+        if (entry is null) return;
+        IsHistoryOpen = false;
+        ActiveTab.AddressText = entry.Address;
+        if (ActiveTab.NavigateCommand.CanExecute(null)) ActiveTab.NavigateCommand.Execute(null);
+    }
+
+    [RelayCommand]
+    private void RemoveHistoryEntry(BrowserHistoryEntry? entry)
+    {
+        if (entry is null) return;
+        _historyStore?.Remove(entry.Address);
+        RefreshHistory();
+    }
+
+    partial void OnHistoryQueryChanged(string value) => RefreshHistory();
 
     // ---- 全宽查看（对标 Codex 的 full view；默认仍是聊天 + 浏览器分屏） ----
 

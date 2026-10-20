@@ -63,6 +63,7 @@ internal static class Program
                 return 0;
             }
             BackendContractTests.Run(checks);
+            SessionPdfExportTests.Run(checks);
             DefaultBackendTests.Run(checks);
             SessionBadgeTests.Run(checks);
             SessionSwitchTests.Run(checks);

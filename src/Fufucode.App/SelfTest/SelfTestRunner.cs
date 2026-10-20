@@ -60,6 +60,13 @@ public static class SelfTestRunner
             return Failures.Count == 0 ? 0 : 1;
         }
 
+        if (args.Contains("--cross-global-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => CrossGlobalSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Cross-global failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--plugin-reconciliation-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => LocalPluginReconciliationSelfTest.RunAsync(Pass, Fail));

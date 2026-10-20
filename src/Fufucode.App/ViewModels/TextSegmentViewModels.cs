@@ -27,6 +27,19 @@ public sealed partial class PlainSegmentViewModel : TextSegmentViewModel
     }
 }
 
+/// <summary>插件声明的富内容围栏：原文交给插件创建控件。</summary>
+public sealed class PluginContentSegmentViewModel : TextSegmentViewModel
+{
+    public PluginContentSegmentViewModel(string language, string payload)
+    {
+        Language = language;
+        Payload = payload;
+    }
+
+    public string Language { get; }
+    public string Payload { get; }
+}
+
 public sealed partial class CodeSegmentViewModel : TextSegmentViewModel
 {
     /// <summary>超过此行数的代码块默认折叠（计划 §9：长输出折叠）。</summary>

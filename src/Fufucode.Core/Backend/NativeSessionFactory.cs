@@ -21,7 +21,7 @@ public static class NativeSessionFactory
         string? persistFilePath = null, string? apiKey = null,
         Func<IReadOnlyList<IPureToolDispatcher>>? pluginProviders = null,
         bool supportsImages = true, SkillRegistry? skills = null, McpManager? mcp = null,
-        SubagentRunner? subagents = null)
+        INativeSubagentRuntime? subagents = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var current = settings.Current;
@@ -49,15 +49,26 @@ public static class NativeSessionFactory
         // 技能是轻量的 Markdown 资源：发现失败不影响会话；skill 工具统一由注册表处理。
         skills ??= SkillRegistry.Discover(workspaceRoot);
         mcp ??= McpManager.Load(workspaceRoot);
-        // 子代理使用独立的内置工具调度器（不继承插件/MCP），只按 agent 定义放行工具。
-        if (subagents is null && client is not null)
-            subagents = new SubagentRunner(AgentRegistry.Discover(workspaceRoot), client, builtin, modelId, workspaceRoot);
+        // 能力链：插件/内置 → Skill → MCP。子代理可按定义白名单使用这些能力。
+        IPureToolDispatcher capabilities = new SkillAwareDispatcher(baseDispatcher, skills);
+        capabilities = new McpGatewayDispatcher(capabilities, mcp);
 
-        // 调度链：MCP → Skill → Subagent → 插件/内置。
-        IPureToolDispatcher chain = baseDispatcher;
-        if (subagents is not null) chain = new SubagentDispatcher(chain, subagents);
-        chain = new SkillAwareDispatcher(chain, skills);
-        var dispatcher = new McpGatewayDispatcher(chain, mcp);
+        var capabilityDefinitions = new List<PureToolDefinition>();
+        if (skills.HasModelInvocableSkills) capabilityDefinitions.Add(SkillRegistry.Definition);
+        if (mcp.HasServers) capabilityDefinitions.Add(McpGatewayDispatcher.Definition);
+        if (pluginCatalog is { } catalog)
+        {
+            capabilityDefinitions.AddRange(catalog.ActiveRegistrations.Select(registration =>
+                new PureToolDefinition(registration.Name, registration.Description,
+                    registration.ParametersJsonSchema)));
+        }
+
+        // Subagent 是可选插件能力；核心未安装时不创建、不声明、也不注入工具。
+        if (subagents is null && client is not null && NativeSubagentRegistry.Factory is { } factory)
+            subagents = factory.Create(client, capabilities, modelId, workspaceRoot, capabilityDefinitions);
+
+        // 调度链：可选 Subagent → MCP → Skill → 插件/内置。
+        var dispatcher = subagents?.Wrap(capabilities) ?? capabilities;
 
         var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations: 10);
         return new NativeCSharpChatSession(

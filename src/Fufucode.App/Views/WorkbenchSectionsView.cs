@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
@@ -18,10 +19,11 @@ using Fufucode.App.Features.Plugins;
 namespace Fufucode.App.Views;
 
 /// <summary>
-/// 设置页各级页面的内容区。按 Windows 设置的语言组织：分组标题 + 一张分组卡，
-/// 卡内每行是一条设置（标题、说明、右侧控件），需要下钻的行显示进入箭头。
+/// 设置页各级页面的内容区。按 Windows 设置的语言组织：分组标题 + 独立行卡，
+/// 每行是一条设置（标题、说明、右侧控件），需要下钻的行显示进入箭头。
 /// 页面 id 与 <see cref="SettingsPageViewModel.SubPages"/> 对应；切换页面时重建，
 /// 同一页面内配置变化只刷新取值，不重建控件树。
+/// 纪律：所有行必须经 <see cref="SettingsLayout"/> 构建，页面代码不再自画卡片/字号/间距。
 /// </summary>
 public sealed class WorkbenchSectionsView : UserControl
 {
@@ -178,7 +180,7 @@ public sealed class WorkbenchSectionsView : UserControl
             () => PageRequested?.Invoke("appearance.arrange"), "PanelLeft");
         // 跨组下钻入口：整个分组壳加组级顶距，与上一组拉开，不并进"字体与密度"的行距节奏。
         var arrangeGroup = (Control)SettingsLayout.Group(arrangeEntry);
-        arrangeGroup.Margin = new Thickness(0, 24, 0, 0);
+        arrangeGroup.Margin = new Thickness(0, SettingsLayout.SectionTopGap, 0, 0);
         rows.Children.Add(arrangeGroup);
 
         Control FluentOnly(Control row)
@@ -213,12 +215,13 @@ public sealed class WorkbenchSectionsView : UserControl
         var auxEntry = SettingsLayout.ChevronRow("辅助栏", "逐个功能选择出现在左辅助、右辅助，或不出现",
             () => PageRequested?.Invoke("appearance.arrange.aux"), "AppsList");
         var auxGroup = (Control)SettingsLayout.Group(auxEntry);
-        auxGroup.Margin = new Thickness(0, 24, 0, 0);
+        auxGroup.Margin = new Thickness(0, SettingsLayout.SectionTopGap, 0, 0);
         rows.Children.Add(auxGroup);
 
         var entryRows = vm.Actions.Select(action => PlacementRow(vm, action)).Cast<Control>().ToArray();
         var entryBody = SettingsLayout.Group(entryRows);
-        rows.Children.Add(SettingsLayout.CollapsibleGroupHeader("入口位置", entryBody, entryRows.Length));
+        rows.Children.Add(SettingsLayout.CollapsibleGroupHeader("入口位置", entryBody, entryRows.Length, _firstGroup));
+        _firstGroup = false;
         rows.Children.Add(entryBody);
     }
 
@@ -305,18 +308,15 @@ public sealed class WorkbenchSectionsView : UserControl
 
     private void RenderNames(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
-        var settings = vm.Current;
         Group(rows, "显示名称",
             TextRow(vm, "用户称呼", "显示在你的消息旁", s => s.UserName, (s, v) => s with { UserName = v }),
             TextRow(vm, "助手名称", "显示在助手消息旁", s => s.AssistantName, (s, v) => s with { AssistantName = v }));
         Group(rows, "模型提示",
             ToggleRow("把名称偏好发送给模型", "让模型知道如何称呼你", s => s.UseNamesInPrompt, value => vm.Change(s => s with { UseNamesInPrompt = value })));
-        _ = settings;
     }
 
     private void RenderFloating(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
-        _ = vm;
         if (_delivery is not { } delivery)
         {
             Group(rows, "通知提示", SettingsLayout.Row("通知提示尚未就绪", "会话建立后可用", null));
@@ -359,6 +359,10 @@ public sealed class WorkbenchSectionsView : UserControl
                 () => browser.SearchUrlTemplate, v => browser.SearchUrlTemplate = v),
             HostTextFieldRow("页面 User-Agent", "留空使用 WebView2 默认值；填写后所有页签立即生效",
                 () => browser.UserAgent, v => browser.UserAgent = v),
+            HostToggleRow("表单自动填充", "允许 WebView2 内置的姓名、地址、电话等自动填充",
+                () => browser.EnableAutofill, value => browser.EnableAutofill = value, "Person"),
+            HostToggleRow("密码自动保存", "允许 WebView2 内置密码管理器保存站点密码",
+                () => browser.EnablePasswordAutosave, value => browser.EnablePasswordAutosave = value, "Key"),
             HostToggleRow("标注时附带区域截图", "关闭后只发送网页地址、元素与文字说明",
                 () => browser.AnnotationIncludeScreenshot, value => browser.AnnotationIncludeScreenshot = value, "ArrowDownload"),
             BuildBrowserClearRow(browser),
@@ -390,6 +394,19 @@ public sealed class WorkbenchSectionsView : UserControl
         Group(rows, "开发者模式",
             BuildCdpRow(vm),
             SettingsLayout.Note("完整 CDP 访问权限允许智能体调用任意 Chrome DevTools Protocol 方法，可读写页面 DOM、网络与存储；仅在信任当前页面与模型时开启。"));
+
+        // ── 设备自带浏览器扩展 ──
+        Group(rows, "设备自带浏览器扩展",
+            HostToggleRow("启用外部浏览器控制桥", "启动本机回环服务，允许 Chrome/Edge 扩展把页面引用发到对话并接受智能体控制",
+                () => browser.ExternalBrowserEnabled, value => browser.ExternalBrowserEnabled = value, "PuzzlePiece"),
+            HostTextFieldRow("扩展端口", "扩展连接的本机端口；被占用时实际端口见下方状态",
+                () => browser.ExternalBrowserPort.ToString(), value =>
+                {
+                    if (int.TryParse(value, out var port)) browser.ExternalBrowserPort = port;
+                }),
+            HostTextFieldRow("配对 PIN", "4 位数字；写入扩展目录的 config.json，并在扩展弹窗中用于配对",
+                () => browser.ExternalBrowserPin, value => browser.ExternalBrowserPin = value),
+            BuildExternalBrowserStatusRow(browser));
 
         if (browser.HasLoadError)
             rows.Children.Add(SettingsLayout.Note("browser-settings.json 加载失败：" + browser.LoadError + "；已用默认值，原文件未覆盖。", warning: true));
@@ -491,14 +508,11 @@ public sealed class WorkbenchSectionsView : UserControl
     private void Group(StackPanel rows, string title, params Control[] groupRows)
     {
         if (groupRows.Length == 0) return;
+        // 即使首组没有标题，也消费掉 first：后续第一个有标题的组不应再被当成页首组，
+        // 否则会出现 0px 与 32px 组间隔混用的“页面不齐”。
         if (!string.IsNullOrEmpty(title))
-        {
-            var header = SettingsLayout.GroupHeader(title);
-            // Windows 设置在页标题下直接进第一个分组，不留大段上边距。
-            if (_firstGroup) header.Classes.Add("first");
-            _firstGroup = false;
-            rows.Children.Add(header);
-        }
+            rows.Children.Add(SettingsLayout.GroupHeader(title, _firstGroup));
+        _firstGroup = false;
         rows.Children.Add(SettingsLayout.Group(groupRows));
     }
 
@@ -557,26 +571,6 @@ public sealed class WorkbenchSectionsView : UserControl
         return SettingsLayout.ToggleRow(label, description, control);
     }
 
-    private Control HostToggleRow(string label, string? description, Func<bool> get, Action<bool> set)
-    {
-        var control = new ToggleSwitch { OnContent = "", OffContent = "", VerticalAlignment = VerticalAlignment.Center };
-        var applying = false;
-        control.IsCheckedChanged += (_, _) =>
-        {
-            if (_refreshing || applying) return;
-            applying = true;
-            try { set(control.IsChecked == true); }
-            finally { applying = false; }
-        };
-        _bindings.Add(_ =>
-        {
-            applying = true;
-            try { control.IsChecked = get(); }
-            finally { applying = false; }
-        });
-        return SettingsLayout.ToggleRow(label, description, control);
-    }
-
     private Control TextRow(WorkbenchCustomizationViewModel vm, string label, string? description,
         Func<WorkbenchAppearance, string> get, Func<WorkbenchAppearance, string, WorkbenchAppearance> set)
     {
@@ -621,12 +615,12 @@ public sealed class WorkbenchSectionsView : UserControl
         };
         _bindings.Add(current => { var color = current.EffectiveAccent; if (picker.Color != color) picker.Color = color; });
 
-        var custom = new TextBox { Width = 110, MaxWidth = 140, PlaceholderText = "#RRGGBB", Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var custom = new TextBox { Width = 110, MaxWidth = 140, PlaceholderText = "#RRGGBB", VerticalAlignment = VerticalAlignment.Center };
         custom.KeyDown += (_, e) => { if (e.Key != Key.Enter) return; CommitAccent(vm, custom); e.Handled = true; };
         custom.LostFocus += (_, _) => CommitAccent(vm, custom);
         _bindings.Add(current => { if (!custom.IsFocused) custom.Text = current.Accent; });
 
-        var host = new StackPanel { Orientation = Orientation.Horizontal, Children = { custom, picker } };
+        var host = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { custom, picker } };
         return SettingsLayout.Row("自定义颜色", "任意颜色；格式 #RRGGBB", host);
     }
 
@@ -635,7 +629,7 @@ public sealed class WorkbenchSectionsView : UserControl
         var positions = Enum.GetValues<UiActionPosition>();
         var titles = positions.Select(WorkbenchActionDefaults.PositionTitle).ToArray();
         var selector = new ComboBox { ItemsSource = titles, MinWidth = 125, MaxWidth = 180, VerticalAlignment = VerticalAlignment.Center };
-        var order = new NumericUpDown { Minimum = -1000, Maximum = 1000, Width = 80, FormatString = "0", Margin = new Thickness(8, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var order = new NumericUpDown { Minimum = -1000, Maximum = 1000, Width = 80, FormatString = "0", VerticalAlignment = VerticalAlignment.Center };
         var applying = false;
         void Apply()
         {
@@ -658,7 +652,7 @@ public sealed class WorkbenchSectionsView : UserControl
             }
             finally { applying = false; }
         });
-        var host = new StackPanel { Orientation = Orientation.Horizontal, Children = { selector, order } };
+        var host = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { selector, order } };
         ToolTip.SetTip(host, action.Description);
         return SettingsLayout.Row(action.Title, action.Description, host, WorkbenchActionDefaults.Icon(action.Id));
     }
@@ -674,7 +668,7 @@ public sealed class WorkbenchSectionsView : UserControl
 
     // ================= 浏览器设置行（BRW-1：真源为 BrowserSettingsViewModel） =================
 
-    private Control HostToggleRow(string label, string? description, Func<bool> get, Action<bool> set, string? icon)
+    private Control HostToggleRow(string label, string? description, Func<bool> get, Action<bool> set, string? icon = null)
     {
         var control = new ToggleSwitch { OnContent = "", OffContent = "", VerticalAlignment = VerticalAlignment.Center };
         var applying = false;
@@ -808,6 +802,59 @@ public sealed class WorkbenchSectionsView : UserControl
         _bindings.Add(_ => { if (!editor.IsFocused) editor.Text = browser.AllowedSitesText; });
         return SettingsLayout.Row("智能体网站白名单与权限例外",
             "每行一个站点，格式“主机名 = approval|allow|block”；留空表示全部站点沿用全局默认权限", editor, "ShieldCheckmark");
+    }
+
+    /// <summary>外部浏览器扩展状态：显示真实运行端口、连接状态与扩展目录，可直接打开目录。</summary>
+    private Control BuildExternalBrowserStatusRow(ViewModels.BrowserSettingsViewModel browser)
+    {
+        var status = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        status.Classes.Add("settingsRowDesc");
+        var path = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        path.Classes.Add("settingsRowDesc");
+        var open = new Button { Content = "打开扩展目录" };
+        AutomationProperties.SetAutomationId(open, "external-browser-open-extension");
+        open.Click += (_, _) =>
+        {
+            var directory = browser.ExternalBrowserExtensionPath;
+            if (string.IsNullOrWhiteSpace(directory) || !Directory.Exists(directory)) return;
+            try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(directory) { UseShellExecute = true }); }
+            catch (Exception error) when (error is System.ComponentModel.Win32Exception or InvalidOperationException) { }
+        };
+        var copy = new Button { Content = "复制配对信息" };
+        copy.Click += async (_, _) =>
+        {
+            if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return;
+            var text = $"Fufucode 外部浏览器扩展\n端口：{browser.ExternalBrowserActualPort}\nPIN：{browser.ExternalBrowserPin}\n扩展目录：{browser.ExternalBrowserExtensionPath}";
+            try { await Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text); }
+            catch (Exception error) when (error is InvalidOperationException or System.Runtime.InteropServices.COMException) { }
+        };
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        buttons.Children.Add(open);
+        buttons.Children.Add(copy);
+        var panel = new StackPanel { Spacing = 6, MinWidth = 260 };
+        panel.Children.Add(status);
+        panel.Children.Add(path);
+        panel.Children.Add(buttons);
+
+        void Sync()
+        {
+            status.Text = browser.ExternalBrowserStatus;
+            path.Text = "扩展目录：" + (string.IsNullOrWhiteSpace(browser.ExternalBrowserExtensionPath)
+                ? "（由应用启动后生成）"
+                : browser.ExternalBrowserExtensionPath);
+            open.IsEnabled = !string.IsNullOrWhiteSpace(browser.ExternalBrowserExtensionPath) &&
+                             Directory.Exists(browser.ExternalBrowserExtensionPath);
+        }
+        browser.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(browser.ExternalBrowserStatus) or nameof(browser.ExternalBrowserConnected) or
+                nameof(browser.ExternalBrowserActualPort) or nameof(browser.ExternalBrowserExtensionPath))
+                Sync();
+        };
+        Sync();
+        return SettingsLayout.Row("扩展连接状态",
+            "在 Chrome/Edge 的扩展页选择“加载已解压的扩展程序”，指向上面的目录；扩展会自动读取 config.json 并配对",
+            panel, "PuzzlePiece");
     }
 
     /// <summary>下载历史行：真实读取 browser-downloads.json。</summary>

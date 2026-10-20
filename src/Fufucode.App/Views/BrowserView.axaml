@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fufucode.App.ViewModels" xmlns:bx="using:Fufucode.App.Features.BrowserExperience"
+             xmlns:ib="using:Fufucode.App.Infrastructure.Browser"
              xmlns:views="using:Fufucode.App.Views"
              x:Class="Fufucode.App.Views.BrowserView" x:DataType="vm:BrowserViewModel" AutomationProperties.Name="内置浏览器">
   <UserControl.Styles>
@@ -57,11 +58,15 @@
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="bx:BrowserTab">
               <Border Classes="browserTabRow">
-                <Grid ColumnDefinitions="*,22">
-                  <Button Classes="browserTab" Classes.selected="{Binding IsSelected}" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).SelectTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding TabHeader}" AutomationProperties.Name="{Binding TabHeader}">
-                    <TextBlock Text="{Binding TabHeader}" FontSize="12" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                <Grid ColumnDefinitions="*,18,22">
+                  <Button Classes="browserTab" Classes.selected="{Binding IsSelected}" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).SelectTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding TabHeader}" AutomationProperties.Name="{Binding TabHeader}" PointerPressed="Tab_PointerPressed" PointerMoved="Tab_PointerMoved" PointerReleased="Tab_PointerReleased">
+                    <StackPanel Orientation="Horizontal" Spacing="5">
+                      <Image Source="{Binding FaviconSource}" Width="12" Height="12" IsVisible="{Binding HasFavicon}" VerticalAlignment="Center"/>
+                      <TextBlock Text="{Binding TabHeader}" FontSize="12" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
+                    </StackPanel>
                   </Button>
-                  <Button Grid.Column="1" Classes="iconButton" Width="20" Height="20" MinWidth="20" MinHeight="20" Padding="5" VerticalAlignment="Center" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).CloseTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="关闭页签" AutomationProperties.Name="关闭浏览器页签"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="9" Height="9"/></Button>
+                  <Button Grid.Column="1" Classes="iconButton" Width="18" Height="18" MinWidth="18" MinHeight="18" Padding="3" VerticalAlignment="Center" IsVisible="{Binding ShowsAudio}" Command="{Binding ToggleMuteCommand}" ToolTip.Tip="静音 / 取消静音" AutomationProperties.Name="浏览器页签静音"><PathIcon Data="{DynamicResource Icon.Speaker}" Width="10" Height="10"/></Button>
+                  <Button Grid.Column="2" Classes="iconButton" Width="20" Height="20" MinWidth="20" MinHeight="20" Padding="5" VerticalAlignment="Center" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).CloseTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="关闭页签" AutomationProperties.Name="关闭浏览器页签"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="9" Height="9"/></Button>
                 </Grid>
               </Border>
             </DataTemplate>
@@ -119,6 +124,7 @@
       </Grid>
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
         <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Command="{Binding ToggleFullViewCommand}" ToolTip.Tip="{Binding FullViewToolTip}" AutomationProperties.Name="浏览器全宽查看"><PathIcon Data="{DynamicResource Icon.FullScreenMaximize}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Command="{Binding ToggleHistoryCommand}" ToolTip.Tip="浏览历史" AutomationProperties.Name="浏览器历史"><PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="Download_Click" ToolTip.Tip="{Binding DownloadSummary}" AutomationProperties.Name="浏览器下载"><PathIcon Data="{DynamicResource Icon.ArrowDownload}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="InspectElement_Click" ToolTip.Tip="检查与拾取页面元素 (Inspect)" AutomationProperties.Name="浏览器检查元素"><PathIcon Data="{DynamicResource Icon.Code}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" Click="OpenFile_Click" ToolTip.Tip="打开本地文件" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"/></Button>
@@ -137,6 +143,33 @@
     </Border>
     <Grid Grid.Row="3">
       <Grid x:Name="HostLayer"/>
+      <!-- 浏览历史：真实落盘数据，可搜索、重开、删除 -->
+      <Border IsVisible="{Binding IsHistoryOpen}" Background="{DynamicResource AppCardBackground}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="8" Margin="12" VerticalAlignment="Top" HorizontalAlignment="Right" Width="440" MaxHeight="440" Padding="10">
+        <Grid RowDefinitions="Auto,Auto,*" RowSpacing="6">
+          <Grid Grid.Row="0" ColumnDefinitions="*,Auto">
+            <TextBlock Text="浏览历史" Classes="bodyStrong" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Classes="iconButton" Width="22" Height="22" Command="{Binding CloseHistoryCommand}" ToolTip.Tip="关闭历史" AutomationProperties.Name="关闭浏览历史"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/></Button>
+          </Grid>
+          <TextBox Grid.Row="1" Text="{Binding HistoryQuery}" PlaceholderText="搜索标题或地址…" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="搜索浏览历史"/>
+          <ScrollViewer Grid.Row="2">
+            <ItemsControl ItemsSource="{Binding HistoryEntries}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="ib:BrowserHistoryEntry">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,3">
+                    <Button Grid.Column="0" HorizontalAlignment="Stretch" Background="Transparent" BorderThickness="0" Padding="6,3" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).OpenHistoryEntryCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding Address}" AutomationProperties.Name="{Binding Title}">
+                      <StackPanel Spacing="2">
+                        <TextBlock Text="{Binding Title}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock Text="{Binding Address}" FontSize="10" Classes="caption" Opacity="0.7" TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                    </Button>
+                    <Button Grid.Column="1" Classes="caption" Content="删除" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).RemoveHistoryEntryCommand}" CommandParameter="{Binding}" VerticalAlignment="Center" AutomationProperties.Name="删除历史记录"/>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
       <!-- 下载列表：叠在页面之上，不移动原生子窗口；关闭后回到页面 -->
       <Border IsVisible="{Binding IsDownloadsOpen}" Background="{DynamicResource AppCardBackground}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="8" Margin="12" VerticalAlignment="Top" HorizontalAlignment="Right" Width="360" MaxHeight="320" Padding="10">
         <Grid RowDefinitions="Auto,*">

@@ -118,6 +118,21 @@ if ($NoRestore) { $cliArgs += '--no-restore' }
 & dotnet @cliArgs
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.Cli publish failed.' }
 
+# 默认随包分发的对话增强插件：发布到 app/plugins/<id>，由宿主首次启动播种到数据目录。
+Write-Host "Publishing chat.interactive-ui plugin -> staging ..."
+$pluginOut = Join-Path $stagingApp 'plugins/chat.interactive-ui'
+$pluginArgs = @('publish', (Join-Path $root 'src/Fufucode.Plugins.InteractiveUI/Fufucode.Plugins.InteractiveUI.csproj'),
+    '-c', $Configuration, '-o', $pluginOut, '--nologo', '-v', 'q')
+if ($NoRestore) { $pluginArgs += '--no-restore' }
+& dotnet @pluginArgs
+if ($LASTEXITCODE -ne 0) { throw 'Interactive UI plugin publish failed.' }
+# 插件包只带自己的程序集：宿主已加载的 Core/App/Avalonia 一律剥离。
+Get-ChildItem -LiteralPath $pluginOut -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.InteractiveUI.dll' } |
+    Remove-Item -Force
+Get-ChildItem -LiteralPath $pluginOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+if (Test-Path (Join-Path $pluginOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $pluginOut 'runtimes') -Recurse -Force }
+
 # 本地调试只需要自有程序集的 PDB；Skia/HarfBuzz 的原生 PDB 合计约 100 MB，删掉。
 Get-ChildItem -LiteralPath $stagingApp -Recurse -File -Filter *.pdb |
     Where-Object { $_.Name -notlike 'Fufucode.*.pdb' } |

@@ -4,9 +4,11 @@ using System.IO;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Fufucode.App.Features.BrowserExperience;
+using Fufucode.App.Features.ExternalBrowser;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Views;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
 using Fufucode.Core;
@@ -22,6 +24,10 @@ public partial class MainWindow
     private PluginToolRegistry? _browserToolRegistry;
     private PluginPackageManager? _pluginPackageManager;
     private WebView2BrowserUseBridge? _wiredBridge;
+    private ExternalBrowserBridgeServer? _externalBrowserBridge;
+    private BrowserSettings _lastExternalBrowserSettings = BrowserSettings.Default;
+    private bool _startingExternalBrowser;
+    internal ExternalBrowserBridgeServer? ExternalBrowserBridgeForTesting => _externalBrowserBridge;
     internal BrowserSettingsViewModel BrowserSettingsForTesting => _browserSettings.ViewModel;
 
     /// <summary>Browser Use 工具注册表（真实接线状态）；未创建时为 null。</summary>
@@ -39,6 +45,8 @@ public partial class MainWindow
         _browserSettings = new BrowserSettingsHost(root);
         EnsureBrowserStores();
         MigrateLegacyBrowserSettings();
+        EnsureExternalBrowserIdentity();
+        InitializeExternalBrowserBridge();
         _browserSettings.ViewModel.Changed += ApplyBrowserSettings;
         _settingsPage.AttachBrowserSettings(_browserSettings.ViewModel);
         WireBrowserUseRegistry(_browserSettings);
@@ -59,6 +67,7 @@ public partial class MainWindow
         _pluginPackageManager = new PluginPackageManager(layout, _browserToolRegistry, serviceResolver: type =>
         {
             if (type == typeof(BrowserUseBridge)) return _wiredBridge;
+            if (type == typeof(ExternalBrowserBridge)) return _externalBrowserBridge;
             return null;
         });
         _pluginPackageManager.PagesChanged += AttachAutomationPluginPage;
@@ -100,6 +109,125 @@ public partial class MainWindow
             view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
             AttachBridge(view);
         }
+        ApplyExternalBrowserSettings(settings);
+    }
+
+    /// <summary>外部浏览器桥的身份（PIN/令牌）必须落盘，否则重启后扩展需要重新配对。</summary>
+    private void EnsureExternalBrowserIdentity()
+    {
+        if (_browserSettings.Store is not { } store) return;
+        var current = store.Current;
+        var pin = current.ExternalBrowserPin;
+        if (pin.Length != 4)
+            pin = Random.Shared.Next(0, 10000).ToString("D4");
+        var token = current.ExternalBrowserToken;
+        if (string.IsNullOrWhiteSpace(token))
+            token = Guid.NewGuid().ToString("N");
+        if (pin != current.ExternalBrowserPin || token != current.ExternalBrowserToken)
+            store.Save(current with { ExternalBrowserPin = pin, ExternalBrowserToken = token });
+    }
+
+    private void InitializeExternalBrowserBridge()
+    {
+        if (_browserSettings.Store is not { } store) return;
+        var current = store.Current;
+        _externalBrowserBridge = new ExternalBrowserBridgeServer(
+            () => _browserSettings.Store?.Current ?? BrowserSettings.Default,
+            current.ExternalBrowserToken,
+            current.ExternalBrowserPin);
+        _externalBrowserBridge.PageReferenceHandler = AcceptExternalBrowserReferenceAsync;
+        _externalBrowserBridge.ApprovalHandler = ApproveBrowserAgentActionAsync;
+        _externalBrowserBridge.StatusChanged += UpdateExternalBrowserStatus;
+        _lastExternalBrowserSettings = current;
+        UpdateExternalBrowserStatus();
+        if (current.ExternalBrowserEnabled) _ = StartExternalBrowserAsync(current);
+    }
+
+    private async Task StartExternalBrowserAsync(BrowserSettings settings)
+    {
+        if (_externalBrowserBridge is null || _startingExternalBrowser) return;
+        _startingExternalBrowser = true;
+        try
+        {
+            await _externalBrowserBridge.StartAsync(settings.ExternalBrowserPort, settings.ExternalBrowserPin);
+            var extension = ExternalBrowserExtensionInstaller.Ensure(
+                _browserSettingsRoot(), _externalBrowserBridge.Port, settings.ExternalBrowserPin);
+            _browserSettings.ViewModel.ReportExternalBrowser(
+                _externalBrowserBridge.Running
+                    ? $"运行中 · 端口 {_externalBrowserBridge.Port} · " + (_externalBrowserBridge.IsConnected ? "扩展已连接" : "等待扩展连接")
+                    : "启动失败",
+                _externalBrowserBridge.Port,
+                _externalBrowserBridge.IsConnected,
+                extension);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
+        {
+            _vm?.Timeline.AddNotification("外部浏览器桥启动失败：" + error.Message);
+            _browserSettings.ViewModel.ReportExternalBrowser("启动失败：" + error.Message, 0, false, string.Empty);
+        }
+        finally { _startingExternalBrowser = false; }
+    }
+
+    private void ApplyExternalBrowserSettings(BrowserSettings settings)
+    {
+        if (_externalBrowserBridge is null) return;
+        var previous = _lastExternalBrowserSettings;
+        _lastExternalBrowserSettings = settings;
+        var changed = previous.ExternalBrowserEnabled != settings.ExternalBrowserEnabled ||
+                      previous.ExternalBrowserPort != settings.ExternalBrowserPort ||
+                      previous.ExternalBrowserPin != settings.ExternalBrowserPin;
+        if (changed)
+        {
+            if (settings.ExternalBrowserEnabled) _ = StartExternalBrowserAsync(settings);
+            else _ = _externalBrowserBridge.StopAsync();
+            return;
+        }
+        var extension = ExternalBrowserExtensionInstaller.Ensure(
+            _browserSettingsRoot(), _externalBrowserBridge.Port, settings.ExternalBrowserPin);
+        _browserSettings.ViewModel.ReportExternalBrowser(
+            _externalBrowserBridge.Running
+                ? $"运行中 · 端口 {_externalBrowserBridge.Port} · " + (_externalBrowserBridge.IsConnected ? "扩展已连接" : "等待扩展连接")
+                : "未启动",
+            _externalBrowserBridge.Port,
+            _externalBrowserBridge.IsConnected,
+            extension);
+    }
+
+    private void UpdateExternalBrowserStatus()
+    {
+        if (_externalBrowserBridge is null) return;
+        var bridge = _externalBrowserBridge;
+        void Apply()
+        {
+            var settings = _browserSettings.ViewModel.CurrentSettings;
+            var extension = ExternalBrowserExtensionInstaller.Ensure(
+                _browserSettingsRoot(), bridge.Port, settings.ExternalBrowserPin);
+            _browserSettings.ViewModel.ReportExternalBrowser(
+                bridge.Running
+                    ? $"运行中 · 端口 {bridge.Port} · " + (bridge.IsConnected ? "扩展已连接" : "等待扩展连接")
+                    : "未启动",
+                bridge.Port,
+                bridge.IsConnected,
+                extension);
+        }
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) Apply();
+        else Avalonia.Threading.Dispatcher.UIThread.Post(Apply);
+    }
+
+    /// <summary>外部浏览器扩展的“引用到对话”走与内置浏览器相同的草稿语义。</summary>
+    private async Task<string> AcceptExternalBrowserReferenceAsync(ExternalBrowserPageReference reference)
+    {
+        var text = new System.Text.StringBuilder();
+        text.AppendLine("【来自设备浏览器扩展的引用】");
+        if (!string.IsNullOrWhiteSpace(reference.Title)) text.AppendLine("标题：" + reference.Title);
+        if (!string.IsNullOrWhiteSpace(reference.Url)) text.AppendLine("地址：" + reference.Url);
+        if (!string.IsNullOrWhiteSpace(reference.Selector)) text.AppendLine("选择器：" + reference.Selector);
+        if (!string.IsNullOrWhiteSpace(reference.Content)) text.AppendLine().Append(reference.Content);
+        var dispatcher = Avalonia.Threading.Dispatcher.UIThread;
+        if (dispatcher.CheckAccess())
+            return await AcceptBrowserReferenceAsync(new BrowserChatReference(text.ToString().TrimEnd(), null));
+        return await dispatcher.InvokeAsync(() =>
+            AcceptBrowserReferenceAsync(new BrowserChatReference(text.ToString().TrimEnd(), null)));
     }
 
     private BrowserSettings _lastBrowserSettings = BrowserSettings.Default;

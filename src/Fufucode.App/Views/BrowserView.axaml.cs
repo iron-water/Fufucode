@@ -24,6 +24,9 @@ namespace Fufucode.App.Views;
 /// <summary>从内置浏览器发送到对话的引用：文本 + 可选的标注截图文件。</summary>
 public sealed record BrowserChatReference(string Text, string? ImagePath);
 
+/// <summary>标注说明 + 可选的实时样式调整（CSS）。</summary>
+public sealed record BrowserAnnotationEdit(string Comment, string Css);
+
 /// <summary>
 /// 右栏 Preview / 工作区浏览器页：页签栏 + 导航 + 地址 + 查找 + 缩放 + WebView2 宿主。
 /// 每个页签持有独立的 BrowserViewHost（独立原生 controller、DOM、历史），
@@ -113,6 +116,8 @@ public partial class BrowserView : UserControl, IDisposable
         foreach (var host in _hosts.Values)
         {
             host.SetUserAgent(_settings.UserAgent);
+            host.SetAutofill(_settings.EnableAutofill);
+            host.SetPasswordAutosave(_settings.EnablePasswordAutosave);
             host.SetOpenLinksExternally(_siteRules.OpensWebExternally);
         }
         _bridge ??= new WebView2BrowserUseBridge(() => this, () => _agentGate);
@@ -496,10 +501,12 @@ public partial class BrowserView : UserControl, IDisposable
             (imagePath, preview) = await CaptureAnnotationAsync(host, x, y, width, height);
         }
 
-        var comment = await PromptAnnotationCommentAsync(preview, tab.DocumentTitle, selector);
+        var edit = await PromptAnnotationCommentAsync(preview, tab.DocumentTitle, selector,
+            css => ApplyAnnotationStyleAsync(host, selector, css));
         preview?.Dispose();
-        if (comment is null)
+        if (edit is null)
         {
+            await ApplyAnnotationStyleAsync(host, selector, string.Empty);
             _viewModel.ReportStatusTo(tab, "已取消标注。");
             return;
         }
@@ -510,9 +517,10 @@ public partial class BrowserView : UserControl, IDisposable
         text.AppendLine("地址：" + (tab.NavigationAddress ?? string.Empty));
         if (selector.Length > 0) text.AppendLine("元素：" + selector);
         text.AppendLine($"区域：{x},{y} {width}×{height}");
-        text.AppendLine("说明：" + (comment.Length > 0 ? comment : "（未填写说明，仅标注区域）"));
+        text.AppendLine("说明：" + (edit.Comment.Length > 0 ? edit.Comment : "（未填写说明，仅标注区域）"));
+        if (edit.Css.Length > 0) text.AppendLine("样式调整：" + edit.Css);
         ChatReferenceRequested?.Invoke(this, new BrowserChatReference(text.ToString().TrimEnd(), imagePath));
-        _viewModel.ReportStatusTo(tab, "标注已发送到对话输入框。");
+        _viewModel.ReportStatusTo(tab, edit.Css.Length > 0 ? "标注与样式调整已发送到对话输入框。" : "标注已发送到对话输入框。");
     }
 
     private async Task<(string? Path, Bitmap? Preview)> CaptureAnnotationAsync(
@@ -544,16 +552,20 @@ public partial class BrowserView : UserControl, IDisposable
         }
     }
 
-    /// <summary>标注说明输入框；返回 null 表示取消，空字符串表示只标注不写说明。</summary>
-    private async Task<string?> PromptAnnotationCommentAsync(Bitmap? preview, string title, string selector)
+    /// <summary>
+    /// 标注说明与 Adjust：填写说明，并可实时调整字体大小、行高、颜色、内边距与圆角。
+    /// 返回 null 表示取消；Css 为空表示不做样式调整。
+    /// </summary>
+    private async Task<BrowserAnnotationEdit?> PromptAnnotationCommentAsync(
+        Bitmap? preview, string title, string selector, Func<string, Task> applyCss)
     {
         var owner = TopLevel.GetTopLevel(this) as Window;
         var dialog = new Window
         {
-            Title = "标注页面",
-            Width = 520,
-            Height = preview is null ? 300 : 470,
-            MinWidth = 420,
+            Title = "标注 / 调整样式",
+            Width = 560,
+            Height = preview is null ? 360 : 560,
+            MinWidth = 460,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = true,
         };
@@ -570,19 +582,68 @@ public partial class BrowserView : UserControl, IDisposable
         {
             panel.Children.Add(new Border
             {
-                Height = 200,
+                Height = 180,
                 Background = Brushes.Transparent,
-                Child = new Image { Source = preview, Stretch = Stretch.Uniform, Height = 200 },
+                Child = new Image { Source = preview, Stretch = Stretch.Uniform, Height = 180 },
             });
         }
         var comment = new TextBox
         {
             AcceptsReturn = true,
             TextWrapping = TextWrapping.Wrap,
-            Height = 90,
+            Height = 80,
             PlaceholderText = "说明想改什么（可留空，仅发送区域截图）…",
         };
         panel.Children.Add(comment);
+
+        panel.Children.Add(new TextBlock { Text = "Adjust（可选，实时预览）", FontWeight = FontWeight.SemiBold, FontSize = 12 });
+        TextBox Field(string placeholder) => new()
+        {
+            Width = 100, Height = 30, PlaceholderText = placeholder, VerticalContentAlignment = VerticalAlignment.Center,
+        };
+        var fontSize = Field("字号 px");
+        var lineHeight = Field("行高");
+        var textColor = Field("文字颜色");
+        var background = Field("背景色");
+        var padding = Field("内边距 px");
+        var radius = Field("圆角 px");
+        var fields = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 8 };
+        foreach (var field in new[] { fontSize, lineHeight, textColor, background, padding, radius })
+            fields.Children.Add(field);
+        panel.Children.Add(fields);
+
+        string BuildCss()
+        {
+            var parts = new List<string>();
+            Add("font-size", fontSize, "px");
+            Add("line-height", lineHeight, "");
+            Add("color", textColor, "");
+            Add("background-color", background, "");
+            Add("padding", padding, "px");
+            Add("border-radius", radius, "px");
+            return string.Join("", parts);
+
+            void Add(string property, TextBox box, string suffix)
+            {
+                var value = (box.Text ?? string.Empty).Trim();
+                if (value.Length == 0) return;
+                if (suffix == "px")
+                {
+                    if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var number) ||
+                        number < 0 || number > 500) return;
+                    value = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+                if (property is "color" or "background-color" &&
+                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]{3,20}$"))
+                    return;
+                parts.Add(property + ":" + value + suffix + ";");
+            }
+        }
+
+        var reset = new Button { Content = "还原样式", HorizontalAlignment = HorizontalAlignment.Left };
+        panel.Children.Add(reset);
+
         var buttons = new StackPanel
         {
             Orientation = Orientation.Horizontal,
@@ -594,15 +655,45 @@ public partial class BrowserView : UserControl, IDisposable
         buttons.Children.Add(cancel);
         buttons.Children.Add(send);
         panel.Children.Add(buttons);
-        dialog.Content = panel;
+        dialog.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
 
-        var completion = new TaskCompletionSource<string?>();
+        async void Apply()
+        {
+            try { await applyCss(BuildCss()); }
+            catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException) { }
+        }
+        foreach (var field in new[] { fontSize, lineHeight, textColor, background, padding, radius })
+            field.TextChanged += (_, _) => Apply();
+        reset.Click += (_, _) =>
+        {
+            foreach (var field in new[] { fontSize, lineHeight, textColor, background, padding, radius }) field.Text = string.Empty;
+            Apply();
+        };
+
+        var completion = new TaskCompletionSource<BrowserAnnotationEdit?>();
         cancel.Click += (_, _) => { completion.TrySetResult(null); dialog.Close(); };
-        send.Click += (_, _) => { completion.TrySetResult((comment.Text ?? string.Empty).Trim()); dialog.Close(); };
+        send.Click += (_, _) =>
+        {
+            completion.TrySetResult(new BrowserAnnotationEdit((comment.Text ?? string.Empty).Trim(), BuildCss()));
+            dialog.Close();
+        };
         dialog.Closed += (_, _) => completion.TrySetResult(null);
         if (owner is not null) await dialog.ShowDialog(owner);
         else dialog.Show();
         return await completion.Task;
+    }
+
+    /// <summary>把 Adjust 的 CSS 实时注入页面；空 CSS 删除预览样式。</summary>
+    private static async Task ApplyAnnotationStyleAsync(BrowserViewHost host, string selector, string css)
+    {
+        if (string.IsNullOrWhiteSpace(selector)) return;
+        var script = "(function(sel,css){var id='__fufu_annotation_style';var el=document.getElementById(id);" +
+                     "if(!css){if(el)el.remove();return 'cleared';}" +
+                     "if(!el){el=document.createElement('style');el.id=id;(document.head||document.documentElement).appendChild(el);}" +
+                     "el.textContent=sel+'{'+css+'}';return 'applied';})(" +
+                     JsonSerializer.Serialize(selector) + "," + JsonSerializer.Serialize(css) + ")";
+        try { await host.ExecuteScriptAsync(script); }
+        catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException) { }
     }
 
     /// <summary>页面内拖框脚本：只做选区与结果写入，不发送任何网络请求。</summary>
@@ -642,14 +733,19 @@ public partial class BrowserView : UserControl, IDisposable
             function up(e) {
               if (!dragging) return;
               dragging = false;
-              const x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
-              const w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
-              const el = document.elementFromPoint(x + w / 2, y + h / 2);
+              let x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
+              let w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
+              let el = document.elementFromPoint(x + w / 2, y + h / 2);
+              // 单击（几乎没有拖动）= 选中元素；拖动 = 选中区域。
+              if ((w < 4 || h < 4) && el) {
+                const r = el.getBoundingClientRect();
+                x = r.left; y = r.top; w = r.width; h = r.height;
+              }
               let selector = '';
               if (el) {
                 if (el.id) selector = '#' + el.id;
                 else if (typeof el.className === 'string' && el.className.trim())
-                  selector = '.' + el.className.trim().split(/\s+/).join('.');
+                  selector = '.' + el.className.trim().split(/\s+/).slice(0, 2).map(c => CSS.escape(c)).join('.');
                 else selector = el.tagName.toLowerCase();
               }
               cleanup();
@@ -795,6 +891,14 @@ public partial class BrowserView : UserControl, IDisposable
     /// <summary>直接向当前页签推送本地路径进入文件预览模式。</summary>
     public void PreviewFile(string? path) => _viewModel.PreviewFile(path);
 
+    /// <summary>Ctrl+L：聚焦并全选地址栏。</summary>
+    public void FocusAddress()
+    {
+        if (this.FindControl<TextBox>("AddressBox") is not { } box) return;
+        box.Focus();
+        box.SelectAll();
+    }
+
     /// <summary>seam 上声明的 x:Name，D 轨据此用 TryPreviewFile 定位（见 docs/archive/progress/progress-e.md）。</summary>
     public const string PreviewControlName = "PreviewBrowser";
 
@@ -826,6 +930,8 @@ public partial class BrowserView : UserControl, IDisposable
         if (_hosts.TryGetValue(tab.Id, out var existing)) return existing;
         var host = new BrowserViewHost();
         host.SetUserAgent(_settings.UserAgent);
+        host.SetAutofill(_settings.EnableAutofill);
+        host.SetPasswordAutosave(_settings.EnablePasswordAutosave);
         host.SetOpenLinksExternally(_siteRules.OpensWebExternally);
         host.OpenExternallyRequested += (_, address) => _ = OpenExternalAsync(address);
         host.AcceleratorHandler = (key, modifiers) => NativeShortcutHandler?.Invoke(key, modifiers) == true;
@@ -835,6 +941,8 @@ public partial class BrowserView : UserControl, IDisposable
             if (state.IsSuccess) _viewModel.RecordVisit(state.Source, state.Title);
         };
         host.ContextMenuActionRequested += (_, action) => HandleContextMenuAction(tab, host, action);
+        host.FaviconChanged += (_, bytes) => tab.ApplyFavicon(bytes);
+        host.AudioStateChanged += (_, state) => tab.ApplyAudioState(state.Playing, state.Muted);
         host.DownloadRequested += (_, request) => _ = HandleDownloadRequestAsync(request);
         host.DownloadProgressChanged += (_, progress) => ApplyDownloadProgress(progress);
         host.PermissionRequested += (_, request) => _ = HandlePermissionRequestAsync(request);
@@ -928,6 +1036,9 @@ public partial class BrowserView : UserControl, IDisposable
                 break;
             case BrowserTabAction.OpenDevTools:
                 if (!host.OpenDevTools()) _viewModel.ReportStatusTo(tab, "当前页面暂不能打开开发工具。");
+                break;
+            case BrowserTabAction.ToggleMute:
+                if (!host.ToggleMute()) _viewModel.ReportStatusTo(tab, "当前页面暂不能切换静音。");
                 break;
             case BrowserTabAction.FindNext:
             case BrowserTabAction.FindPrevious:
@@ -1064,6 +1175,50 @@ public partial class BrowserView : UserControl, IDisposable
     }
 
     private DateTime _suppressSuggestionsUntil;
+    private BrowserTab? _draggingTab;
+    private Point _dragStart;
+    private bool _tabDragMoved;
+
+    private void Tab_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control { DataContext: BrowserTab tab }) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
+        _draggingTab = tab;
+        _dragStart = e.GetPosition(this);
+        _tabDragMoved = false;
+    }
+
+    private void Tab_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_draggingTab is null) return;
+        if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed) { _draggingTab = null; return; }
+        var position = e.GetPosition(this);
+        if (!_tabDragMoved && Math.Abs(position.X - _dragStart.X) < 8 && Math.Abs(position.Y - _dragStart.Y) < 8) return;
+        _tabDragMoved = true;
+        var target = HitTestTab(position);
+        if (target is null || ReferenceEquals(target, _draggingTab)) return;
+        var index = _viewModel.Tabs.IndexOf(target);
+        if (index >= 0) _viewModel.MoveTab(_draggingTab, index);
+    }
+
+    private void Tab_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        _draggingTab = null;
+        _tabDragMoved = false;
+    }
+
+    private BrowserTab? HitTestTab(Point pointInView)
+    {
+        foreach (var button in this.GetVisualDescendants().OfType<Button>())
+        {
+            if (!button.Classes.Contains("browserTab")) continue;
+            var origin = button.TranslatePoint(new Point(0, 0), this);
+            if (origin is null) continue;
+            var rect = new Rect(origin.Value, button.Bounds.Size);
+            if (rect.Contains(pointInView) && button.DataContext is BrowserTab tab) return tab;
+        }
+        return null;
+    }
 
     private void Find_KeyDown(object? sender, KeyEventArgs e)
     {
@@ -1126,8 +1281,11 @@ public partial class BrowserView : UserControl, IDisposable
         var fullView = new MenuItem { Header = _viewModel.FullViewToolTip };
         fullView.Click += (_, _) => _viewModel.ToggleFullViewCommand.Execute(null);
         menu.Items.Add(fullView);
-        var history = new MenuItem { Header = "显示最近访问" };
-        history.Click += (_, _) => _viewModel.RefreshSuggestions(string.Empty);
+        var recent = new MenuItem { Header = "显示最近访问" };
+        recent.Click += (_, _) => _viewModel.RefreshSuggestions(string.Empty);
+        menu.Items.Add(recent);
+        var history = new MenuItem { Header = "浏览历史" };
+        history.Click += (_, _) => _viewModel.ToggleHistoryCommand.Execute(null);
         menu.Items.Add(history);
         menu.Items.Add(new Separator());
         var devtools = new MenuItem { Header = "开发者工具" };

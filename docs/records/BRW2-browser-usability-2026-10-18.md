@@ -73,10 +73,50 @@
 | `dotnet run --project src/Fufucode.App -- --selftest --browser-integration-only` | `Browser integration failures: 0` |
 | 全量 `--selftest` | 未完成：运行到 `[回车发送]` 第二条输入断言时阻塞在 Avalonia headless `KeyTextInput`，与浏览器代码无直接调用关系；本记录不把它记为通过 |
 
+## 3.1 第二轮：三层浏览器能力补齐（2026-10-19）
+
+用户明确三层目标：应用内浏览器、应用内浏览器控制、设备自带浏览器控制插件。
+
+### 第三层：设备自带浏览器控制（原先近乎空白）
+
+- 新增 `App/Features/ExternalBrowser/ExternalBrowserBridgeServer.cs`：独立本机回环 HTTP 服务，不依赖 `service.remote-control`。
+  - `/api/status`、`/api/pair`（4 位 PIN、5 次锁定、常量时间比较）、`/api/next`（25 秒长轮询）、`/api/result`、`/api/extension/collect`。
+  - 端口默认 `54321`，被占用时自动退回系统分配；实际端口写进设置页与扩展 `config.json`。
+  - PIN/令牌按设置落盘，重启无需重新配对。
+- 扩展重写：`background/service-worker.js` 增加长轮询、命令执行、结果回传、`alarms` 保活、自动读取 `config.json`、自动配对；新增 `content/agent.js`（click/type/hover/scroll/key/select/wait/get_dom）；manifest 增加 `tabs`、`alarms`、`<all_urls>`。
+- 新增 `ExternalBrowserExtensionInstaller`：把扩展复制到 `<dataRoot>/external-browser-extension` 并写入端口/PIN；设置页提供“打开扩展目录”“复制配对信息”。
+- 新增工具 `external_browser_state`、`external_browser_action`（14 个动作），复用站点权限与审批。
+- 设置新增：外部浏览器启用、端口、PIN、连接状态、扩展目录。
+
+### 第二层：应用内浏览器控制
+
+- 新增工具：`browser_scroll`、`browser_hover`、`browser_key`、`browser_select`、`browser_wait`、`browser_get_dom`。
+- 敏感操作语义识别：点击提交/购买/支付/删除类元素、按 Enter、敏感站点动作都会强制逐次确认。
+- `browser_cdp` 改为每次使用前显式确认，对标 Codex 的 “explicit approval before full CDP”。
+- 截图结果通过 Markdown 图片在用户消息气泡中可见。
+
+### 第一层：应用内浏览器
+
+- 标注：单击元素即选中元素区域，拖动选择区域；说明窗口新增 Adjust（字号、行高、文字色、背景色、内边距、圆角）实时预览与还原。
+- 新增完整浏览历史面板：搜索、重开、逐条删除。
+- 页签 favicon、音频播放指示与静音；页签拖动排序。
+- 新增快捷键 `Ctrl+L`（聚焦地址栏）、`Ctrl+Shift+B`（全宽切换）。
+- 设置新增表单自动填充、密码自动保存开关，接入 WebView2 profile。
+
+### 第二轮验证
+
+| 命令 | 结果 |
+| --- | --- |
+| `dotnet build src/Fufucode.App/Fufucode.App.csproj` | 0 错误 |
+| `dotnet run --project tests/Fufucode.App.Browser.Tests` | 160 项断言全部通过（新增 14 项外部桥协议测试） |
+| `--native-module-selftest` | `Native module failures: 0` |
+| `--selftest --browser-integration-only` | `Browser integration failures: 0` |
+| `node --check`（扩展全部 JS） | 通过 |
+
 ## 4. 未执行与未验证
 
 - 全量 `--selftest` 未跑完：在 `TestEnterKeyAsync` 的第二次 `KeyTextInput` 处阻塞；已确认 mock 回合正常结束并置 Idle，阻塞发生在 Avalonia headless 输入模拟，不在浏览器路径。未据此宣称全量自测通过。
-- 真实扩展包加载（需要用户放入合法未打包扩展）未做原生验收。
-- 外部 Chrome/Edge MV3 扩展与本机服务的端口仍不一致：服务端默认随机端口，扩展默认 `127.0.0.1:54321`；本轮未改远程控制服务。
+- 真实 Chrome/Edge 扩展加载与端到端动作未人工验收：需要用户在 `chrome://extensions` 加载 `<dataRoot>/external-browser-extension`，再跑一次真实点击/截图。
 - 权限确认窗口、下载保存对话框、标注说明窗口的指针/IME/DPI 真实交互未逐项人工验收。
-- 未实现：标签拖拽排序/固定/静音、密码管理器、书签栏、页面内查找高亮样式定制、开发者工具内嵌停靠。
+- 标注 Adjust 只覆盖字号/行高/颜色/内边距/圆角，不是 Codex 的完整设计面板。
+- 未实现：内嵌 DevTools 面板（仍是外部窗口）、扩展安装/商店管理 UI、Chrome profile 导入、书签栏、云浏览器。

@@ -270,6 +270,12 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     /// <summary>本回合的文件改动总结卡（Codex 风格），由 TimelineViewModel 在回合结束时填充。</summary>
     public TurnChangeSummaryViewModel ChangeCard { get; } = new();
 
+    /// <summary>正文里出现的链接与文件路径，回合结束时提取一次。</summary>
+    public System.Collections.ObjectModel.ObservableCollection<MessageLinkViewModel> Links { get; } = new();
+    public System.Collections.ObjectModel.ObservableCollection<MessageFileViewModel> Files { get; } = new();
+    public bool HasLinks => Links.Count > 0;
+    public bool HasFiles => Files.Count > 0;
+
     private string _changeSummary = "", _artifactSummary = "";
     public string ChangeSummary { get => _changeSummary; set { if (SetProperty(ref _changeSummary, value)) OnPropertyChanged(nameof(HasChangeSummary)); } }
     public string ArtifactSummary
@@ -365,6 +371,8 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         _finalAnswerStarted = true;
         foreach (var group in _groups) group.CollapseOnTurnSettled();
         foreach (var thinking in Blocks.OfType<ThinkingBlockViewModel>()) thinking.IsLive = false;
+
+        RefreshReferences();
 
         var lastText = Blocks.OfType<TextBlockViewModel>().LastOrDefault();
         foreach (var text in Blocks.OfType<TextBlockViewModel>())
@@ -480,6 +488,23 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     /// 回合结束：定阶段、记耗时、收起未手动展开的工具组与思考块，
     /// 并把最后一个文本块标记为最终总结（上方过程内容弱化但不删除）。
     /// </summary>
+    /// <summary>
+    /// 从普通文本段提取链接与文件路径。
+    /// 只扫 PlainSegment：代码块里的路径属于代码内容，不应变成可点的引用。
+    /// </summary>
+    private void RefreshReferences()
+    {
+        Links.Clear();
+        Files.Clear();
+        foreach (var text in Blocks.OfType<TextBlockViewModel>())
+        {
+            foreach (var segment in text.Segments.OfType<PlainSegmentViewModel>())
+                MessageReferenceExtractor.Extract(segment.Text, Links, Files);
+        }
+        OnPropertyChanged(nameof(HasLinks));
+        OnPropertyChanged(nameof(HasFiles));
+    }
+
     public void FinalizeTurn(SessionOutcome outcome, TimeSpan elapsed)
     {
         if (_isComplete) return;
@@ -497,6 +522,8 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
 
         foreach (var group in _groups) group.CollapseOnTurnSettled();
         foreach (var thinking in Blocks.OfType<ThinkingBlockViewModel>()) thinking.IsLive = false;
+
+        RefreshReferences();
 
         var lastText = Blocks.OfType<TextBlockViewModel>().LastOrDefault();
         foreach (var text in Blocks.OfType<TextBlockViewModel>())

@@ -1,0 +1,9 @@
+{
+  "id": "chat.interactive-ui",
+  "name": "交互增强",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.InteractiveUI.dll",
+  "packageType": "Fufucode.Plugins.InteractiveUI.InteractiveUiPluginPackage",
+  "category": "Chat",
+  "capabilities": ["MessageContent"]
+}

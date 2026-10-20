@@ -40,6 +40,8 @@ public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     string? GitHubRepository = null,
     // 模型选择器里置顶的模型 id（可跨多个提供商）。
     IReadOnlyList<string>? PinnedModels = null,
+    // 用户手动选择的 Subagent 档位；插件安装后的首次默认值为 faster。
+    string SubagentTier = "faster",
     // 用户在模型选择器里关闭掉的关键字快捷项。
     IReadOnlyList<string>? DismissedModelKeywords = null);
 
@@ -165,6 +167,8 @@ public sealed class AppSettingsStore
             (!Uri.TryCreate(feed, UriKind.Absolute, out var feedUri) ||
              feedUri.Scheme is not ("http" or "https" or "file")))
             throw new ArgumentException("Invalid update feed URL.");
+        if (settings.SubagentTier is not ("faster" or "stronger"))
+            throw new ArgumentException("Invalid subagent tier.");
         return settings;
     }
 

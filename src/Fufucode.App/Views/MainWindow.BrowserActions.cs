@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Fufucode.App.Features.BrowserExperience;
+using Fufucode.App.Infrastructure;
 using Fufucode.App.Features.Shortcuts;
 
 namespace Fufucode.App;
@@ -18,6 +19,29 @@ public partial class MainWindow
         (_workbenchPages.ContainsKey("browser") ? _workbenchPages["browser"].Content as Views.BrowserView : null);
     private static Views.BrowserView? FindBrowser(Control? control) => control as Views.BrowserView ??
         control?.GetVisualAncestors().OfType<Views.BrowserView>().FirstOrDefault();
+    /// <summary>
+    /// 在右侧 Workbench 的内置浏览器打开一个地址；浏览器不可用时返回 false，由调用方退回系统浏览器。
+    /// 返回 true 只表示导航已发起，不等待页面加载完成。
+    /// </summary>
+    internal bool OpenUrlInBrowser(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return false;
+        try
+        {
+            OpenDockPage("browser", DockZone.Right);
+            if (!_workbenchPages.ContainsKey("browser")) return false;
+            if (_workbenchPages["browser"].Content is not Views.BrowserView view) return false;
+
+            view.ViewModel.AddressText = url;
+            if (view.ViewModel.NavigateCommand.CanExecute(null)) view.ViewModel.NavigateCommand.Execute(null);
+            return true;
+        }
+        catch (Exception)
+        {
+            return false;
+        }
+    }
+
     private Views.BrowserView CreateBrowserPage()
     {
         EnsureBrowserStores();

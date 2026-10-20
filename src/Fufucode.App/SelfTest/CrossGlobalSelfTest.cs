@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Views;
 using Fufucode.Core;
 
 namespace Fufucode.App.SelfTest;
@@ -56,6 +57,37 @@ public static class CrossGlobalSelfTest
             Check(palette.HasNoMatches && palette.SelectedItem is null, "无匹配为空态，不伪执行");
         }
 
+        using (var palette = new CommandPaletteViewModel(registry))
+        {
+            string? openedSession = null, openedSetting = null;
+            palette.SessionSource = () =>
+            [
+                new CommandPaletteItemViewModel("session-a", "修复登录", "会话", "FUMO · 刚刚", "",
+                    null, false, false, CommandPaletteItemKind.Session) { SearchText = "登录 login" },
+            ];
+            palette.SettingSource = () =>
+            [
+                new CommandPaletteItemViewModel("appearance", "外观", "设置", "基础类", "",
+                    null, false, false, CommandPaletteItemKind.Setting) { SearchText = "主题 skin theme" },
+            ];
+            palette.SessionActivated += id => openedSession = id;
+            palette.SettingActivated += id => openedSetting = id;
+            palette.Open();
+            Check(palette.Items.Count == 4 &&
+                palette.Items.Count(item => item.Kind == CommandPaletteItemKind.Session) == 1 &&
+                palette.Items.Count(item => item.Kind == CommandPaletteItemKind.Setting) == 1,
+                "命令面板合并动作、会话与设置三组结果");
+            palette.SearchText = "skin";
+            Check(palette.Items.Count == 1 && palette.SelectedItem?.Kind == CommandPaletteItemKind.Setting &&
+                palette.SelectedItem.Id == "appearance", "设置搜索词可跨语言命中");
+            await palette.ExecuteSelectedCommand.ExecuteAsync(null);
+            Check(openedSetting == "appearance" && !palette.IsOpen, "选中设置项后跳转并关闭面板");
+            palette.Open();
+            palette.SearchText = "修复";
+            await palette.ExecuteSelectedCommand.ExecuteAsync(null);
+            Check(openedSession == "session-a" && !palette.IsOpen, "选中会话后按会话 ID 激活并关闭面板");
+        }
+
         var fixtureRoot = Path.Combine(Path.GetTempPath(), "fufucode-cross-global-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(fixtureRoot);
         try
@@ -76,6 +108,16 @@ public static class CrossGlobalSelfTest
                 failedPreferences.SaveStatusText.Contains("回退"), "偏好保存失败保留原值与失败说明");
         }
         finally { Directory.Delete(fixtureRoot, true); }
+
+        var shortPaste = new string('a', 800);
+        var longPaste = new string('b', ChatPage.MaxEmbeddedPasteChars + 1);
+        var shortContext = ChatPage.PastedAttachmentContext(shortPaste, "C:/temp/short.txt");
+        var longContext = ChatPage.PastedAttachmentContext(longPaste, "C:/temp/long.txt");
+        Check(shortContext.Contains(shortPaste, StringComparison.Ordinal) && !shortContext.Contains("已截断"),
+            "短于上限的粘贴完整内嵌，不标截断");
+        Check(longContext.Contains("已截断") && longContext.Contains("C:/temp/long.txt") &&
+            !longContext.Contains(longPaste, StringComparison.Ordinal),
+            "超长粘贴截断并保留完整文件位置");
 
         var user = new PiMessage("user", [], null, null, null, default);
         var measuredZero = new PiMessage("assistant", [], "stop", null, new PiUsage(0, 0, 0, 0, 0, default), default);
@@ -212,6 +254,17 @@ public static class CrossGlobalSelfTest
             await center.FlushAsync();
             Check(center.Items.Count == 7 && center.Items[0].IsFailed && center.Items[1].IsCompleted,
                 "成功终态之后独立连接故障单独显示一次，保留原任务成功记录");
+
+            center.SetFilterCommand.Execute("actionable");
+            Check(center.FilteredItems.Count == center.Items.Count(item => item.IsFailed || item.RequiresAction) &&
+                center.FilteredItems.All(item => item.IsFailed || item.RequiresAction),
+                "失败与待处理过滤只保留可操作或失败通知");
+            center.SetFilterCommand.Execute("unread");
+            Check(center.FilteredItems.Count == center.Items.Count(item => !item.IsRead) &&
+                !center.FilteredItems.Contains(originalRow), "未读过滤排除已读记录");
+            center.SetFilterCommand.Execute("all");
+            Check(center.FilteredItems.Count == center.Items.Count && center.IsAllFilter,
+                "全部过滤恢复完整记录");
         }
     }
 }

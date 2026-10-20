@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>Fufucode.Plugins.Subagents</AssemblyName>
+    <RootNamespace>Fufucode.Plugins.Subagents</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

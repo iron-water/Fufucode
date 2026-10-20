@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using CommunityToolkit.Mvvm.Input;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
 
@@ -92,6 +93,63 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
     {
         get => Current.AnnotationIncludeScreenshot;
         set => Set(value, _ => { }, v => Persist(s => s with { AnnotationIncludeScreenshot = v }));
+    }
+
+    public bool EnableAutofill
+    {
+        get => Current.EnableAutofill;
+        set => Set(value, _ => { }, v => Persist(s => s with { EnableAutofill = v }));
+    }
+
+    public bool EnablePasswordAutosave
+    {
+        get => Current.EnablePasswordAutosave;
+        set => Set(value, _ => { }, v => Persist(s => s with { EnablePasswordAutosave = v }));
+    }
+
+    // ── 设备自带浏览器扩展 ──
+
+    public bool ExternalBrowserEnabled
+    {
+        get => Current.ExternalBrowserEnabled;
+        set => Set(value, _ => { }, v => Persist(s => s with { ExternalBrowserEnabled = v }));
+    }
+
+    public int ExternalBrowserPort
+    {
+        get => Current.ExternalBrowserPort;
+        set => Set(value, _ => { }, v => Persist(s => s with { ExternalBrowserPort = v }));
+    }
+
+    public string ExternalBrowserPin
+    {
+        get => Current.ExternalBrowserPin;
+        set => Set(value, _ => { }, v => Persist(s => s with { ExternalBrowserPin = v }));
+    }
+
+    private string _externalBrowserStatus = "尚未启动";
+    public string ExternalBrowserStatus { get => _externalBrowserStatus; private set => SetProperty(ref _externalBrowserStatus, value); }
+    public int ExternalBrowserActualPort { get; private set; }
+    public bool ExternalBrowserConnected { get; private set; }
+    private string _externalBrowserExtensionPath = "";
+    public string ExternalBrowserExtensionPath { get => _externalBrowserExtensionPath; private set => SetProperty(ref _externalBrowserExtensionPath, value); }
+
+    public void ReportExternalBrowser(string status, int actualPort, bool connected, string extensionPath)
+    {
+        ExternalBrowserStatus = status;
+        ExternalBrowserActualPort = actualPort;
+        ExternalBrowserConnected = connected;
+        ExternalBrowserExtensionPath = extensionPath;
+        OnPropertyChanged(nameof(ExternalBrowserActualPort));
+        OnPropertyChanged(nameof(ExternalBrowserConnected));
+        OnPropertyChanged(nameof(ExternalBrowserExtensionPath));
+    }
+
+    [RelayCommand]
+    private void RegenerateExternalBrowserPin()
+    {
+        var pin = Random.Shared.Next(0, 10000).ToString("D4");
+        ExternalBrowserPin = pin;
     }
 
     // ── 下载 ──
@@ -292,6 +350,8 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
             nameof(ExtensionsDirectory),
             nameof(BrowserUseEnabled), nameof(WebUrlOpenTargetIndex), nameof(LocalUrlOpenTargetIndex), nameof(ShowFullUrl),
             nameof(SearchUrlTemplate), nameof(UserAgent), nameof(AnnotationIncludeScreenshot),
+            nameof(EnableAutofill), nameof(EnablePasswordAutosave),
+            nameof(ExternalBrowserEnabled), nameof(ExternalBrowserPort), nameof(ExternalBrowserPin),
             nameof(ScreenshotModeIndex), nameof(PromptDownloadLocation), nameof(DownloadHistoryEnabled),
             nameof(DefaultDownloadDirectory), nameof(EnableSiteTools), nameof(DefaultBrowsePermissionIndex),
             nameof(DefaultDownloadPermissionIndex), nameof(AllowedSitesText), nameof(EnableFullCdpAccess),

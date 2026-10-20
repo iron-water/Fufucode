@@ -29,6 +29,16 @@ foreach ($component in @('App', 'Cli')) {
     dotnet publish $project -c Release -r win-x64 --self-contained true -o $destination
     if ($LASTEXITCODE -ne 0) { throw "Fufucode.$component publish failed." }
 }
+# 默认随包分发的对话增强插件。
+$interactiveUiDir = Join-Path $packageRoot 'app/plugins/chat.interactive-ui'
+dotnet publish (Join-Path $root 'src/Fufucode.Plugins.InteractiveUI/Fufucode.Plugins.InteractiveUI.csproj') -c Release -r win-x64 --self-contained false -o $interactiveUiDir
+if ($LASTEXITCODE -ne 0) { throw 'Interactive UI plugin publish failed.' }
+Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.InteractiveUI.dll' } |
+    Remove-Item -Force
+Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+if (Test-Path (Join-Path $interactiveUiDir 'runtimes')) { Remove-Item -LiteralPath (Join-Path $interactiveUiDir 'runtimes') -Recurse -Force }
+
 # Keep the original apphost for root launchers, and expose a native PATH entry
 # so Ctrl+C reaches the CLI directly instead of cmd's batch-job prompt.
 Copy-Item -LiteralPath (Join-Path $packageRoot 'cli/Fufucode.Cli.exe') -Destination (Join-Path $packageRoot 'cli/fufucode.exe')

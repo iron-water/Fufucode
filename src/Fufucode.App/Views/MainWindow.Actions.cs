@@ -76,6 +76,7 @@ public partial class MainWindow
         Action("session.share", "分享/导出会话", "会话", ExportSessionAsync, Ready);
         Action("session.export", "导出为 Markdown", "会话", ExportSessionAsync, Ready);
         Action("session.export.metadata", "导出元数据", "会话", ExportSessionMetadataAsync, Ready);
+        Action("session.export.pdf", "导出为 PDF", "会话", ExportSessionPdfAsync, Ready);
         Action("session.fork.worktree", "在新工作树中创建分支", "会话", ForkIntoWorktreeAsync,
             () => IdleReal() ?? (_host?.Current.Session.FilePath is null ? "会话尚未落盘" : null));
         Action("copy.session", "复制会话", "会话", () => CopyAsync(SessionMarkdown()), Ready);
@@ -275,6 +276,41 @@ public partial class MainWindow
         }
         return text.ToString();
     }
+    /// <summary>导出为 PDF：A4 排版，保留标题、元信息、逐条消息与代码块；中文字体走系统雅黑。</summary>
+    private async Task ExportSessionPdfAsync()
+    {
+        if (_vm is null) return;
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        { Title = "导出为 PDF", SuggestedFileName = "fufucode-session.pdf", DefaultExtension = "pdf" });
+        if (file is null) return;
+
+        var messages = new List<SessionPdfMessage>();
+        foreach (var entry in _vm.Timeline.Entries)
+        {
+            var content = Views.MessageActionsView.MessageText(entry);
+            if (content.Length == 0) continue;
+            var isUser = entry is UserMessageViewModel;
+            messages.Add(new SessionPdfMessage(
+                isUser ? _customization.Current.UserName : _customization.Current.AssistantName,
+                content,
+                isUser));
+        }
+
+        var title = _vm.Sidebar.SelectedSession?.Title;
+        var metadata = new List<(string Label, string Value)>
+        {
+            ("会话", string.IsNullOrWhiteSpace(title) ? "未命名会话" : title!),
+            ("会话 ID", CurrentSessionId ?? "mock-window"),
+            ("项目", _host?.ProjectPath ?? Environment.CurrentDirectory),
+            ("模型", _vm.StatusBar.ModelText),
+            ("导出时间", DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss")),
+        };
+
+        using var stream = await file.OpenWriteAsync();
+        stream.SetLength(0);
+        SessionPdfExporter.Write(stream, string.IsNullOrWhiteSpace(title) ? "Fufucode 会话" : title!, metadata, messages);
+    }
+
     private async Task ExportSessionAsync()
     {
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions { Title = "导出会话", SuggestedFileName = "fufucode-session.md", DefaultExtension = "md" });

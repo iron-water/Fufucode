@@ -12,17 +12,22 @@ using Avalonia.VisualTree;
 namespace Fufucode.App.Views;
 
 /// <summary>
-/// Windows 设置风格的布局构件：分组卡片 + 行式条目。
+/// Windows 设置风格的唯一布局构件来源：分组标题 + 行卡。
 /// 一行 = 可选图标 + 标题/说明 + 右侧控件，或一个进入箭头（点击跳到二级页）。
-/// 一个分组一张卡，卡内用细分隔线分行，避免"每项一张卡"的堆叠感。
+/// 每项是一张独立圆角行卡，组只负责纵向节奏（8px），不包大卡。
+/// 新设置页必须经这里构建行，禁止在页面里手写 settingsRow 结构。
 /// </summary>
 internal static class SettingsLayout
 {
+    /// <summary>组与组之间的固定上间隔（8px 网格的整数倍）。</summary>
+    public const double SectionTopGap = 24;
+
     /// <summary>分组标题（卡片外面）。</summary>
-    public static TextBlock GroupHeader(string text)
+    public static TextBlock GroupHeader(string text, bool first = false)
     {
         var block = new TextBlock { Text = text };
         block.Classes.Add("settingsGroupHeader");
+        if (first) block.Classes.Add("first");
         return block;
     }
 
@@ -30,7 +35,7 @@ internal static class SettingsLayout
     /// 可折叠的分组标题：标题 + 右侧计数 + 展开箭头。
     /// 对应 Windows 设置里长列表分组（如"多显示器"）的收起/展开。
     /// </summary>
-    public static Control CollapsibleGroupHeader(string text, Control body, int count)
+    public static Control CollapsibleGroupHeader(string text, Control body, int count, bool first = false)
     {
         var chevron = new PathIcon { Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center };
         TryGeometry("Icon.ChevronUp", chevron);
@@ -38,6 +43,8 @@ internal static class SettingsLayout
         countText.Classes.Add("meta");
 
         var content = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 8 };
+        // 标题在按钮内部：显式清掉 settingsGroupHeader 自带的外部组间隔，
+        // 组间隔只由按钮自身的 Margin 提供，避免 32 + 32 叠加。
         var title = new TextBlock { Text = text, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0) };
         title.Classes.Add("settingsGroupHeader");
         content.Children.Add(title);
@@ -46,9 +53,9 @@ internal static class SettingsLayout
 
         var header = new Button
         {
-            Padding = new Thickness(2, 0), Margin = new Thickness(2, 24, 0, 8), MinHeight = 24,
+            Padding = new Thickness(0), Margin = new Thickness(0, first ? 0 : 32, 0, 10), MinHeight = 24,
             HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Background = Transparent, BorderThickness = new Thickness(0), Content = content,
+            Background = null, BorderThickness = new Thickness(0), Content = content,
         };
         header.Classes.Add("settingsGroupToggle");
         AutomationProperties.SetName(header, "折叠或展开分组 " + text);
@@ -65,7 +72,6 @@ internal static class SettingsLayout
         return header;
     }
 
-    private static readonly IBrush? Transparent = null;
     private static void TryGeometry(string key, PathIcon icon)
     {
         icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension(key));

@@ -196,7 +196,12 @@ try
           searchVm.FilteredCategories.Any(c => c.Id == SettingsPageViewModel.OtherHubId),
         "清空搜索恢复收纳态");
 
-    // ================= 5. 插件能力门禁（MKT-1） =================
+    // ================= 5. 设置页纪律守卫（规范 §10） =================
+    // 放在能力门禁之前：门禁测试依赖本机插件目录，属于既有环境用例；
+    // 纪律守卫是纯源码检查，必须每次都能独立跑完。
+    Fufucode.App.Settings.Tests.SettingsStyleTests.Run(Check);
+
+    // ================= 6. 插件能力门禁（MKT-1） =================
     passed += Fufucode.App.Settings.Tests.PluginGatingTests.Run(Check);
 
     Console.WriteLine($"\n全部通过：{passed} 项断言");

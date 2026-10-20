@@ -6,18 +6,29 @@ using System.Text;
 
 namespace Fufucode.Core.Backend;
 
-/// <summary>子代理定义：名称、用途、工具白名单、轮次上限与系统提示。</summary>
+/// <summary>子代理运行模式：read 只读快速探索；patch 在临时 worktree 中修改并返回补丁。</summary>
+public enum SubagentMode
+{
+    Read,
+    Patch,
+}
+
+/// <summary>子代理定义：名称、模式、工具白名单、轮次上限、输出契约与系统提示。</summary>
 public sealed record AgentDefinition(
     string Name,
     string Description,
     IReadOnlyList<string> Tools,
     string SystemPrompt,
-    int MaxTurns = 15,
-    string? ModelId = null);
+    int MaxTurns = 6,
+    string? ModelId = null,
+    string? Effort = null,
+    string? OutputSchema = null,
+    bool Fork = false,
+    SubagentMode Mode = SubagentMode.Read,
+    int? TimeoutSeconds = null);
 
 /// <summary>
-/// 轻量子代理注册表：内置 explore/general，并发现项目与用户级 Markdown 定义。
-/// 与 Claude/OMP 的 `agents/*.md` 约定兼容（frontmatter: name/description/tools/maxTurns/model）。
+/// 轻量子代理注册表：内置 explore（read）与 general（patch），并发现项目/用户级 Markdown 定义。
 /// </summary>
 public sealed class AgentRegistry
 {
@@ -30,9 +41,9 @@ public sealed class AgentRegistry
 
     public bool TryGet(string name, out AgentDefinition agent) => _agents.TryGetValue(name, out agent!);
 
-    /// <summary>默认子代理：general。</summary>
+    /// <summary>默认子代理：explore（只读、最快）。</summary>
     public AgentDefinition Default =>
-        _agents.TryGetValue("general", out var general) ? general : All[0];
+        _agents.TryGetValue("explore", out var explore) ? explore : All[0];
 
     public static AgentRegistry Discover(string? workspaceRoot, string? userHome = null)
     {
@@ -51,7 +62,7 @@ public sealed class AgentRegistry
         roots.Add(Path.Combine(userHome, ".agents", "agents"));
         roots.Add(Path.Combine(userHome, ".claude", "agents"));
 
-        // roots 顺序是"项目 → 用户"；倒序加载，让项目定义最后写入并覆盖用户定义。
+        // 倒序加载：用户先写、项目最后写，保证项目定义覆盖用户与内置。
         foreach (var root in roots.AsEnumerable().Reverse())
         {
             if (!Directory.Exists(root)) continue;
@@ -61,7 +72,6 @@ public sealed class AgentRegistry
             foreach (var file in files)
             {
                 var agent = TryLoad(file);
-                // 项目/用户定义优先于内置（后发现的覆盖先发现的，roots 顺序已保证项目在前）。
                 if (agent is not null) agents[agent.Name] = agent;
             }
         }
@@ -72,23 +82,28 @@ public sealed class AgentRegistry
     private static IEnumerable<AgentDefinition> Builtins()
     {
         var readOnly = new[] { "read_file", "list_dir", "grep_search", "glob_files" };
-        var all = new[] { "read_file", "write_file", "edit_file", "list_dir", "grep_search", "glob_files", "run_command" };
+        var patchTools = new[]
+        {
+            "read_file", "write_file", "edit_file", "list_dir", "grep_search", "glob_files", "run_command"
+        };
 
         yield return new AgentDefinition(
             "explore",
             "只读探索：搜索代码、定位文件与事实，不修改任何内容。",
             readOnly,
             "你是只读探索子代理。使用读取、目录列表、正则搜索与通配查找收集事实，" +
-            "不要修改文件或执行命令。返回简洁、可核验的结论与文件位置。",
-            MaxTurns: 15);
+            "不要尝试修改文件或执行命令。返回简洁结论，并给出文件:行号证据。",
+            MaxTurns: 12,
+            Mode: SubagentMode.Read);
 
         yield return new AgentDefinition(
             "general",
-            "通用子代理：可使用全部内置工具完成一个边界明确的任务。",
-            all,
-            "你是一个独立子代理，只负责交给你的这一项任务。先调查再行动，" +
-            "完成后用简洁文本返回结果、涉及的文件与任何未完成事项。",
-            MaxTurns: 20);
+            "通用修改代理：在隔离 worktree 中修改代码并返回补丁。",
+            patchTools,
+            "你是一个隔离修改子代理。只处理交给你的任务：先阅读相关代码，再做最小必要修改；" +
+            "可以运行验证命令。完成后用简洁文本说明改动、验证结果与未完成项。",
+            MaxTurns: 12,
+            Mode: SubagentMode.Patch);
     }
 
     private static AgentDefinition? TryLoad(string file)
@@ -106,12 +121,26 @@ public sealed class AgentRegistry
             var tools = ParseList(Read(frontmatter, "tools"))
                         ?? new[] { "read_file", "list_dir", "grep_search", "glob_files" };
             var maxTurns = int.TryParse(Read(frontmatter, "maxTurns"), out var turns)
-                ? Math.Clamp(turns, 1, 50)
-                : 15;
+                ? Math.Clamp(turns, 1, 30)
+                : 6;
 
-            return new AgentDefinition(name, description, tools,
-                string.IsNullOrWhiteSpace(body) ? description : body.Trim(), maxTurns,
-                Read(frontmatter, "model"));
+            var mode = string.Equals(Read(frontmatter, "mode"), "patch", StringComparison.OrdinalIgnoreCase)
+                ? SubagentMode.Patch
+                : SubagentMode.Read;
+            var timeout = int.TryParse(Read(frontmatter, "timeoutSeconds"), out var seconds)
+                ? Math.Clamp(seconds, 10, 600)
+                : (int?)null;
+
+            return new AgentDefinition(
+                name, description, tools,
+                string.IsNullOrWhiteSpace(body) ? description : body.Trim(),
+                maxTurns,
+                Read(frontmatter, "model"),
+                Read(frontmatter, "effort"),
+                Read(frontmatter, "outputSchema"),
+                bool.TryParse(Read(frontmatter, "fork"), out var fork) && fork,
+                mode,
+                timeout);
         }
         catch
         {
@@ -164,9 +193,11 @@ public sealed class AgentRegistry
     {
         var builder = new StringBuilder();
         builder.AppendLine("# 可用子代理");
-        builder.AppendLine("需要隔离上下文时调用 subagent 工具，传入 agent 与 prompt。");
+        builder.AppendLine("需要隔离上下文时调用 subagent 工具；read 只读探索，patch 在隔离工作树中修改并返回补丁。");
         foreach (var agent in All)
-            builder.Append("- ").Append(agent.Name).Append("：").AppendLine(agent.Description);
+            builder.Append("- ").Append(agent.Name).Append("（")
+                .Append(agent.Mode == SubagentMode.Patch ? "patch" : "read").Append("）：")
+                .AppendLine(agent.Description);
         return builder.ToString().TrimEnd();
     }
 }

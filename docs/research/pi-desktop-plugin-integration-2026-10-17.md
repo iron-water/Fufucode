@@ -9,7 +9,7 @@
 ## 结论
 
 1. **不能直接安装 `.piplug`。** PI-Desktop 插件运行在 Node 进程 + 沙箱 Electron 窗口，通过 `pi.*` 与 `window.pluginBridge` 接口工作。Fufucode 当前默认内核是纯 C# FUMO，默认包明确不携带 Node；直接兼容需要一个 Node + Electron 兼容宿主，成本高且违背零外部运行时方向。
-2. **可行路径是原生复刻。** Fufucode 已有 `IPluginPackage`、`PluginPageContribution`、`IPluginToolHandler`、皮肤贡献与依赖声明，足以把高价值插件做成真正的 C# 插件包。真正的缺口是：`CreatePageContribution` 目前没有被宿主接线，工作台页面仍由 `MainWindow` 逐个 `new` 并只登记内置页。
+2. **可行路径是原生复刻。** Fufucode 已有 `IPluginPackage`、`PluginPageContribution`、`IPluginToolHandler`、皮肤贡献与依赖声明，足以把高价值插件做成真正的 C# 插件包。2026-10-18 更新已把页面贡献接入宿主：`PluginWorkspacePageHost` 会把已安装且启用的插件页面注册进停靠区，终端与自动开发已作为真实插件页面运行。当前缺口只剩贡献元数据（停靠区域、默认可见性、页签顺序）。
 3. **最值得首批接入的是工作面板类小工具**，不是大而全的 AI 能力：
    - 左栏：会话来源/时间过滤、自动会话标题、会话归档检索。
    - 右栏：Git 历史/Blame、提交与推送、订阅额度、日志查看、剪贴板历史、待办。
@@ -35,7 +35,7 @@
 - 插件包契约：[IPluginPackage.cs](../src/Fufucode.Core/Plugins/IPluginPackage.cs)
 - 插件市场目录：[PluginMarketplace.cs](../src/Fufucode.Core/Plugins/PluginMarketplace.cs)
 
-`WorkbenchPageRegistry` 的注释明确写着 “Built-in registrations only”，`IPluginPackage.CreatePageContribution` 目前只有 Aero 皮肤使用了皮肤贡献，页面贡献没有任何插件使用，也没有宿主消费方。因此“接入”分为两层：先补宿主接线，再做具体插件。
+`WorkbenchPageRegistry` 已有 `RegisterPlugin` / `Unregister`，`PluginWorkspacePageHost` 消费 `IPluginPackage.CreatePageContribution` 并把插件页面接入停靠区；`workspace.terminal` 与自动开发插件已按此路径真实运行。宿主不再静态引用这些页面实现。因此现在可以直接做具体插件，剩余的前置工作只有贡献元数据与权限声明。
 
 ## 对照总表
 
@@ -129,7 +129,7 @@
 
 ## 接入前必须补的宿主能力
 
-1. **页面贡献接线**：让 `IPluginPackage.CreatePageContribution` 真正注册到 `WorkbenchPageRegistry`，并支持声明停靠区域（左/右/底）、默认可见性、图标与页签顺序。当前接口存在但无人消费。
+1. **页面贡献元数据**：接线已于 2026-10-18 完成。剩余工作是让 `PluginPageContribution` 声明停靠区域（左/右/底）、默认可见性、图标与页签顺序；当前页面能注册，但由用户布局决定落点。
 2. **插件页生命周期**：安装后注册页面，停用/卸载时停止后台任务、注销工具、释放控件；资源占用时明确“待重启”，不假装已卸载。
 3. **能力与权限扩展**：现有 `PluginCapability` 只有浏览器、电脑操控、逆向、自动开发。新增插件需要 `fs.read`、`fs.write`、`net.fetch`、`clipboard`、`process.spawn` 等声明式权限，并在宿主侧按调用检查，不能只靠 UI 勾选。
 4. **一次性模型补全**：自动标题、提示词改写需要一个受控的“单次补全”接口，复用当前后端与用户模型，不走插件自建通道。
@@ -146,5 +146,5 @@
 
 - 市场目录为社区提交并标注 unverified；本文只读元数据，未审计任何插件源码。
 - 未安装、未运行任何 PI 插件，未验证 `.piplug` 包的实际接口行为。
-- 本机 `CreatePageContribution` 未接线是源码判断，未做运行时验证。
+- 页面贡献接线已按 2026-10-18 源码与终端/自动开发插件核实；插件页面的真实安装、停用、卸载行为未在本轮重新运行验证。
 - 订阅额度各供应商接口、SSH 凭据策略、会话导入格式映射均未实测。

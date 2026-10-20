@@ -21,8 +21,8 @@
         <Button Grid.Column="1" Classes="iconButton" Content="×" Width="32" Height="32"
                 Command="{Binding CloseCommand}" AutomationProperties.Name="关闭命令面板"/>
       </Grid>
-      <TextBox x:Name="SearchBox" Grid.Row="1" Text="{Binding SearchText}" PlaceholderText="搜索应用动作"
-               Margin="16,0,16,8" MinHeight="36" AutomationProperties.Name="搜索应用动作"/>
+      <TextBox x:Name="SearchBox" Grid.Row="1" Text="{Binding SearchText}" PlaceholderText="搜索动作、会话与设置"
+               Margin="16,0,16,8" MinHeight="36" AutomationProperties.Name="搜索动作、会话与设置"/>
       <Grid Grid.Row="2" MinHeight="80">
         <ListBox x:Name="ActionsList" Classes="paletteList" ItemsSource="{Binding Items}"
                  SelectedItem="{Binding SelectedItem}" BorderThickness="0" Background="Transparent"
@@ -47,7 +47,7 @@
             </DataTemplate>
           </ListBox.ItemTemplate>
         </ListBox>
-        <TextBlock Classes="caption" Text="没有匹配的应用动作" IsVisible="{Binding HasNoMatches}"
+        <TextBlock Classes="caption" Text="没有匹配的动作、会话或设置" IsVisible="{Binding HasNoMatches}"
                    Margin="16,16"/>
       </Grid>
       <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">

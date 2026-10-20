@@ -54,7 +54,11 @@
   </div>
 
   <div class="footer">
-    <span id="host-label">http://127.0.0.1:54321</span>
+    <div class="host-row">
+      <input type="text" id="host-input" class="host-box" placeholder="http://127.0.0.1:54321">
+      <button id="save-host-btn" class="btn secondary">保存地址</button>
+    </div>
+    <div id="host-hint" class="host-hint">桌面端设置页会显示实际端口和配对 PIN。</div>
   </div>
 
   <script src="popup.js"></script>
