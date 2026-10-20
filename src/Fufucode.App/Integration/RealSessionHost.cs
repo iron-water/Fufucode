@@ -43,19 +43,15 @@ public sealed class RealSessionHost : IAsyncDisposable
         var projectPath = AppDataLayout.NormalizeProjectPath(options.ProjectPath ?? Environment.CurrentDirectory);
         var appDataLayout = layout ?? new AppDataLayout(options.AppDataRootOverride);
 
-        // FUMO 原生内核（默认）不需要 Node/Pi，因此只在显式要外部后端时才解析运行时。
-        var backendPreference = new Fufucode.Core.Backend.BackendPreferenceStore(appDataLayout).DefaultBackend;
-        var wantsExternal = options.Backend is { } explicitBackend
-            ? explicitBackend is BackendId.Pi or BackendId.Omp or BackendId.Claude or BackendId.Codex or BackendId.Dsh
-            : backendPreference is Fufucode.Core.Backend.EngineId.Pi or Fufucode.Core.Backend.EngineId.Omp or Fufucode.Core.Backend.EngineId.Claude or Fufucode.Core.Backend.EngineId.Codex or Fufucode.Core.Backend.EngineId.Dsh;
-        var (node, cli) = wantsExternal
-            ? RealSessionBootstrap.ResolveRuntime(options, required: false)
-            : (string.Empty, string.Empty);
+        // FUMO 原生内核仍是默认后端，但六个后端的运行时都要探测：
+        // 设置页与新建聊天需要如实显示“哪个后端当前可用”，不能因为默认是 FUMO
+        // 就把 Pi/OMP 误报为缺失。探测失败不会让 FUMO 启动失败。
+        var (node, cli) = RealSessionBootstrap.ResolveRuntime(options, required: false);
 
         // 产品路径默认要求审批桥接 Verified 才能提交 prompt（decisions.md [轨道A] 桥接探针）。
         // 数据根：显式 layout 优先；否则尊重 AppDataRootOverride（自测隔离），产品参数为默认根。
         var manager = new PersistentSessionManager(node, cli, appDataLayout,
-            ompExecutablePath: wantsExternal ? RealSessionBootstrap.ResolveOmpRuntime(options) : null,
+            ompExecutablePath: RealSessionBootstrap.ResolveOmpRuntime(options),
             clientFactoryFactory: BackendPluginLoader.CreateRpcFactory,
             claudeExecutablePath: RealSessionBootstrap.ResolveClaudeRuntime(options),
             codexExecutablePath: RealSessionBootstrap.ResolveCodexRuntime(options),
