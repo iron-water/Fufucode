@@ -76,8 +76,9 @@ public partial class MainWindow
         _islandElapsed.Classes.Add("dim");
         _islandUsage = new TextBlock { FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 90, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandUsage.Classes.Add("dim");
-        var chevron = new PathIcon { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
-        chevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.ChevronDown"));
+        var chevron = new Avalonia.Controls.Shapes.Path { Width = 10, Height = 10, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center };
+        chevron.Bind(Avalonia.Controls.Shapes.Path.DataProperty, new DynamicResourceExtension("Icon.ChevronDown"));
+        chevron.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new DynamicResourceExtension("AppTextDim"));
 
         var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, VerticalAlignment = VerticalAlignment.Center };
         pillContent.Children.Add(_islandDot);
