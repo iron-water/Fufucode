@@ -300,6 +300,7 @@ public partial class MainWindow
         _islandLiveText?.SetValue(TextBlock.TextProperty,
             running ? $"{activity} · {queued ?? "执行中"}"
             : failed ? outcome
+            : string.IsNullOrEmpty(usage) ? ""
             : "上次回合 " + usage.Replace("会话累计：", ""));
         if (_islandLiveDot is not null)
         {
