@@ -16,11 +16,12 @@ namespace Fufucode.App.Features.RemoteControl;
 /// </summary>
 public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
 {
-    private readonly IChatSession _session;
+    private IChatSession _session;
     private readonly object _gate = new();
     private readonly Dictionary<string, EntryBuilder> _entries = new(StringComparer.Ordinal);
     private readonly List<string> _order = new();
-    private readonly string _title;
+    private string _title;
+    private readonly DelegatingToolApprovalGate _approvals;
     private string _activity = nameof(SessionActivity.Idle);
     private string _connection = nameof(SessionConnection.Stopped);
     private string? _model;
@@ -34,14 +35,13 @@ public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
         _session = session ?? throw new ArgumentNullException(nameof(session));
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         _title = title;
-        Approvals = approvals ?? (session is Fufucode.Core.IExtensionUiSession ui
-            ? new SessionApprovalGate(ui) : new InMemoryToolApprovalGate());
-        _ownsApprovals = approvals is null;
+        _approvals = new DelegatingToolApprovalGate(approvals ?? (session is Fufucode.Core.IExtensionUiSession ui
+            ? (IRemoteToolApprovalGate)new SessionApprovalGate(ui) : new InMemoryToolApprovalGate()));
+        Approvals = _approvals;
         _session.Event += OnSessionEvent;
     }
 
     public IRemoteToolApprovalGate Approvals { get; }
-    private readonly bool _ownsApprovals;
 
     public event EventHandler<RemoteUpdate>? Updated;
 
@@ -63,6 +63,39 @@ public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
             }
             _order.InsertRange(0, historyIds);
         }
+        Raise(new RemoteSnapshotUpdate(Snapshot()));
+    }
+
+    /// <summary>
+    /// 切换底层会话但保持远控服务、配对令牌与审批订阅不变。调用方随后仍可调用
+    /// <see cref="LoadHistory"/> 补齐当前会话历史；旧会话的条目与审批不会泄漏到新快照。
+    /// </summary>
+    public void Rebind(IChatSession session, string title)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+
+        lock (_gate)
+        {
+            if (_disposed) throw new ObjectDisposedException(nameof(RemoteSessionAdapter));
+            _session.Event -= OnSessionEvent;
+            _session = session;
+            _title = title;
+            _entries.Clear();
+            _order.Clear();
+            _activity = nameof(SessionActivity.Idle);
+            _connection = nameof(SessionConnection.Stopped);
+            _model = null;
+            _canSend = false;
+            _canStop = false;
+            _queuedCount = 0;
+            var nextApprovals = session is Fufucode.Core.IExtensionUiSession ui
+                ? (IRemoteToolApprovalGate)new SessionApprovalGate(ui) : new InMemoryToolApprovalGate();
+            _approvals.Replace(nextApprovals);
+            _session.Event += OnSessionEvent;
+            RefreshStatusLocked();
+        }
+
         Raise(new RemoteSnapshotUpdate(Snapshot()));
     }
 
@@ -152,6 +185,8 @@ public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
         var updates = new List<RemoteUpdate>();
         lock (_gate)
         {
+            // Rebind 后旧会话可能仍有排队事件；不得把它们写入新会话时间线。
+            if (!ReferenceEquals(sender, _session)) return;
             switch (e)
             {
                 case SessionEvent.MessageStarted started:
@@ -306,7 +341,7 @@ public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
         if (_disposed) return;
         _disposed = true;
         _session.Event -= OnSessionEvent;
-        if (_ownsApprovals && Approvals is IDisposable disposable) disposable.Dispose();
+        _approvals.Dispose();
     }
 
     /// <summary>一条消息的增量投影（与桌面消息重建同语义）。</summary>

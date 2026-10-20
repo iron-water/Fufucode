@@ -84,6 +84,23 @@ data class RemoteSessionSnapshot(
 
 data class RemoteCommandResult(val accepted: Boolean, val message: String?)
 
+data class RemoteSessionInfo(
+    val sessionId: String,
+    val title: String,
+    val projectName: String,
+    val backend: String,
+    val isCurrent: Boolean,
+    val isPinned: Boolean,
+    val isUnread: Boolean,
+    val canSwitch: Boolean,
+    val lastOpenedUtc: String?,
+)
+
+data class RemoteSessionCatalog(
+    val currentSessionId: String,
+    val sessions: List<RemoteSessionInfo>,
+)
+
 data class RemotePairResult(val success: Boolean, val token: String?, val error: String?, val lockedOut: Boolean)
 
 /** 桌面 `/api/status` 投影；`address`/`port` 即“当前已连接桌面端 IP、端口”。 */
@@ -112,6 +129,7 @@ sealed interface RemoteUpdate {
         val queuedCount: Int,
     ) : RemoteUpdate
     data class Notice(val message: String) : RemoteUpdate
+    data class Sessions(val catalog: RemoteSessionCatalog) : RemoteUpdate
 }
 
 /** 解析过程中遇到无法识别的线协议内容时的诊断记录（不静默丢弃）。 */

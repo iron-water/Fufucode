@@ -17,6 +17,7 @@ using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
+using Fufucode.Core.RemoteControl;
 using Fufucode.Core.Backend;
 using Avalonia.VisualTree;
 
@@ -704,8 +705,10 @@ public partial class MainWindow : Window
 
         _perfWiring?.AttachSession(host.Chat);
         _dialogHost!.Attach(host.Chat);
-        Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Attach(host.Chat, host.ProjectPath);
-        Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.LoadHistory(host.CurrentTranscript());
+        var remoteService = Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService;
+        remoteService?.ConfigureSessionDirectory(BuildRemoteSessionCatalog, SwitchSessionFromRemoteAsync);
+        remoteService?.Attach(host.Chat, host.ProjectPath);
+        remoteService?.LoadHistory(host.CurrentTranscript());
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {
             // 换会话/重建：先解除旧接线，避免旧时间线与输入框继续接收扩展事件。
@@ -999,6 +1002,118 @@ public partial class MainWindow : Window
             item.MarkUnread(SessionPresentation.Load(host.Manager.Metadata, record.Id).Unread);
             return item;
         }).ToArray();
+    }
+
+    /// <summary>手机只读目录：跨项目的会话元信息；不含文件路径、令牌或时间线正文。</summary>
+    private RemoteSessionCatalog BuildRemoteSessionCatalog()
+    {
+        if (_host is null)
+            return new(string.Empty, []);
+
+        try
+        {
+            var metadata = _host.Manager.Metadata;
+            var currentId = _host.Current.Session.Id;
+            var currentProjectPath = _host.ProjectPath;
+            var turnActive = _vm?.Input.IsTurnActive == true;
+            var archivedProjects = ProjectArchive.LoadSet(metadata);
+            var projects = metadata.ListProjects();
+            var trustedProjects = projects
+                .Where(project => !RealSessionHost.PathEquals(project.Path, currentProjectPath))
+                .Select(project => (
+                    project.Id,
+                    Trusted: System.IO.Directory.Exists(project.Path) &&
+                        _host.Manager.GetProjectTrustStatus(project.Path).Decision == ProjectTrustDecision.Trust))
+                .ToDictionary(item => item.Id, item => item.Trusted);
+            var sessions = projects
+                .SelectMany(project => metadata.ListSessions(project.Id).Select(record => (project, record)))
+                .Where(pair => pair.record.Id == currentId ||
+                    !SessionArchive.IsArchived(metadata, pair.record, archivedProjects))
+                .Select(pair =>
+                {
+                    var presentation = SessionPresentation.Load(metadata, pair.record.Id);
+                    var sameProject = RealSessionHost.PathEquals(pair.project.Path, currentProjectPath);
+                    var canSwitch = !turnActive && pair.record.Id != currentId &&
+                        (sameProject || trustedProjects.GetValueOrDefault(pair.project.Id));
+                    var projectName = Path.GetFileName(pair.project.Path.TrimEnd(
+                        Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+                    return new RemoteSessionInfo(
+                        pair.record.Id,
+                        pair.record.Name ?? pair.record.Id[..Math.Min(8, pair.record.Id.Length)],
+                        string.IsNullOrWhiteSpace(projectName) ? pair.project.Path : projectName,
+                        BackendCapabilities.For(pair.record.Backend).Name,
+                        pair.record.Id == currentId,
+                        presentation.Pinned,
+                        presentation.Unread,
+                        canSwitch,
+                        pair.record.LastOpened);
+                })
+                .OrderByDescending(item => item.IsPinned)
+                .ThenByDescending(item => item.LastOpenedUtc)
+                .Take(100)
+                .ToArray();
+            return new RemoteSessionCatalog(currentId, sessions);
+        }
+        catch (Exception)
+        {
+            return new(_host.Current.Session.Id, []);
+        }
+    }
+
+    /// <summary>手机切换会话必须回到 Avalonia UI 线程执行；失败不会伪装成成功。</summary>
+    private async Task<RemoteCommandResult> SwitchSessionFromRemoteAsync(
+        string sessionId, CancellationToken cancellationToken)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            var operation = await Dispatcher.UIThread.InvokeAsync(
+                () => SwitchSessionFromRemoteCoreAsync(sessionId, cancellationToken));
+            return operation;
+        }
+        return await SwitchSessionFromRemoteCoreAsync(sessionId, cancellationToken);
+    }
+
+    private async Task<RemoteCommandResult> SwitchSessionFromRemoteCoreAsync(
+        string sessionId, CancellationToken cancellationToken)
+    {
+        if (_closed || _host is null || _switching || _restarting)
+            return new(false, "电脑端当前忙碌，暂时不能切换会话。");
+        if (string.IsNullOrWhiteSpace(sessionId))
+            return new(false, "会话 ID 为空。");
+        if (_vm?.Input.IsTurnActive == true)
+            return new(false, "电脑端当前回合进行中，请停止或等待完成后再切换。");
+        if (_vm?.IsSettingsPage == true)
+            return new(false, "请先在电脑端退出设置页。");
+
+        try
+        {
+            var metadata = _host.Manager.Metadata;
+            var target = metadata.GetSession(sessionId);
+            var project = metadata.GetProject(target.ProjectId);
+            if (!Directory.Exists(project.Path))
+                return new(false, "目标项目文件夹不存在。");
+
+            if (!RealSessionHost.PathEquals(project.Path, _host.ProjectPath))
+            {
+                var trust = _host.Manager.GetProjectTrustStatus(project.Path);
+                if (trust.RequiresDecision || trust.Decision == ProjectTrustDecision.DoNotTrust)
+                    return new(false, "目标项目需要先在电脑端确认信任。");
+                await SwitchProjectAsync(project.Path);
+            }
+
+            if (_host is null || !RealSessionHost.PathEquals(_host.ProjectPath, project.Path))
+                return new(false, "电脑端未能打开目标项目。");
+            if (_host.Current.Session.Id != sessionId)
+                await SwitchSessionAsync(sessionId);
+            var accepted = _host is not null && _host.Current.Session.Id == sessionId;
+            return accepted
+                ? new(true, "已切换会话。")
+                : new(false, "电脑端未能切换会话，请查看电脑端提示。");
+        }
+        catch (Exception error)
+        {
+            return new(false, "切换失败：" + error.GetBaseException().Message);
+        }
     }
 
     /// <summary>切换（或新建）会话：先落当前草稿，换会话后整体重建视图模型。</summary>

@@ -21,6 +21,8 @@ internal static class RemoteControlTests
         await SessionDataAndMessagingAsync(check);
         await ApprovalFlowAsync(check);
         await EmergencyStopAsync(check);
+        await SessionDirectoryAndStableRebindAsync(check);
+        await HostRebindPreservesPairingAsync(check);
         WebAssetContract(check);
         QrContract(check);
         PolicyGuardrails(check);
@@ -382,6 +384,79 @@ internal static class RemoteControlTests
         check(after.QueuedCount == 0 && !after.CanStop, "停止后队列清空且不再可停止");
 
         server.Stop();
+    }
+
+    /// <summary>10. 桌面会话目录、真实切换结果，以及切换后配对令牌仍然有效。</summary>
+    private static async Task SessionDirectoryAndStableRebindAsync(Action<bool, string> check)
+    {
+        var first = new FakeChatSession { CurrentModel = "first-model" };
+        var second = new FakeChatSession { CurrentModel = "second-model" };
+        using var adapter = new RemoteSessionAdapter(first, "会话一");
+        var switched = new List<string>();
+        await using var server = new RemoteControlServer(
+            adapter,
+            LoopbackOptions(),
+            sessionCatalog: () => new RemoteSessionCatalog(
+                "one",
+                [
+                    new RemoteSessionInfo("one", "会话一", "项目甲", "FUMO", true, false, true, false, DateTimeOffset.UtcNow),
+                    new RemoteSessionInfo("two", "会话二", "项目甲", "OMP", false, true, false, true, DateTimeOffset.UtcNow.AddMinutes(-1)),
+                ]),
+            switchSession: (id, _) =>
+            {
+                switched.Add(id);
+                adapter.Rebind(second, "会话二");
+                return Task.FromResult(id == "two"
+                    ? new RemoteCommandResult(true, "已切换")
+                    : new RemoteCommandResult(false, "未知会话"));
+            });
+        var started = server.Start();
+        using var client = RemoteHttpClient.Create(started.Port);
+        client.Token = (await client.PairAsync(started.Pin!)).Token;
+
+        var catalogResponse = await client.GetAsync("/api/sessions");
+        check(catalogResponse.Status == HttpStatusCode.OK, "已配对手机可读取桌面会话目录");
+        var catalog = JsonSerializer.Deserialize<RemoteSessionCatalog>(catalogResponse.Body, RemoteWire.Options);
+        check(catalog is { CurrentSessionId: "one" } && catalog.Sessions.Count == 2 &&
+              catalog.Sessions.Any(item => item.SessionId == "two" && item.IsPinned),
+            "会话目录包含真实当前会话、置顶状态与可切换目标");
+
+        var switchResponse = await client.PostAsync("/api/sessions/switch", new { sessionId = "two" });
+        check(switchResponse.Status == HttpStatusCode.OK && switched.SequenceEqual(["two"]),
+            "切换端点只调用一次桌面控制器并返回受理结果");
+        var afterSwitch = await client.SnapshotAsync();
+        check(afterSwitch.Title == "会话二" && afterSwitch.Model == "second-model",
+            "切换后快照显示新会话，且同一配对令牌仍有效");
+        first.SimulateUserMessage("stale-old-session", "旧会话迟到事件");
+        check((await client.SnapshotAsync()).Entries.All(entry => entry.Id != "stale-old-session"),
+            "切换后旧会话迟到事件不会污染新会话时间线");
+        second.SimulateUserMessage("after-switch", "切换后的消息");
+        check((await client.SnapshotAsync()).Entries.Any(entry => entry.Id == "after-switch"),
+            "切换后的真实会话事件仍能通过原连接读取");
+
+        var bad = await client.PostAsync("/api/sessions/switch", new { sessionId = "missing" });
+        check(bad.Status == HttpStatusCode.Conflict,
+            "桌面拒绝的会话切换以冲突状态返回，不伪装成功");
+    }
+
+    /// <summary>真实宿主切换会话后，手机现有令牌和监听端口仍可继续使用。</summary>
+    private static async Task HostRebindPreservesPairingAsync(Action<bool, string> check)
+    {
+        using var host = new RemoteControlHost(LoopbackOptions());
+        var first = new FakeChatSession { CurrentModel = "host-first" };
+        var second = new FakeChatSession { CurrentModel = "host-second" };
+        host.Attach(first, "宿主会话一");
+        var status = await host.StartAsync();
+        using var client = RemoteHttpClient.Create(status.Port);
+        var token = (await client.PairAsync(status.Pin!)).Token;
+        client.Token = token;
+        host.Attach(second, "宿主会话二");
+        host.LoadHistory([]);
+        var snapshot = await client.SnapshotAsync();
+        check(snapshot.Title == "宿主会话二" && snapshot.Model == "host-second",
+            "真实宿主切换会话后同一手机令牌可读取新会话");
+        check(host.Status.Port == status.Port && host.Status.Pin == status.Pin,
+            "会话切换不重启监听或轮换 PIN");
     }
 
     /// <summary>6. 内嵌移动端页面契约（自包含、配对入口、移动端版式要素）。</summary>

@@ -166,6 +166,8 @@ fun MobileApp(
                             viewModel.disconnect()
                             route = MobileRoute.Pair
                         },
+                        sessions = state.sessions,
+                        onSwitchSession = viewModel::switchSession,
                     )
                 }
 
