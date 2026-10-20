@@ -30,6 +30,12 @@ public sealed record CompatibleEndpoint(string ProviderName, string BaseUrl, str
         string.IsNullOrWhiteSpace(ModelId) ? [] : [ModelId];
 }
 
+/// <summary>
+/// 后台常驻行为。默认关闭：关闭窗口即退出，不隐式常驻。
+/// 独立于性能设置，避免把行为开关混进渲染/内存档位。
+/// </summary>
+public sealed record BackgroundSettings(bool CloseToTray = false);
+
 public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     string? ThinkingLevel = null, string Theme = "system", string? ProxyUrl = null,
     CompatibleEndpoint? Endpoint = null,
@@ -43,7 +49,9 @@ public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     // 用户手动选择的 Subagent 档位；插件安装后的首次默认值为 faster。
     string SubagentTier = "faster",
     // 用户在模型选择器里关闭掉的关键字快捷项。
-    IReadOnlyList<string>? DismissedModelKeywords = null);
+    IReadOnlyList<string>? DismissedModelKeywords = null,
+    // 后台常驻（托盘）行为；旧配置没有该字段时按默认“关窗即退出”。
+    BackgroundSettings? Background = null);
 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(AppSettings))]

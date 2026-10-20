@@ -56,8 +56,15 @@ public partial class App : Application
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow = new MainWindow(_options);
+            var window = new MainWindow(_options);
+            desktop.MainWindow = window;
             if (Program.NativeModuleSelfTest) desktop.MainWindow.ShowActivated = false;
+
+            // 第二个实例的激活请求：恢复主窗口（可能在托盘隐藏）并退出第二个进程。
+            // 监听线程在后台，必须切回 UI 线程。
+            if (Program.SingleInstance is { } singleInstance)
+                singleInstance.ActivationRequested += () => Avalonia.Threading.Dispatcher.UIThread.Post(window.ShowFromTray);
+            desktop.Exit += (_, _) => Program.SingleInstance?.Dispose();
         }
         Fufucode.Core.Diagnostics.StartupProbe.Mark("app.window-created", "MainWindow assigned to lifetime");
 
