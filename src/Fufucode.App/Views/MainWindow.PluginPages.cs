@@ -5,6 +5,7 @@ using Fufucode.App.Features.Plugins;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
+using Fufucode.Core;
 
 namespace Fufucode.App;
 
@@ -20,22 +21,38 @@ public partial class MainWindow
             ? Program.SelfTestDataRoot ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-selftest-appdata")
             : _options.CreateAppDataLayout().Root;
         if (Program.SelfTestMode) SelfTest.SelfTestTerminalPlugin.EnsureInstalled(root);
+
+        // 默认随包插件先把载荷同步到数据根，页面宿主的激活扫描才能找到它。
+        PluginBootstrapper.EnsureBundled(new AppDataLayout(root));
         _pluginPageHost = new PluginWorkspacePageHost(root, _workbenchPages,
             () => _options.Mode == AppSessionMode.Mock);
         _pluginPageHost.PagesChanged += OnPluginPagesChanged;
+        // 性能监控插件页需要宿主服务（页面工厂、设置注册），必须在 InitializeInstalledPlugins 之前接好。
+        InitializePerformance(root);
+        if (_perfWiring is { } wiring)
+        {
+            wiring.Attach(_pluginPageHost.Manager);
+            // 插件可能在服务就位前已激活（没有页面贡献）：让管理器重新构造贡献后再由 Start 统一同步。
+            wiring.PrepareForResync();
+            _pluginPageHost.Manager.RequestPageResync();
+        }
         _pluginPageHost.Start(_layoutContext);
         SyncTerminalPageReference();
+        SyncPerformanceSettings();
         PruneDockLayout();
         RenderDockPages();
+        _perfWiring?.OnPluginsSynced();
     }
 
     private void OnPluginPagesChanged()
     {
         if (!Dispatcher.UIThread.CheckAccess()) { Dispatcher.UIThread.Post(OnPluginPagesChanged); return; }
         SyncTerminalPageReference();
+        SyncPerformanceSettings();
         PruneDockLayout();
         RenderDockPages();
         _actions.RefreshCapabilities();
+        _perfWiring?.OnPluginsSynced();
     }
 
     /// <summary>解析当前终端页面并接线快捷键匹配；插件启停时由页面变化事件重新调用。</summary>

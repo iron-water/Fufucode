@@ -32,11 +32,14 @@ public partial class App : Application
 
     public override void Initialize()
     {
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("app.xaml", "Avalonia XAML load begins");
         AvaloniaXamlLoader.Load(this);
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("app.xaml", "Avalonia XAML loaded");
     }
 
     public override void OnFrameworkInitializationCompleted()
     {
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("app.theme.begin", "theme settings load");
         // 启动时应用持久化主题（selftest 自行控制主题，跳过）。
         if (!Program.SelfTestMode)
         {
@@ -49,12 +52,14 @@ public partial class App : Application
                 // 设置存储不可用（目录权限等）：保持跟随系统，不阻止启动。
             }
         }
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("app.theme.end", "theme applied");
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new MainWindow(_options);
             if (Program.NativeModuleSelfTest) desktop.MainWindow.ShowActivated = false;
         }
+        Fufucode.Core.Diagnostics.StartupProbe.Mark("app.window-created", "MainWindow assigned to lifetime");
 
         base.OnFrameworkInitializationCompleted();
     }

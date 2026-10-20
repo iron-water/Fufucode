@@ -17,6 +17,14 @@
   </PropertyGroup>
 
   <!--
+    本地/发布的可执行启动速度：非裁剪 Release 默认 ReadyToRun，把启动路径的 IL 预编译为原生代码。
+    裁剪包在下面显式关闭（体积优先），需要时用 -p:PublishReadyToRun=true 覆盖。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishTrimmed)' != 'true'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <!--
     发布瘦身（PKG-1）：仅 Release + 自包含 + 指定 RID 时启用裁剪。
     TrimMode=partial 只裁可裁剪的框架程序集，不裁 App/Core/插件自身的反射与 JSON 路径；
     Avalonia 平台后端按可达性自动分流（Windows 包不会保留 X11/macOS 后端）。

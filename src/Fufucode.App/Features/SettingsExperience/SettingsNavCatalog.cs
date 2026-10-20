@@ -79,6 +79,8 @@ public static class SettingsNavCatalog
             "JSON 导入 导出 项目覆盖 全局 ui.json config", "Code", "#B48CFF"),
         new("usage", "用量", SettingsNavTier.Other,
             "用量 token 消耗 统计 配额 usage tokens", "History", "#8A8A8E", HasContent: false),
+        new("performance", "性能", SettingsNavTier.Other,
+            "性能 监控 耗时 延迟 卡顿 慢 追踪 trace 诊断 perf performance trace latency", "History", "#6CCB5F"),
         new("modules", "工作台模块", SettingsNavTier.Other,
             "浏览器 启用 停用 内建 模块 辅助工具 browser module", "PuzzlePiece", "#FF99A4"),
         new("functions", "会话与消息", SettingsNavTier.Other,

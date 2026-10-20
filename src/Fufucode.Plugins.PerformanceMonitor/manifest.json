@@ -1,0 +1,9 @@
+{
+  "id": "performance.monitor",
+  "name": "性能监控",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.PerformanceMonitor.dll",
+  "packageType": "Fufucode.Plugins.PerformanceMonitor.PerformanceMonitorPluginPackage",
+  "category": "Workspace",
+  "capabilities": ["WorkspacePage"]
+}

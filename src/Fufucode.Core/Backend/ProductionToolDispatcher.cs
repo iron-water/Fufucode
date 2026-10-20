@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 
+using Fufucode.Core.Diagnostics;
 namespace Fufucode.Core.Backend;
 
 /// <summary>
@@ -199,6 +200,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         }
         catch (Exception ex)
         {
+            using var errorSpan = PerfTracer.Step("tool.error", "tool", call.Name);
+            errorSpan.Fail(ex.GetType().Name);
             return new PureToolResult(call.Id, false, $"工具执行异常：{ex.Message}");
         }
     }
@@ -665,6 +668,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
     private PureToolResult ExecuteGlobFiles(PureToolCall call, CancellationToken ct)
     {
+        using var span = PerfTracer.Step("tool.glob", "tool", "glob_files");
         var relPath = ".";
         var pattern = "*";
         var maxResults = 100;
@@ -681,11 +685,14 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         }
         catch (JsonException ex)
         {
+            span.Fail("invalid_arguments");
             return new PureToolResult(call.Id, false, $"参数 JSON 无效：{ex.Message}");
         }
 
+        span.Tag("path", relPath);
+        span.Tag("pattern", pattern);
         var targetDir = ResolveSafePath(relPath, out var error);
-        if (targetDir is null) return new PureToolResult(call.Id, false, error);
+        if (targetDir is null) { span.Fail("path_rejected"); return new PureToolResult(call.Id, false, error); }
 
         if (!Directory.Exists(targetDir))
             return new PureToolResult(call.Id, false, $"目录不存在：'{relPath}'。");
@@ -695,7 +702,12 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             return new PureToolResult(call.Id, false, $"无效的通配符模式：'{pattern}'。");
 
         var matched = new List<string>();
-        EnumerateGlobRecursive(targetDir, globRegex, maxResults, matched, IgnoreMatcher(), ct);
+        {
+            using var scanSpan = PerfTracer.Step("tool.glob.scan");
+            EnumerateGlobRecursive(targetDir, globRegex, maxResults, matched, IgnoreMatcher(), ct);
+            scanSpan.Tag("matched", matched.Count);
+            scanSpan.Tag("truncated", matched.Count >= maxResults);
+        }
 
         if (matched.Count == 0)
             return new PureToolResult(call.Id, true, "未找到匹配文件。");
@@ -813,15 +825,22 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         using var process = new Process { StartInfo = psi };
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
+        using var span = PerfTracer.Step("tool.process", "tool", "run_command");
+        span.Tag("command", cmd);
+        span.Tag("cwd", workingDirectory);
+        span.Tag("timeoutSeconds", timeoutSeconds);
 
+        var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
         try
         {
             process.Start();
         }
         catch (Exception ex)
         {
+            span.Fail(ex.GetType().Name);
             return new PureToolResult(call.Id, false, $"进程启动失败：{ex.Message}");
         }
+        span.Tag("startMs", (long)System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
         // 有界读取：只保留头部 32KB 与尾部 32KB，中间内容边读边丢弃（仍需排空管道，防止子进程因管道写满而卡死）。
         var stdoutTask = ReadHeadTailAsync(process.StandardOutput, CommandOutputHeadChars, CommandOutputTailChars, linkedCts.Token);
@@ -841,10 +860,18 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             }
         }
 
-        if (ct.IsCancellationRequested) throw new OperationCanceledException(ct);
+        if (ct.IsCancellationRequested) { span.Cancel(); throw new OperationCanceledException(ct); }
 
         var stdout = await SafeReadAsync(stdoutTask).ConfigureAwait(false);
         var stderr = await SafeReadAsync(stderrTask).ConfigureAwait(false);
+
+        span.Tag("exitCode", timedOut ? -1 : process.ExitCode);
+        span.Tag("timedOut", timedOut);
+        span.Tag("stdoutBytes", stdout.TotalChars);
+        span.Tag("stderrBytes", stderr.TotalChars);
+        span.Tag("dropped", stdout.Dropped || stderr.Dropped);
+        if (timedOut) span.Fail("timeout");
+        else if (process.ExitCode != 0) span.Tag("ok", false);
 
         if (timedOut)
         {
