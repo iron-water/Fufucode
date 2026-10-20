@@ -68,6 +68,19 @@ public partial class MainWindow : Window
     // AttachGlobalContext 的页面切换处理器：持引用以便换 VM/关闭时解除。
     private PropertyChangedEventHandler? _globalVmPropertyChanged;
     private AppSettingsStore? _settingsStore;
+    // 自测隔离：无头测试通过 Program.SelfTestDataRoot 指定数据根，同一根复用一份存储。
+    private static AppSettingsStore? _selfTestSettingsStore;
+    private static string? _selfTestSettingsRoot;
+    // 后台常驻（托盘）：默认关闭。开启后用户关窗只隐藏窗口，进程与会话继续运行。
+    private TrayIconService? _trayIcon;
+    private AppSettingsStore? _backgroundStore;
+    private bool _hiddenToTray;
+    private bool _exitRequested;
+    private bool _trayUnavailable;
+    /// <summary>自测接缝：无头平台没有真实托盘，用它验证关窗/恢复/退出语义。</summary>
+    internal bool SimulateTrayAvailableForTesting { get; set; }
+    /// <summary>自测接缝：窗口当前是否处于托盘隐藏态。</summary>
+    internal bool HiddenToTrayForTesting => _hiddenToTray;
 
     /// <summary>无参构造保持 mock 会话（无头自测与设计器使用）；真实会话经 <see cref="AppOptions"/> 注入。</summary>
     public MainWindow() : this(AppOptions.Mock)
@@ -221,7 +234,10 @@ public partial class MainWindow : Window
     /// mock 用 App.SettingsStore（它此后仅供启动读主题，不再写真实会话设置）。</summary>
     private void AttachSettingsContext(MainViewModel vm)
     {
-        _settingsStore ??= App.SettingsStore;
+        // 无头自测必须读写隔离数据根，不能碰用户真实的 settings.json。
+        _settingsStore ??= Program.SelfTestMode && Program.SelfTestDataRoot is { } selfTestRoot
+            ? SelfTestSettingsStore(selfTestRoot)
+            : App.SettingsStore;
         var host = _host;
         var layout = host?.Manager.Layout;
         var (nodeHint, cliHint) = RuntimePathHints();
@@ -271,6 +287,8 @@ public partial class MainWindow : Window
             PiVersion: () => DiagnosticsSummary.ResolvePiVersion(cliHint),
             NodeVersion: () => DiagnosticsSummary.ResolveNodeVersion(nodeHint));
         vm.Settings.Attach(context);
+        // 后台常驻跟随真实设置存储（host.Manager.Settings）；设置页保存后立即生效。
+        AttachBackgroundMode(context.Store);
         if (_settingsApplyModelAfterRestart)
         {
             // 设置页「立即重启」成功后的同进程应用（重启失败/未走到 attach 时下一周期再判）。
@@ -1227,12 +1245,127 @@ public partial class MainWindow : Window
         return timer;
     }
 
+    // ── 后台常驻（托盘） ──
+
+    /// <summary>设置页写入的存储；真实模式为 host.Manager.Settings，mock 为进程级设置。</summary>
+    private AppSettingsStore EffectiveSettingsStore =>
+        _backgroundStore ?? (_settingsStore ??= App.SettingsStore);
+
+    private bool CloseToTrayEnabled => EffectiveSettingsStore.Current.Background?.CloseToTray == true;
+
+    /// <summary>托盘入口是否真实可用。创建失败时不隐藏窗口，避免用户失去恢复入口。</summary>
+    private bool TrayAvailable => _trayIcon is not null || SimulateTrayAvailableForTesting;
+
+    /// <summary>自测接缝：当前窗口生效的设置存储。</summary>
+    internal AppSettingsStore BackgroundStoreForTesting => EffectiveSettingsStore;
+
+    private static AppSettingsStore SelfTestSettingsStore(string root)
+    {
+        if (_selfTestSettingsStore is null || !string.Equals(_selfTestSettingsRoot, root, StringComparison.Ordinal))
+        {
+            _selfTestSettingsStore = new AppSettingsStore(new AppDataLayout(root));
+            _selfTestSettingsRoot = root;
+        }
+        return _selfTestSettingsStore;
+    }
+
+    private void AttachBackgroundMode(AppSettingsStore store)
+    {
+        if (!ReferenceEquals(_backgroundStore, store))
+        {
+            if (_backgroundStore is not null) _backgroundStore.Changed -= OnBackgroundSettingsChanged;
+            _backgroundStore = store;
+            _backgroundStore.Changed += OnBackgroundSettingsChanged;
+        }
+        ApplyBackgroundMode();
+    }
+
+    private void OnBackgroundSettingsChanged(AppSettings settings)
+    {
+        // 设置存储也可能被后台代码更新；托盘是 UI 对象，统一切回 UI 线程。
+        if (Dispatcher.UIThread.CheckAccess()) ApplyBackgroundMode();
+        else Dispatcher.UIThread.Post(ApplyBackgroundMode);
+    }
+
+    /// <summary>设置开 → 建托盘并显示；设置关 → 隐藏托盘；若窗口正藏在托盘，先恢复再关。</summary>
+    private void ApplyBackgroundMode()
+    {
+        if (_closed) return;
+        var enabled = CloseToTrayEnabled;
+        if (enabled) EnsureTrayIcon();
+        if (_trayIcon is { } tray) tray.IsVisible = enabled;
+        if (!enabled && _hiddenToTray) ShowFromTray();
+    }
+
+    private void EnsureTrayIcon()
+    {
+        if (_trayIcon is not null || _trayUnavailable) return;
+        // 无头自测没有真实托盘实现；用 SimulateTrayAvailableForTesting 接缝验证行为。
+        if (Program.SelfTestMode) return;
+        try
+        {
+            _trayIcon = new TrayIconService(ShowFromTray, ExitApplication);
+        }
+        catch (Exception error)
+        {
+            _trayUnavailable = true;
+            System.Diagnostics.Trace.TraceWarning("托盘图标创建失败：{0}", error.Message);
+        }
+    }
+
+    /// <summary>只有用户主动关窗才隐藏；系统注销/关闭与显式退出仍走真实退出流程。</summary>
+    private bool ShouldHideToTray(WindowCloseReason reason) =>
+        !_closed && !_exitRequested && reason == WindowCloseReason.WindowClosing &&
+        CloseToTrayEnabled && TrayAvailable;
+
+    private void HideToTray()
+    {
+        if (_hiddenToTray || _closed) return;
+        _hiddenToTray = true;
+        // 辅助栏窗口由主窗口拥有：Hide() 不会连带隐藏，逐个收起；恢复时由布局重新显示。
+        foreach (var host in _floatingDocks.Values) host.Window.Hide();
+        Hide();
+    }
+
+    /// <summary>托盘左键/菜单“显示主窗口”/第二个实例启动时恢复主窗口。</summary>
+    internal void ShowFromTray()
+    {
+        if (_closed) return;
+        _hiddenToTray = false;
+        if (WindowState == WindowState.Minimized) WindowState = WindowState.Normal;
+        Show();
+        RenderFloatingWindows();
+        Activate();
+        // 进程外激活（第二个实例）时 Windows 可能拒绝前台切换：短暂置顶一次把窗口带到用户面前。
+        var previous = Topmost;
+        Topmost = true;
+        Topmost = previous;
+    }
+
+    /// <summary>托盘“退出”：标记为显式退出，交给既有关闭流程释放会话与子进程。</summary>
+    internal void ExitApplication()
+    {
+        if (_closed) return;
+        _exitRequested = true;
+        if (_trayIcon is { } tray) tray.IsVisible = false;
+        Close();
+    }
+
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
     {
         if (_closeApproved)
         {
             return;
         }
+
+        // 后台常驻：用户点关闭按钮 / Alt+F4 时只隐藏到托盘，进程、会话与子进程继续运行。
+        if (ShouldHideToTray(e.CloseReason))
+        {
+            e.Cancel = true;
+            HideToTray();
+            return;
+        }
+
         e.Cancel = true;
         if (_closingInProgress) return;
         _closingInProgress = true;
@@ -1311,6 +1444,13 @@ public partial class MainWindow : Window
     private void OnClosed(object? sender, EventArgs e)
     {
         _bootstrapCts.Dispose();
+        if (_backgroundStore is not null)
+        {
+            _backgroundStore.Changed -= OnBackgroundSettingsChanged;
+            _backgroundStore = null;
+        }
+        _trayIcon?.Dispose();
+        _trayIcon = null;
     }
 
     private void OnScrollToEndRequested() => ScrollToEnd();
