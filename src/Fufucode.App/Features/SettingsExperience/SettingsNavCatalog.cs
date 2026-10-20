@@ -57,9 +57,7 @@ public static class SettingsNavCatalog
         new("models", "模型与思考", SettingsNavTier.Basic,
             "模型 思考 等级 默认 model thinking", "Brain", "#FF9E4C"),
         new("storage", "储存", SettingsNavTier.Basic,
-            "空间 占用 缓存 日志 保留 清理 storage cache logs", "Folder", "#8A8A8E"),
-        new("archived", "已归档", SettingsNavTier.Basic,
-            "归档 已归档 项目 会话 恢复 打开 列表 archive archived project session restore", "Archive", "#8A8A8E"),
+            "空间 占用 缓存 日志 保留 清理 归档 已归档 storage cache logs archive", "Folder", "#8A8A8E"),
 
         // ── 大功能 ──
         new("marketplace", "插件市场", SettingsNavTier.Features,
@@ -77,6 +75,9 @@ public static class SettingsNavCatalog
         // ── 其他（默认收纳二级小功能） ──
         new("notifications", "通知", SettingsNavTier.Other,
             "完成 失败 权限 问题 审批 提醒 失焦 notification", "Alert", "#FFC83D"),
+        new("background", "后台与托盘", SettingsNavTier.Other,
+            "后台 常驻 托盘 关闭窗口 最小化 退出 单实例 tray background close minimize single instance",
+            "WindowNew", "#4CC2FF"),
         new("config", "配置文件", SettingsNavTier.Other,
             "JSON 导入 导出 项目覆盖 全局 ui.json config", "Code", "#B48CFF"),
         new("usage", "用量", SettingsNavTier.Other,
