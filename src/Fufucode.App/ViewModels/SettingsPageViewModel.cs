@@ -68,6 +68,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             new("marketplace.automation", "工作流与自动化", "自动化与任务", "自动化 工作流 automation workflow"),
             new("marketplace.theme", "个性皮肤", "主题与皮肤", "皮肤 主题 theme skin"),
             new("marketplace.tools", "工具扩展", "其他工具插件", "工具 扩展 tools extension"),
+            new("storage.archive", "已归档", "归档项目与归档会话", "归档 已归档 项目 会话 恢复 打开 列表 archive archived project session restore"),
         ];
         // 模型清单变化时同步重建选择器的筛选结果与供应商快捷项。
         ModelChoices.CollectionChanged += (_, _) => RebuildFilteredModels();
@@ -221,11 +222,16 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             ? Uri.UnescapeDataString(CurrentPageId["shortcuts.".Length..])
             : null;
 
-    public bool ShowStorage => SelectedCategory?.Id == "storage";
+    /// <summary>储存首页：只在没有进入二级页时显示。</summary>
+    public bool ShowStorage => SelectedCategory?.Id == "storage" && CurrentPageId.Length == 0;
     [ObservableProperty] private Avalonia.Controls.Control? _storageContent;
 
-    /// <summary>设置 → 已归档：归档项目与会话的统一管理页。</summary>
-    public bool ShowArchive => SelectedCategory?.Id == "archived";
+    /// <summary>储存 → 已归档（二级页）：归档项目与会话的统一管理页。</summary>
+    public bool ShowArchive => SelectedCategory?.Id == "storage" && CurrentPageId == "storage.archive";
+
+    /// <summary>从储存首页进入「已归档」二级页。</summary>
+    [RelayCommand]
+    public void OpenArchivePage() => OpenPage("storage.archive");
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowArchiveEmpty))]
     private Avalonia.Controls.Control? _archiveContent;

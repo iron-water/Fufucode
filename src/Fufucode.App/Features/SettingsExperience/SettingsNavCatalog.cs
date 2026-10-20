@@ -57,9 +57,7 @@ public static class SettingsNavCatalog
         new("models", "模型与思考", SettingsNavTier.Basic,
             "模型 思考 等级 默认 model thinking", "Brain", "#FF9E4C"),
         new("storage", "储存", SettingsNavTier.Basic,
-            "空间 占用 缓存 日志 保留 清理 storage cache logs", "Folder", "#8A8A8E"),
-        new("archived", "已归档", SettingsNavTier.Basic,
-            "归档 已归档 项目 会话 恢复 打开 列表 archive archived project session restore", "Archive", "#8A8A8E"),
+            "空间 占用 缓存 日志 保留 清理 归档 已归档 storage cache logs archive", "Folder", "#8A8A8E"),
 
         // ── 大功能 ──
         new("marketplace", "插件市场", SettingsNavTier.Features,

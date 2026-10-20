@@ -87,12 +87,18 @@ internal static class ArchiveSelfTest
             // 设置页接线：归档分类可见；默认后端选择位于后端二级页且列出全部六类后端。
             var settings = new SettingsPageViewModel();
             settings.AttachNavPreference(Path.Combine(root, "nav"));
-            Check(settings.FilteredCategories.Any(category => category.Id == "archived"),
-                "settings sidebar exposes the archived category");
-            settings.SelectCategory("archived");
+            Check(!settings.FilteredCategories.Any(category => category.Id == "archived") &&
+                settings.FilteredCategories.Any(category => category.Id == "storage"),
+                "archive lives under storage instead of being a top-level category");
+            settings.SelectCategory("storage");
+            Check(settings.ShowStorage && !settings.ShowArchive,
+                "storage root shows its hub before entering the archive subpage");
             settings.ArchiveContent = page;
-            Check(settings.ShowArchive && !settings.ShowArchiveEmpty && settings.CategoryTitle == "已归档",
-                "archived category hosts the archive page");
+            settings.OpenArchivePage();
+            Check(settings.ShowArchive && !settings.ShowStorage && !settings.ShowArchiveEmpty &&
+                settings.CategoryTitle == "储存" && settings.PageTitle == "已归档" &&
+                settings.Breadcrumb == "储存 › 已归档",
+                "storage archive subpage renders with breadcrumb 储存 › 已归档");
             settings.SelectCategory("marketplace");
             settings.OpenPage("marketplace.backend");
             Check(settings.ShowBackendCard && settings.BackendEngineChoices.Count == 6 &&
