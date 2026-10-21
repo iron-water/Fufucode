@@ -16,7 +16,6 @@ using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
-using Fufucode.Core.Updates;
 
 namespace Fufucode.App;
 
@@ -71,13 +70,11 @@ public partial class MainWindow
         Action("session.fork", "分叉", "会话", () => _chatPage.ChooseForkPointAsync(), IdleReal);
         Action("session.side", "新建侧边聊天", "会话", StartSideChatAsync, IdleReal);
         Action("session.schedule", "添加计划任务", "会话", ShowSchedulesAsync, Ready);
-        Action("session.share", "分享/导出会话", "会话", ExportSessionAsync, Ready);
         Action("session.export", "导出为 Markdown", "会话", ExportSessionAsync, Ready);
         Action("session.export.metadata", "导出元数据", "会话", ExportSessionMetadataAsync, Ready);
         Action("session.export.pdf", "导出为 PDF", "会话", ExportSessionPdfAsync, Ready);
         Action("session.fork.worktree", "在新工作树中创建分支", "会话", ForkIntoWorktreeAsync,
             () => IdleReal() ?? (_host?.Current.Session.FilePath is null ? "会话尚未落盘" : null));
-        Action("copy.session", "复制会话", "会话", () => CopyAsync(SessionMarkdown()), Ready);
         Action("copy.id", "复制会话 ID", "会话", () => CopyAsync(CurrentSessionId ?? "mock-window"), Ready);
         Action("copy.project", "复制文件夹路径", "会话", () => CopyAsync(_host?.ProjectPath ?? Environment.CurrentDirectory));
         Action("copy.task", "复制会话文件路径", "会话", () => CopyAsync(_host!.Current.Session.FilePath!), () => _host?.Current.Session.FilePath is null ? "会话尚未落盘" : null);
@@ -92,8 +89,7 @@ public partial class MainWindow
         Action("diagnostics.export", "导出完整诊断包", "诊断", ExportDiagnosticsAsync);
         Action("help.shortcuts", "键盘快捷键", "帮助", () => ShowTextAsync("键盘快捷键", string.Join("\n", _actions.Actions.Where(a => a.Shortcut.Length > 0).Select(a => a.Shortcut + "    " + a.Title))));
         Action("help.troubleshoot", "故障排除", "帮助", ShowDiagnosticsAsync);
-        Action("help.status", "系统状态", "帮助", ShowDiagnosticsAsync);
-        Action("help.update", "检查更新", "帮助", CheckUpdatesAsync);
+        Action("help.update", "检查更新", "帮助", ShowUpdateSettingsAsync);
         Action("help.about", "关于 Fufucode", "帮助", ShowAboutAsync);
         Action("auth.manage", "模型认证管理", "设置", ShowAuthenticationAsync, Ready);
         Now("view.fullscreen", "切换全屏", "窗口", () => WindowState = WindowState == WindowState.FullScreen ? WindowState.Normal : WindowState.FullScreen);
@@ -376,33 +372,12 @@ public partial class MainWindow
             typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown");
         await ShowTextAsync("诊断包已导出", $"已导出 {count} 条脱敏调用记录。未包含凭据、环境变量值、会话正文或原始配置。");
     }
-    private async Task CheckUpdatesAsync()
+    private async Task ShowUpdateSettingsAsync()
     {
-        var layout = _options.CreateAppDataLayout();
-        var settingsStore = _settingsStore ?? new AppSettingsStore(layout);
-        using var updateService = new AppUpdateService(layout, settingsStore);
-        var currentVersion = typeof(MainWindow).Assembly.GetName().Version?.ToString(3) ?? "1.4.0";
-        var result = await updateService.CheckForUpdatesAsync(currentVersion);
-        if (result.Status == UpdateCheckStatus.UpdateAvailable && result.Manifest is not null)
-        {
-            var text = $"{result.Message}\n\n更新说明：\n{result.Manifest.ReleaseNotes}\n\n下载包：{result.Manifest.PackageUrl}\n大小：{result.Manifest.PackageSizeBytes / 1024 / 1024} MB\nSHA-256：{result.Manifest.Sha256}\n政策：{result.Manifest.PolicyNotice}\n\n提示：可在「设置 - 关于」中一键下载并安全更新。";
-            await ShowTextAsync("发现软件更新", text);
-        }
-        else
-        {
-            await ShowTextAsync("检查更新", result.Message);
-        }
-    }
-    private static async Task<string> RunOutputAsync(string executable, string[] arguments, string directory)
-    {
-        var start = new ProcessStartInfo(executable) { WorkingDirectory = directory, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-        foreach (var argument in arguments) start.ArgumentList.Add(argument);
-        using var process = Process.Start(start) ?? throw new InvalidOperationException("无法启动 " + executable);
-        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
-        try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(30)); }
-        catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }
-        if (process.ExitCode != 0) throw new InvalidOperationException(await error);
-        return await output;
+        if (_vm is null) return;
+        _vm.Settings.SelectCategory("about");
+        await NavigateWorkspaceAsync(AppPage.Settings);
+        await _vm.Settings.CheckAndUpgradeAsync();
     }
     private Task ShowTextAsync(string title, string text) => ShowPanelAsync(title, new TextBox { Text = text, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, MinHeight = 200 });
     private async Task ShowPanelAsync(string title, Control content)

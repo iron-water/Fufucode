@@ -19,13 +19,13 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
     public const string PageId = "perf";
 
     private PerfRecorder? _recorder;
-    private PerfDockPage? _page;
+    private object? _page;
     private PerfPageHost? _host;
     private IPerfHostBridge? _bridge;
     private string? _dataRoot;
     /// <summary>共享计数：两个管理器各自从默认加载上下文创建包实例，计数必须跨实例共享。</summary>
     private static int s_instances;
-    private static Avalonia.Controls.Control? s_page;
+    private static object? s_page;
     private static int s_pageOwners;
 
 
@@ -68,6 +68,7 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
         PerfHostSamples.Subscribe(null);
         var recorder = _recorder;
         _recorder = null;
+        (_page as IDisposable)?.Dispose();
         _page = null;
         _host = null;
         _bridge = null;
@@ -84,13 +85,14 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
         var recorder = _recorder;
         var bridge = _bridge;
         if (recorder is null || string.IsNullOrEmpty(_dataRoot) || bridge is null) return null;
-        _page ??= new PerfDockPage(recorder, _dataRoot);
-        _host ??= new PerfPageHost(recorder, _dataRoot, () => _page!.Content);
+        var page = _page as PerfDockPage;
+        if (page is null) _page = page = new PerfDockPage(recorder, _dataRoot);
+        _host ??= new PerfPageHost(recorder, _dataRoot, () => page.Content);
         bridge.RegisterSettings(_host);
-        var content = _page.Content;
+        var content = page.Content;
         // 多个插件管理器（页面宿主 + 浏览器工具宿主）会各自激活本插件并各建一份页面；
         // 只保留一个共享页面实例，否则同一控件会被挂到两处。
-        if (s_page is { } shared) content = shared;
+        if (s_page is Avalonia.Controls.Control shared) content = shared;
         else s_page = content;
         Interlocked.Increment(ref s_pageOwners);
         return new PluginPageContribution(
@@ -106,7 +108,7 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
                 if (Interlocked.Decrement(ref s_pageOwners) <= 0)
                 {
                     Interlocked.Exchange(ref s_pageOwners, 0);
-                    _page?.Dispose();
+                    (_page as IDisposable)?.Dispose();
                 }
             });
     }

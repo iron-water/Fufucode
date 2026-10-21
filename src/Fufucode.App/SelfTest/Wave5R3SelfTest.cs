@@ -60,7 +60,7 @@ public static class Wave5R3SelfTest
             vm.Settings.ProxyInput = "http://unsaved-fixture:8080";
             vm.Settings.SelectedCategory = vm.Settings.Categories.Single(x => x.Id == "network");
             await Ready(); Save("settings-network-dark.png");
-            vm.Settings.SelectedCategory = vm.Settings.Categories.Single(x => x.Id == "notifications");
+            vm.Settings.SelectCategory("notifications");
             await Ready(); Save("settings-notifications-dark.png");
             vm.Settings.SelectedCategory = vm.Settings.Categories.Single(x => x.Id == "appearance");
             window.ConfirmDiscardSettingsForTesting = _ => Task.FromResult(false);

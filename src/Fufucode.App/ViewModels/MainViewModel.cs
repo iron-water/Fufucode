@@ -134,7 +134,6 @@ public sealed partial class MainViewModel : ViewModelBase
 
     [ObservableProperty] private string _currentBackendId = "fumo";
     [ObservableProperty] private string _currentBackendName = "FUMO";
-    [ObservableProperty] private string _currentBackendBadgeColor = "#8B5CF6";
 
     [RelayCommand]
     public async Task ToggleRemoteControlAsync()

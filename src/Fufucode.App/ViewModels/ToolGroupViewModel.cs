@@ -208,8 +208,20 @@ public sealed partial class ToolGroupViewModel : ObservableObject
         return null;
     }
 
-    [RelayCommand]
-    private void ToggleExpanded() => IsExpanded = !IsExpanded;
+    /// <summary>展开/收起明细。点击入口在页面代码里调用，便于展开后滚动跟随。</summary>
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
+    /// <summary>组内是否已经包含某个工具块（重建投影时避免重复添加）。</summary>
+    public bool Contains(ToolCallBlockViewModel tool) => _tools.Contains(tool);
+
+    /// <summary>工具块已不在消息里时从组内移除，避免保留陈旧条目。</summary>
+    public void Remove(ToolCallBlockViewModel tool)
+    {
+        if (!_tools.Remove(tool)) return;
+        tool.PropertyChanged -= OnToolChanged;
+        Tools.Remove(tool);
+        Recompute();
+    }
 
     /// <summary>回合结束：收起用户未手动展开的组。</summary>
     public void CollapseOnTurnSettled()

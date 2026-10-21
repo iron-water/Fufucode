@@ -34,11 +34,14 @@ public sealed class WorkbenchSectionsView : UserControl
     private StackPanel? _rows;
     private string? _builtPage;
     private readonly List<Action<WorkbenchAppearance>> _bindings = new();
+    private readonly Dictionary<Control, bool> _searchBaseline = new();
 
     public static readonly StyledProperty<string> PageProperty =
         AvaloniaProperty.Register<WorkbenchSectionsView, string>(nameof(Page), "appearance");
     public static readonly StyledProperty<bool> SearchActiveProperty =
         AvaloniaProperty.Register<WorkbenchSectionsView, bool>(nameof(SearchActive));
+    public static readonly StyledProperty<string> SearchTextProperty =
+        AvaloniaProperty.Register<WorkbenchSectionsView, string>(nameof(SearchText), "");
 
     /// <summary>页面 id：appearance / appearance.arrange / functions / functions.names / functions.floating / config。</summary>
     public string Page
@@ -53,7 +56,11 @@ public sealed class WorkbenchSectionsView : UserControl
         set => SetValue(SearchActiveProperty, value);
     }
     /// <summary>搜索关键词（小写），用于按行过滤。</summary>
-    public string SearchText { get; set; } = "";
+    public string SearchText
+    {
+        get => GetValue(SearchTextProperty);
+        set => SetValue(SearchTextProperty, value);
+    }
 
     /// <summary>保留旧分类ID兼容导航，内容已迁移为独立通知渠道。</summary>
     public void AttachNotificationDelivery(NotificationDeliveryViewModel? delivery)
@@ -81,14 +88,26 @@ public sealed class WorkbenchSectionsView : UserControl
 
     /// <summary>二级页跳转请求（分类首页的入口行点击时触发）。</summary>
     public event Action<string>? PageRequested;
+    /// <summary>真实动作请求（功能状态页的“打开终端/文件/用量”等入口）。</summary>
+    public event Action<string>? ActionRequested;
 
     public WorkbenchSectionsView()
     {
         DataContextChanged += (_, _) =>
         {
-            if (_vm is not null) _vm.PropertyChanged -= Changed;
+            if (_vm is not null)
+            {
+                _vm.PropertyChanged -= Changed;
+                _vm.ActionsChanged -= RebuildFromHost;
+                _vm.PagesChanged -= RebuildFromHost;
+            }
             _vm = DataContext as WorkbenchCustomizationViewModel;
-            if (_vm is not null) _vm.PropertyChanged += Changed;
+            if (_vm is not null)
+            {
+                _vm.PropertyChanged += Changed;
+                _vm.ActionsChanged += RebuildFromHost;
+                _vm.PagesChanged += RebuildFromHost;
+            }
             Render();
         };
     }
@@ -96,7 +115,7 @@ public sealed class WorkbenchSectionsView : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == PageProperty || change.Property == SearchActiveProperty) Render();
+        if (change.Property == PageProperty || change.Property == SearchActiveProperty || change.Property == SearchTextProperty) Render();
     }
 
     private void Changed(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
@@ -105,11 +124,14 @@ public sealed class WorkbenchSectionsView : UserControl
         Dispatcher.UIThread.Post(Refresh);
     }
 
+    private void RebuildFromHost() => Dispatcher.UIThread.Post(Render);
+
     private void Render()
     {
         if (_vm is not { } vm) { Content = null; _rows = null; _builtPage = null; return; }
         var rows = new StackPanel { Spacing = 0 };
         _bindings.Clear();
+        _searchBaseline.Clear();
         _firstGroup = true;
         switch (Page)
         {
@@ -120,6 +142,7 @@ public sealed class WorkbenchSectionsView : UserControl
             case "functions.names": RenderNames(vm, rows); break;
             case "functions.floating": RenderFloating(vm, rows); break;
             case "browser": RenderBrowserSettings(vm, rows); break;
+            case "terminal" or "files" or "automation" or "usage": RenderFeatureStatus(vm, rows); break;
             default: RenderConfig(vm, rows); break;
         }
         _rows = rows;
@@ -137,8 +160,76 @@ public sealed class WorkbenchSectionsView : UserControl
     private void RefreshValues(WorkbenchAppearance current)
     {
         _refreshing = true;
-        try { foreach (var binding in _bindings) binding(current); }
+        try
+        {
+            foreach (var binding in _bindings) binding(current);
+            ApplySearchFilter();
+        }
         finally { _refreshing = false; }
+    }
+
+    private void ApplySearchFilter()
+    {
+        if (_rows is null) return;
+        var query = SearchText.Trim();
+        if (query.Length == 0)
+        {
+            foreach (var child in _rows.Children.OfType<Control>()) RestoreVisibility(child);
+            return;
+        }
+
+        var pendingHeaders = new List<Control>();
+        foreach (var child in _rows.Children.OfType<Control>())
+        {
+            if (child.Classes.Contains("settingsGroupHeader") || child.Classes.Contains("settingsGroupToggle"))
+            {
+                pendingHeaders.Add(child);
+                continue;
+            }
+
+            var visible = FilterSearchControl(child, query);
+            child.IsVisible = visible;
+            foreach (var header in pendingHeaders) header.IsVisible = visible;
+            pendingHeaders.Clear();
+        }
+        foreach (var header in pendingHeaders) header.IsVisible = false;
+    }
+
+    private bool FilterSearchControl(Control control, string query)
+    {
+        if (!_searchBaseline.TryGetValue(control, out var baseline))
+        {
+            baseline = control.IsVisible;
+            _searchBaseline[control] = baseline;
+        }
+
+        if (control.Classes.Contains("settingsRow"))
+        {
+            var terms = SettingsLayout.GetSearchTerms(control) ?? "";
+            return baseline && terms.Contains(query, StringComparison.OrdinalIgnoreCase);
+        }
+
+        if (control is Panel panel && panel.Classes.Contains("settingsGroupList"))
+        {
+            var visible = false;
+            foreach (var child in panel.Children.OfType<Control>())
+            {
+                var childVisible = FilterSearchControl(child, query);
+                child.IsVisible = childVisible;
+                visible |= childVisible;
+            }
+            return visible;
+        }
+
+        // 非行式控件（说明卡、JSON 编辑区等）按自身可见性保留，不参与词过滤。
+        return baseline;
+    }
+
+    private void RestoreVisibility(Control control)
+    {
+        if (_searchBaseline.TryGetValue(control, out var baseline)) control.IsVisible = baseline;
+        if (control is Panel panel)
+            foreach (var child in panel.Children.OfType<Control>()) RestoreVisibility(child);
     }
 
     // ================= 页面 =================
@@ -194,20 +285,20 @@ public sealed class WorkbenchSectionsView : UserControl
     private void RenderArrangement(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
         Group(rows, "区域显隐",
-            ToggleRow("左侧边栏", "隐藏保留已打开页面与内容", _ => true, visible => vm.EditLayout(l => l.Hidden[DockZone.Left] = !visible), () => !vm.Layout.Hidden[DockZone.Left]),
-            ToggleRow("右侧边栏", null, _ => true, visible => vm.EditLayout(l => l.Hidden[DockZone.Right] = !visible), () => !vm.Layout.Hidden[DockZone.Right]),
-            ToggleRow("底部面板", "只有关闭最后一个终端页签才会终止进程", _ => true, visible => vm.EditLayout(l => l.Hidden[DockZone.Bottom] = !visible), () => !vm.Layout.Hidden[DockZone.Bottom]),
+            ToggleRow("左侧边栏", "隐藏保留已打开页面与内容", _ => true, visible => vm.SetZoneVisible(DockZone.Left, visible), () => !vm.Layout.Hidden[DockZone.Left]),
+            ToggleRow("右侧边栏", null, _ => true, visible => vm.SetZoneVisible(DockZone.Right, visible), () => !vm.Layout.Hidden[DockZone.Right]),
+            ToggleRow("底部面板", "只有关闭最后一个终端页签才会终止进程", _ => true, visible => vm.SetZoneVisible(DockZone.Bottom, visible), () => !vm.Layout.Hidden[DockZone.Bottom]),
             ToggleRow("底部状态栏", "连接、Shell、活动与 Token 等运行状态，默认关闭", s => s.ShowStatusBar, value => vm.Change(s => s with { ShowStatusBar = value })));
 
-        var pageRows = new List<Control>
-        {
-            CustomChoiceRow("会话管理", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("overview"), value => MovePage(vm, "overview", value), null, "0", "1", "2", "3"),
-            CustomChoiceRow("文件", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("files"), value => MovePage(vm, "files", value), null, "0", "1", "2", "3"),
-            CustomChoiceRow("变更", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("changes"), value => MovePage(vm, "changes", value), null, "0", "1", "2", "3"),
-            CustomChoiceRow("浏览器", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("browser"), value => MovePage(vm, "browser", value), null, "0", "1", "2", "3"),
-            CustomChoiceRow("终端", null, new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("terminal"), value => MovePage(vm, "terminal", value), null, "0", "1", "2", "3"),
-            CustomChoiceRow("侧边聊天", "独立会话；向主会话传递内容需要显式操作", new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" }, s => s.LayoutPageZone("sidechat"), value => MovePage(vm, "sidechat", value), null, "0", "1", "2", "3"),
-        };
+        // 页面清单来自宿主真实注册表（含插件页），不在设置页维护第二份硬编码列表。
+        var pageRows = vm.Pages
+            .GroupBy(page => page.Id, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .Select(page => (Control)CustomChoiceRow(page.Title, null,
+                new[] { "左停靠区", "右停靠区", "底停靠区", "隐藏" },
+                s => s.LayoutPageZone(page.Id),
+                value => MovePage(vm, page.Id, value), null, "0", "1", "2", "3"))
+            .ToList();
         pageRows.Add(ActionRow("恢复默认布局", "恢复页面默认位置与区域显隐，保留颜色与名称", "恢复",
             () => { vm.ResetLayout(); vm.Status = "已恢复默认布局，保留颜色与名称"; }, "settings-layout-reset"));
         Group(rows, "页面位置", pageRows.ToArray());
@@ -231,7 +322,7 @@ public sealed class WorkbenchSectionsView : UserControl
         var choices = new[] { "左辅助", "右辅助", "不显示" };
         var values = new[] { UiActionPosition.MenuLeft, UiActionPosition.MenuRight, UiActionPosition.Hidden };
         var groups = vm.Actions
-            .Where(IsAuxiliaryCandidate)
+            .Where(action => IsAuxiliaryCandidate(vm, action))
             .GroupBy(action => action.Group)
             .OrderBy(group => group.Key, StringComparer.CurrentCulture);
 
@@ -245,12 +336,11 @@ public sealed class WorkbenchSectionsView : UserControl
     }
 
     /// <summary>能否进辅助栏：默认位置在左/右辅助，或已被用户改到辅助栏的动作。</summary>
-    private static bool IsAuxiliaryCandidate(AppActionDefinition action)
+    private static bool IsAuxiliaryCandidate(WorkbenchCustomizationViewModel vm, AppActionDefinition action)
     {
         if (action.Id.StartsWith("edit.", StringComparison.Ordinal)) return false;
         if (action.Id.StartsWith("status.", StringComparison.Ordinal)) return false;
-        if (action.Id.StartsWith("copy.", StringComparison.Ordinal) && action.Id == "copy.log") return true;
-        var placement = WorkbenchActionDefaults.Placement(action.Id);
+        var placement = vm.Current.Actions.GetValueOrDefault(action.Id) ?? WorkbenchActionDefaults.Placement(action.Id);
         return placement.Position is UiActionPosition.MenuLeft or UiActionPosition.MenuRight;
     }
 
@@ -311,7 +401,10 @@ public sealed class WorkbenchSectionsView : UserControl
         Group(rows, "显示名称",
             TextRow(vm, "用户称呼", "显示在你的消息旁", s => s.UserName, (s, v) => s with { UserName = v }),
             TextRow(vm, "助手名称", "显示在助手消息旁", s => s.AssistantName, (s, v) => s with { AssistantName = v }));
-        Group(rows, "模型提示",
+        Group(rows, "会话命名",
+            ChoiceRow(vm, "自动取名", "有第一条消息后自动命名；你自己改的名字始终优先。子代理未安装时自动退回截取首条 prompt。",
+                new[] { "子代理取名", "截取首条消息" }, s => s.SessionNaming,
+                (s, v) => s with { SessionNaming = v }, "Edit", "subagent", "mechanical"),
             ToggleRow("把名称偏好发送给模型", "让模型知道如何称呼你", s => s.UseNamesInPrompt, value => vm.Change(s => s with { UseNamesInPrompt = value })));
     }
 
@@ -467,6 +560,51 @@ public sealed class WorkbenchSectionsView : UserControl
         return layout;
     }
 
+    /// <summary>
+    /// 功能入口分类：不伪造设置行，只显示宿主真实状态，并把用户送到真正能操作它的地方。
+    /// 状态与动作都来自宿主注入的 <see cref="WorkbenchCustomizationViewModel.FeatureStatus"/>。
+    /// </summary>
+    private void RenderFeatureStatus(WorkbenchCustomizationViewModel vm, StackPanel rows)
+    {
+        var status = vm.StatusOf(Page);
+        var badge = new Border { VerticalAlignment = VerticalAlignment.Center };
+        badge.Classes.Add("badge");
+        badge.Child = new TextBlock { Text = status.State, Classes = { "caption" } };
+
+        Group(rows, "运行状态",
+            SettingsLayout.Row("当前状态", status.Detail, badge, IconForFeature(Page)));
+
+        if (!string.IsNullOrWhiteSpace(status.ActionLabel))
+        {
+            Group(rows, "打开功能",
+                SettingsLayout.ChevronRow(status.ActionLabel!,
+                    "执行真实入口；未安装或未启用时由宿主给出原因。",
+                    () =>
+                    {
+                        if (status.ActionId is { Length: > 0 } action) ActionRequested?.Invoke(action);
+                        else if (status.PageId is { Length: > 0 } page) PageRequested?.Invoke(page);
+                    },
+                    IconForFeature(Page)));
+        }
+
+        Group(rows, "配置位置",
+            SettingsLayout.ChevronRow("安装与启用",
+                "在插件市场管理插件形态的功能；内建工作台页面在“工作台模块”中启停。",
+                () => PageRequested?.Invoke("marketplace"), "PuzzlePiece"),
+            SettingsLayout.ChevronRow("工作台模块",
+                "查看内建页面的启停状态与保存结果。",
+                () => PageRequested?.Invoke("modules"), "AppsList"));
+    }
+
+    private static string IconForFeature(string pageId) => pageId switch
+    {
+        "terminal" => "Terminal",
+        "files" => "Folder",
+        "automation" => "Automation",
+        "usage" => "History",
+        _ => "Info",
+    };
+
     private void RenderConfig(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
         Group(rows, "",
@@ -508,6 +646,15 @@ public sealed class WorkbenchSectionsView : UserControl
     private void Group(StackPanel rows, string title, params Control[] groupRows)
     {
         if (groupRows.Length == 0) return;
+        // 组标题也是搜索语义词：搜索“消息”“下载”等应保留该组下可解释的行。
+        if (!string.IsNullOrEmpty(title))
+        {
+            foreach (var row in groupRows)
+            {
+                var terms = SettingsLayout.GetSearchTerms(row);
+                SettingsLayout.SetSearchTerms(row, string.Join(" ", new[] { terms, title }.Where(value => !string.IsNullOrWhiteSpace(value))));
+            }
+        }
         // 即使首组没有标题，也消费掉 first：后续第一个有标题的组不应再被当成页首组，
         // 否则会出现 0px 与 32px 组间隔混用的“页面不齐”。
         if (!string.IsNullOrEmpty(title))

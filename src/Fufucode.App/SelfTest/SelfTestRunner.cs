@@ -209,6 +209,18 @@ public static class SelfTestRunner
             Console.WriteLine($"Shortcuts failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
+        if (args.Contains("--steer-keyboard-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(TestSteerKeyboardAsync);
+            Console.WriteLine($"Steer keyboard failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+        if (args.Contains("--settings-apply-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(TestSettingsApplyAsync);
+            Console.WriteLine($"Settings apply failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
         if (args.Contains("--r2-only"))
         {
             await RunWave5R2ChecksAsync(args);
@@ -1182,8 +1194,9 @@ public static class SelfTestRunner
             var queuedBefore = mock.QueuedCount;
             try
             {
-                presenter.SetValue(Avalonia.Controls.Presenters.TextPresenter.PreeditTextProperty, "nihao");
                 window.KeyTextInput("组合中草稿");
+                // 文本输入可能先清空 preedit；在最接近真实按键的时刻重新标记组合态。
+                presenter.SetValue(Avalonia.Controls.Presenters.TextPresenter.PreeditTextProperty, "nihao");
                 window.KeyPress(Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter, null);
                 await Task.Delay(150);
                 await DrainUiQueueAsync();
@@ -3218,6 +3231,8 @@ public static class SelfTestRunner
             // 10) 空闲改模型：先 RPC 成功后保存，页头 chip 刷新
             turnActive = false;
             await Task.Delay(20);
+            // 运行中保存的是完整 provider/model；下次 Attach 会把不在端点清单里的旧值
+            // 修复为端点默认模型（见 RepairSelectedModel），失败回退断言按修复后的值核对。
             var idleChoice = new SettingsPageViewModel.ModelChoice("openai/gpt-y", "openai/gpt-y");
             vm.ModelChoices.Add(idleChoice);
             vm.SelectedModel = idleChoice;
@@ -3247,8 +3262,8 @@ public static class SelfTestRunner
             vm.SelectedModel = failing;
             await Task.Delay(20);
             if (vm.ModelsError == "model not found" &&
-                store.Current.SelectedModel == "openai/gpt-y" &&
-                vm.SelectedModel?.Value == "openai/gpt-y")
+                store.Current.SelectedModel == "m1" &&
+                vm.SelectedModel?.Value == "m1")
             {
                 Pass("set_model 失败不保存且回退选择");
             }

@@ -70,6 +70,14 @@ public sealed class PluginPackageManager : IAsyncDisposable
         _dependencyStore = new(layout.PluginsDirectory);
         _serviceResolver = serviceResolver;
         _stateStore.Changed += SyncActivePlugins;
+        PluginStateNotifier.Changed += OnNotifiedStateChanged;
+    }
+
+    private void OnNotifiedStateChanged()
+    {
+        // 设置页、浏览器和工作区宿主各自持有一个管理器；跨实例写入后先刷新
+        // 本地快照，再让统一 Changed 链路收敛工具和页面贡献。
+        _stateStore.Reload();
     }
     public AppDataLayout Layout => _layout;
     public PluginStateStore StateStore => _stateStore;
@@ -110,6 +118,14 @@ public sealed class PluginPackageManager : IAsyncDisposable
         Known(pluginId);
         lock (_gate)
         {
+            var definition = PluginMarketplaceCatalog.Find(pluginId)!;
+            if (definition.IsEmbedded)
+            {
+                if (_stateStore.GetState(pluginId).IsInstalled)
+                    throw new InvalidOperationException("插件已安装，请使用启用或停用操作。");
+                _stateStore.Install(pluginId);
+                return;
+            }
             if (_stateStore.GetState(pluginId).IsInstalled && HasPhysicalPayload(pluginId))
                 throw new InvalidOperationException("插件已安装，请使用更新操作。");
             Deploy(pluginId, sourcePayloadDirectory, false);
@@ -131,7 +147,10 @@ public sealed class PluginPackageManager : IAsyncDisposable
         var target = Target(id);
         var staging = PluginPathGuard.Within(_layout.PluginsDirectory, ".staging", id + "-" + Guid.NewGuid().ToString("N"));
         var backup = staging + ".backup";
-        var previous = _stateStore.GetState(id);
+        // 只有用户显式写过的状态才能在失败时回滚；默认/计算状态回写会伪造“用户已卸载”，
+        // 使后续启动不再自动播种默认插件。
+        var hadExplicitState = _stateStore.TryGetStoredState(id, out var storedState);
+        var previous = hadExplicitState ? storedState : _stateStore.GetState(id);
         var wasActive = _activePlugins.ContainsKey(id);
         var oldDeps = wasActive ? _activePlugins[id].Package.Dependencies.ToArray() : Array.Empty<PluginDependencyDeclaration>();
         var acquired = new List<PluginDependencyDeclaration>();
@@ -180,7 +199,7 @@ public sealed class PluginPackageManager : IAsyncDisposable
             try { _dependencyStore.ReleaseDependencies(id, acquired); } catch (Exception e) { recoveryErrors.Add(e); }
             try
             {
-                _stateStore.RestoreState(previous);
+                if (hadExplicitState) _stateStore.RestoreState(previous);
                 if (wasActive) ActivatePluginLocked(id);
             }
             catch (Exception e) { recoveryErrors.Add(e); }
@@ -207,6 +226,11 @@ public sealed class PluginPackageManager : IAsyncDisposable
     public void UninstallPackage(string pluginId)
     {
         Known(pluginId);
+        if (PluginMarketplaceCatalog.Find(pluginId)!.IsEmbedded)
+        {
+            _stateStore.Uninstall(pluginId);
+            return;
+        }
         SetBackendEnabledFor(pluginId, false);
         if (PluginMarketplaceCatalog.Find(pluginId)!.IsCoreBuiltin) throw new InvalidOperationException("核心内置组件不可卸载。");
         lock (_gate)
@@ -239,12 +263,13 @@ public sealed class PluginPackageManager : IAsyncDisposable
             _changing = true;
             try
             {
-                if (enabled)
+                var embedded = PluginMarketplaceCatalog.Find(pluginId)!.IsEmbedded;
+                if (!embedded && enabled)
                 {
                     SetBackendEnabledFor(pluginId, true);
                     ActivatePluginLocked(pluginId);
                 }
-                else
+                else if (!embedded)
                 {
                     DeactivatePluginLocked(pluginId);
                     SetBackendEnabledFor(pluginId, false);
@@ -426,13 +451,37 @@ public sealed class PluginPackageManager : IAsyncDisposable
             var shared = Dependencies.FirstOrDefault(d => (d.TargetFileName ?? d.PackageId + ".dll") == name.Name + ".dll");
             if (!File.Exists(local) && shared is not null)
                 local = PluginPathGuard.Within(pool, shared.PackageId, shared.Version, shared.TargetFileName ?? shared.PackageId + ".dll");
-            if (!File.Exists(local)) return null;
-            using var stream = File.OpenRead(local);
-            return LoadFromStream(stream);
+            if (File.Exists(local))
+            {
+                using var stream = File.OpenRead(local);
+                return LoadFromStream(stream);
+            }
+            // 宿主程序集回退：在发布单目录或开发目录下查找宿主提供的共享程序集（如 Avalonia）
+            var fileName = PluginPathGuard.Segment(name.Name + ".dll");
+            var candidateApp = Path.Combine(AppContext.BaseDirectory, fileName);
+            if (File.Exists(candidateApp))
+            {
+                using var stream = File.OpenRead(candidateApp);
+                return LoadFromStream(stream);
+            }
+            var devAppRelease = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Fufucode.App", "bin", "Release", "net10.0", fileName);
+            if (File.Exists(devAppRelease))
+            {
+                using var stream = File.OpenRead(Path.GetFullPath(devAppRelease));
+                return LoadFromStream(stream);
+            }
+            var devAppDebug = Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "Fufucode.App", "bin", "Debug", "net10.0", fileName);
+            if (File.Exists(devAppDebug))
+            {
+                using var stream = File.OpenRead(Path.GetFullPath(devAppDebug));
+                return LoadFromStream(stream);
+            }
+            return null;
         }
     }
     public ValueTask DisposeAsync()
     {
+        PluginStateNotifier.Changed -= OnNotifiedStateChanged;
         _stateStore.Changed -= SyncActivePlugins;
         lock (_gate)
             foreach (var id in _activePlugins.Keys.ToArray()) DeactivatePluginLocked(id);

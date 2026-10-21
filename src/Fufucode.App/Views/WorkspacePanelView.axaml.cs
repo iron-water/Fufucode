@@ -47,7 +47,7 @@ public partial class WorkspacePanelView : UserControl
             using var bitmap = new RenderTargetBitmap(pixelSize, new Vector(96 * scale, 96 * scale));
             bitmap.Render(diagram);
             await using var stream = await target.OpenWriteAsync();
-            bitmap.Save(stream);
+            bitmap.Save(stream, PngBitmapEncoderOptions.Default);
         }
         catch (Exception error)
         {

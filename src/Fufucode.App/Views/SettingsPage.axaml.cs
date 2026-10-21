@@ -38,6 +38,10 @@ public partial class SettingsPage : UserControl
         // 侧栏选中项不双向绑定：搜索/升降级会重建条目实例，双向绑定会把选中写回成 null。
         SettingsCategoryList.SelectionChanged += OnNavSelectionChanged;
         CompactSettingsCategories.SelectionChanged += OnNavSelectionChanged;
+        WorkbenchSections.ActionRequested += id =>
+        {
+            if (TopLevel.GetTopLevel(this) is MainWindow window) _ = window.ExecuteWorkbenchActionAsync(id);
+        };
         Loaded += (_, _) =>
         {
             AttachViewModel();
@@ -176,7 +180,7 @@ public partial class SettingsPage : UserControl
     internal void AttachNotificationDelivery(NotificationDeliveryViewModel delivery)
     {
         WorkbenchSections.AttachNotificationDelivery(delivery);
-        WorkbenchSections.PageRequested += id => (DataContext as SettingsPageViewModel)?.OpenPage(id);
+        WorkbenchSections.PageRequested += id => (DataContext as SettingsPageViewModel)?.NavigateTo(id);
     }
 
     /// <summary>浏览器设置真源（BRW-1）：设置页只做投影，真源由组合根创建并落盘。</summary>
@@ -195,8 +199,10 @@ public partial class SettingsPage : UserControl
             CompactSettingsCategories.IsVisible = compact;
             SettingsBody.ColumnDefinitions = new ColumnDefinitions(compact ? "*" : "300,*");
             SettingsBody.RowDefinitions = new RowDefinitions(compact ? "Auto,*" : "*");
-            Grid.SetColumn(SettingsContentArea, compact ? 0 : 1);
-            Grid.SetRow(SettingsContentArea, compact ? 1 : 0);
+            // 响应式重排的是 SettingsBody 的直接子级 SettingsContentHost；
+            // 改内层 SettingsContentArea 会让宿主留在已不存在的第 2 列，触发布局越界。
+            Grid.SetColumn(SettingsContentHost, compact ? 0 : 1);
+            Grid.SetRow(SettingsContentHost, compact ? 1 : 0);
         }
 
         var controlBudget = Bounds.Width - 32 - (compact ? 0 : 196) - 48;

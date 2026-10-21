@@ -31,7 +31,8 @@ public abstract record SessionEvent
     public sealed record BlockFinished(string MessageId, int ContentIndex, MessageBlock FinalBlock) : SessionEvent;
 
     /// <summary>工具执行状态变化（状态徽标与状态文本）。</summary>
-    public sealed record ToolCallStatusChanged(string MessageId, int ContentIndex, string ToolCallId, ToolCallStatus Status, string? StatusText) : SessionEvent;
+    /// <param name="DurationMs">后端测得的工具耗时（毫秒）；未知时为 null，UI 回退到本地近似计时。</param>
+    public sealed record ToolCallStatusChanged(string MessageId, int ContentIndex, string ToolCallId, ToolCallStatus Status, string? StatusText, long? DurationMs = null) : SessionEvent;
 
     /// <summary>消息结束：整条消息的最终依据，整体替换临时消息；携带累计用量快照。</summary>
     public sealed record MessageFinished(string MessageId, ChatMessage FinalMessage, UsageInfo? CumulativeUsage) : SessionEvent;

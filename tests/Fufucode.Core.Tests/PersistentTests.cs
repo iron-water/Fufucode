@@ -64,7 +64,7 @@ internal static class PersistentTests
                 "undecided project starts no Pi process or session");
         }
         manager.SetProjectTrustDecision(trustWork, ProjectTrustDecision.DoNotTrust);
-        await using (var denied = await manager.CreateAsync(trustWork))
+        await using (var denied = await manager.CreateAsync(trustWork, backend: BackendId.Pi))
         {
             var state = (await denied.Coordinator.QueryStateAsync()).Data!.Value;
             var flags = state.GetProperty("startupArgs").EnumerateArray().Select(value => value.GetString()).ToArray();
@@ -75,7 +75,7 @@ internal static class PersistentTests
         Check(restartedManager.GetProjectTrustStatus(trustWork).Decision == ProjectTrustDecision.DoNotTrust,
             "project trust decision persists across desktop manager restart");
         restartedManager.SetProjectTrustDecision(trustWork, ProjectTrustDecision.Trust);
-        await using (var trusted = await restartedManager.CreateAsync(trustWork))
+        await using (var trusted = await restartedManager.CreateAsync(trustWork, backend: BackendId.Pi))
         {
             var state = (await trusted.Coordinator.QueryStateAsync()).Data!.Value;
             var flags = state.GetProperty("startupArgs").EnumerateArray().Select(value => value.GetString()).ToArray();
@@ -92,7 +92,7 @@ internal static class PersistentTests
 
         string savedId;
         string savedFile;
-        await using (var session = await manager.CreateAsync(work, "fixture"))
+        await using (var session = await manager.CreateAsync(work, "fixture", backend: BackendId.Pi))
         {
             savedId = session.Session.Id;
             savedFile = manager.Metadata.GetSession(savedId).FilePath!;
@@ -140,7 +140,7 @@ internal static class PersistentTests
         }
 
         string crashId;
-        await using (var crashed = await manager.CreateAsync(otherWork))
+        await using (var crashed = await manager.CreateAsync(otherWork, backend: BackendId.Pi))
         {
             crashId = crashed.Session.Id;
             try { await crashed.Coordinator.SendPromptAsync("persist_crash"); }
@@ -158,7 +158,7 @@ internal static class PersistentTests
         }
 
         string toolCrashId;
-        await using (var crashed = await manager.CreateAsync(otherWork))
+        await using (var crashed = await manager.CreateAsync(otherWork, backend: BackendId.Pi))
         {
             toolCrashId = crashed.Session.Id;
             try { await crashed.Coordinator.SendPromptAsync("persist_crash_after_assistant"); }
@@ -189,7 +189,7 @@ internal static class PersistentTests
         }
         finally { System.Globalization.CultureInfo.CurrentCulture = priorCulture; }
 
-        await using (var slowMetadata = await manager.CreateAsync(work))
+        await using (var slowMetadata = await manager.CreateAsync(work, backend: BackendId.Pi))
         {
             using var blocker = new SqliteConnection($"Data Source={layout.DatabasePath}");
             blocker.Open();
@@ -267,7 +267,7 @@ internal static class PersistentTests
         string sessionId;
         string sessionFile;
         var modelTurnCompleted = false;
-        await using (var session = await manager.CreateAsync(work, "M4 smoke"))
+        await using (var session = await manager.CreateAsync(work, "M4 smoke", backend: BackendId.Pi))
         {
             Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Verified,
                 "persistent manager loads and verifies the built-in approval bridge");

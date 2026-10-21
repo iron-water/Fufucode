@@ -5,51 +5,46 @@ using Avalonia.Platform;
 namespace Fufucode.App.Integration;
 
 /// <summary>
-/// 系统托盘图标。只在“关闭窗口时最小化到托盘”开启时可见；默认关闭时完全不创建，
-/// 保持“关窗即退出”的既有行为。
-///
-/// 左键单击 → 显示并激活主窗口；右键菜单 → 显示主窗口 / 退出。
-/// 托盘是可选的后台入口：创建失败（平台不支持、无桌面会话）时由调用方回退为不常驻，
-/// 不能出现“窗口已隐藏但没有恢复入口”的状态。
+/// 系统托盘图标。左键恢复主窗口；右键菜单在每次弹出前由组合根填充，
+/// 使固定/最近会话与当前外观设置始终反映实际状态。
 /// </summary>
 internal sealed class TrayIconService : IDisposable
 {
     private const string BrandIconUri = "avares://Fufucode.App/Assets/Brand/fufucode.ico";
 
     private readonly TrayIcon _tray;
-    private readonly NativeMenuItem _showItem;
-    private readonly NativeMenuItem _exitItem;
+    private readonly NativeMenu _menu;
+    private readonly Action<NativeMenu> _fillMenu;
     private bool _disposed;
 
-    public TrayIconService(Action showWindow, Action exitApplication)
+    public TrayIconService(Action showWindow, Action<NativeMenu> fillMenu)
     {
         ArgumentNullException.ThrowIfNull(showWindow);
-        ArgumentNullException.ThrowIfNull(exitApplication);
-
-        _showItem = new NativeMenuItem("显示主窗口");
-        _showItem.Click += (_, _) => showWindow();
-
-        _exitItem = new NativeMenuItem("退出");
-        _exitItem.Click += (_, _) => exitApplication();
-
-        var menu = new NativeMenu();
-        menu.Add(_showItem);
-        menu.Add(new NativeMenuItemSeparator());
-        menu.Add(_exitItem);
+        ArgumentNullException.ThrowIfNull(fillMenu);
+        _fillMenu = fillMenu;
+        _menu = new NativeMenu();
+        _menu.NeedsUpdate += (_, _) => RebuildMenu();
+        RebuildMenu();
 
         _tray = new TrayIcon
         {
             ToolTipText = "Fufucode",
-            Menu = menu,
+            Menu = _menu,
             IsVisible = false,
         };
-        // 左键单击恢复窗口；右键由平台弹出 Menu。
+        // Win32 实现对左键单击触发 Clicked；右键由平台弹出 Menu。
         _tray.Clicked += (_, _) => showWindow();
-
         if (TryLoadBrandIcon() is { } icon) _tray.Icon = icon;
     }
 
-    /// <summary>托盘图标是否显示。设置关闭时立即隐藏，不留下隐形入口。</summary>
+    internal NativeMenu MenuForTesting => _menu;
+    internal void RebuildMenu()
+    {
+        if (_disposed) return;
+        _menu.Items.Clear();
+        _fillMenu(_menu);
+    }
+
     public bool IsVisible
     {
         get => _tray.IsVisible;
@@ -60,7 +55,6 @@ internal sealed class TrayIconService : IDisposable
         }
     }
 
-    /// <summary>品牌图标加载失败不影响托盘功能（系统会显示默认图标）。</summary>
     private static WindowIcon? TryLoadBrandIcon()
     {
         try

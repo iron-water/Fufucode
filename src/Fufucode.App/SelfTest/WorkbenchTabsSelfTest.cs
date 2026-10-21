@@ -66,9 +66,11 @@ internal static class WorkbenchTabsSelfTest
                 Check(ReferenceEquals(page, window.PageForTesting(id)) && page.IsEffectivelyVisible, id + " reopens the same content");
             }
             await window.ActionsForTesting.ExecuteAsync("toggle.left"); await Ready();
-            Check(window.DockLayoutForTesting.Pages[DockZone.Left].Count == 0 && window.FindControl<Border>("SidebarBorder")!.IsVisible &&
-                window.FindControl<DockRegionView>("LeftDock")!.GetVisualDescendants().OfType<Button>().Any(b => ToolTip.GetTip(b) as string == "打开功能页" && b.IsEffectivelyVisible),
-                "empty region reopens with its native Add Page entry after the last tab closes");
+            Check(window.DockLayoutForTesting.Pages[DockZone.Left].Count > 0 &&
+                window.FindControl<Border>("SidebarBorder")!.IsVisible &&
+                window.FindControl<DockRegionView>("LeftDock")!.GetVisualDescendants().OfType<Button>()
+                    .Any(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b)?.StartsWith("dock-tab-", StringComparison.Ordinal) == true && b.IsEffectivelyVisible),
+                "empty region reopens by seeding an unowned default page");
             window.OpenDockPage("files", DockZone.Right); await Ready();
             var files = window.PageForTesting("files");
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "folder" }));

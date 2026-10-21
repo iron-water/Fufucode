@@ -41,6 +41,9 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
 
     public IPureToolDispatcher Inner => _inner;
 
+    /// <summary>裸调度器默认不视为已安装；插件运行时覆盖为 true。</summary>
+    public bool IsActive { get; init; }
+
     public Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default) =>
         string.Equals(call.Name, ToolName, StringComparison.Ordinal)
             ? HandleAsync(call, _runner, cancellationToken)

@@ -71,6 +71,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             new("marketplace.tools", "工具扩展", "其他工具插件", "工具 扩展 tools extension"),
             new("storage.archive", "已归档", "归档项目与归档会话", "归档 已归档 项目 会话 恢复 打开 列表 archive archived project session restore"),
         ];
+        // “跟随默认”始终可选：模型查询失败或尚未返回时下拉也不该是空白。
+        ModelChoices.Add(new ModelChoice(null, "跟随默认"));
+        SelectedModel = ModelChoices[0];
         // 模型清单变化时同步重建选择器的筛选结果与供应商快捷项。
         ModelChoices.CollectionChanged += (_, _) => RebuildFilteredModels();
         // 侧栏目录与三级架构（D2）：先按目录建全部条目，再按搜索词过滤成侧栏分组。
@@ -82,7 +85,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     public ObservableCollection<SettingsCategoryViewModel> Categories { get; } = new();
     public IReadOnlyList<SettingsSubPageViewModel> SubPages { get; } = [];
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ShowThemeRow))]
     private WorkbenchCustomizationViewModel? _customization;
     public ObservableCollection<SettingsCategoryViewModel> FilteredCategories { get; } = new();
     [ObservableProperty] private IReadOnlyList<BuiltInModuleViewModel> _builtInModules = Array.Empty<BuiltInModuleViewModel>();
@@ -177,17 +179,19 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// <summary>会话与消息首页：只在没有进入任何子页时显示。</summary>
     public bool ShowFunctions => SelectedCategory?.Id == "functions" && CurrentPageId.Length == 0;
     public bool ShowConfigSection => SelectedCategory?.Id == "config";
-    /// <summary>外观、浏览器、功能、配置文件共用分区控件（含它们的二级页）。</summary>
-    public bool ShowWorkbenchSection => ShowAppearance || ShowFunctions || ShowConfigSection || ShowBrowserSettings;
-    public string WorkbenchSectionId => SelectedCategory?.Id switch { "functions" => "functions", "config" => "config", "browser" => "browser", _ => "appearance" };
-    private string Search => SearchText.Trim();
-    private bool SearchMatches(string terms) => Search.Length == 0 || terms.Contains(Search, StringComparison.OrdinalIgnoreCase);
-    private const string LookTerms = "主题 皮肤 skin Fluent Metro Material3 Material 3 亮色 暗色 强调色 字号 密度 圆角 阅读宽度 预设 appearance theme";
-    private const string ArrangeTerms = "停靠区 页面位置 显隐 状态栏 入口位置 按钮 布局 dock layout page status";
-    /// <summary>外观页左栏：常规外观（主题、颜色、字体、密度、圆角、阅读宽度）。</summary>
-    public bool ShowLookColumn => ShowAppearance && SearchMatches(LookTerms);
-    /// <summary>外观页右栏：前端功能排布（停靠、页面位置、入口位置）。</summary>
-    public bool ShowArrangementColumn => ShowAppearance && SearchMatches(ArrangeTerms);
+    /// <summary>
+    /// 由 WorkbenchSectionsView 承载的全部分类（含其二级页）。
+    /// 必须按分类而非“首页”判断，否则 appearance.arrange / functions.floating
+    /// 等子页会保留控件树但整体不可见，表现为“点了没反应”。
+    /// </summary>
+    public bool ShowWorkbenchSection => SelectedCategory?.Id is
+        "appearance" or "functions" or "config" or "browser" or "terminal" or "files" or "automation" or "usage";
+    public string WorkbenchSectionId => SelectedCategory?.Id switch
+    {
+        "functions" => "functions", "config" => "config", "browser" => "browser",
+        "terminal" or "files" or "automation" or "usage" => SelectedCategory.Id,
+        _ => "appearance",
+    };
 
     /// <summary>保留为独立左侧页面的五个分区。</summary>
     /// <summary>模型与思考首页：只在没有进入任何子页时显示。</summary>
@@ -256,10 +260,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// <summary>「其他」收纳桶页：右侧列二级功能入口卡，点击进入对应设置页。</summary>
     /// <summary>「其他」桶页：选中占位项时列出小功能入口卡。</summary>
     public bool ShowOtherHub => SelectedCategory?.Id == OtherHubId;
-    /// <summary>目录中已登记但内容页尚未接线的分类（终端/文件管理/自动开发/用量）。</summary>
-    public bool ShowCategoryPlaceholder =>
-        SelectedCategory is { } category && SettingsNavCatalog.Find(category.Id) is { HasContent: false };
-    public bool ShowThemeRow => Customization is null && ShowAppearance && MatchesOption("外观 主题 亮色 暗色 跟随系统 appearance theme");
     public bool ShowModelRow => ShowModels && MatchesOption("模型与思考 模型 默认 model");
     public bool ShowThinkingRow => ShowModels && MatchesOption("模型与思考 思考 等级 默认 thinking");
     public bool ShowProxyRow => ShowNetwork && MatchesOption("网络与端点 代理 网络 proxy URL");
@@ -351,8 +351,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool MatchesOption(string terms) => SearchText.Trim().Length == 0 || terms.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase);
     private void NotifyCategoryVisibility()
     {
-        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowLookColumn), nameof(ShowArrangementColumn), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
-                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems),nameof(ShowCategoryPlaceholder), nameof(ShowThemeRow), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
+        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
+                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
 
@@ -498,6 +498,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         Func<bool>? IsTurnActive = null,
         Func<string, string, CancellationToken, Task<RpcResponse>>? SetModel = null,
         Func<string, CancellationToken, Task<RpcResponse>>? SetThinkingLevel = null,
+        Func<CancellationToken, Task<ThinkingLevelAvailability>>? QueryThinkingLevels = null,
         Func<CancellationToken, Task<RpcResponse>>? QueryState = null,
         Func<Task>? RestartSession = null,
         Action<string, string>? SaveCredential = null,
@@ -510,6 +511,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool _suppressThemeApply;
     private bool _suppressApply;
     private CancellationTokenSource? _queryCts;
+    private CancellationTokenSource? _thinkingCts;
 
     public bool IsMock => _context?.IsMock ?? true;
 
@@ -574,10 +576,11 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// <summary>模型下拉项：Value=null 表示「跟随默认」（settings.selectedModel=null）。</summary>
     public sealed record ModelChoice(string? Value, string Label);
 
-    /// <summary>思考等级下拉项：Value=null 表示「默认」（跟随 Pi/模型默认）。</summary>
+    /// <summary>思考等级下拉项：Value=null 表示「默认」（跟随引擎/模型默认）。</summary>
     public sealed record ThinkingChoice(string? Value, string Label, bool IsSupported = true);
 
-    private static readonly ThinkingChoice[] ThinkingChoicesStatic =
+    /// <summary>引擎未上报等级时的保守回退集合；真实会话以 <c>QueryThinkingLevels</c> 的结果为准。</summary>
+    private static readonly ThinkingChoice[] FallbackThinkingChoices =
     [
         new(null, "默认"),
         new("off", "off"),
@@ -587,9 +590,13 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         new("high", "high"),
         new("xhigh", "xhigh"),
         new("max", "max"),
-        new("ultra", "ultra（当前后端未支持）", false),
-        new("auto", "auto（当前后端未支持）", false),
     ];
+
+    /// <summary>规范展示顺序；引擎上报的未知档位按上报顺序追加在后面。</summary>
+    private static readonly string[] ThinkingLevelOrder =
+        ["off", "minimal", "low", "medium", "high", "xhigh", "max", "ultra", "auto"];
+
+    private ThinkingChoice[] _thinkingChoices = FallbackThinkingChoices;
 
     [ObservableProperty]
     private string _currentModelText = "—";
@@ -597,7 +604,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     public ObservableCollection<string> ModelRows { get; } = new();
     public ObservableCollection<ModelChoice> ModelChoices { get; } = new();
-    public IReadOnlyList<ThinkingChoice> ThinkingChoices => ThinkingChoicesStatic;
+    /// <summary>当前活动引擎实际提供的思考等级；会话/后端更换后随之刷新。</summary>
+    public IReadOnlyList<ThinkingChoice> ThinkingChoices => _thinkingChoices;
 
     [ObservableProperty]
     private ModelChoice? _selectedModel;
@@ -630,7 +638,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     partial void OnSelectedThinkingChanged(ThinkingChoice? value)
     {
-        if (value is { IsSupported: false }) { ModelsError = "当前 Pi 版本不支持 " + value.Value + "，未发送或保存此档位"; return; }
+        if (value is { IsSupported: false }) { ModelsError = "当前引擎不支持 " + value.Value + "，未发送或保存此档位"; return; }
         if (_suppressApply || value is null)
         {
             return;
@@ -896,9 +904,75 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private void RevertThinkingSelection(string? saved)
     {
         _suppressApply = true;
-        SelectedThinking = ThinkingChoicesStatic.FirstOrDefault(c => c.Value == saved)
-            ?? ThinkingChoicesStatic[0];
+        SelectedThinking = ThinkingChoices.FirstOrDefault(c => c.Value == saved)
+            ?? ThinkingChoices[0];
         _suppressApply = false;
+    }
+
+    /// <summary>
+    /// 用当前引擎上报的等级重建下拉项。已保存但引擎不提供的档位保留并如实灰显，
+    /// 避免切换后端后静默丢弃用户此前的选择。
+    /// </summary>
+    private void SetThinkingChoices(IReadOnlyList<string>? reported, string? selectedValue)
+    {
+        var choices = new List<ThinkingChoice> { new(null, "默认") };
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        void Add(string value, bool supported)
+        {
+            if (string.IsNullOrWhiteSpace(value) || !seen.Add(value)) return;
+            choices.Add(new ThinkingChoice(value, supported ? value : $"{value}（当前引擎不支持）", supported));
+        }
+
+        if (reported is { Count: > 0 })
+        {
+            foreach (var level in ThinkingLevelOrder)
+                if (reported.Contains(level, StringComparer.OrdinalIgnoreCase)) Add(level, true);
+            // 后端上报但不在规范顺序里的新档位：按上报顺序追加，不丢弃。
+            foreach (var level in reported) Add(level, true);
+        }
+        else
+        {
+            foreach (var choice in FallbackThinkingChoices)
+                if (choice.Value is { } value) Add(value, true);
+        }
+
+        if (selectedValue is { Length: > 0 } && !seen.Contains(selectedValue)) Add(selectedValue, false);
+
+        var previous = SelectedThinking?.Value;
+        _thinkingChoices = choices.ToArray();
+        OnPropertyChanged(nameof(ThinkingChoices));
+
+        _suppressApply = true;
+        SelectedThinking = choices.FirstOrDefault(c => c.Value == selectedValue)
+            ?? choices.FirstOrDefault(c => c.Value == previous)
+            ?? choices[0];
+        _suppressApply = false;
+    }
+
+    /// <summary>查询当前引擎支持的思考等级；失败或取消时保留回退集合，不伪造支持面。</summary>
+    private async Task RefreshThinkingLevelsAsync()
+    {
+        if (_context is not { QueryThinkingLevels: { } query } ctx) return;
+
+        _thinkingCts?.Cancel();
+        _thinkingCts?.Dispose();
+        _thinkingCts = new CancellationTokenSource();
+        var generation = _attachmentGeneration;
+        try
+        {
+            var availability = await query(_thinkingCts.Token);
+            if (generation != _attachmentGeneration) return;
+            SetThinkingChoices(availability.Levels, ctx.Store.Current.ThinkingLevel);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            if (generation == _attachmentGeneration)
+                SetThinkingChoices(null, ctx.Store.Current.ThinkingLevel);
+        }
     }
 
     /// <summary>重启成功 reattach 后：若已存模型与当前会话模型不同且空闲，对当前会话应用。</summary>
@@ -1736,6 +1810,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     {
         _attachmentGeneration++;
         _queryCts?.Cancel();
+        _thinkingCts?.Cancel();
         _context = context;
         // 侧栏三级架构的升降级偏好随数据根目录持久化（mock 无 dataRoot 时仅内存态）。
         RebuildSearchKeywords();
@@ -1779,10 +1854,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         ModelsStateText = null;
         NetworkStateText = null;
         IsModelApplying = false;
-        _suppressApply = true;
-        SelectedThinking = ThinkingChoicesStatic.FirstOrDefault(c => c.Value == current.ThinkingLevel)
-            ?? ThinkingChoicesStatic[0];
-        _suppressApply = false;
+        // 先用回退集合占位并回填已保存值；真实会话随后按当前引擎上报的等级重建。
+        SetThinkingChoices(null, current.ThinkingLevel);
         SyncModelSelection();
         SettingsLoadError = context.Store.LastLoadError;
         HasSettingsLoadError = SettingsLoadError is not null;
@@ -1819,6 +1892,10 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         if (!context.IsMock && context.QueryModels is not null)
         {
             _ = RefreshModelsAsync();
+        }
+        if (!context.IsMock && context.QueryThinkingLevels is not null)
+        {
+            _ = RefreshThinkingLevelsAsync();
         }
         _ = CheckPendingOrInterruptedUpdateAsync();
         if (context.Store.Current.AutoCheckUpdates)

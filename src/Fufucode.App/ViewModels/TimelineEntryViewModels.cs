@@ -433,43 +433,69 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     }
 
     /// <summary>把相邻工具调用折叠成组；文本/思考/错误会断开分组。</summary>
+    /// <summary>
+    /// 重建渲染投影。
+    ///
+    /// 关键是复用已有的 <see cref="ToolGroupViewModel"/> 实例：状态（展开、用户固定）
+    /// 挂在组上，重建时换新实例会让用户刚展开的组在下一个工具结果到达时突然折叠。
+    /// </summary>
     private void RebuildDisplayBlocks()
     {
-        DisplayBlocks.Clear();
+        var next = new List<object>();
         ToolGroupViewModel? openGroup = null;
         var groupIndex = 0;
+
         foreach (var block in Blocks)
         {
             if (block is ToolCallBlockViewModel tool)
             {
-                openGroup ??= NewGroup(tool, groupIndex++);
-                openGroup.Add(tool);
+                if (openGroup is null)
+                {
+                    openGroup = FindOrCreateGroup(tool, groupIndex++);
+                    next.Add(openGroup);
+                }
+                if (!openGroup.Contains(tool)) openGroup.Add(tool);
                 continue;
             }
 
             openGroup = null;
-            DisplayBlocks.Add(block);
+            next.Add(block);
         }
 
-        // 收起不再出现在投影里的组，避免继续订阅子工具。
-        var live = DisplayBlocks.OfType<ToolGroupViewModel>().ToHashSet();
-        foreach (var group in _groups.Where(group => !live.Contains(group)).ToArray())
+        // 消息快照可能替换或移除工具块；先按当前 Blocks 清理组内陈旧条目。
+        var liveTools = Blocks.OfType<ToolCallBlockViewModel>().ToHashSet();
+        foreach (var group in _groups)
+        {
+            foreach (var stale in group.Tools.Where(tool => !liveTools.Contains(tool)).ToArray())
+                group.Remove(stale);
+        }
+
+        // 不再出现在投影里的组解除订阅并丢弃。
+        var liveGroups = next.OfType<ToolGroupViewModel>().ToHashSet();
+        foreach (var group in _groups.Where(group => !liveGroups.Contains(group)).ToArray())
         {
             group.Detach();
             _groups.Remove(group);
         }
 
+        if (DisplayBlocks.SequenceEqual(next)) return;
+        DisplayBlocks.Clear();
+        foreach (var item in next) DisplayBlocks.Add(item);
         OnPropertyChanged(nameof(HeaderStatusText));
     }
 
-    private ToolGroupViewModel NewGroup(ToolCallBlockViewModel tool, int ordinal)
+    /// <summary>按稳定 GroupId 复用已有组；找不到才新建。</summary>
+    private ToolGroupViewModel FindOrCreateGroup(ToolCallBlockViewModel tool, int ordinal)
     {
         var groupId = string.IsNullOrWhiteSpace(tool.ToolCallId)
             ? $"{Id}:group:{ordinal}"
             : tool.ToolCallId;
+
+        var existing = _groups.FirstOrDefault(group => group.GroupId == groupId);
+        if (existing is not null) return existing;
+
         var group = new ToolGroupViewModel(groupId);
         _groups.Add(group);
-        DisplayBlocks.Add(group);
         return group;
     }
 

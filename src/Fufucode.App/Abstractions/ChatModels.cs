@@ -45,7 +45,9 @@ public sealed record ToolCallBlock(
     ToolCallStatus Status,
     string? StatusText,
     string? Output,
-    bool IsErrorOutput) : MessageBlock(MessageBlockKind.ToolCall);
+    bool IsErrorOutput,
+    /// <summary>后端报告的工具耗时（毫秒）；未知时为 null。</summary>
+    long? DurationMs = null) : MessageBlock(MessageBlockKind.ToolCall);
 
 /// <summary>
 /// 一条消息的快照。<see cref="Blocks"/> 按 contentIndex 有序；

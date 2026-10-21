@@ -125,6 +125,24 @@ public sealed partial class SettingsPageViewModel
         OnPropertyChanged(nameof(CurrentCategoryIsPinned));
     }
 
+    /// <summary>
+    /// 统一设置页跳转：一级分类 id 走 SelectCategory；子页 id 先选父分类再下钻。
+    /// 供功能状态页、相关设置和命令面板复用，避免“只设置了子页 id 但分类没切”。
+    /// </summary>
+    public void NavigateTo(string id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return;
+        if (SearchText.Length > 0) SearchText = string.Empty;
+        var categoryId = SettingsNavCatalog.Find(id)?.Id
+            ?? SettingsNavCatalog.Find(id.Split('.')[0])?.Id;
+        if (categoryId is not null) SelectCategory(categoryId);
+        if (!string.Equals(id, categoryId, StringComparison.Ordinal)) OpenPage(id);
+    }
+
+    /// <summary>通知策略页直达通知渠道（应用内/通知页/Windows），两个持久化真源不再各藏一处。</summary>
+    [RelayCommand]
+    private void OpenNotificationChannels() => NavigateTo("functions.floating");
+
     /// <summary>「相关设置」卡片：选中对应分类，二级页 id 时同时下钻。</summary>
     [RelayCommand]
     private void OpenRelated(SettingsRelatedLink? link)

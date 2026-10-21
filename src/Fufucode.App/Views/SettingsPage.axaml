@@ -122,7 +122,8 @@
                                          IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowWorkbenchSection}"
                                          DataContext="{Binding Customization}"
                                          Page="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ActivePageId}"
-                                         SearchActive="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).IsSearching}"/>
+                                         SearchActive="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).IsSearching}"
+                                         SearchText="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SearchText}"/>
 
             <!-- ═══ 模型与思考 ═══ -->
                         <!-- ═══ 插件市场（Plugin Marketplace） ═══ -->
@@ -731,12 +732,29 @@
                 </StackPanel>
               </Border>
               <StackPanel Spacing="4" Margin="2,8,0,0">
-                <TextBlock Classes="meta" Text="策略控制主动提示；会话标记和通知列表仍可查看。系统通知尚未启用。" TextWrapping="Wrap"/>
+                <TextBlock Classes="meta" Text="此页控制提醒策略；通知渠道（应用内、通知页、Windows 系统通知）在“会话与消息 → 通知提示”中统一配置。会话标记和通知列表仍可查看。" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Text="当前无法修改提醒偏好。" IsVisible="{Binding !HasNotificationPreferences}" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Text="{Binding NotificationPreferences.SaveStatusText}" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Foreground="{DynamicResource AppCriticalForeground}"
                            Text="{Binding NotificationPreferences.SaveError}"
                            IsVisible="{Binding NotificationPreferences.HasSaveError}" TextWrapping="Wrap"/>
+              </StackPanel>
+              <StackPanel Spacing="0" Margin="0,24,0,0">
+                <TextBlock Classes="settingsGroupHeader" Text="通知渠道"/>
+                <Button Classes="settingsRow clickable" Command="{Binding OpenNotificationChannelsCommand}"
+                        AutomationProperties.Name="打开通知渠道设置">
+                  <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Alert}" Width="18" Height="18"
+                              VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Left">
+                      <TextBlock Classes="settingsRowTitle" Text="应用内 / 通知页 / Windows 系统通知"/>
+                      <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
+                                 Text="选择哪些渠道真正投递提醒；与上面的提醒策略分开保存。"/>
+                    </StackPanel>
+                    <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
+                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                  </Grid>
+                </Button>
               </StackPanel>
             </StackPanel>
 
@@ -956,13 +974,6 @@
                   </DataTemplate>
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
-            </StackPanel>
-
-            <!-- ═══ 目录已登记、内容页尚未接线的分类（终端/文件管理/自动开发/用量）═══ -->
-            <StackPanel IsVisible="{Binding ShowCategoryPlaceholder}" Spacing="8" Margin="12,20">
-              <TextBlock Classes="subtitle" Text="该设置页尚未接线"/>
-              <TextBlock Classes="caption" TextWrapping="Wrap"
-                         Text="分类已在设置侧栏三级架构中登记，内容页由主控 M 统一接线。"/>
             </StackPanel>
 
             <!-- ═══ 在侧栏显示为一级分类：小功能页内的开关 ═══ -->

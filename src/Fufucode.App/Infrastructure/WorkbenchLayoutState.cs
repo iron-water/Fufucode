@@ -47,6 +47,9 @@ public sealed class WorkbenchLayoutState
     public bool NotificationMigrationApplied { get; set; }
 
     public DockZone? Find(string id) => Pages.Where(pair => pair.Value.Contains(id)).Select(pair => (DockZone?)pair.Key).FirstOrDefault();
+    /// <summary>当前布局里出现的全部页面 ID（含插件页），用于结构规范化时保留有效条目。</summary>
+    public IEnumerable<string> AllPageIds() =>
+        Pages.Values.SelectMany(pages => pages).Concat(Floating.SelectMany(f => f.Pages)).Distinct(StringComparer.Ordinal);
     public FloatingDockState? FindFloating(string id) => Floating.FirstOrDefault(item => item.Pages.Contains(id));
 
     public void Open(string id, DockZone target)
@@ -158,13 +161,13 @@ public sealed class WorkbenchLayoutState
 
     public string Serialize() => JsonSerializer.Serialize(this);
 
-    public static WorkbenchLayoutState Restore(string? text, IEnumerable<string> knownPages)
+    public static WorkbenchLayoutState Restore(string? text, IEnumerable<string>? knownPages = null)
     {
         WorkbenchLayoutState state;
         try { state = string.IsNullOrWhiteSpace(text) ? new() : JsonSerializer.Deserialize<WorkbenchLayoutState>(text) ?? new(); }
         catch (JsonException) { return new(); }
         state.MigrateLegacyPreview();
-        var known = knownPages.ToHashSet(StringComparer.Ordinal);
+        var known = (knownPages ?? KnownPages).ToHashSet(StringComparer.Ordinal);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         state.PinnedPages = (state.PinnedPages ?? new()).Where(known.Contains).ToHashSet(StringComparer.Ordinal);
         if (state.Pages is null || state.Selected is null || state.Hidden is null) return new();
@@ -193,14 +196,14 @@ public sealed class WorkbenchLayoutState
         state.LeftWidth = Dimension(state.LeftWidth, 232, 200, 500);
         state.RightWidth = Dimension(state.RightWidth, 320, 32, double.MaxValue);
         state.BottomHeight = Dimension(state.BottomHeight, 240, 160, 500);
-        state.Normalize();
+        state.Normalize(known);
         return state;
     }
 
-    public void Normalize()
+    public void Normalize(IEnumerable<string>? knownPages = null)
     {
         MigrateLegacyPreview();
-        var known = KnownPages.ToHashSet(StringComparer.Ordinal);
+        var known = (knownPages ?? KnownPages).ToHashSet(StringComparer.Ordinal);
         PinnedPages.RemoveWhere(id => !known.Contains(id) || id == "preview");
         foreach (var zone in Enum.GetValues<DockZone>())
         {
