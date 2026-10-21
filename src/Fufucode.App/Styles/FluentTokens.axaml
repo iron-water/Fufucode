@@ -43,6 +43,21 @@
             <SolidColorBrush x:Key="ControlFillColorInputActiveBrush" Color="#FFFFFFFF"/>
             <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#0F000000"/>
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#29000000"/>
+            <!-- 三档底色规范：输入框/滚动条/菜单等 Fluent 默认面统一归到语义底色，
+                 避免出现规范外的近黑（如 #111111）。 -->
+            <StaticResource x:Key="TextControlBackground"            ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+            <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+            <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+            <StaticResource x:Key="TextControlBorderBrush"           ResourceKey="ControlStrokeColorDefaultBrush"/>
+            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="ControlStrokeColorSecondaryBrush"/>
+            <StaticResource x:Key="ScrollBarThumbFill"               ResourceKey="ControlStrokeColorSecondaryBrush"/>
+            <StaticResource x:Key="ScrollBarThumbFillPointerOver"    ResourceKey="ControlStrokeColorSecondaryBrush"/>
+            <StaticResource x:Key="ScrollBarThumbFillPressed"        ResourceKey="ControlStrokeColorDefaultBrush"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBackground"    ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBorderBrush"   ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+            <StaticResource x:Key="ComboBoxDropDownBackground"       ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+            <StaticResource x:Key="ComboBoxDropDownBorderBrush"      ResourceKey="CardStrokeColorDefaultSolidBrush"/>
             <SolidColorBrush x:Key="ControlStrokeColorForStrongFillWhenOnImageBrush" Color="#59000000"/>
             <LinearGradientBrush x:Key="ControlElevationBorderBrush"
                                  StartPoint="0%,0%" EndPoint="0%,100%">
@@ -142,6 +157,20 @@
             <SolidColorBrush x:Key="ControlFillColorInputActiveBrush" Color="#2C2C2C"/>
             <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#12FFFFFF"/>
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#18FFFFFF"/>
+            <!-- 三档底色规范：输入框用深层、滚动条用高亮层、菜单/下拉用栏层。 -->
+            <StaticResource x:Key="TextControlBackground"            ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+            <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+            <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+            <StaticResource x:Key="TextControlBorderBrush"           ResourceKey="ControlStrokeColorDefaultBrush"/>
+            <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="ControlStrokeColorSecondaryBrush"/>
+            <StaticResource x:Key="ScrollBarThumbFill"               ResourceKey="ControlStrokeColorSecondaryBrush"/>
+            <StaticResource x:Key="ScrollBarThumbFillPointerOver"    ResourceKey="ControlStrokeColorSecondaryBrush"/>
+            <StaticResource x:Key="ScrollBarThumbFillPressed"        ResourceKey="ControlStrokeColorDefaultBrush"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBackground"    ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+            <StaticResource x:Key="MenuFlyoutPresenterBorderBrush"   ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+            <StaticResource x:Key="ComboBoxDropDownBackground"       ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
+            <StaticResource x:Key="ComboBoxDropDownBorderBrush"      ResourceKey="CardStrokeColorDefaultSolidBrush"/>
             <SolidColorBrush x:Key="ControlStrokeColorForStrongFillWhenOnImageBrush" Color="#42FFFFFF"/>
             <LinearGradientBrush x:Key="ControlElevationBorderBrush"
                                  StartPoint="0%,0%" EndPoint="0%,100%">
