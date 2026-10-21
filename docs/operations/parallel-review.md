@@ -7,7 +7,7 @@
 1. `main` 只做集成，不直接承载并行 feature。
 2. 一个 feature 名 = 一个分支 = 一个工作树 = 一个写入者。
 3. 模型不共享工作树；同一工作树只有一个写入者。
-4. 构建默认走 `fucode/publish-local.ps1 -OutputRoot out/review/<slug>`，不覆盖 `out/app`，不写本地更新指针，不停止正在运行的应用。
+4. 构建默认走 `fucode/publish-local.ps1 -ReviewLabel "<branch>@<sha>" -NoRun`，自动写到主工作树 `out/review/<分支名>`；不覆盖 `out/app`，不写本地更新指针，不停止正在运行的应用。
 5. 清理只允许 `fucode/feature-worktree.ps1 -Remove`：工作树必须干净且分支已合并，否则拒绝。
 6. 审阅构建的窗口标题必须带 `branch@commit` label；没有 label 的窗口不作为审阅对象。
 
@@ -31,11 +31,14 @@ review  : C:\Projects\Fucode\Fufucode\out\review\feature-review-ui
 ## 构建与审阅
 
 ```bash
+pwsh fucode/review-parallel.ps1 -NoBuild -Open
+pwsh fucode/review-parallel.ps1 -NoBuild -LaunchSlug <slug>
 pwsh fucode/review-parallel.ps1 -Open
 pwsh fucode/review-parallel.ps1 -IncludeMain -Open
-pwsh fucode/review-parallel.ps1 -LaunchSlug <slug>
-pwsh fucode/review-parallel.ps1 -NoBuild
 ```
+
+`-NoBuild` 只盘点模型已经发布好的构建，适合“模型各自发布、用户逐个看”的常态；
+不带 `-NoBuild` 会由主工作树串行重建全部 feature。
 
 每个 feature 的输出：
 
@@ -70,19 +73,30 @@ out/review/index.html
 
 ## 单个 feature 直接发布
 
+在 feature 工作树里执行：
+
 ```bash
-pwsh fucode/publish-local.ps1 -OutputRoot out/review/<slug> -ReviewLabel "fix-x@abc123" -NoDeploy -NoRun
+pwsh fucode/publish-local.ps1 -ReviewLabel "feature/review-ui@a1b2c3d4" -NoRun
 ```
 
-`-OutputRoot` 模式下不会停止现有应用、不会覆盖 `out/app`、不会写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。只给 `-ReviewLabel` 而不给 `-OutputRoot` 时也会按审阅构建处理，输出到 `out/review/<当前分支>`；这样模型漏写 `-OutputRoot` 也不会误部署，审阅板也能找到它。
+只需要 `-ReviewLabel`。脚本会找到主工作树，并把产物放到
+`out/review/feature-review-ui`；即使模型在自己的 worktree 里发布，主工作树的审阅板也能直接看到。
+
+- 不要省略 `-ReviewLabel`，否则会变成普通本地构建。
+- 相对 `-OutputRoot` 也以主工作树为基准，可覆盖目录，但通常不需要。
+- 审阅构建不会停止现有应用、不会覆盖 `out/app`、不会写
+  `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
+- 模型必须按 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md) 回报 label、commit、目录和构建结果。
 
 ## 人类反馈循环
 
 1. 模型各自在自己的工作树实现并提交。
-2. 模型用 `publish-local.ps1 -OutputRoot ... -ReviewLabel ...` 发布自己的构建。
-3. 用户运行 `review-parallel.ps1 -Open` 看审阅板，按 label 选择构建。
-4. 用 `-LaunchSlug` 逐个启动，窗口标题和 data-root 都指向该 feature。
+2. 模型用 `publish-local.ps1 -ReviewLabel "<branch>@<sha>" -NoRun` 发布自己的构建。
+3. 用户运行 `review-parallel.ps1 -NoBuild -Open` 看审阅板，按 label 选择构建。
+4. 用 `-NoBuild -LaunchSlug <slug>` 逐个启动，窗口标题和 data-root 都指向该 feature。
 5. 审阅意见回到对应会话；只有合入 main 后才用 `feature-worktree.ps1 -Remove` 清理。
+
+模型侧的执行规则、发布命令和交付格式见 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md)。
 
 ## 为什么不是让模型完全自己处理
 
