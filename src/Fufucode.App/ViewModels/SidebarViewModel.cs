@@ -126,7 +126,15 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         string CurrentSessionId,
         Func<string, Task>? SwitchProjectRequested = null,
         Func<Task>? OpenProjectRequested = null,
-        IReadOnlyList<string>? RecentProjects = null);
+        IReadOnlyList<string>? RecentProjects = null,
+        IReadOnlyList<NewSessionBackendOption>? NewSessionBackends = null,
+        Func<string, Task>? NewSessionWithBackendRequested = null);
+
+    /// <summary>新建会话时可选的后端；不可用的条目在菜单中禁用。</summary>
+    public sealed record NewSessionBackendOption(string Key, string Label, bool Available);
+
+    /// <summary>新建会话可选后端（默认后端始终在首位）。mock 模式为空。</summary>
+    public IReadOnlyList<NewSessionBackendOption> NewSessionBackends { get; }
 
     private readonly IChatSession _session;
     private readonly TimelineViewModel _timeline;
@@ -149,6 +157,7 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         _callbacks = callbacks;
 
         Sessions = new ObservableCollection<SessionItemViewModel>(sessions ?? MockDemoSessions());
+        NewSessionBackends = callbacks?.NewSessionBackends ?? [];
         ProjectText = callbacks?.ProjectText ?? string.Empty;
         _currentName = callbacks?.CurrentName ?? string.Empty;
 
@@ -348,6 +357,18 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         }
 
         _ = RunSwitchAsync(() => _callbacks.NewSessionRequested());
+    }
+
+    /// <summary>按指定后端新建会话（会话管理页“新建会话”右侧菜单）。</summary>
+    [RelayCommand]
+    private async Task NewSessionWithBackendAsync(string? backendKey)
+    {
+        if (_callbacks?.NewSessionWithBackendRequested is null || string.IsNullOrWhiteSpace(backendKey))
+        {
+            return;
+        }
+
+        await RunSwitchAsync(() => _callbacks.NewSessionWithBackendRequested(backendKey));
     }
 
     /// <summary>保存当前会话名称（真实模式；经 Pi set_session_name 落盘）。</summary>
