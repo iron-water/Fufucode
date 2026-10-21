@@ -37,7 +37,13 @@ public partial class ChatPage : UserControl
         InputBox.AddHandler(InputElement.KeyDownEvent, InputBox_KeyDown, RoutingStrategies.Tunnel);
         InputBox.TemplateApplied += (_, _) => HookInputPreedit();
 
-        Loaded += (_, _) => HookInputPreedit();
+        Loaded += (_, _) => { HookInputPreedit(); RefreshSessionContext(); };
+        SessionProjectChip.Click += async (_, _) =>
+        {
+            if (SessionContextRequested?.Invoke() is not { CanChangeProject: true } info) return;
+            if (ChangeProjectRequested is null) return;
+            await ChangeProjectRequested();
+        };
 
         // D-R4-1：会话头与输入区高度会随内容变化（草稿增长、队列条、待恢复提示），
         // 窗口层据此重算抽屉避让带；只发事件，不做任何布局决策。

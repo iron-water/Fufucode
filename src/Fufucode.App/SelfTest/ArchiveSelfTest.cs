@@ -125,6 +125,15 @@ internal static class ArchiveSelfTest
                 settings.CategoryTitle == "储存" && settings.PageTitle == "已归档" &&
                 settings.Breadcrumb == "储存 › 已归档",
                 "storage archive subpage renders with breadcrumb 储存 › 已归档");
+            // 会话命名规则：没有名字显示「新会话」；机械命名截取首条 prompt；子代理结果需要清洗。
+            var unnamed = new SessionRecord("abcdef1234567890", "p", null, null, false, DateTimeOffset.UtcNow);
+            Check(SessionTitles.Display(unnamed) == SessionTitles.NewSession &&
+                SessionTitles.Mechanical("  帮我  修复   终端转义输出问题  ") == "帮我 修复 终端转义输出问题" &&
+                SessionTitles.Mechanical(new string('长', 40)).EndsWith('…') &&
+                SessionTitles.SanitizeGenerated("「修复终端转义输出」\n解释") == "修复终端转义输出" &&
+                SessionTitles.SanitizeGenerated("12345") is null,
+                "session titles: new sessions show 新会话 and auto titles are shortened/cleaned");
+
             settings.SelectCategory("marketplace");
             settings.OpenPage("marketplace.backend");
             Check(settings.ShowBackendCard && settings.BackendEngineChoices.Count == 6 &&

@@ -47,6 +47,8 @@ public sealed record WorkbenchAppearance
     public string UserName { get; init; } = "你";
     public string AssistantName { get; init; } = "Fufucode";
     public bool UseNamesInPrompt { get; init; } = true;
+    /// <summary>会话自动取名方式：subagent（子代理）/ mechanical（截取首条 prompt）。</summary>
+    public string SessionNaming { get; init; } = "subagent";
     // ---- 浏览器 (Browser Use / CDP) 偏好设置 ----
     public bool BrowserUseEnabled { get; init; } = true;
     public string WebUrlOpenTarget { get; init; } = "builtin";

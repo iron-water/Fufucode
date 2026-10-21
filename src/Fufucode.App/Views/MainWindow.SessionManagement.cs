@@ -118,6 +118,9 @@ public partial class MainWindow : ISessionManagement
             if (_host is null) return;
             if (id != _host.Current.Session.Id) await SwitchSessionAsync(id);
             await _host.RenameCurrentAsync(name);
+            // 用户亲手改的名字是最高准则：自动取名永远不再覆盖它。
+            SessionPresentation.Save(_host.Manager.Metadata, id,
+                SessionPresentation.Load(_host.Manager.Metadata, id) with { NameUserSet = true, NameAutoAttempted = true });
             RefreshSessionList();
         }
         catch (Exception error) { _vm?.Timeline.AddNotification("重命名失败：" + error.Message); }

@@ -87,6 +87,7 @@ public sealed class SubagentPluginPackage : IPluginPackage
 
         public SubagentTier Tier => _tier;
         public IPureToolDispatcher Inner => _capabilities;
+        public bool IsActive => true;
         public Func<PureToolCall, CancellationToken, Task<bool>>? ApprovalGate
         {
             get => _runner.ApprovalGate;
@@ -126,6 +127,19 @@ public sealed class SubagentPluginPackage : IPluginPackage
                 agent.Name, agent.Description, agent.Mode.ToString().ToLowerInvariant())).ToArray();
 
         public string BuildPromptSection() => _runner.BuildPromptSection();
+
+        /// <summary>只读 utility 任务：使用内置 explore 代理，失败时返回 null 由调用方回退。</summary>
+        public async Task<string?> RunUtilityAsync(string prompt, CancellationToken cancellationToken)
+        {
+            if (string.IsNullOrWhiteSpace(prompt)) return null;
+            try
+            {
+                var result = await _runner.RunAsync("explore", prompt, null, cancellationToken).ConfigureAwait(false);
+                return result.Success ? result.Content?.Trim() : null;
+            }
+            catch (OperationCanceledException) { throw; }
+            catch { return null; }
+        }
 
         private SubagentRunner CreateRunner()
         {
