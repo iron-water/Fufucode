@@ -57,6 +57,9 @@ public static class SettingsNavCatalog
             "模型 思考 等级 默认 model thinking", "Brain", "#FF9E4C"),
         new("storage", "储存", SettingsNavTier.Basic,
             "空间 占用 缓存 日志 保留 清理 归档 已归档 storage cache logs archive", "Folder", "#8A8A8E"),
+        new("memory", "性能与内存", SettingsNavTier.Basic,
+            "内存 优化 软件渲染 GPU 动画 玻璃 终端 回滚 performance memory render gpu software",
+            "Speedometer", "#FF9E4C"),
 
         // ── 大功能 ──
         new("marketplace", "插件市场", SettingsNavTier.Features,
