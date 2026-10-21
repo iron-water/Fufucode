@@ -1453,7 +1453,12 @@ public partial class MainWindow : Window
         menu.Add(CreateTraySessionMenu("最近会话", pinned: false));
         menu.Add(new NativeMenuItemSeparator());
 
-        AddTrayAction(menu, "新建会话", () => _ = RunTrayActionAsync(NewChatAsync));
+        AddTrayAction(menu, "新建会话", () => _ = RunTrayActionAsync(async () =>
+        {
+            ShowFromTray();
+            await NewChatAsync();
+            await NavigateWorkspaceAsync(AppPage.Chat);
+        }));
         AddTrayAction(menu, "关于 Fufucode", () => OpenFufucodeRepository());
         menu.Add(CreateTrayThemeMenu());
         AddTrayAction(menu, "设置", () => _ = RunTrayActionAsync(OpenSettingsFromTrayAsync));
@@ -1463,6 +1468,8 @@ public partial class MainWindow : Window
         menu.Add(new NativeMenuItemSeparator());
         AddTrayAction(menu, "退出", ExitApplication);
     }
+
+    internal void FillTrayMenuForTesting(NativeMenu menu) => FillTrayMenu(menu);
 
     private static void AddTrayAction(NativeMenu menu, string title, Action action)
     {
@@ -1527,9 +1534,13 @@ public partial class MainWindow : Window
         var submenu = new NativeMenu();
         var accent = _customization?.Current.Accent ?? "system";
         AddTrayAccent(submenu, "默认色（跟随系统）", "system", accent);
+        submenu.Add(new NativeMenuItemSeparator());
         AddTrayAccent(submenu, "Fufucode 蓝", "#0078D4", accent);
         AddTrayAccent(submenu, "青绿色", "#087E66", accent);
-        AddTrayAccent(submenu, "紫色", "#6750A4", accent);
+        AddTrayAccent(submenu, "紫色", "#7B51B5", accent);
+        AddTrayAccent(submenu, "玫瑰红", "#B14670", accent);
+        AddTrayAccent(submenu, "琥珀橙", "#B15B00", accent);
+        AddTrayAccent(submenu, "中性灰", "#6B7075", accent);
         return new NativeMenuItem("主题色") { Menu = submenu };
     }
 
@@ -1550,6 +1561,7 @@ public partial class MainWindow : Window
         {
             ShowFromTray();
             await ActivateOverviewSessionAsync(session);
+            await NavigateWorkspaceAsync(AppPage.Chat);
         }
         catch (Exception error)
         {
@@ -1616,6 +1628,10 @@ public partial class MainWindow : Window
     {
         if (_closed) return;
         _exitRequested = true;
+        if (_hiddenToTray && _vm?.Settings.HasUnsavedChanges == true)
+        {
+            ShowFromTray();
+        }
         if (_trayIcon is { } tray) tray.IsVisible = false;
         Close();
     }
