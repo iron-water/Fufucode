@@ -85,6 +85,13 @@
 - 移除工作区使用 `git worktree remove <path>`，不得直接递归删除 worktree、仓库、会话或记忆目录。
 - `docs/decisions.md` 保持追加记录；不把旧队列 pending 状态视作新授权。
 
+## 并行 Feature（2026-10-21）
+
+- `main` 只做集成；并行 feature 用 `fucode/feature-worktree.ps1 -Name <id>` 建独立分支/工作树，一个工作树只有一个写入者。
+- 审阅构建用 `publish-local.ps1 -OutputRoot out/review/<slug> -ReviewLabel <label>`；不得覆盖 `out/app`、写本地更新指针或停止别人的运行实例。
+- 审阅用 `fucode/review-parallel.ps1 -Open`；每项带 `branch@commit` label、独立 `--data-root`，窗口标题显示 label。
+- 工作树清理只用 `feature-worktree.ps1 -Remove`，且必须干净并已合入 `main`；禁止强删未提交工作。详见 `docs/operations/parallel-review.md`。
+
 ## 交付与诚信
 
 - M受管无人值守任务采用`docs/tasks/agent-event-protocol.md`结构化事件；只在agent停止后接收交付，审核按绑定runId/taskId/HEAD的明确decision分流，不按正文关键词判断。模块待接线是有效交付，不要求受限worker越权接共享入口。
