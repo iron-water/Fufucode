@@ -90,22 +90,21 @@
   <Style Selector="Border.settingsRow.last">
     <Setter Property="Margin" Value="0,0,0,0"/>
   </Style>
-  <!-- 会话管理分层（对齐设置页）：页底 → 组卡（浅一层）→ 项目/会话行卡 → 当前会话高亮。 -->
+  <!-- 会话管理只保留三层：页底 → 项目组面板（项目栏与会话同色）→ 悬停高亮。
+       不再给单行套卡片/描边，避免多层 box 叠在一起。 -->
   <Style Selector="Border.overviewGroup">
-    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
-    <Setter Property="Padding" Value="6"/>
-    <Setter Property="Margin" Value="0,2,0,6"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="Margin" Value="0,2,0,4"/>
   </Style>
   <Style Selector="Button.overviewProject">
-    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
-    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="MinHeight" Value="40"/>
-    <Setter Property="Padding" Value="10,6"/>
+    <Setter Property="MinHeight" Value="36"/>
+    <Setter Property="Padding" Value="8,4"/>
     <Setter Property="HorizontalAlignment" Value="Stretch"/>
     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     <Setter Property="Cursor" Value="Hand"/>
@@ -114,20 +113,15 @@
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
   <Style Selector="Border.overviewSession">
-    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
-    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="MinHeight" Value="36"/>
-    <Setter Property="Padding" Value="10,4"/>
-    <Setter Property="Margin" Value="0,2,0,0"/>
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="Padding" Value="8,2"/>
+    <Setter Property="Margin" Value="0,1,0,0"/>
   </Style>
   <Style Selector="Border.overviewSession:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-  </Style>
-  <Style Selector="Border.overviewSession.current">
-    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
   </Style>
   <!-- 对话框卡片内的输入框：与设置行同口径的轻质填充，
        不再使用深色主题下默认的纯黑输入底。 -->
