@@ -22,6 +22,13 @@ public interface INativeSubagentRuntime
     IPureToolDispatcher Wrap(IPureToolDispatcher inner);
     IReadOnlyList<NativeSubagentDescriptor> Agents { get; }
     string BuildPromptSection();
+    /// <summary>
+    /// 让子代理执行一次读任务并返回文本结果；会话取名等功能使用。
+    /// 未实现或失败时返回 null，调用方必须回退到本地规则，不能假定可用。
+    /// </summary>
+    System.Threading.Tasks.Task<string?> RunUtilityAsync(string prompt,
+        System.Threading.CancellationToken cancellationToken) =>
+        System.Threading.Tasks.Task.FromResult<string?>(null);
     Func<PureToolCall, System.Threading.CancellationToken, System.Threading.Tasks.Task<bool>>? ApprovalGate { get; set; }
     Func<IReadOnlyList<PureAgentMessage>>? HistoryProvider { get; set; }
     Func<PermissionMode>? ParentMode { get; set; }
@@ -100,4 +107,7 @@ public static class NativeSubagentContract
 public interface INativeSubagentDispatcher
 {
     IPureToolDispatcher Inner { get; }
+
+    /// <summary>插件是否真正安装并启用；未激活的调度器不得改变底层权限链。</summary>
+    bool IsActive { get; }
 }

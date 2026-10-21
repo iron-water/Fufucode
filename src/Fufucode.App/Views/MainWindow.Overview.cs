@@ -364,7 +364,7 @@ public partial class MainWindow
     {
         var metadata = _host!.Manager.Metadata;
         var presentation = SessionPresentation.Load(metadata, session.Id);
-        var title = session.Name ?? session.Id[..Math.Min(8, session.Id.Length)];
+        var title = SessionTitles.Display(session);
         var projectPath = metadata.GetProject(session.ProjectId).Path;
         var isCurrent = session.Id == CurrentSessionId;
 
@@ -518,7 +518,7 @@ public partial class MainWindow
         if (session.Id == CurrentSessionId)
             throw new InvalidOperationException("不能删除当前打开的会话；请先切换到其他会话。");
         if (IdleReal() is { } reason) throw new InvalidOperationException(reason);
-        var title = session.Name ?? session.Id[..Math.Min(8, session.Id.Length)];
+        var title = SessionTitles.Display(session);
         var cancel = new Button { Content = "取消", IsCancel = true, MinWidth = 88 };
         var delete = new Button { Content = "永久删除", MinWidth = 88 };
         var dialog = Views.AppDialog.Create("永久删除会话", 480);
@@ -592,8 +592,10 @@ public partial class MainWindow
             card.Children.Add(new TextBlock { Text = "由其他会话分叉", Classes = { "caption" } });
         card.Children.Add(new TextBlock
         {
-            Text = "会话 " + session.Id[..Math.Min(8, session.Id.Length)],
+            // 悬停卡保留完整 id，方便排查；行标题本身不再显示 id。
+            Text = "ID " + session.Id,
             Classes = { "caption", "mono" },
+            TextTrimming = TextTrimming.CharacterEllipsis,
         });
         return card;
     }
