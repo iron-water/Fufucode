@@ -125,7 +125,8 @@ pwsh fucode/review-parallel.ps1 -NoBuild -LaunchSlug <branch-slug>
 pwsh fucode/feature-worktree.ps1 -Name <id> -Remove
 ```
 
-脚本会拒绝不干净或未合并的工作树。不要用 `Remove-Item -Recurse` 或
+脚本会拒绝不干净或未合并的工作树，也会拒绝在**被删除的工作树目录内**运行。
+必须在主工作树执行清理。不要用 `Remove-Item -Recurse` 或
 `git worktree remove --force` 绕过检查。
 
 ## 可直接粘贴的派工 prompt

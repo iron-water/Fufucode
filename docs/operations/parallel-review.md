@@ -27,6 +27,7 @@ review  : C:\Projects\Fucode\Fufucode\out\review\feature-review-ui
 ```
 
 清理会先检查工作树是否干净、分支是否已进入 `main`，任一不满足就拒绝。
+必须在主工作树执行清理；在要删除的工作树目录内运行会被拒绝，避免删到一半留下残目录。
 
 ## 构建与审阅
 
