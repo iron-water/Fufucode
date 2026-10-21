@@ -225,6 +225,24 @@ try
           editStore.Current.Layout?.Hidden[DockZone.Bottom] == false,
         "设置页布局编辑写入真实 ui.json 状态");
 
+    // ================= 4.2 Fluent 暗色三档底色 =================
+    var appearance = new WorkbenchAppearance();
+    Check(appearance.BaseBackground == "#1C1C1C" && appearance.BaseBar == "#2C2C2C" &&
+          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#FFD400",
+        "Fluent 暗色默认三档底色与模型输出强调色");
+    Check(WorkbenchAppearance.BaseBackgroundChoices.Count == 3 &&
+          WorkbenchAppearance.BaseBarChoices.Count == 3 &&
+          WorkbenchAppearance.BaseHighlightChoices.Count == 3,
+        "每档底色只提供三个备选");
+    Check(WorkbenchAppearance.BaseBackgroundLabels.Count == WorkbenchAppearance.BaseBackgroundChoices.Count &&
+          WorkbenchAppearance.BaseBarLabels.Count == WorkbenchAppearance.BaseBarChoices.Count &&
+          WorkbenchAppearance.BaseHighlightLabels.Count == WorkbenchAppearance.BaseHighlightChoices.Count,
+        "底色备选与标签一一对应");
+    Check(new WorkbenchAppearance { BaseBar = "#FF00FF" }.Normalize().BaseBar == "#2C2C2C",
+        "非法底色回退到默认，不接受任意第四种底色");
+    Check(appearance.Accent != appearance.Emphasis,
+        "主题色与模型输出强调色是两个独立字段");
+
     // ================= 5. 设置页纪律守卫（规范 §10） =================
     // 放在能力门禁之前：门禁测试依赖本机插件目录，属于既有环境用例；
     // 纪律守卫是纯源码检查，必须每次都能独立跑完。

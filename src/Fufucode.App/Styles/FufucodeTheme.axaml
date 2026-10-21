@@ -15,6 +15,7 @@
                 <ResourceDictionary x:Key="Light">
                     <!-- App* 语义键：值统一派生自 Fluent v2 令牌；
                          浅色侧栏用纯白浮于页面底(#F3F3F3)之上（Win11 浅色设置的 NavigationView 面）。 -->
+                    <SolidColorBrush x:Key="AppEmphasis" Color="#9A6700"/>
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorBaseBrush"/>
@@ -38,7 +39,7 @@
                     <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
                     <SolidColorBrush x:Key="AppListSelected" Color="#12000000"/>
-                    <SolidColorBrush x:Key="AppNavAccentBrush" Color="#0067C0"/>
+                    <SolidColorBrush x:Key="AppNavAccentBrush" Color="{DynamicResource SystemAccentColorDark2}"/>
                     <!-- Win11 设置侧栏面（浅色）：白底浮起。 -->
                     <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#FAFAFA"/>
                     <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColor}" Opacity="0.26"/>
@@ -79,14 +80,17 @@
                     <StaticResource x:Key="ListBoxItemForegroundSelectedDisabled"    ResourceKey="TextFillColorDisabledBrush"/>
                 </ResourceDictionary>
                 <ResourceDictionary x:Key="Dark">
-                    <!-- Win11 深色分层：窗口/内容基底压到最暗(#202020)，侧栏/停靠/chrome 浮起为
-                         #2C2C2C 的 Mica 面（SolidBackgroundFillColorQuaternary），卡片再亮半级。
-                         由此导航与内容产生 8% 明度差，无需任何描边即可分栏。 -->
-                    <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
-                    <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+                    <!-- Fluent 暗色只用三类底色：窗口/内容深灰、一般栏浅灰、高亮。
+                         主题色是 AppAccent；强调色只用于模型输出标记。 -->
+                    <SolidColorBrush x:Key="AppBaseDeep" Color="#1C1C1C"/>
+                    <SolidColorBrush x:Key="AppBaseBar" Color="#2C2C2C"/>
+                    <SolidColorBrush x:Key="AppBaseHighlight" Color="#3A3A3A"/>
+                    <SolidColorBrush x:Key="AppEmphasis" Color="#FFD400"/>
+                    <StaticResource x:Key="AppWindowBackground"   ResourceKey="AppBaseDeep"/>
+                    <StaticResource x:Key="AppTitleBarBackground" ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppCardBackground"     ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
                     <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线（深色 = 6% 白）。 -->
@@ -98,17 +102,16 @@
                     <StaticResource x:Key="AppAccentForeground"   ResourceKey="TextOnAccentFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppAccentText"         ResourceKey="AccentTextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppAccentSubtle"       ResourceKey="AccentTextFillColorPrimaryBrush"/>
-                    <StaticResource x:Key="AppHover"              ResourceKey="SubtleFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
-                    <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
-                    <SolidColorBrush x:Key="AppListSelected" Color="#2EFFFFFF"/>
-                    <SolidColorBrush x:Key="AppNavAccentBrush" Color="#4CC2FF"/>
-                    <!-- Win11 设置侧栏面：实色 #2C2C2C（Quaternary 是透明叠加，不透明这里不浮起）。 -->
-                    <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#2C2C2C"/>
+                    <StaticResource x:Key="AppHover"              ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="AppPressed"            ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="AppListHover"          ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="AppListSelected"       ResourceKey="AppBaseHighlight"/>
+                    <SolidColorBrush x:Key="AppNavAccentBrush" Color="{DynamicResource SystemAccentColorLight2}"/>
+                    <StaticResource x:Key="AppSettingsNavBackground" ResourceKey="AppBaseBar"/>
                     <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColorLight2}" Opacity="0.42"/>
-                    <StaticResource x:Key="AppToolCardBackground" ResourceKey="CardBackgroundFillColorDefaultBrush"/>
-                    <StaticResource x:Key="AppInnerWell"          ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppCodeBackground"     ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="AppToolCardBackground" ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppInnerWell"          ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="AppCodeBackground"     ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCodeBorder"         ResourceKey="CardStrokeColorDefaultBrush"/>
                     <StaticResource x:Key="AppErrorBackground"    ResourceKey="SystemFillColorCriticalBackgroundBrush"/>
                     <StaticResource x:Key="AppErrorBorder"        ResourceKey="SystemFillColorCriticalBrush"/>
@@ -117,25 +120,25 @@
                     <StaticResource x:Key="AppSuccessForeground"  ResourceKey="SystemFillColorSuccessBrush"/>
                     <StaticResource x:Key="AppCautionForeground"  ResourceKey="SystemFillColorCautionBrush"/>
                     <StaticResource x:Key="AppCriticalForeground" ResourceKey="SystemFillColorCriticalBrush"/>
-                    <StaticResource x:Key="AppDialogBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
-                    <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppDialogBackground"   ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
                     <SolidColorBrush x:Key="AppScrimBackground" Color="#4D000000"/>
-                    <!-- chrome/停靠与侧栏同层（#2C2C2C）；内容区由 AppMicaPageBackground→Base 提供。 -->
-                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
-                    <StaticResource x:Key="AppDockBackground"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-                    <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
-                    <StaticResource x:Key="AppSubtleBackground"   ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
+                    <!-- chrome/停靠与侧栏同层；内容区由 AppMicaPageBackground→Deep 提供。 -->
+                    <StaticResource x:Key="AppChromeBackground"   ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppContentBackground"  ResourceKey="AppBaseDeep"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="AppSubtleBackground"   ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="AppWarningForeground"  ResourceKey="SystemFillColorCautionBrush"/>
                     <SolidColorBrush x:Key="AppTerminalBackground" Color="#FF14171D"/>
                     <SolidColorBrush x:Key="AppTerminalForeground" Color="#FFDEE3EC"/>
                     <StaticResource x:Key="AppMicaPageBackground" ResourceKey="AppWindowBackground"/>
                     <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
-                    <SolidColorBrush x:Key="ListBoxItemBackgroundSelected" Color="#0F000000"/>
-                    <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="#26000000"/>
-                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelected" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush"/>

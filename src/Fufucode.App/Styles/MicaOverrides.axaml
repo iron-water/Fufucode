@@ -11,7 +11,7 @@
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <SolidColorBrush x:Key="AppMicaPageBackground"    Color="Transparent"/>
-            <SolidColorBrush x:Key="AppMicaSidebarBackground" Color="#66262626"/>
+            <SolidColorBrush x:Key="AppMicaSidebarBackground" Color="#662C2C2C"/>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>

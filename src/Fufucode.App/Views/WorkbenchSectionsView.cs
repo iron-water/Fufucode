@@ -209,6 +209,15 @@ public sealed class WorkbenchSectionsView : UserControl
             return baseline && terms.Contains(query, StringComparison.OrdinalIgnoreCase);
         }
 
+        // LiquidGlass 的 Group 是 Border.settingsGroup 包一层 settingsGroupList；
+        // 搜索必须递归到包裹层内部，否则所有分组都会被当成“非行式控件”整体保留。
+        if (control is Border { Child: Control grouped } && control.Classes.Contains("settingsGroup"))
+        {
+            var visible = FilterSearchControl(grouped, query);
+            grouped.IsVisible = visible;
+            return visible && baseline;
+        }
+
         if (control is Panel panel && panel.Classes.Contains("settingsGroupList"))
         {
             var visible = false;
@@ -228,6 +237,8 @@ public sealed class WorkbenchSectionsView : UserControl
     private void RestoreVisibility(Control control)
     {
         if (_searchBaseline.TryGetValue(control, out var baseline)) control.IsVisible = baseline;
+        if (control is Border { Child: Control grouped } && control.Classes.Contains("settingsGroup"))
+            RestoreVisibility(grouped);
         if (control is Panel panel)
             foreach (var child in panel.Children.OfType<Control>()) RestoreVisibility(child);
     }
@@ -250,15 +261,42 @@ public sealed class WorkbenchSectionsView : UserControl
             CustomChoiceRow("预设", "一次性套用一组取值，之后仍可单独微调", new[] { "标准", "紧凑", "阅读" }, PresetOf, value => vm.Preset(value), "ArrowClockwise", "standard", "compact", "reading"));
 
         var colorGroupStart = rows.Children.Count;
-        Group(rows, "颜色",
-            FluentOnly(ToggleRow("跟随系统强调色", "Fluent 使用此选项；Metro 与 Material 3 使用各自固定强调色。", s => s.Accent == "system",
+        Group(rows, "主题色与强调色",
+            FluentOnly(ToggleRow("跟随系统主题色", "Fluent 使用此选项；Metro 与 Material 3 使用各自固定主题色。", s => s.Accent == "system",
                 value => vm.Change(s => s with { Accent = value ? "system" : Hex(s.EffectiveAccent) }))),
             FluentOnly(SwatchRow(vm)),
-            FluentOnly(ColorPickerRow(vm)));
+            FluentOnly(ColorPickerRow(vm,
+                "自定义主题色", "UI 通用颜色：选中、链接、主按钮；格式 #RRGGBB",
+                s => s.Accent == "system" ? Hex(s.EffectiveAccent) : s.Accent,
+                (s, value) => s with { Accent = value })),
+            EmphasisPickerRow(vm));
         var colorGroup = rows.Children.Skip(colorGroupStart).ToArray();
         _bindings.Add(current =>
         {
-            foreach (var control in colorGroup) control.IsVisible = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
+            foreach (var control in colorGroup)
+                control.IsVisible = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
+        });
+
+        var baseGroupStart = rows.Children.Count;
+        Group(rows, "底色（Fluent 暗色）",
+            CustomChoiceRow("窗口底色", "最底层的深灰背景",
+                WorkbenchAppearance.BaseBackgroundLabels.ToArray(), s => s.BaseBackground,
+                value => vm.Change(s => s with { BaseBackground = value }), "Color",
+                WorkbenchAppearance.BaseBackgroundChoices.ToArray()),
+            CustomChoiceRow("一般栏", "标题栏、侧栏、停靠区等常用栏的浅灰",
+                WorkbenchAppearance.BaseBarLabels.ToArray(), s => s.BaseBar,
+                value => vm.Change(s => s with { BaseBar = value }), "Color",
+                WorkbenchAppearance.BaseBarChoices.ToArray()),
+            CustomChoiceRow("高亮", "悬停与选中态；从不太亮到更亮",
+                WorkbenchAppearance.BaseHighlightLabels.ToArray(), s => s.BaseHighlight,
+                value => vm.Change(s => s with { BaseHighlight = value }), "Color",
+                WorkbenchAppearance.BaseHighlightChoices.ToArray()),
+            SettingsLayout.Note("仅 Fluent 暗色生效；每一档只给三个备选，避免把层级关系选反。"));
+        var baseGroup = rows.Children.Skip(baseGroupStart).ToArray();
+        _bindings.Add(current =>
+        {
+            foreach (var control in baseGroup)
+                control.IsVisible = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
         });
 
         Group(rows, "字体与密度",
@@ -742,34 +780,58 @@ public sealed class WorkbenchSectionsView : UserControl
             var swatch = new Button { Width = 22, Height = 22, Margin = new Thickness(4), Padding = new Thickness(0),
                 Background = new SolidColorBrush(Color.Parse(hex)), CornerRadius = new CornerRadius(11) };
             swatch.Classes.Add("accentSwatch");
-            ToolTip.SetTip(swatch, hex); AutomationProperties.SetName(swatch, "强调色 " + hex);
+            ToolTip.SetTip(swatch, hex); AutomationProperties.SetName(swatch, "主题色 " + hex);
             swatch.Click += (_, _) => vm.Change(s => s with { Accent = hex });
             _bindings.Add(current => swatch.Classes.Set("selected", current.Accent.Equals(hex, StringComparison.OrdinalIgnoreCase)));
             colors.Children.Add(swatch);
         }
-        return SettingsLayout.Row("强调色", "选择预设颜色，或在右侧输入十六进制值", colors);
+        return SettingsLayout.Row("主题色", "UI 通用颜色；不是模型输出强调色", colors);
     }
 
-    private Control ColorPickerRow(WorkbenchCustomizationViewModel vm)
+    private Control ColorPickerRow(WorkbenchCustomizationViewModel vm, string title, string description,
+        Func<WorkbenchAppearance, string> get, Func<WorkbenchAppearance, string, WorkbenchAppearance> set)
     {
         var picker = new ColorPicker { IsAlphaEnabled = false, VerticalAlignment = VerticalAlignment.Center };
         picker.ColorChanged += (_, _) =>
         {
             if (_refreshing) return;
-            var accent = Hex(picker.Color);
-            if (accent.Equals(vm.Current.Accent, StringComparison.OrdinalIgnoreCase)) return;
-            vm.Change(s => s with { Accent = accent });
+            var color = Hex(picker.Color);
+            if (color.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase)) return;
+            vm.Change(s => set(s, color));
         };
-        _bindings.Add(current => { var color = current.EffectiveAccent; if (picker.Color != color) picker.Color = color; });
+        _bindings.Add(current => { var color = Color.Parse(get(current)); if (picker.Color != color) picker.Color = color; });
 
         var custom = new TextBox { Width = 110, MaxWidth = 140, PlaceholderText = "#RRGGBB", VerticalAlignment = VerticalAlignment.Center };
-        custom.KeyDown += (_, e) => { if (e.Key != Key.Enter) return; CommitAccent(vm, custom); e.Handled = true; };
-        custom.LostFocus += (_, _) => CommitAccent(vm, custom);
-        _bindings.Add(current => { if (!custom.IsFocused) custom.Text = current.Accent; });
+        custom.KeyDown += (_, e) => { if (e.Key != Key.Enter) return; Commit(); e.Handled = true; };
+        custom.LostFocus += (_, _) => Commit();
+        _bindings.Add(current => { if (!custom.IsFocused) custom.Text = get(current); });
+
+        void Commit()
+        {
+            var text = custom.Text?.Trim();
+            if (string.IsNullOrEmpty(text)) { custom.Text = get(vm.Current); return; }
+            var value = text.StartsWith('#') ? text : "#" + text;
+            if (value.Length != 7 || !value.Skip(1).All(Uri.IsHexDigit))
+            {
+                vm.Status = "颜色格式应为 #RRGGBB，例如 #0078D4";
+                return;
+            }
+            var normalized = value.ToUpperInvariant();
+            custom.Text = normalized;
+            if (normalized.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase)) return;
+            vm.Change(s => set(s, normalized));
+        }
 
         var host = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { custom, picker } };
-        return SettingsLayout.Row("自定义颜色", "任意颜色；格式 #RRGGBB", host);
+        return SettingsLayout.Row(title, description, host);
     }
+
+    private Control EmphasisPickerRow(WorkbenchCustomizationViewModel vm) =>
+        ColorPickerRow(vm,
+            "强调色",
+            "只用于模型输出中的 Markdown 粗体/标记，默认黄色；格式 #RRGGBB",
+            s => s.Emphasis,
+            (s, value) => s with { Emphasis = value });
 
     private Control PlacementRow(WorkbenchCustomizationViewModel vm, AppActionDefinition action)
     {
@@ -1067,22 +1129,6 @@ public sealed class WorkbenchSectionsView : UserControl
             if (value == "3") { l.PinnedPages.Remove(pageId); l.Close(pageId); }
             else l.Move(pageId, (DockZone)int.Parse(value));
         });
-
-    private static void CommitAccent(WorkbenchCustomizationViewModel vm, TextBox custom)
-    {
-        var text = custom.Text?.Trim();
-        if (string.IsNullOrEmpty(text)) { custom.Text = vm.Current.Accent; return; }
-        var value = text.StartsWith('#') ? text : "#" + text;
-        if (value.Length != 7 || !value.Skip(1).All(Uri.IsHexDigit))
-        {
-            vm.Status = "颜色格式应为 #RRGGBB，例如 #0078D4";
-            return;
-        }
-        var normalized = "#" + value[1..].ToUpperInvariant();
-        custom.Text = normalized;
-        if (normalized.Equals(vm.Current.Accent, StringComparison.OrdinalIgnoreCase)) return;
-        vm.Change(s => s with { Accent = normalized });
-    }
 
     private static string Hex(Color color) => $"#{color.R:X2}{color.G:X2}{color.B:X2}";
     private static string PresetOf(WorkbenchAppearance s) =>
