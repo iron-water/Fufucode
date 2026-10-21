@@ -22,10 +22,7 @@ public partial class MainWindow
     private Border? _islandDot;
     private TextBlock? _islandTitle;
     private TextBlock? _islandModel;
-    private Border? _islandSep;
-    private TextBlock? _islandActivity;
-    private TextBlock? _islandElapsed;
-    private TextBlock? _islandUsage;
+    private Avalonia.Controls.Shapes.Path? _islandBackend;
     private Border? _islandSatellite;
     private TextBlock? _islandSatCount;
     private TextBlock? _islandLiveMeta;
@@ -51,8 +48,9 @@ public partial class MainWindow
         IslandOverlayHost.Content = null;
         IslandOverlay.IsVisible = false;
         _islandPill = null;
-        _islandDot = _islandSep = _islandSatellite = _islandLiveDot = null;
-        _islandTitle = _islandModel = _islandActivity = _islandElapsed = _islandUsage = _islandSatCount = null;
+        _islandDot = _islandSatellite = _islandLiveDot = null;
+        _islandTitle = _islandModel = _islandSatCount = null;
+        _islandBackend = null;
         _islandLiveMeta = _islandLiveText = _islandPanelTitle = _islandPanelSubtitle = null;
         _islandLiveBar = null; _islandStopButton = _islandSteerButton = null;
 
@@ -63,31 +61,30 @@ public partial class MainWindow
         }
         CaptionBrandFallback.IsVisible = false;
 
-        // ── 紧凑胶囊：● 名称 · 模型 │ 状态 ⏱ ⚡ ⌄ ─────────────────────
-        _islandDot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center };
-        _islandTitle = new TextBlock { FontSize = 12, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center,
-            MaxWidth = 170, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandModel = new TextBlock { FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center,
-            MaxWidth = 120, TextTrimming = TextTrimming.CharacterEllipsis };
+        // ── 紧凑胶囊：● 后端图标 · 会话名 · 模型 ⌄ ─────────────────────
+        // 状态点=会话状态；后端图标=当前内核（形状区分，不靠颜色）；末位展开。
+        _islandDot = new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(4.5), VerticalAlignment = VerticalAlignment.Center };
+        _islandBackend = new Avalonia.Controls.Shapes.Path
+        {
+            Width = 16, Height = 16, Stretch = Stretch.Uniform,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        _islandBackend.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new DynamicResourceExtension("AppTextSecondary"));
+        _islandTitle = new TextBlock { FontSize = 13.5, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 200, TextTrimming = TextTrimming.CharacterEllipsis };
+        _islandModel = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandModel.Classes.Add("dim");
-        _islandSep = new Border { Width = 1, Height = 14, VerticalAlignment = VerticalAlignment.Center };
-        _islandActivity = new TextBlock { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 200, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandElapsed = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
-        _islandElapsed.Classes.Add("dim");
-        _islandUsage = new TextBlock { FontSize = 10.5, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 90, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandUsage.Classes.Add("dim");
-        var chevron = new Avalonia.Controls.Shapes.Path { Width = 10, Height = 10, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center };
+        // 经验对齐：几何体在 12x12 盒里偏上，下移 3px 才与文字视觉中线齐平。
+        var chevron = new Avalonia.Controls.Shapes.Path { Width = 12, Height = 12, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
         chevron.Bind(Avalonia.Controls.Shapes.Path.DataProperty, new DynamicResourceExtension("Icon.ChevronDown"));
         chevron.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new DynamicResourceExtension("AppTextDim"));
 
-        var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 7, VerticalAlignment = VerticalAlignment.Center };
+        var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 9, VerticalAlignment = VerticalAlignment.Center };
         pillContent.Children.Add(_islandDot);
+        pillContent.Children.Add(_islandBackend);
         pillContent.Children.Add(_islandTitle);
         pillContent.Children.Add(_islandModel);
-        pillContent.Children.Add(_islandSep);
-        pillContent.Children.Add(_islandActivity);
-        pillContent.Children.Add(_islandElapsed);
-        pillContent.Children.Add(_islandUsage);
         pillContent.Children.Add(chevron);
 
         // 胶囊为 Border：PointerPressed 标记 handled，顶栏 PointerPressed→BeginMoveDrag
@@ -95,9 +92,9 @@ public partial class MainWindow
         _islandPill = new Border
         {
             Child = pillContent,
-            Padding = new Thickness(12, 0),
-            Height = 32,
-            CornerRadius = new CornerRadius(16),
+            Padding = new Thickness(16, 0),
+            Height = 40,
+            CornerRadius = new CornerRadius(20),
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
         _islandPill.Classes.Add("sessionIsland");
@@ -124,7 +121,7 @@ public partial class MainWindow
         var compact = new StackPanel { Orientation = Orientation.Horizontal, Children = { _islandPill, _islandSatellite } };
         IslandHost.Children.Add(compact);
 
-        IslandOverlayHost.Content = BuildIslandPanel(actions);
+        IslandOverlayHost.Content = BuildIslandPanel(settings, actions);
 
         RefreshIsland();
     }
@@ -134,7 +131,7 @@ public partial class MainWindow
     private void IslandScrim_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
         IslandOverlay.IsVisible = false;
 
-    private Control BuildIslandPanel(IEnumerable<Infrastructure.AppActionDefinition> actions)
+    private Control BuildIslandPanel(WorkbenchAppearance settings, IEnumerable<Infrastructure.AppActionDefinition> actions)
     {
         // 头部：后端块 + 标题 + 副标（模型 · 项目 · 分支），右侧实时元信息。
         var backendTile = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(7), VerticalAlignment = VerticalAlignment.Center };
@@ -163,12 +160,18 @@ public partial class MainWindow
             Columns = 4,
             Margin = new Thickness(0, 14, 0, 12),
         };
-        var preferred = new[] { "session.rename", "session.pin", "session.side", "session.fork",
-                                "session.search", "session.share", "session.archive", "session.schedule" };
-        var byId = actions.Where(a => a.Id.StartsWith("session.", StringComparison.Ordinal))
-            .GroupBy(a => a.Id, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var action in preferred.Where(byId.ContainsKey).Select(id => byId[id]))
-            tiles.Children.Add(BuildIslandTile(action));
+        // 磁贴由用户配置决定：位置为 SessionIsland 的动作按 Order 排序渲染；
+        // Hidden 的动作不出现，任何动作（不只 session.*）都可以被放进岛。
+        var islandActions = actions
+            .Select(action => (Action: action,
+                Placement: settings.Actions.GetValueOrDefault(action.Id, WorkbenchActionDefaults.Placement(action.Id))))
+            .Where(pair => pair.Placement.Position == UiActionPosition.SessionIsland)
+            .OrderBy(pair => pair.Placement.Order)
+            .ThenBy(pair => WorkbenchActionDefaults.SubMenuOrder(pair.Action.Id))
+            .Select(pair => pair.Action)
+            .ToArray();
+        foreach (var action in islandActions) tiles.Children.Add(BuildIslandTile(action));
+        tiles.IsVisible = islandActions.Length > 0;
 
         // 实时活动条：仅在真实活动（运行/失败/有排队/有用量）时出现；空闲整条隐藏。
         _islandLiveDot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center };
@@ -258,10 +261,8 @@ public partial class MainWindow
         // 中间列本身也裁剪，三者合起来保证顶栏永不互相压字。
         var windowWidth = Bounds.Width > 0 ? Bounds.Width : Width;
         var narrow = windowWidth < 1000;
-        var tighter = windowWidth < 900;
-        var minimal = windowWidth < 820;
         if (_islandPill is not null)
-            _islandPill.MaxWidth = Math.Max(150, windowWidth - 560);
+            _islandPill.MaxWidth = Math.Max(170, windowWidth - 600);
         _islandTitle?.SetValue(TextBlock.TextProperty, title);
         _islandModel?.SetValue(TextBlock.TextProperty, ShortModelName(model));
         _islandModel?.SetValue(Visual.IsVisibleProperty, !string.IsNullOrEmpty(model) && !narrow);
@@ -270,15 +271,8 @@ public partial class MainWindow
             _islandDot.Classes.Remove("running"); _islandDot.Classes.Remove("failed"); _islandDot.Classes.Remove("idle");
             _islandDot.Classes.Add(running ? "running" : failed ? "failed" : "idle");
         }
-        var showLive = (running || failed) && !minimal;
-        _islandSep?.SetValue(Visual.IsVisibleProperty, showLive);
-        _islandActivity?.SetValue(Visual.IsVisibleProperty, showLive);
-        _islandElapsed?.SetValue(Visual.IsVisibleProperty, showLive);
-        _islandActivity?.SetValue(TextBlock.TextProperty, activity);
-        _islandElapsed?.SetValue(TextBlock.TextProperty, showLive ? "⏱ " + (DateTimeOffset.UtcNow - _turnStarted).ToString(@"mm\:ss") : "");
-        var usageShort = string.IsNullOrEmpty(usage) ? "" : "⚡" + usage.Replace("会话累计：", "").Trim();
-        _islandUsage?.SetValue(TextBlock.TextProperty, usageShort);
-        _islandUsage?.SetValue(Visual.IsVisibleProperty, !string.IsNullOrEmpty(usage) && !tighter);
+        var showLive = running || failed;
+        UpdateIslandBackendIcon(vm?.CurrentBackendId, vm?.CurrentBackendName);
 
         // 卫星点：有排队时亮起并显示数量
         _islandSatellite?.SetValue(Visual.IsVisibleProperty, hasQueue);
@@ -317,6 +311,34 @@ public partial class MainWindow
             _islandSteerButton?.SetValue(Button.CommandProperty, vm.Input.SteerCommand);
             _islandSteerButton?.SetValue(InputElement.IsEnabledProperty, vm.Input.CanSteer);
         }
+    }
+
+    /// <summary>先查主窗资源，再回落 Application（图标表挂在应用级样式）。</summary>
+    private Geometry? FindGeometry(string key)
+    {
+        if (TryGetResource(key, ActualThemeVariant, out var local) && local is Geometry localGeometry)
+            return localGeometry;
+        var app = Avalonia.Application.Current;
+        if (app is not null && app.TryGetResource(key, ActualThemeVariant, out var shared) && shared is Geometry sharedGeometry)
+            return sharedGeometry;
+        return null;
+    }
+
+    /// <summary>胶囊里的后端图标：按内核选形状，不依赖颜色区分。</summary>
+    private void UpdateIslandBackendIcon(string? backendId, string? backendName)
+    {
+        if (_islandBackend is null) return;
+        var key = backendId switch
+        {
+            "pi" => "Icon.PlugConnected",
+            "omp" => "Icon.Speedometer",
+            "codex" => "Icon.Code",
+            "dsh" => "Icon.Globe",
+            "claude" => "Icon.Brain",
+            _ => "Icon.Sparkle",
+        };
+        _islandBackend.SetValue(Avalonia.Controls.Shapes.Path.DataProperty, FindGeometry(key));
+        ToolTip.SetTip(_islandBackend, "后端：" + (string.IsNullOrWhiteSpace(backendName) ? "FUMO" : backendName));
     }
 
     /// <summary>"vendor/model-name" → "model-name"；无斜杠原样返回。</summary>

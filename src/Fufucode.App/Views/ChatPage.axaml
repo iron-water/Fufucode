@@ -47,15 +47,7 @@
           </Grid>
         </Grid>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-          <!-- 当前会话后端徽标。切换后端必须新开会话（会话创建后固定后端），
-               因此这里只读显示；新建聊天使用“设置 › 插件市场 › 后端内核”中的默认值。 -->
-          <Border Classes="subtle" Padding="6,2" VerticalAlignment="Center"
-                  ToolTip.Tip="当前会话后端（默认值在 设置 › 插件市场 › 后端内核 修改）">
-            <StackPanel Orientation="Horizontal" Spacing="5" VerticalAlignment="Center">
-              <Border Width="8" Height="8" CornerRadius="4" Background="{Binding CurrentBackendBadgeColor, FallbackValue='#8B5CF6'}"/>
-              <TextBlock Text="{Binding CurrentBackendName, FallbackValue='FUMO'}" FontSize="11" FontWeight="SemiBold"/>
-            </StackPanel>
-          </Border>
+          <!-- 会话后端由顶栏会话岛展示（图标 + 名称），这里不再重复徽标。 -->
           <Button Classes="iconButton" Width="30" Height="30" Command="{Binding ToggleRemoteControlCommand}" ToolTip.Tip="手机远程控制 (WorkBuddy 对标)"><PathIcon Data="{DynamicResource Icon.Phone}" Width="15" Height="15"/></Button>
           <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" ToolTip.Tip="会话操作"><PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16"/></Button>
           <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click" ToolTip.Tip="查找本会话"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
@@ -209,6 +201,7 @@
                                                                MaxHeight="{Binding MaxHeight}" Margin="12,8" />
                                     <Button Classes="subtle" Content="{Binding ExpandLabel}"
                                             Command="{Binding ToggleExpandCommand}"
+                                            Click="OnBlockLayoutToggled"
                                             IsVisible="{Binding CanCollapse}" Margin="6,0,6,6"
                                             HorizontalAlignment="Left"/>
                                   </StackPanel>
@@ -249,7 +242,7 @@
                         <DataTemplate DataType="vm:ToolGroupViewModel" x:DataType="vm:ToolGroupViewModel">
                           <Border Classes="toolGroupCard" Margin="0,4">
                             <StackPanel>
-                              <Button Classes="toolGroupHeader" Command="{Binding ToggleExpandedCommand}"
+                              <Button Classes="toolGroupHeader" Click="OnToolGroupClicked"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                       Padding="10,7">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
