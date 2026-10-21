@@ -58,9 +58,14 @@ internal static class AppDialog
         {
             Orientation = Orientation.Horizontal,
             Spacing = 10,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
         };
-        foreach (var action in actions) buttons.Children.Add(action);
+        foreach (var action in actions)
+        {
+            action.VerticalAlignment = VerticalAlignment.Center;
+            buttons.Children.Add(action);
+        }
 
         var footer = new Border
         {
@@ -80,6 +85,9 @@ internal static class AppDialog
     /// <summary>字段标题 + 控件 + 说明。</summary>
     public static Control Field(string label, Control control, string? description = null)
     {
+        // 对话框输入框统一使用设置行的内嵌底色，避免深色主题下默认黑底与卡片脱节。
+        if (control is TextBox textBox && !textBox.Classes.Contains("dialogInput"))
+            textBox.Classes.Add("dialogInput");
         var stack = new StackPanel { Spacing = 6 };
         stack.Children.Add(new TextBlock { Text = label, Classes = { "settingsRowTitle" } });
         stack.Children.Add(control);

@@ -10,6 +10,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Input.Platform;
 using Avalonia.Interactivity;
+using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.Views;
@@ -66,7 +67,18 @@ internal static class SessionManagementRealSelfTest
         {
             await Until(() => window.CurrentSessionId == first.Id);
             var view = (OverviewView)window.PageForTesting("overview");
-            Button Row(string id) => view.Body.Children.OfType<Grid>().SelectMany(g => g.Children.OfType<Button>())
+            var sidebar = ((ViewModels.MainViewModel)window.DataContext!).Sidebar;
+            Check(sidebar.NewSessionBackends.Select(option => option.Key)
+                    .SequenceEqual(new[] { "fumo", "pi", "omp", "codex", "dsh", "claude" }),
+                "overview new-session dropdown exposes all six backends");
+            window.RenderOverview();
+            var toolbarGrid = view.Toolbar.Children.OfType<Grid>().First();
+            var addButton = toolbarGrid.Children.OfType<Button>()
+                .Single(button => ToolTip.GetTip(button) as string == "新建分区或项目");
+            Check(addButton.ContextMenu!.Items.OfType<MenuItem>().Select(item => item.Header)
+                    .SequenceEqual(new object[] { "新建分区", "添加项目" }),
+                "overview plus menu offers new section and add project");
+            Button Row(string id) => view.GetVisualDescendants().OfType<Button>()
                 .First(b => AutomationProperties.GetAutomationId(b) == "session.row." + id);
             MenuItem Menu(string id, string title) => Row(id).ContextMenu!.Items.OfType<MenuItem>().Single(m => (string?)m.Header == title);
             void Invoke(MenuItem item) => item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
@@ -74,7 +86,8 @@ internal static class SessionManagementRealSelfTest
             Check(new[] { "重命名", "置顶", "标为未读", "项目", "分区", "分叉", "复制", "归档" }
                 .All(title => row.ContextMenu!.Items.OfType<MenuItem>().Any(m => (string?)m.Header == title)),
                 "persisted real rows expose all required context actions");
-            var tail = ((Grid)row.Parent!).Children.OfType<StackPanel>().Single();
+            var tail = view.GetVisualDescendants().OfType<StackPanel>().Single(stack =>
+                AutomationProperties.GetAutomationId(stack) == "session.tail." + second.Id);
             Check(tail.Children.OfType<Button>().Select(AutomationProperties.GetName).SequenceEqual(new[] { "置顶", "归档" }),
                 "row hover contains only pin and archive, not rename");
             Check(Menu(second.Id, "分叉").Items.OfType<MenuItem>().Select(m => m.Header)
@@ -93,8 +106,8 @@ internal static class SessionManagementRealSelfTest
             Invoke(Menu(second.Id, "项目").Items.OfType<MenuItem>().Single(m => (string?)m.Header == organization.Project(other).Name));
             Check(new SessionOrganization(store).Placement(second.Id).ProjectId == other.Id && store.GetSession(second.Id).ProjectId == project.Id,
                 "project submenu moves display grouping without silently changing execution cwd");
-            var sectionHeader = view.Body.Children.OfType<TextBlock>().Single(t =>
-                AutomationProperties.GetAutomationId(t) == "section.row." + section.Id);
+            var sectionHeader = view.GetVisualDescendants().OfType<Button>().Single(button =>
+                AutomationProperties.GetAutomationId(button) == "section.row." + section.Id);
             Invoke(sectionHeader.ContextMenu!.Items.OfType<MenuItem>().Single(m => (string?)m.Header == "重命名"));
             var sectionDialog = await Dialog("重命名分区");
             ((StackPanel)sectionDialog.Content!).Children.OfType<TextBox>().Single().Text = "Renamed section";
@@ -102,7 +115,8 @@ internal static class SessionManagementRealSelfTest
                 .Single(b => (string?)b.Content == "保存").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             await Until(() => new SessionOrganization(store).State.Sections.Single().Name == "Renamed section");
             Check(new SessionOrganization(store).State.Sections.Single().Name == "Renamed section", "section context rename persists the edited name");
-            var projectRow = view.Body.Children.OfType<Button>().Single(b => AutomationProperties.GetAutomationId(b) == "project.row." + project.Id);
+            var projectRow = view.GetVisualDescendants().OfType<Button>().Single(b =>
+                AutomationProperties.GetAutomationId(b) == "project.row." + project.Id);
             Invoke(projectRow.ContextMenu!.Items.OfType<MenuItem>().Single(m => (string?)m.Header == "编辑项目"));
             var projectDialog = await Dialog("编辑项目");
             var projectPanel = (StackPanel)projectDialog.Content!;
@@ -133,7 +147,7 @@ internal static class SessionManagementRealSelfTest
             Invoke(Menu(second.Id, "归档"));
             Check(SessionPresentation.Load(store, second.Id).Archived && window.CurrentSessionId == first.Id &&
                 File.Exists(store.GetSession(second.Id).FilePath!), "archive of inactive target preserves history and the active conversation");
-            Check(!view.Body.Children.OfType<Grid>().SelectMany(g => g.Children.OfType<Button>())
+            Check(!view.GetVisualDescendants().OfType<Button>()
                 .Any(b => AutomationProperties.GetAutomationId(b) == "session.row." + second.Id), "archived target leaves the visible grouped rows");
         }
         finally
