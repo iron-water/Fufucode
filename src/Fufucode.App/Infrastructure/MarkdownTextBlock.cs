@@ -27,6 +27,7 @@ public sealed class MarkdownTextBlock
     private const string MonoFontKey = "AppMonoFont";
     private const string CodeBackgroundKey = "AppCodeBackground";
     private const string AccentTextKey = "AppAccentText";
+    private const string EmphasisKey = "AppEmphasis";
     private const string SecondaryTextKey = "AppTextSecondary";
 
     private static readonly FontFamily FallbackMonoFont = new("Cascadia Mono, Consolas, monospace");
@@ -367,6 +368,10 @@ public sealed class MarkdownTextBlock
                         Flush();
                         var inner = text[(index + markerLength)..close];
                         Span span = strong ? new Bold() : new Italic();
+                        if (strong && ResolveBrush(host, EmphasisKey) is { } emphasis)
+                        {
+                            span.Foreground = emphasis;
+                        }
                         span.Inlines.AddRange(ParseInlines(host, inner, baseSize, monoFamily));
                         result.Add(span);
                         index = close + markerLength;

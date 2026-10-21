@@ -44,6 +44,7 @@
 
 ## 7. 构件与样式单一来源
 
+- Fluent 暗色只用三档底色、一种主题色、一种模型输出强调色；细则见 [color-principles.md](color-principles.md)。
 - 设置页所有行经 `SettingsLayout`；样式集中在 `WorkbenchStyles.axaml`。
 - 颜色、圆角、字号、间距只用语义 token；禁止内联修补、裸 hex、平行卡片类。
 - 设计纪律必须能由源码测试机械检查。

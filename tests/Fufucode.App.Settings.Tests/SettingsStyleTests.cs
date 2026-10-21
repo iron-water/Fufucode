@@ -101,6 +101,16 @@ internal static class SettingsStyleTests
         check(missingIcons.Length == 0,
             "设置导航图标键全部存在" +
             (missingIcons.Length == 0 ? "" : "（缺失：" + string.Join(", ", missingIcons) + "）"));
+
+        // 10. Fluent 暗色用色原则：三档底色 + 主题色 + 模型输出强调色。
+        var themePath = Path.Combine(root, "src", "Fufucode.App", "Styles", "FufucodeTheme.axaml");
+        var theme = File.ReadAllText(themePath);
+        var requiredColorKeys = new[] { "AppBaseDeep", "AppBaseBar", "AppBaseHighlight", "AppEmphasis" };
+        check(requiredColorKeys.All(key => theme.Contains("x:Key=\"" + key + "\"", StringComparison.Ordinal)),
+            "Fluent 暗色三档底色与强调色 token 齐备");
+        var markdownPath = Path.Combine(root, "src", "Fufucode.App", "Infrastructure", "MarkdownTextBlock.cs");
+        check(File.ReadAllText(markdownPath).Contains("AppEmphasis", StringComparison.Ordinal),
+            "模型输出 Markdown 强调使用 AppEmphasis");
     }
 
     private static string FindRepositoryRoot()

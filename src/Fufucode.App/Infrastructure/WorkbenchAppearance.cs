@@ -18,10 +18,26 @@ public sealed record WorkbenchAppearance
 {
     public int Version { get; init; } = 1;
     public string Theme { get; init; } = "system";
+    /// <summary>主题色：UI 通用颜色（选中、链接、主按钮）。不是模型输出强调色。</summary>
     public string Accent { get; init; } = "system";
     public Avalonia.Media.Color EffectiveAccent => Accent == "system"
         ? Avalonia.Application.Current?.PlatformSettings?.GetColorValues().AccentColor1 ?? Avalonia.Media.Color.Parse("#0078D4")
         : Avalonia.Media.Color.Parse(Accent);
+    /// <summary>底色一：窗口/内容最底层深灰。</summary>
+    public string BaseBackground { get; init; } = "#1C1C1C";
+    /// <summary>底色二：标题栏、侧栏、停靠区等一般栏的浅灰。</summary>
+    public string BaseBar { get; init; } = "#2C2C2C";
+    /// <summary>底色三：悬停、选中与高亮。</summary>
+    public string BaseHighlight { get; init; } = "#3A3A3A";
+    /// <summary>强调色：只用于模型输出中的 Markdown 强调标记，默认黄色。</summary>
+    public string Emphasis { get; init; } = "#FFD400";
+    /// <summary>三档底色各自只提供三个备选，避免用户把层级关系选反。</summary>
+    public static readonly IReadOnlyList<string> BaseBackgroundChoices = ["#1C1C1C", "#161616", "#101010"];
+    public static readonly IReadOnlyList<string> BaseBackgroundLabels = ["深灰", "更深", "最深"];
+    public static readonly IReadOnlyList<string> BaseBarChoices = ["#2C2C2C", "#333333", "#3A3A3A"];
+    public static readonly IReadOnlyList<string> BaseBarLabels = ["浅灰", "更浅", "更亮"];
+    public static readonly IReadOnlyList<string> BaseHighlightChoices = ["#333333", "#3A3A3A", "#484848"];
+    public static readonly IReadOnlyList<string> BaseHighlightLabels = ["不太亮", "高亮", "更亮"];
     public string Surface { get; init; } = "fluent";
     // Retain an unknown stored identity for forward compatibility; resolve only for display/application.
     public string Skin { get; init; } = "fluent";
@@ -97,11 +113,21 @@ public sealed record WorkbenchAppearance
     {
         static string Choose(string? value, string fallback, params string[] values) => values.Contains(value) ? value! : fallback;
         static string Name(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim()[..Math.Min(value.Trim().Length, 80)];
+        static string Color(string? value, string fallback) =>
+            value is { Length: 7 } && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit)
+                ? value.ToUpperInvariant() : fallback;
+        static string BaseColor(string? value, IReadOnlyList<string> choices, string fallback) =>
+            value is { Length: 7 } && choices.Contains(value.ToUpperInvariant(), StringComparer.Ordinal)
+                ? value.ToUpperInvariant() : fallback;
         return this with
         {
             Version = 1,
             Theme = Choose(Theme, "system", "system", "light", "dark"),
             Accent = Accent == "system" || Accent is { Length: 7 } && Accent[0] == '#' && Accent.Skip(1).All(Uri.IsHexDigit) ? Accent : "system",
+            BaseBackground = BaseColor(BaseBackground, BaseBackgroundChoices, "#1C1C1C"),
+            BaseBar = BaseColor(BaseBar, BaseBarChoices, "#2C2C2C"),
+            BaseHighlight = BaseColor(BaseHighlight, BaseHighlightChoices, "#3A3A3A"),
+            Emphasis = Color(Emphasis, "#FFD400"),
             Surface = Choose(Surface, "fluent", "fluent", "glass", "flat", "classic"),
             FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 11, 24) : 13,
             Density = Choose(Density, "cozy", "compact", "cozy", "airy"),

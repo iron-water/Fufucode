@@ -108,6 +108,10 @@ UserControl (AppMicaPageBackground = AppWindowBackground → SolidBackgroundFill
 | 成功 | `AppSuccessForeground` | 复制状态、已启用 |
 | 警告 | `AppWarningForeground` / `AppCautionForeground` | 中断通知 |
 
+### 6.1 Fluent 暗色用色
+
+Fluent 暗色只允许三档底色（`AppBaseDeep/AppBaseBar/AppBaseHighlight`）、一种主题色（`AppAccent`）和一种模型输出强调色（`AppEmphasis`）。三档底色各只有三个备选；主题色/强调色可任选。图标、diff 红绿、代码高亮、终端和状态色属于已声明例外。详见 [color-principles.md](design/color-principles.md)。
+
 ## 7. 侧栏三级架构
 
 目录：`SettingsNavCatalog.All`（Basic → Features → Other 顺序）。
