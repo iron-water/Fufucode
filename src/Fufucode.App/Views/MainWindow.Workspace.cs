@@ -346,8 +346,125 @@ public partial class MainWindow
                 if (ReferenceEquals(TopLevel.GetTopLevel(browser), this)) browser.SetOccluded(value);
     }
 
+    /// <summary>输入区上下文条：当前会话所属项目（新会话且未发送第一条消息时可改）与固定后端。</summary>
+    private void WireSessionContext(MainViewModel vm)
+    {
+        _chatPage.SessionContextRequested = () =>
+        {
+            if (_host is null) return null;
+            var backend = BackendCapabilities.For(_host.Current.Session.Backend);
+            var project = _host.Manager.Metadata.GetProject(_host.Current.Session.ProjectId);
+            var organization = new SessionOrganization(_host.Manager.Metadata);
+            var name = organization.Project(project).Name;
+            // 只有还没有用户消息的新会话才能改项目；发送第一条后不再显示项目切换。
+            var canChange = !HasUserMessage(_host.Current.Session);
+            return new Views.ChatPage.SessionContextInfo(
+                project.Id, string.IsNullOrWhiteSpace(name) ? Path.GetFileName(project.Path) : name,
+                backend.Name, BackendBadgeColor(backend.Id), canChange);
+        };
+        _chatPage.ChangeProjectRequested = async () =>
+        {
+            if (_host is null) return;
+            var projects = OverviewProjects()
+                .Select(project => (project.Id, new SessionOrganization(_host.Manager.Metadata).Project(project).Name))
+                .ToArray();
+            await _chatPage.ShowProjectPickerAsync(projects, _host.Current.Session.ProjectId, async id =>
+            {
+                await MoveCurrentSessionToProjectAsync(id);
+                _chatPage.RefreshSessionContext();
+            });
+        };
+        _chatPage.RefreshSessionContext();
+        // 发出第一条消息后项目即固定：上下文条收起项目切换入口。
+        vm.Input.SubmissionStarted += _ => Dispatcher.UIThread.Post(() => _chatPage.RefreshSessionContext());
+    }
+
+    /// <summary>把当前会话移动到目标项目（或无项目独立工作区）。
+    /// 只有还没有用户消息的新会话允许移动；移动后会话在目标项目里继续，凭据与历史不变。</summary>
+    private async Task MoveCurrentSessionToProjectAsync(string? projectId)
+    {
+        if (_host is null) return;
+        if (_vm?.Input.IsTurnActive == true)
+            throw new InvalidOperationException("当前回合进行中，请先停止或等待完成再切换项目。");
+        var metadata = _host.Manager.Metadata;
+        var session = _host.Current.Session;
+        var target = projectId is null
+            ? metadata.GetOrCreateProject(ScratchWorkspace.Ensure(_options.CreateAppDataLayout()))
+            : metadata.GetProject(projectId);
+        if (target.Id == session.ProjectId) return;
+
+        // 新会话的会话文件随会话移动到目标项目目录，旧目录不留孤儿文件。
+        var sourceFile = session.FilePath;
+        var projectDirectory = _host.Manager.Layout.ProjectSessionsDirectory(target.Id);
+        var backendDirectory = Path.Combine(projectDirectory, BackendFolder(session.Backend));
+        Directory.CreateDirectory(backendDirectory);
+        string? moved = null;
+        if (sourceFile is { Length: > 0 } && File.Exists(sourceFile))
+        {
+            moved = Path.Combine(backendDirectory, Path.GetFileName(sourceFile));
+            File.Move(sourceFile, moved, overwrite: false);
+        }
+
+        try
+        {
+            metadata.MoveSession(session.Id, target.Id, moved);
+        }
+        catch
+        {
+            if (moved is not null && File.Exists(moved) && sourceFile is not null)
+                File.Move(moved, sourceFile, overwrite: true);
+            throw;
+        }
+
+        // 展示分组同步：移动到目标项目后不再挂在原来的分区。
+        new SessionOrganization(metadata).PlaceSession(session.Id, target.Id, null);
+        // 先把窗口切到目标项目，再按同一会话 id 重开，避免在旧项目目录里继续执行。
+        var path = target.Path;
+        if (!RealSessionHost.PathEquals(_host.ProjectPath, path)) await SwitchProjectAsync(path);
+        // 切换项目会恢复该项目最近的会话；这里再切回刚才移动的会话。
+        if (_host.Current.Session.Id != session.Id)
+            await _host.SwitchToAsync(session.Id, _bootstrapCts.Token);
+        RefreshSessionList();
+    }
+
+    private static string BackendFolder(Fufucode.Core.BackendId backend) => backend switch
+    {
+        Fufucode.Core.BackendId.Omp => "omp",
+        Fufucode.Core.BackendId.Claude => "claude",
+        Fufucode.Core.BackendId.Codex => "codex",
+        Fufucode.Core.BackendId.Dsh => "dsh",
+        Fufucode.Core.BackendId.Pi => string.Empty,
+        _ => "fumo",
+    };
+
+    private static bool HasUserMessage(Fufucode.Core.SessionRecord session)
+    {
+        if (session.FilePath is not { Length: > 0 } path || !File.Exists(path)) return false;
+        try
+        {
+            // FUMO/协议后端：JSON 里的 messages 数组；Pi：JSONL 每行一条。
+            var text = File.ReadAllText(path);
+            if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                return text.Contains("\"Role\": 1", StringComparison.Ordinal) ||
+                       text.Contains("\"Role\":1", StringComparison.Ordinal);
+            return text.Contains("\"role\":\"user\"", StringComparison.Ordinal);
+        }
+        catch (Exception) { return true; }
+    }
+
+    private static string BackendBadgeColor(Fufucode.Core.BackendId backend) => backend switch
+    {
+        Fufucode.Core.BackendId.Pi => "#6CCB5F",
+        Fufucode.Core.BackendId.Omp => "#FF9E4C",
+        Fufucode.Core.BackendId.Codex => "#3399FF",
+        Fufucode.Core.BackendId.Dsh => "#2BD4C4",
+        Fufucode.Core.BackendId.Claude => "#E8794A",
+        _ => "#8B5CF6",
+    };
+
     private void AttachWorkspaceContext(MainViewModel vm)
     {
+        WireSessionContext(vm);
         var path = _host?.ProjectPath ?? Environment.CurrentDirectory;
         if (_host is null) vm.WorkspacePanel.AttachMock(path);
         else

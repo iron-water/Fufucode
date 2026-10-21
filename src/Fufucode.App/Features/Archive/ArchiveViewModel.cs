@@ -69,7 +69,7 @@ public sealed class ArchiveViewModel
             foreach (var session in _store.ListSessions(project.Id))
             {
                 if (!SessionPresentation.Load(_store, session.Id).Archived) continue;
-                var title = session.Name ?? session.Id[..Math.Min(8, session.Id.Length)];
+                var title = SessionTitles.Display(session);
                 entries.Add(new ArchivedSessionEntry(session.Id, title, projectName, project.Path,
                     archivedProjects.Contains(project.Id), session.LastOpened));
             }

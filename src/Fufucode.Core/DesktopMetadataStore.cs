@@ -286,6 +286,21 @@ public sealed class DesktopMetadataStore
         if (command.ExecuteNonQuery() != 1) throw new KeyNotFoundException(sessionId);
     }
 
+    /// <summary>
+    /// Moves a session row to another project. Only allowed while the backend cannot have
+    /// written history yet (no file); the caller moves any persisted file first.
+    /// </summary>
+    public void MoveSession(string sessionId, string projectId, string? filePath)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE sessions SET project_id=$project, file_path=$path WHERE id=$id";
+        command.Parameters.AddWithValue("$project", projectId);
+        command.Parameters.AddWithValue("$path", (object?)filePath ?? DBNull.Value);
+        command.Parameters.AddWithValue("$id", sessionId);
+        if (command.ExecuteNonQuery() != 1) throw new KeyNotFoundException(sessionId);
+    }
+
     public void SetSessionName(string sessionId, string name)
     {
         using var connection = Open();

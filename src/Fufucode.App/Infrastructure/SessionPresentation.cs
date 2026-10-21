@@ -6,7 +6,11 @@ using Fufucode.Core;
 namespace Fufucode.App.Infrastructure;
 
 public sealed record SessionPresentation(bool Pinned = false, bool Archived = false, bool Unread = false,
-    List<string>? RowActions = null)
+    List<string>? RowActions = null,
+    /// <summary>用户亲手改过名字；自动取名永远不能覆盖它。</summary>
+    bool NameUserSet = false,
+    /// <summary>已经尝试过自动取名，避免每次回合结束重复调用。</summary>
+    bool NameAutoAttempted = false)
 {
     private static string Key(string id) => "session:presentation:v1:" + id;
     public static SessionPresentation Load(DesktopMetadataStore store, string id)

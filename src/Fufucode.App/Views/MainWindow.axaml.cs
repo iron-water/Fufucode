@@ -990,7 +990,8 @@ public partial class MainWindow : Window
             .OrderByDescending(record => SessionPresentation.Load(host.Manager.Metadata, record.Id).Pinned).Select(record =>
         {
             var isCurrent = record.Id == currentId;
-            var title = record.Name ?? record.Id[..Math.Min(8, record.Id.Length)];
+            // 没有名字的会话显示「新会话」，不再显示一串 id。
+            var title = SessionTitles.Display(record);
             var subtitle = BackendCapabilities.For(record.Backend).Name + " · " +
                 (isCurrent ? "当前活跃会话" : record.LastOpened.LocalDateTime.ToString("MM-dd HH:mm"));
             var item = new SessionItemViewModel(
@@ -1042,7 +1043,7 @@ public partial class MainWindow : Window
                         Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
                     return new RemoteSessionInfo(
                         pair.record.Id,
-                        pair.record.Name ?? pair.record.Id[..Math.Min(8, pair.record.Id.Length)],
+                        SessionTitles.Display(pair.record),
                         string.IsNullOrWhiteSpace(projectName) ? pair.project.Path : projectName,
                         BackendCapabilities.For(pair.record.Backend).Name,
                         pair.record.Id == currentId,
@@ -1212,6 +1213,11 @@ public partial class MainWindow : Window
         try
         {
             await _host.RenameCurrentAsync(name);
+            // 用户手动改名后，自动取名不得再覆盖。
+            var metadata = _host.Manager.Metadata;
+            var id = _host.Current.Session.Id;
+            SessionPresentation.Save(metadata, id,
+                SessionPresentation.Load(metadata, id) with { NameUserSet = true, NameAutoAttempted = true });
             if (DataContext is MainViewModel vm)
             {
                 vm.Sidebar.UpdateSessions(BuildSessionItems(_host), _host.Current.Session.Id, name);

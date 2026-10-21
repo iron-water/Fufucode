@@ -7,7 +7,7 @@
         <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/><TextBlock Text="新建会话" FontSize="12"/></StackPanel>
       </Button>
       <Button Grid.Column="1" Classes="subtle iconButton" Width="32" Height="32"
-              AutomationProperties.Name="选择后端新建会话" ToolTip.Tip="选择后端新建会话">
+              AutomationProperties.Name="选择后端新建会话" ToolTip.Tip="选择后端后新建会话">
         <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="12" Height="12"/>
         <Button.Flyout>
           <MenuFlyout Opening="NewSessionFlyout_Opening"/>
