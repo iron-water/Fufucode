@@ -40,13 +40,23 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+
+# 审阅目录按分支名固定（/ 换成 -），不按 commit 变化；审阅板用同一规则，
+# 模型漏写 -OutputRoot 时也能落到审阅板预期的位置。
+$branchHint = $null
+try {
+    $branchHint = (& git -C $root rev-parse --abbrev-ref HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $branchHint -eq 'HEAD') { $branchHint = $null } else { $branchHint = $branchHint.Trim() }
+} catch { }
+
 $hasOutputRoot = -not [string]::IsNullOrWhiteSpace($OutputRoot)
 $isReview = $hasOutputRoot -or (-not [string]::IsNullOrWhiteSpace($ReviewLabel))
 $outRoot = if ($hasOutputRoot) {
     if ([IO.Path]::IsPathRooted($OutputRoot)) { [IO.Path]::GetFullPath($OutputRoot) }
     else { [IO.Path]::GetFullPath((Join-Path $root $OutputRoot)) }
 } elseif ($isReview) {
-    $reviewSlug = ($ReviewLabel.Trim() -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
+    $slugSource = if ($branchHint) { $branchHint } else { $ReviewLabel }
+    $reviewSlug = ($slugSource.Trim() -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
     if ([string]::IsNullOrWhiteSpace($reviewSlug)) { $reviewSlug = 'review' }
     Join-Path $root "out/review/$reviewSlug"
 } else { Join-Path $root 'out' }
@@ -185,11 +195,7 @@ if ($RuntimeIdentifier -like 'win-*') {
 }
 
 # 构建标记：channel 固定 local，写 commit 与构建时间，构成唯一构建身份。
-$branch = $null
-try {
-    $branch = (& git -C $root rev-parse --abbrev-ref HEAD 2>$null)
-    if ($LASTEXITCODE -ne 0 -or $branch -eq 'HEAD') { $branch = $null } else { $branch = $branch.Trim() }
-} catch { }
+$branch = $branchHint
 $label = if (-not [string]::IsNullOrWhiteSpace($ReviewLabel)) { $ReviewLabel } else { $null }
 if ([string]::IsNullOrWhiteSpace($label) -and $isReview) {
     $label = if ($branch) { "$branch@$commit" } else { "review@$commit" }

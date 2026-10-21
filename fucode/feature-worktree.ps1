@@ -58,11 +58,13 @@ if ($LASTEXITCODE -eq 0) { throw "分支已存在：$branch" }
 & git -C $root worktree add -b $branch $path $Base
 if ($LASTEXITCODE -ne 0) { throw "git worktree add 失败：$branch" }
 
+$branchSlug = ($branch -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
 Write-Host "已创建并行工作树："
 Write-Host "  branch  : $branch"
 Write-Host "  worktree: $path"
+Write-Host "  review  : $(Join-Path $root "out/review/$branchSlug")"
 Write-Host "  label   : $branch@<commit>"
 Write-Host ""
 Write-Host "下一步："
 Write-Host "  cd `"$path`""
-Write-Host "  pwsh fucode/publish-local.ps1 -OutputRoot `"$root/out/review/$slug`" -ReviewLabel `"$branch`" -NoDeploy -NoRun"
+Write-Host "  pwsh fucode/publish-local.ps1 -OutputRoot `"$root/out/review/$branchSlug`" -ReviewLabel `"$branch@<commit>`" -NoDeploy -NoRun"
