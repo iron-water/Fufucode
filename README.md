@@ -1,140 +1,64 @@
 # Fufucode
 
-Windows-first desktop client for AI coding agents, built in C# on [Avalonia](https://avaloniaui.net/). Default backend is **FUMO**, a pure C# agent kernel with zero external runtime dependencies. Pi, OMP, Claude Code, Codex and DeepSeek Harness are optional backend plugins.
+面向 AI 编程 agent 的 Windows 桌面客户端，基于 C# / Avalonia 构建。
 
-Fufucode renders the session: streaming timeline, tool cards, approval gate, built-in browser, terminal, file preview and Git panel.
+默认内核为 **FUMO**（纯 C# 实现，零外部运行时依赖），Pi、OMP、Claude Code、Codex、DeepSeek Harness 等可作为后端插件按需接入。
 
-## Layout
+界面以会话为中心：流式时间线、工具卡片、审批门、内置浏览器、终端、文件预览与 Git 面板。
 
-| Path | Contents | Tracked? |
-|---|---|---|
-| `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog | yes |
-| `src/Fufucode.App` | Avalonia UI shell | yes |
-| `src/Fufucode.Cli` | Headless CLI | yes |
-| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, remote control, cron, auto-dev, skins) | yes |
-| `src/Fufucode.Pi` / `src/Fufucode.Claude` | Protocol adapters carried by their backend plugins | yes |
-| `tools/` | Native launcher and CLI forwarder | yes |
-| `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
-| `tests/` | Executable verification suites | yes |
-| `docs/` | Current authority, design, tasks, records and evidence; start at `docs/README.md` | yes |
-| `android/` | WorkBuddy-style mobile client | yes |
-| `assets/` | Product visual assets | yes |
-| `extensions/` | Optional extension payloads | yes |
-| `TestApp/` | Legacy initial Avalonia scaffold; not a product entry; build output ignored | source only |
-| `labs/` | Historical packaging experiments and logs | yes |
-| `out/` | Generated build/package output; not a source of truth | ignored |
-| `output/` | Generated screenshot output; use `out/evidence` instead | ignored |
-| `runtime/` | Local Node/Pi payload for optional backends; not shipped by default | ignored (provenance only) |
-| `reference/` | Third-party read-only references | ignored |
-| `tmp/` | Test artifacts; safe to clean | ignored |
+## 环境要求
 
-## Requirements
+- Windows 10+（x64）
+- 开发构建需要 .NET 10 SDK；自包含安装包的最终用户无需任何依赖，精简安装包需要 .NET 10 Runtime
+- 可选：Node、Bun、Python、Git Bash 或任意后端 CLI——Fufucode 直接使用已安装的，缺失时才提示下载
 
-- Windows 10+ (x64)
-- .NET 10 SDK to build. End users need nothing with the self-contained installer; the slim installer requires the **.NET 10 Runtime** (`Microsoft.NETCore.App 10.x`).
-- Optional: Node, Bun, Python, Git Bash, or any backend CLI. Fufucode uses what is already installed and only offers a download for what is missing.
-
-## Build and run
+## 构建与运行
 
 ```bash
 dotnet build Fufucode.sln -c Release
 ```
 
-Local development build and deploy:
+本地开发部署：
 
 ```bash
 pwsh fucode/publish-local.ps1
 ```
 
-## Parallel feature review
-
-Several models can work at once without sharing a worktree or overwriting `out/app`:
+## 打包
 
 ```bash
-pwsh fucode/feature-worktree.ps1 -Name review-ui
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0                     # 自包含
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0 -FrameworkDependent # 依赖 .NET 10
 ```
 
-Commit in that worktree, then publish an isolated review build:
+| 安装包 | 体积 | 依赖 |
+|---|---:|---|
+| `Fufucode-Native-Setup.exe` | ~19.5 MB | 无 |
+| `Fufucode-Native-Slim-Setup.exe` | ~12.2 MB | .NET 10 Runtime |
+
+## 目录结构
+
+| 路径 | 内容 |
+|---|---|
+| `src/Fufucode.Core` | 会话、持久化、信任、diff、更新、插件宿主 |
+| `src/Fufucode.App` | Avalonia UI 外壳 |
+| `src/Fufucode.Cli` | 无头命令行 |
+| `src/Fufucode.Plugins.*` | 后端与功能插件 |
+| `tools/` | 原生启动器与 CLI 转发器 |
+| `scripts/packaging/` | 打包与工具链脚本 |
+| `tests/` | 可执行验证套件 |
+| `android/` | 移动客户端 |
+| `TestApp/`、`labs/` | 早期脚手架与历史实验，非产品入口 |
+
+## CLI 速查
 
 ```bash
-pwsh fucode/publish-local.ps1 -ReviewLabel "feature/review-ui@a1b2c3d4" -NoRun
+fufucode "<prompt>"           # 一次性对话
+fufucode sessions list        # 会话列表
+fufucode runtime status       # 运行时与后端状态
+fufucode plugins status       # 插件状态
 ```
 
-Open the review board, then launch one build at a time:
+## 状态
 
-```bash
-pwsh fucode/review-parallel.ps1 -NoBuild -Open
-pwsh fucode/review-parallel.ps1 -NoBuild -LaunchSlug feature-review-ui
-```
-
-Each build lands in `out/review/<branch>`, has a `branch@commit` label, and uses its own
-`--data-root` and window title. Stale builds are marked when the branch has moved on.
-Cleanup is refused unless the worktree is clean and merged:
-
-```bash
-pwsh fucode/feature-worktree.ps1 -Name review-ui -Remove
-```
-
-See [docs/operations/parallel-review.md](docs/operations/parallel-review.md) for the workflow and
-[docs/tasks/parallel-feature-brief.md](docs/tasks/parallel-feature-brief.md) for the model-facing rules.
-
-## CLI
-
-```bash
-fufucode "<prompt>"                  # one-shot chat
-fufucode sessions list
-fufucode settings get --json
-fufucode runtime status              # node / bun / python / git-bash / backends
-fufucode plugins status              # installed plugin payloads
-```
-
-Runtime and plugin payloads install from a local zip or URL with SHA-256 verification:
-
-```bash
-fufucode runtime install pi --from Fufucode-Pi-Runtime.zip --sha256 <hex>
-fufucode plugins install backend.claude --from backend.claude-1.0.0.zip
-```
-
-## Packaging
-
-```bash
-pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0                     # self-contained
-pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0 -FrameworkDependent # needs .NET 10
-pwsh scripts/packaging/package-toolchain.ps1 -Id pi
-```
-
-| Installer | Download | Installed | Requires |
-|---|---:|---:|---|
-| `Fufucode-Native-Setup.exe` | 19.45 MB | 62.18 MB | nothing |
-| `Fufucode-Native-Slim-Setup.exe` | 12.2 MB | 37.60 MB | .NET 10 Runtime |
-
-`plugins-dist/` and `runtimes/` are separate download assets. Build output is not committed.
-
-## Performance and memory
-
-Settings → 性能与内存 provides opt-in switches; the default is high performance.
-
-| Switch | Effect | Applies |
-|---|---|---|
-| 软件渲染 | Skips ANGLE/D3D and the GPU driver stack; ~130–140 MB less working set | after restart |
-| 关闭视觉特效 | Stops glass/blur luminance sampling | immediately |
-| 减少终端回滚 | Terminal history 1500 → 500 lines | new terminals |
-| 浏览器后台降内存 | Background tabs skip early WebView2 creation and use `MemoryUsageTargetLevel.Low`; background scripts keep running | next tab switch |
-
-Measured idle build: 327 MB working set (default) vs 189 MB (low-memory preset).
-
-## Verify
-
-```bash
-out/build-native/app/Fufucode.App.exe --selftest
-pwsh scripts/packaging/native-start-smoke.ps1 -PackageRoot out/build-native
-pwsh scripts/packaging/test-native-channel.ps1
-```
-
-## Background mode
-
-Closing the window exits Fufucode by default. Enable **Settings → Other → Background and tray** to keep the process, sessions and backend subprocesses running after the window closes: the tray icon restores the window, and its menu can show the window or exit. Only one Fufucode process runs per login session; launching it again brings the existing window forward (even from the tray) and the second process exits.
-
-## Status
-
-Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
+活跃开发中。FUMO 为默认内核，后端插件按需安装。许可证信息见 `THIRD-PARTY-NOTICES.md`。
