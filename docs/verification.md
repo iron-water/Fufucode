@@ -1,5 +1,8 @@
 # 验证记录
 
+> **状态：HISTORICAL LOG（2026-10-08 起）**
+> 本页是历史验证记录，不代表当前源码。最新设置/接线验证见 [records/frontend-wiring-normalization-2026-10-20.md](records/frontend-wiring-normalization-2026-10-20.md) 和 [records/INDEX.md](records/INDEX.md)。
+
 ## 2026-10-08：Pi 1.1.0
 
 - 实际落锁 Pi 1.1.0 探针：11 PASS、0 FAIL/SKIP；自测 14 PASS。含双向 JSONL 副本读写、真实审批桥，以及显式内置 codemode/MCP 的 QuickJS/stdio/内层审批/store 行为。

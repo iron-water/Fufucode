@@ -6,16 +6,27 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 
 ## Layout
 
-| Path | Contents |
-|---|---|
-| `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog |
-| `src/Fufucode.App` | Avalonia UI shell |
-| `src/Fufucode.Cli` | Headless CLI |
-| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, remote control, cron, auto-dev, skins) |
-| `src/Fufucode.Pi` / `src/Fufucode.Claude` | Protocol adapters carried by their backend plugins |
-| `tools/` | Native launcher and CLI forwarder |
-| `scripts/packaging/` | Package, installer, toolchain and runtime packaging |
-| `tests/` | Executable verification suites |
+| Path | Contents | Tracked? |
+|---|---|---|
+| `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog | yes |
+| `src/Fufucode.App` | Avalonia UI shell | yes |
+| `src/Fufucode.Cli` | Headless CLI | yes |
+| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, remote control, cron, auto-dev, skins) | yes |
+| `src/Fufucode.Pi` / `src/Fufucode.Claude` | Protocol adapters carried by their backend plugins | yes |
+| `tools/` | Native launcher and CLI forwarder | yes |
+| `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
+| `tests/` | Executable verification suites | yes |
+| `docs/` | Current authority, design, tasks, records and evidence; start at `docs/README.md` | yes |
+| `android/` | WorkBuddy-style mobile client | yes |
+| `assets/` | Product visual assets | yes |
+| `extensions/` | Optional extension payloads | yes |
+| `TestApp/` | Legacy initial Avalonia scaffold; not a product entry; build output ignored | source only |
+| `labs/` | Historical packaging experiments and logs | yes |
+| `out/` | Generated build/package output; not a source of truth | ignored |
+| `output/` | Generated screenshot output; use `out/evidence` instead | ignored |
+| `runtime/` | Local Node/Pi payload for optional backends; not shipped by default | ignored (provenance only) |
+| `reference/` | Third-party read-only references | ignored |
+| `tmp/` | Test artifacts; safe to clean | ignored |
 
 ## Requirements
 
