@@ -44,8 +44,20 @@ public sealed class AppActionRegistry
         RefreshCapabilities();
     }
 
+    public bool Contains(string id) => _actions.ContainsKey(id);
+
     public IAsyncRelayCommand GetCommand(string id) => _commands.TryGetValue(id, out var command)
         ? command : throw new KeyNotFoundException("Action is not registered: " + id);
+
+    /// <summary>移除动态注册的动作（插件页卸载）。不存在时是幂等空操作。</summary>
+    public bool Unregister(string id)
+    {
+        if (!_actions.Remove(id)) return false;
+        _commands.Remove(id);
+        _executing.Remove(id);
+        RefreshCapabilities();
+        return true;
+    }
 
     public string? GetDisabledReason(string id)
     {

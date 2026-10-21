@@ -1,3 +1,5 @@
+using System;
+
 namespace Fufucode.App.Infrastructure;
 
 public static class WorkbenchActionDefaults
@@ -17,8 +19,17 @@ public static class WorkbenchActionDefaults
         "status.shell" => new(UiActionPosition.StatusLeft, 1),
         "status.activity" => new(UiActionPosition.StatusRight, 0),
         "status.tokens" => new(UiActionPosition.StatusRight, 1),
-        "status.duration" or "status.branch" or "status.project" => new(UiActionPosition.Hidden),
-        "session.side" or "session.fork" or "session.schedule" or "session.share" or "window.session" => new(UiActionPosition.HeaderMenu),
+        "status.duration" => new(UiActionPosition.StatusRight, 2),
+        "status.project" => new(UiActionPosition.StatusRight, 3),
+        "status.branch" => new(UiActionPosition.StatusRight, 4),
+        // 会话绑定动作：默认进入顶部动态岛，可作为磁贴配置；其它皮肤自动折回左辅助菜单。
+        "session.rename" or "session.pin" or "session.side" or "session.fork" or "session.schedule"
+            => new(UiActionPosition.SessionIsland, id switch
+            {
+                "session.rename" => 0, "session.pin" => 1, "session.side" => 2,
+                "session.fork" => 3, _ => 4,
+            }),
+        "window.session" => new(UiActionPosition.HeaderMenu),
         "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
         "usage" or "perf" or "diagnostics.export" => new(UiActionPosition.MenuRight),
         "layout.reset" or "composer.toggle" or "summary.toggle" => new(UiActionPosition.MenuRight),
@@ -32,7 +43,7 @@ public static class WorkbenchActionDefaults
     public static string? SubMenu(string id) => id switch
     {
         "chat" or "files" or "changes" or "browser" or "terminal" or "extensions" => "工作区页面",
-        "copy.session" or "copy.id" or "copy.task" or "copy.project" or "copy.log" or "copy.deeplink" or "copy.markdown" or "copy.workdir" => "复制",
+        "copy.id" or "copy.task" or "copy.project" or "copy.log" or "copy.deeplink" or "copy.markdown" or "copy.workdir" => "复制",
         "session.export" or "session.export.markdown" or "session.export.metadata" or "session.export.pdf" => "导出",
         "session.fork" or "session.fork.worktree" => "分叉",
         "project.open" or "project.explorer" or "project.openWith" or "library" => "项目",
@@ -40,7 +51,7 @@ public static class WorkbenchActionDefaults
         _ when id.StartsWith("edit.") => "编辑",
         "view.fullscreen" or "view.zoomIn" or "view.zoomOut" or "view.zoomReset" or "layout.reset" or "composer.toggle" or "summary.toggle" => "视图与布局",
         _ when id.StartsWith("speech.") => "语音朗读",
-        "page.automation" or "page.local-review" or "perf" or "diagnostics.export" or "help.troubleshoot" or "help.status" => "诊断与系统",
+        "page.automation" or "page.local-review" or "perf" or "diagnostics.export" or "help.troubleshoot" => "诊断与系统",
         "help.shortcuts" or "help.update" or "help.about" or "auth.manage" or "window.new" or "window.session" => "帮助与全局",
         _ => null,
     };
@@ -55,41 +66,57 @@ public static class WorkbenchActionDefaults
     public static string PositionTitle(UiActionPosition position) => position switch
     {
         UiActionPosition.TopLeft => "顶栏左侧", UiActionPosition.TopRight => "顶栏右侧",
-        UiActionPosition.TopCenter => "顶栏中间", UiActionPosition.SessionIsland => "会话岛（顶栏中央）",
+        UiActionPosition.TopCenter => "顶栏中间", UiActionPosition.SessionIsland => "会话岛（Fluent；其它皮肤折回左辅助）",
         UiActionPosition.MenuLeft => "核心功能（侧边栏）", UiActionPosition.MenuRight => "辅助功能（顶栏菜单）",
         UiActionPosition.HeaderMenu => "会话头菜单", UiActionPosition.StatusLeft => "状态栏左侧",
         UiActionPosition.StatusRight => "状态栏右侧", _ => "隐藏"
     };
-    public static string Icon(string id) => id switch
+    /// <summary>
+    /// 动作的显式 Fluent 图标。返回 null 表示目录漏登记，调用方显示通用占位；
+    /// 自测会把任何 null 视为失败，防止“新动作静默落入 AppsList”。
+    /// </summary>
+    public static string? ExplicitIcon(string id) => id switch
     {
-        "browser.new-tab" => "Add", "browser.close-tab" => "Dismiss", "browser.back" => "ArrowLeft", "browser.forward" => "ArrowRight",
-        "browser.reload" or "browser.zoom-reset" => "ArrowClockwise", "browser.stop" => "RecordStop", "browser.find" => "Search",
-        "browser.zoom-in" => "ZoomIn", "browser.zoom-out" => "ZoomOut", "browser.copy-address" => "Copy",
-        "browser.open-external" => "Open", "browser.devtools" => "Wrench",
-        "page.local-review" => "ShieldCheckmark",
-        "page.automation" => "Automation",
-        "library" => "Folder",
+        "browser.new-tab" => "Add", "browser.close-tab" => "Dismiss",
+        "browser.back" => "ArrowLeft", "browser.forward" => "ArrowRight",
+        "browser.reload" or "browser.zoom-reset" => "ArrowClockwise", "browser.stop" => "RecordStop",
+        "browser.find" => "Search", "browser.zoom-in" => "ZoomIn", "browser.zoom-out" => "ZoomOut",
+        "browser.copy-address" => "Copy", "browser.open-external" => "Open", "browser.devtools" => "Wrench",
+        "browser.focus-address" => "Edit", "browser.toggle-full-view" => "FullScreenMaximize",
+        "page.local-review" => "ShieldCheckmark", "page.automation" => "Automation", "library" => "Folder",
         "commands" or "session.search" => "Search", "settings" => "Settings",
-                "toggle.left" => "PanelLeft", "toggle.right" => "PanelRight", "toggle.bottom" => "PanelBottom", "terminal" => "Terminal",
+        "toggle.left" => "PanelLeft", "toggle.right" => "PanelRight", "toggle.bottom" => "PanelBottom",
+        "terminal" => "Terminal", "terminal.copy" => "Copy", "terminal.paste" => "ClipboardPaste",
+        "terminal.find" => "Search", "terminal.bottom" => "ArrowDown", "terminal.copy-or-interrupt" => "Copy",
+        "terminal.interrupt" => "RecordStop", "terminal.new" => "Add",
         "session.new" => "Add", "navigate.back" => "ArrowLeft", "navigate.forward" => "ArrowRight",
         "session.previous" => "ArrowLeft", "session.next" => "ArrowRight",
         "session.rename" => "Edit", "session.pin" => "Pin", "session.archive" => "Archive",
-        "session.unread" or "chat" or "session.side" => "Chat", "session.fork" => "Branch", "session.export" => "ArrowDownload", "session.share" => "Share",
-        "session.schedule" or "tasks" => "Calendar", "notifications" => "Alert", "browser" => "Globe", "files" or "project.open" => "Folder",
-        "extensions" => "PuzzlePiece", "window.new" or "window.session" => "WindowNew", "usage" => "Info",
-        "auth.manage" => "Key", "project.openWith" => "Open",
-        "speech.start" or "speech.settings" => "Speaker", "speech.pause" => "Pause", "speech.resume" => "Play", "speech.stop" => "RecordStop",
-        "session.export.metadata" => "Document", "session.export.pdf" => "Document",
-        "session.fork.worktree" => "Branch", "copy.deeplink" => "Share", "copy.markdown" => "Copy", "copy.workdir" => "Folder",
-        "help.about" or "help.update" or "help.performance" => "Info",
-        "composer.toggle" => "Edit", "layout.reset" => "ArrowClockwise", "summary.toggle" => "Document", "edit.undo" => "ArrowUndo", "edit.redo" => "ArrowRedo",
-        "edit.cut" => "Cut", "edit.copy" => "Copy", "edit.paste" => "ClipboardPaste", "edit.delete" => "Dismiss", "edit.selectAll" => "Document",
-        "view.zoomIn" => "ZoomIn", "view.zoomOut" => "ZoomOut", "view.zoomReset" => "ArrowClockwise", "view.fullscreen" => "FullScreenMaximize",
-        "session.archives" => "Archive", "session.foreground" => "Open", "project.explorer" => "Folder",
-        "help.shortcuts" => "Keyboard",
-        "perf" => "Speedometer", "help.troubleshoot" => "Wrench", "help.status" => "Info",
+        "session.unread" or "chat" or "session.side" => "Chat", "session.fork" => "Branch",
+        "session.export" or "session.export.markdown" => "ArrowDownload",
+        "session.schedule" or "tasks" => "Calendar", "notifications" => "Alert", "browser" => "Globe",
+        "files" or "project.open" => "Folder", "changes" => "Branch", "extensions" => "PuzzlePiece",
+        "window.new" or "window.session" => "WindowNew", "usage" => "Info", "auth.manage" => "Key",
+        "project.openWith" or "project.explorer" => "Open",
+        "speech.start" or "speech.settings" => "Speaker", "speech.pause" => "Pause",
+        "speech.resume" => "Play", "speech.stop" => "RecordStop",
+        "session.export.metadata" or "session.export.pdf" => "Document",
+        "session.fork.worktree" => "Branch", "copy.id" => "Copy",
+        "copy.deeplink" => "Share", "copy.markdown" => "Copy", "copy.workdir" or "copy.project" => "Folder",
+        "copy.task" => "Document", "copy.log" => "History",
+        "help.about" or "help.update" => "Info",
+        "composer.toggle" => "Edit", "layout.reset" => "ArrowClockwise", "summary.toggle" => "Document",
+        "edit.undo" => "ArrowUndo", "edit.redo" => "ArrowRedo", "edit.cut" => "Cut", "edit.copy" => "Copy",
+        "edit.paste" => "ClipboardPaste", "edit.delete" => "Dismiss", "edit.selectAll" => "Document",
+        "view.zoomIn" => "ZoomIn", "view.zoomOut" => "ZoomOut", "view.zoomReset" => "ArrowClockwise",
+        "view.fullscreen" => "FullScreenMaximize",
+        "session.archives" => "Archive", "session.foreground" => "Open",
+        "help.shortcuts" => "Keyboard", "perf" => "Speedometer", "help.troubleshoot" => "Wrench",
         "diagnostics.export" => "ArrowDownload",
-        _ when id.StartsWith("status.") => "Info",
-        _ when id.StartsWith("copy.") => "Copy", _ => "AppsList"
+        _ when id.StartsWith("status.", StringComparison.Ordinal) => "Info",
+        _ => null,
     };
+
+    /// <summary>界面用图标：显式映射优先，未知动作回退通用图标。</summary>
+    public static string Icon(string id) => ExplicitIcon(id) ?? "AppsList";
 }

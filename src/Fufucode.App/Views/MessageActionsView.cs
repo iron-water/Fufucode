@@ -31,6 +31,7 @@ public sealed class MessageActionsView : UserControl
     private readonly TextBlock _usage;
     private readonly TextBlock _model;
     private readonly TextBlock _time;
+    private readonly StackPanel _icons;
 
     internal void ApplyAppearance(WorkbenchAppearance appearance)
     {
@@ -38,12 +39,17 @@ public sealed class MessageActionsView : UserControl
         UpdateVisibility();
     }
 
+    /// <summary>
+    /// 只淡出图标操作；用量/模型/时间始终可见。
+    /// 之前整条一起淡出，用户不悬停就完全看不到底部信息，像是"没有底部工具栏"。
+    /// </summary>
     private void UpdateVisibility()
     {
-        if (Content is Control content)
-            content.Opacity = _appearance.MessageActions == "show" ||
-                              (_appearance.MessageActions == "hover" && IsPointerOver) ? 1 : 0;
-        IsHitTestVisible = _appearance.MessageActions != "hide";
+        if (_icons is null) return;
+        var visible = _appearance.MessageActions == "show" ||
+                      (_appearance.MessageActions == "hover" && IsPointerOver);
+        _icons.Opacity = visible ? 1 : 0;
+        _icons.IsHitTestVisible = _appearance.MessageActions != "hide";
     }
 
     public MessageActionsView()
@@ -61,14 +67,14 @@ public sealed class MessageActionsView : UserControl
         _model = new TextBlock { Classes = { "meta" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
         _time = new TextBlock { Classes = { "meta", "tabularNumeric" }, VerticalAlignment = VerticalAlignment.Center };
 
-        var icons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        icons.Children.Add(_copy);
-        icons.Children.Add(_speak);
-        icons.Children.Add(_quote);
-        icons.Children.Add(_fork);
-        icons.Children.Add(_retry);
-        icons.Children.Add(_ask);
-        icons.Children.Add(_edit);
+        _icons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        _icons.Children.Add(_copy);
+        _icons.Children.Add(_speak);
+        _icons.Children.Add(_quote);
+        _icons.Children.Add(_fork);
+        _icons.Children.Add(_retry);
+        _icons.Children.Add(_ask);
+        _icons.Children.Add(_edit);
 
         var meta = new StackPanel
         {
@@ -84,9 +90,9 @@ public sealed class MessageActionsView : UserControl
             ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
             Margin = new Thickness(0, 6, 0, 0),
         };
-        Grid.SetColumn(icons, 0);
+        Grid.SetColumn(_icons, 0);
         Grid.SetColumn(meta, 1);
-        row.Children.Add(icons);
+        row.Children.Add(_icons);
         row.Children.Add(meta);
 
         // 复制菜单：普通文本 / Markdown / 消息 ID（与主流客户端一致）。
@@ -130,10 +136,10 @@ public sealed class MessageActionsView : UserControl
         };
         PointerEntered += (_, _) =>
         {
-            if (Content is Control content && _appearance.MessageActions == "hover")
+            if (_appearance.MessageActions == "hover")
             {
-                content.Opacity = 1;
-                IsHitTestVisible = true;
+                _icons.Opacity = 1;
+                _icons.IsHitTestVisible = true;
             }
         };
         PointerExited += (_, _) => UpdateVisibility();

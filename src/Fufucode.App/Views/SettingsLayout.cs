@@ -19,8 +19,17 @@ namespace Fufucode.App.Views;
 /// </summary>
 internal static class SettingsLayout
 {
+    private sealed class SearchTermsOwner { }
+
     /// <summary>组与组之间的固定上间隔（8px 网格的整数倍）。</summary>
     public const double SectionTopGap = 24;
+
+    /// <summary>供设置页搜索使用的行语义词。由标准行构件统一写入，页面不重复维护过滤条件。</summary>
+    public static readonly AttachedProperty<string?> SearchTermsProperty =
+        AvaloniaProperty.RegisterAttached<SearchTermsOwner, Control, string?>("SearchTerms");
+
+    public static void SetSearchTerms(Control control, string? value) => control.SetValue(SearchTermsProperty, value);
+    public static string? GetSearchTerms(Control control) => control.GetValue(SearchTermsProperty);
 
     /// <summary>分组标题（卡片外面）。</summary>
     public static TextBlock GroupHeader(string text, bool first = false)
@@ -59,6 +68,8 @@ internal static class SettingsLayout
         };
         header.Classes.Add("settingsGroupToggle");
         AutomationProperties.SetName(header, "折叠或展开分组 " + text);
+        AutomationProperties.SetAutomationId(header, "settings-collapsible-" + text);
+        AutomationProperties.SetAutomationId(body, "settings-collapsible-body-" + text);
 
         var expanded = true;
         void Apply()
@@ -172,6 +183,8 @@ internal static class SettingsLayout
         }
 
         var row = new Border { Child = grid };
+        SetSearchTerms(row, string.Join(" ", new[] { title, description }
+            .Where(value => !string.IsNullOrWhiteSpace(value))));
         row.Classes.Add("settingsRow");
         // Win11 行高：带说明 64，仅标题 52。compact 只给无说明行。
         if (string.IsNullOrEmpty(description)) row.Classes.Add("compact");

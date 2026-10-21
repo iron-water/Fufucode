@@ -13,6 +13,7 @@ public partial class MainWindow
     private ShortcutManagerViewModel _shortcuts = null!;
     private ShortcutsPage _shortcutsPage = null!;
     private ShortcutAction[] _shortcutActions = [];
+    private string _shortcutActionSignature = "";
     internal ShortcutManagerViewModel ShortcutsForTesting => _shortcuts;
     internal bool RouteShortcutForTesting(Key key, KeyModifiers modifiers) =>
         HandleGlobalShortcut(new KeyEventArgs { Key = key, KeyModifiers = modifiers });
@@ -21,12 +22,25 @@ public partial class MainWindow
     {
         var store = new ShortcutBindingsStore(Program.SelfTestDataRoot ?? _options.CreateAppDataLayout().Root);
         _shortcuts = new(() => store);
-        _shortcutActions = _actions.Actions.Select(action => new ShortcutAction(action.Id, action.Title, action.Group,
-            ShortcutDefaults.ScopeOf(action.Id), ShortcutDefaults.DefaultGestures(action.Id), action.Description)).ToArray();
-        _shortcuts.SetActions(_shortcutActions, _actions.GetDisabledReason);
+        SyncShortcutCatalog();
         _shortcuts.Changed += UpdateShortcutLabels;
         _shortcutsPage = new(_shortcuts) { CompositionProbe = IsShortcutCompositionActive };
         _actions.Changed += OnShortcutCapabilitiesChanged;
+        UpdateShortcutLabels();
+    }
+
+    /// <summary>
+    /// 动作目录可能因插件页启停而增长/收缩；快捷键目录必须同步重建，
+    /// 不能只在启动时投影一次。
+    /// </summary>
+    private void SyncShortcutCatalog()
+    {
+        var signature = string.Join("|", _actions.Actions.Select(action => action.Id).OrderBy(id => id, StringComparer.Ordinal));
+        if (signature == _shortcutActionSignature) return;
+        _shortcutActionSignature = signature;
+        _shortcutActions = _actions.Actions.Select(action => new ShortcutAction(action.Id, action.Title, action.Group,
+            ShortcutDefaults.ScopeOf(action.Id), ShortcutDefaults.DefaultGestures(action.Id), action.Description)).ToArray();
+        _shortcuts.SetActions(_shortcutActions, _actions.GetDisabledReason);
         UpdateShortcutLabels();
     }
 
@@ -39,6 +53,7 @@ public partial class MainWindow
 
     private void OnShortcutCapabilitiesChanged()
     {
+        SyncShortcutCatalog();
         foreach (var row in _shortcuts.Rows)
             row.RefreshUnavailable(() => _actions.GetDisabledReason(row.Id));
     }

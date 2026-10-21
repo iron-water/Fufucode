@@ -29,7 +29,7 @@ internal static class BackgroundModeSelfTest
         MainWindow? window = null;
         try
         {
-            Check(SettingsNavCatalog.Find("background") is { Tier: SettingsNavTier.Other, HasContent: true },
+            Check(SettingsNavCatalog.Find("background") is { Tier: SettingsNavTier.Other },
                 "后台与托盘进入设置目录（其他分类，有内容页）");
             Check(new BackgroundSettings().CloseToTray == false && new AppSettings().Background is null,
                 "默认关闭托盘常驻，旧配置缺失字段时保持关窗即退出");

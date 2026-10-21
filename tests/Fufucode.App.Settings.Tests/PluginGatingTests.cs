@@ -39,6 +39,10 @@ internal static class PluginGatingTests
             Check(!PluginAccess.ComputerControlEnabled(customization), "未安装时电脑操控不可用");
 
             // ── 安装并启用 ──
+            // 状态存储把“没有真实载荷的已安装”如实降级为未安装；夹具先建立载荷契约，
+            // 这样测到的是“安装后能力解锁”，而不是绕过生产门禁。
+            SeedPayload(dataRoot, PluginCapabilityRegistry.ProviderId(PluginCapability.BrowserControl)!);
+            SeedPayload(dataRoot, PluginCapabilityRegistry.ProviderId(PluginCapability.ComputerControl)!);
             var store = new PluginStateStore(new AppDataLayout(dataRoot));
             store.Install(PluginCapabilityRegistry.ProviderId(PluginCapability.BrowserControl)!);
             Check(PluginAccess.AdvancedControlEnabled(customization), "安装并启用后浏览器高级控制解锁");
@@ -132,6 +136,15 @@ internal static class PluginGatingTests
         }
     }
 
+    /// <summary>建立最小真实载荷（manifest），满足 PluginStateStore 的“已安装”契约。</summary>
+    private static void SeedPayload(string dataRoot, string pluginId)
+    {
+        var directory = Path.Combine(dataRoot, "plugins", pluginId);
+        Directory.CreateDirectory(directory);
+        File.WriteAllText(Path.Combine(directory, "manifest.json"),
+            "{\"id\":\"" + pluginId + "\",\"version\":\"1.0.0\",\"entryAssembly\":\"plugin.dll\"}");
+    }
+
     private static PluginItemViewModel Find(SettingsPageViewModel settings, string id)
     {
         foreach (var item in settings.MarketplacePlugins)
@@ -140,7 +153,7 @@ internal static class PluginGatingTests
     }
 
     /// <summary>构造最小真实运行上下文：只接线数据根，其余回调返回固定只读值。</summary>
-    private static SettingsPageViewModel.Context BuildContext(string dataRoot) =>
+    internal static SettingsPageViewModel.Context BuildContext(string dataRoot) =>
         new(
             Store: new AppSettingsStore(new AppDataLayout(dataRoot)),
             IsMock: false,

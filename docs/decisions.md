@@ -655,7 +655,14 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 
 2026-10-18 交互终端插件体验增强决定：在终端拆为 `workspace.terminal` 插件后，按“把所有问题和可做的增强写好”的指令继续补齐：VT 侧加入 SGR 下划线/斜体/反显/暗色/隐藏/删除线、OSC 0/1/2 标题、OSC 4 调色板、OSC 8 超链接、DECSCUSR 光标形状、括号粘贴与鼠标跟踪模式、组合字符合并、可配置回滚；交互侧加入双击选词、三击选行、全选、Ctrl+Click 链接、拖拽自动滚动、鼠标按下/释放/滚轮上报、页签重命名与重启、shell 配置（cmd/PowerShell/pwsh/Git Bash，缺失时明确报告）、终端设置对话框与持久化、直接粘贴到 shell（括号粘贴/多行确认）、视觉/蜂鸣响铃、字号缩放、文本运行合并与 FormattedText 缓存、输出面无障碍名称。终端设置由插件自管（`<dataRoot>/terminal-settings.json`），宿主不感知字段。验证：解决方案 36 工程 0 错误 0 警告；终端测试 104 项通过；`--r2-only`、`--floating-workbench-only` 0 失败；真实 ConPTY 光标应答冒烟通过。未实现分屏、页签拖拽排序、命令历史持久化、正则查找、鼠标运动上报、图片协议；本工作树基线的 `--tabs-only` 2 项、`--skins-integration-only` Grid 越界、`--r3-only` 设置分类失败与终端插件无关，未修复。详见 `docs/records/terminal-plugin-2026-10-18.md`。
 
-2026-10-20 性能监控取代旧诊断入口决定：性能监控插件已覆盖旧“诊断与系统”里的三项重合能力，按用户指令删除这些旧入口，避免同一功能出现两个入口。1. 删除“查看调用轨迹”（`trace` 动作与 `MainWindow.Trace.cs`）：回合瀑布、慢调用与异常页取代其 Pi 诊断日志列表。2. 删除“运行状态与资源”（`help.tasks`）：进程内存/CPU/线程/句柄/GC 与 UI 批处理耗时已由性能停靠页概览和 `perf/host-*.jsonl` 持续采集。3. 删除“开始/结束性能跟踪”（`help.performance`）及其 `_performanceWatch`/`_performanceSamples` 采样：性能页提供实时、持续、可导出的采样。4. 性能监控命令面板只保留一个入口“性能监控”（`perf`），收进“诊断与系统”子菜单并作为默认项；`perf.anomalies`/`perf.export`/`perf.clear` 不再占用辅助栏——导出、清空与异常视图保留在性能页和设置页内。5. “导出完整诊断包”（`diagnostics.export`）、“故障排除”（`help.troubleshoot`）与“系统状态”（`help.status`）保留：前者覆盖后端诊断日志与系统信息，后两者展示应用/系统/路径等非性能信息。验证：解决方案 0 错误；`WorkbenchCustomizationSelfTest` 的动作清单断言同步更新（`trace`/`help.performance` → `perf`）。
+2026-10-20 FUMO 长程任务执行架构与无头验证决定：
+1. 解决轮次硬截断：`NativeSessionFactory` 将 `maxIterations` 默认从 10 提至 50（支持长程复杂工程任务）；CLI 增加 `--max-iterations` / `--max-turns <N>` 参数，会话动态应用。
+2. 注入基础环境提示与工程原则：`NativeCSharpChatSession.BuildTurnMessages` 自动注入基础系统提示（告知 Windows cmd.exe / OS 环境、命令串联使用 `&&`、优先使用内置工具、SDK 缺失时完成代码架构/数据/测试并如实报告），彻底消除模型在 Windows 下盲目尝试 Unix 命令导致的死循环。
+3. 放宽工具截断上限：`NativeAgentLoop.PruneToolResult` 阈值由 12KB 提至 64KB（头 48KB + 尾 16KB），避免 30KB 级任务规范在首轮被腰斩。
+4. 传递思考等级：`NativeSessionFactory` 创建会话时自动透传 `ThinkingLevel`；CLI 增加 `--thinking` / `--thinking-level` 参数支持。
+5. CLI 无头会话接入性能插件：`PackageLoadContext` 增加对宿主输出目录共享依赖的回退解析（支持无头加载 Avalonia 相关插件），CLI 会话自动激活 `performance.monitor`，实时写出 `perf/perf-*.jsonl` span 记录。
+6. 实测验证：在 `C:\Projects\SGline` 下运行 `test.md`（Flutter 数学巨树任务书 Phase 1），选用 `group/swe-2` 模型无头运行。32 轮模型迭代、46 次工具调用（20 write、12 edit、7 command、4 read、2 plan），在无 Dart/Flutter 环境下自主完成纯 Dart 领域引擎（9 个文件）、种子数据（23 节点、46 边）、Python 离线验证脚本（实测 ALL CHECKS PASSED）及测试文件，耗时 513.86 秒，生成 227 条完整性能 span 记录，最终交付报告完整且诚实。后端测试 843 项、性能测试全过。
+
 
 2026-10-20 性能监控默认启用与启动链路追踪决定：1. `performance.monitor` 的目录条目改为 `DefaultInstalled: true, DefaultEnabled: true`（用户明确“暂时先默认启用”）。App 启动时由 `PluginBootstrapper.EnsureBundled` 把 `plugins-dist/performance.monitor` 幂等复制到 `<dataRoot>/plugins/performance.monitor`；宿主共享程序集不复制。仅登记状态而没有真实载荷的条目仍按未安装处理。发布渠道若未随包提供插件载荷，设置页会显示缺失原因，不伪造启用。2. 新增启动链路追踪 `StartupTrace`：记录 `process.main` → `avalonia.setup` → `window.ctor.begin/shell/plugins/end` → `session.bootstrap` → `session-ready`（mock 为 `mock-session`）的顺序里程碑与累计/分段耗时，写入 `<dataRoot>/perf/startup-<时间>-<pid>.jsonl`。启动结束后一次性回放成 `startup` 根 span 与 `startup.<milestone>` 子 span（带真实起止时间），插件中途启用时补发已缓冲的里程碑；性能页瀑布选择器的“启动”项与概览的“最近启动”行使用同一数据。3. `PerfTracer.EmitCompleted` 支持外部传入真实起止时间；`PerfSpanEnd.EndTimestampTicks` 让接收端按真实结束时间计算时长（启动回放、离线补录均适用）。4. 修复 `PerfJsonlWriter` 的实时可读性：FileStream 64KB 缓冲导致运行中的日志长时间显示 0 字节，改为逐条 Flush。验证：解决方案 0 错误；性能监控测试全部通过（新增回放时长与显式结束时间断言）；真实 exe（`--mock --data-root`）自动部署并启用插件，`startup-*.jsonl` 记录完整里程碑，`perf-*.jsonl` 出现单棵 `startup` trace，`host-*.jsonl` 持续写入运行时样本。
 
@@ -671,3 +678,13 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 4. 常驻隐藏时只隐藏窗口：不销毁会话、不暂停正在被 Browser Use / CDP 控制的页面。WebView2 的后台降内存沿用既有可见性/遮挡路径（内存优化分支的 `MemoryUsageTargetLevel.Low`），托盘模式本身不额外挂起页面。
 5. 恢复入口保护：托盘图标创建失败（平台不支持）时不隐藏窗口，避免用户失去恢复方式；设置被外部关闭时，若窗口处于隐藏态会先恢复窗口。
 6. 验收：`--selftest --background-only` 13 项通过（设置默认值/落盘/即时生效、单实例二次启动与激活事件、关窗隐藏/托盘恢复/关设置后真实退出）；`--notification-page-only`、`--floating-workbench-only` 0 失败；解决方案构建 0 错误。基线既有失败（`--settings-only` 3 项、`--tabs-only` 3 项）在 f712385 上同样存在，与本功能无关。
+
+## 2026-10-20 CLI 跨后端可观测性与覆盖修正决定
+
+1. 单次运行参数 `-m/--model` 与 `--plan`/`--permission-mode` 不再只对 FUMO 直接调用会话对象，而是统一经 `ISessionCoordinator` 落到当前后端。FUMO 的模型 ID 可整体传入；其它后端按 `provider/modelId` 解析。权限模式无法真正应用时（Claude/Codex/DSH 当前为空实现，Pi 未加载审批桥）在发送前失败，禁止假装只读却仍可写。
+2. 新增 `fufucode status [--json]`：报告项目路径、默认后端与可用性、模型/思考等级、端点与凭据状态、会话数量与最近会话、全部工具链、插件载荷覆盖。它不打开会话、不获取会话租约、不修改会话元数据；FUMO 不依赖外部工具链。
+3. 新增 `fufucode commands [--json]`：通过 `QueryCommandsAsync` 列出当前后端真实可用的内置工具、插件、MCP、子代理与技能；REPL 内可直接使用 `/commands`。
+4. `sessions list/show` 增加后端标识；新增 `sessions rename <id> <name>`。已打开的活动会话同时回写后端，未打开的会话只更新桌面元数据，避免外部运行时缺失导致无法整理会话。
+5. `models thinking <level>` 设置并通过后端确认后持久化为应用默认；`models thinking` 仍只查询可用等级。
+6. 修复 `SessionDeletion` 的默认后端缺陷：FUMO 历史是 `.json`，旧逻辑只接受 `.jsonl`，导致 `sessions delete` 对默认后端必然失败；同时删除租约原先在项目根获取，而 FUMO/Claude/Codex/DSH/OMP 的会话租约在各自子目录，删除活会话不会被阻止。现按后端选择租约目录，并允许协议适配后端的 `.json` 历史。
+7. 验证：`Fufucode.Cli` 与 `Fufucode.Core.Tests` 构建 0 错误 0 警告；`--cli-only` 新增断言通过（直接 prompt、组合参数、`-r` 无 id、status、commands、rename、FUMO 活会话删除拒绝与 `.json` 删除）；真实 FUMO 会话下 `status`、`commands`、`sessions list/rename`、`models thinking` 手动验证通过。`--plan` 的模型端到端拦截因本机模型代理当时拒绝连接未完成验证，列为未验证项。

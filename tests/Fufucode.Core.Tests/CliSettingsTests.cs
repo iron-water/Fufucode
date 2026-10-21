@@ -117,13 +117,13 @@ internal static class CliSettingsTests
             new[] { "get", "apiKey" }, new[] { "get", "theme", "extra" }, new[] { "set", "theme" },
             new[] { "set", "endpointCredentialConfigured", "true" }, new[] { "set", "theme", "invalid" },
             new[] { "set", "selectedModel", "missing-provider" }, new[] { "set", "selectedModel", "fixture/ " },
-            new[] { "set", "thinkingLevel", "invalid" }, new[] { "set", "proxyUrl", "http://user:secret@localhost" },
+            new[] { "set", "thinkingLevel", "invalid level" }, new[] { "set", "proxyUrl", "http://user:secret@localhost" },
             new[] { "set", "endpoint", "{broken" }, new[] { "set", "endpoint", "{}" },
             new[] { "set", "endpoint", endpoint.Replace("FUFUCODE_TEST_KEY", "invalid-name", StringComparison.Ordinal) }
         })
         {
             var before = manager.Settings.Current;
-            try { await Settings(true, arguments); throw new Exception("Invalid CLI setting arguments were accepted."); }
+            try { await Settings(true, arguments); throw new Exception("Invalid CLI setting arguments were accepted: " + string.Join(" ", arguments)); }
             catch (ArgumentException) { }
             Check(before == manager.Settings.Current, "CLI invalid settings arguments preserve saved configuration");
         }

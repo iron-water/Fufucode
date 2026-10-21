@@ -306,6 +306,7 @@ internal static class WorkbenchDemoSelfTest
                 "L08: Escape cancels pointer drag without moving page or retaining feedback");
             foreach (var id in known)
             {
+                if (!window.PageAvailableForTesting(id)) continue;
                 var livePage = window.PageForTesting(id);
                 foreach (var zone in Enum.GetValues<DockZone>())
                 {

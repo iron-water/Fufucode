@@ -12,7 +12,7 @@ internal sealed record WorkbenchPage(string Id, string Title, string Icon, Contr
 internal sealed class WorkbenchPageRegistry : IDisposable
 {
     private sealed record Registration(string Id, string Title, string Icon, string ModuleId,
-        bool Optional, Func<Control> Create, Action<Control>? Release)
+        bool Optional, bool PluginOwned, Func<Control> Create, Action<Control>? Release)
     {
         public WorkbenchPage? Page { get; set; }
     }
@@ -24,36 +24,41 @@ internal sealed class WorkbenchPageRegistry : IDisposable
     public bool ContainsKey(string id) => _registrations.TryGetValue(id, out var item) && item.Page is not null;
 
     public void RegisterCore(string id, string title, string icon, Control content) =>
-        Register(id, title, icon, "core", false, () => content, null);
+        Register(id, title, icon, "core", false, false, () => content, null);
 
     public void RegisterOptional(string id, string title, string icon, string moduleId,
-        Func<Control> create, Action<Control> release) => Register(id, title, icon, moduleId, true, create, release);
+        Func<Control> create, Action<Control> release) => Register(id, title, icon, moduleId, true, false, create, release);
 
     /// <summary>注册插件贡献的页面；内容已由插件创建，停用时由插件负责释放。</summary>
     public void RegisterPlugin(string id, string title, string icon, string moduleId, Control content, Action<Control>? release) =>
-        Register(id, title, icon, moduleId, true, () => content, release);
+        Register(id, title, icon, moduleId, true, true, () => content, release);
 
-    /// <summary>移除插件页面（插件停用/卸载）。停靠布局由调用方清理。</summary>
+    /// <summary>移除插件页面（插件停用/卸载）。内建 core/optional 页永不由插件路径移除。</summary>
     public void Unregister(string id)
     {
-        if (!_registrations.Remove(id, out var item)) return;
+        if (!_registrations.TryGetValue(id, out var item) || !item.PluginOwned) return;
+        _registrations.Remove(id);
         if (item.Page is { } page) item.Release?.Invoke(page.Content);
         item.Page = null;
     }
 
-    private void Register(string id, string title, string icon, string moduleId, bool optional,
+    private void Register(string id, string title, string icon, string moduleId, bool optional, bool pluginOwned,
         Func<Control> create, Action<Control>? release)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(id);
         if (_registrations.ContainsKey(id)) throw new InvalidOperationException("Page ID is already reserved: " + id);
-        var item = new Registration(id, title, icon, moduleId, optional, create, release);
+        var item = new Registration(id, title, icon, moduleId, optional, pluginOwned, create, release);
         item.Page = new(id, title, icon, create(), moduleId);
         _registrations.Add(id, item);
     }
 
     public void SetEnabled(string id, bool enabled, Action<Control> detach)
     {
-        var item = _registrations[id];
+        if (!_registrations.TryGetValue(id, out var item))
+        {
+            System.Diagnostics.Trace.TraceWarning("Workbench page '{0}' was not registered when setting enabled={1}.", id, enabled);
+            return;
+        }
         if (!item.Optional) throw new InvalidOperationException("Core pages cannot be disabled: " + id);
         if (enabled == (item.Page is not null)) return;
         if (enabled)

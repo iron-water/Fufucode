@@ -33,13 +33,22 @@ internal static class NativePipelineTests
                     persistFilePath: persistPath);
                 session.SetExecutionModeAsync("full").GetAwaiter().GetResult();
                 var settled = new TaskCompletionSource<SessionOutcome>();
+                var toolStatuses = new List<SessionEvent.ToolCallStatusChanged>();
                 session.Event += (_, e) =>
                 {
                     if (e is SessionEvent.TurnSettled turn) settled.TrySetResult(turn.Outcome);
+                    if (e is SessionEvent.ToolCallStatusChanged status)
+                        lock (toolStatuses) toolStatuses.Add(status);
                 };
                 session.SendAsync("把 hello 写入 out.txt").GetAwaiter().GetResult();
                 var outcome = settled.Task.Wait(TimeSpan.FromSeconds(30)) ? settled.Task.Result : SessionOutcome.Unknown;
                 TestUtil.Check(outcome == SessionOutcome.Completed, "session turn completed");
+                var completedTools = toolStatuses.Where(s => s.Status == ToolCallStatus.Completed).ToArray();
+                TestUtil.Check(completedTools.Length == 2, "both tools report completion");
+                TestUtil.Check(completedTools.All(s => s.DurationMs is not null),
+                    "tool completion carries backend-measured duration");
+                var runCommand = completedTools.Single(s => s.ToolCallId == "call-2");
+                TestUtil.Check(runCommand.DurationMs is > 0, "run_command duration is non-zero");
             }
             finally
             {

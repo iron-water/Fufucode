@@ -21,7 +21,8 @@ public static class NativeSessionFactory
         string? persistFilePath = null, string? apiKey = null,
         Func<IReadOnlyList<IPureToolDispatcher>>? pluginProviders = null,
         bool supportsImages = true, SkillRegistry? skills = null, McpManager? mcp = null,
-        INativeSubagentRuntime? subagents = null)
+        INativeSubagentRuntime? subagents = null,
+        int? maxIterations = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var current = settings.Current;
@@ -74,8 +75,9 @@ public static class NativeSessionFactory
         // 调度链：可选 Subagent → MCP → Skill → 插件/内置。
         var dispatcher = subagents?.Wrap(capabilities) ?? capabilities;
 
-        var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations: 10);
-        return new NativeCSharpChatSession(
+        var effectiveMaxIterations = maxIterations ?? 50;
+        var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations: effectiveMaxIterations);
+        var chat = new NativeCSharpChatSession(
             engine, sessionId, modelId,
             systemPromptProvider: systemPromptProvider,
             pluginTools: pluginCatalog,
@@ -83,7 +85,13 @@ public static class NativeSessionFactory
             supportsImages: supportsImages,
             skills: skills,
             mcp: mcp,
-            subagents: subagents);
+            subagents: subagents,
+            workspaceRoot: workspaceRoot);
+
+        if (!string.IsNullOrWhiteSpace(current.ThinkingLevel) && current.ThinkingLevel != "off")
+            chat.SetThinkingLevel(current.ThinkingLevel);
+
+        return chat;
     }
 
     /// <summary>FUMO 会话的持久化文件相对路径（按项目与会话 id 存放）。</summary>

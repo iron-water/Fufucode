@@ -40,10 +40,10 @@ public static class PluginBootstrapper
                     continue;
                 }
 
-                var source = Path.Combine(AppContext.BaseDirectory, "plugins-dist", id);
-                if (!Directory.Exists(source))
+                var source = ResolveSource(id);
+                if (source is null)
                 {
-                    results.Add((id, false, $"分发载荷缺失：{source}"));
+                    results.Add((id, false, "分发载荷缺失：未找到 plugins-dist/" + id + " 或开发构建输出"));
                     continue;
                 }
 
@@ -61,6 +61,31 @@ public static class PluginBootstrapper
             }
         }
         return results;
+    }
+
+    /// <summary>默认插件的开发/打包载荷目录；生产优先程序目录，开发再回溯仓库 out 与项目输出。</summary>
+    private static string? ResolveSource(string pluginId)
+    {
+        var direct = Path.Combine(AppContext.BaseDirectory, "plugins-dist", pluginId);
+        if (Directory.Exists(direct)) return direct;
+
+        var project = pluginId switch
+        {
+            "performance.monitor" => "Fufucode.Plugins.PerformanceMonitor",
+            _ => null,
+        };
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            var packaged = Path.Combine(directory.FullName, "out", "plugins-dist", pluginId);
+            if (Directory.Exists(packaged)) return packaged;
+            if (project is null) continue;
+            foreach (var configuration in new[] { "Debug", "Release" })
+            {
+                var built = Path.Combine(directory.FullName, "src", project, "bin", configuration, "net10.0");
+                if (File.Exists(Path.Combine(built, "manifest.json"))) return built;
+            }
+        }
+        return null;
     }
 
     private static void CopyTree(string source, string target)

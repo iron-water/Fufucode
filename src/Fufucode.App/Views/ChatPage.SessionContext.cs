@@ -37,9 +37,6 @@ public partial class ChatPage
 
         SessionProjectChipText.Text = info.ProjectName;
         SessionProjectChip.IsVisible = info.CanChangeProject;
-        SessionBackendChipText.Text = info.BackendName;
-        SessionBackendDot.Background = Brush.Parse(string.IsNullOrWhiteSpace(info.BackendColor)
-            ? "#8B5CF6" : info.BackendColor);
     }
 
     /// <summary>项目选择浮层：本机项目列表、“不在项目中工作”“新建项目”。</summary>

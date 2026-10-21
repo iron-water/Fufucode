@@ -24,8 +24,7 @@ public sealed record SettingsNavDefinition(
     SettingsNavTier Tier,
     string SearchTerms,
     string Icon = "Settings",
-    string IconColor = "",
-    bool HasContent = true);
+    string IconColor = "");
 
 /// <summary>
 /// 设置左侧栏的权威目录（唯一真源）。三级分类、条目顺序与搜索词都从这里读取；
@@ -62,15 +61,15 @@ public static class SettingsNavCatalog
         // ── 大功能 ──
         new("marketplace", "插件市场", SettingsNavTier.Features,
             "插件 市场 商店 安装 卸载 后端 浏览器控制 电脑操控 plugins marketplace install",
-            "PuzzlePiece", "#8B5CF6", HasContent: true),
+            "PuzzlePiece", "#8B5CF6"),
         new("browser", "浏览器", SettingsNavTier.Features,
             "Browser Use 网页 导航 链接 CDP 控制 下载 历史 缓存 权限 browser cdp web", "Globe", "#3399FF"),
         new("terminal", "终端", SettingsNavTier.Features,
-            "终端 命令 shell 输出 复制 粘贴 字体 terminal shell", "Terminal", "#4CC2FF", HasContent: false),
+            "终端 命令 shell 输出 复制 粘贴 字体 terminal shell", "Terminal", "#4CC2FF"),
         new("files", "文件管理", SettingsNavTier.Features,
-            "文件 管理 预览 目录 打开 资源管理器 files explorer preview", "Document", "#FFC83D", HasContent: false),
+            "文件 管理 预览 目录 打开 资源管理器 files explorer preview", "Document", "#FFC83D"),
         new("automation", "自动开发", SettingsNavTier.Features,
-            "自动 开发 自动化 任务 线程 automation agent", "Automation", "#B48CFF", HasContent: false),
+            "自动 开发 自动化 任务 线程 automation agent", "Automation", "#B48CFF"),
 
         // ── 其他（默认收纳二级小功能） ──
         new("notifications", "通知", SettingsNavTier.Other,
@@ -81,7 +80,7 @@ public static class SettingsNavCatalog
         new("config", "配置文件", SettingsNavTier.Other,
             "JSON 导入 导出 项目覆盖 全局 ui.json config", "Code", "#B48CFF"),
         new("usage", "用量", SettingsNavTier.Other,
-            "用量 token 消耗 统计 配额 usage tokens", "History", "#8A8A8E", HasContent: false),
+            "用量 token 消耗 统计 配额 usage tokens", "History", "#8A8A8E"),
         new("performance", "性能", SettingsNavTier.Other,
             "性能 监控 耗时 延迟 卡顿 慢 追踪 trace 诊断 perf performance trace latency", "History", "#6CCB5F"),
         new("modules", "工作台模块", SettingsNavTier.Other,

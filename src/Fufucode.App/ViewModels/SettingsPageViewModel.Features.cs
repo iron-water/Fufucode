@@ -192,19 +192,20 @@ public sealed partial class SettingsPageViewModel
         "Claude (后端插件 · 暖橙红)",
     ];
 
+    private static EngineId EngineForIndex(int value) => value switch
+    {
+        1 => EngineId.Pi,
+        2 => EngineId.Omp,
+        3 => EngineId.Codex,
+        4 => EngineId.Dsh,
+        5 => EngineId.Claude,
+        _ => EngineId.NativeCSharp,
+    };
+
     partial void OnSelectedBackendIndexChanged(int value)
     {
-        var engine = value switch
-        {
-            1 => EngineId.Pi,
-            2 => EngineId.Omp,
-            3 => EngineId.Codex,
-            4 => EngineId.Dsh,
-            5 => EngineId.Claude,
-            _ => EngineId.NativeCSharp,
-        };
-        var badge = BackendBadgeCatalog.For(engine);
-        BackendStatusText = $"当前默认：{badge.DisplayName}（{badge.BadgeColor}）";
+        var engine = EngineForIndex(value);
+        UpdateBackendStatus(engine);
 
         if (_context?.DataRoot is { } root && Directory.Exists(root))
         {
@@ -215,6 +216,32 @@ public sealed partial class SettingsPageViewModel
             }
             catch { }
         }
+    }
+
+    private void UpdateBackendStatus(EngineId engine)
+    {
+        var badge = BackendBadgeCatalog.For(engine);
+        BackendStatusText = $"当前默认：{badge.DisplayName}（{badge.BadgeColor}）" + BackendPluginSuffix(engine);
+    }
+
+    /// <summary>后端选择必须如实反映插件载荷状态；未安装时明确说明新会话会回退。</summary>
+    private string BackendPluginSuffix(EngineId engine)
+    {
+        var pluginId = engine switch
+        {
+            EngineId.Pi => "backend.pi",
+            EngineId.Omp => "backend.omp",
+            EngineId.Codex => "backend.codex",
+            EngineId.Dsh => "backend.dsh",
+            EngineId.Claude => "backend.claude",
+            _ => "core.csharp",
+        };
+        if (_pluginStore is null) return " · 插件状态未接线";
+        var state = _pluginStore.GetState(pluginId);
+        if (state.IsInstalled && state.IsEnabled) return " · 插件已启用";
+        return state.IsInstalled
+            ? " · 插件已停用；新建会话将回退 FUMO"
+            : " · 插件未安装；新建会话将回退 FUMO";
     }
 
     private void SyncBackendPreference(string? dataRoot)
@@ -305,9 +332,22 @@ public sealed partial class SettingsPageViewModel
     internal PluginCapabilityGateway? CapabilityGateway => _capabilityGateway;
 
     /// <summary>插件状态变化（安装/卸载/启停）后刷新设置页可见状态。</summary>
+    /// <summary>其它宿主实例写入 plugins.json：先刷新本地快照，再由 Changed 统一投影。</summary>
+    private void OnGlobalPluginStateChanged() => _pluginStore?.Reload();
+
     private void OnPluginStoreChanged()
     {
-        // 只刷新自身耗时很短的状态投影；不重建分类、不触发导航。
+        // 插件状态可能由其它宿主实例写入；市场行、能力门禁和页面状态必须
+        // 从同一份 plugins.json 重新投影，不能只刷新能力文案而留下旧 badge/toggle。
+        if (_pluginStore is not null)
+        {
+            foreach (var item in MarketplacePlugins)
+            {
+                var state = _pluginStore.GetState(item.Id);
+                item.IsInstalled = state.IsInstalled;
+                item.IsEnabled = state.IsEnabled;
+            }
+        }
         NotifyCapabilityState();
     }
 
@@ -332,11 +372,18 @@ public sealed partial class SettingsPageViewModel
 
     private void SyncPlugins(string? dataRoot)
     {
+        if (_packageManager is not null)
+        {
+            _ = _packageManager.DisposeAsync();
+            _packageManager = null;
+        }
         if (_pluginStore is not null) _pluginStore.Changed -= OnPluginStoreChanged;
+        PluginStateNotifier.Changed -= OnGlobalPluginStateChanged;
         if (dataRoot is not null && Directory.Exists(dataRoot))
         {
             _pluginStore = new PluginStateStore(new AppDataLayout(dataRoot));
             _pluginStore.Changed += OnPluginStoreChanged;
+            PluginStateNotifier.Changed += OnGlobalPluginStateChanged;
             _capabilityGateway = new PluginCapabilityGateway(_pluginStore);
         }
         else
@@ -353,6 +400,7 @@ public sealed partial class SettingsPageViewModel
             MarketplacePlugins.Add(new PluginItemViewModel(def, state.IsInstalled, state.IsEnabled));
         }
         NotifyCapabilityState();
+        UpdateBackendStatus(EngineForIndex(SelectedBackendIndex));
         OnPropertyChanged(nameof(MarketplaceGroups));
     }
 
@@ -401,12 +449,20 @@ public sealed partial class SettingsPageViewModel
     /// <summary>CDP 访问真实状态文本。</summary>
     public string CdpStatusText => BrowserUseStatusText;
 
+    private PluginPackageManager? _packageManager;
+
+    /// <summary>
+    /// 设置页只持有一个包管理器：每次安装/启停都新建会在全局状态通知上累积订阅，
+    /// 并让同一数据根出现多个“活动插件”所有者。
+    /// </summary>
     private PluginPackageManager ResolvePackageManager()
     {
+        if (_packageManager is not null) return _packageManager;
         var root = _context?.DataRoot ?? Program.SelfTestDataRoot ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var layout = new AppDataLayout(root);
         var gateway = _capabilityGateway ?? new PluginCapabilityGateway(_pluginStore ?? new PluginStateStore(layout));
-        return new PluginPackageManager(layout, new PluginToolRegistry(gateway), _pluginStore);
+        _packageManager = new PluginPackageManager(layout, new PluginToolRegistry(gateway), _pluginStore);
+        return _packageManager;
     }
 
     [RelayCommand]

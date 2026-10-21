@@ -107,6 +107,11 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _diagramSource = "";
     [ObservableProperty] private string _diagramError = "";
 
+    /// <summary>文本/代码文件的侧栏预览：直接显示源码，不交给浏览器。</summary>
+    [ObservableProperty] private bool _isTextPreview;
+    [ObservableProperty] private string _previewText = "";
+    [ObservableProperty] private string _previewLanguage = "";
+
     /// <summary>喂给富文本渲染器的 Mermaid 围栏文本。</summary>
     public string DiagramMarkdown => IsDiagramPreview && DiagramSource.Length > 0
         ? "```mermaid" + (char)10 + DiagramSource + (char)10 + "```"
@@ -116,13 +121,15 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
 
     partial void OnDiagramErrorChanged(string value) => OnPropertyChanged(nameof(HasDiagramError));
     /// <summary>浏览器预览的可见性；用正向属性避免运行期绑定不支持取反。</summary>
-    public bool IsBrowserPreviewVisible => !IsDiagramPreview;
+    public bool IsBrowserPreviewVisible => !IsDiagramPreview && !IsTextPreview;
 
     partial void OnIsDiagramPreviewChanged(bool value)
     {
         OnPropertyChanged(nameof(DiagramMarkdown));
         OnPropertyChanged(nameof(IsBrowserPreviewVisible));
     }
+
+    partial void OnIsTextPreviewChanged(bool value) => OnPropertyChanged(nameof(IsBrowserPreviewVisible));
     partial void OnDiagramSourceChanged(string value) => OnPropertyChanged(nameof(DiagramMarkdown));
     public ObservableCollection<WorkspacePanelTabViewModel> Tabs { get; } = new();
     public ObservableCollection<WorkspacePanelChangedFileViewModel> Changes { get; } = new();
@@ -160,6 +167,8 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         IsFilePreviewOpen = false;
         IsDiagramPreview = false;
         DiagramSource = string.Empty;
+        IsTextPreview = false;
+        PreviewText = string.Empty;
     }
 
     /// <summary>.mermaid/.mmd 文件不走浏览器预览，直接渲染成图表并给出下载/复制。</summary>
@@ -172,8 +181,12 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         {
             IsDiagramPreview = false;
             DiagramSource = string.Empty;
+            UpdateTextPreview(full);
             return;
         }
+
+        IsTextPreview = false;
+        PreviewText = string.Empty;
 
         try
         {
@@ -194,6 +207,50 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             IsDiagramPreview = false;
             DiagramSource = string.Empty;
             DiagramError = ex.Message;
+        }
+    }
+
+    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "cs", "fs", "vb", "py", "js", "jsx", "ts", "tsx", "java", "kt", "kts", "go", "rs",
+        "c", "h", "cc", "cpp", "cxx", "hpp", "m", "mm", "swift", "php", "rb", "lua", "dart",
+        "json", "jsonc", "yaml", "yml", "toml", "xml", "xsd", "html", "htm", "css", "scss",
+        "less", "sh", "bash", "zsh", "ps1", "bat", "cmd", "sql", "md", "markdown", "txt",
+        "log", "ini", "conf", "cfg", "env", "gitignore", "editorconfig", "gradle", "properties",
+    };
+
+    /// <summary>
+    /// 文本类文件用代码视图预览。二进制或过大的文件仍然退回浏览器，
+    /// 避免把乱码或几百 MB 的内容塞进控件。
+    /// </summary>
+    private void UpdateTextPreview(string full)
+    {
+        var extension = System.IO.Path.GetExtension(full).TrimStart('.').ToLowerInvariant();
+        if (extension.Length == 0 || !TextExtensions.Contains(extension))
+        {
+            IsTextPreview = false;
+            PreviewText = string.Empty;
+            return;
+        }
+
+        try
+        {
+            var info = new FileInfo(full);
+            if (!info.Exists || info.Length > 512 * 1024)
+            {
+                IsTextPreview = false;
+                PreviewText = string.Empty;
+                return;
+            }
+
+            PreviewText = File.ReadAllText(full);
+            PreviewLanguage = extension;
+            IsTextPreview = true;
+        }
+        catch (Exception)
+        {
+            IsTextPreview = false;
+            PreviewText = string.Empty;
         }
     }
 

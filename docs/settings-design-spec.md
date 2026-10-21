@@ -118,6 +118,19 @@ UserControl (AppMicaPageBackground = AppWindowBackground → SolidBackgroundFill
 
 "其他"是一级占位项 `OtherHubId="other"`，点开后内容区列 `OtherHubItems` 二级卡（`settingsRow clickable` + 图标 + 标题 + ChevronRight）。点二级卡只切 `SelectedCategory`，**不往 FilteredCategories 塞**（避免误升级）；侧栏高亮回退到"其他"占位项。
 
+### 7.1 功能状态页
+
+`terminal`、`files`、`automation`、`usage` 不是可编辑设置页，而是**功能状态页**：
+
+- 状态来自宿主真实事实（插件页/控制器是否存在、内建页是否注册），不写“尚未接线”。
+- 只提供一个真实入口（打开终端/文件/自动开发/用量）和两个配置入口（插件市场、工作台模块）。
+- 状态由 `WorkbenchCustomizationViewModel.FeatureStatus` 注入；页面不自行判断插件状态。
+- 插件页 ID 与内建页壳冲突时，内建注册优先；插件贡献不得删除 core/optional 页注册。
+
+### 7.2 页面位置目录
+
+“前端功能排布 → 页面位置”的行来自宿主注册表（`WorkbenchCustomizationViewModel.Pages`），不维护第二份硬编码页面清单。插件页启用后自动出现，停用后由布局裁剪移除；`ui.json` 解析不得丢弃插件页 ID。
+
 ## 8. 不自创样式清单
 
 **允许新增的**：
@@ -193,13 +206,21 @@ UserControl (AppMicaPageBackground = AppWindowBackground → SolidBackgroundFill
     不得留下空组头。
 18. 能力门禁页面（插件/后端/外部服务）必须显示真实状态与不可用原因，
     不得用假开关或占位成功文案。
+19. 功能入口分类（终端/文件/自动开发/用量）必须显示宿主真实状态并提供真实入口；
+    禁止恢复“尚未接线”占位页。
+20. 页面位置行必须来自宿主注册表（`WorkbenchCustomizationViewModel.Pages`）；
+    禁止在设置页硬编码页面清单。
+21. 每个注册动作必须有 `WorkbenchActionDefaults.ExplicitIcon` 显式图标；
+    自测发现 `null` 即失败，禁止静默回退 `AppsList`。
+22. 插件页注册必须与内建页壳分离：插件注册失败或 ID 冲突只能记录原因，
+    不得删除 core/optional 页注册。
 
 ### 10.6 自测与守卫
 
-19. 每个新增设置页至少增加一条断言：页面可被选中、关键行存在、关键控件可交互。
-20. `tests/Fufucode.App.Settings.Tests` 的 `SettingsStyleTests` 必须通过：
+23. 每个新增设置页至少增加一条断言：页面可被选中、关键行存在、关键控件可交互。
+24. `tests/Fufucode.App.Settings.Tests` 的 `SettingsStyleTests` 必须通过：
     它检查裸 hex、内联样式、`App*`/`Icon.*` 资源键存在性、禁用类名与结构漂移。
-21. 修改设置页后必须运行：
+25. 修改设置页后必须运行：
     - `dotnet build Fufucode.sln -c Debug`
     - `dotnet run --project tests/Fufucode.App.Settings.Tests`
     - `dotnet run --project tests/Fufucode.App.Backend.Tests`
@@ -214,6 +235,9 @@ UserControl (AppMicaPageBackground = AppWindowBackground → SolidBackgroundFill
 - [ ] 页面 id 在导航、VM、渲染 switch 三处一致
 - [ ] 搜索词已登记，空结果不残留组头
 - [ ] 能力门禁显示真实状态
+- [ ] 功能状态页有真实入口，无占位页
+- [ ] 页面位置来自宿主注册表，插件页不被丢弃
+- [ ] 所有注册动作有显式图标
 - [ ] 定向测试通过
 
 ### 10.8 已知且允许的例外

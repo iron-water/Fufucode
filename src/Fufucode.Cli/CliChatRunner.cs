@@ -6,7 +6,7 @@ using Fufucode.Core;
 namespace Fufucode.Cli;
 
 public sealed record CliChatResult(SessionOutcome Outcome, string Text, string? Error, bool Handled = false,
-    int? FailureExitCode = null);
+    int? FailureExitCode = null, int ToolCalls = 0, long DurationMs = 0, UsageInfo? Usage = null, string? Model = null);
 
 /// <summary>One stdin reader per turn; RPC callbacks only enqueue requests.</summary>
 public static class CliChatRunner
@@ -20,6 +20,9 @@ public static class CliChatRunner
         ArgumentNullException.ThrowIfNull(chat);
         ArgumentException.ThrowIfNullOrWhiteSpace(prompt);
         diagnostics ??= Console.Error;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var toolCalls = 0;
+        UsageInfo? lastUsage = null;
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var sending = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var settled = new TaskCompletionSource<SessionOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -40,19 +43,25 @@ public static class CliChatRunner
             {
                 switch (ev)
                 {
+                    case SessionEvent.BlockStarted { Kind: MessageBlockKind.ToolCall }:
+                        toolCalls++; break;
                     case SessionEvent.TextAppended text when !json:
                         if (!streamingText.TryGetValue(text.MessageId, out var partial))
                             streamingText[text.MessageId] = partial = new System.Text.StringBuilder();
                         partial.Append(text.Delta); output.Write(text.Delta); output.Flush(); break;
-                    case SessionEvent.MessageFinished { FinalMessage.Role: MessageRole.Assistant } message:
-                        var final = string.Concat(message.FinalMessage.Blocks.OfType<TextBlock>().Select(b => b.Text));
-                        answer.Append(final);
-                        if (!json)
+                    case SessionEvent.MessageFinished message:
+                        if (message.CumulativeUsage is { } usage) lastUsage = usage;
+                        if (message.FinalMessage.Role == MessageRole.Assistant)
                         {
-                            var prior = streamingText.Remove(message.MessageId, out var written) ? written.ToString() : "";
-                            if (final.StartsWith(prior, StringComparison.Ordinal)) output.Write(final[prior.Length..]);
-                            else { output.WriteLine(); output.Write(final); }
-                            output.Flush();
+                            var final = string.Concat(message.FinalMessage.Blocks.OfType<TextBlock>().Select(b => b.Text));
+                            answer.Append(final);
+                            if (!json)
+                            {
+                                var prior = streamingText.Remove(message.MessageId, out var written) ? written.ToString() : "";
+                                if (final.StartsWith(prior, StringComparison.Ordinal)) output.Write(final[prior.Length..]);
+                                else { output.WriteLine(); output.Write(final); }
+                                output.Flush();
+                            }
                         }
                         break;
                     case SessionEvent.TurnSettled turn: settled.TrySetResult(turn.Outcome); break;
@@ -93,12 +102,31 @@ public static class CliChatRunner
             else await send; // Validate acknowledgement even when model terminal events arrived first.
             var error = failure.Task.IsCompleted ? (await failure.Task).Error : denied ? "An approval was rejected or cancelled." : null;
             var outcome = error is not null ? SessionOutcome.Failed : await settled.Task;
+            var durationMs = stopwatch.ElapsedMilliseconds;
             var result = new CliChatResult(outcome, answer.ToString() + string.Concat(streamingText.Values), error, wasHandled,
-                failure.Task.IsCompleted ? (await failure.Task).ExitCode : null);
+                failure.Task.IsCompleted ? (await failure.Task).ExitCode : null, toolCalls, durationMs, lastUsage, chat.CurrentModel);
             lock (gate)
             {
-                if (json) output.WriteLine(JsonSerializer.Serialize(new
-                    { outcome = wasHandled && error is null ? "handled" : outcome.ToString().ToLowerInvariant(), text = result.Text, error }));
+                if (json)
+                {
+                    var usageData = lastUsage is null ? null : new
+                    {
+                        inputTokens = lastUsage.InputTokens,
+                        outputTokens = lastUsage.OutputTokens,
+                        totalTokens = (lastUsage.InputTokens ?? 0) + (lastUsage.OutputTokens ?? 0),
+                        cachedTokens = lastUsage.CacheReadTokens
+                    };
+                    output.WriteLine(JsonSerializer.Serialize(new
+                    {
+                        outcome = wasHandled && error is null ? "handled" : outcome.ToString().ToLowerInvariant(),
+                        text = result.Text,
+                        error,
+                        durationMs,
+                        toolCalls,
+                        model = chat.CurrentModel,
+                        usage = usageData
+                    }));
+                }
                 else if (result.Text.Length > 0) output.WriteLine();
                 output.Flush();
             }

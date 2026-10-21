@@ -652,10 +652,24 @@ public partial class MainWindow
     private bool EnsureDockHasPages(DockZone zone)
     {
         if (_dockLayout.Pages[zone].Count > 0) return false;
-        var defaults = new WorkbenchLayoutState().Pages[zone].Where(id => _workbenchPages.ContainsKey(id)).ToList();
-        if (defaults.Count == 0) return false;
-        _dockLayout.Pages[zone] = defaults;
-        _dockLayout.Selected[zone] = defaults[0];
+        // 一个页面只能有一个视觉宿主：已在其它停靠区或浮窗中的页面不能再作为默认页塞进来，
+        // 否则 Avalonia 会报“控件已有视觉父级”。
+        var occupied = _dockLayout.Pages.Where(pair => pair.Key != zone)
+            .SelectMany(pair => pair.Value)
+            .Concat(_dockLayout.Floating.SelectMany(floating => floating.Pages))
+            .ToHashSet(StringComparer.Ordinal);
+        var preferred = new WorkbenchLayoutState().Pages[zone]
+            .Where(id => _workbenchPages.ContainsKey(id)).ToList();
+        var defaults = preferred.Where(id => !occupied.Contains(id)).ToList();
+        if (defaults.Count > 0)
+        {
+            _dockLayout.Pages[zone] = defaults;
+            _dockLayout.Selected[zone] = defaults[0];
+            return true;
+        }
+        // 所有默认页都已被别的区域持有：把第一个默认页移过来，保持“一页一宿主”。
+        if (preferred.Count == 0) return false;
+        _dockLayout.Move(preferred[0], zone);
         return true;
     }
 

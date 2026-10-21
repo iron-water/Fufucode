@@ -53,10 +53,16 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
     private string? _modelId;
     private volatile bool _isRunning;
 
+    public int MaxIterations
+    {
+        get => _loop.MaxIterations;
+        set => _loop.MaxIterations = value;
+    }
+
     public PureCSharpAgentEngine(
         IPureToolDispatcher? toolDispatcher = null,
         IPureModelClient? modelClient = null,
-        int maxIterations = 10)
+        int maxIterations = 50)
     {
         _toolDispatcher = toolDispatcher;
         // 生产路径不允许静默回退到“确定性假模型”：没有配置端点时明确失败。
@@ -130,7 +136,7 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
             Plugins.PluginToolRegistry registry => ResolveProductionDispatcher(registry.InnerDispatcher),
             SkillAwareDispatcher skill => ResolveProductionDispatcher(skill.Inner),
             McpGatewayDispatcher mcp => ResolveProductionDispatcher(mcp.Inner),
-            INativeSubagentDispatcher subagent => ResolveProductionDispatcher(subagent.Inner),
+            INativeSubagentDispatcher { IsActive: true } subagent => ResolveProductionDispatcher(subagent.Inner),
             NativeToolComposite composite => ResolveProductionDispatcher(composite.Builtin),
             _ => null
         };
