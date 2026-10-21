@@ -34,6 +34,9 @@ public partial class MainWindow
         var root = Program.SelfTestMode ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata") : _options.CreateAppDataLayout().Root;
         _customization = new(new WorkbenchAppearanceStore(root));
         _customization.LayoutSnapshot = () => _dockLayout;
+        _customization.PageCatalog = () => _workbenchPages.Values
+            .Select(page => new WorkbenchPageChoice(page.Id, page.Title)).ToArray();
+        _customization.FeatureStatus = FeatureStatusFor;
         RegisterWorkbenchActions();
         _customization.SetActions(_actions.Actions);
         _customization.Applied += ApplyCustomization;
@@ -70,7 +73,11 @@ public partial class MainWindow
         _customizationSessionHandler = (_, e) =>
         {
             if (e is Abstractions.SessionEvent.MessageStarted { Role: Abstractions.MessageRole.User }) _turnStarted = DateTimeOffset.UtcNow;
-            if (e is Abstractions.SessionEvent.TurnSettled) Dispatcher.UIThread.Post(() => OnCustomizedTurnSettled(vm));
+            if (e is Abstractions.SessionEvent.TurnSettled)
+            {
+                Dispatcher.UIThread.Post(() => OnCustomizedTurnSettled(vm));
+                Dispatcher.UIThread.Post(() => _ = NameSessionAfterFirstTurnAsync(vm));
+            }
             Dispatcher.UIThread.Post(RefreshStatusLabels);
         };
         _customizationSession.Event += _customizationSessionHandler;
@@ -137,7 +144,14 @@ public partial class MainWindow
         var darkTheme = ActualThemeVariant == ThemeVariant.Dark;
         var fill = darkTheme ? AccentColor("SystemAccentColorLight2") : accent;
         var textFill = AccentColor(darkTheme ? "SystemAccentColorLight3" : "SystemAccentColorDark2");
+        // 深色主题下强调色文字（链接、选中项）实际观感偏暗；向白色提亮一档，保持可读性。
+        if (darkTheme) textFill = Blend(textFill, Colors.White, 0.18);
         var contrast = (fill.R * .2126 + fill.G * .7152 + fill.B * .0722) > 155 ? Colors.Black : Colors.White;
+
+        static Color Blend(Color from, Color to, double amount) => Color.FromArgb(255,
+            (byte)(from.R + (to.R - from.R) * amount),
+            (byte)(from.G + (to.G - from.G) * amount),
+            (byte)(from.B + (to.B - from.B) * amount));
         foreach (var key in new[] { "AccentFillColorDefaultBrush", "SystemControlBackgroundAccentBrush", "SystemControlForegroundAccentBrush", "SystemControlHighlightAccentBrush", "SystemControlHighlightAltAccentBrush", "SystemControlRevealFocusVisualBrush", "TextControlBorderBrushFocused", "TabItemHeaderSelectedPipeFill", "AccentButtonBackground" })
             Resources[key] = new SolidColorBrush(fill);
         Resources["AccentTextFillColorPrimaryBrush"] = new SolidColorBrush(textFill);
@@ -314,6 +328,25 @@ public partial class MainWindow
             foreach (var label in pair.Value) label.Text = StatusText(pair.Key);
         RefreshIsland();
     }
+    /// <summary>
+    /// 设置页“功能入口”分类的真实运行状态。只报告宿主当前事实：
+    /// 插件是否提供页/控制器、内建页是否存在，不用占位成功文案。
+    /// </summary>
+    private WorkbenchFeatureStatus FeatureStatusFor(string id) => id switch
+    {
+        "terminal" => _terminalPage is null
+            ? new("未启用", "交互终端由 workspace.terminal 插件提供；安装并启用后可在底部停靠区使用。", "marketplace", null, "前往插件市场")
+            : new("已启用", "终端插件已就绪，可在底部停靠区打开项目终端。", null, "terminal", "打开终端"),
+        "files" => new("内建", "文件与变更页由工作台内建提供，可在右栏打开并预览。", null, "files", "打开文件与变更"),
+        "automation" => !_workbenchPages.ContainsKey("automation")
+            ? new("已停用", "自动开发模块已在工作台模块中停用；启用后可使用。", "modules", null, "打开工作台模块")
+            : _automationPageHost?.Controller is null
+                ? new("仅页壳", "自动开发页已保留，但插件内容未加载；请在插件市场安装并启用 automation.auto-dev。", "marketplace", null, "前往插件市场")
+                : new("已启用", "自动开发工作台已就绪。", null, "page.automation", "打开自动开发"),
+        "usage" => new("内建", "用量详情在右栏页面展示当前会话、本轮与全部记录口径。", null, "usage", "打开用量"),
+        _ => new("未知", "宿主尚未提供该功能的运行状态。"),
+    };
+
     private string StatusText(string id) => id switch
     {
         "status.connection" => _vm?.StatusBar.ConnectionText ?? "未连接",

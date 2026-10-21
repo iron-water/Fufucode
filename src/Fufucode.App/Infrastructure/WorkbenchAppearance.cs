@@ -110,13 +110,17 @@ public sealed record WorkbenchAppearance
             MessageActions = Choose(MessageActions, "hover", "show", "hover", "hide"),
             Composer = Choose(Composer, "wide", "wide", "reading", "hidden"),
             UserName = Name(UserName, "你"), AssistantName = Name(AssistantName, "Fufucode"),
+            SessionNaming = Choose(SessionNaming, "subagent", "subagent", "mechanical"),
             WebUrlOpenTarget = Choose(WebUrlOpenTarget, "builtin", "builtin", "system"),
             LocalUrlOpenTarget = Choose(LocalUrlOpenTarget, "builtin", "builtin", "system"),
             ScreenshotMode = Choose(ScreenshotMode, "on_demand", "always", "on_demand", "never"),
             BrowserPermissionHistory = Choose(BrowserPermissionHistory, "ask", "ask", "always", "deny"),
             DefaultBrowsePermission = Choose(DefaultBrowsePermission, "approval", "approval", "allow", "block"),
             DefaultDownloadPermission = Choose(DefaultDownloadPermission, "approval", "approval", "allow", "block"),
-            Layout = Layout is null ? null : WorkbenchLayoutState.Restore(Layout.Serialize(), WorkbenchLayoutState.KnownPages),
+            // 这里只做结构规范化：插件页 ID 必须保留，真正的“页面是否还存在”
+            // 由组合根在拥有注册表时（WorkbenchLayoutState.Restore(..., KnownPageIds)）裁剪。
+            Layout = Layout is null ? null : WorkbenchLayoutState.Restore(
+                Layout.Serialize(), WorkbenchLayoutState.KnownPages.Concat(Layout.AllPageIds())),
             Actions = (Actions ?? new()).Where(p => !string.IsNullOrWhiteSpace(p.Key) && p.Value is not null && Enum.IsDefined(p.Value.Position))
                 .ToDictionary(p => p.Key, p => p.Value with { Order = Math.Clamp(p.Value.Order, -1000, 1000) }, StringComparer.Ordinal)
         };

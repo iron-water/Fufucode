@@ -178,6 +178,8 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     private int _outputLineCount;
     private DateTimeOffset? _startedAt;
     private DateTimeOffset? _finishedAt;
+    /// <summary>后端报告的真实耗时；存在时优先于 UI 本地近似计时。</summary>
+    private long? _reportedDurationMs;
 
     /// <summary>块创建即视为工具开始时间；后端协议里没有可靠的起止时间戳。</summary>
     public ToolCallBlockViewModel() => _startedAt = DateTimeOffset.Now;
@@ -250,16 +252,41 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     public bool IsRunning { get; private set; }
 
-    /// <summary>工具耗时只在终态显示；没有精确起止时间时不猜。</summary>
-    public bool HasDuration => _startedAt is { } start && _finishedAt is { } end && end >= start;
+    /// <summary>后端报告的真实耗时；null 表示未知。</summary>
+    public long? ReportedDurationMs => _reportedDurationMs;
+
+    /// <summary>
+    /// 写入后端测得的真实耗时。FUMO 在工具派发/完成时记录；Pi/Claude 等未提供时保持 null，
+    /// UI 继续使用本地近似计时。
+    /// </summary>
+    public void SetReportedDuration(long? durationMs)
+    {
+        if (durationMs is null || durationMs == _reportedDurationMs) return;
+        _reportedDurationMs = Math.Max(0, durationMs.Value);
+        OnPropertyChanged(nameof(ReportedDurationMs));
+        OnPropertyChanged(nameof(HasDuration));
+        OnPropertyChanged(nameof(DurationText));
+    }
+
+    /// <summary>工具耗时只在终态显示；后端有真实耗时，或本地拿到了起止时间。</summary>
+    public bool HasDuration => _reportedDurationMs is not null ||
+        (_startedAt is { } start && _finishedAt is { } end && end >= start);
 
     public string DurationText
     {
         get
         {
-            if (!HasDuration) return string.Empty;
-            var seconds = (_finishedAt!.Value - _startedAt!.Value).TotalSeconds;
-            return seconds < 10 ? seconds.ToString("0.0") + "s" : ((int)Math.Round(seconds)) + "s";
+            var ms = _reportedDurationMs ??
+                (_startedAt is { } start && _finishedAt is { } end && end >= start
+                    ? (long)(end - start).TotalMilliseconds
+                    : (long?)null);
+            if (ms is not { } value) return string.Empty;
+            return value switch
+            {
+                < 1_000 => $"{value} ms",
+                < 60_000 => $"{value / 1000d:0.0} s",
+                _ => $"{(int)(value / 60_000)} min {(int)(value % 60_000 / 1000)} s",
+            };
         }
     }
 
@@ -337,6 +364,7 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
             SetOutput(block.Output, block, null);
         }
         IsErrorOutput = block.IsErrorOutput;
+        SetReportedDuration(block.DurationMs);
     }
 
     /// <summary>

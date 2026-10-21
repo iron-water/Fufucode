@@ -106,6 +106,9 @@ internal sealed class PluginWorkspacePageHost : IDisposable
         foreach (var (pluginId, contribution) in contributions)
         {
             if (_active.ContainsKey(pluginId)) continue;
+            // 内建页壳可以保留同一页面 ID（automation 的页面容器由 App 持有，插件只提供内容）。
+            // 这类贡献不注册新页，由专用宿主消费，避免把正常协作记成加载失败。
+            if (_pages.KnownPageIds.Contains(contribution.PageId, StringComparer.Ordinal)) continue;
             try
             {
                 var created = contribution.CreateView();
@@ -114,9 +117,20 @@ internal sealed class PluginWorkspacePageHost : IDisposable
                 if (created is not IPluginWorkspacePage page)
                     throw new InvalidOperationException("页面贡献没有实现宿主工作区页面契约。");
                 page.SetProject(_projectPath, _useMock());
+                try
+                {
+                    _pages.RegisterPlugin(contribution.PageId, contribution.Title, contribution.IconKey,
+                        contribution.ModuleId, page.View, _ => page.Dispose());
+                }
+                catch (InvalidOperationException error) when (error.Message.Contains("already reserved", StringComparison.Ordinal))
+                {
+                    // 内建页壳可以预留同一页面 ID（例如 automation），插件只负责提供内容；
+                    // 不能让插件注册失败路径删除或破坏核心页注册。
+                    _loadErrors[pluginId] = "页面 ID 已由内建宿主保留：" + contribution.PageId;
+                    page.Dispose();
+                    continue;
+                }
                 _active[pluginId] = page;
-                _pages.RegisterPlugin(contribution.PageId, contribution.Title, contribution.IconKey,
-                    contribution.ModuleId, page.View, _ => page.Dispose());
                 page.StateChanged += OnPageStateChanged;
                 added = true;
             }

@@ -18,7 +18,7 @@ internal static class CliTests
                 output, new StringReader(""));
             if (result.Outcome != SessionOutcome.Completed || result.Text != "Final answer" ||
                 !output.ToString().Contains("Hel", StringComparison.Ordinal) || !output.ToString().Contains("Final answer", StringComparison.Ordinal))
-                throw new Exception("CLI chat runner did not stream the FakePi assistant response.");
+                throw new Exception($"CLI chat runner did not stream the FakePi assistant response. outcome={result.Outcome} text={result.Text} output={output}");
             Console.WriteLine("PASS CLI chat runner streams FakePi text and waits for settled outcome");
         }
 
@@ -39,6 +39,8 @@ internal static class CliTests
         await CliMaintenanceTests.RunAsync(root, fake, dotnet);
         await CliHostTests.RunAsync();
         await TestDispatchAsync();
+        await TestStatusAndRenameAsync(root);
+        await TestNativeSessionDeletionAsync(root);
         // The headless UI group drives the App; it is skipped when the App cannot render in this environment.
         if (Environment.GetEnvironmentVariable("FUFUCODE_SKIP_UI_GROUP") != "1") await RunUiAsync(root);
         await RunContractsAsync(root);
@@ -195,6 +197,98 @@ internal static class CliTests
         var literal = CliOptions.Parse(["chat", "--json", "--", "--project", "literal prompt"]);
         Check(literal.LiteralArguments && literal.Arguments.SequenceEqual(["--project", "literal prompt"]),
             "CLI -- preserves option-like prompt content");
+        var direct = CliOptions.Parse(["fix", "the", "build"]);
+        Check(direct.Command == "chat" && direct.Arguments.SequenceEqual(["fix", "the", "build"]),
+            "CLI treats an unknown first positional as a direct chat prompt");
+        var flags = CliOptions.Parse(["-c", "-y", "--plan", "-m", "provider/model", "review", "this"]);
+        Check(flags.Continue && flags.AutoApprove && flags.PermissionMode == "plan" &&
+            flags.ModelOverride == "provider/model" && flags.Command == "chat",
+            "CLI parses continue, auto-approve, plan and model override together");
+        var resume = CliOptions.Parse(["-r"]);
+        Check(resume.Continue && resume.SessionId is null,
+            "CLI -r without an id resumes the most recent conversation");
+    }
+
+    /// <summary>状态总览只读、会话改名不依赖外部后端运行时。</summary>
+    private static async Task TestStatusAndRenameAsync(string root)
+    {
+        var layout = new AppDataLayout(Path.Combine(root, "tmp", "cli-status", Guid.NewGuid().ToString("N")));
+        var project = Path.Combine(layout.Root, "project");
+        Directory.CreateDirectory(project);
+        var metadata = new DesktopMetadataStore(layout);
+        var record = metadata.CreateSession(metadata.GetOrCreateProject(project), "before", BackendId.NativeCSharp);
+
+        var oldOut = Console.Out; var oldError = Console.Error;
+        try
+        {
+            using var output = new StringWriter();
+            Console.SetOut(output);
+            var statusCode = await Fufucode.Cli.Program.Main(["status", "--json", "--project", project,
+                "--app-data", layout.Root]);
+            Console.SetOut(oldOut);
+            var statusJson = output.ToString();
+            output.GetStringBuilder().Clear();
+            Check(statusCode == 0, "CLI status exits 0 for the default native backend");
+            using (var status = JsonDocument.Parse(statusJson))
+            {
+                Check(status.RootElement.GetProperty("backend").GetProperty("preferred").GetString() == "fumo" &&
+                    status.RootElement.GetProperty("backend").GetProperty("available").GetBoolean() &&
+                    status.RootElement.GetProperty("sessions").GetProperty("count").GetInt32() == 1,
+                    "CLI status reports backend availability and project sessions without opening one");
+            }
+
+            Console.SetOut(output);
+            var renameCode = await Fufucode.Cli.Program.Main(["sessions", "rename", record.Id, "after", "--project", project,
+                "--app-data", layout.Root, "--json"]);
+            Console.SetOut(oldOut);
+            Check(renameCode == 0, "CLI sessions rename succeeds for a closed session");
+            Check(metadata.GetSession(record.Id).Name == "after",
+                "CLI sessions rename persists the new name without starting the backend");
+
+            output.GetStringBuilder().Clear();
+            Console.SetOut(output);
+            var commandsCode = await Fufucode.Cli.Program.Main(["commands", "--project", project,
+                "--app-data", layout.Root, "--json"]);
+            Console.SetOut(oldOut);
+            var commandsJson = output.ToString();
+            Check(commandsCode == 0, "CLI commands lists the native tool surface without a model call");
+            using (var commands = JsonDocument.Parse(commandsJson))
+            {
+                var names = commands.RootElement.EnumerateArray()
+                    .Select(command => command.GetProperty("name").GetString())
+                    .ToArray();
+                Check(names.Contains("read_file") && names.Contains("update_plan"),
+                    "CLI commands reports builtin tools and the plan tool");
+            }
+        }
+        finally { Console.SetOut(oldOut); Console.SetError(oldError); }
+    }
+
+    /// <summary>默认后端 FUMO 的历史是 .json，删除必须接受它，并按 fumo/ 租约目录拒绝活会话。</summary>
+    private static async Task TestNativeSessionDeletionAsync(string root)
+    {
+        var layout = new AppDataLayout(Path.Combine(root, "tmp", "cli-native-delete", Guid.NewGuid().ToString("N")));
+        var project = Path.Combine(layout.Root, "project");
+        Directory.CreateDirectory(project);
+        var manager = new PersistentSessionManager(string.Empty, string.Empty, layout);
+        string sessionId; string sessionFile;
+        await using (var live = await manager.CreateAsync(project, backend: BackendId.NativeCSharp))
+        {
+            sessionId = live.Session.Id;
+            sessionFile = live.Session.FilePath!;
+            await ExpectAsync<InvalidOperationException>(() =>
+                CliSessionCommands.DeleteAsync(layout, project, sessionId, true, TextWriter.Null));
+            Check(manager.Metadata.GetSession(sessionId).Id == sessionId,
+                "CLI sessions delete refuses a live FUMO session lease");
+        }
+        // 新会话可能尚未落盘；写入一个合法 JSON 历史后再验证删除确实移除 .json 文件。
+        Directory.CreateDirectory(Path.GetDirectoryName(sessionFile)!);
+        File.WriteAllText(sessionFile, "[]");
+        await CliSessionCommands.DeleteAsync(layout, project, sessionId, true, TextWriter.Null);
+        var projectRecord = manager.Metadata.GetOrCreateProject(project);
+        Check(!File.Exists(sessionFile) &&
+            manager.Metadata.ListSessions(projectRecord.Id).All(s => s.Id != sessionId),
+            "CLI sessions delete removes the FUMO .json history and metadata");
     }
 
     private static void Check(bool condition, string message)

@@ -203,7 +203,7 @@ public sealed class WidgetsView : Border
         var box = new TextBox
         {
             Text = GetString(element, "value"),
-            Watermark = GetString(element, "placeholder", "输入内容"),
+            PlaceholderText = GetString(element, "placeholder", "输入内容"),
             Width = 320,
             HorizontalAlignment = HorizontalAlignment.Left,
             AcceptsReturn = false,

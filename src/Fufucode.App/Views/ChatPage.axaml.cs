@@ -157,6 +157,46 @@ public partial class ChatPage : UserControl
         if (TopLevel.GetTopLevel(this) is MainWindow window) window.OpenDockPage("files", DockZone.Right);
     }
 
+    /// <summary>
+    /// 点击工具组：先切换展开；如果展开的是仍在运行的组，说明用户想看最新执行，
+    /// 直接回到底部并继续跟随流式输出。非运行中的组只展开，不移动视点。
+    /// </summary>
+    private void OnToolGroupClicked(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: ToolGroupViewModel group }) return;
+
+        if (!group.IsExpanded)
+        {
+            var offset = TimelineScroller.Offset.Y;
+            var followLatest = group.IsActive;
+            group.ToggleExpanded();
+            if (followLatest) ScrollToEnd();
+            else RestoreScrollOffset(offset);
+            return;
+        }
+
+        group.ToggleExpanded();
+        var expandedOffset = TimelineScroller.Offset.Y;
+        RestoreScrollOffset(expandedOffset);
+    }
+
+    /// <summary>
+    /// 展开/收起代码块会显著改变某一条的高度；Avalonia 会把焦点控件带回视野，
+    /// 表现为整页跳回这段输出的开头。这里在布局完成后恢复原来的滚动位置。
+    /// </summary>
+    private void OnBlockLayoutToggled(object? sender, RoutedEventArgs e) =>
+        RestoreScrollOffset(TimelineScroller.Offset.Y);
+
+    private void RestoreScrollOffset(double offset)
+    {
+        var atBottom = DataContext is MainViewModel vm && vm.Timeline.IsAtBottom;
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (atBottom) ScrollToEnd();
+            else TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, offset);
+        }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
     private void UpdateComposerToolbar()
     {
         var narrow = ComposerToolbar.Bounds.Width < 520;

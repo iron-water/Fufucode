@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 using Avalonia.Threading;
 using Fufucode.App.Features.Plugins;
 using Fufucode.App.Infrastructure;
@@ -11,6 +13,8 @@ namespace Fufucode.App;
 
 public partial class MainWindow
 {
+    /// <summary>由插件页自动注册的动作：pageId → actionId。纯代码贡献的页面也能进入统一动作面。</summary>
+    private readonly Dictionary<string, string> _pluginPageActions = new(StringComparer.Ordinal);
     /// <summary>
     /// 在共享外壳就绪后挂接可选插件页面。终端等页面不再由 App 静态创建：
     /// 插件未安装/未启用时页面不存在，动作会给出真实原因。
@@ -41,7 +45,42 @@ public partial class MainWindow
         SyncPerformanceSettings();
         PruneDockLayout();
         RenderDockPages();
+        SyncPluginPageActions();
+        _customization.SetActions(_actions.Actions);
+        _customization.NotifyPagesChanged();
         _perfWiring?.OnPluginsSynced();
+    }
+
+    /// <summary>
+    /// 为没有专用动作的插件页自动生成“打开 X”动作，并移除已消失插件的动作。
+    /// 已有专用动作（terminal/perf 等）不被覆盖，保证动作语义仍由公共目录定义。
+    /// </summary>
+    private void SyncPluginPageActions()
+    {
+        if (_pluginPageHost is null) return;
+        var active = _pluginPageHost.ActivePages.Values
+            .GroupBy(page => page.PageId, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+        foreach (var (pageId, actionId) in _pluginPageActions.ToArray())
+        {
+            if (active.ContainsKey(pageId)) continue;
+            _actions.Unregister(actionId);
+            _pluginPageActions.Remove(pageId);
+        }
+
+        foreach (var page in active.Values)
+        {
+            if (_actions.Contains(page.PageId) || _actions.Contains("page." + page.PageId)) continue;
+            var actionId = "page." + page.PageId;
+            if (_pluginPageActions.Values.Contains(actionId, StringComparer.Ordinal)) continue;
+            var title = _workbenchPages.ContainsKey(page.PageId) ? _workbenchPages[page.PageId].Title : page.PageId;
+            _actions.Register(new AppActionDefinition(actionId, "打开" + title, "工作台", "",
+                "打开插件贡献的工作区页面",
+                () => { OpenDockPage(page.PageId, DockZone.Right); return Task.CompletedTask; },
+                () => _workbenchPages.ContainsKey(page.PageId) ? null : "插件页面当前不可用。"));
+            _pluginPageActions[page.PageId] = actionId;
+        }
     }
 
     private void OnPluginPagesChanged()
@@ -51,7 +90,10 @@ public partial class MainWindow
         SyncPerformanceSettings();
         PruneDockLayout();
         RenderDockPages();
+        SyncPluginPageActions();
         _actions.RefreshCapabilities();
+        _customization.SetActions(_actions.Actions);
+        _customization.NotifyPagesChanged();
         _perfWiring?.OnPluginsSynced();
     }
 

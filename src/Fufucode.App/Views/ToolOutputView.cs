@@ -87,7 +87,7 @@ public sealed class ToolOutputView : SelectableTextBlock
         // 显式把 Foreground 设为 null 会丢掉继承色（上下文行会变透明），所以只在有颜色时赋值。
         var run = new Run(line);
         if (brush is not null) run.Foreground = brush;
-        Inlines.Add(run);
+        Inlines?.Add(run);
     }
 
     /// <summary>解析一行里的 SGR 序列；未识别的转义原样保留，避免吞掉真实输出。</summary>
@@ -95,7 +95,7 @@ public sealed class ToolOutputView : SelectableTextBlock
     {
         if (!HasAnsi(line))
         {
-            Inlines.Add(new Run(line));
+            Inlines?.Add(new Run(line));
             return;
         }
 
@@ -109,7 +109,7 @@ public sealed class ToolOutputView : SelectableTextBlock
             var run = new Run(buffer.ToString());
             if (brush is not null) run.Foreground = brush;
             if (bold) run.FontWeight = FontWeight.Bold;
-            Inlines.Add(run);
+            Inlines?.Add(run);
             buffer.Clear();
         }
 

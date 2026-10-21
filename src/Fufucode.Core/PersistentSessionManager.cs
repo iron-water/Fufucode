@@ -946,6 +946,7 @@ public sealed class PersistentSession : IAsyncDisposable
     public ISessionCoordinator Coordinator { get; }
     public SessionHistory History { get; }
     public Fufucode.App.Abstractions.IChatSession Chat => _chat;
+    public List<IAsyncDisposable> Disposables { get; } = new();
 
     /// <summary>The Pi process, its diagnostics and its lease are shared, so a fork hands them over.</summary>
     internal DiagnosticLog Diagnostics => _diagnosticLog;
@@ -1047,6 +1048,10 @@ public sealed class PersistentSession : IAsyncDisposable
         Coordinator.SnapshotChanged -= OnSnapshot;
         try
         {
+            foreach (var d in Disposables)
+            {
+                try { await d.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
             if (_chat is IAsyncDisposable disposableChat) await disposableChat.DisposeAsync();
             _metadataChanges.Writer.TryComplete();
             await _metadataWriter;

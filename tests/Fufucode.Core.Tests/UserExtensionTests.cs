@@ -35,7 +35,7 @@ internal static class UserExtensionTests
         manager.UserExtensionPaths = [one, one, two];
         Check(manager.UserExtensionPaths.SequenceEqual([one, two]),
             "user extension configuration snapshots and deduplicates absolute paths");
-        await using (var first = await manager.CreateAsync(work))
+        await using (var first = await manager.CreateAsync(work, backend: BackendId.Pi))
         {
             var flags = StartupArgs(first);
             Check(flags.Contains("--no-extensions") &&
@@ -45,7 +45,7 @@ internal static class UserExtensionTests
             Check(ExplicitExtensions(StartupArgs(first)).SequenceEqual([bridge, one, two]),
                 "changing user extension selection does not alter a running Pi process");
         }
-        await using (var next = await manager.CreateAsync(work))
+        await using (var next = await manager.CreateAsync(work, backend: BackendId.Pi))
             Check(ExplicitExtensions(StartupArgs(next)).SequenceEqual([bridge, two]),
                 "new Pi process receives the updated user extension selection");
 
@@ -53,7 +53,7 @@ internal static class UserExtensionTests
         manager.UserExtensionPaths = [missing];
         var projectId = manager.Metadata.GetOrCreateProject(work).Id;
         var before = manager.Metadata.ListSessions(projectId).Count;
-        try { await manager.CreateAsync(work); throw new Exception("missing extension was started"); }
+        try { await manager.CreateAsync(work, backend: BackendId.Pi); throw new Exception("missing extension was started"); }
         catch (UserExtensionLoadException error)
         {
             Check(error.ExtensionPath == missing && error.Kind == UserExtensionLoadFailureKind.MissingPath &&
@@ -67,17 +67,17 @@ internal static class UserExtensionTests
         Check(manager.GetProjectTrustStatus(work).RequiresDecision &&
             manager.GetProjectTrustStatus(work).ProtectedResources.Contains(local),
             "project-local user extension participates in project trust inspection");
-        try { await manager.CreateAsync(work); throw new Exception("undecided local extension started"); }
+        try { await manager.CreateAsync(work, backend: BackendId.Pi); throw new Exception("undecided local extension started"); }
         catch (ProjectTrustDecisionRequiredException) { }
         manager.SetProjectTrustDecision(work, ProjectTrustDecision.DoNotTrust);
-        try { await manager.CreateAsync(work); throw new Exception("denied local extension started"); }
+        try { await manager.CreateAsync(work, backend: BackendId.Pi); throw new Exception("denied local extension started"); }
         catch (ProjectExtensionNotTrustedException error)
         {
             Check(error.ExtensionPath == local && error.Status.Decision == ProjectTrustDecision.DoNotTrust,
                 "denied project cannot load project-local executable extension");
         }
         manager.SetProjectTrustDecision(work, ProjectTrustDecision.Trust);
-        await using (var trusted = await manager.CreateAsync(work))
+        await using (var trusted = await manager.CreateAsync(work, backend: BackendId.Pi))
             Check(StartupArgs(trusted).Contains("--approve") &&
                 ExplicitExtensions(StartupArgs(trusted)).Contains(local),
                 "trusted project explicitly loads its selected local extension");
@@ -96,7 +96,7 @@ internal static class UserExtensionTests
             "export default function(pi) { pi.registerCommand('fufucode-user-two', { description: 'two', handler: async () => {} }); }");
         var manager = new PersistentSessionManager(node, cli, new AppDataLayout(Path.Combine(scratch, "appdata")));
         manager.UserExtensionPaths = [first, secondDirectory];
-        await using (var session = await manager.CreateAsync(work))
+        await using (var session = await manager.CreateAsync(work, backend: BackendId.Pi))
         {
             var response = await session.Coordinator.QueryCommandsAsync();
             var names = response.Data!.Value.GetProperty("commands").EnumerateArray()
@@ -106,7 +106,7 @@ internal static class UserExtensionTests
                 "real managed Pi loads two explicit user extensions beside the approval bridge");
         }
         manager.UserExtensionPaths = [first];
-        await using (var session = await manager.CreateAsync(work))
+        await using (var session = await manager.CreateAsync(work, backend: BackendId.Pi))
         {
             var response = await session.Coordinator.QueryCommandsAsync();
             var names = response.Data!.Value.GetProperty("commands").EnumerateArray()
@@ -117,7 +117,7 @@ internal static class UserExtensionTests
         var failing = Path.Combine(scratch, "failing.ts");
         File.WriteAllText(failing, "export default function() { throw new Error('fixture load failure'); }");
         manager.UserExtensionPaths = [failing];
-        try { await manager.CreateAsync(work); throw new Exception("failing extension was accepted"); }
+        try { await manager.CreateAsync(work, backend: BackendId.Pi); throw new Exception("failing extension was accepted"); }
         catch (UserExtensionLoadException error)
         {
             Check(error.ExtensionPath == failing && error.Kind == UserExtensionLoadFailureKind.PiStartupFailure,

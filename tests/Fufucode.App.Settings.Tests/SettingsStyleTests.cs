@@ -95,7 +95,7 @@ internal static class SettingsStyleTests
             "设置导航条目标题、搜索词与图标齐备");
         var iconKeys = CollectIconKeys(iconsPath);
         var missingIcons = SettingsNavCatalog.All
-            .Where(item => item.HasContent && !iconKeys.Contains(item.Icon))
+            .Where(item => !iconKeys.Contains(item.Icon))
             .Select(item => item.Id + ":" + item.Icon)
             .ToArray();
         check(missingIcons.Length == 0,

@@ -33,16 +33,20 @@ public static class SettingsDestinationSelfTest
             var store = new AppSettingsStore(new AppDataLayout(Path.Combine(root, "settings")));
             var vm = new SettingsPageViewModel();
             vm.Attach(Context(store));
-            Check(vm.Categories.Any(category => category.Id == "modules") && vm.Categories.Any(category => category.Id == "about") &&
+            Check(vm.OtherHubItems.Any(category => category.Id == "modules") && vm.Categories.Any(category => category.Id == "about") &&
                 vm.ShowAppearance && !vm.HasUnsavedChanges,
-                "分类包含内建工作台模块与关于，初始没有未保存草稿");
-            Check(new[] { "appearance", "functions", "config" }.All(id => vm.Categories.Any(category => category.Id == id)) &&
-                !vm.Categories.Any(category => category.Id is "layout" or "details") &&
+                "一级侧栏与「其他」收纳桶共同覆盖内建模块与关于，初始没有未保存草稿");
+            Check(vm.Categories.Any(category => category.Id == "appearance") &&
+                vm.OtherHubItems.Any(category => category.Id == "functions"),
+                "一级侧栏包含外观，会话与消息收纳在「其他」");
+            Check(vm.OtherHubItems.Any(category => category.Id == "config"),
+                "配置文件页收纳在「其他」");
+            Check(!vm.Categories.Any(category => category.Id is "layout" or "details") &&
                 vm.WorkbenchSectionId == "appearance" && vm.ShowWorkbenchSection,
-                "UI 定制合并为外观与功能两个大页，布局与停靠、细节与功能不再各占一个左栏分类");
-            Check(vm.WorkbenchSectionId == "appearance" && vm.ShowWorkbenchSection && vm.ShowLookColumn && vm.ShowArrangementColumn,
-                "外观页按两栏呈现：常规外观与前端功能排布");
-            vm.SelectedCategory = vm.Categories.Single(category => category.Id == "config");
+                "不再保留 layout/details 旧分类，外观页使用分区控件");
+            Check(vm.WorkbenchSectionId == "appearance" && vm.ShowWorkbenchSection,
+                "外观页使用统一设置分区，不再维护第二套可见性谓词");
+            vm.SelectCategory("config");
             Check(vm.WorkbenchSectionId == "config" && vm.ShowConfigSection && vm.ShowWorkbenchSection,
                 "配置文件是独立左栏页面，不再依赖二级导航");
             vm.SelectedCategory = vm.Categories.Single(category => category.Id == "appearance");

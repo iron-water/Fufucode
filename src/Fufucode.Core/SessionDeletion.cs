@@ -9,7 +9,18 @@ public static class SessionDeletion
         var project = metadata.GetProject(session.ProjectId);
         if (!AppDataLayout.PathKey(AppDataLayout.NormalizeProjectPath(projectPath)).Equals(AppDataLayout.PathKey(project.Path)))
             throw new InvalidOperationException("Session belongs to another project.");
-        var directory = layout.ProjectSessionsDirectory(project.Id);
+        var projectDirectory = layout.ProjectSessionsDirectory(project.Id);
+        // 后端会话目录必须与打开会话时的租约目录一致（OMP/FUMO/Claude/Codex/DSH 各有子目录，
+        // Pi 使用项目根）。否则删除正在使用的会话不会被租约阻止。
+        var directory = session.Backend switch
+        {
+            BackendId.Omp => Path.Combine(projectDirectory, "omp"),
+            BackendId.NativeCSharp => Path.Combine(projectDirectory, "fumo"),
+            BackendId.Claude => Path.Combine(projectDirectory, "claude"),
+            BackendId.Codex => Path.Combine(projectDirectory, "codex"),
+            BackendId.Dsh => Path.Combine(projectDirectory, "dsh"),
+            _ => projectDirectory,
+        };
         if (!AppDataLayout.IsUnderDirectory(directory, layout.SessionsDirectory))
             throw new InvalidOperationException("Session directory is outside the data root.");
         CheckNoLinks(directory, layout.Root);
@@ -20,8 +31,12 @@ public static class SessionDeletion
         string? quarantine = null;
         if (session.FilePath is { } file)
         {
-            if (!AppDataLayout.IsUnderDirectory(file, directory) || !Path.GetExtension(file).Equals(".jsonl", StringComparison.OrdinalIgnoreCase))
-                throw new InvalidOperationException("Stored Pi session path is outside its project or is not JSONL.");
+            // Pi 使用 .jsonl；FUMO 与协议适配插件使用 .json。两者都必须位于本会话目录内。
+            var extension = Path.GetExtension(file);
+            var supported = extension.Equals(".jsonl", StringComparison.OrdinalIgnoreCase) ||
+                (session.Backend != BackendId.Pi && extension.Equals(".json", StringComparison.OrdinalIgnoreCase));
+            if (!AppDataLayout.IsUnderDirectory(file, directory) || !supported)
+                throw new InvalidOperationException("Stored session path is outside its project or has an unsupported extension.");
             CheckNoLinks(file, layout.Root);
             if (File.Exists(file))
             {

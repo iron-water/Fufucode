@@ -326,8 +326,9 @@ internal static class SeepReverseLabPluginTests
         var withoutPlugin = client.Requests.FirstOrDefault();
         checks.Check(withoutPlugin is not null, "会话真实发出了模型请求");
         checks.Check(withoutPlugin is not null &&
-                     withoutPlugin.Messages.All(m => m.Role != PureAgentRole.System),
-            "未启用插件时请求里没有 System 消息");
+                     withoutPlugin.Messages.Where(m => m.Role == PureAgentRole.System)
+                         .All(m => !m.Content.Contains("实验环境开关协议", StringComparison.Ordinal)),
+            "未启用插件时 System 消息不包含插件人格（基础环境规范仍可存在）");
 
         store2.Install(SeepReverseLabAssets.PluginId);
         var beforeCount = client.Requests.Count;

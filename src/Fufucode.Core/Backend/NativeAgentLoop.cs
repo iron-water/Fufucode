@@ -16,8 +16,15 @@ public sealed class NativeAgentLoop
 {
     private readonly IPureModelClient _modelClient;
     private readonly IPureToolDispatcher? _toolDispatcher;
-    private readonly int _maxIterations;
+    private int _maxIterations;
     private readonly bool _streamingEnabled;
+
+    /// <summary>最大轮次限制。长程复杂任务可动态调大。</summary>
+    public int MaxIterations
+    {
+        get => _maxIterations;
+        set => _maxIterations = value > 0 ? value : 10;
+    }
 
     /// <summary>通过增量回调观察模型的文本与工具分片（默认关闭，仅走一次性请求）。</summary>
     public bool StreamingEnabled => _streamingEnabled;
@@ -292,12 +299,12 @@ public sealed class NativeAgentLoop
 
     private static string PruneToolResult(string content)
     {
-        const int maxChars = 12 * 1024;
+        const int maxChars = 64 * 1024;
         if (string.IsNullOrEmpty(content) || content.Length <= maxChars) return content;
 
-        var head = content.Substring(0, 6 * 1024);
-        var tail = content.Substring(content.Length - 3 * 1024, 3 * 1024);
-        var omitted = content.Length - (9 * 1024);
+        var head = content.Substring(0, 48 * 1024);
+        var tail = content.Substring(content.Length - 16 * 1024, 16 * 1024);
+        var omitted = content.Length - (64 * 1024);
         return $"{head}\n\n... [工具输出过长，已截断折叠 {omitted} 字符以节省上下文] ...\n\n{tail}";
     }
 

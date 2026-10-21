@@ -550,32 +550,26 @@
                   Foreground="{DynamicResource AppTextSecondary}"/>
       </Button>
 
-      <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
-      <Border x:Name="ComposerCard" Grid.Row="1" Classes="composerCard" MaxWidth="880"
+      <!-- 输入区：项目切换在输入框上方独立一行（Codex 式），卡片本体只放输入与底部工具。
+           x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
+      <StackPanel x:Name="ComposerHost" Grid.Row="1" MaxWidth="880" HorizontalAlignment="Stretch" VerticalAlignment="Bottom">
+        <StackPanel x:Name="SessionContextBar" Orientation="Horizontal" Spacing="6"
+                    Margin="12,0,12,6" IsVisible="False">
+          <Button x:Name="SessionProjectChip" Classes="contextChip"
+                  ToolTip.Tip="更改此会话的项目"
+                  AutomationProperties.Name="更改此会话的项目">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
+                        VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+              <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
+              <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
+                        VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+            </StackPanel>
+          </Button>
+        </StackPanel>
+      <Border x:Name="ComposerCard" Classes="composerCard"
               CornerRadius="0" BorderThickness="0,1,0,0" Margin="0" HorizontalAlignment="Stretch">
         <StackPanel>
-          <!-- 会话上下文条：新会话尚未发送第一条消息时可改所属项目；后端在创建时已固定。 -->
-          <StackPanel x:Name="SessionContextBar" Orientation="Horizontal" Spacing="6"
-                      Margin="0,0,0,8" IsVisible="False">
-            <Button x:Name="SessionProjectChip" Classes="contextChip"
-                    ToolTip.Tip="更改此会话的项目"
-                    AutomationProperties.Name="更改此会话的项目">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
-                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
-                <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
-              </StackPanel>
-            </Button>
-            <Border Classes="chip" ToolTip.Tip="会话创建后固定使用此后端；新建会话时可选择">
-              <StackPanel Orientation="Horizontal" Spacing="5">
-                <Border x:Name="SessionBackendDot" Width="8" Height="8" CornerRadius="4"
-                        VerticalAlignment="Center" Background="#8B5CF6"/>
-                <TextBlock x:Name="SessionBackendChipText" Classes="caption" VerticalAlignment="Center"/>
-              </StackPanel>
-            </Border>
-          </StackPanel>
 
           <!-- 排队条：subtle chip 列表 -->
           <Border Classes="queueStrip" IsVisible="{Binding Input.HasQueue}" Margin="0,0,0,8">
@@ -802,6 +796,7 @@
           </Grid>
         </StackPanel>
       </Border>
+      </StackPanel>
 
     </Grid>
   </Grid>

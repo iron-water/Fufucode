@@ -153,8 +153,10 @@ public sealed class AppSettingsStore
     {
         if (settings.Version != 1) throw new ArgumentException("Unsupported settings version.");
         if (settings.Theme is not ("system" or "light" or "dark")) throw new ArgumentException("Invalid theme.");
+        // 档位由各引擎自行声明（Pi 动态上报，其余后端按实现给出）；这里只挡住明显的脏值，
+        // 不再维护跨后端的固定白名单，否则新档位或新后端会被设置层提前拒绝。
         if (settings.ThinkingLevel is { } level &&
-            level is not ("off" or "minimal" or "low" or "medium" or "high" or "xhigh" or "max"))
+            (level.Length is 0 or > 32 || !level.All(c => char.IsAsciiLetterLower(c) || c is '-' or '_')))
             throw new ArgumentException("Invalid thinking level.");
         if (settings.ProxyUrl is { } proxy && (!Uri.TryCreate(proxy, UriKind.Absolute, out var uri) ||
             uri.Scheme is not ("http" or "https") || uri.UserInfo.Length > 0 || uri.Query.Length > 0))

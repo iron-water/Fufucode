@@ -178,6 +178,11 @@
                        IsVisible="{Binding HasDiagramError}" Foreground="{DynamicResource AppCriticalForeground}"
                        Margin="12" TextWrapping="Wrap"/>
           </Grid>
+          <!-- 文本/代码文件：原生代码视图，保留语法高亮，不显示浏览器外壳。 -->
+          <ScrollViewer IsVisible="{Binding IsTextPreview}" Padding="10"
+                        HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <views:HighlightedCodeView Code="{Binding PreviewText}" Language="{Binding PreviewLanguage}"/>
+          </ScrollViewer>
         </Grid>
       </Grid>
     </Grid>

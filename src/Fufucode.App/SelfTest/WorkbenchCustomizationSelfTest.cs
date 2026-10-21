@@ -92,7 +92,12 @@ internal static class WorkbenchCustomizationSelfTest
         {
             await Ready();
             var vm = (MainViewModel)window.DataContext!;
-            Check(!vm.Settings.ShowThemeRow && ReferenceEquals(vm.Settings.Customization, window.CustomizationForTesting), "settings has one active theme editor rather than two conflicting stores");
+            Check(ReferenceEquals(vm.Settings.Customization, window.CustomizationForTesting), "settings has one active theme editor rather than two conflicting stores");
+            var missingIcons = window.ActionsForTesting.Actions
+                .Where(action => WorkbenchActionDefaults.ExplicitIcon(action.Id) is null)
+                .Select(action => action.Id).ToArray();
+            Check(missingIcons.Length == 0,
+                "all registered actions have explicit semantic icons" + (missingIcons.Length == 0 ? "" : ": " + string.Join(", ", missingIcons)));
             var actions = window.ActionsForTesting.Actions.Select(a => a.Id).ToHashSet();
             Check(!actions.Any(id => id.StartsWith("opinions.", StringComparison.Ordinal)), "opinion mode and its import/export are no longer registered as app actions");
             var settingsButton = window.GetVisualDescendants().OfType<Button>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "action-settings");
@@ -116,7 +121,7 @@ internal static class WorkbenchCustomizationSelfTest
                 "the export submenu offers markdown and metadata with a default");
             Check(leftFlyout.Items.OfType<MenuItem>().All(i => i.Header?.ToString() != "临时聊天" && i.Header?.ToString() != "审查"),
                 "temporary chat and review are gone from the left auxiliary menu");
-            Check(new[] { "session.pin", "session.unread", "session.archive", "session.rename", "session.fork", "session.side", "session.schedule", "session.share", "window.session", "copy.log", "perf", "help.update", "edit.undo", "speech.start", "session.fork.worktree", "session.export.metadata", "copy.markdown", "copy.workdir" }.All(actions.Contains),
+            Check(new[] { "session.pin", "session.unread", "session.archive", "session.rename", "session.fork", "session.side", "session.schedule", "window.session", "copy.log", "perf", "help.update", "edit.undo", "speech.start", "session.fork.worktree", "session.export.metadata", "copy.markdown", "copy.workdir" }.All(actions.Contains),
                 "requested functional actions are registered in the shared catalog");
             Check(!new[] { "session.temporary", "review", "view.chatTabs", "view.navigation", "window.close", "app.quit", "ruler.toggle", "help.changes", "docs", "feedback" }.Any(actions.Contains),
                 "redundant and meaningless actions are gone from the catalog");
@@ -141,10 +146,17 @@ internal static class WorkbenchCustomizationSelfTest
                 "moving it away clears the top center again");
 
             var priorLayout = window.DockLayoutForTesting.Serialize();
-            c.EditLayout(l => { l.Move("files", DockZone.Right); l.Hidden[DockZone.Bottom] = false; });
-            Check(window.DockLayoutForTesting.Find("files") == DockZone.Right && !window.DockLayoutForTesting.Hidden[DockZone.Bottom] && JsonNode.Parse(c.Json)!["layout"] is not null,
-                "settings page assignments apply to the live dock and enter JSON");
-            c.Undo(); Check(window.DockLayoutForTesting.Serialize() == priorLayout, "layout changes participate in configuration undo");
+            c.EditLayout(l => l.Move("files", DockZone.Right));
+            c.SetZoneVisible(DockZone.Bottom, true);
+            Check(window.DockLayoutForTesting.Find("files") == DockZone.Right,
+                "settings page assignments move the live dock page");
+            Check(!window.DockLayoutForTesting.Hidden[DockZone.Bottom],
+                "settings page assignments reveal the live bottom dock");
+            Check(JsonNode.Parse(c.Json)!["layout"] is not null,
+                "settings page assignments enter ui.json");
+            c.Undo();
+            c.Undo();
+            Check(window.DockLayoutForTesting.Serialize() == priorLayout, "layout changes participate in configuration undo");
             c.Change(s => s with { UserName = "本地用户", AssistantName = "助手甲", ShowAvatars = false, ShowMessageTimes = false, Composer = "reading", ReadingWidth = "narrow", Density = "airy", ShowSessionHeader = true });
             await Ready();
             var chat = window.GetVisualDescendants().OfType<ChatPage>().First();
@@ -255,7 +267,7 @@ internal static class WorkbenchCustomizationSelfTest
                     // 其余分类各拍一张，确认卡行布局在长页面上也成立
                     foreach (var category in new[] { "models", "network", "notifications", "modules", "about", "config" })
                     {
-                        mainVm.Settings.SelectedCategory = mainVm.Settings.Categories.Single(x => x.Id == category);
+                        mainVm.Settings.SelectCategory(category);
                         await Task.Delay(120); pageWindow.UpdateLayout(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
                         using var shot = pageWindow.CaptureRenderedFrame();
                         shot?.Save(Path.Combine(root, "settings-" + category + ".png"), PngBitmapEncoderOptions.Default);
@@ -299,7 +311,7 @@ internal static class WorkbenchCustomizationSelfTest
                     if (collapseHeader is not null)
                     {
                         var body = settingsPage.GetVisualDescendants().OfType<StackPanel>()
-                            .Where(p => p.Classes.Contains("settingsGroupList")).LastOrDefault();
+                            .FirstOrDefault(p => Avalonia.Automation.AutomationProperties.GetAutomationId(p) == "settings-collapsible-body-入口位置");
                         var before = body?.IsVisible;
                         collapseHeader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                         await Task.Delay(120); pageWindow.UpdateLayout();
@@ -353,11 +365,13 @@ internal static class WorkbenchCustomizationSelfTest
                 c.Change(s => s with { Theme = "system", Accent = "system" });
                 Check(c.Current.EffectiveAccent == (Application.Current?.PlatformSettings?.GetColorValues().AccentColor1 ?? Avalonia.Media.Color.Parse("#0078D4")),
                     "default appearance follows the system accent instead of forcing the Demo green");
-                c.Change(s => s with { Surface = "flat" }); await Ready();
-                Check(window.FindControl<StackPanel>("CustomTopRight")!.Children.OfType<Button>().All(b => b.CornerRadius.TopLeft == 0), "flat style applies square native controls");
-                c.Change(s => s with { Surface = "glass" });
-                Check(window.TransparencyLevelHint.Contains(Avalonia.Controls.WindowTransparencyLevel.AcrylicBlur), "glass style requests the actual compositor material with a solid fallback");
-                c.Change(s => s with { Surface = "fluent" });
+                c.Change(s => s with { Skin = "metro" }); await Ready();
+                Check(window.FindControl<StackPanel>("CustomTopRight")!.Children.OfType<Button>().All(b => b.CornerRadius.TopLeft == 0),
+                    "Metro skin applies square native controls");
+                c.Change(s => s with { Skin = "liquidglass" }); await Ready();
+                Check(window.TransparencyLevelHint.Contains(Avalonia.Controls.WindowTransparencyLevel.AcrylicBlur),
+                    "LiquidGlass skin requests the actual compositor material with a solid fallback");
+                c.Change(s => s with { Skin = "fluent" }); await Ready();
             }
             finally { settingsWindow.Close(); }
             // 明暗两套主题在宽窄两种窗口下各留一张证据图。放在所有断言之后，

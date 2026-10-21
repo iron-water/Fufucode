@@ -257,6 +257,9 @@ public partial class MainWindow : Window
             SetThinkingLevel: host is null || !host.HasLiveSession
                 ? null
                 : (level, ct) => host.Current.Coordinator.SetThinkingLevelAsync(level, ct),
+            QueryThinkingLevels: host is null || !host.HasLiveSession
+                ? null
+                : ct => host.Current.Coordinator.QueryThinkingLevelsAsync(ct),
             QueryState: host is null || !host.HasLiveSession
                 ? null
                 : ct => host.Current.Coordinator.QueryStateAsync(ct),
@@ -1428,13 +1431,155 @@ public partial class MainWindow : Window
         if (Program.SelfTestMode) return;
         try
         {
-            _trayIcon = new TrayIconService(ShowFromTray, ExitApplication);
+            _trayIcon = new TrayIconService(ShowFromTray, FillTrayMenu);
         }
         catch (Exception error)
         {
             _trayUnavailable = true;
             System.Diagnostics.Trace.TraceWarning("托盘图标创建失败：{0}", error.Message);
         }
+    }
+
+    /// <summary>
+    /// 组装托盘右键菜单。NativeMenu 的 NeedsUpdate 会在每次打开前调用，
+    /// 因此固定/最近会话、当前主题色和设置状态都不会变成启动时的旧快照。
+    /// </summary>
+    private void FillTrayMenu(NativeMenu menu)
+    {
+        AddTrayAction(menu, "显示主窗口", ShowFromTray);
+        menu.Add(new NativeMenuItemSeparator());
+
+        menu.Add(CreateTraySessionMenu("固定会话", pinned: true));
+        menu.Add(CreateTraySessionMenu("最近会话", pinned: false));
+        menu.Add(new NativeMenuItemSeparator());
+
+        AddTrayAction(menu, "新建会话", () => _ = RunTrayActionAsync(NewChatAsync));
+        AddTrayAction(menu, "关于 Fufucode", () => OpenFufucodeRepository());
+        menu.Add(CreateTrayThemeMenu());
+        AddTrayAction(menu, "设置", () => _ = RunTrayActionAsync(OpenSettingsFromTrayAsync));
+
+        var fufu = new NativeMenuItem("召唤 FUFU（即将推出）") { IsEnabled = false };
+        menu.Add(fufu);
+        menu.Add(new NativeMenuItemSeparator());
+        AddTrayAction(menu, "退出", ExitApplication);
+    }
+
+    private static void AddTrayAction(NativeMenu menu, string title, Action action)
+    {
+        var item = new NativeMenuItem(title);
+        item.Click += (_, _) => action();
+        menu.Add(item);
+    }
+
+    private NativeMenuItem CreateTraySessionMenu(string title, bool pinned)
+    {
+        var submenu = new NativeMenu();
+        var sessions = TraySessions(pinned);
+        if (sessions.Count == 0)
+        {
+            submenu.Add(new NativeMenuItem(pinned ? "暂无固定会话" : "暂无最近会话") { IsEnabled = false });
+        }
+        else
+        {
+            foreach (var session in sessions.Take(3))
+            {
+                var target = session;
+                var item = new NativeMenuItem(TraySessionTitle(target));
+                item.Click += (_, _) => _ = ActivateTraySessionAsync(target);
+                submenu.Add(item);
+            }
+        }
+        return new NativeMenuItem(title) { Menu = submenu };
+    }
+
+    private IReadOnlyList<SessionRecord> TraySessions(bool pinned)
+    {
+        if (_host is null) return [];
+        var metadata = _host.Manager.Metadata;
+        var archivedProjects = ProjectArchive.LoadSet(metadata);
+        var sessions = metadata.ListProjects()
+            .SelectMany(project => metadata.ListSessions(project.Id))
+            .Where(record => !SessionArchive.IsArchived(metadata, record, archivedProjects))
+            .Select(record => (Record: record, Presentation: SessionPresentation.Load(metadata, record.Id)))
+            .Where(pair => pinned ? pair.Presentation.Pinned : !pair.Presentation.Pinned)
+            .OrderByDescending(pair => pair.Record.LastOpened)
+            .Select(pair => pair.Record)
+            .Take(3)
+            .ToArray();
+        return sessions;
+    }
+
+    private string TraySessionTitle(SessionRecord session)
+    {
+        var title = SessionTitles.Display(session);
+        if (_host is null) return title;
+        try
+        {
+            var project = _host.Manager.Metadata.GetProject(session.ProjectId);
+            var projectName = Path.GetFileName(project.Path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            return string.IsNullOrWhiteSpace(projectName) ? title : $"{title} · {projectName}";
+        }
+        catch (Exception) { return title; }
+    }
+
+    private NativeMenuItem CreateTrayThemeMenu()
+    {
+        var submenu = new NativeMenu();
+        var accent = _customization?.Current.Accent ?? "system";
+        AddTrayAccent(submenu, "默认色（跟随系统）", "system", accent);
+        AddTrayAccent(submenu, "Fufucode 蓝", "#0078D4", accent);
+        AddTrayAccent(submenu, "青绿色", "#087E66", accent);
+        AddTrayAccent(submenu, "紫色", "#6750A4", accent);
+        return new NativeMenuItem("主题色") { Menu = submenu };
+    }
+
+    private void AddTrayAccent(NativeMenu menu, string title, string value, string current)
+    {
+        var item = new NativeMenuItem(title)
+        {
+            IsChecked = string.Equals(current, value, StringComparison.OrdinalIgnoreCase),
+            ToggleType = MenuItemToggleType.Radio,
+        };
+        item.Click += (_, _) => _customization?.Change(current => current with { Accent = value });
+        menu.Add(item);
+    }
+
+    private async Task ActivateTraySessionAsync(SessionRecord session)
+    {
+        try
+        {
+            ShowFromTray();
+            await ActivateOverviewSessionAsync(session);
+        }
+        catch (Exception error)
+        {
+            _vm?.Timeline.AddNotification("打开托盘会话失败：" + error.GetBaseException().Message);
+        }
+    }
+
+    private async Task OpenSettingsFromTrayAsync()
+    {
+        ShowFromTray();
+        await NavigateWorkspaceAsync(AppPage.Settings);
+    }
+
+    private async Task RunTrayActionAsync(Func<Task> action)
+    {
+        try { await action(); }
+        catch (Exception error) { _vm?.Timeline.AddNotification("托盘操作失败：" + error.GetBaseException().Message); }
+    }
+
+    private static void OpenFufucodeRepository()
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "https://github.com/iron-water/Fufucode",
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception) { }
     }
 
     /// <summary>只有用户主动关窗才隐藏；系统注销/关闭与显式退出仍走真实退出流程。</summary>

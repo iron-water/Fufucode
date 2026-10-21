@@ -16,6 +16,7 @@ if (args.Contains("--bridge-only")) { await BridgeIntegrationTests.RunAsync(root
 if (args.Contains("--cli-ui-only")) { await CliTests.RunUiAsync(root); return; }
 if (args.Contains("--cli-contract-only")) { await CliTests.RunContractsAsync(root); return; }
 if (args.Contains("--cli-host-only")) { await CliHostTests.RunAsync(); return; }
+if (args.Contains("--cli-only")) { await CliTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--idle-maintenance-only")) { await IdleMaintenanceTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--process-exit-only")) { await ProcessExitTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--a13-only")) { await A13ContractTests.RunAsync(root, fake, dotnet); return; }

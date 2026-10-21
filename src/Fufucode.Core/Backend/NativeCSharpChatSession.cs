@@ -24,6 +24,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     private readonly SkillRegistry? _skills;
     private readonly McpManager? _mcp;
     private readonly INativeSubagentRuntime? _subagents;
+    private readonly string? _workspaceRoot;
     private readonly object _gate = new();
     private readonly object _persistGate = new();
     private readonly List<(string Text, IReadOnlyList<PureImageAttachment>? Images)> _queue = [];
@@ -186,6 +187,18 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     }
 
     public string ThinkingLevel => _thinkingLevel;
+    public string? WorkspaceRoot => _workspaceRoot;
+
+    /// <summary>最大轮次限制。长程复杂任务可动态调大。</summary>
+    public int MaxIterations
+    {
+        get => (_engine as PureCSharpAgentEngine)?.MaxIterations ?? 50;
+        set
+        {
+            if (_engine is PureCSharpAgentEngine pureEngine)
+                pureEngine.MaxIterations = value;
+        }
+    }
 
     /// <summary>恢复会话时标记“上次运行被中断”，供 UI 提示。</summary>
     public void MarkInterrupted()
@@ -203,13 +216,15 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         bool supportsImages = true,
         SkillRegistry? skills = null,
         McpManager? mcp = null,
-        INativeSubagentRuntime? subagents = null)
+        INativeSubagentRuntime? subagents = null,
+        string? workspaceRoot = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
         _supportsImages = supportsImages;
         _skills = skills;
         _mcp = mcp;
         _subagents = subagents;
+        _workspaceRoot = workspaceRoot;
         _systemPromptProvider = systemPromptProvider;
         _pluginTools = pluginTools;
         _persistFilePath = persistFilePath;
@@ -236,7 +251,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public NativeCSharpChatSession(
         IPureModelClient modelClient,
         IPureToolDispatcher? toolDispatcher = null,
-        int maxIterations = 10,
+        int maxIterations = 50,
         string? sessionId = null,
         string? modelId = null,
         IPluginSystemPromptProvider? systemPromptProvider = null,
@@ -245,9 +260,10 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         bool supportsImages = true,
         SkillRegistry? skills = null,
         McpManager? mcp = null,
-        INativeSubagentRuntime? subagents = null)
+        INativeSubagentRuntime? subagents = null,
+        string? workspaceRoot = null)
         : this(new PureCSharpAgentEngine(toolDispatcher, modelClient, maxIterations), sessionId, modelId,
-            systemPromptProvider, pluginTools, persistFilePath, supportsImages, skills, mcp, subagents)
+            systemPromptProvider, pluginTools, persistFilePath, supportsImages, skills, mcp, subagents, workspaceRoot)
     {
         ArgumentNullException.ThrowIfNull(modelClient);
     }
@@ -310,15 +326,15 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     }
 
     /// <summary>
-    /// 组装本轮发往模型的消息：启用插件提供人格时，在最前面追加一条 System 消息；
-    /// 没有启用插件提供人格时保持原有单条 User 消息，不注入空 System。支持携带多模态图像附件与计划提示。
+    /// 组装本轮发往模型的消息：包含基础环境规范，并追加插件人格、规划、技能与 MCP 信息。
     /// </summary>
     private IReadOnlyList<PureAgentMessage> BuildTurnMessages(string text, IReadOnlyList<PureImageAttachment>? images = null)
     {
+        var basePrompt = BuildBaseSystemPrompt();
         var fragment = _systemPromptProvider?.Current;
         var planSnippet = GetCurrentPlanSnippet();
         var skillsSection = _skills?.BuildPromptSection();
-        var systemContent = fragment;
+        var systemContent = string.IsNullOrWhiteSpace(fragment) ? basePrompt : $"{basePrompt}\n\n{fragment}";
 
         void AppendSection(string? section)
         {
@@ -341,6 +357,33 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             new PureAgentMessage(PureAgentRole.System, systemContent),
             userMsg,
         ];
+    }
+
+    private string BuildBaseSystemPrompt()
+    {
+        var isWindows = OperatingSystem.IsWindows();
+        var osName = isWindows ? "Windows" : (OperatingSystem.IsMacOS() ? "macOS" : "Linux");
+        var shellName = isWindows ? "Windows cmd.exe" : "sh";
+
+        var sb = new StringBuilder();
+        sb.AppendLine("你是运行在 Fufucode 原生内核（FUMO）中的自主编码 Agent。");
+        sb.AppendLine($"当前运行环境：{osName}，命令行解释器为 {shellName}。");
+        if (!string.IsNullOrWhiteSpace(_workspaceRoot))
+            sb.AppendLine($"当前工作区根目录：{_workspaceRoot}");
+
+        sb.AppendLine();
+        sb.AppendLine("## 工具使用与工程原则");
+        sb.AppendLine("1. 优先使用内置文件工具（read_file、write_file、edit_file、list_dir、grep_search、glob_files）进行文件查阅与编辑，比外部 shell 命令更高效稳定。");
+        if (isWindows)
+        {
+            sb.AppendLine("2. 在 Windows 环境下使用 run_command 时：");
+            sb.AppendLine("   - 串联命令必须使用 '&&' 或 '&'，不要使用 Unix shell 分隔符 ';'。");
+            sb.AppendLine("   - 使用 Windows 原生命令（如 dir、where.exe、findstr、echo 等），不要直接假设存在 Unix 工具（如 ls、cat、grep、head、tr 等）。");
+        }
+        sb.AppendLine("3. 目标是实际完成代码开发与落地，不只给出空泛方案。");
+        sb.AppendLine("4. 当遇到环境缺少某 SDK/工具链（如未安装对应语言编译器）时，不要陷入无限探测循环；应依据任务书规范自主完成核心架构设计、源代码编写、种子数据准备与必要单元测试，并在最终回复中如实说明环境限制与未验证项。");
+
+        return sb.ToString().TrimEnd();
     }
 
     private string? GetCurrentPlanSnippet() => (_engine as PureCSharpAgentEngine)?.CurrentPlanSnippet;
@@ -794,6 +837,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         {
             if (!_toolsById.TryGetValue(call.Id, out var tool)) return;
             tool.Status = ToolCallStatus.Running;
+            tool.StartedTicks ??= Stopwatch.GetTimestamp();
             _blocks[tool.ContentIndex] = tool.Block;
             session.Emit(new SessionEvent.ToolCallStatusChanged(
                 _messageId!, tool.ContentIndex, tool.Id, ToolCallStatus.Running, null));
@@ -813,9 +857,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         {
             tool.Status = result.Success ? ToolCallStatus.Completed : ToolCallStatus.Failed;
             tool.Output = result.Content;
+            tool.DurationMs = tool.StartedTicks is { } started
+                ? (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
+                : null;
             _blocks[tool.ContentIndex] = tool.Block;
             session.Emit(new SessionEvent.ToolCallStatusChanged(
-                _messageId!, tool.ContentIndex, tool.Id, tool.Status, result.Content));
+                _messageId!, tool.ContentIndex, tool.Id, tool.Status, result.Content, tool.DurationMs));
             if (_toolsByIndex.Values.All(t => t.Status is ToolCallStatus.Completed or ToolCallStatus.Failed))
                 CloseMessage();
         }
@@ -827,9 +874,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             {
                 if (tool.Status is not (ToolCallStatus.Pending or ToolCallStatus.Running)) continue;
                 tool.Status = outcome == SessionOutcome.Interrupted ? ToolCallStatus.Cancelled : ToolCallStatus.Failed;
+                tool.DurationMs = tool.StartedTicks is { } started
+                    ? (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
+                    : null;
                 _blocks[tool.ContentIndex] = tool.Block;
                 session.Emit(new SessionEvent.ToolCallStatusChanged(
-                    _messageId, tool.ContentIndex, tool.Id, tool.Status, null));
+                    _messageId, tool.ContentIndex, tool.Id, tool.Status, null, tool.DurationMs));
             }
             CloseMessage();
         }
@@ -870,8 +920,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             public StringBuilder Arguments { get; } = new();
             public ToolCallStatus Status { get; set; } = ToolCallStatus.Pending;
             public string? Output { get; set; }
+            /// <summary>实际派发时刻（Stopwatch 时间戳）；尚未开始执行时为 null。</summary>
+            public long? StartedTicks { get; set; }
+            /// <summary>进入终态时计算的耗时；未执行或旧路径没有起点时为 null。</summary>
+            public long? DurationMs { get; set; }
             public ToolCallBlock Block => new(Id, Name, Arguments.Length == 0 ? "{}" : Arguments.ToString(),
-                Status, null, Output, Status == ToolCallStatus.Failed);
+                Status, null, Output, Status == ToolCallStatus.Failed, DurationMs);
         }
     }
 }

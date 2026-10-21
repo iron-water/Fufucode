@@ -88,7 +88,7 @@ internal static class SettingsAndDiagnosticsTests
             ProxyUrl = "http://localhost:7890", Endpoint = new CompatibleEndpoint("fixture",
                 "https://example.test/v1", "fixture-model", "FUFUCODE_TEST_KEY") });
         string sessionId;
-        await using (var session = await manager.CreateAsync(projectPath))
+        await using (var session = await manager.CreateAsync(projectPath, backend: BackendId.Pi))
         {
             sessionId = session.Session.Id;
             Check(session.Chat.CurrentModel == "fixture/fixture-model",
@@ -113,7 +113,7 @@ internal static class SettingsAndDiagnosticsTests
                 "M6 resume does not replace the session model from current app preferences");
         }
         manager.Settings.Update(s => s with { SelectedModel = null, ThinkingLevel = null, Endpoint = null });
-        await using (var withoutEndpoint = await manager.CreateAsync(projectPath))
+        await using (var withoutEndpoint = await manager.CreateAsync(projectPath, backend: BackendId.Pi))
         {
             var models = File.ReadAllText(Path.Combine(sessionLayout.LegacyPiAgentDirectory, "models.json"));
             using var parsed = JsonDocument.Parse(models);

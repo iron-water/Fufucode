@@ -105,6 +105,7 @@ public partial class MainWindow
                 IsTurnActive = () => vm.Input.IsTurnActive,
                 SetModel = (provider, model, ct) => session.Coordinator.SetModelAsync(provider, model, ct),
                 SetThinkingLevel = (level, ct) => session.Coordinator.SetThinkingLevelAsync(level, ct),
+                QueryThinkingLevels = ct => session.Coordinator.QueryThinkingLevelsAsync(ct),
                 QueryState = ct => session.Coordinator.QueryStateAsync(ct),
                 RestartSession = null,
                 ModelApplied = model => vm.StatusBar.SetModelOverride(model)

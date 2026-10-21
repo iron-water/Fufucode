@@ -208,7 +208,7 @@ public sealed class MessageRebuilder
     private void ApplyToolStatus(SessionEvent.ToolCallStatusChanged e)
     {
         var message = GetMessage(e.MessageId);
-        if (message.TryApplyToolStatus(e.ContentIndex, e.Status, e.StatusText))
+        if (message.TryApplyToolStatus(e.ContentIndex, e.Status, e.StatusText, e.DurationMs))
         {
             MarkDirty(e.MessageId);
         }
@@ -339,7 +339,8 @@ public sealed class MessageRebuilder
         }
 
         /// <summary>终态消息之后补发的工具状态：按 contentIndex 在终态副本上替换该块。</summary>
-        public bool TryApplyToolStatus(int contentIndex, ToolCallStatus status, string? statusText)
+        public bool TryApplyToolStatus(int contentIndex, ToolCallStatus status, string? statusText,
+            long? durationMs = null)
         {
             if (Final is not { } final || contentIndex < 0 || contentIndex >= final.Blocks.Count
                 || final.Blocks[contentIndex] is not ToolCallBlock tool)
@@ -347,8 +348,14 @@ public sealed class MessageRebuilder
                 return false;
             }
 
-            if (tool.Status == status && tool.StatusText == statusText) return false;
-            return ReplaceFinalBlock(tool, tool with { Status = status, StatusText = statusText });
+            if (tool.Status == status && tool.StatusText == statusText &&
+                (durationMs is null || durationMs == tool.DurationMs)) return false;
+            return ReplaceFinalBlock(tool, tool with
+            {
+                Status = status,
+                StatusText = statusText,
+                DurationMs = durationMs ?? tool.DurationMs,
+            });
         }
 
         /// <summary>终态消息之后补发的块终态：在终态副本上原地替换该块。</summary>
