@@ -70,8 +70,10 @@ public partial class ChatPage
                     details.Children.Add(DetailRow("Icon.Terminal", "终端命令", "运行命令、安装软件和更改系统设置"));
                     details.Children.Add(Divider());
                     details.Children.Add(DetailRow("Icon.Globe", "互联网和已连接的应用", "访问网站、发送数据并使用已启用的插件"));
-                    var detailsCard = new Border { Child = details, Padding = new Thickness(0) };
-                    detailsCard.Classes.Add("card");
+                    // 对话框内嵌卡：显式底/描边、不加浮起阴影（设计规范：普通卡无阴影）。
+                    var detailsCard = new Border { Child = details, Padding = new Thickness(0), BorderThickness = new Thickness(1), CornerRadius = new CornerRadius(8) };
+                    detailsCard.Bind(Border.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppCardBackground"));
+                    detailsCard.Bind(Border.BorderBrushProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppCardStroke"));
 
                     var risk = new TextBlock
                     {
