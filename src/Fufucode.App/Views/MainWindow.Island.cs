@@ -23,6 +23,7 @@ public partial class MainWindow
     private TextBlock? _islandTitle;
     private TextBlock? _islandModel;
     private Avalonia.Controls.Shapes.Path? _islandBackend;
+    private Border? _islandBackendCircle;
     private Border? _islandSatellite;
     private TextBlock? _islandSatCount;
     private TextBlock? _islandLiveMeta;
@@ -51,6 +52,7 @@ public partial class MainWindow
         _islandDot = _islandSatellite = _islandLiveDot = null;
         _islandTitle = _islandModel = _islandSatCount = null;
         _islandBackend = null;
+        _islandBackendCircle = null;
         _islandLiveMeta = _islandLiveText = _islandPanelTitle = _islandPanelSubtitle = null;
         _islandLiveBar = null; _islandStopButton = _islandSteerButton = null;
 
@@ -63,26 +65,36 @@ public partial class MainWindow
 
         // ── 紧凑胶囊：● 后端图标 · 会话名 · 模型 ⌄ ─────────────────────
         // 状态点=会话状态；后端图标=当前内核（形状区分，不靠颜色）；末位展开。
-        _islandDot = new Border { Width = 9, Height = 9, CornerRadius = new CornerRadius(4.5), VerticalAlignment = VerticalAlignment.Center };
+        _islandDot = new Border { Width = 10, Height = 10, CornerRadius = new CornerRadius(5), VerticalAlignment = VerticalAlignment.Center };
+        // 后端标识：非 FUMO 用形状图标；FUMO 暂用"圆框 F"占位，后续统一视觉资产。
         _islandBackend = new Avalonia.Controls.Shapes.Path
         {
             Width = 16, Height = 16, Stretch = Stretch.Uniform,
             VerticalAlignment = VerticalAlignment.Center,
         };
         _islandBackend.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new DynamicResourceExtension("AppTextSecondary"));
-        _islandTitle = new TextBlock { FontSize = 13.5, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center,
-            MaxWidth = 200, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandModel = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center,
-            MaxWidth = 150, TextTrimming = TextTrimming.CharacterEllipsis };
+        var fumoLetter = new TextBlock { Text = "F", FontSize = 10.5, FontWeight = FontWeight.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        fumoLetter.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
+        _islandBackendCircle = new Border
+        {
+            Width = 18, Height = 18, CornerRadius = new CornerRadius(9), BorderThickness = new Thickness(1.2),
+            VerticalAlignment = VerticalAlignment.Center, Child = fumoLetter, IsVisible = false,
+        };
+        _islandBackendCircle.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppTextSecondary"));
+        var backendHost = new Panel { VerticalAlignment = VerticalAlignment.Center, Children = { _islandBackendCircle, _islandBackend } };
+        _islandTitle = new TextBlock { FontSize = 14, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 220, TextTrimming = TextTrimming.CharacterEllipsis };
+        _islandModel = new TextBlock { FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center,
+            MaxWidth = 170, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandModel.Classes.Add("dim");
         // 经验对齐：几何体在 12x12 盒里偏上，下移 3px 才与文字视觉中线齐平。
-        var chevron = new Avalonia.Controls.Shapes.Path { Width = 12, Height = 12, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
+        var chevron = new Avalonia.Controls.Shapes.Path { Width = 13, Height = 13, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
         chevron.Bind(Avalonia.Controls.Shapes.Path.DataProperty, new DynamicResourceExtension("Icon.ChevronDown"));
         chevron.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new DynamicResourceExtension("AppTextDim"));
 
-        var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 9, VerticalAlignment = VerticalAlignment.Center };
+        var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         pillContent.Children.Add(_islandDot);
-        pillContent.Children.Add(_islandBackend);
+        pillContent.Children.Add(backendHost);
         pillContent.Children.Add(_islandTitle);
         pillContent.Children.Add(_islandModel);
         pillContent.Children.Add(chevron);
@@ -92,9 +104,9 @@ public partial class MainWindow
         _islandPill = new Border
         {
             Child = pillContent,
-            Padding = new Thickness(16, 0),
-            Height = 40,
-            CornerRadius = new CornerRadius(20),
+            Padding = new Thickness(18, 0),
+            Height = 48,
+            CornerRadius = new CornerRadius(24),
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
         _islandPill.Classes.Add("sessionIsland");
@@ -328,17 +340,25 @@ public partial class MainWindow
     private void UpdateIslandBackendIcon(string? backendId, string? backendName)
     {
         if (_islandBackend is null) return;
-        var key = backendId switch
+        var isFumo = string.IsNullOrWhiteSpace(backendId) || backendId == "fumo";
+        // FUMO：圆框 F 占位；其它后端：形状图标（官方高清图标资产未入库，先用图标表近似）。
+        if (_islandBackendCircle is not null) _islandBackendCircle.IsVisible = isFumo;
+        _islandBackend.IsVisible = !isFumo;
+        if (!isFumo)
         {
-            "pi" => "Icon.PlugConnected",
-            "omp" => "Icon.Speedometer",
-            "codex" => "Icon.Code",
-            "dsh" => "Icon.Globe",
-            "claude" => "Icon.Brain",
-            _ => "Icon.Sparkle",
-        };
-        _islandBackend.SetValue(Avalonia.Controls.Shapes.Path.DataProperty, FindGeometry(key));
-        ToolTip.SetTip(_islandBackend, "后端：" + (string.IsNullOrWhiteSpace(backendName) ? "FUMO" : backendName));
+            var key = backendId switch
+            {
+                "pi" => "Icon.PlugConnected",
+                "omp" => "Icon.Speedometer",
+                "codex" => "Icon.Code",
+                "dsh" => "Icon.Globe",
+                "claude" => "Icon.Brain",
+                _ => "Icon.Sparkle",
+            };
+            _islandBackend.SetValue(Avalonia.Controls.Shapes.Path.DataProperty, FindGeometry(key));
+        }
+        ToolTip.SetTip(_islandBackendCircle ?? (Control)_islandBackend,
+            "后端：" + (string.IsNullOrWhiteSpace(backendName) ? "FUMO" : backendName));
     }
 
     /// <summary>"vendor/model-name" → "model-name"；无斜杠原样返回。</summary>
