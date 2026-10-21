@@ -1,3 +1,4 @@
+using Avalonia;
 using System;
 using System.ComponentModel;
 using System.Linq;
@@ -37,12 +38,75 @@ public partial class ChatPage
             {
                 if (mode == "full" && TopLevel.GetTopLevel(this) is MainWindow owner)
                 {
-                    var confirm = new Button { Content = "允许本会话所有工具" };
+                    // 权限升级对话框：警示标题 + 能力清单卡 + 风险说明 + 右下按钮。
+                    // 必须经 SkinDialog 展示，否则代码构建的 Window 没有主题资源（纯黑底）。
+                    var confirm = new Button { Content = "确认" };
+                    confirm.Classes.Add("danger");
                     var cancel = new Button { Content = "取消", IsCancel = true };
-                    var dialog = new Window { Title = "完全访问：工具无需人工确认", Width = 430, Height = 180, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-                    dialog.Content = new StackPanel { Margin = new Avalonia.Thickness(20), Spacing = 16, Children = { new TextBlock { Text = "包括文件写入、Shell 和第三方扩展工具。", TextWrapping = Avalonia.Media.TextWrapping.Wrap }, new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Children = { cancel, confirm } } } };
-                    cancel.Click += (_, _) => dialog.Close(false); confirm.Click += (_, _) => dialog.Close(true);
-                    if (!await dialog.ShowDialog<bool>(owner)) return;
+
+                    var heading = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 10,
+                        Children =
+                        {
+                            BindIcon(new PathIcon { Width = 20, Height = 20 }, "Icon.Warning", "AppWarningForeground"),
+                            new TextBlock { Text = "要开启完整访问权限吗？", FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center },
+                        },
+                    };
+
+                    var intro = new TextBlock
+                    {
+                        Text = "Fufucode 将能够在未经你确认的情况下，在这台计算机上的任何位置运行命令、使用互联网，以及创建和编辑文件。这包括但不限于：",
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                        FontSize = 13,
+                        LineHeight = 20,
+                    };
+                    intro.Classes.Add("secondary");
+
+                    var details = new StackPanel();
+                    details.Children.Add(DetailRow("Icon.Folder", "文件和文件夹", "读取、创建、修改或删除计算机上任意位置的文件"));
+                    details.Children.Add(Divider());
+                    details.Children.Add(DetailRow("Icon.Terminal", "终端命令", "运行命令、安装软件和更改系统设置"));
+                    details.Children.Add(Divider());
+                    details.Children.Add(DetailRow("Icon.Globe", "互联网和已连接的应用", "访问网站、发送数据并使用已启用的插件"));
+                    var detailsCard = new Border { Child = details, Padding = new Thickness(0) };
+                    detailsCard.Classes.Add("card");
+
+                    var risk = new TextBlock
+                    {
+                        Text = "这会带来敏感数据丢失或泄露、提示注入等风险。你可以随时将其关闭。",
+                        TextWrapping = Avalonia.Media.TextWrapping.Wrap,
+                        FontSize = 12,
+                    };
+                    risk.Classes.Add("secondary");
+
+                    var actions = new StackPanel
+                    {
+                        Orientation = Orientation.Horizontal,
+                        Spacing = 8,
+                        HorizontalAlignment = HorizontalAlignment.Right,
+                        Children = { cancel, confirm },
+                    };
+
+                    var dialog = new Window
+                    {
+                        Title = "完全访问：工具无需人工确认",
+                        Width = 560,
+                        SizeToContent = SizeToContent.Height,
+                        CanResize = false,
+                        ShowInTaskbar = false,
+                        WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                        Content = new StackPanel
+                        {
+                            Margin = new Thickness(24, 20, 24, 20),
+                            Spacing = 16,
+                            Children = { heading, intro, detailsCard, risk, actions },
+                        },
+                    };
+                    cancel.Click += (_, _) => dialog.Close(false);
+                    confirm.Click += (_, _) => dialog.Close(true);
+                    if (!await SkinDialog.ShowAsync<bool>(dialog, owner)) return;
                 }
                 await vm.Input.SetExecutionModeAsync(mode);
             }
@@ -135,5 +199,50 @@ public partial class ChatPage
             remove.Command = vm.Input.RemoveAttachmentCommand; remove.CommandParameter = file;
             row.Children.Add(name); row.Children.Add(remove); AttachedFiles.Children.Add(row);
         }
+    }
+
+    /// <summary>给图标绑动态资源：Data 取 Icon.*，Foreground 取 App* 画刷。</summary>
+    private static T BindIcon<T>(T icon, string dataKey, string brushKey) where T : PathIcon
+    {
+        icon.Bind(PathIcon.DataProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(dataKey));
+        icon.Bind(PathIcon.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension(brushKey));
+        return icon;
+    }
+
+    /// <summary>权限说明卡里的一行：accent 图标块 + 标题 + 描述。</summary>
+    private static Control DetailRow(string iconKey, string title, string description)
+    {
+        var tile = new Border
+        {
+            Width = 34, Height = 34, CornerRadius = new Avalonia.CornerRadius(8),
+            VerticalAlignment = VerticalAlignment.Top,
+        };
+        tile.Bind(Border.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccentSubtle"));
+        tile.Child = BindIcon(new PathIcon
+        {
+            Width = 16, Height = 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        }, iconKey, "AppAccentText");
+
+        var caption = new TextBlock { Text = title, FontSize = 13, FontWeight = Avalonia.Media.FontWeight.SemiBold };
+        var detail = new TextBlock { Text = description, FontSize = 12, TextWrapping = Avalonia.Media.TextWrapping.Wrap, Margin = new Avalonia.Thickness(0, 2, 0, 0) };
+        detail.Classes.Add("secondary");
+        var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Margin = new Avalonia.Thickness(12, 0, 0, 0) };
+        texts.Children.Add(caption); texts.Children.Add(detail);
+
+        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
+        grid.Children.Add(tile);
+        Grid.SetColumn(texts, 1);
+        grid.Children.Add(texts);
+        return new Border { Padding = new Avalonia.Thickness(14, 10), Child = grid };
+    }
+
+    /// <summary>卡内行之间的 1px 发丝分隔线。</summary>
+    private static Border Divider()
+    {
+        var rule = new Border { Height = 1, Margin = new Avalonia.Thickness(14, 0, 14, 0) };
+        rule.Bind(Border.BackgroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppDividerSubtle"));
+        return rule;
     }
 }
