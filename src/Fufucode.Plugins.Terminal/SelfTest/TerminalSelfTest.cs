@@ -231,6 +231,49 @@ public static class TerminalSelfTest
         }
     }
 
+    /// <summary>
+    /// Real ConPTY check of the automatic shell selection: resolve pwsh → Windows PowerShell → cmd,
+    /// start the chosen shell, and require it to execute a harmless echo.
+    /// </summary>
+    public static async Task<string> RunConPtyShellProfileSmokeAsync(string workingDirectory)
+    {
+        if (!OperatingSystem.IsWindows()) return "SKIP: Windows ConPTY is unavailable on this platform.";
+        var profile = ShellProfiles.ResolveAuto();
+        var executable = ShellProfiles.Resolve(profile)
+            ?? throw new InvalidOperationException("No usable shell resolved.");
+        var shellDirectory = Path.Combine(Path.GetFullPath(workingDirectory), "tmp", "shell-pty-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(shellDirectory);
+        try
+        {
+            using var session = new ConPtyTerminalSession(ShellProfiles.BuildCommandLine(profile, executable, null));
+            var collected = new TerminalBuffer(80, 15);
+            var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var exited = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var gate = new object();
+            session.Output += text =>
+            {
+                lock (gate)
+                {
+                    collected.Append(text);
+                    if (collected.PlainText.Contains("AUTO-SHELL-OK", StringComparison.Ordinal)) ready.TrySetResult(true);
+                }
+            };
+            session.Exited += (code, error) => exited.TrySetResult(code);
+            session.Start(shellDirectory, 80, 15);
+            session.Write("echo AUTO-SHELL-OK\r");
+            await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
+            session.Write("exit\r");
+            try { await exited.Task.WaitAsync(TimeSpan.FromSeconds(8)); } catch (TimeoutException) { }
+            return $"PASS: auto profile '{profile.Id}' ({executable}) started and executed the echo.";
+        }
+        finally
+        {
+            try { if (Directory.Exists(shellDirectory)) Directory.Delete(shellDirectory, true); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     private static string Escaped(string text) =>
         text.Replace("\u001b", "ESC").Replace("\r", "").Replace("\n", "<LF>");
 
