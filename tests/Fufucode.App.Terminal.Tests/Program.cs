@@ -533,6 +533,10 @@ internal static class Program
         Check(normalized.ShellProfile == ShellProfiles.AutoId && normalized.FontSize == 28 && normalized.ScrollbackLines == 0 && normalized.Bell == "visual",
             "terminal-settings-normalize");
         Check(TerminalSettings.Default.ShellProfile == ShellProfiles.AutoId, "terminal-settings-default-is-auto");
+        Check((new TerminalSettings { Version = 1, ShellProfile = "cmd" }).Normalize().ShellProfile == ShellProfiles.AutoId,
+            "terminal-settings-v1-cmd-migrates-to-auto");
+        Check((new TerminalSettings { Version = 2, ShellProfile = "cmd" }).Normalize().ShellProfile == "cmd",
+            "terminal-settings-explicit-v2-cmd-is-kept");
         var settingsRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-settings-" + Guid.NewGuid().ToString("N"));
         try
         {

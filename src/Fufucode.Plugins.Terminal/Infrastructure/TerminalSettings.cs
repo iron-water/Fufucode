@@ -12,7 +12,10 @@ namespace Fufucode.Plugins.Terminal.Infrastructure;
 /// </summary>
 public sealed record TerminalSettings
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
+
+    /// <summary>设置文件版本；v1 的默认 cmd 在 v2 迁移为“自动”。</summary>
+    public int Version { get; init; } = 1;
 
     /// <summary>
     /// shell 配置：<see cref="ShellProfiles"/> 中的 id，或 <see cref="ShellProfiles.AutoId"/>。
@@ -40,7 +43,12 @@ public sealed record TerminalSettings
 
     public TerminalSettings Normalize() => this with
     {
-        ShellProfile = ShellProfiles.NormalizeId(ShellProfile),
+        // v1 had no automatic mode and persisted "cmd" as the default. Treat that legacy value as
+        // automatic once, then keep an explicit cmd choice made under v2.
+        ShellProfile = Version < 2 && string.Equals(ShellProfile, "cmd", StringComparison.OrdinalIgnoreCase)
+            ? ShellProfiles.AutoId
+            : ShellProfiles.NormalizeId(ShellProfile),
+        Version = CurrentVersion,
         CommandOverride = (CommandOverride ?? string.Empty).Trim(),
         FontSize = Math.Clamp(double.IsFinite(FontSize) ? FontSize : 13, 9, 28),
         ScrollbackLines = Math.Clamp(ScrollbackLines, 0, 100_000),
