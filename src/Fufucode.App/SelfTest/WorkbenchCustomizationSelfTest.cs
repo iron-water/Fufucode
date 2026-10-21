@@ -310,7 +310,7 @@ internal static class WorkbenchCustomizationSelfTest
                         .FirstOrDefault(b => Avalonia.Automation.AutomationProperties.GetName(b)?.StartsWith("折叠或展开分组") == true);
                     if (collapseHeader is not null)
                     {
-                        var body = settingsPage.GetVisualDescendants().OfType<StackPanel>()
+                        var body = settingsPage.GetVisualDescendants().OfType<Control>()
                             .FirstOrDefault(p => Avalonia.Automation.AutomationProperties.GetAutomationId(p) == "settings-collapsible-body-入口位置");
                         var before = body?.IsVisible;
                         collapseHeader.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
