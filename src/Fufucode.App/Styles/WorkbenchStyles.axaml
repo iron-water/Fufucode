@@ -57,6 +57,10 @@
   <Style Selector="Border.settingsRow.clickable:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
+  <!-- 所有设置行（不只可点击行）在悬停时统一升高亮层，先保证"横条有反馈"，再逐项细化。 -->
+  <Style Selector="Border.settingsRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
   <Style Selector="Border.settingsRow.clickable:pressed">
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
@@ -189,7 +193,7 @@
   <!-- Win11 设置行内下拉：默认 subtle 填充（#0DFFFFFF 深色 / #80F6F6F6 浅色）、
        无可见边框，悬停时升到 ControlFillColorSecondary；左侧留 10px、右侧留给箭头。 -->
   <Style Selector="Border.settingsRow ComboBox">
-    <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="MinHeight" Value="32"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
@@ -202,7 +206,7 @@
     </Setter>
   </Style>
   <Style Selector="Border.settingsRow ComboBox:pointerover">
-    <Setter Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}"/>
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
   <!-- 行内开关：Fluent 默认 40×20 偏大，Win11 设置里为 36×18。 -->
   <Style Selector="Border.settingsRow ToggleSwitch">
