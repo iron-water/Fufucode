@@ -27,7 +27,15 @@ public sealed record BuildInfo(
     string? GitHubRepository = null,
     string? Commit = null,
     /// <summary>指针构建：真实构建目录（用于从任意安装位置指向仓库 out/app）。</summary>
-    string? SourceDirectory = null)
+    string? SourceDirectory = null,
+    /// <summary>并行审阅标签；正常产品构建为 null。</summary>
+    string? Label = null,
+    /// <summary>构建来源分支；未知时为 null。</summary>
+    string? Branch = null,
+    /// <summary>构建来源工作树；正常产品构建为 null。</summary>
+    string? Worktree = null,
+    /// <summary>是否为并行审阅构建；审阅构建不部署、不抢运行实例。</summary>
+    bool Review = false)
 {
     public const string FileName = "build-info.json";
 

@@ -21,7 +21,10 @@ public sealed record AppOptions(
     BackendId? Backend = null, string? OmpExecutablePath = null,
     string? ClaudeExecutablePath = null,
     string? CodexExecutablePath = null,
-    string? DshExecutablePath = null)
+    string? DshExecutablePath = null,
+    // 并行审阅：允许多个实例同时运行，并用标签区分窗口；不影响正常产品启动。
+    bool ParallelReview = false,
+    string? ReviewLabel = null)
 {
     public static readonly AppOptions Mock = new(AppSessionMode.Mock, null, null, null, null);
 
@@ -40,6 +43,8 @@ public sealed record AppOptions(
         var mode = AppSessionMode.Real;
         string? project = null, session = null, node = null, cli = null, dataRoot = null;
         BackendId? backend = null;
+        var parallelReview = false;
+        string? reviewLabel = null;
         string? omp = null;
         string? claude = null;
         string? codex = null;
@@ -87,9 +92,17 @@ public sealed record AppOptions(
                 case "--data-root" when i + 1 < args.Length:
                     dataRoot = System.IO.Path.GetFullPath(args[++i]);
                     break;
+                case "--parallel-review":
+                    parallelReview = true;
+                    break;
+                case "--review-label" when i + 1 < args.Length:
+                    reviewLabel = args[++i];
+                    parallelReview = true;
+                    break;
             }
         }
 
-        return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp, claude, codex, dsh);
+        return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp, claude, codex, dsh,
+            parallelReview, reviewLabel);
     }
 }
