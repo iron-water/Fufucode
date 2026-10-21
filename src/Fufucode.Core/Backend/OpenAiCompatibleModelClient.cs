@@ -485,7 +485,7 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
         var toolsList = new List<object>();
-        foreach (var tool in request.ToolNames.Distinct(StringComparer.Ordinal))
+        foreach (var tool in request.ToolNames.Distinct(StringComparer.Ordinal).OrderBy(t => t, StringComparer.Ordinal))
         {
             toolsList.Add(new
             {

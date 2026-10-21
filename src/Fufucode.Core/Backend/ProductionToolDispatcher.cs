@@ -474,7 +474,11 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         }
 
         if (count > 1 && !replaceAll)
-            return new PureToolResult(call.Id, false, $"在 '{relPath}' 中找到 {count} 处匹配。请提供更多上下文行使其唯一，或设置 replace_all: true。");
+        {
+            var lineNumbers = FindLineNumbers(rawContent, chosenOld);
+            var lineHint = lineNumbers.Count > 0 ? $"（在第 {string.Join("、", lineNumbers.Take(5))} 行）" : "";
+            return new PureToolResult(call.Id, false, $"在 '{relPath}' 中找到 {count} 处匹配{lineHint}。请提供更多上下文行使其唯一，或设置 replace_all: true。");
+        }
 
         var replacedContent = replaceAll
             ? rawContent.Replace(chosenOld, chosenNew!, StringComparison.Ordinal)
@@ -482,7 +486,52 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         FileChangeJournal.Capture(call.Id, target);
         await WriteAllTextAtomicAsync(target, replacedContent, fileEncoding, ct).ConfigureAwait(false);
 
-        return new PureToolResult(call.Id, true, $"已成功更新 '{relPath}'（替换了 {count} 处）。");
+        var preview = BuildEditPreview(rawContent, chosenOld, chosenNew!);
+        var msg = $"已成功更新 '{relPath}'（替换了 {count} 处）。";
+        if (!string.IsNullOrEmpty(preview)) msg += $"\n{preview}";
+        return new PureToolResult(call.Id, true, msg);
+    }
+
+    private static List<int> FindLineNumbers(string text, string pattern)
+    {
+        var lines = new List<int>();
+        var lineNo = 1;
+        var idx = 0;
+        var textLen = text.Length;
+        var patLen = Math.Max(1, pattern.Length);
+        while (idx < textLen)
+        {
+            var matchIdx = text.IndexOf(pattern, idx, StringComparison.Ordinal);
+            if (matchIdx < 0) break;
+            while (idx < matchIdx)
+            {
+                if (text[idx] == '\n') lineNo++;
+                idx++;
+            }
+            lines.Add(lineNo);
+            idx += patLen;
+        }
+        return lines;
+    }
+
+    private static string BuildEditPreview(string original, string oldStr, string newStr)
+    {
+        var pos = original.IndexOf(oldStr, StringComparison.Ordinal);
+        if (pos < 0) return string.Empty;
+
+        var lineNo = 1;
+        for (var i = 0; i < pos; i++) if (original[i] == '\n') lineNo++;
+
+        var oldLines = oldStr.Replace("\r\n", "\n").Split('\n');
+        var newLines = newStr.Replace("\r\n", "\n").Split('\n');
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"@@ 第 {lineNo} 行附近变更 @@");
+        foreach (var line in oldLines.Take(5)) sb.AppendLine($"- {line}");
+        if (oldLines.Length > 5) sb.AppendLine($"- ... (其余 {oldLines.Length - 5} 行)");
+        foreach (var line in newLines.Take(5)) sb.AppendLine($"+ {line}");
+        if (newLines.Length > 5) sb.AppendLine($"+ ... (其余 {newLines.Length - 5} 行)");
+        return sb.ToString().TrimEnd();
     }
 
     private static string ReplaceFirst(string text, string search, string replace)
@@ -546,6 +595,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         var caseSensitive = doc.RootElement.TryGetProperty("case_sensitive", out var csElem) && csElem.ValueKind == JsonValueKind.True;
 
+        var contextLines = 0;
+        if (doc.RootElement.TryGetProperty("context_lines", out var clElem) && clElem.TryGetInt32(out var cl) && cl > 0)
+            contextLines = Math.Clamp(cl, 0, 5);
+
         var maxMatches = 100;
         if (doc.RootElement.TryGetProperty("max_matches", out var mmElem) && mmElem.TryGetInt32(out var mm) && mm > 0)
             maxMatches = Math.Min(mm, 1000);
@@ -577,7 +630,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         {
             await Task.Run(() =>
             {
-                SearchDirectoryRecursive(targetDir, regex, globRegex, maxMatches, matches, IgnoreMatcher(), ct);
+                SearchDirectoryRecursive(targetDir, regex, globRegex, maxMatches, contextLines, matches, IgnoreMatcher(), ct);
             }, ct).ConfigureAwait(false);
         }
         catch (RegexMatchTimeoutException)
@@ -596,7 +649,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         return new PureToolResult(call.Id, true, resultText);
     }
 
-    private void SearchDirectoryRecursive(string currentDir, Regex regex, Regex? globRegex, int maxMatches, List<string> results, GitIgnoreMatcher ignore, CancellationToken ct)
+    private void SearchDirectoryRecursive(string currentDir, Regex regex, Regex? globRegex, int maxMatches, int contextLines, List<string> results, GitIgnoreMatcher ignore, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         if (results.Count >= maxMatches) return;
@@ -618,14 +671,36 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 try
                 {
                     if (new FileInfo(file).Length > 5 * 1024 * 1024) continue;
-                    var lineNum = 0;
-                    foreach (var line in File.ReadLines(file))
+                    if (contextLines > 0)
                     {
-                        lineNum++;
-                        if (regex.IsMatch(line))
+                        var lines = File.ReadLines(file).ToList();
+                        for (var i = 0; i < lines.Count; i++)
                         {
-                            results.Add($"{relative}:{lineNum}: {line.TrimEnd()}");
-                            if (results.Count >= maxMatches) return;
+                            if (regex.IsMatch(lines[i]))
+                            {
+                                var start = Math.Max(0, i - contextLines);
+                                var end = Math.Min(lines.Count - 1, i + contextLines);
+                                for (var c = start; c <= end; c++)
+                                {
+                                    var sep = c == i ? ": " : "- ";
+                                    results.Add($"{relative}:{c + 1}{sep}{lines[c].TrimEnd()}");
+                                }
+                                if (results.Count >= maxMatches) return;
+                                i = end;
+                            }
+                        }
+                    }
+                    else
+                    {
+                        var lineNum = 0;
+                        foreach (var line in File.ReadLines(file))
+                        {
+                            lineNum++;
+                            if (regex.IsMatch(line))
+                            {
+                                results.Add($"{relative}:{lineNum}: {line.TrimEnd()}");
+                                if (results.Count >= maxMatches) return;
+                            }
                         }
                     }
                 }
@@ -658,7 +733,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
                 if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
 
-                SearchDirectoryRecursive(subDir, regex, globRegex, maxMatches, results, ignore, ct);
+                SearchDirectoryRecursive(subDir, regex, globRegex, maxMatches, contextLines, results, ignore, ct);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -1189,6 +1264,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     "path": { "type": "string", "description": "搜索起始子目录，默认根目录" },
                     "glob": { "type": "string", "description": "文件名过滤模式，例如 *.cs" },
                     "case_sensitive": { "type": "boolean", "description": "是否区分大小写（默认 false）" },
+                    "context_lines": { "type": "integer", "description": "匹配行周围附带的上下文行数（0-5，默认 0）" },
                     "max_matches": { "type": "integer", "description": "最大匹配行数（默认 100）" }
                 },
                 "required": ["pattern"]
