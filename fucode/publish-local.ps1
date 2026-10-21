@@ -27,13 +27,24 @@ param(
     [switch]$NoRun,
     [switch]$NoRestore,
     # ReadyToRun：预编译 IL 为原生代码，冷启动可省约 1 秒 JIT；发布体积增加约 6 MB。
-    [switch]$ReadyToRun
+    [switch]$ReadyToRun,
+    # 并行审阅：构建到独立目录，不停止/启动现有应用，不写本地更新指针。
+    [string]$OutputRoot = '',
+    # 审阅标签（默认 branch@commit），会写入 build-info.json 并显示在窗口标题。
+    [string]$ReviewLabel = '',
+    # 只构建并复制到 out/app，但不写“本地更新”指针。
+    [switch]$NoPointer
 )
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$appOut = Join-Path $root 'out/app'
-$cliOut = Join-Path $root 'out/cli'
+$isReview = -not [string]::IsNullOrWhiteSpace($OutputRoot)
+$outRoot = if ($isReview) {
+    if ([IO.Path]::IsPathRooted($OutputRoot)) { [IO.Path]::GetFullPath($OutputRoot) }
+    else { [IO.Path]::GetFullPath((Join-Path $root $OutputRoot)) }
+} else { Join-Path $root 'out' }
+$appOut = Join-Path $outRoot 'app'
+$cliOut = Join-Path $outRoot 'cli'
 $appExe = Join-Path $appOut 'Fufucode.App.exe'
 
 function Get-Commit {
@@ -96,7 +107,7 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 if ([string]::IsNullOrWhiteSpace($version)) { $version = '1.4.0' }
 
 # 先发布到暂存目录，避免目标目录被占用时构建本身失败。
-$stagingRoot = Join-Path $root 'out/.staging'
+$stagingRoot = Join-Path $outRoot ('.staging-' + $PID)
 $stagingApp = Join-Path $stagingRoot 'app'
 $stagingCli = Join-Path $stagingRoot 'cli'
 if (Test-Path -LiteralPath $stagingRoot) {
@@ -167,12 +178,27 @@ if ($RuntimeIdentifier -like 'win-*') {
 }
 
 # 构建标记：channel 固定 local，写 commit 与构建时间，构成唯一构建身份。
+$branch = $null
+try {
+    $branch = (& git -C $root rev-parse --abbrev-ref HEAD 2>$null)
+    if ($LASTEXITCODE -ne 0 -or $branch -eq 'HEAD') { $branch = $null } else { $branch = $branch.Trim() }
+} catch { }
+$label = if (-not [string]::IsNullOrWhiteSpace($ReviewLabel)) { $ReviewLabel } else { $null }
+if ([string]::IsNullOrWhiteSpace($label) -and $isReview) {
+    $label = if ($branch) { "$branch@$commit" } else { "review@$commit" }
+}
 $buildInfo = [ordered]@{
     version = $version
     builtAtUtc = (Get-Date).ToUniversalTime().ToString('o')
     channel = 'local'
 }
 if ($commit) { $buildInfo.commit = $commit }
+if ($branch) { $buildInfo.branch = $branch }
+if ($label) { $buildInfo.label = $label }
+if ($isReview) {
+    $buildInfo.worktree = $root
+    $buildInfo.review = $true
+}
 $json = $buildInfo | ConvertTo-Json -Depth 3
 Set-Content -Path (Join-Path $stagingApp 'build-info.json') -Value $json -Encoding Utf8
 Set-Content -Path (Join-Path $stagingCli 'build-info.json') -Value $json -Encoding Utf8
@@ -221,8 +247,9 @@ function Remove-StaleBuild {
     return $removed
 }
 
+$shouldDeploy = (-not $NoDeploy) -and (-not $isReview)
 $stopped = 0
-if (-not $NoDeploy) {
+if ($shouldDeploy) {
     $stopped = Stop-RunningApp -ExpectedExe $appExe
 }
 
@@ -235,21 +262,40 @@ Remove-Item -LiteralPath $stagingRoot -Recurse -Force -ErrorAction SilentlyConti
 
 # 指针：安装在其它位置（%LOCALAPPDATA%\Programs）的应用无法向上找到仓库 out/app，
 # 因此在用户的本地更新目录写一个指向真实构建的 build-info.json。
-$localPointerDir = Join-Path $Env:LOCALAPPDATA 'Fufucode/updates/local'
-New-Item -ItemType Directory -Force -Path $localPointerDir | Out-Null
-$pointer = [ordered]@{
-    version = $version
-    builtAtUtc = $buildInfo.builtAtUtc
-    channel = 'local'
-    sourceDirectory = $appOut
+# 并行审阅构建绝不写这个指针，否则会覆盖用户正在使用的本地构建。
+if (-not $isReview -and -not $NoPointer) {
+    $localPointerDir = Join-Path $Env:LOCALAPPDATA 'Fufucode/updates/local'
+    New-Item -ItemType Directory -Force -Path $localPointerDir | Out-Null
+    $pointer = [ordered]@{
+        version = $version
+        builtAtUtc = $buildInfo.builtAtUtc
+        channel = 'local'
+        sourceDirectory = $appOut
+    }
+    if ($commit) { $pointer.commit = $commit }
+    $pointer | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $localPointerDir 'build-info.json') -Encoding Utf8
 }
-if ($commit) { $pointer.commit = $commit }
-$pointer | ConvertTo-Json -Depth 3 | Set-Content -Path (Join-Path $localPointerDir 'build-info.json') -Encoding Utf8
+
+if ($isReview) {
+    $review = [ordered]@{
+        label = $label
+        branch = $branch
+        commit = $commit
+        worktree = $root
+        builtAtUtc = $buildInfo.builtAtUtc
+        appExe = $appExe
+        dataRoot = (Join-Path $outRoot 'data')
+        launchArgs = @('--project', $root, '--data-root', (Join-Path $outRoot 'data'),
+            '--parallel-review', '--review-label', $label)
+    }
+    $review | ConvertTo-Json -Depth 4 | Set-Content -Path (Join-Path $outRoot 'review.json') -Encoding Utf8
+}
 
 Write-Host ""
-Write-Host "Local build ready: $appOut"
+Write-Host $(if ($isReview) { "Review build ready: $appOut" } else { "Local build ready: $appOut" })
 Write-Host "  version : $version"
 Write-Host "  buildId : $buildId"
+if ($label) { Write-Host "  label   : $label" }
 if ($stopped -gt 0) { Write-Host "  stopped : $stopped 个运行中的实例" }
 if ($failedApp.Count -gt 0) {
     Write-Warning "  $($failedApp.Count) 个文件未能覆盖（可能仍被占用）：$($failedApp -join ', ')"
@@ -258,10 +304,12 @@ if ($staleApp -gt 0 -or $staleCli -gt 0) {
     Write-Host "  cleaned : app $staleApp 个旧文件, cli $staleCli 个旧文件"
 }
 
-$shouldLaunch = (-not $NoRun) -and (-not $NoDeploy) -and (Test-Path -LiteralPath $appExe)
+$shouldLaunch = $shouldDeploy -and (-not $NoRun) -and (Test-Path -LiteralPath $appExe)
 if ($shouldLaunch) {
     Write-Host "  启动 : $appExe"
     Start-Process -FilePath $appExe -WorkingDirectory $appOut
+} elseif ($isReview) {
+    Write-Host "  审阅 : 在 review 面板逐个启动（独立数据根，不抢运行实例）"
 } else {
     Write-Host "  应用内：设置 → 构建与更新 → 部署最新构建"
 }

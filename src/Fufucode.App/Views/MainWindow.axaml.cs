@@ -135,14 +135,15 @@ public partial class MainWindow : Window
             }
         };
 
+        var windowTitle = options.Mode == AppSessionMode.Mock ? "Fufucode（mock 演示）" : "Fufucode";
+        if (!string.IsNullOrWhiteSpace(options.ReviewLabel)) windowTitle += " · " + options.ReviewLabel;
+        Title = windowTitle;
         if (options.Mode == AppSessionMode.Mock)
         {
-            Title = "Fufucode（mock 演示）";
             AttachSession(new Mock.MockChatSession(), sessions: null, callbacks: null);
         }
         else
         {
-            Title = "Fufucode";
             ShowStartup("正在启动会话…", inProgress: true);
         }
 
