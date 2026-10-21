@@ -22,12 +22,12 @@ public sealed class MessageActionsView : UserControl
 {
     private WorkbenchAppearance _appearance = new();
     private readonly Button _copy;
-    private readonly Button _like;
-    private readonly Button _dislike;
     private readonly Button _speak;
     private readonly Button _quote;
     private readonly Button _edit;
-    private readonly Button _more;
+    private readonly Button _fork;
+    private readonly Button _retry;
+    private readonly Button _ask;
     private readonly TextBlock _usage;
     private readonly TextBlock _model;
     private readonly TextBlock _time;
@@ -49,12 +49,13 @@ public sealed class MessageActionsView : UserControl
     public MessageActionsView()
     {
         _copy = WorkbenchUi.IconButton("Copy", "复制消息");
-        _like = WorkbenchUi.IconButton("ThumbLike", "有帮助");
-        _dislike = WorkbenchUi.IconButton("ThumbDislike", "没帮助");
         _speak = WorkbenchUi.IconButton("Speaker", "朗读这条消息");
         _quote = WorkbenchUi.IconButton("ArrowReply", "引用到主会话");
         _edit = WorkbenchUi.IconButton("Edit", "编辑成新草稿");
-        _more = WorkbenchUi.IconButton("More", "更多消息操作");
+        // 分叉三件事直接出现在操作条：不再藏进"更多"菜单。
+        _fork = WorkbenchUi.IconButton("Branch", "从此消息分叉");
+        _retry = WorkbenchUi.IconButton("ArrowClockwise", "分叉并重试");
+        _ask = WorkbenchUi.IconButton("Chat", "在侧边聊天中提问");
 
         _usage = new TextBlock { Classes = { "meta", "tabularNumeric" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
         _model = new TextBlock { Classes = { "meta" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
@@ -62,12 +63,12 @@ public sealed class MessageActionsView : UserControl
 
         var icons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         icons.Children.Add(_copy);
-        icons.Children.Add(_like);
-        icons.Children.Add(_dislike);
         icons.Children.Add(_speak);
         icons.Children.Add(_quote);
+        icons.Children.Add(_fork);
+        icons.Children.Add(_retry);
+        icons.Children.Add(_ask);
         icons.Children.Add(_edit);
-        icons.Children.Add(_more);
 
         var meta = new StackPanel
         {
@@ -102,22 +103,10 @@ public sealed class MessageActionsView : UserControl
         copyMenu.Items.Add(copyIdItem);
         _copy.Flyout = copyMenu;
 
-        var menu = new MenuFlyout();
-        var fork = new MenuItem { Header = "从此消息分叉" };
-        var retry = new MenuItem { Header = "分叉并重试" };
-        var ask = new MenuItem { Header = "在侧边聊天中提问" };
-        fork.Click += async (_, _) => await ForkAsync(false);
-        retry.Click += async (_, _) => await ForkAsync(true);
-        ask.Click += (_, _) => FindChat()?.AskAbout(MessageText(DataContext), Source());
-        menu.Items.Add(fork);
-        menu.Items.Add(retry);
-        menu.Items.Add(ask);
-        _more.Flyout = menu;
-
         _copy.Click += async (_, _) => await CopyAsync(MessageText(DataContext));
-        // 点赞/点踩：先只做本地反馈（按钮保持按下态），不伪造已上报。
-        _like.Click += (_, _) => SetFeedback(_like, _dislike, positive: true);
-        _dislike.Click += (_, _) => SetFeedback(_like, _dislike, positive: false);
+        _fork.Click += async (_, _) => await ForkAsync(false);
+        _retry.Click += async (_, _) => await ForkAsync(true);
+        _ask.Click += (_, _) => FindChat()?.AskAbout(MessageText(DataContext), Source());
         _quote.Click += (_, _) => FindChat()?.AddContext(MessageText(DataContext), Source());
         _edit.Click += (_, _) => FindChat()?.EditMessage(MessageText(DataContext));
         _speak.Click += async (_, _) =>
@@ -157,13 +146,6 @@ public sealed class MessageActionsView : UserControl
         AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
     }
 
-    private static void SetFeedback(Button like, Button dislike, bool positive)
-    {
-        var already = positive ? like.Classes.Contains("active") : dislike.Classes.Contains("active");
-        like.Classes.Set("active", !already && positive);
-        dislike.Classes.Set("active", !already && !positive);
-    }
-
     /// <summary>按当前消息类型刷新可见性与元信息。</summary>
     private void Bind()
     {
@@ -171,14 +153,14 @@ public sealed class MessageActionsView : UserControl
         var assistant = DataContext as AssistantMessageViewModel;
         var timeline = DataContext as TimelineEntryViewModel;
 
-        // 与主流客户端一致：用户消息只提供"复制"与"编辑成草稿"；
-        // "更多"里的分叉/重试/侧边提问都是对助手输出的操作，用户消息不出现。
+        // 用户消息只提供"复制"与"编辑成草稿"；分叉/重试/侧边提问都是
+        // 针对助手输出的操作，直接作为图标常驻助手消息操作条。
         _edit.IsVisible = isUser;
-        _like.IsVisible = !isUser;
-        _dislike.IsVisible = !isUser;
         _speak.IsVisible = !isUser && FindChat()?.SpeechService is not null;
         _quote.IsVisible = !isUser;
-        _more.IsVisible = !isUser;
+        _fork.IsVisible = !isUser;
+        _retry.IsVisible = !isUser;
+        _ask.IsVisible = !isUser;
         _model.IsVisible = assistant?.HasModel == true;
         _model.Text = assistant?.ModelText ?? string.Empty;
         _usage.IsVisible = assistant?.HasUsage == true;
