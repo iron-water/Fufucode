@@ -23,6 +23,7 @@ pwsh fucode/feature-worktree.ps1 -Name review-ui -Remove
 ```text
 branch  : feature/review-ui
 worktree: C:\Projects\Fucode\Fufucode\.claude\worktrees\review-ui
+review  : C:\Projects\Fucode\Fufucode\out\review\feature-review-ui
 ```
 
 清理会先检查工作树是否干净、分支是否已进入 `main`，任一不满足就拒绝。
@@ -44,6 +45,10 @@ out/review/<slug>/review.json
 out/review/<slug>/build.log
 out/review/index.html
 ```
+
+`<slug>` 由分支名固定生成（`/` 换成 `-`），不随 commit 变化：
+`feature/review-ui` → `out/review/feature-review-ui`，`main` → `out/review/main`。
+这样重新提交后审阅板仍能找到同一个目录，并能判断构建是否落后于当前 HEAD。
 
 `review.json` 和 `app/build-info.json` 都带：
 
@@ -69,7 +74,7 @@ out/review/index.html
 pwsh fucode/publish-local.ps1 -OutputRoot out/review/<slug> -ReviewLabel "fix-x@abc123" -NoDeploy -NoRun
 ```
 
-`-OutputRoot` 模式下不会停止现有应用、不会覆盖 `out/app`、不会写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。只给 `-ReviewLabel` 而不给 `-OutputRoot` 时也会按审阅构建处理，输出到 `out/review/<label>`；这样模型漏写 `-OutputRoot` 也不会误部署。
+`-OutputRoot` 模式下不会停止现有应用、不会覆盖 `out/app`、不会写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。只给 `-ReviewLabel` 而不给 `-OutputRoot` 时也会按审阅构建处理，输出到 `out/review/<当前分支>`；这样模型漏写 `-OutputRoot` 也不会误部署，审阅板也能找到它。
 
 ## 人类反馈循环
 

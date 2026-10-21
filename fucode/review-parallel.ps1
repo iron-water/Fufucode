@@ -67,7 +67,7 @@ function Get-Worktrees {
 
 function Get-Slug {
     param([string]$Value)
-    $slug = ($Value -replace '[^A-Za-z0-9._-]+', '_').Trim('_', '.', '-')
+    $slug = ($Value -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
     if ([string]::IsNullOrWhiteSpace($slug)) { $slug = 'feature' }
     return $slug
 }
@@ -92,7 +92,7 @@ foreach ($item in $worktrees) {
     $head = if ($item.Head) { $item.Head.Substring(0, [Math]::Min(8, $item.Head.Length)) } else { 'unknown' }
     $label = "$branchName@$head"
     if ($isMain) { $label = "main@$head" }
-    $slug = Get-Slug $label
+    $slug = Get-Slug $branchName
     $reviewOut = Join-Path $reviewRoot $slug
     $buildScript = Join-Path $item.Path 'fucode/publish-local.ps1'
     $dirty = @(& git -C $item.Path status --porcelain 2>$null).Count
@@ -131,6 +131,11 @@ foreach ($item in $worktrees) {
         BuildError = ''
         BuildLog = ''
         DurationMs = 0
+        Published = $false
+        PublishedLabel = ''
+        PublishedCommit = ''
+        PublishedAtUtc = ''
+        PublishedStale = $false
     })
 }
 
@@ -164,13 +169,40 @@ if (-not $NoBuild) {
         $item.BuildLog = $log
         $item.BuildError = if (Test-Path -LiteralPath $err) { (Get-Content -LiteralPath $err -Tail 30) -join "`n" } else { '' }
     }
+} else {
+    # 只盘点：模型可能已经各自发布过构建。读取 review.json，区分“没构建”和
+    # “有构建但落后于当前 HEAD”，避免审阅板把已有产物误报成未构建。
+    foreach ($item in $features) {
+        $reviewFile = Join-Path $item.ReviewOut 'review.json'
+        $exe = Join-Path $item.ReviewOut 'app/Fufucode.App.exe'
+        if (-not (Test-Path -LiteralPath $reviewFile) -or -not (Test-Path -LiteralPath $exe)) { continue }
+        try { $review = Get-Content -LiteralPath $reviewFile -Raw | ConvertFrom-Json } catch { continue }
+        if (-not $review) { continue }
+        $item.Published = $true
+        $item.PublishedLabel = [string]$review.label
+        $item.PublishedCommit = [string]$review.commit
+        $item.PublishedAtUtc = [string]$review.builtAtUtc
+        $publishedShort = if ($item.PublishedCommit) {
+            $item.PublishedCommit.Substring(0, [Math]::Min(8, $item.PublishedCommit.Length))
+        } else { '' }
+        $item.PublishedStale = [bool]($publishedShort -and $item.Head -and
+            $publishedShort -ne $item.Head)
+    }
+}
+
+function Get-EffectiveLabel {
+    param($item)
+    if ($item.Published -and -not [string]::IsNullOrWhiteSpace($item.PublishedLabel)) {
+        return $item.PublishedLabel
+    }
+    return $item.Label
 }
 
 function Get-LaunchCommand {
     param($item)
     $exe = Join-Path $item.ReviewOut 'app/Fufucode.App.exe'
     $args = @('--project', $root, '--data-root', (Join-Path $item.ReviewOut 'data'),
-        '--parallel-review', '--review-label', $item.Label)
+        '--parallel-review', '--review-label', (Get-EffectiveLabel $item))
     if ($Mock) { $args += '--mock' }
     $quoted = $args | ForEach-Object { if ($_ -match '\s') { '"' + $_ + '"' } else { $_ } }
     return ('& "{0}" {1}' -f $exe, ($quoted -join ' '))
@@ -178,18 +210,41 @@ function Get-LaunchCommand {
 
 function Get-Status {
     param($item)
+    if ($item.Published) {
+        $published = if ($item.PublishedLabel) { $item.PublishedLabel } else { $item.PublishedCommit }
+        if ($item.PublishedStale) {
+            return "已发布旧构建 $published（当前 $($item.Head)）"
+        }
+        return "已发布 $published"
+    }
     if ($null -eq $item.BuildExit) { return '未构建' }
     if ($item.BuildExit -eq 0) { return '构建通过' }
     return "构建失败 ($($item.BuildExit))"
+}
+
+function Get-StatusColor {
+    param($item)
+    if ($item.Published) {
+        if ($item.PublishedStale) { return '#9a6700' }
+        return '#1a7f37'
+    }
+    if ($null -eq $item.BuildExit) { return '#6b7280' }
+    if ($item.BuildExit -eq 0) { return '#1a7f37' }
+    return '#cf222e'
 }
 
 $htmlRows = [Text.StringBuilder]::new()
 $mdRows = [Text.StringBuilder]::new()
 $mdRows.AppendLine('| Feature | Build | Branch | Commit | Ahead/Behind | Dirty | Risk | Changed |') | Out-Null
 $mdRows.AppendLine('|---|---|---|---|---|---:|---:|---:|') | Out-Null
-foreach ($item in ($features | Sort-Object @{ Expression = { if ($null -eq $_.BuildExit) { 1 } elseif ($_.BuildExit -ne 0) { 0 } else { 2 } } }, Label)) {
+foreach ($item in ($features | Sort-Object @{ Expression = {
+            if ($_.Published) { if ($_.PublishedStale) { 1 } else { 2 } }
+            elseif ($null -eq $_.BuildExit) { 4 }
+            elseif ($_.BuildExit -ne 0) { 0 }
+            else { 3 }
+        } }, Label)) {
     $status = Get-Status $item
-    $color = if ($item.BuildExit -eq 0) { '#1a7f37' } elseif ($null -eq $item.BuildExit) { '#6b7280' } else { '#cf222e' }
+    $color = Get-StatusColor $item
     $logRel = "$($item.Slug)/build.log"
     $labelHtml = [System.Net.WebUtility]::HtmlEncode($item.Label)
     $statusHtml = [System.Net.WebUtility]::HtmlEncode($status)
@@ -235,7 +290,10 @@ Set-Content -LiteralPath (Join-Path $reviewRoot 'index.html') -Value $html -Enco
 $md = "# Fufucode parallel feature review`n`n生成于 $generated`n`n" + $mdRows.ToString()
 Set-Content -LiteralPath (Join-Path $reviewRoot 'index.md') -Value $md -Encoding Utf8
 
-$features | Select-Object Label, Branch, Head, BuildExit, Dirty, Ahead, Behind, Risk, ReviewOut |
+$features | Select-Object Label, Branch, Head, BuildExit,
+    @{ Name = 'Published'; Expression = { if ($_.Published) { $_.PublishedLabel } else { '' } } },
+    @{ Name = 'Stale'; Expression = { $_.PublishedStale } },
+    Dirty, Ahead, Behind, Risk, ReviewOut |
     Format-Table -AutoSize
 Write-Host "审阅板: $(Join-Path $reviewRoot 'index.html')"
 
@@ -243,12 +301,16 @@ if ($Launch -or $LaunchSlug) {
     foreach ($item in $features) {
         if ($LaunchSlug -and $item.Slug -ne $LaunchSlug) { continue }
         $exe = Join-Path $item.ReviewOut 'app/Fufucode.App.exe'
-        if (-not (Test-Path -LiteralPath $exe)) { Write-Warning "跳过 $($item.Label)：尚未构建"; continue }
+        $launchLabel = Get-EffectiveLabel $item
+        if (-not (Test-Path -LiteralPath $exe)) { Write-Warning "跳过 $launchLabel：尚未构建"; continue }
+        if ($item.PublishedStale) {
+            Write-Warning "$launchLabel 是旧构建（$($item.PublishedCommit)），当前 HEAD 为 $($item.Head)；请先重新构建。"
+        }
         $args = @('--project', $root, '--data-root', (Join-Path $item.ReviewOut 'data'),
-            '--parallel-review', '--review-label', $item.Label)
+            '--parallel-review', '--review-label', $launchLabel)
         if ($Mock) { $args += '--mock' }
         Start-Process -FilePath $exe -ArgumentList $args -WorkingDirectory (Join-Path $item.ReviewOut 'app')
-        Write-Host "已启动: $($item.Label)"
+        Write-Host "已启动: $launchLabel"
     }
 }
 
