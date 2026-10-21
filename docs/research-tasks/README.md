@@ -1,5 +1,8 @@
 # 外部 Agent 研究任务认领
 
+> **状态：ARCHIVED（2026-10-21）**  
+> 这四项旧认领任务不再自动派发或续接。下表保留历史状态；当前研究入口见 [docs/README.md](../README.md)。
+
 日期：2026-10-05。由用户在任意 harness 中分发；主 agent 不自动派遣、不创建聊天。旧轨道队列不续接。
 
 | 任务 | 优先级 | 状态 | 任务书 |
@@ -11,7 +14,7 @@
 
 ## 共同协议
 
-先读根目录 AGENTS.md、docs/AI_DEVELOPMENT_PLAN.md、docs/runtime-baseline.md、docs/design/frontend-functional-plan.md 和对应任务书。现有原型及 reference/ 只读。
+先读根目录 AGENTS.md、docs/AI_DEVELOPMENT_PLAN.md、docs/runtime-baseline.md、docs/design/frontend-capability-hierarchy.md 和对应任务书。现有原型及 reference/ 只读。
 所有任务只交研究，不修改产品代码、不安装插件、不更新 Pi、不访问凭据、不提交、不推送、不自建 worktree。需要实验先写实验方案，由用户或主 agent 另行授权。
 每个任务仅可写自己的 `docs/research-results/Rxx/` 目录，含 `claim.md`、`report.md` 和必要证据。claim.md 写认领者、harness、时间、任务编号、基线 commit 和进行状态；不要修改本索引，避免冲突。认领前检查该目录是否已有认领，重复则停止并告知用户。
 本地已有未提交原型，必须记录使用的文件及 SHA-256，不假定 commit 含有原型。外部 agent 看不到主 agent 当前聊天，因此需求全部以任务书为准。

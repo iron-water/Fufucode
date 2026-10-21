@@ -5,4 +5,4 @@
 - `coordination/`：旧工作队列与 CUA 调度材料。
 
 这些文档仅用于追溯，不自动派发、续接或执行。文内旧代理职责、工作区路径、pending 状态及调度规则不覆盖根目录 AGENTS.md。
-当前外部研究任务使用 [认领协议](../research-tasks/README.md)，主线状态见 [progress.md](../progress.md)。
+[research-tasks](../research-tasks/README.md) 也已归档，不再认领新任务；当前主线入口见 [docs/README.md](../README.md)，进度见 [progress.md](../progress.md)。

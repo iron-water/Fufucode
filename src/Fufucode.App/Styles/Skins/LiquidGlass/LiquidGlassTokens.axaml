@@ -47,11 +47,26 @@
 
       <!-- 玻璃表面专用：LiquidGlassAdapter/样式层按主题从这里取玻璃参数色。
            TintColor 是玻璃染色（v1 adapter 未读，留作 v2 钩子的默认基调）。 -->
-      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#66F7F7F9"/>
-      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#4DF7F7F9"/>
-      <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#1A007AFF"/>
+      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#38FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#42FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#00000000"/>
       <SolidColorBrush x:Key="LiquidGlassHighlightColor"  Color="#E6FFFFFF"/>
-      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#66F2F2F7"/>
+      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#33FFFFFF"/>
+      <!-- 内容层卡片材质（HIG Standard Material, regular）：比 chrome 玻璃更实，保证正文可读。 -->
+      <SolidColorBrush x:Key="LiquidGlassMaterialColor" Color="#99FFFFFF"/>
+      <!-- iOS tertiarySystemFill / secondarySystemFill：玻璃上的控件填充是半透明灰，不是实色井。 -->
+      <SolidColorBrush x:Key="LiquidGlassControlFill" Color="#1F767680"/>
+      <SolidColorBrush x:Key="LiquidGlassControlFillHover" Color="#33767680"/>
+      <!-- 应用内"壁纸"：iOS 玻璃的观感来自背后有色彩可折射/模糊。应用没有壁纸，
+           纯平底色会让玻璃退化成实色块（这也是"和 Material 没区别"的根因）。
+           这层环境渐变铺在 ChromeRoot，给所有玻璃面提供带色差的采样素材。 -->
+      <LinearGradientBrush x:Key="LiquidGlassAmbientBackground" StartPoint="0%,0%" EndPoint="85%,100%">
+        <GradientStop Color="#FF9CC4F0" Offset="0"/>
+        <GradientStop Color="#FFC2D6EF" Offset="0.4"/>
+        <GradientStop Color="#FFE4D8F0" Offset="0.72"/>
+        <GradientStop Color="#FFEFF0F4" Offset="1"/>
+      </LinearGradientBrush>
+      <SolidColorBrush x:Key="LiquidGlassShadowColor"     Color="#FF000000"/>
 
       <!-- 文本/墨水：iOS label / secondaryLabel(60%) / tertiaryLabel(30%) -->
       <SolidColorBrush x:Key="AppTextPrimary"   Color="#FF000000"/>
@@ -213,11 +228,23 @@
       <SolidColorBrush x:Key="AppMicaSidebarBackground"   Color="#FF1C1C1E"/>
       <SolidColorBrush x:Key="LiquidGlassFallbackPageBackground" Color="#FF000000"/>
 
-      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#661C1C1E"/>
-      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#4D1C1C1E"/>
-      <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#1A0A84FF"/>
+      <SolidColorBrush x:Key="LiquidGlassSurfaceColor"    Color="#38FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassCaptionSurfaceColor" Color="#42FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassTintColor"       Color="#00000000"/>
       <SolidColorBrush x:Key="LiquidGlassHighlightColor"  Color="#66FFFFFF"/>
-      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#662C2C2E"/>
+      <SolidColorBrush x:Key="LiquidGlassDockSurfaceColor" Color="#33FFFFFF"/>
+      <SolidColorBrush x:Key="LiquidGlassMaterialColor" Color="#5C1C1C22"/>
+      <SolidColorBrush x:Key="LiquidGlassControlFill" Color="#3D767680"/>
+      <SolidColorBrush x:Key="LiquidGlassControlFillHover" Color="#52767680"/>
+      <!-- 深色环境渐变：黑底上带深蓝→深紫的走向，玻璃折射时能看出色差；
+           没有它时整窗纯黑，模糊与折射都没有素材（用户实测"像 Material"）。 -->
+      <LinearGradientBrush x:Key="LiquidGlassAmbientBackground" StartPoint="0%,0%" EndPoint="85%,100%">
+        <GradientStop Color="#FF3B7BC8" Offset="0"/>
+        <GradientStop Color="#FF1B3F73" Offset="0.35"/>
+        <GradientStop Color="#FF2A1650" Offset="0.7"/>
+        <GradientStop Color="#FF08090F" Offset="1"/>
+      </LinearGradientBrush>
+      <SolidColorBrush x:Key="LiquidGlassShadowColor"     Color="#FF000000"/>
 
       <SolidColorBrush x:Key="AppTextPrimary"   Color="#FFFFFFFF"/>
       <SolidColorBrush x:Key="AppTextSecondary" Color="#99EBEBF5"/>
