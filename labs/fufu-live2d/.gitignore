@@ -1,0 +1,13 @@
+# Cubism SDK / 示例模型等第三方载荷（许可禁止入库；按 README 手工放置）
+vendor/
+models/
+
+# 构建产物
+bin/
+obj/
+out/
+
+# 运行产物
+*.metrics.json
+*.metrics.csv
+screenshots/

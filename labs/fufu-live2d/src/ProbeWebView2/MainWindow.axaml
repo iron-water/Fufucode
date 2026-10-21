@@ -1,0 +1,27 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:ProbeWebView2"
+        x:Class="ProbeWebView2.MainWindow"
+        Width="420" Height="560"
+        Title="FUFU-02 ProbeWebView2 (WebGL)"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        ExtendClientAreaToDecorationsHint="True"
+        Background="Transparent"
+        Topmost="True"
+        CanResize="False">
+  <Panel>
+    <local:WebViewHost x:Name="View" />
+    <StackPanel Orientation="Vertical" VerticalAlignment="Top" Margin="4">
+      <Border Background="#AA000000" CornerRadius="4" Padding="6,3" HorizontalAlignment="Left">
+        <TextBlock x:Name="Status" Foreground="White" FontSize="11" Text="loading webview2..."/>
+      </Border>
+      <StackPanel Orientation="Horizontal" Margin="0,4,0,0" Spacing="4">
+        <Button x:Name="BtnMotion" FontSize="11" Padding="6,2" Content="动作"/>
+        <Button x:Name="BtnHit" FontSize="11" Padding="6,2" Content="命中?"/>
+        <Button x:Name="BtnThrough" FontSize="11" Padding="6,2" Content="穿透"/>
+        <Button x:Name="BtnOffscreen" FontSize="11" Padding="6,2" Content="遮挡"/>
+      </StackPanel>
+    </StackPanel>
+  </Panel>
+</Window>
