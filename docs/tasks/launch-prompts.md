@@ -1,5 +1,8 @@
 # 可直接发送给Codex/OMP的任务prompt
 
+> **状态：HISTORICAL TEMPLATE（2026-10-21 标记）**  
+> 本文件中的 D/O/U prompt 是历史范围模板，不再直接派发。当前执行入口以 [AGENTS.md](../../AGENTS.md)、[execution-contract.md](execution-contract.md) 顶部状态说明和当前任务段落为准；默认后端是 FUMO，不是 Pi。保留原文仅供追溯。
+
 2026-10-14受管派工/正常返工续接必须在**实际发送的完整prompt**中附delivery-callback-protocol要点：直接人类授权原文及来源01a12596/userMessage01a13994-73c3、主控01a10ae0-9bb9-78f3-b2b3-fd3ceeb34d07、worker/task/run/base/revision绑定、由最终HEAD构成的稳定eventId；停写落卡后一次send_message_to_thread回传、最终唯一规范JSON卡、不等无必要回信。工具缺失/结果不明保卡两小时补扫，不盲重发。旧worker树未必有新文档，不能只说“读取主控协议”或只在heartbeat配置写规则。在途任务不为此被打断，下一正常续接携带。
 
 2026-10-11 新开工顺序与范围改用 [开发拓扑 v2](development-topology-v2.md) 的 V1/C1/V2 等任务包。下文 D/O/U prompt 是历史范围参考，不再直接投入旧队列。首项 V1 只补已整合 D1 的原生验收缺口；新任务不得重新实现已接受模块。仍按本文件的模型、所有权和交付纪律生成具体 prompt。

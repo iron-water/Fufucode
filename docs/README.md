@@ -1,35 +1,59 @@
-# 文档导航
+# Fufucode 文档导航
 
-- [Pi 原生能力接入核查（1.1.0）](research/pi-native-capabilities-2026-10-08.md)：codemode、MCP、Durable、subagent 的入口与适配边界。
-- [Pi 1.1.0 升级交付](records/pi-upgrade-2026-10-08.md)：锁定版本、验证、产物和回退限制。
+日期：2026-10-21。本文是 docs 的唯一入口。
 
-## 核心入口
+## 一、当前权威（按优先级）
 
-- [权威开发计划](AI_DEVELOPMENT_PLAN.md)：目标、职责、开发与验证规则。
-- [当前开发拓扑 v2](tasks/development-topology-v2.md)：实际成果盘点、三阶段交付、依赖与旧任务承接。
-- [开发控制架构](design/autonomous-development-control.md)：三模式、委托、自主决策、纠偏与项目验收；上层设计与底层执行分开。
-- [当前进度](progress.md)：交付状态与下一步。
-- [决策记录](decisions.md)：追加式记录，原文和历史路径保留。
-- [运行基线](runtime-baseline.md)：实际 Pi 版本、协议与行为证据。
-- [验证记录](verification.md)：已运行验证及未验证边界。
+1. [AGENTS.md](../AGENTS.md)：协作、文件所有权、当前后端与构建约定。
+2. [决策记录](decisions.md)：追加式权威决定；以最新日期条目为准。
+3. [前端能力分级与生命周期](design/frontend-capability-hierarchy.md)：2026-10-20 前端权威基线。
+4. [设置页设计规范](settings-design-spec.md)：设置页结构、样式与硬性纪律。
+5. [项目总原则](design/project-principles.md)：目录、状态、分级、验证的总纲。
+6. [执行契约](tasks/execution-contract.md)：先读顶部状态说明；后端默认已由 Pi 改为 FUMO。
+7. [当前进度](progress.md)：追加式进度日志，只看最新日期段。
+8. [运行基线](runtime-baseline.md)：顶部已声明 FUMO 默认；Pi 段落是历史基线。
+9. [验证记录](verification.md)：历史验证；最新验证以 `records/` 与交付记录为准。
 
-## 分类目录
+## 二、前端设计文档状态
 
-| 目录 | 内容 | 常用入口 |
+| 文档 | 日期 | 状态 |
 |---|---|---|
-| `design/` | 产品功能、交互清单、CLI 和协作规格 | [前端功能规划](design/frontend-functional-plan.md)、[小交互清单](design/frontend-interaction-inventory.md) |
-| `frontend-prototype/` | 可直接打开的前端交互原型及交付说明 | [原型说明](frontend-prototype/README.md)、[打开原型](frontend-prototype/index.html) |
-| `research/` | 已有调研和设计参考，不自动作为实现承诺 | [Codex 功能研究](research/codex-feature-study.md)、[多 agent 研究](research/multiagent-collab-study.md) |
-| `research-tasks/` | 当前外部 agent 可认领的研究任务书 | [认领协议与四项任务](research-tasks/README.md) |
-| `research-results/` | 外部 agent 按 Rxx 独立交付的结果目录，认领后创建 | 见认领协议 |
-| `operations/` | 运行维护和升级操作规程 | [Pi 升级规程](operations/pi-upgrade-sop.md) |
-| `records/` | 审查、反馈、故障、验证日志与整理记录 | [本轮目录整理](records/docs-organization-2026-10-05.md) |
-| `archive/` | 旧轨道任务、分轨进度、历史队列与调度材料 | [历史资料说明](archive/README.md) |
-| `面向人类/` | 面向用户阅读的自包含报告 | 保持原文件名 |
+| [frontend-capability-hierarchy.md](design/frontend-capability-hierarchy.md) | 2026-10-20 | **当前权威**：5 个物理承载、7 级梯队、三大藏点 |
+| [conversation-workbench-v4.md](design/conversation-workbench-v4.md) | 2026-10-15 | 自动开发工作台的当前产品决定；不覆盖全局前端分级 |
+| [frontend-functional-plan.md](design/frontend-functional-plan.md) | 2026-10-05 | **历史提案，已被取代**；保留三栏方案讨论 |
+| [frontend-design-guideline.md](design/frontend-design-guideline.md) | 2026-10-01 | **历史研究，已被取代**；保留五区骨架证据 |
+| [frontend-interaction-inventory.md](design/frontend-interaction-inventory.md) | 2026-10-06 | 小交互讨论清单，不等于已实现 |
 
-## 使用规则
+## 三、执行与任务
 
-五个核心入口保留原路径，满足 AGENTS.md 的引用约定。原型目录不移动，既有浏览器地址及图片相对路径不变。
-新产品方案放 design，调研放 research；未定任务进入 research-tasks，交付进入 research-results，正式决定仍由主 agent 追加到 decisions。
-archive 是历史参考，不是待执行指令；旧 pending 不代表新授权。旧固定五区设计文档仍在 design 供参考，当前三栏可配置方向以最新功能规划和用户意见为准。
-历史决策原文不改写；遇到旧路径，可查 [路径迁移表](records/document-path-map.json)。目录整理不意味着旧结论仍然适用。
+- 当前执行协议：[execution-contract.md](tasks/execution-contract.md)、[session-handoff-protocol.md](tasks/session-handoff-protocol.md)。
+- [launch-prompts.md](tasks/launch-prompts.md) 中的 D/O/U 段落是历史模板，不再直接派发。
+- [development-topology-v2.md](tasks/development-topology-v2.md) 是 2026-10-11 的旧拓扑，保留追溯。
+- `tasks/hourly-*`、`tasks/M-E7-*` 等是历史派工材料，不代表当前队列。
+- [archive/README.md](archive/README.md) 是历史资料说明，不是待执行指令。
+
+## 四、记录、证据与调研
+
+- [records/README.md](records/README.md)：记录分类、命名与状态规则。
+- [records/INDEX.md](records/INDEX.md)：交付、日志、证据的入口索引。
+- [records/evidence/](records/evidence/)：截图、日志与验收证据。
+- [research/](research/)：内部分析与设计参考，不自动成为实现承诺。
+- [research-tasks/README.md](research-tasks/README.md)：**已归档**的旧外部认领任务，不再派发。
+- [research-results/README.md](research-results/README.md)：外部调研结果；R01 evidence 是第三方证据，R05 是原型副本。
+- [frontend-prototype/README.md](frontend-prototype/README.md)：可交互前端原型；不是产品验收证据。
+
+## 五、归档与运维
+
+- [archive/](archive/)：旧轨道任务、分轨进度、历史队列、旧自动化契约。
+- [automation/README.md](automation/README.md)：旧 D/O/U 机器契约与验证脚本，已不参与当前调度。
+- [operations/README.md](operations/README.md)：运行维护入口；`pi-upgrade-sop.md` 是历史 Pi 规程。
+- [面向人类/README.md](面向人类/README.md)：面向用户的成品说明。
+- [人类意见/README.md](人类意见/README.md)：用户原始意见，不是实现规格。
+
+## 六、使用规则
+
+1. 新文档先写 `status`（current / historical / superseded / evidence）、日期和来源。
+2. 当前结论只放“当前权威”；历史原文保留并加 `SUPERSEDED` 横幅，不改写历史。
+3. 旧路径查询只用于追溯；[records/document-path-map.json](records/document-path-map.json) 是 2026-10-05 的一次性迁移表，不是当前索引。
+4. 证据放 `records/evidence/` 或 `research-results/`，不要把截图、日志和脚本混进设计文档。
+5. 任何“Pi 默认”表述先确认日期；2026-10-17 之后默认是 FUMO。

@@ -1,5 +1,8 @@
 # Fufucode 前端功能拆解与规划
 
+> **状态：HISTORICAL PROPOSAL / SUPERSEDED（2026-10-05）**  
+> 本文是未获最终确认的历史提案，仍以 Pi RPC 为默认后端。当前前端权威是 [frontend-capability-hierarchy.md](frontend-capability-hierarchy.md)（2026-10-20），当前默认后端是 FUMO。
+
 日期：2026-10-05。状态：待用户确认的产品方案，不代表已实现或已验收。
 
 配套交互示意：`../frontend-prototype/index.html`。它只演示布局、入口和状态，不执行 Pi、Shell、浏览器导航、文件写入或云端操作。

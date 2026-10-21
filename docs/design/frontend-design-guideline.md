@@ -1,5 +1,8 @@
 # Fufucode 前端设计准则：五区骨架与区内交互
 
+> **状态：HISTORICAL / SUPERSEDED（2026-10-01）**  
+> 当前前端权威是 [frontend-capability-hierarchy.md](frontend-capability-hierarchy.md)（2026-10-20）。本文仅保留五区骨架的历史研究，不应作为新实现依据。
+
 日期：2026-10-01。五区骨架为用户定案：左栏任务/一般选项、中央对话、右栏tab化视图、底栏终端、独立设置界面。本文按此组织，不再将布局当可选组件集合。功能与布局对齐Codex Desktop，视觉沿UniGetUI；ZCode只作区内交互参考。本文为研究与实施规格，未代表产品验收。
 
 ## 层0：五区骨架总览
