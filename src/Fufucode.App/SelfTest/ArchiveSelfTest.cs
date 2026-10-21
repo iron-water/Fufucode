@@ -44,6 +44,18 @@ internal static class ArchiveSelfTest
             Check(!ProjectArchive.IsArchivedPath(store, Path.Combine(root, "deleted-project")),
                 "missing recent project path is not archived and does not throw");
 
+            var thirdPath = Path.Combine(root, "third");
+            Directory.CreateDirectory(thirdPath);
+            var ordered = ProjectOrder.Apply(store, store.ListProjects());
+            Check(ordered.Count == 2, "first ordering keeps every existing project");
+            var third = store.GetOrCreateProject(thirdPath);
+            ordered = ProjectOrder.Apply(store, store.ListProjects());
+            Check(ordered[0].Id == third.Id && ordered.Count == 3,
+                "newly added project is listed first without manual sorting");
+            ProjectOrder.Promote(store, first.Id);
+            ordered = ProjectOrder.Apply(store, store.ListProjects());
+            Check(ordered[0].Id == first.Id, "promoted project stays first");
+
             SessionRecord? openedSession = null;
             string? openedProject = null;
             var model = new ArchiveViewModel(store,
