@@ -21,6 +21,7 @@ public partial class MainWindow
 {
     private WorkbenchCustomizationViewModel _customization = null!;
     private Styles? _customStyles;
+    private readonly Dictionary<string, object?> _fluentColorOverrides = new(StringComparer.Ordinal);
     private readonly Dictionary<string, List<TextBlock>> _statusLabels = new(StringComparer.Ordinal);
     private readonly DispatcherTimer _statusTimer = new() { Interval = TimeSpan.FromSeconds(1) };
     private DateTimeOffset _turnStarted;
@@ -44,6 +45,7 @@ public partial class MainWindow
         _statusTimer.Tick += (_, _) => RefreshStatusLabels();
         _statusTimer.Tick += CheckSchedules;
         _statusTimer.Start();
+        ActualThemeVariantChanged += (_, _) => { if (!_closed) ApplyCustomization(_customization.Current); };
         Closed += (_, _) => _statusTimer.Stop();
         Closed += (_, _) => ReleaseWindowSkin(this);
         if (Application.Current?.PlatformSettings is { } platform)
@@ -106,7 +108,7 @@ public partial class MainWindow
         // 启动期会先由 InitializeCustomization 应用一次、再由 AttachCustomization 应用一次；
         // 样式重建会触发整棵可视化树重新求值（实测约 0.6~0.9 秒），视觉配置相同就不应重复。
         // 布局单独判断：项目布局由 AttachWorkspaceContext 先行恢复，不应为了布局重放整套样式。
-        var signature = (settings with { Layout = null }).Serialize();
+        var signature = (settings with { Layout = null }).Serialize() + "|" + ActualThemeVariant;
         if (signature == _appliedCustomization)
         {
             if (settings.Layout is not null && settings.Layout.Serialize() != _dockLayout.Serialize())
@@ -117,6 +119,7 @@ public partial class MainWindow
             return;
         }
         _appliedCustomization = signature;
+        RestoreFluentColorOverrides();
         Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.release-skin.begin", "release previous skin");
         ReleaseWindowSkin(this);
         Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.release-skin.end", "previous skin released");
@@ -184,6 +187,7 @@ public partial class MainWindow
         Styles.Add(_customStyles);
         Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.styles", "custom styles rebuilt");
         ApplyWindowSkin(this, settings);
+        ApplyFluentColorOverrides(settings);
         Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.skin", "window skin applied");
         CustomStatusBar.IsVisible = settings.ShowStatusBar;
         ChromeRoot.RowDefinitions[2].Height = new GridLength(settings.ShowStatusBar ? 26 : 0);
@@ -332,6 +336,71 @@ public partial class MainWindow
     /// 设置页“功能入口”分类的真实运行状态。只报告宿主当前事实：
     /// 插件是否提供页/控制器、内建页是否存在，不用占位成功文案。
     /// </summary>
+    private static readonly string[] FluentDeepKeys =
+    [
+        "AppWindowBackground", "AppMicaPageBackground", "AppContentBackground",
+        "SolidBackgroundFillColorBaseBrush", "SolidBackgroundFillColorSecondaryBrush",
+    ];
+
+    private static readonly string[] FluentBarKeys =
+    [
+        "AppTitleBarBackground", "AppSidebarBackground", "AppMicaSidebarBackground", "AppSettingsNavBackground",
+        "AppSurfaceBackground", "AppCardBackground", "AppToolCardBackground", "AppDialogBackground",
+        "AppDialogFooterBackground", "AppChromeBackground", "AppDockBackground", "AppDockHeaderBackground",
+        "AppCodeBackground", "MenuSurfaceBrush", "LayerFillColorDefaultBrush", "LayerFillColorAltBrush",
+        "SolidBackgroundFillColorTertiaryBrush", "SolidBackgroundFillColorQuaternaryBrush",
+        "CardBackgroundFillColorDefaultBrush", "ControlFillColorDefaultBrush", "ControlFillColorInputActiveBrush",
+    ];
+
+    private static readonly string[] FluentHighlightKeys =
+    [
+        "AppHover", "AppPressed", "AppListHover", "AppListSelected", "AppTabSelectedBackground",
+        "AppSubtleBackground", "AppInnerWell", "CardBackgroundFillColorSecondaryBrush",
+        "SubtleFillColorSecondaryBrush", "SubtleFillColorTertiaryBrush",
+        "ListBoxItemBackgroundSelected", "ListBoxItemBackgroundSelectedPointerOver",
+        "ListBoxItemBackgroundSelectedPressed", "ControlFillColorSecondaryBrush",
+        "ControlFillColorTertiaryBrush", "ControlFillColorDisabledBrush",
+    ];
+
+    private void RestoreFluentColorOverrides()
+    {
+        foreach (var (key, original) in _fluentColorOverrides)
+        {
+            if (original is null) Resources.Remove(key);
+            else Resources[key] = original;
+        }
+        _fluentColorOverrides.Clear();
+    }
+
+    /// <summary>
+    /// Fluent 暗色的三档底色与模型输出强调色。只覆盖语义底色键；
+    /// 图标、diff 红绿、代码高亮、终端与状态色保持各自语义，不纳入三档底色。
+    /// </summary>
+    private void ApplyFluentColorOverrides(WorkbenchAppearance settings)
+    {
+        if (settings.SkinResolution.Skin != Features.Skins.SkinId.Fluent) return;
+
+        void Set(string key, IBrush brush)
+        {
+            if (!_fluentColorOverrides.ContainsKey(key))
+                _fluentColorOverrides[key] = Resources.TryGetResource(key, ActualThemeVariant, out var original) ? original : null;
+            Resources[key] = brush;
+        }
+
+        Set("AppEmphasis", new SolidColorBrush(Color.Parse(settings.Emphasis)));
+        if (ActualThemeVariant != ThemeVariant.Dark) return;
+
+        var deep = new SolidColorBrush(Color.Parse(settings.BaseBackground));
+        var bar = new SolidColorBrush(Color.Parse(settings.BaseBar));
+        var highlight = new SolidColorBrush(Color.Parse(settings.BaseHighlight));
+        Set("AppBaseDeep", deep);
+        Set("AppBaseBar", bar);
+        Set("AppBaseHighlight", highlight);
+        foreach (var key in FluentDeepKeys) Set(key, deep);
+        foreach (var key in FluentBarKeys) Set(key, bar);
+        foreach (var key in FluentHighlightKeys) Set(key, highlight);
+    }
+
     private WorkbenchFeatureStatus FeatureStatusFor(string id) => id switch
     {
         "terminal" => _terminalPage is null
