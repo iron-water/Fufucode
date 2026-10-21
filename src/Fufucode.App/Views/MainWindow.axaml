@@ -34,9 +34,11 @@
                         HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="520">
             <StackPanel x:Name="CustomTopCenter" Orientation="Horizontal" Spacing="3"/>
           </ScrollViewer>
-          <!-- 会话灵动岛：Fluent 皮肤的中央活态显示（标题+运行态+快捷磁贴展开） -->
-          <Panel x:Name="IslandHost" HorizontalAlignment="Center" VerticalAlignment="Center"/>
         </Grid>
+        <!-- 会话灵动岛：跨全部列叠放，以整个窗口为基准居中（左/右按钮宽度不对称，
+             放在中间列会偏）。面板本身透明，只有胶囊命中输入。 -->
+        <Panel x:Name="IslandHost" Grid.ColumnSpan="4" ZIndex="5"
+               HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
         <StackPanel x:Name="LegacyCaptionActions" Grid.Column="2" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0" IsVisible="False">
           <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" ToolTip.Tip="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{DynamicResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>
           <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" ToolTip.Tip="左区"><PathIcon Data="{DynamicResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
