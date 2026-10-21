@@ -705,3 +705,13 @@ EAD
 - 新增 `ReduceBackgroundBrowserMemory`：低内存模式下后台页签不提前创建 controller；已存在的后台 controller 设 `CoreWebView2.MemoryUsageTargetLevel.Low`，回到前台设 Normal。
 - 不使用 `TrySuspendAsync/Resume`，避免暂停后台脚本、网络与 Browser Use 自动化；改用官方建议的 MemoryUsageTargetLevel 组合，二者不混用。
 - 未做：后台标签超时销毁重建、WebView2 独立 `--disable-gpu`、JS 堆上限、缓存上限；这些需要真实页面回归后再定。
+
+## 2026-10-21 默认皮肤收敛为 Fluent、其余皮肤改为插件市场提供
+
+1. 默认安装包内置皮肤只保留 Fluent（`SkinCatalog.BuiltIn`）。Metro / Material 3 / Aero / Luna / Liquid Glass 不再随包出现在皮肤选择器，也不再作为内置目录项展示。
+2. 五套皮肤改为插件市场中的真实插件条目：`skin.metro` / `skin.material3` / `skin.aero` / `skin.luna` / `skin.liquidglass`，默认均不安装、不启用；由用户在插件市场按需安装。
+3. 插件激活时通过 `IPluginPackage.CreateSkinContribution` 登记皮肤，写入新的 `PluginSkinRegistry`；停用/卸载时立即撤销。`SkinCatalog.All` 与设置页皮肤选择器按注册表动态计算，安装后无需重启即可出现，卸载后立即消失。
+4. 持久化兼容：已保存但对应插件未安装的皮肤键不报错，解析层明确回退 Fluent 并保留原始请求文本；重新安装该插件后恢复原皮肤。
+5. 资源归属：五套皮肤的资源 URI 仍指向宿主 `avares://Fufucode.App/Styles/Skins/...`（用户选择“保留实现”）；插件包只承载身份、展示文案与可用性登记，不复制主题资产。Aero 插件改为引用宿主 Aero 资产，避免插件程序集资源加载差异。
+6. 打包：`package-native.ps1` 的插件分发列表与默认包禁用程序集清单加入四个新皮肤插件；解决方案新增对应工程。
+7. 验证：解决方案 45 工程 0 错误 0 警告；`Fufucode.App.Skins.Tests` 297 项通过（新增“默认只有 Fluent / 未安装 Metro 回退 / 插件登记后恢复六套”三项断言）；`Fufucode.App.LiquidGlass.Tests` 89 项通过；`--selftest --skins-integration-only` 皮肤链路检查通过（该自测既有的退出期 Grid 越界不在本次范围）。

@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using Fufucode.Core.Plugins;
 
 namespace Fufucode.App.Features.Skins;
 
@@ -15,6 +17,9 @@ public enum SkinId
     Luna = 4,
     WorkBuddy = 5,
     LiquidGlass = 6,
+
+    /// <summary>插件提供的第三方皮肤（不内置于默认包）。</summary>
+    External = 7,
 }
 
 /// <summary>
@@ -36,9 +41,14 @@ public sealed record SkinDefinition(
 /// <summary>
 /// 皮肤键解析结果。未知键回退 fluent，但保留原始请求文本与原因，不静默改写调用方持久输入。
 /// </summary>
-public readonly record struct SkinResolution(SkinId Skin, string RequestedKey, bool FellBack, string Reason)
+public readonly record struct SkinResolution(
+    SkinId Skin,
+    string RequestedKey,
+    bool FellBack,
+    string Reason,
+    SkinDefinition? ResolvedDefinition = null)
 {
-    public SkinDefinition Definition => SkinCatalog.Get(Skin);
+    public SkinDefinition Definition => ResolvedDefinition ?? SkinCatalog.Get(Skin);
 }
 
 /// <summary>
@@ -93,11 +103,75 @@ public static class SkinCatalog
         LiquidGlass.LiquidGlassSkin.TokenDictionaryUri,
         LiquidGlass.LiquidGlassSkin.ScopedStylesUri);
 
-    /// <summary>全部已知皮肤，顺序即设置页展示建议顺序。</summary>
-    /// <remarks>WorkBuddy 皮肤已归档（它本就是手机遥控配套 App 的设计规范，
-    /// DESK-1 误当桌面皮肤引入）；资源与枚举值保留以免破坏持久化键的解析，但不再对用户可见。</remarks>
-    public static IReadOnlyList<SkinDefinition> All { get; } =
-        new[] { FluentDefinition, MetroDefinition, Material3Definition, AeroDefinition, LunaDefinition, LiquidGlassDefinition };
+    /// <summary>默认包内置的皮肤：按用户要求只保留 Fluent。</summary>
+    /// <remarks>WorkBuddy 皮肤已归档；其余皮肤改为插件市场提供，安装并启用后经
+    /// <see cref="PluginSkinRegistry"/> 动态出现在这里。</remarks>
+    public static IReadOnlyList<SkinDefinition> BuiltIn { get; } = new[] { FluentDefinition };
+
+    /// <summary>
+    /// 当前可用皮肤 = 内置 Fluent + 已安装且启用的插件皮肤，顺序即设置页展示顺序。
+    /// 每次读取都反映插件注册表的最新状态（安装/停用/卸载即时生效）。
+    /// </summary>
+    public static IReadOnlyList<SkinDefinition> All
+    {
+        get
+        {
+            var result = new List<SkinDefinition>(BuiltIn);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { FluentDefinition.StorageKey };
+            foreach (var contribution in PluginSkinRegistry.Contributions)
+            {
+                if (!seen.Add(contribution.StorageKey)) continue;
+                result.Add(DefinitionFor(contribution));
+            }
+            return result;
+        }
+    }
+
+    /// <summary>把插件皮肤贡献转换为目录定义；已知皮肤沿用内置枚举以便行为接线。</summary>
+    private static SkinDefinition DefinitionFor(Core.Plugins.PluginSkinContribution contribution)
+    {
+        var id = IdForStorageKey(contribution.StorageKey);
+        if (id == SkinId.External)
+        {
+            return new SkinDefinition(
+                SkinId.External,
+                contribution.StorageKey,
+                contribution.DisplayName,
+                contribution.Summary,
+                contribution.Description,
+                false,
+                contribution.TokenDictionaryUri,
+                contribution.ScopedStylesUri);
+        }
+
+        var built = Get(id);
+        return built with
+        {
+            DisplayName = contribution.DisplayName,
+            Summary = contribution.Summary,
+            Description = contribution.Description,
+            TokenDictionaryUri = contribution.TokenDictionaryUri ?? built.TokenDictionaryUri,
+            ScopedStylesUri = contribution.ScopedStylesUri ?? built.ScopedStylesUri,
+        };
+    }
+
+    private static SkinId IdForStorageKey(string storageKey) => storageKey.Trim().ToLowerInvariant() switch
+    {
+        "metro" => SkinId.Metro,
+        "material3" or "material-3" or "m3" => SkinId.Material3,
+        "aero" => SkinId.Aero,
+        "luna" or "xp" or "luna-blue" => SkinId.Luna,
+        "liquidglass" or "liquid-glass" or "glass" or "ios" or "lg" => SkinId.LiquidGlass,
+        _ => SkinId.External,
+    };
+
+    /// <summary>某皮肤当前是否可用（Fluent 恒可用；其余必须是已启用插件皮肤）。</summary>
+    public static bool IsAvailable(SkinId id)
+    {
+        if (id == SkinId.Fluent) return true;
+        if (id == SkinId.External) return PluginSkinRegistry.Contributions.Count > 0;
+        return PluginSkinRegistry.Find(Get(id).StorageKey) is not null;
+    }
 
     public static SkinDefinition Get(SkinId id) => id switch
     {
@@ -121,38 +195,29 @@ public static class SkinCatalog
             case "fluent":
                 id = SkinId.Fluent;
                 return true;
-            case "metro":
-                id = SkinId.Metro;
-                return true;
-            case "aero":
-                id = SkinId.Aero;
-                return true;
-            case "luna":
-            case "xp":
-            case "luna-blue":
-                id = SkinId.Luna;
-                return true;
-            case "material3":
-            case "material-3":
-            case "m3":
-                id = SkinId.Material3;
-                return true;
             case "workbuddy":
             case "work-buddy":
             case "wb":
                 id = SkinId.WorkBuddy;
-                return true;
-            case "liquidglass":
-            case "liquid-glass":
-            case "glass":
-            case "ios":
-            case "lg":
-                id = SkinId.LiquidGlass;
-                return true;
-            default:
-                id = SkinId.Fluent;
-                return false;
+                return false; // 已归档，不再可见
         }
+
+        var resolved = IdForStorageKey(normalized);
+        // 非 Fluent 皮肤只有在插件已安装且启用时才可解析；否则按未知键回退 Fluent。
+        if (resolved != SkinId.External && PluginSkinRegistry.Find(Get(resolved).StorageKey) is not null)
+        {
+            id = resolved;
+            return true;
+        }
+
+        if (resolved == SkinId.External && PluginSkinRegistry.Find(normalized) is not null)
+        {
+            id = SkinId.External;
+            return true;
+        }
+
+        id = SkinId.Fluent;
+        return false;
     }
 
     /// <summary>解析并给出可解释结果；空值与未知值都回退 fluent，原始请求原样保留在结果中。</summary>
@@ -162,8 +227,18 @@ public static class SkinCatalog
         if (string.IsNullOrWhiteSpace(requested))
             return new SkinResolution(SkinId.Fluent, requested, true, "皮肤键为空，按默认回退 fluent。");
         if (TryParse(requested, out var id))
-            return new SkinResolution(id, requested, false, string.Empty);
+        {
+            var definition = id == SkinId.External
+                ? DefinitionFor(PluginSkinRegistry.Find(requested)!)
+                : (SkinCatalog.All.FirstOrDefault(d => d.Id == id) ?? Get(id));
+            return new SkinResolution(id, requested, false, string.Empty, definition);
+        }
+
+        var installed = PluginSkinRegistry.Find(requested);
+        if (installed is not null)
+            return new SkinResolution(SkinId.External, requested, false, string.Empty, DefinitionFor(installed));
+
         return new SkinResolution(SkinId.Fluent, requested, true,
-            $"未知皮肤键 \"{requested}\"：回退 fluent；请求值未被改写，持久输入保持原样。");
+            $"皮肤 \"{requested}\" 未安装或未知：回退 fluent；请先在插件市场安装对应皮肤插件。请求值未被改写。");
     }
 }

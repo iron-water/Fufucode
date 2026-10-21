@@ -187,6 +187,22 @@ public static class PluginMarketplaceCatalog
             "Windows Vista / 7 经典毛玻璃质感皮肤包，含光泽按钮、半透明边框与拟物窗口装饰。",
             "1.0.0", "Fufucode Community", ["窗口亚克力/毛玻璃混合特效"],
             DefaultInstalled: false, DefaultEnabled: false),
+        new("skin.metro", "Metro 皮肤", PluginCategory.Theme,
+            "Windows 8 风格直角平面色块与整块强调色选择态，固定 Metro 调色板。",
+            "1.0.0", "Fufucode Community", ["主题资源与控件样式覆盖"],
+            DefaultInstalled: false, DefaultEnabled: false),
+        new("skin.material3", "Material 3 皮肤", PluginCategory.Theme,
+            "Material 3 胶囊按钮、色调分层容器与状态层叠加，固定 M3 调色板。",
+            "1.0.0", "Fufucode Community", ["主题资源与控件样式覆盖"],
+            DefaultInstalled: false, DefaultEnabled: false),
+        new("skin.luna", "Windows XP Luna 皮肤", PluginCategory.Theme,
+            "Windows XP Luna Blue 经典圆润控件与高对比蓝色标题栏。",
+            "1.0.0", "Fufucode Community", ["主题资源与控件样式覆盖"],
+            DefaultInstalled: false, DefaultEnabled: false),
+        new("skin.liquidglass", "Liquid Glass 皮肤", PluginCategory.Theme,
+            "iOS 26 液态玻璃：SKSL 自绘折射、色散与边缘高光，跟随系统强调色。",
+            "1.0.0", "Fufucode Community", ["Skia GPU 着色器渲染"],
+            DefaultInstalled: false, DefaultEnabled: false),
     ];
 
     public static PluginDefinition? Find(string id) =>

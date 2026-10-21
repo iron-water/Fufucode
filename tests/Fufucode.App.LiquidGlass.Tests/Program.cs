@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Fufucode.App.Features.Skins;
+using Fufucode.Core.Plugins;
 using Fufucode.App.Features.Skins.LiquidGlass;
 using Fufucode.App.LiquidGlass.Tests;
 
@@ -215,6 +216,12 @@ try
     Check(probe.ResolvedColor("AppWindowBackground") == baselineWindowBackground, "释放后窗口底回 Fluent 基线");
     lease.Dispose();
     Check(probe.Window.Resources.MergedDictionaries.Count == baselineDictCount, "重复 Dispose 幂等");
+
+    // LiquidGlass 已转为插件皮肤：测试显式登记贡献后再走通用皮肤管线。
+    var lgDefinition = SkinCatalog.Get(SkinId.LiquidGlass);
+    PluginSkinRegistry.Register("test.liquidglass",
+        new PluginSkinContribution(lgDefinition.StorageKey, lgDefinition.DisplayName, lgDefinition.Summary,
+            lgDefinition.Description, lgDefinition.TokenDictionaryUri, lgDefinition.ScopedStylesUri));
 
     // ---------- 11. SkinLease 集成路径：liquidglass 键走通用皮肤管线 ----------
     var skinLease = SkinLease.Apply(probe.Window, SkinCatalog.Resolve("liquidglass"), ThemeVariant.Light);

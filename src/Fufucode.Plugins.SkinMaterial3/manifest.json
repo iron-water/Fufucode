@@ -1,0 +1,8 @@
+{
+  "id": "skin.material3",
+  "name": "Material 3 皮肤",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.SkinMaterial3.dll",
+  "packageType": "Fufucode.Plugins.SkinMaterial3.SkinMaterial3PluginPackage",
+  "category": "Theme"
+}

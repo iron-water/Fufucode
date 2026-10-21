@@ -93,6 +93,9 @@ public sealed class WorkbenchSectionsView : UserControl
 
     public WorkbenchSectionsView()
     {
+        // 插件市场安装/停用皮肤后，外观页的皮肤选择器即时反映可用集合。
+        Fufucode.Core.Plugins.PluginSkinRegistry.Changed += () =>
+            Dispatcher.UIThread.Post(() => { if (Page.StartsWith("appearance", StringComparison.Ordinal)) Render(); });
         DataContextChanged += (_, _) =>
         {
             if (_vm is not null)

@@ -11,6 +11,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Fufucode.App.Features.Skins;
+using Fufucode.Core.Plugins;
 using Fufucode.App.Skins.Tests;
 
 // E7 皮肤引擎定向测试（独立入口，未注册全量自测）：
@@ -32,6 +33,18 @@ Directory.CreateDirectory(evidenceRoot);
 try
 {
     // ---------- 1. 目录解析与解释性回退（无 UI、不写任何持久文件） ----------
+// 默认包只提供 Fluent；其余皮肤由插件市场安装。测试显式登记这些皮肤贡献，
+// 再验证插件可用后的目录、解析与换肤链路。
+Check(SkinCatalog.All.Select(s => s.StorageKey).SequenceEqual(new[] { "fluent" }),
+    "默认包内置皮肤只有 Fluent（其余皮肤不再随包提供）");
+Check(!SkinCatalog.TryParse("metro", out _), "未安装的 Metro 皮肤键回退 Fluent（市场插件未安装）");
+foreach (var id in new[] { SkinId.Metro, SkinId.Material3, SkinId.Aero, SkinId.Luna, SkinId.LiquidGlass })
+{
+    var d = SkinCatalog.Get(id);
+    PluginSkinRegistry.Register("test." + d.StorageKey,
+        new PluginSkinContribution(d.StorageKey, d.DisplayName, d.Summary, d.Description, d.TokenDictionaryUri, d.ScopedStylesUri));
+}
+Check(SkinCatalog.All.Count == 6, "安装皮肤插件后目录恢复六套皮肤");
     Check(SkinCatalog.TryParse("metro", out var metroId) && metroId == SkinId.Metro, "metro 键解析为 Metro");
     Check(SkinCatalog.TryParse("Material3", out var m3Id) && m3Id == SkinId.Material3, "Material3 键（大小写不敏感）解析为 Material3");
     Check(SkinCatalog.TryParse("m3", out var m3Alias) && m3Alias == SkinId.Material3, "m3 别名解析为 Material3");
