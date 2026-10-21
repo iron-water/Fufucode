@@ -30,6 +30,12 @@ $path = Join-Path $root ".claude/worktrees/$slug"
 
 function Assert-Clean {
     param([string]$Worktree)
+    $top = @(& git -C $Worktree rev-parse --show-toplevel 2>$null)
+    $expected = [IO.Path]::GetFullPath($Worktree)
+    $actual = if ($top.Count -gt 0 -and $top[0]) { [IO.Path]::GetFullPath($top[0].Trim()) } else { '' }
+    if ($LASTEXITCODE -ne 0 -or $actual -ne $expected) {
+        throw "不是独立的 Git 工作树（可能已损坏）：$Worktree"
+    }
     $dirty = @(& git -C $Worktree status --porcelain 2>$null)
     if ($LASTEXITCODE -ne 0) { throw "不是有效的 Git 工作树：$Worktree" }
     if ($dirty.Count -gt 0) {
@@ -39,6 +45,12 @@ function Assert-Clean {
 
 if ($Remove) {
     if (-not (Test-Path -LiteralPath $path)) { throw "工作树不存在：$path" }
+    $current = [IO.Path]::GetFullPath((Get-Location).Path)
+    $inside = $current.Equals($path, [StringComparison]::OrdinalIgnoreCase) -or
+        $current.StartsWith($path + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)
+    if ($inside) {
+        throw "不要在被删除的工作树内运行 -Remove。先切到主工作树：$root"
+    }
     Assert-Clean $path
     & git -C $root merge-base --is-ancestor $branch $Base 2>$null
     if ($LASTEXITCODE -ne 0) {
