@@ -671,14 +671,11 @@ public sealed class PersistentSessionManager
         }
     }
 
-    /// <summary>
-    /// 读取 FUMO 会话文件：支持带版本的信封与旧的裸数组。解析失败时把原文件改名为
-    /// .corrupt-时间戳 保留现场（绝不在下一次回合覆盖掉唯一副本），并按空历史启动。
-    /// </summary>
-    private sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
+    /// <summary>已解析的 FUMO 会话文件（FUFU 等外部宿主复用同一格式与损坏隔离语义）。</summary>
+    public sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
         string? ThinkingLevel, string? ExecutionMode);
 
-    private static NativeSessionFile? LoadNativeMessages(string file)
+    public static NativeSessionFile? LoadNativeMessages(string file)
     {
         try
         {

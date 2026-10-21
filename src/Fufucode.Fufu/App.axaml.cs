@@ -20,6 +20,8 @@ public sealed class App : Application
     private FufuTrayService? _tray;
     private WanderController? _wander;
     private BotHost? _bot;
+    private FufuSessionHost? _sessionHost;
+    private PetChatWindow? _chatWindow;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
     private PixelPoint? _lastPos; // 显式跟踪位置：Window.Position 在 Hide/Show 往返后可能复位为 0,0
@@ -47,6 +49,7 @@ public sealed class App : Application
         };
         _wander = new WanderController(_behavior);
         _bot = new BotHost(_behavior);
+        _sessionHost = new FufuSessionHost(dataRoot, _behavior);
 
         var renderer = new PlaceholderPetRenderer();
         var settings = _settings.Current;
@@ -139,6 +142,10 @@ public sealed class App : Application
         };
         menu.Items.Add(showItem);
 
+        var chatItem = new NativeMenuItem("和 FUFU 聊天…");
+        chatItem.Click += (_, _) => ShowChat();
+        menu.Items.Add(chatItem);
+
         var pauseItem = new NativeMenuItem("暂停移动") { IsChecked = s.MovementPaused };
         pauseItem.Click += (_, _) =>
         {
@@ -193,6 +200,10 @@ public sealed class App : Application
             hideItem.Click += (_, _) => { if (_petShown) HidePet(); else ShowPet(); _tray?.RebuildMenu(); };
             menu.Items.Add(hideItem);
 
+            var chatItem = new MenuItem { Header = "和 FUFU 聊天…" };
+            chatItem.Click += (_, _) => ShowChat();
+            menu.Items.Add(chatItem);
+
             var pauseItem = new MenuItem { Header = "暂停移动", IsChecked = s.MovementPaused };
             pauseItem.Click += (_, _) =>
             {
@@ -235,6 +246,24 @@ public sealed class App : Application
         return menu;
     }
 
+    /// <summary>打开/聚焦聊天窗：窗口锚到宠物附近。</summary>
+    private void ShowChat()
+    {
+        if (_sessionHost is null) return;
+        if (_chatWindow is { } w) { w.Activate(); return; }
+        var chat = new PetChatWindow(_sessionHost);
+        if (_petWindow is { } pet)
+        {
+            var scaling = pet.Screens.ScreenFromPoint(pet.Position)?.Scaling ?? 1.0;
+            chat.Position = new PixelPoint(
+                Math.Max(0, pet.Position.X + (int)(pet.Width * scaling) + 8),
+                Math.Max(0, pet.Position.Y));
+        }
+        chat.Closed += (_, _) => _chatWindow = null;
+        chat.Show();
+        _chatWindow = chat;
+    }
+
     /// <summary>托盘退出：真正结束 FUFU 进程（任务书 §六.6）。</summary>
     private void Quit()
     {
@@ -243,6 +272,8 @@ public sealed class App : Application
         FufuLog.Write("FUFU quit");
         SavePosition();
         _tray?.Dispose();
+        _chatWindow?.Close();
+        _sessionHost?.Dispose();
         _petWindow?.Close();
         _wander?.Stop();
         _behavior?.Dispose();
