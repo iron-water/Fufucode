@@ -238,6 +238,66 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             return count == 0 ? 0.5 : sum / count;
         }
 
+        /// <summary>
+        /// 采样 snapshot 指定 DIP 区域的平均 alpha（0..1）。
+        /// 玻璃底下若整片透明（alpha≈0），lens shader 采透明像素得到的输出近透明，
+        /// 叠加 SurfaceColor 就成了"实色块"——RenderLens 用这个值做兜底：
+        /// bounds 平均 alpha 极低时改走 DrawFallback 的磨砂渐变。
+        /// </summary>
+        public double SampleAverageAlpha(Rect dipRect)
+        {
+            double sx0 = (dipRect.X * Scaling - OriginInPixels.X);
+            double sy0 = (dipRect.Y * Scaling - OriginInPixels.Y);
+            double sx1 = (dipRect.Right * Scaling - OriginInPixels.X);
+            double sy1 = (dipRect.Bottom * Scaling - OriginInPixels.Y);
+
+            int x0 = Math.Max(0, (int)Math.Floor(sx0));
+            int y0 = Math.Max(0, (int)Math.Floor(sy0));
+            int x1 = Math.Min(Image.Width, (int)Math.Ceiling(sx1));
+            int y1 = Math.Min(Image.Height, (int)Math.Ceiling(sy1));
+            if (x1 <= x0 || y1 <= y0)
+                return 0.0;
+
+            int w = Math.Min(x1 - x0, 16);
+            int h = Math.Min(y1 - y0, 16);
+
+            using SKBitmap bitmap = new();
+            SKImageInfo info = new(w, h, SKColorType.Bgra8888, SKAlphaType.Premul);
+            using SKSurface? surface = SKSurface.Create(info);
+            if (surface is null)
+                return 0.0;
+
+            SKRect src = new(x0, y0, x1, y1);
+            SKRect dst = new(0, 0, w, h);
+            surface.Canvas.DrawImage(Image, src, dst);
+            surface.Canvas.Flush();
+
+            using SKImage? sample = surface.Snapshot();
+            if (sample is null)
+                return 0.0;
+
+            using SKPixmap? pixmap = sample.PeekPixels();
+            if (pixmap is null)
+                return 0.0;
+
+            ReadOnlySpan<byte> pixels = pixmap.GetPixelSpan<byte>();
+            int stride = pixmap.RowBytes;
+            double sum = 0.0;
+            int count = 0;
+            for (int y = 0; y < h; y++)
+            {
+                int rowBase = y * stride;
+                for (int x = 0; x < w; x++)
+                {
+                    int o = rowBase + x * 4;
+                    sum += pixels[o + 3] / 255.0;
+                    count++;
+                }
+            }
+
+            return count == 0 ? 0.0 : sum / count;
+        }
+
         public bool TryAddLease()
         {
             while (true)

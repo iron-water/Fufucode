@@ -29,17 +29,20 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
         private readonly LiquidGlassDrawParameters _parameters;
         private readonly LiquidGlassBackdropSnapshot? _backdropSnapshot;
         private readonly LiquidGlassDrawPass _pass;
+        private readonly Rect? _topLevelBounds;
 
         public LiquidGlassDrawOperation(
             Rect bounds,
             LiquidGlassDrawParameters parameters,
             LiquidGlassBackdropSnapshot? snapshot,
-            LiquidGlassDrawPass pass)
+            LiquidGlassDrawPass pass,
+            Rect? topLevelBounds = null)
         {
             _bounds = bounds;
             _parameters = parameters;
             _backdropSnapshot = snapshot is not null && snapshot.TryAddLease() ? snapshot : null;
             _pass = pass;
+            _topLevelBounds = topLevelBounds;
         }
 
         public void Dispose()
@@ -140,6 +143,19 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 return;
             }
 
+            // Snapshot 全透明防御：玻璃底下若整片透明（layout 未把内容伸到下面，
+            // 或首帧 snapshot 未捕获时），lens 采 alpha=0 → 叠 SurfaceColor 成实色块。
+            // 此时改走 fallback 磨砂渐变，保住"玻璃浮起"观感。
+            if (_topLevelBounds is { } topLevel)
+            {
+                double avgAlpha = _backdropSnapshot.SampleAverageAlpha(topLevel);
+                if (avgAlpha < 0.05)
+                {
+                    DrawFallback(canvas);
+                    return;
+                }
+            }
+
             SKMatrix currentTransform = canvas.TotalMatrix;
             if (!currentTransform.TryInvert(out SKMatrix currentInvertedTransform))
                 return;
@@ -208,7 +224,9 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 }
 
                 float refractionHeight = (float)Clamp(_parameters.RefractionHeight, 0.0, Math.Min(size.Width, size.Height) * 0.5);
-                float refractionAmount = (float)_parameters.RefractionAmount;
+                // 状态机（§7.3）：Hover 折射 ×1.15、Press ×1.35（内部应力扭曲）。
+                float refractionAmount = (float)(_parameters.RefractionAmount
+                    * (1.0 + 0.15 * _parameters.HoverProgress + 0.20 * _parameters.PressProgress));
                 bool applyLens = refractionHeight > 0.001f && Math.Abs(refractionAmount) > 0.001f;
 
                 SKShader? lensShader = null;
@@ -329,7 +347,10 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             float exposureEv = (float)Clamp(parameters.ExposureEv, -8.0, 8.0);
             float opacity = (float)Clamp(parameters.BackdropOpacity, 0.0, 1.0);
 
-            float blurSigmaPx = (float)(Clamp(parameters.BlurRadius, 0.0, 256.0) * snapshot.Scaling);
+            // 状态机：Hover 模糊 ×1.05、Press ×0.90（按下时更透亮）。量化到 4% 档位避免滤波缓存抖动。
+            double blurGain = 1.0 + 0.05 * parameters.HoverProgress - 0.15 * parameters.PressProgress;
+            blurGain = Math.Round(blurGain * 25.0) / 25.0;
+            float blurSigmaPx = (float)(Clamp(parameters.BlurRadius * blurGain, 0.0, 256.0) * snapshot.Scaling);
 
             bool isIdentity =
                 Math.Abs(brightness) < 0.0005f
@@ -630,44 +651,43 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             };
             uniforms["cornerRadii"] = cornerRadii;
 
-            float alpha = (float)Clamp(_parameters.HighlightOpacity, 0.0, 1.0);
+            // 状态机：Hover 边缘光 +20%（0.60→0.80）、Press 再升至 0.95。
+            float alpha = (float)Clamp(_parameters.HighlightOpacity
+                * (1.0 + 0.25 * _parameters.HoverProgress + 0.20 * _parameters.PressProgress), 0.0, 1.0);
             uniforms["color"] = new[]
             {
                 1.0f, 1.0f, 1.0f, alpha
             };
+            uniforms["pointer"] = new[] { (float)_parameters.PointerLocal.X, (float)_parameters.PointerLocal.Y };
+            uniforms["pointerPresence"] = (float)Clamp(_parameters.PointerPresence, 0.0, 1.0);
+            uniforms["glintRadius"] = (float)Math.Clamp(Math.Min(size.Width, size.Height) * 0.9, 28.0, 120.0);
 
             float angleRad = (float)(_parameters.HighlightAngleDegrees * (Math.PI / 180.0));
             uniforms["angle"] = angleRad;
-            uniforms["falloff"] = (float)Clamp(_parameters.HighlightFalloff, 0.0, 8.0);
+            uniforms["falloff"] = (float)Clamp(_parameters.HighlightFalloff, 0.5, 8.0);
+            // 顶部镜面带严格 0.5–1.0px（HIG）；旧实现按 stroke 宽度画四周同宽描边，
+            // 是"塑料边框感"的来源。这里改为着色器内按 SDF 生成非对称光照。
+            uniforms["rimWidth"] = (float)Clamp(_parameters.HighlightWidth, 0.25, 4.0);
+            uniforms["aoStrength"] = 0.16f;    // 底部环境遮蔽（规范 0.12–0.20）
+            uniforms["bevelStrength"] = 0.14f; // 内倒角光晕（规范 0.10–0.20）
 
             using SKRuntimeEffectChildren children = new(s_highlightEffect);
             using SKShader? shader = s_highlightEffect.ToShader(uniforms, children);
             if (shader is null)
                 return;
 
-            float blurRadius = (float)Clamp(_parameters.HighlightBlurRadius, 0.0, 20.0);
-            using SKMaskFilter? maskFilter = blurRadius > 0.001f
-                ? SKMaskFilter.CreateBlur(SKBlurStyle.Normal, blurRadius)
-                : null;
-
-            float strokeWidth = (float)(Math.Ceiling(Clamp(_parameters.HighlightWidth, 0.0, 100.0)) * 2.0);
-
             using SKPaint paint = new()
             {
                 Shader = shader,
                 IsAntialias = true,
-                BlendMode = SKBlendMode.Plus,
-                Style = SKPaintStyle.Stroke,
-                StrokeJoin = SKStrokeJoin.Round,
-                StrokeCap = SKStrokeCap.Round,
-                StrokeWidth = Math.Max(0.5f, strokeWidth),
-                MaskFilter = maskFilter
+                // 光照包含白光（提亮）与底部黑遮蔽（压暗），SrcOver 才能两者兼得。
+                BlendMode = SKBlendMode.SrcOver,
+                Style = SKPaintStyle.Fill,
             };
 
             SKRect rect = SKRect.Create(0, 0, size.Width, size.Height);
             using SKPath path = CreateRoundRectPath(rect, cornerRadii);
 
-            // Pad the highlight layer to avoid edge artifacts when transformed and/or rasterized into an intermediate surface.
             const float safePad = 1.0f;
 
             canvas.Save();
@@ -677,7 +697,7 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
 
             canvas.Translate(safePad, safePad);
             canvas.ClipPath(path, SKClipOperation.Intersect, true);
-            canvas.DrawPath(path, paint);
+            canvas.DrawRect(rect, paint);
 
             canvas.Restore();
             canvas.Restore();
@@ -689,9 +709,11 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             if (_parameters.TintColor.A > 0)
             {
                 Color tint = _parameters.TintColor;
+                // Hue 混合按 tint alpha 缩放强度：此前恒用 255 会把整面重度染色，
+                // 玻璃读成"有色塑料板"而不是"带环境色的磨砂"。
                 using SKPaint huePaint = new()
                 {
-                    Color = new SKColor(tint.R, tint.G, tint.B, 255),
+                    Color = new SKColor(tint.R, tint.G, tint.B, tint.A),
                     IsAntialias = true,
                     BlendMode = SKBlendMode.Hue
                 };
@@ -717,6 +739,29 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 };
                 canvas.DrawRect(rect, paint);
             }
+
+            // 玻璃受光面：顶部一层极淡白雾向下衰减（iOS "光从上方来"），
+            // 底部一条极淡暗带压边，让平面读得出厚度而不是纯色板。
+            using (SKPaint sheen = new()
+            {
+                Shader = SKShader.CreateLinearGradient(
+                    new SKPoint(0, 0),
+                    new SKPoint(0, rect.Height),
+                    new[]
+                    {
+                        new SKColor(255, 255, 255, 26),
+                        new SKColor(255, 255, 255, 8),
+                        new SKColor(255, 255, 255, 0),
+                        new SKColor(0, 0, 0, 12),
+                    },
+                    new[] { 0f, 0.18f, 0.62f, 1f },
+                    SKShaderTileMode.Clamp),
+                IsAntialias = true,
+                BlendMode = SKBlendMode.SrcOver,
+            })
+            {
+                canvas.DrawRect(rect, sheen);
+            }
         }
 
         private void RenderInteractiveHighlight(SKCanvas canvas)
@@ -724,8 +769,9 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             if (s_interactiveHighlightEffect is null)
                 return;
 
-            float progress = (float)Clamp(_parameters.InteractiveProgress, 0.0, 1.0);
-            if (progress <= 0.001f)
+            float hover = (float)Clamp(_parameters.HoverProgress, 0.0, 1.0);
+            float press = (float)Clamp(_parameters.PressProgress, 0.0, 1.0);
+            if (hover <= 0.001f && press <= 0.001f)
                 return;
 
             SKSize size = new((float)_bounds.Width, (float)_bounds.Height);
@@ -741,35 +787,19 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             canvas.Save();
             canvas.ClipPath(clipPath, SKClipOperation.Intersect, true);
 
-            // 按压时先从指尖发白雾，再叠一层径向高光（iOS "illuminate from within" 语义）。
-            using (SKPaint basePaint = new()
-                {
-                    Color = new SKColor(255, 255, 255, (byte)Clamp(0.08f * progress * 255f, 0f, 255f)),
-                    BlendMode = SKBlendMode.Plus,
-                    IsAntialias = true
-                })
-            {
-                canvas.DrawRect(rect, basePaint);
-            }
-
             using SKRuntimeEffectUniforms uniforms = new(s_interactiveHighlightEffect);
-            uniforms["size"] = new[]
-            {
-                size.Width, size.Height
-            };
-            uniforms["color"] = new[]
-            {
-                1.0f, 1.0f, 1.0f, (float)Clamp(0.15 * progress, 0.0, 1.0)
-            };
-            uniforms["radius"] = Math.Min(size.Width, size.Height) * 1.5f;
+            uniforms["size"] = new[] { size.Width, size.Height };
             uniforms["position"] = new[]
             {
-                (float)Clamp(_parameters.InteractivePosition.X, 0.0, size.Width), (float)Clamp(_parameters.InteractivePosition.Y, 0.0, size.Height)
+                (float)Clamp(_parameters.PointerLocal.X, 0.0, size.Width),
+                (float)Clamp(_parameters.PointerLocal.Y, 0.0, size.Height)
             };
+            uniforms["hover"] = hover;
+            uniforms["press"] = press;
+            uniforms["radius"] = (float)Math.Clamp(Math.Min(size.Width, size.Height) * 0.8, 36.0, 160.0);
 
             using SKRuntimeEffectChildren children = new(s_interactiveHighlightEffect);
             using SKShader? shader = s_interactiveHighlightEffect.ToShader(uniforms, children);
-
             if (shader is not null)
             {
                 using SKPaint paint = new()
@@ -799,13 +829,28 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
             canvas.Save();
             canvas.ClipPath(path, SKClipOperation.Intersect, true);
 
-            if (_parameters.SurfaceColor.A > 0)
+            // 磨砂基色：SurfaceColor 顶部略亮到底部原 alpha 的竖向渐变，模拟模糊后的环境色。
+            // 即便没有 snapshot 也读得出"浮起磨砂"而非"实色块"（iOS 玻璃在无内容处的近似观感）。
+            Color surface = _parameters.SurfaceColor;
+            if (surface.A > 0)
             {
-                Color surface = _parameters.SurfaceColor;
+                // 降级路径没有真实 backdrop 可模糊，玻璃面需要自撑一层可见的磨砂底；
+                // 正常路径的 SurfaceColor 只有 8%（规范 5–15%），直接用会几乎全透。
+                byte topAlpha = (byte)Clamp(surface.A * 0.85 + 92, 0, 255);
+                byte bottomAlpha = (byte)Clamp(surface.A * 0.85 + 58, 0, 255);
                 using SKPaint fill = new()
                 {
-                    Color = new SKColor(surface.R, surface.G, surface.B, surface.A),
-                    IsAntialias = true
+                    Shader = SKShader.CreateLinearGradient(
+                        new SKPoint(0, 0),
+                        new SKPoint(0, size.Height),
+                        new[]
+                        {
+                            new SKColor(surface.R, surface.G, surface.B, topAlpha),
+                            new SKColor(surface.R, surface.G, surface.B, bottomAlpha),
+                        },
+                        null,
+                        SKShaderTileMode.Clamp),
+                    IsAntialias = true,
                 };
                 canvas.DrawRect(rect, fill);
             }
@@ -820,7 +865,22 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                 canvas.DrawRect(rect, mist);
             }
 
-            // 细描边高光（降级版边缘高光）
+            // 底部内阴影带（顶 80% 到底 100%）：给"浮起"的离地暗示。
+            using (SKPaint shade = new()
+            {
+                Shader = SKShader.CreateLinearGradient(
+                    new SKPoint(0, size.Height * 0.8f),
+                    new SKPoint(0, size.Height),
+                    new[] { new SKColor(0, 0, 0, 0), new SKColor(0, 0, 0, 20) },
+                    null,
+                    SKShaderTileMode.Clamp),
+                IsAntialias = true,
+            })
+            {
+                canvas.DrawRect(rect, shade);
+            }
+
+            // 细描边高光（降级版边缘高光）+ 顶部 1.5px 受光棱线。
             if (_parameters.HighlightEnabled && _parameters.HighlightOpacity > 0.001)
             {
                 float alpha = (float)Clamp(_parameters.HighlightOpacity * 0.6, 0.0, 1.0);
@@ -832,6 +892,15 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                     StrokeWidth = 1.0f
                 };
                 canvas.DrawPath(path, stroke);
+
+                // 顶部内嵌 hairline：模拟左上受光棱的亮线，是 iOS 玻璃最关键的"浮起"暗示。
+                using SKPaint hairline = new()
+                {
+                    Color = new SKColor(255, 255, 255, (byte)Clamp(_parameters.HighlightOpacity * 0.9f * 255f, 0f, 255f)),
+                    IsAntialias = true,
+                    StrokeWidth = 1.5f,
+                };
+                canvas.DrawLine(0, 0.75f, size.Width, 0.75f, hairline);
             }
 
             canvas.Restore();

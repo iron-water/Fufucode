@@ -292,15 +292,15 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
                         return;
                     }
 
-                    // If the required clip (inflated by blur/refraction) grows beyond the last capture,
-                    // don't wait for the cadence timer — otherwise interactive slider drags can render
-                    // with an undersized snapshot and appear to "shift" as the blur kernel clamps.
+                    // If the required clip (inflated by blur/refraction) grows beyond the last capture
+                    // by more than a 24 DIP buffer, capture immediately; otherwise stay on the cadence
+                    // throttle to avoid micro-animations triggering full-window CPU re-captures.
                     double scaling = topLevel.RenderScaling;
                     BackdropClip desiredClip = CalculateBackdropClip(topLevel, state, scaling);
                     bool needsClipGrowthCapture =
                         desiredClip.DipRect.Width > 0
                         && desiredClip.DipRect.Height > 0
-                        && (!state.HasLastClipRect || !RectContains(state.LastClipRect, desiredClip.DipRect));
+                        && (!state.HasLastClipRect || !RectContains(state.LastClipRect.Inflate(24.0), desiredClip.DipRect));
 
                     long nowTicks = DateTime.UtcNow.Ticks;
                     if (!needsClipGrowthCapture && nowTicks - state.LastCaptureTicksUtc < s_minCaptureIntervalTicks)

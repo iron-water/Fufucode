@@ -56,6 +56,16 @@ namespace Fufucode.App.Features.Skins.LiquidGlass
         public double HighlightAngleDegrees { get; set; }
         public double HighlightFalloff { get; set; }
 
+        // 动态状态机（规范 §7.2/§7.3）：Rest→Hover→Press 由弹簧驱动。
+        //   HoverProgress  0..1：边缘光 +20%、折射 ×1.15、内部环境晕 0.08
+        //   PressProgress  0..1：折射 ×1.35、模糊 ×0.90、中心光斑 0.20
+        //   PointerLocal   指针在控件内的局部坐标（光源被指针吸引 lerp 0.35；最近边缘镜面斑）
+        //   PointerPresence 0..1：指针在场强度（离开时弹簧淡出）
+        public double HoverProgress { get; set; }
+        public double PressProgress { get; set; }
+        public Point PointerLocal { get; set; }
+        public double PointerPresence { get; set; }
+
         public bool ShadowEnabled { get; set; }
         public double ShadowRadius { get; set; }
         public Vector ShadowOffset { get; set; }
