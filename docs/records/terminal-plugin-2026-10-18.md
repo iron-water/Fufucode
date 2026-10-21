@@ -51,6 +51,7 @@
 - `dotnet run --project src/Fufucode.App -- --selftest --r2-only`：0 失败。
 - `--floating-workbench-only`：0 失败。
 - 真实 ConPTY 冒烟（在测试工程/自测入口中）：光标报告应答可见；主屏提示符保留。
+- 自动 shell 真实 ConPTY 冒烟：`--conpty-shell` 在 Windows 上解析到 `pwsh`（`C:\Program Files\PowerShell\7\pwsh.exe`）并成功执行 `echo AUTO-SHELL-OK`。
 - 全量 App `--selftest`：12 项失败，均不属于终端：W5-R3 设置分类 2 项（另有 2 项连带异常）、Tabs 空区域 2 项、C5 原生目标输入/焦点 4 项、R05 设置行 2 项。终端相关断言 0 失败。
 
 未通过或未验证：

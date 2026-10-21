@@ -43,6 +43,12 @@ internal static class Program
             .SetupWithoutStarting();
         try
         {
+            if (args.Contains("--conpty-shell"))
+            {
+                Console.WriteLine(Task.Run(() => Fufucode.Plugins.Terminal.SelfTest.TerminalSelfTest
+                    .RunConPtyShellProfileSmokeAsync(Environment.CurrentDirectory)).GetAwaiter().GetResult());
+                return 0;
+            }
             if (args.Contains("--conpty-p0"))
             {
                 // Run off the headless dispatcher thread: blocking it would deadlock the async smoke.
