@@ -36,7 +36,7 @@
 - 鼠标跟踪（1000/1002/1003/1006）按下/释放/滚轮转发；Shift 保留文本选择。
 - 页签右键重命名/重启；工具栏重启按钮；shell 退出后可重启。
 - 终端设置对话框：shell 配置、命令覆盖、字号、回滚行数、响铃方式、光标闪烁、链接、关闭确认；持久化到插件自己的 `terminal-settings.json`。
-- shell 配置：cmd、Windows PowerShell、PowerShell 7、Git Bash；缺失时明确报告，不回退到其它 shell。
+- shell 配置：默认“自动”（PowerShell 7 → Windows PowerShell → cmd，只使用真实存在的可执行文件），也可显式选择 cmd、Windows PowerShell、PowerShell 7、Git Bash；显式选择缺失时明确报告，不回退到其它 shell；v1 设置里的默认 cmd 一次性迁移为自动，v2 显式 cmd 保留。
 - 直接粘贴到 shell（右键菜单或 Ctrl+Shift+V）；程序启用括号粘贴时自动包裹，未启用且含换行时先确认。
 - 字号驱动单元格度量；Ctrl +/- 缩放；视觉响铃闪烁或蜂鸣。
 - 文本绘制按同样式相邻单元格合并，`FormattedText` 按文本/颜色/样式/字号缓存。
@@ -47,10 +47,11 @@
 实际执行：
 
 - `dotnet build Fufucode.sln`：36 工程，0 错误，0 警告。
-- `tests/Fufucode.App.Terminal.Tests`：104 项断言全部通过，覆盖 VT P0/P1、备用屏、DSR/DA、滚动区域、SGR、OSC、模式、组合字符、调色板、选择、设置、插件页面契约，以及真实 `MainWindow` 有/无插件两条路径。
+- `tests/Fufucode.App.Terminal.Tests`：109 项断言全部通过，覆盖 VT P0/P1、备用屏、DSR/DA、滚动区域、SGR、OSC、模式、组合字符、调色板、选择、设置、插件页面契约，以及真实 `MainWindow` 有/无插件两条路径。
 - `dotnet run --project src/Fufucode.App -- --selftest --r2-only`：0 失败。
 - `--floating-workbench-only`：0 失败。
 - 真实 ConPTY 冒烟（在测试工程/自测入口中）：光标报告应答可见；主屏提示符保留。
+- 自动 shell 真实 ConPTY 冒烟：`--conpty-shell` 在 Windows 上解析到 `pwsh`（`C:\Program Files\PowerShell\7\pwsh.exe`）并成功执行 `echo AUTO-SHELL-OK`。
 - 全量 App `--selftest`：12 项失败，均不属于终端：W5-R3 设置分类 2 项（另有 2 项连带异常）、Tabs 空区域 2 项、C5 原生目标输入/焦点 4 项、R05 设置行 2 项。终端相关断言 0 失败。
 
 未通过或未验证：
