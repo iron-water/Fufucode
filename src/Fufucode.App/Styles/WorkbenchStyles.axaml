@@ -863,6 +863,29 @@
   <Style Selector="Border.islandLiveBar Border.failed">
     <Setter Property="Background" Value="{DynamicResource AppCriticalForeground}"/>
   </Style>
+  <!-- 危险确认按钮：透明底 + critical 描边/文字，悬停用 critical 浅底（权限升级确认）。 -->
+  <Style Selector="Button.danger">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCriticalForeground}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="16,5"/>
+    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.083"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.danger:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppErrorBackground}"/>
+  </Style>
+  <Style Selector="Button.danger:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppErrorBackground}"/>
+    <Setter Property="RenderTransform" Value="scale(0.98)"/>
+  </Style>
   <Style Selector="Button.islandBarButton">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
