@@ -202,8 +202,11 @@ public partial class ChatPage : UserControl
         var narrow = ComposerToolbar.Bounds.Width < 520;
         foreach (var control in ComposerToolbar.Children) Grid.SetRow(control, narrow ? 1 : 0);
         Grid.SetRow(ComposerModes, 0);
-        Grid.SetColumn(ComposerModes, narrow ? 0 : 3);
-        Grid.SetColumnSpan(ComposerModes, narrow ? 5 : 1);
+        Grid.SetColumn(ComposerModes, narrow ? 0 : 4);
+        Grid.SetColumnSpan(ComposerModes, narrow ? 6 : 1);
+        // 项目 chip 始终在第一行；窄窗时模式组换到第二行，避免两者重叠。
+        Grid.SetRow(SessionContextBar, 0);
+        Grid.SetColumn(SessionContextBar, narrow ? 0 : 3);
         ComposerModes.HorizontalAlignment = narrow ? Avalonia.Layout.HorizontalAlignment.Left : Avalonia.Layout.HorizontalAlignment.Right;
         ComposerModes.Margin = narrow ? new Avalonia.Thickness(0, 0, 0, 6) : new Avalonia.Thickness(0, 0, 8, 0);
     }
