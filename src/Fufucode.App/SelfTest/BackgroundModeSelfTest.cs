@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Fufucode.App.Features.SettingsExperience;
 using Fufucode.App.Integration;
@@ -85,6 +86,25 @@ internal static class BackgroundModeSelfTest
 
             window.ShowFromTray();
             Check(window.IsVisible && !window.HiddenToTrayForTesting, "托盘动作恢复并激活主窗口");
+
+            // ── 托盘菜单结构：固定/最近会话、新建会话、关于、主题色（含默认色）、设置、FUFU 占位与退出 ──
+            var trayMenu = new Avalonia.Controls.NativeMenu();
+            window.FillTrayMenuForTesting(trayMenu);
+            var itemHeaders = trayMenu.Items.OfType<Avalonia.Controls.NativeMenuItem>().Select(i => i.Header).ToArray();
+            Check(itemHeaders.Contains("显示主窗口") && itemHeaders.Contains("固定会话") &&
+                  itemHeaders.Contains("最近会话") && itemHeaders.Contains("新建会话") &&
+                  itemHeaders.Contains("关于 Fufucode") && itemHeaders.Contains("主题色") &&
+                  itemHeaders.Contains("设置") && itemHeaders.Contains("召唤 FUFU（即将推出）") &&
+                  itemHeaders.Contains("退出"), "托盘菜单完整包含全部预期条目与退出项");
+
+            var fufuItem = trayMenu.Items.OfType<Avalonia.Controls.NativeMenuItem>().FirstOrDefault(i => i.Header == "召唤 FUFU（即将推出）");
+            Check(fufuItem is { IsEnabled: false }, "召唤 FUFU 项为禁用占位态");
+
+            var themeMenu = trayMenu.Items.OfType<Avalonia.Controls.NativeMenuItem>().FirstOrDefault(i => i.Header == "主题色")?.Menu;
+            var themeHeaders = themeMenu?.Items.OfType<Avalonia.Controls.NativeMenuItem>().Select(i => i.Header).ToArray() ?? [];
+            Check(themeHeaders.Contains("默认色（跟随系统）") && themeHeaders.Contains("Fufucode 蓝") &&
+                  themeHeaders.Contains("青绿色") && themeHeaders.Contains("紫色"),
+                  "主题色子菜单包含默认色与标准调色盘选项");
 
             window.BackgroundStoreForTesting.Update(settings => settings with
             {
