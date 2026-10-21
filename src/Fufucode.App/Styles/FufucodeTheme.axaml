@@ -158,7 +158,7 @@
                     <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"         ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ComboBoxItemBackgroundPressed"             ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ComboBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
-                    <StaticResource x:Key="ComboBoxBackground"            ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="ComboBoxBackground"            ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ComboBoxBorderBrush"           ResourceKey="CardStrokeColorDefaultSolidBrush"/>
