@@ -12,10 +12,16 @@ namespace Fufucode.Plugins.Terminal.Infrastructure;
 /// </summary>
 public sealed record TerminalSettings
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
 
-    /// <summary>shell 配置：<see cref="ShellProfiles"/> 中的 id。</summary>
-    public string ShellProfile { get; init; } = "cmd";
+    /// <summary>设置文件版本；v1 的默认 cmd 在 v2 迁移为“自动”。</summary>
+    public int Version { get; init; } = 1;
+
+    /// <summary>
+    /// shell 配置：<see cref="ShellProfiles"/> 中的 id，或 <see cref="ShellProfiles.AutoId"/>。
+    /// 自动模式优先 PowerShell 7，其次 Windows PowerShell，最后回退到 cmd。
+    /// </summary>
+    public string ShellProfile { get; init; } = ShellProfiles.AutoId;
     /// <summary>启动命令覆盖（可选）；为空时使用配置的默认命令。</summary>
     public string CommandOverride { get; init; } = "";
     /// <summary>字号（DIP）。</summary>
@@ -37,7 +43,12 @@ public sealed record TerminalSettings
 
     public TerminalSettings Normalize() => this with
     {
-        ShellProfile = ShellProfiles.Find(ShellProfile)?.Id ?? "cmd",
+        // v1 had no automatic mode and persisted "cmd" as the default. Treat that legacy value as
+        // automatic once, then keep an explicit cmd choice made under v2.
+        ShellProfile = Version < 2 && string.Equals(ShellProfile, "cmd", StringComparison.OrdinalIgnoreCase)
+            ? ShellProfiles.AutoId
+            : ShellProfiles.NormalizeId(ShellProfile),
+        Version = CurrentVersion,
         CommandOverride = (CommandOverride ?? string.Empty).Trim(),
         FontSize = Math.Clamp(double.IsFinite(FontSize) ? FontSize : 13, 9, 28),
         ScrollbackLines = Math.Clamp(ScrollbackLines, 0, 100_000),
@@ -56,6 +67,9 @@ public sealed record ShellProfile(string Id, string DisplayName, string FileName
 /// <summary>内置 shell 列表。只列真实存在的可执行文件；未找到时由调用方显式报告不可用。</summary>
 public static class ShellProfiles
 {
+    /// <summary>自动选择：PowerShell 7 → Windows PowerShell → cmd，只使用真实存在的可执行文件。</summary>
+    public const string AutoId = "auto";
+
     public static readonly IReadOnlyList<ShellProfile> All =
     [
         new("cmd", "命令提示符 (cmd.exe)", "cmd.exe", "/Q /K chcp 65001 >nul"),
@@ -66,6 +80,30 @@ public static class ShellProfiles
 
     public static ShellProfile? Find(string? id) =>
         All.FirstOrDefault(profile => string.Equals(profile.Id, id, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>把设置里的 shell id 收敛为“已知 id 或 auto”；空值、未知值一律自动。</summary>
+    public static string NormalizeId(string? id) =>
+        string.Equals(id, AutoId, StringComparison.OrdinalIgnoreCase) ? AutoId : Find(id)?.Id ?? AutoId;
+
+    /// <summary>自动模式的解析结果：按 pwsh → powershell → cmd 顺序取第一个真实存在的 shell。</summary>
+    public static ShellProfile ResolveAuto()
+    {
+        foreach (var id in new[] { "pwsh", "powershell", "cmd" })
+        {
+            var profile = Find(id);
+            if (profile is not null && Resolve(profile) is not null) return profile;
+        }
+        return Find("cmd")!;
+    }
+
+    /// <summary>设置里选择“自动”时，给用户显示实际会启动的 shell。</summary>
+    public static string DescribeResolution(string? id)
+    {
+        var profile = string.Equals(NormalizeId(id), AutoId, StringComparison.Ordinal)
+            ? ResolveAuto()
+            : Find(id) ?? ResolveAuto();
+        return profile.DisplayName;
+    }
 
     /// <summary>该配置的可执行文件绝对路径；不存在时返回 null。</summary>
     public static string? Resolve(ShellProfile profile)
