@@ -76,6 +76,19 @@
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
+                    <!-- ComboBox 下拉项与列表项同色：否则回落到 Fluent 默认暗色，高亮变"高黑"。 -->
+                    <StaticResource x:Key="ComboBoxItemBackgroundSelected"            ResourceKey="ListBoxItemBackgroundSelected"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="ListBoxItemBackgroundSelectedPointerOver"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="ListBoxItemBackgroundSelectedPressed"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"         ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundPressed"             ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="ComboBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
+                    <!-- 闭合态 ComboBox 也用同一套底色，避免 Fluent 默认暗底。 -->
+                    <StaticResource x:Key="ComboBoxBackground"            ResourceKey="CardBackgroundFillColorDefaultBrush"/>
+                    <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="CardBackgroundFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
+                    <StaticResource x:Key="ComboBoxBorderBrush"           ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <StaticResource x:Key="ComboBoxForeground"            ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelectedDisabled"    ResourceKey="TextFillColorDisabledBrush"/>
                 </ResourceDictionary>
@@ -139,6 +152,17 @@
                     <StaticResource x:Key="ListBoxItemBackgroundSelected" ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundSelected"            ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPointerOver" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundSelectedPressed"     ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundPointerOver"         ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxItemBackgroundPressed"             ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
+                    <StaticResource x:Key="ComboBoxBackground"            ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxBackgroundPressed"     ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ComboBoxBorderBrush"           ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <StaticResource x:Key="ComboBoxForeground"            ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelected"            ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="ListBoxItemForegroundSelectedPointerOver" ResourceKey="TextFillColorPrimaryBrush"/>

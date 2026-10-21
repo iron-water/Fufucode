@@ -340,6 +340,8 @@ public partial class MainWindow
     [
         "AppWindowBackground", "AppMicaPageBackground", "AppContentBackground",
         "SolidBackgroundFillColorBaseBrush", "SolidBackgroundFillColorSecondaryBrush",
+        "TextControlBackground", "TextControlBackgroundPointerOver",
+        "TextControlBackgroundFocused", "TextControlBackgroundDisabled",
     ];
 
     private static readonly string[] FluentBarKeys =
@@ -350,6 +352,7 @@ public partial class MainWindow
         "AppCodeBackground", "MenuSurfaceBrush", "LayerFillColorDefaultBrush", "LayerFillColorAltBrush",
         "SolidBackgroundFillColorTertiaryBrush", "SolidBackgroundFillColorQuaternaryBrush",
         "CardBackgroundFillColorDefaultBrush", "ControlFillColorDefaultBrush", "ControlFillColorInputActiveBrush",
+        "ComboBoxBackground", "MenuFlyoutPresenterBackground", "ComboBoxDropDownBackground",
     ];
 
     private static readonly string[] FluentHighlightKeys =
@@ -358,7 +361,11 @@ public partial class MainWindow
         "AppSubtleBackground", "AppInnerWell", "CardBackgroundFillColorSecondaryBrush",
         "SubtleFillColorSecondaryBrush", "SubtleFillColorTertiaryBrush",
         "ListBoxItemBackgroundSelected", "ListBoxItemBackgroundSelectedPointerOver",
-        "ListBoxItemBackgroundSelectedPressed", "ControlFillColorSecondaryBrush",
+        "ListBoxItemBackgroundSelectedPressed",
+        "ComboBoxItemBackgroundSelected", "ComboBoxItemBackgroundSelectedPointerOver",
+        "ComboBoxItemBackgroundSelectedPressed", "ComboBoxItemBackgroundPointerOver",
+        "ComboBoxItemBackgroundPressed", "ComboBoxBackgroundPointerOver", "ComboBoxBackgroundPressed",
+        "ControlFillColorSecondaryBrush",
         "ControlFillColorTertiaryBrush", "ControlFillColorDisabledBrush",
     ];
 
