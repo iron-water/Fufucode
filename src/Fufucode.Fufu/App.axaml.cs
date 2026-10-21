@@ -1,0 +1,254 @@
+using Avalonia;
+using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
+using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Fufucode.Fufu.Bot;
+using Fufucode.Fufu.Integration;
+using Fufucode.Fufu.Pet;
+using Fufucode.Fufu.Settings;
+
+namespace Fufucode.Fufu;
+
+public sealed class App : Application
+{
+    private readonly FufuOptions _options;
+    private FufuSettingsStore? _settings;
+    private PetBehavior? _behavior;
+    private PetWindow? _petWindow;
+    private FufuTrayService? _tray;
+    private WanderController? _wander;
+    private BotHost? _bot;
+    private bool _exiting;
+    private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
+    private PixelPoint? _lastPos; // 显式跟踪位置：Window.Position 在 Hide/Show 往返后可能复位为 0,0
+
+    public App() : this(FufuOptions.Mock) { }
+    public App(FufuOptions options) => _options = options;
+
+    public override void Initialize() => AvaloniaXamlLoader.Load(this);
+
+    public override void OnFrameworkInitializationCompleted()
+    {
+        if (ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop) return;
+
+        desktop.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+
+        var dataRoot = _options.DataRoot;
+        FufuLog.Init(dataRoot);
+        FufuLog.Write($"FUFU init: dataRoot={dataRoot}");
+        _settings = new FufuSettingsStore(dataRoot);
+
+        _behavior = new PetBehavior
+        {
+            FreeRoam = _settings.Current.FreeRoam,
+            MovementPaused = _settings.Current.MovementPaused,
+        };
+        _wander = new WanderController(_behavior);
+        _bot = new BotHost(_behavior);
+
+        var renderer = new PlaceholderPetRenderer();
+        var settings = _settings.Current;
+        _petWindow = new PetWindow(renderer, _behavior, _wander, settings.Scale, settings.ClickThrough)
+        {
+            Icon = LoadWindowIcon(),
+        };
+
+        // 恢复上次位置；越出屏幕时钳回工作区。
+        if (settings.PositionX is { } px && settings.PositionY is { } py)
+        {
+            _petWindow.Position = new PixelPoint((int)px, (int)py);
+            _lastPos = _petWindow.Position;
+        }
+        desktop.MainWindow = _petWindow;
+        _petWindow.Closed += (_, _) => SavePosition();
+        _petWindow.PositionChanged += (_, _) =>
+        {
+            // 隐藏/还原期间平台可能回发 (0,0)，不采信；其余都是真实位置。
+            if (_petWindow.Position != new PixelPoint(0, 0))
+                _lastPos = _petWindow.Position;
+            _petWindow.ClampToScreen();
+        };
+
+        try
+        {
+            _tray = new FufuTrayService(ShowPet, FillTrayMenu);
+        }
+        catch (Exception ex)
+        {
+            FufuLog.Write($"TrayIcon failed: {ex.GetType().Name}: {ex.Message}");
+        }
+
+        // 右键桌宠 = 与托盘一致的操作菜单（点角色实体才命中）。
+        renderer.View.ContextMenu = BuildContextMenu();
+
+        // 单实例激活：恢复并显示桌宠。
+        if (Program.SingleInstance is { } guard)
+        {
+            guard.ActivationRequested += () => Dispatcher.UIThread.Post(ShowPet);
+        }
+
+        base.OnFrameworkInitializationCompleted();
+    }
+
+    private WindowIcon? LoadWindowIcon()
+    {
+        try
+        {
+            using var stream = Avalonia.Platform.AssetLoader.Open(new Uri("avares://fufu/Assets/fufu.png"));
+            return new WindowIcon(stream);
+        }
+        catch (Exception) { return null; }
+    }
+
+    private void ShowPet()
+    {
+        if (_petWindow is null) return;
+        _petShown = true;
+        _petWindow.Show();
+        _petWindow.Activate();
+        _tray?.RebuildMenu();
+    }
+
+    private void HidePet()
+    {
+        SavePosition();
+        _petShown = false;
+        _petWindow?.Hide();
+        _tray?.RebuildMenu();
+    }
+
+    private void SavePosition()
+    {
+        if (_petWindow is null || _settings is null) return;
+        var pos = _lastPos ?? _petWindow.Position;
+        _settings.Update(s => s with { PositionX = pos.X, PositionY = pos.Y });
+    }
+
+    private void FillTrayMenu(NativeMenu menu)
+    {
+        if (_settings is null || _behavior is null || _petWindow is null) return;
+        var s = _settings.Current;
+
+        var showItem = new NativeMenuItem(_petShown ? "隐藏桌宠" : "显示桌宠");
+        showItem.Click += (_, _) =>
+        {
+            if (_petShown) HidePet(); else ShowPet();
+            _tray?.RebuildMenu();
+        };
+        menu.Items.Add(showItem);
+
+        var pauseItem = new NativeMenuItem("暂停移动") { IsChecked = s.MovementPaused };
+        pauseItem.Click += (_, _) =>
+        {
+            var paused = !_settings.Current.MovementPaused;
+            _settings.Update(v => v with { MovementPaused = paused });
+            _behavior.MovementPaused = paused;
+            _tray?.RebuildMenu();
+        };
+        menu.Items.Add(pauseItem);
+
+        var roamItem = new NativeMenuItem("自由移动") { IsChecked = s.FreeRoam };
+        roamItem.Click += (_, _) =>
+        {
+            var on = !_settings.Current.FreeRoam;
+            _settings.Update(v => v with { FreeRoam = on });
+            _behavior.FreeRoam = on;
+            _tray?.RebuildMenu();
+        };
+        menu.Items.Add(roamItem);
+
+        menu.Items.Add(new NativeMenuItemSeparator());
+
+        var autoItem = new NativeMenuItem("开机自启") { IsChecked = s.AutoStart };
+        autoItem.Click += (_, _) =>
+        {
+            var on = !_settings.Current.AutoStart;
+            var exe = Environment.ProcessPath;
+            if (exe is not null && StartupRegistration.Set(on, exe))
+                _settings.Update(v => v with { AutoStart = on });
+            _tray?.RebuildMenu();
+        };
+        menu.Items.Add(autoItem);
+
+        menu.Items.Add(new NativeMenuItemSeparator());
+
+        var quitItem = new NativeMenuItem("退出 FUFU");
+        quitItem.Click += (_, _) => Quit();
+        menu.Items.Add(quitItem);
+    }
+
+    /// <summary>右键桌宠弹出的上下文菜单：与托盘菜单同一组动作。</summary>
+    private ContextMenu BuildContextMenu()
+    {
+        var menu = new ContextMenu();
+        menu.Opening += (_, _) =>
+        {
+            menu.Items.Clear();
+            if (_settings is null || _behavior is null || _petWindow is null) return;
+            var s = _settings.Current;
+
+            var hideItem = new MenuItem { Header = _petShown ? "隐藏到托盘" : "显示桌宠" };
+            hideItem.Click += (_, _) => { if (_petShown) HidePet(); else ShowPet(); _tray?.RebuildMenu(); };
+            menu.Items.Add(hideItem);
+
+            var pauseItem = new MenuItem { Header = "暂停移动", IsChecked = s.MovementPaused };
+            pauseItem.Click += (_, _) =>
+            {
+                var paused = !_settings.Current.MovementPaused;
+                _settings.Update(v => v with { MovementPaused = paused });
+                _behavior.MovementPaused = paused;
+                _tray?.RebuildMenu();
+            };
+            menu.Items.Add(pauseItem);
+
+            var roamItem = new MenuItem { Header = "自由移动", IsChecked = s.FreeRoam };
+            roamItem.Click += (_, _) =>
+            {
+                var on = !_settings.Current.FreeRoam;
+                _settings.Update(v => v with { FreeRoam = on });
+                _behavior.FreeRoam = on;
+                _tray?.RebuildMenu();
+            };
+            menu.Items.Add(roamItem);
+
+            menu.Items.Add(new Separator());
+
+            var autoItem = new MenuItem { Header = "开机自启", IsChecked = s.AutoStart };
+            autoItem.Click += (_, _) =>
+            {
+                var on = !_settings.Current.AutoStart;
+                var exe = Environment.ProcessPath;
+                if (exe is not null && StartupRegistration.Set(on, exe))
+                    _settings.Update(v => v with { AutoStart = on });
+                _tray?.RebuildMenu();
+            };
+            menu.Items.Add(autoItem);
+
+            menu.Items.Add(new Separator());
+
+            var quitItem = new MenuItem { Header = "退出 FUFU" };
+            quitItem.Click += (_, _) => Quit();
+            menu.Items.Add(quitItem);
+        };
+        return menu;
+    }
+
+    /// <summary>托盘退出：真正结束 FUFU 进程（任务书 §六.6）。</summary>
+    private void Quit()
+    {
+        if (_exiting) return;
+        _exiting = true;
+        FufuLog.Write("FUFU quit");
+        SavePosition();
+        _tray?.Dispose();
+        _petWindow?.Close();
+        _wander?.Stop();
+        _behavior?.Dispose();
+        if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
+        else
+            Environment.Exit(0);
+    }
+}

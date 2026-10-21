@@ -99,6 +99,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.SkinLuna",
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.SkinLiquidGlass", "src\Fufucode.Plugins.SkinLiquidGlass\Fufucode.Plugins.SkinLiquidGlass.csproj", "{A3461DB0-182B-4B66-9F23-B45DF62FDA04}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Fufu", "src\Fufucode.Fufu\Fufucode.Fufu.csproj", "{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -636,6 +638,18 @@ Global
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04}.Release|x64.Build.0 = Release|Any CPU
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04}.Release|x86.ActiveCfg = Release|Any CPU
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04}.Release|x86.Build.0 = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x64.Build.0 = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x86.Build.0 = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x64.ActiveCfg = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x64.Build.0 = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x86.ActiveCfg = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -684,5 +698,6 @@ Global
 		{8FB2AD05-5ED4-4ABC-8E44-34AF33B41DA9} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A85FBF1A-D4B3-4EF3-B81B-526E977AA873} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

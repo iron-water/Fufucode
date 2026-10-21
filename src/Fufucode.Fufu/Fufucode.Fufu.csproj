@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <!-- FUFU 目标平台仅 Windows 10/11：windows TFM 解锁 Registry/Win32 承载 API，不产生跨平台警告 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- FUFU 是独立分发单元：独立 exe 名、独立程序集，不并入 Fufucode.App -->
+    <AssemblyName>fufu</AssemblyName>
+    <RootNamespace>Fufucode.Fufu</RootNamespace>
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(PublishTrimmed)' != 'true'">
+    <PublishReadyToRun>true</PublishReadyToRun>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="..\..\assets\fufu\fufu.png" Link="Assets\fufu.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
+    <PackageReference Include="Avalonia.Fonts.Inter" Version="12.1.3" />
+  </ItemGroup>
+
+</Project>
