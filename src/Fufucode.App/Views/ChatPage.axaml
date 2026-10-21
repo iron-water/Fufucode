@@ -627,7 +627,7 @@
           <Border x:Name="ComposerUnderline" Classes="composerUnderline" Margin="0,0,0,2"/>
 
           <!-- 底部行：命令入口 + 提示 + 停止/发送 -->
-          <Grid x:Name="ComposerToolbar" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,*,Auto">
+          <Grid x:Name="ComposerToolbar" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
             <Button x:Name="ComposerMoreButton" Classes="iconButton" ToolTip.Tip="附加功能"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/></Button>
             <Button x:Name="CommandFlyoutButton" Grid.Column="1" Classes="iconButton" VerticalAlignment="Center" IsVisible="False"
                     IsEnabled="{Binding Extensions.CanUseCommands}"
@@ -671,22 +671,22 @@
               </Button.Flyout>
             </Button>
             <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="添加文件、图片、PDF 或链接"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
-            <WrapPanel x:Name="ComposerModes" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
-              <!-- 会话所属项目：与其它选择器同排放在底部；新会话发送第一条前可改。 -->
-              <StackPanel x:Name="SessionContextBar" Orientation="Horizontal" Spacing="6"
-                          VerticalAlignment="Center" Margin="0,0,6,0" IsVisible="False">
-                <Button x:Name="SessionProjectChip" Classes="contextChip"
-                        ToolTip.Tip="更改此会话的项目"
-                        AutomationProperties.Name="更改此会话的项目">
-                  <StackPanel Orientation="Horizontal" Spacing="6">
-                    <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
-                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                    <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
-                    <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
-                  </StackPanel>
-                </Button>
-              </StackPanel>
+            <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
+            <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="6"
+                        VerticalAlignment="Center" Margin="6,0,8,0" IsVisible="False">
+              <Button x:Name="SessionProjectChip" Classes="contextChip"
+                      ToolTip.Tip="更改此会话的项目"
+                      AutomationProperties.Name="更改此会话的项目">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
+                            VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                  <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
+                  <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
+                            VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+                </StackPanel>
+              </Button>
+            </StackPanel>
+            <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
               <Button Classes="subtle" Width="165" Height="28" Padding="8,0" FontSize="11"
                       IsEnabled="{Binding Settings.CanChangeModel}" ToolTip.Tip="选择模型">
@@ -765,7 +765,7 @@
                 <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:SettingsPageViewModel+ThinkingChoice"><TextBlock Text="{Binding Label}" FontSize="11"/></DataTemplate></ComboBox.ItemTemplate>
               </ComboBox>
             </WrapPanel>
-            <StackPanel Grid.Column="4" Orientation="Horizontal" Spacing="6">
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6">
               <Button Classes="iconButton" Command="{Binding Input.StopCommand}"
                       ToolTip.Tip="停止当前回合" AutomationProperties.Name="停止">
                 <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
