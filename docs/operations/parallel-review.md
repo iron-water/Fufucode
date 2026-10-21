@@ -69,7 +69,7 @@ out/review/index.html
 pwsh fucode/publish-local.ps1 -OutputRoot out/review/<slug> -ReviewLabel "fix-x@abc123" -NoDeploy -NoRun
 ```
 
-`-OutputRoot` 模式下不会停止现有应用、不会覆盖 `out/app`、不会写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
+`-OutputRoot` 模式下不会停止现有应用、不会覆盖 `out/app`、不会写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。只给 `-ReviewLabel` 而不给 `-OutputRoot` 时也会按审阅构建处理，输出到 `out/review/<label>`；这样模型漏写 `-OutputRoot` 也不会误部署。
 
 ## 人类反馈循环
 

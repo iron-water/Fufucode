@@ -31,6 +31,8 @@ param(
     # 并行审阅：构建到独立目录，不停止/启动现有应用，不写本地更新指针。
     [string]$OutputRoot = '',
     # 审阅标签（默认 branch@commit），会写入 build-info.json 并显示在窗口标题。
+    # 只给 label 不给 OutputRoot 时也按审阅构建处理，输出到 out/review/<label>，
+    # 避免误把并行构建部署进 out/app。
     [string]$ReviewLabel = '',
     # 只构建并复制到 out/app，但不写“本地更新”指针。
     [switch]$NoPointer
@@ -38,10 +40,15 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$isReview = -not [string]::IsNullOrWhiteSpace($OutputRoot)
-$outRoot = if ($isReview) {
+$hasOutputRoot = -not [string]::IsNullOrWhiteSpace($OutputRoot)
+$isReview = $hasOutputRoot -or (-not [string]::IsNullOrWhiteSpace($ReviewLabel))
+$outRoot = if ($hasOutputRoot) {
     if ([IO.Path]::IsPathRooted($OutputRoot)) { [IO.Path]::GetFullPath($OutputRoot) }
     else { [IO.Path]::GetFullPath((Join-Path $root $OutputRoot)) }
+} elseif ($isReview) {
+    $reviewSlug = ($ReviewLabel.Trim() -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
+    if ([string]::IsNullOrWhiteSpace($reviewSlug)) { $reviewSlug = 'review' }
+    Join-Path $root "out/review/$reviewSlug"
 } else { Join-Path $root 'out' }
 $appOut = Join-Path $outRoot 'app'
 $cliOut = Join-Path $outRoot 'cli'
