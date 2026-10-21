@@ -35,7 +35,9 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
     private ITerminalSession DefaultSessionFactory()
     {
         if (_useMock) return new TerminalMockSession();
-        var profile = ShellProfiles.Find(_settings.ShellProfile) ?? ShellProfiles.Find("cmd")!;
+        var profile = string.Equals(_settings.ShellProfile, ShellProfiles.AutoId, StringComparison.OrdinalIgnoreCase)
+            ? ShellProfiles.ResolveAuto()
+            : ShellProfiles.Find(_settings.ShellProfile) ?? ShellProfiles.ResolveAuto();
         var executable = ShellProfiles.Resolve(profile);
         if (executable is null)
             return new UnavailableSession($"所选 shell 不可用：{profile.DisplayName}。请在终端设置中选择已安装的 shell。");
@@ -173,7 +175,7 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
         {
             _session.Start(workspace, Buffer.Columns, Buffer.Rows);
             IsRunning = _session.IsRunning;
-            StatusText = IsMock ? "演示" : ShellProfiles.Find(Settings.ShellProfile)?.DisplayName ?? "shell";
+            StatusText = IsMock ? "演示" : ShellProfiles.DescribeResolution(Settings.ShellProfile);
         }
         catch (Exception error) when (error is System.ComponentModel.Win32Exception or PlatformNotSupportedException or IOException or System.Runtime.InteropServices.COMException)
         {
