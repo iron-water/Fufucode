@@ -27,7 +27,7 @@ try
     var basic = Ids(SettingsNavTier.Basic);
     var features = Ids(SettingsNavTier.Features);
     var other = Ids(SettingsNavTier.Other);
-    Check(basic.SequenceEqual(new[] { "appearance", "about", "network", "shortcuts", "models", "storage" }),
+    Check(basic.SequenceEqual(new[] { "appearance", "about", "network", "shortcuts", "models", "storage", "memory" }),
         "基础类包含外观/关于/网络/键盘/模型/储存");
     // 插件市场（MKT 轨道）在目录中已是大功能一级条目，此处按实际目录核对，不再沿用旧四条目断言。
     Check(features.SequenceEqual(new[] { "marketplace", "browser", "terminal", "files", "automation" }),
@@ -158,7 +158,7 @@ try
         .Where(item => SettingsNavLayout.Matches(item, term)).Select(item => item.Id).ToArray();
     Check(Matches("代理").SequenceEqual(new[] { "network" }),
         "搜索命中基础类条目");
-    Check(Matches("终端").SequenceEqual(new[] { "terminal" }), "搜索命中大功能条目");
+    Check(Matches("shell").SequenceEqual(new[] { "terminal" }), "搜索命中大功能条目");
     Check(Matches("用量").SequenceEqual(new[] { "usage" }), "搜索命中其他类小功能");
     Check(Matches("不存在的关键词").Length == 0, "无命中时不输出任何条目");
 
