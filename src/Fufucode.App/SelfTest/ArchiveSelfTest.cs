@@ -88,12 +88,15 @@ internal static class ArchiveSelfTest
             _ = AppDialog.Field("名称", dialogInput);
             Check(dialogInput.Classes.Contains("dialogInput"),
                 "dialog fields use the shared non-black input style");
-            var footer = AppDialog.Footer(new Avalonia.Controls.Button { Content = "保存" });
+            var footerButton = new Avalonia.Controls.Button { Content = "保存" };
+            var footer = AppDialog.Footer(footerButton);
             Check(footer.Child is Avalonia.Controls.StackPanel
                 {
-                    HorizontalAlignment: Avalonia.Layout.HorizontalAlignment.Center,
+                    HorizontalAlignment: Avalonia.Layout.HorizontalAlignment.Right,
                     VerticalAlignment: Avalonia.Layout.VerticalAlignment.Center,
-                }, "dialog action row is centered");
+                } && footerButton.HorizontalContentAlignment == Avalonia.Layout.HorizontalAlignment.Center &&
+                footerButton.VerticalContentAlignment == Avalonia.Layout.VerticalAlignment.Center,
+                "dialog button text is centered inside the button");
 
             // 设置页接线：归档分类可见；默认后端选择位于后端二级页且列出全部六类后端。
             var settings = new SettingsPageViewModel();

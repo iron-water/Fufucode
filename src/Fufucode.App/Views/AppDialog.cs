@@ -58,12 +58,19 @@ internal static class AppDialog
         {
             Orientation = Orientation.Horizontal,
             Spacing = 10,
-            HorizontalAlignment = HorizontalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
         };
         foreach (var action in actions)
         {
             action.VerticalAlignment = VerticalAlignment.Center;
+            // 居中的是按钮里的文字，不是整排按钮：把内容对齐到按钮内部正中。
+            if (action is Button button)
+            {
+                button.HorizontalContentAlignment = HorizontalAlignment.Center;
+                button.VerticalContentAlignment = VerticalAlignment.Center;
+                button.Padding = new Thickness(16, 6);
+            }
             buttons.Children.Add(action);
         }
 
