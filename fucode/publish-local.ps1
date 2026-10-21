@@ -49,16 +49,27 @@ try {
     if ($LASTEXITCODE -ne 0 -or $branchHint -eq 'HEAD') { $branchHint = $null } else { $branchHint = $branchHint.Trim() }
 } catch { }
 
+# 审阅产物统一放在主工作树的 out/review 下。这样模型在自己的 worktree 里发布，
+# 主工作树的审阅板也能直接找到，不需要知道主仓库绝对路径。
+$sharedRoot = $root
+try {
+    $commonDir = (& git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null)
+    if ($LASTEXITCODE -eq 0 -and $commonDir) {
+        $candidate = Split-Path -Parent ($commonDir.Trim())
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) { $sharedRoot = $candidate }
+    }
+} catch { }
+
 $hasOutputRoot = -not [string]::IsNullOrWhiteSpace($OutputRoot)
 $isReview = $hasOutputRoot -or (-not [string]::IsNullOrWhiteSpace($ReviewLabel))
 $outRoot = if ($hasOutputRoot) {
     if ([IO.Path]::IsPathRooted($OutputRoot)) { [IO.Path]::GetFullPath($OutputRoot) }
-    else { [IO.Path]::GetFullPath((Join-Path $root $OutputRoot)) }
+    else { [IO.Path]::GetFullPath((Join-Path $sharedRoot $OutputRoot)) }
 } elseif ($isReview) {
     $slugSource = if ($branchHint) { $branchHint } else { $ReviewLabel }
     $reviewSlug = ($slugSource.Trim() -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
     if ([string]::IsNullOrWhiteSpace($reviewSlug)) { $reviewSlug = 'review' }
-    Join-Path $root "out/review/$reviewSlug"
+    Join-Path $sharedRoot "out/review/$reviewSlug"
 } else { Join-Path $root 'out' }
 $appOut = Join-Path $outRoot 'app'
 $cliOut = Join-Path $outRoot 'cli'
