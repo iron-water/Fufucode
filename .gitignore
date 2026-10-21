@@ -1,10 +1,11 @@
 **/bin/
 **/obj/
+# 本地运行时载荷（Node/Pi）；仅 runtime/**/LICENSE* 与 package*.json 以 provenance 形式跟踪。
 runtime/
 node_modules/
 *.user
-logs/
-tmp/
+/logs/
+/tmp/
 .vs/
 
 # 第三方参考仓库（独立克隆，不入库）
