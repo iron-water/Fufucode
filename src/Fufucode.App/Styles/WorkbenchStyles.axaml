@@ -120,8 +120,21 @@
     <Setter Property="Padding" Value="8,2"/>
     <Setter Property="Margin" Value="0,1,0,0"/>
   </Style>
-  <Style Selector="Border.overviewSession:pointerover">
+  <!-- 悬停高亮由代码在整行 Border 上加 hover 类，保证覆盖标题与右侧快捷图标同一块底，
+       不再依赖子按钮的 :pointerover（那只画标题列）。 -->
+  <Style Selector="Border.overviewSession.hover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <!-- 会话行内的标题按钮只负责点击与文本，不能再画自己的悬停底色：
+       否则高亮只覆盖标题列，宽度与右侧快捷图标对不齐。 -->
+  <Style Selector="Border.overviewSession Button:pointerover">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Border.overviewSession Button:pressed">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Border.overviewSession Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
   </Style>
   <!-- 对话框卡片内的输入框：与设置行同口径的轻质填充，
        不再使用深色主题下默认的纯黑输入底。 -->
