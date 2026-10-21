@@ -1,0 +1,8 @@
+{
+  "id": "skin.luna",
+  "name": "Windows XP Luna 皮肤",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.SkinLuna.dll",
+  "packageType": "Fufucode.Plugins.SkinLuna.SkinLunaPluginPackage",
+  "category": "Theme"
+}

@@ -17,6 +17,6 @@ public sealed class AeroSkinPluginPackage : IPluginPackage
             DisplayName: "Windows Aero (玻璃风格)",
             Summary: "拟物玻璃、高光浮雕与光泽控制台风格（Windows Vista/7 视觉复刻）。",
             Description: "采用仿玻璃透明质感、高亮边缘反光与质感边框；在支持合成器的系统下呈现深度立体光效。",
-            TokenDictionaryUri: "avares://Fufucode.Plugins.AeroSkin/Themes/AeroTokens.axaml",
-            ScopedStylesUri: "avares://Fufucode.Plugins.AeroSkin/Themes/AeroStyles.axaml");
+            TokenDictionaryUri: "avares://Fufucode.App/Styles/Skins/Aero/AeroTokens.axaml",
+            ScopedStylesUri: "avares://Fufucode.App/Styles/Skins/Aero/AeroStyles.axaml");
 }

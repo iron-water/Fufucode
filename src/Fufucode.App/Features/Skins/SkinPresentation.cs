@@ -24,8 +24,8 @@ public static class SkinPresentation
     /// <summary>内联短标签的字符预算；超过即视为“堆砌文字”，应由测试拦下。</summary>
     public const int InlineSummaryBudget = 20;
 
-    /// <summary>全部皮肤的呈现文案，顺序与 <see cref="SkinCatalog.All"/> 一致。</summary>
-    public static IReadOnlyList<SkinCopy> All { get; } =
+    /// <summary>全部可用皮肤的呈现文案，顺序与 <see cref="SkinCatalog.All"/> 一致（随插件安装动态变化）。</summary>
+    public static IReadOnlyList<SkinCopy> All =>
         SkinCatalog.All
             .Select(definition => new SkinCopy(definition.Id, definition.DisplayName, definition.Summary, definition.Description))
             .ToArray();
