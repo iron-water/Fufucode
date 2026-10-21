@@ -28,14 +28,9 @@ public partial class ChatPage
         // 否则最后一条消息贴到输入区上沿、操作条被输入区挡住。
         TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12, 16, 28), "airy" => new Thickness(28, 24, 28, 40), _ => new Thickness(24, 20, 24, 32) };
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
-        // 项目 chip 在卡片外的同一宿主里，隐藏/限宽必须作用于宿主，否则收起后仍残留一行。
-        var composerVisible = settings.Composer != "hidden";
-        ComposerHost.IsVisible = composerVisible;
-        ComposerCard.IsVisible = composerVisible;
+        ComposerCard.IsVisible = settings.Composer != "hidden";
         // 沉浸式收起时由窗口层保留重新展开入口；这里只控制卡片本身。
-        var composerWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
-        ComposerHost.MaxWidth = composerWidth;
-        ComposerCard.MaxWidth = composerWidth;
+        ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
         else ComposerCard.ClearValue(Border.CornerRadiusProperty);

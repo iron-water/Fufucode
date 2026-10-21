@@ -622,6 +622,7 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 - 实测：下载 19.45 → 12.2 MB，安装后 62.18 → 37.60 MB；节省 7.25 MB 下载 / 24.58 MB 安装。代价是目标机必须已安装 Microsoft.NETCore.App 10.x；缺失时 apphost 会给出标准提示。
 - 瘦身包 selftest 与自包含包一致（同一组 11 项既有失败），CLI help/json/runtime、完整性清单、平台后端清理均通过。
 
+EAD
 ## 2026-10-19 前端能力 7 级动态梯队与左/右辅助栏规范化重构决定
 
 1. 确立《Fufucode 前端能力分级与生命周期演进开发守则》（`docs/design/frontend-capability-hierarchy.md`）：
@@ -688,3 +689,19 @@ Windows 文件共享冲突使用有界重试，不改权限、不绕过只读；
 5. `models thinking <level>` 设置并通过后端确认后持久化为应用默认；`models thinking` 仍只查询可用等级。
 6. 修复 `SessionDeletion` 的默认后端缺陷：FUMO 历史是 `.json`，旧逻辑只接受 `.jsonl`，导致 `sessions delete` 对默认后端必然失败；同时删除租约原先在项目根获取，而 FUMO/Claude/Codex/DSH/OMP 的会话租约在各自子目录，删除活会话不会被阻止。现按后端选择租约目录，并允许协议适配后端的 `.json` 历史。
 7. 验证：`Fufucode.Cli` 与 `Fufucode.Core.Tests` 构建 0 错误 0 警告；`--cli-only` 新增断言通过（直接 prompt、组合参数、`-r` 无 id、status、commands、rename、FUMO 活会话删除拒绝与 `.json` 删除）；真实 FUMO 会话下 `status`、`commands`、`sessions list/rename`、`models thinking` 手动验证通过。`--plan` 的模型端到端拦截因本机模型代理当时拒绝连接未完成验证，列为未验证项。
+
+2026-10-19 内存优化模式决定：
+- 新增 `PerformanceSettings`（写入 settings.json）与 `MemoryProfile`（运行时只读快照），默认全部关闭 = 高性能模式。
+- 设置页新增「性能与内存」（基础类），提供四个独立开关与低内存/高性能预设：
+  1. 软件渲染：Avalonia 使用 `Win32RenderingMode.Software`，不初始化 ANGLE/D3D；需重启。
+  2. 关闭视觉特效：LiquidGlass 自适应亮度采样直接跳过；立即生效。
+  3. 减少终端回滚：`TerminalBuffer.HistoryLimit` 从 1500 降到 500；对新建终端生效。
+  4. 浏览器后台降内存：非活动页签不提前创建 controller，已存在的后台 controller 使用 `MemoryUsageTargetLevel.Low`。
+- 实测（Debug，空闲、无会话）：高性能 327 MB WS / 234 MB 私有 / GPU 模块 130 MB / 61 线程；低内存 189 MB WS / 111 MB 私有 / GPU 模块 0 / 18 线程。降幅约 138 MB WS、123 MB 私有。
+- 未纳入本轮：图片缓存上限、浏览器隐藏挂起、非活动会话 LRU。会话主机实际只保留一个 current 会话，切换时释放；图片缓存与浏览器新功能在主检出未提交代码中，待合并后补。
+
+2026-10-19 WebView2 内存优化（低内存模式补充）：
+- 每个浏览器页签持有独立 `BrowserViewHost`/controller，等于一个独立 renderer 进程；仅设 `IsVisible=false` 不会释放进程内存。
+- 新增 `ReduceBackgroundBrowserMemory`：低内存模式下后台页签不提前创建 controller；已存在的后台 controller 设 `CoreWebView2.MemoryUsageTargetLevel.Low`，回到前台设 Normal。
+- 不使用 `TrySuspendAsync/Resume`，避免暂停后台脚本、网络与 Browser Use 自动化；改用官方建议的 MemoryUsageTargetLevel 组合，二者不混用。
+- 未做：后台标签超时销毁重建、WebView2 独立 `--disable-gpu`、JS 堆上限、缓存上限；这些需要真实页面回归后再定。
