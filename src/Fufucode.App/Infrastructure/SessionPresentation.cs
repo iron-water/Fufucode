@@ -1,10 +1,12 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using Fufucode.Core;
 
 namespace Fufucode.App.Infrastructure;
 
-public sealed record SessionPresentation(bool Pinned = false, bool Archived = false, bool Unread = false)
+public sealed record SessionPresentation(bool Pinned = false, bool Archived = false, bool Unread = false,
+    List<string>? RowActions = null)
 {
     private static string Key(string id) => "session:presentation:v1:" + id;
     public static SessionPresentation Load(DesktopMetadataStore store, string id)

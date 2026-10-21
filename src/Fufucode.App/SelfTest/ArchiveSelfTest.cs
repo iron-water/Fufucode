@@ -84,6 +84,17 @@ internal static class ArchiveSelfTest
             Check(page.Content is Avalonia.Controls.StackPanel { Children.Count: >= 2 },
                 "archive page renders project and session sections without a host window");
 
+            var dialogInput = new Avalonia.Controls.TextBox();
+            _ = AppDialog.Field("名称", dialogInput);
+            Check(dialogInput.Classes.Contains("dialogInput"),
+                "dialog fields use the shared non-black input style");
+            var footer = AppDialog.Footer(new Avalonia.Controls.Button { Content = "保存" });
+            Check(footer.Child is Avalonia.Controls.StackPanel
+                {
+                    HorizontalAlignment: Avalonia.Layout.HorizontalAlignment.Center,
+                    VerticalAlignment: Avalonia.Layout.VerticalAlignment.Center,
+                }, "dialog action row is centered");
+
             // 设置页接线：归档分类可见；默认后端选择位于后端二级页且列出全部六类后端。
             var settings = new SettingsPageViewModel();
             settings.AttachNavPreference(Path.Combine(root, "nav"));

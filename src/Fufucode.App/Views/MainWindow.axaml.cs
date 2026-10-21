@@ -677,7 +677,10 @@ public partial class MainWindow : Window
             OpenProjectRequested: () => OpenProjectAsync(),
             RecentProjects: ProjectPreferences.LoadRecent(host.Manager.Metadata)
                 .Where(path => !ProjectArchive.IsArchivedPath(host.Manager.Metadata, path))
-                .ToArray());
+                .ToArray(),
+            NewSessionBackends: BuildNewSessionBackendOptions(host),
+            NewSessionWithBackendRequested: key =>
+                SwitchSessionAsync(null, BackendCapabilities.Parse(key)));
 
         AttachSession(host.Chat, BuildSessionItems(host), callbacks,
             new RealPromptSteering(host), page);
@@ -1117,7 +1120,7 @@ public partial class MainWindow : Window
     }
 
     /// <summary>切换（或新建）会话：先落当前草稿，换会话后整体重建视图模型。</summary>
-    private async Task SwitchSessionAsync(string? sessionId)
+    private async Task SwitchSessionAsync(string? sessionId, BackendId? requestedBackend = null)
     {
         if (_switching || _restarting || _host is null || _closed)
         {
@@ -1135,7 +1138,7 @@ public partial class MainWindow : Window
             string? backendNote = null;
             if (sessionId is null)
             {
-                (newBackend, backendNote) = ResolveNewSessionBackend();
+                (newBackend, backendNote) = ResolveNewSessionBackend(requestedBackend);
             }
             if (!await ConfirmLeaveSettingsAsync())
             {
