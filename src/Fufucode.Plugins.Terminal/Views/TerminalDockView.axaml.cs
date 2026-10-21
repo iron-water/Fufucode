@@ -62,12 +62,15 @@ public partial class TerminalDockView : UserControl
     {
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
         var profiles = ShellProfiles.All;
+        var autoLabel = "自动（" + ShellProfiles.ResolveAuto().DisplayName + "）";
         var shell = new ComboBox
         {
-            ItemsSource = profiles.Select(profile => ShellProfiles.Resolve(profile) is null
+            ItemsSource = new[] { autoLabel }.Concat(profiles.Select(profile => ShellProfiles.Resolve(profile) is null
                 ? profile.DisplayName + "（未安装）"
-                : profile.DisplayName).ToArray(),
-            SelectedIndex = Math.Max(0, profiles.ToList().FindIndex(profile => profile.Id == CurrentSettings.ShellProfile)),
+                : profile.DisplayName)).ToArray(),
+            SelectedIndex = string.Equals(ShellProfiles.NormalizeId(CurrentSettings.ShellProfile), ShellProfiles.AutoId, StringComparison.Ordinal)
+                ? 0
+                : Math.Max(1, profiles.ToList().FindIndex(profile => profile.Id == CurrentSettings.ShellProfile) + 1),
             MinWidth = 300
         };
         var overrideBox = new TextBox { Text = CurrentSettings.CommandOverride, PlaceholderText = "留空使用所选 shell 的默认命令" };
@@ -108,10 +111,13 @@ public partial class TerminalDockView : UserControl
         cancel.Click += (_, _) => dialog.Close(false);
         apply.Click += (_, _) => dialog.Close(true);
         if (!await Fufucode.App.Views.SkinDialog.ShowAsync<bool>(dialog, owner)) return;
-        var selected = profiles[Math.Clamp(shell.SelectedIndex, 0, profiles.Count - 1)];
+        // Index 0 is the automatic profile; the rest map one-to-one to ShellProfiles.All.
+        var shellId = shell.SelectedIndex <= 0
+            ? ShellProfiles.AutoId
+            : profiles[Math.Clamp(shell.SelectedIndex - 1, 0, profiles.Count - 1)].Id;
         var settings = (CurrentSettings with
         {
-            ShellProfile = selected.Id,
+            ShellProfile = shellId,
             CommandOverride = overrideBox.Text ?? string.Empty,
             FontSize = (double)(font.Value ?? 13),
             ScrollbackLines = (int)(scrollback.Value ?? 1500),

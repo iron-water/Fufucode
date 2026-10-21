@@ -530,8 +530,9 @@ internal static class Program
         {
             ShellProfile = "no-such-shell", FontSize = 999, ScrollbackLines = -4, Bell = "loud"
         }).Normalize();
-        Check(normalized.ShellProfile == "cmd" && normalized.FontSize == 28 && normalized.ScrollbackLines == 0 && normalized.Bell == "visual",
+        Check(normalized.ShellProfile == ShellProfiles.AutoId && normalized.FontSize == 28 && normalized.ScrollbackLines == 0 && normalized.Bell == "visual",
             "terminal-settings-normalize");
+        Check(TerminalSettings.Default.ShellProfile == ShellProfiles.AutoId, "terminal-settings-default-is-auto");
         var settingsRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-settings-" + Guid.NewGuid().ToString("N"));
         try
         {
@@ -557,6 +558,11 @@ internal static class Program
             Check(ShellProfiles.Resolve(powershell) is { Length: > 0 }, "terminal-shell-powershell-resolves");
             Check(ShellProfiles.BuildCommandLine(cmd, ShellProfiles.Resolve(cmd), null).Contains("cmd.exe", StringComparison.OrdinalIgnoreCase),
                 "terminal-shell-command-line");
+            var automatic = ShellProfiles.ResolveAuto();
+            Check(ShellProfiles.Resolve(automatic) is { Length: > 0 } && automatic.Id is "pwsh" or "powershell" or "cmd",
+                "terminal-shell-auto-prefers-newer-shells");
+            Check(ShellProfiles.DescribeResolution(ShellProfiles.AutoId).Length > 0,
+                "terminal-shell-auto-describes-resolution");
         }
 
         // A shell that cannot be resolved produces an explicit start error, not a silent cmd fallback.
