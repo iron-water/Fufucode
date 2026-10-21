@@ -7,6 +7,7 @@ using Avalonia.LogicalTree;
 using Avalonia.Markup.Xaml;
 using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Styling;
+using Avalonia.VisualTree;
 using Fufucode.App.Features.Skins.Aero;
 
 namespace Fufucode.App.Features.Skins;
@@ -27,6 +28,19 @@ public sealed class SkinLease : IDisposable
     private ResourceDictionary? _captionDictionary;
     private readonly List<AeroCaptionAdapter> _captions = new();
     private readonly List<LiquidGlass.LiquidGlassAdapter> _glassAdapters = new();
+    private readonly List<LiquidGlass.LiquidGlassMaterialAdapter> _glassMaterials = new();
+    private IDisposable? _materialLoadedSubscription;
+
+    /// <summary>后加载的内容卡（切换设置分类、虚拟化列表）在 Loaded 时补挂材质。</summary>
+    private void OnBorderLoaded(Border border)
+    {
+        if (_disposed || !LiquidGlass.LiquidGlassMaterialAdapter.IsMaterialHost(border)) return;
+        if (!ReferenceEquals(TopLevel.GetTopLevel(border), _target)) return;
+        _glassMaterials.RemoveAll(m => TopLevel.GetTopLevel(m.Host) is null && !ReferenceEquals(m.Host, border));
+        if (_glassMaterials.Any(m => ReferenceEquals(m.Host, border))) return;
+        if (LiquidGlass.LiquidGlassMaterialAdapter.TryAttach(border) is { } material)
+            _glassMaterials.Add(material);
+    }
 
     private SkinLease(
         Control target,
@@ -153,6 +167,9 @@ public sealed class SkinLease : IDisposable
             // 直接写本地 Resources["AppMicaPageBackground"]——本地条目优先于合并字典里的令牌值。
             try
             {
+                lease.InstallGlassWallpaper();
+                lease._materialLoadedSubscription = Control.LoadedEvent.AddClassHandler<Border>(
+                    (border, _) => lease.OnBorderLoaded(border));
                 lease.AttachExistingGlassChrome();
                 lease.SyncGlassFallback();
                 if (target is Window window)
@@ -217,6 +234,17 @@ public sealed class SkinLease : IDisposable
             foreach (var adapter in _captions) adapter.SyncFrom(window, hasBlur: false);
     }
 
+    /// <summary>
+    /// 页面切换后重扫 chrome 宿主：设置页等页面在租约挂载之后才进 PageHost，
+    /// 只在 Apply/Opened 扫一次会让它们的导航宿主永远不成玻璃。
+    /// </summary>
+    internal void RescanGlassChrome()
+    {
+        if (_disposed || Skin != SkinId.LiquidGlass) return;
+        _glassAdapters.RemoveAll(adapter => !adapter.IsActive);
+        AttachExistingGlassChrome();
+    }
+
     private void AttachExistingGlassChrome()
     {
         // 物化：Attach 原位替换宿主为 LiquidGlassSurface，迭代中改树会抛集合已修改。
@@ -233,6 +261,14 @@ public sealed class SkinLease : IDisposable
             {
                 // 宿主暂时不能包（父容器非 Panel 等）：跳过，不算失败。
             }
+        }
+        // 内容层卡片（设置页行卡/内容卡）：Standard Material（模糊+鲜明度），不移位。
+        foreach (var border in _target.GetVisualDescendants().OfType<Border>().ToArray())
+        {
+            if (!LiquidGlass.LiquidGlassMaterialAdapter.IsMaterialHost(border)) continue;
+            if (_glassMaterials.Any(m => ReferenceEquals(m.Host, border))) continue;
+            if (LiquidGlass.LiquidGlassMaterialAdapter.TryAttach(border) is { } material)
+                _glassMaterials.Add(material);
         }
         SyncGlass();
     }
@@ -273,6 +309,23 @@ public sealed class SkinLease : IDisposable
     }
 
     private bool _glassFallbackInstalled;
+    private LiquidGlass.LiquidGlassWallpaper? _glassWallpaper;
+    private Panel? _glassWallpaperHost;
+
+    /// <summary>在窗口根 Grid（ChromeRoot）最底层插入应用内壁纸，给玻璃提供可采样的色差。</summary>
+    private void InstallGlassWallpaper()
+    {
+        if (_target is not Window { Content: Panel root }) return;
+        var wallpaper = new LiquidGlass.LiquidGlassWallpaper();
+        if (root is Grid grid && grid.RowDefinitions.Count > 0)
+            Grid.SetRowSpan(wallpaper, grid.RowDefinitions.Count);
+        if (root is Grid g2 && g2.ColumnDefinitions.Count > 0)
+            Grid.SetColumnSpan(wallpaper, g2.ColumnDefinitions.Count);
+        wallpaper.ZIndex = -100;
+        root.Children.Insert(0, wallpaper);
+        _glassWallpaper = wallpaper;
+        _glassWallpaperHost = root;
+    }
     private Avalonia.Platform.IPlatformSettings? _platformColorValuesSource;
     private EventHandler<Avalonia.Platform.PlatformColorValues>? _platformColorValuesChanged;
 
@@ -312,6 +365,10 @@ public sealed class SkinLease : IDisposable
         _captions.Clear();
         foreach (var adapter in _glassAdapters) adapter.Dispose();
         _glassAdapters.Clear();
+        _materialLoadedSubscription?.Dispose();
+        _materialLoadedSubscription = null;
+        foreach (var material in _glassMaterials) material.Dispose();
+        _glassMaterials.Clear();
         if (_platformColorValuesSource is not null && _platformColorValuesChanged is not null)
         {
             _platformColorValuesSource.ColorValuesChanged -= _platformColorValuesChanged;
@@ -319,6 +376,10 @@ public sealed class SkinLease : IDisposable
             _platformColorValuesSource = null;
         }
         // 我安装的窗底回落条目（令牌未删 AppMicaPageBackground，本地条目遮蔽令牌值）—— 拿走后还原令牌。
+        if (_glassWallpaper is not null && _glassWallpaperHost is not null)
+            _glassWallpaperHost.Children.Remove(_glassWallpaper);
+        _glassWallpaper = null;
+        _glassWallpaperHost = null;
         if (_glassFallbackInstalled) _target.Resources.Remove("AppMicaPageBackground");
         _glassFallbackInstalled = false;
         if (_captionDictionary is not null) _target.Resources.MergedDictionaries.Remove(_captionDictionary);

@@ -717,42 +717,87 @@ public partial class MainWindow
             var width = Bounds.Width > 0 ? Bounds.Width : Width;
             var settings = _vm?.IsSettingsPage == true;
             var narrow = width < 1100;
+            var isGlass = _windowSkins.TryGetValue(this, out var skinLease)
+                && skinLease.Skin == Features.Skins.SkinId.LiquidGlass;
+
+            // 保持标准 Grid 空间划分：各区域各占一格，互不遮挡，绝不重叠穿模。
             var left = !settings && (narrow ? _leftDrawerOpen : !_dockLayout.Hidden[DockZone.Left]);
-            var leftWidth = Math.Clamp(_dockLayout.LeftWidth,200,Math.Max(200,width - 750));
+            var leftWidth = Math.Clamp(_dockLayout.LeftWidth, 200, Math.Max(200, width - 750));
             ShellGrid.ColumnDefinitions[0].Width = new GridLength(left && !narrow ? leftWidth : 0);
             ShellGrid.ColumnDefinitions[1].Width = new GridLength(left && !narrow ? 5 : 0);
             SidebarBorder.IsVisible = left;
             LeftPanelSplitter.IsVisible = left && !narrow;
+            Grid.SetColumn(SidebarBorder, 0);
             Grid.SetColumnSpan(SidebarBorder, narrow ? 3 : 1);
             SidebarBorder.ZIndex = narrow ? 12 : 0;
             SidebarBorder.HorizontalAlignment = narrow ? HorizontalAlignment.Left : HorizontalAlignment.Stretch;
             SidebarBorder.Width = narrow ? _dockLayout.LeftWidth : double.NaN;
-            SidebarBorder.Margin = narrow ? DrawerBand() : default;
+            if (narrow) SidebarBorder.Margin = DrawerBand();
+            else SidebarBorder.ClearValue(Layoutable.MarginProperty);
+
+            Grid.SetColumn(LeftPanelSplitter, 1);
+            Grid.SetColumnSpan(LeftPanelSplitter, 1);
+            LeftPanelSplitter.Margin = default;
+            LeftPanelSplitter.Width = double.NaN;
+            LeftPanelSplitter.ZIndex = 0;
+
+            Grid.SetColumn(WorkspaceShell, 2);
+            Grid.SetColumnSpan(WorkspaceShell, 1);
+
             var available = width - (left && !narrow ? leftWidth + 5 : 0);
             var rightHasPages = _dockLayout.Pages.TryGetValue(DockZone.Right, out var rPages) && rPages.Count > 0;
             var right = !settings && (narrow ? _rightDrawerOpen : (!_dockLayout.Hidden[DockZone.Right] && (rightHasPages || IsRightDrawerForTesting)));
             IsRightDrawerForTesting = narrow;
-            var rightWidth = Math.Clamp(_dockLayout.RightWidth,32,Math.Max(32,available - 32));
-            WorkspaceShell.ColumnDefinitions[0].Width = new GridLength(1,GridUnitType.Star);
+            var rightWidth = Math.Clamp(_dockLayout.RightWidth, 32, Math.Max(32, available - 32));
+
+            WorkspaceShell.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
             WorkspaceShell.ColumnDefinitions[1].Width = new GridLength(right && !IsRightDrawerForTesting ? 5 : 0);
             WorkspaceShell.ColumnDefinitions[2].Width = new GridLength(right && !IsRightDrawerForTesting ? rightWidth : 0);
             RightPanelBorder.IsVisible = right;
             RightPanelSplitter.IsVisible = right && !IsRightDrawerForTesting;
             RightDrawerScrim.IsVisible = right && IsRightDrawerForTesting;
-            Grid.SetColumn(RightPanelBorder,IsRightDrawerForTesting ? 0 : 2);
-            Grid.SetColumnSpan(RightPanelBorder,IsRightDrawerForTesting ? 3 : 1);
-            Grid.SetRowSpan(RightPanelBorder,IsRightDrawerForTesting ? 1 : 3);
+
+            Grid.SetColumn(RightPanelBorder, IsRightDrawerForTesting ? 0 : 2);
+            Grid.SetColumnSpan(RightPanelBorder, IsRightDrawerForTesting ? 3 : 1);
+            Grid.SetRow(RightPanelBorder, 0);
+            Grid.SetRowSpan(RightPanelBorder, IsRightDrawerForTesting ? 1 : 3);
             RightPanelBorder.ZIndex = IsRightDrawerForTesting ? 12 : 0;
             RightPanelBorder.HorizontalAlignment = IsRightDrawerForTesting ? HorizontalAlignment.Right : HorizontalAlignment.Stretch;
             RightPanelBorder.Width = IsRightDrawerForTesting ? rightWidth : double.NaN;
-            RightPanelBorder.Margin = right && IsRightDrawerForTesting ? DrawerBand() : default;
+            if (right && IsRightDrawerForTesting) RightPanelBorder.Margin = DrawerBand();
+            else RightPanelBorder.ClearValue(Layoutable.MarginProperty);
+
             RightDrawerScrim.Margin = RightPanelBorder.Margin;
+            Grid.SetColumn(RightPanelSplitter, 1);
+            Grid.SetColumnSpan(RightPanelSplitter, 1);
+            RightPanelSplitter.Margin = default;
+            RightPanelSplitter.Width = double.NaN;
+            RightPanelSplitter.ZIndex = 0;
+
             var bottom = !settings && !_dockLayout.Hidden[DockZone.Bottom];
             var height = WorkspaceShell.Bounds.Height > 0 ? WorkspaceShell.Bounds.Height : Height - 74;
-            WorkspaceShell.RowDefinitions[0].Height = new GridLength(1,GridUnitType.Star);
+            var bottomHeight = Math.Clamp(_dockLayout.BottomHeight, 160, Math.Max(160, height - 360));
+            WorkspaceShell.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
             WorkspaceShell.RowDefinitions[1].Height = new GridLength(bottom ? 5 : 0);
-            WorkspaceShell.RowDefinitions[2].Height = new GridLength(bottom ? Math.Clamp(_dockLayout.BottomHeight,160,Math.Max(160,height - 360)) : 0);
-            TerminalBorder.IsVisible = TerminalSplitter.IsVisible = bottom;
+            WorkspaceShell.RowDefinitions[2].Height = new GridLength(bottom ? bottomHeight : 0);
+
+            TerminalBorder.IsVisible = bottom;
+            TerminalSplitter.IsVisible = bottom;
+            TerminalBorder.Height = double.NaN;
+            TerminalBorder.VerticalAlignment = VerticalAlignment.Stretch;
+            Grid.SetColumn(TerminalBorder, 0);
+            Grid.SetRow(TerminalBorder, 2);
+            Grid.SetRowSpan(TerminalBorder, 1);
+            TerminalBorder.ZIndex = 0;
+            TerminalBorder.ClearValue(Layoutable.MarginProperty);
+
+            Grid.SetColumn(TerminalSplitter, 0);
+            Grid.SetRow(TerminalSplitter, 1);
+            Grid.SetRowSpan(TerminalSplitter, 1);
+            TerminalSplitter.Margin = default;
+            TerminalSplitter.Height = double.NaN;
+            TerminalSplitter.ZIndex = 0;
+
             var drawerVisible = narrow && (left || right);
             if (drawerVisible && !_drawerWasVisible)
                 _drawerReturnFocus = FocusManager?.GetFocusedElement() as Control;
@@ -781,7 +826,7 @@ public partial class MainWindow
         finally { _applyingWorkspaceLayout = false; }
     }
 
-    private Thickness DrawerBand() => _vm?.IsChatPage == true ? new(0,_chatPage.HeaderBandHeight,0,_chatPage.BottomReserveHeight) : default;
+    private Thickness DrawerBand() => _vm?.IsChatPage == true ? new(0, _chatPage.HeaderBandHeight, 0, _chatPage.BottomReserveHeight) : default;
 
     private void CaptureWorkspaceDimensions()
     {
