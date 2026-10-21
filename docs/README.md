@@ -28,6 +28,7 @@
 ## 三、执行与任务
 
 - 当前执行协议：[execution-contract.md](tasks/execution-contract.md)、[session-handoff-protocol.md](tasks/session-handoff-protocol.md)。
+- 并行 feature 的执行规则与派工 prompt：[parallel-feature-brief.md](tasks/parallel-feature-brief.md)。
 - [launch-prompts.md](tasks/launch-prompts.md) 中的 D/O/U 段落是历史模板，不再直接派发。
 - [development-topology-v2.md](tasks/development-topology-v2.md) 是 2026-10-11 的旧拓扑，保留追溯。
 - `tasks/hourly-*`、`tasks/M-E7-*` 等是历史派工材料，不代表当前队列。
@@ -50,17 +51,18 @@
 - [research-results/README.md](research-results/README.md)：外部调研结果；R01 evidence 是第三方证据，R05 是原型副本。
 - [frontend-prototype/README.md](frontend-prototype/README.md)：可交互前端原型；不是产品验收证据。
 
-## 五、归档与运维
+## 六、归档与运维
 
 - [archive/](archive/)：旧轨道任务、分轨进度、历史队列、旧自动化契约。
 - [automation/README.md](automation/README.md)：旧 D/O/U 机器契约与验证脚本，已不参与当前调度。
 - [operations/README.md](operations/README.md)：运行维护入口；`pi-upgrade-sop.md` 是历史 Pi 规程。
 - [operations/runtime-and-backends.md](operations/runtime-and-backends.md)：FUMO 默认与本地 runtime 载荷。
+- [operations/parallel-review.md](operations/parallel-review.md)：并行 feature 的独立构建、审阅板与清理规则。
 - [operations/worktrees.md](operations/worktrees.md)：worktree 清单与回收边界。
 - [面向人类/README.md](面向人类/README.md)：面向用户的成品说明。
 - [人类意见/README.md](人类意见/README.md)：用户原始意见，不是实现规格。
 
-## 六、使用规则
+## 七、使用规则
 
 1. 新文档先写 `status`（current / historical / superseded / evidence）、日期和来源。
 2. 当前结论只放“当前权威”；历史原文保留并加 `SUPERSEDED` 横幅，不改写历史。

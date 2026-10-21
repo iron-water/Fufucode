@@ -46,6 +46,38 @@ Local development build and deploy:
 pwsh fucode/publish-local.ps1
 ```
 
+## Parallel feature review
+
+Several models can work at once without sharing a worktree or overwriting `out/app`:
+
+```bash
+pwsh fucode/feature-worktree.ps1 -Name review-ui
+```
+
+Commit in that worktree, then publish an isolated review build:
+
+```bash
+pwsh fucode/publish-local.ps1 -ReviewLabel "feature/review-ui@a1b2c3d4" -NoRun
+```
+
+Open the review board, then launch one build at a time:
+
+```bash
+pwsh fucode/review-parallel.ps1 -NoBuild -Open
+pwsh fucode/review-parallel.ps1 -NoBuild -LaunchSlug feature-review-ui
+```
+
+Each build lands in `out/review/<branch>`, has a `branch@commit` label, and uses its own
+`--data-root` and window title. Stale builds are marked when the branch has moved on.
+Cleanup is refused unless the worktree is clean and merged:
+
+```bash
+pwsh fucode/feature-worktree.ps1 -Name review-ui -Remove
+```
+
+See [docs/operations/parallel-review.md](docs/operations/parallel-review.md) for the workflow and
+[docs/tasks/parallel-feature-brief.md](docs/tasks/parallel-feature-brief.md) for the model-facing rules.
+
 ## CLI
 
 ```bash
