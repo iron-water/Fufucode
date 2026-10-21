@@ -352,7 +352,10 @@ internal static class WorkbenchCustomizationSelfTest
                     "customization no longer nests a second tab navigation inside the settings categories");
                 customizationView.Page = "appearance";
                 await Task.Delay(100); settingsWindow.UpdateLayout();
-                var colorPicker = customizationView.GetVisualDescendants().OfType<ColorPicker>().Single();
+                var accentRow = customizationView.GetVisualDescendants().OfType<Border>()
+                    .First(b => b.Classes.Contains("settingsRow") &&
+                        b.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().Any(t => t.Text == "自定义主题色"));
+                var colorPicker = accentRow.GetVisualDescendants().OfType<ColorPicker>().Single();
                 colorPicker.Color = Avalonia.Media.Color.Parse("#12ABCD");
                 Check(c.Current.Accent == "#12ABCD", "arbitrary native color selection saves and applies the exact RGB color");
                 Check(window.Resources["SystemAccentColorDark2"] is Avalonia.Media.Color darker && darker != c.Current.EffectiveAccent &&
