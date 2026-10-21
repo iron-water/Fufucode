@@ -28,7 +28,10 @@ public partial class MainWindow
     // 会话管理的折叠状态：只影响展示，不写盘；项目/分区分开记忆。
     private readonly HashSet<string> _collapsedProjects = new(StringComparer.Ordinal);
     private readonly HashSet<string> _collapsedSections = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _expandedProjects = new(StringComparer.Ordinal);
     private bool _allProjectsCollapsed;
+    // 项目内默认先显示最近活动的几条会话，其余折叠起来。
+    private const int ProjectSessionPreview = 4;
 
     /// <summary>可固定到会话行右侧的快捷操作（最多 4 个）。</summary>
     private static readonly (string Id, string Label, string Icon)[] SessionQuickActions =
@@ -132,10 +135,10 @@ public partial class MainWindow
             }).ToArray();
             foreach (var session in important) _overview.Body.Children.Add(BuildOverviewSessionRow(session, organization));
             if (important.Length == 0) OverviewEmpty("暂无需要关注的任务");
-            foreach (var day in all.GroupBy(s => s.LastOpened.LocalDateTime.Date).OrderByDescending(g => g.Key))
+            foreach (var day in all.GroupBy(s => SessionActivityAt(s).LocalDateTime.Date).OrderByDescending(g => g.Key))
             {
                 OverviewHeading(day.Key == DateTime.Today ? "今天" : day.Key == DateTime.Today.AddDays(-1) ? "昨天" : day.Key.ToString("MM-dd"));
-                OverviewSessionGroup(day.OrderByDescending(s => s.LastOpened), organization);
+                OverviewSessionGroup(day.OrderByDescending(SessionActivityAt), organization);
             }
             return;
         }
@@ -170,7 +173,7 @@ public partial class MainWindow
         OverviewHeading("会话");
         // 只列未归入项目的会话，避免与项目下的会话重复。
         OverviewSessionGroup(all.Where(s => organization.Placement(s.Id).ProjectId is null)
-            .OrderByDescending(s => s.LastOpened), organization);
+            .OrderByDescending(SessionActivityAt), organization);
         if (_host is null)
             foreach (var demo in _vm.Sidebar.Sessions)
             {
@@ -189,6 +192,12 @@ public partial class MainWindow
     }
     private IEnumerable<SessionRecord> OverviewSessions() => OverviewProjects()
         .SelectMany(project => _host!.Manager.Metadata.ListSessions(project.Id));
+
+    /// <summary>会话最后活动时间：优先会话文件写入时间，缺失时退回打开时间。</summary>
+    private static DateTimeOffset SessionActivityAt(SessionRecord session) =>
+        session.FilePath is { Length: > 0 } path && File.Exists(path)
+            ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero)
+            : session.LastOpened;
     private TextBlock OverviewHeading(string title, double indent = 0)
     {
         // Win11 侧栏分组标题与条目图标列对齐：条目内边距 4+图标 margin 8 = 12px 基线。
@@ -267,8 +276,9 @@ public partial class MainWindow
     {
         var settings = organization.Project(project);
         var collapsed = _collapsedProjects.Contains(project.Id);
+        // 按会话内容的最后写入时间排序，而不是“最近打开”：切换会话不会把旧会话顶到最前。
         var projectSessions = sessions.Where(s => organization.Placement(s.Id).ProjectId == project.Id)
-            .OrderByDescending(s => s.LastOpened).ToArray();
+            .OrderByDescending(SessionActivityAt).ToArray();
 
         var chevron = new PathIcon { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
         chevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension(
@@ -322,8 +332,30 @@ public partial class MainWindow
         var stack = new StackPanel { Spacing = 2 };
         stack.Children.Add(row);
         if (!collapsed)
-            foreach (var session in projectSessions)
+        {
+            var expanded = _expandedProjects.Contains(project.Id);
+            var visible = expanded ? projectSessions : projectSessions.Take(ProjectSessionPreview).ToArray();
+            foreach (var session in visible)
                 stack.Children.Add(BuildOverviewSessionRow(session, organization, 8));
+            if (projectSessions.Length > ProjectSessionPreview)
+            {
+                var rest = projectSessions.Length - ProjectSessionPreview;
+                var more = new Button
+                {
+                    Classes = { "subtle" }, Content = expanded ? "收起" : $"展开显示（还有 {rest} 个）",
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    FontSize = 12, Padding = new Thickness(8, 3), Margin = new Thickness(8, 1, 0, 0),
+                    Background = Brushes.Transparent, BorderThickness = new Thickness(0),
+                };
+                more.Click += (_, _) =>
+                {
+                    if (!_expandedProjects.Add(project.Id)) _expandedProjects.Remove(project.Id);
+                    RenderOverview();
+                };
+                stack.Children.Add(more);
+            }
+        }
         _overview.Body.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
     }
     private Control BuildOverviewSessionRow(SessionRecord session, SessionOrganization organization, double indent = 0)
@@ -337,7 +369,7 @@ public partial class MainWindow
         var button = new Button
         {
             Classes = { "subtle" }, Background = Brushes.Transparent, BorderThickness = new Thickness(0),
-            Padding = new Thickness(4, 0), HorizontalAlignment = HorizontalAlignment.Stretch,
+            Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 30,
             Content = new TextBlock
             {
@@ -365,7 +397,6 @@ public partial class MainWindow
         {
             Classes = { "overviewSession" }, Margin = new Thickness(indent, 0, 0, 0), Child = grid,
         };
-        if (isCurrent) row.Classes.Add("current");
         row.PointerEntered += (_, _) => tail.IsVisible = true;
         row.PointerExited += (_, _) => { if (!row.IsKeyboardFocusWithin) tail.IsVisible = false; };
         row.GotFocus += (_, _) => tail.IsVisible = true;
