@@ -158,10 +158,10 @@
             <SolidColorBrush x:Key="ControlStrokeColorDefaultBrush"   Color="#12FFFFFF"/>
             <SolidColorBrush x:Key="ControlStrokeColorSecondaryBrush" Color="#18FFFFFF"/>
             <!-- 三档底色规范：输入框用深层、滚动条用高亮层、菜单/下拉用栏层。 -->
-            <StaticResource x:Key="TextControlBackground"            ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-            <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="SolidBackgroundFillColorBaseBrush"/>
-            <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="SolidBackgroundFillColorBaseBrush"/>
+            <StaticResource x:Key="TextControlBackground"            ResourceKey="ControlFillColorTertiaryBrush"/>
+            <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ControlFillColorTertiaryBrush"/>
+            <StaticResource x:Key="TextControlBackgroundFocused"     ResourceKey="ControlFillColorTertiaryBrush"/>
+            <StaticResource x:Key="TextControlBackgroundDisabled"    ResourceKey="ControlFillColorSecondaryBrush"/>
             <StaticResource x:Key="TextControlBorderBrush"           ResourceKey="ControlStrokeColorDefaultBrush"/>
             <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="ControlStrokeColorSecondaryBrush"/>
             <StaticResource x:Key="ScrollBarThumbFill"               ResourceKey="ControlStrokeColorSecondaryBrush"/>
