@@ -210,6 +210,10 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.RemoteControl.dll',
     'Fufucode.Plugins.CronSchedules.dll',
     'Fufucode.Plugins.AeroSkin.dll',
+    'Fufucode.Plugins.SkinMetro.dll',
+    'Fufucode.Plugins.SkinMaterial3.dll',
+    'Fufucode.Plugins.SkinLuna.dll',
+    'Fufucode.Plugins.SkinLiquidGlass.dll',
     'Fufucode.Plugins.AutoDev.dll',
     'Fufucode.Plugins.Terminal.dll',
     'Fufucode.Plugins.PerformanceMonitor.dll'
@@ -351,6 +355,10 @@ $plugins = @(
     @{ Id = 'service.remote-control'; Project = 'src/Fufucode.Plugins.RemoteControl/Fufucode.Plugins.RemoteControl.csproj' },
     @{ Id = 'automation.cron'; Project = 'src/Fufucode.Plugins.CronSchedules/Fufucode.Plugins.CronSchedules.csproj' },
     @{ Id = 'skin.aero'; Project = 'src/Fufucode.Plugins.AeroSkin/Fufucode.Plugins.AeroSkin.csproj' },
+    @{ Id = 'skin.metro'; Project = 'src/Fufucode.Plugins.SkinMetro/Fufucode.Plugins.SkinMetro.csproj' },
+    @{ Id = 'skin.material3'; Project = 'src/Fufucode.Plugins.SkinMaterial3/Fufucode.Plugins.SkinMaterial3.csproj' },
+    @{ Id = 'skin.luna'; Project = 'src/Fufucode.Plugins.SkinLuna/Fufucode.Plugins.SkinLuna.csproj' },
+    @{ Id = 'skin.liquidglass'; Project = 'src/Fufucode.Plugins.SkinLiquidGlass/Fufucode.Plugins.SkinLiquidGlass.csproj' },
     @{ Id = 'automation.auto-dev'; Project = 'src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj' },
     @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
     # 性能监控插件：可选安装，默认包不含其程序集。

@@ -1,0 +1,8 @@
+{
+  "id": "skin.liquidglass",
+  "name": "Liquid Glass 皮肤",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.SkinLiquidGlass.dll",
+  "packageType": "Fufucode.Plugins.SkinLiquidGlass.SkinLiquidGlassPluginPackage",
+  "category": "Theme"
+}

@@ -14,6 +14,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Fufucode.App.Features.Skins;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
@@ -22,8 +23,21 @@ namespace Fufucode.App.SelfTest;
 
 internal static class SkinIntegrationSelfTest
 {
+    /// <summary>皮肤已改为插件市场提供；自测在隔离环境显式登记，验证换肤链路本身。</summary>
+    private static void EnsureSkinPluginsRegistered()
+    {
+        foreach (var id in new[] { SkinId.Metro, SkinId.Material3, SkinId.Aero, SkinId.Luna, SkinId.LiquidGlass })
+        {
+            var definition = SkinCatalog.Get(id);
+            Fufucode.Core.Plugins.PluginSkinRegistry.Register("selftest." + definition.StorageKey,
+                new Fufucode.Core.Plugins.PluginSkinContribution(definition.StorageKey, definition.DisplayName,
+                    definition.Summary, definition.Description, definition.TokenDictionaryUri, definition.ScopedStylesUri));
+        }
+    }
+
     internal static async Task RunAsync(Action<string> pass, Action<string> fail)
     {
+        EnsureSkinPluginsRegistered();
         void Check(bool ok, string name) { if (ok) pass("Skins: " + name); else fail("Skins: " + name); }
         string? StoredSkin(WorkbenchAppearance appearance) => JsonNode.Parse(appearance.Serialize())?["skin"]?.GetValue<string>();
         var root = Path.Combine(Path.GetTempPath(), "fufucode-skins-integration-" + Guid.NewGuid().ToString("N"));

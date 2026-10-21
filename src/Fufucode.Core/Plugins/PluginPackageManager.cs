@@ -378,6 +378,8 @@ public sealed class PluginPackageManager : IAsyncDisposable
             page = PageDecorator is { } decorator ? decorator(id, package, rawPage) : rawPage;
             var content = package.CreateContentContribution(context);
             if (content is not null) PluginContentRegistry.Register(id, content);
+            var skin = package.CreateSkinContribution(context);
+            if (skin is not null) PluginSkinRegistry.Register(id, skin);
             _activePlugins.Add(id, (package, handler, context));
             if (loadContext is not null) _loadContexts[id] = loadContext;
             if (page is not null) _pageContributions[id] = page;
@@ -396,6 +398,7 @@ public sealed class PluginPackageManager : IAsyncDisposable
     {
         // 先摘掉渲染贡献：即使后续 shutdown 失败，也不能让已停用插件的控件继续被创建。
         PluginContentRegistry.Unregister(id);
+        PluginSkinRegistry.Unregister(id);
         if (!_activePlugins.TryGetValue(id, out var entry)) return;
         if (entry.Handler is not null) _toolRegistry.Unregister(entry.Handler);
         // Preserve the entry when shutdown fails so a later stop can retry.

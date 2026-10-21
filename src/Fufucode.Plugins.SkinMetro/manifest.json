@@ -1,0 +1,8 @@
+{
+  "id": "skin.metro",
+  "name": "Metro 皮肤",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.SkinMetro.dll",
+  "packageType": "Fufucode.Plugins.SkinMetro.SkinMetroPluginPackage",
+  "category": "Theme"
+}
