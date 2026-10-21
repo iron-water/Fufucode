@@ -550,26 +550,12 @@
                   Foreground="{DynamicResource AppTextSecondary}"/>
       </Button>
 
-      <!-- 输入区：项目切换在输入框上方独立一行（Codex 式），卡片本体只放输入与底部工具。
-           x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
-      <StackPanel x:Name="ComposerHost" Grid.Row="1" MaxWidth="880" HorizontalAlignment="Stretch" VerticalAlignment="Bottom">
-        <StackPanel x:Name="SessionContextBar" Orientation="Horizontal" Spacing="6"
-                    Margin="12,0,12,6" IsVisible="False">
-          <Button x:Name="SessionProjectChip" Classes="contextChip"
-                  ToolTip.Tip="更改此会话的项目"
-                  AutomationProperties.Name="更改此会话的项目">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
-                        VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-              <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
-              <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                        VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
-            </StackPanel>
-          </Button>
-        </StackPanel>
-      <Border x:Name="ComposerCard" Classes="composerCard"
+      <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
+      <Border x:Name="ComposerCard" Grid.Row="1" Classes="composerCard" MaxWidth="880"
               CornerRadius="0" BorderThickness="0,1,0,0" Margin="0" HorizontalAlignment="Stretch">
         <StackPanel>
+          <!-- 会话上下文（项目切换）在底部工具行，与模型/思考/权限同排；
+               后端只在顶栏会话岛显示，输入卡内不再有后端徽标。 -->
 
           <!-- 排队条：subtle chip 列表 -->
           <Border Classes="queueStrip" IsVisible="{Binding Input.HasQueue}" Margin="0,0,0,8">
@@ -686,6 +672,21 @@
             </Button>
             <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="添加文件、图片、PDF 或链接"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
             <WrapPanel x:Name="ComposerModes" Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
+              <!-- 会话所属项目：与其它选择器同排放在底部；新会话发送第一条前可改。 -->
+              <StackPanel x:Name="SessionContextBar" Orientation="Horizontal" Spacing="6"
+                          VerticalAlignment="Center" Margin="0,0,6,0" IsVisible="False">
+                <Button x:Name="SessionProjectChip" Classes="contextChip"
+                        ToolTip.Tip="更改此会话的项目"
+                        AutomationProperties.Name="更改此会话的项目">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
+                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                    <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
+                    <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
+                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+                  </StackPanel>
+                </Button>
+              </StackPanel>
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
               <Button Classes="subtle" Width="165" Height="28" Padding="8,0" FontSize="11"
                       IsEnabled="{Binding Settings.CanChangeModel}" ToolTip.Tip="选择模型">
@@ -796,7 +797,6 @@
           </Grid>
         </StackPanel>
       </Border>
-      </StackPanel>
 
     </Grid>
   </Grid>

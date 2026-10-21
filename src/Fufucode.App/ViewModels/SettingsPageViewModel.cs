@@ -103,6 +103,14 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [ObservableProperty] private string? _networkStateText;
     [ObservableProperty] private bool _isModelApplying;
     [ObservableProperty] private bool _isEndpointSaving;
+    // ── 性能与内存（默认全部关闭 = 高性能模式） ──
+    [ObservableProperty] private bool _softwareRendering;
+    [ObservableProperty] private bool _disableVisualEffects;
+    [ObservableProperty] private bool _reduceTerminalScrollback;
+    [ObservableProperty] private bool _reduceBackgroundBrowserMemory;
+    [ObservableProperty] private SettingSaveState _performanceState;
+    [ObservableProperty] private string? _performanceStateText;
+    private bool _suppressPerformanceSave;
     private EndpointDraft? _endpointDraftBaseline;
     private bool _hasEndpointKeyDraft;
     private bool _suppressDraftTracking;
@@ -231,6 +239,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     /// <summary>储存首页：只在没有进入二级页时显示。</summary>
     public bool ShowStorage => SelectedCategory?.Id == "storage" && CurrentPageId.Length == 0;
+    /// <summary>性能与内存：独立于插件提供的性能中心页面，避免同一 id 冲突。</summary>
+    public bool ShowMemory => SelectedCategory?.Id == "memory";
     [ObservableProperty] private Avalonia.Controls.Control? _storageContent;
     /// <summary>性能监控设置页：内容由性能监控插件提供，未安装时显示安装提示。</summary>
     public bool ShowPerformance => SelectedCategory?.Id == "performance";
@@ -352,7 +362,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private void NotifyCategoryVisibility()
     {
         foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
-                     nameof(ShowStorage), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
+                     nameof(ShowStorage), nameof(ShowMemory), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowRemoteCard), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
 
@@ -1828,6 +1838,16 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         CloseToTray = current.Background?.CloseToTray ?? false;
         _suppressBackgroundApply = false;
         BackgroundSaveError = null;
+        var performance = current.Performance ?? new PerformanceSettings();
+        _suppressPerformanceSave = true;
+        SoftwareRendering = performance.SoftwareRendering;
+        DisableVisualEffects = performance.DisableVisualEffects;
+        ReduceTerminalScrollback = performance.ReduceTerminalScrollback;
+        ReduceBackgroundBrowserMemory = performance.ReduceBackgroundBrowserMemory;
+        _suppressPerformanceSave = false;
+        MemoryProfile.Apply(performance);
+        PerformanceState = SettingSaveState.Unchanged;
+        PerformanceStateText = null;
         ProxySummary = current.ProxyUrl is { } proxy ? $"已设置（{proxy}）" : "未设置";
         ProxyInput = current.ProxyUrl;
         ProxyError = null;
@@ -2050,5 +2070,59 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             NodeVersion: NodeVersion));
         await ctx.CopyText(summary);
         CopyStatus = "已复制到剪贴板";
+    }
+
+    // ── 性能与内存 ──
+
+    partial void OnSoftwareRenderingChanged(bool value) => SavePerformance(restartRequired: true);
+    partial void OnDisableVisualEffectsChanged(bool value) => SavePerformance();
+    partial void OnReduceTerminalScrollbackChanged(bool value) => SavePerformance();
+    partial void OnReduceBackgroundBrowserMemoryChanged(bool value) => SavePerformance();
+
+    /// <summary>把三个开关写回 settings.json，并立即更新运行时读数。</summary>
+    private void SavePerformance(bool restartRequired = false)
+    {
+        if (_suppressPerformanceSave || _context is null) return;
+        try
+        {
+            var next = _context.Store.Update(current => current with
+            {
+                Performance = new PerformanceSettings(
+                    SoftwareRendering, DisableVisualEffects, ReduceTerminalScrollback,
+                    ReduceBackgroundBrowserMemory),
+            });
+            MemoryProfile.Apply(next.Performance);
+            PerformanceState = restartRequired ? SettingSaveState.RestartRequired : SettingSaveState.Applied;
+            PerformanceStateText = restartRequired ? "已保存 · 重启后生效" : "已保存 · 已应用";
+        }
+        catch (Exception ex)
+        {
+            PerformanceState = SettingSaveState.Failed;
+            PerformanceStateText = "保存失败：" + ex.GetBaseException().Message;
+        }
+    }
+
+    [RelayCommand]
+    private void ApplyLowMemoryPreset()
+    {
+        _suppressPerformanceSave = true;
+        SoftwareRendering = true;
+        DisableVisualEffects = true;
+        ReduceTerminalScrollback = true;
+        ReduceBackgroundBrowserMemory = true;
+        _suppressPerformanceSave = false;
+        SavePerformance(restartRequired: true);
+    }
+
+    [RelayCommand]
+    private void ApplyHighPerformancePreset()
+    {
+        _suppressPerformanceSave = true;
+        SoftwareRendering = false;
+        DisableVisualEffects = false;
+        ReduceTerminalScrollback = false;
+        ReduceBackgroundBrowserMemory = false;
+        _suppressPerformanceSave = false;
+        SavePerformance(restartRequired: true);
     }
 }
