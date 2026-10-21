@@ -397,10 +397,15 @@ public partial class MainWindow
         {
             Classes = { "overviewSession" }, Margin = new Thickness(indent, 0, 0, 0), Child = grid,
         };
-        row.PointerEntered += (_, _) => tail.IsVisible = true;
-        row.PointerExited += (_, _) => { if (!row.IsKeyboardFocusWithin) tail.IsVisible = false; };
-        row.GotFocus += (_, _) => tail.IsVisible = true;
-        row.LostFocus += (_, _) => { if (!row.IsPointerOver) tail.IsVisible = false; };
+        void SetHover(bool on)
+        {
+            if (on) row.Classes.Add("hover"); else row.Classes.Remove("hover");
+            tail.IsVisible = on;
+        }
+        row.PointerEntered += (_, _) => SetHover(true);
+        row.PointerExited += (_, _) => { if (!row.IsKeyboardFocusWithin) SetHover(false); };
+        row.GotFocus += (_, _) => SetHover(true);
+        row.LostFocus += (_, _) => { if (!row.IsPointerOver) SetHover(false); };
 
         var menu = OverviewContextMenu();
         menu.Items.Add(OverviewMenu("重命名", async () => { await ActivateOverviewSessionAsync(session); await RenameManagedSessionAsync(); }));
