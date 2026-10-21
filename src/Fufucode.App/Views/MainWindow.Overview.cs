@@ -186,9 +186,11 @@ public partial class MainWindow
     {
         var metadata = MetadataOrMock();
         var currentProjectId = _host?.Current.Project.Id;
-        return metadata.ListProjects()
+        var visible = metadata.ListProjects()
             .Where(project => project.Id == currentProjectId || !ProjectArchive.IsArchived(metadata, project.Id))
             .ToArray();
+        // 新登记的项目默认排在最前，不用在列表里逐个翻找。
+        return ProjectOrder.Apply(metadata, visible);
     }
     private IEnumerable<SessionRecord> OverviewSessions() => OverviewProjects()
         .SelectMany(project => _host!.Manager.Metadata.ListSessions(project.Id));
