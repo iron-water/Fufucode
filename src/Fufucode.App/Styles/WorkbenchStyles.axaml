@@ -129,6 +129,10 @@
   <Style Selector="Border.overviewSession.hover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
+  <!-- 伪类兜底：覆盖子树，行内任意位置悬停都亮（不依赖手动 PointerEntered）。 -->
+  <Style Selector="Border.overviewSession:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
   <!-- 输入区上下文条：项目/后端 chip，与设置行同一层轻质填充，不使用独立卡片。 -->
   <Style Selector="Button.contextChip">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>

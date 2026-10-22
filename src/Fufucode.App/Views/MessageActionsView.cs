@@ -134,19 +134,12 @@ public sealed class MessageActionsView : UserControl
             if (FindChat() is { } chat) ApplyAppearance(chat.Appearance);
             Bind();
         };
-        PointerEntered += (_, _) =>
-        {
-            if (_appearance.MessageActions == "hover")
-            {
-                _icons.Opacity = 1;
-                _icons.IsHitTestVisible = true;
-            }
-        };
-        PointerExited += (_, _) => UpdateVisibility();
-
-        // 底部卡只在回合结束后出现；出现时做一次淡入，避免突然插入造成滚动跳动。
+        // PointerEntered/Exited 是直接事件、不冒泡：按钮铺满后本控件收不到，
+        // 改跟 IsPointerOver 属性（覆盖子树），与设置行/会话行同一套语义。
         PropertyChanged += (_, e) =>
         {
+            if (e.Property == Avalonia.Input.InputElement.IsPointerOverProperty) UpdateVisibility();
+            // 底部卡只在回合结束后出现；出现时做一次淡入，避免突然插入造成滚动跳动。
             if (e.Property == IsVisibleProperty && IsVisible) Motion.AnimateFooter(this);
         };
         AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
