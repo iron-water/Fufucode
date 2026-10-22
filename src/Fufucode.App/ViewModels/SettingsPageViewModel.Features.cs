@@ -184,12 +184,12 @@ public sealed partial class SettingsPageViewModel
 
     public IReadOnlyList<string> BackendEngineChoices { get; } =
     [
-        "FUMO (默认原生内核 · 纯 C# · 紫色)",
-        "Pi (后端插件 · 绿色)",
-        "OMP (后端插件 · 橙色)",
-        "Codex (后端插件 · 蓝色)",
-        "DSH (后端插件 · 青色)",
-        "Claude (后端插件 · 暖橙红)",
+        "FUMO (默认原生内核 · 纯 C#)",
+        "Pi (后端插件)",
+        "OMP (后端插件)",
+        "Codex (后端插件)",
+        "DSH (后端插件)",
+        "Claude (后端插件)",
     ];
 
     private static EngineId EngineForIndex(int value) => value switch
@@ -221,7 +221,7 @@ public sealed partial class SettingsPageViewModel
     private void UpdateBackendStatus(EngineId engine)
     {
         var badge = BackendBadgeCatalog.For(engine);
-        BackendStatusText = $"当前默认：{badge.DisplayName}（{badge.BadgeColor}）" + BackendPluginSuffix(engine);
+        BackendStatusText = $"当前默认：{badge.DisplayName}" + BackendPluginSuffix(engine);
     }
 
     /// <summary>后端选择必须如实反映插件载荷状态；未安装时明确说明新会话会回退。</summary>
