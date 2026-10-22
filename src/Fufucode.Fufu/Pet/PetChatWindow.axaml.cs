@@ -45,6 +45,29 @@ public sealed partial class PetChatWindow : Window
         host.ApprovalRequested += r => Dispatcher.UIThread.Post(() => ShowApproval(r));
         host.ApprovalClosed += r => Dispatcher.UIThread.Post(() => HideApproval(r));
         Closed += (_, _) => host.SessionEventReceived -= OnHostEvent;
+        Opened += async (_, _) => await RestoreHistoryAsync();
+    }
+
+    private async Task RestoreHistoryAsync()
+    {
+        try
+        {
+            var history = await _host.LoadChatHistoryAsync();
+            if (history.Count == 0) return;
+
+            foreach (var message in history)
+            {
+                var text = MessageText(message);
+                if (string.IsNullOrWhiteSpace(text)) continue;
+                Append(text,
+                    message.Role == MessageRole.User ? UserBubble : BotBubble,
+                    message.Role == MessageRole.User ? HorizontalAlignment.Right : HorizontalAlignment.Left);
+            }
+        }
+        catch (Exception ex)
+        {
+            Append($"（历史恢复失败：{ex.Message}）", SysBubble, HorizontalAlignment.Left);
+        }
     }
 
     private void OnHostEvent(object? sender, SessionEvent e) =>
