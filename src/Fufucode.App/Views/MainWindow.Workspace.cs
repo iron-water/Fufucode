@@ -472,7 +472,8 @@ public partial class MainWindow
         RenderDockPages();
         Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.dock-render", "dock pages rendered");
         UpdateLocalReviewProject(path);
-        vm.Settings.AttachBuiltInModules([_browserModule, _libraryModule, _localReviewModule]);
+        // 设置里只暴露真正的内建可选模块；浏览器/终端/自动开发的安装状态统一由插件市场管理。
+        vm.Settings.AttachBuiltInModules([_libraryModule, _localReviewModule]);
         vm.Settings.ShortcutsContent = _shortcutsPage;
         // 快捷键页内部分组下钻 → 同步到设置页子页路由，让面包屑/标题/淡入一起走。
         _shortcutsPage.GroupOpened += group => vm.Settings.OpenShortcutsGroup(group);
