@@ -7,7 +7,7 @@
 1. `main` 只做集成，不直接承载并行 feature。
 2. 一个 feature 名 = 一个分支 = 一个工作树 = 一个写入者。
 3. 模型不共享工作树；同一工作树只有一个写入者。
-4. 构建默认走 `fucode/publish-local.ps1 -ReviewLabel "<branch>@<sha>" -NoRun`，自动写到主工作树 `out/review/<分支名>`；不覆盖 `out/app`，不写本地更新指针，不停止正在运行的应用。
+4. 模型收尾必须运行 `fucode/feature-publish.ps1` 自主发布，自动写到主工作树 `out/review/<分支名>`；不覆盖 `out/app`，不写本地更新指针，不停止正在运行的应用。
 5. 清理只允许 `fucode/feature-worktree.ps1 -Remove`：工作树必须干净且分支已合并，否则拒绝。
 6. 审阅构建的窗口标题必须带 `branch@commit` label；没有 label 的窗口不作为审阅对象。
 
@@ -72,21 +72,23 @@ out/review/index.html
 - `--parallel-review` 跳过单实例守卫，多个审阅窗口可以同时存在；
 - `--review-label` 显示在窗口标题里，避免看错构建。
 
-## 单个 feature 直接发布
+## 单个 feature 自主发布
 
-在 feature 工作树里执行：
+模型在 feature 工作树里执行一条命令：
 
 ```bash
-pwsh fucode/publish-local.ps1 -ReviewLabel "feature/review-ui@a1b2c3d4" -NoRun
+pwsh fucode/feature-publish.ps1
 ```
 
-只需要 `-ReviewLabel`。脚本会找到主工作树，并把产物放到
-`out/review/feature-review-ui`；即使模型在自己的 worktree 里发布，主工作树的审阅板也能直接看到。
+它做四件事：确认不是 `main`、检查工作树干净、用 `branch@commit` 发布到主工作树的
+`out/review/<分支名>`、读回 `review.json` 核对 label/commit/exe。模型不需要知道主仓库路径，
+也不应该让用户代为构建。
 
-- 不要省略 `-ReviewLabel`，否则会变成普通本地构建。
-- 相对 `-OutputRoot` 也以主工作树为基准，可覆盖目录，但通常不需要。
-- 审阅构建不会停止现有应用、不会覆盖 `out/app`、不会写
+- 有未提交改动时默认拒绝；确认要一起构建时加 `-AllowDirty`。
+- 构建失败会返回非零退出码，模型必须修完重新发布。
+- 不会启动应用、不会停止现有应用、不会覆盖 `out/app`、不会写
   `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
+- 裸 `publish-local.ps1 -ReviewLabel ...` 只作为脚本不可用时的故障回退。
 - 模型必须按 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md) 回报 label、commit、目录和构建结果。
 
 ## 人类反馈循环

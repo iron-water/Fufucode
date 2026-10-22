@@ -54,11 +54,15 @@ Several models can work at once without sharing a worktree or overwriting `out/a
 pwsh fucode/feature-worktree.ps1 -Name review-ui
 ```
 
-Commit in that worktree, then publish an isolated review build:
+Commit in that worktree, then let the model publish its own isolated review build:
 
 ```bash
-pwsh fucode/publish-local.ps1 -ReviewLabel "feature/review-ui@a1b2c3d4" -NoRun
+pwsh fucode/feature-publish.ps1
 ```
+
+The script refuses `main`, checks that the worktree is clean, generates the
+`branch@commit` label, builds into the main worktree's `out/review/<branch>`, and verifies
+the resulting `review.json` and executable.
 
 Open the review board, then launch one build at a time:
 

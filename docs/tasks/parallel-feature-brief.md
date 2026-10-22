@@ -7,7 +7,7 @@
 ## 一句话
 
 一个 feature = 一个分支 = 一个工作树 = 一个写入者；在自己的工作树提交，用
-`publish-local.ps1 -ReviewLabel` 发布到主仓库的 `out/review/<分支>`；不要碰 `main`、
+`feature-publish.ps1` 自主发布到主仓库的 `out/review/<分支>`；不要碰 `main`、
 `out/app` 和别人的运行实例。
 
 ## 开工前先核对
@@ -41,31 +41,38 @@ pwsh fucode/feature-worktree.ps1 -Name <id>
 - 不把“模块写完”冒充“整项可用”；未接线的部分明确标注。
 - 未实际运行的测试写“未运行”，不要写“应该通过”。
 
-## 发布审阅构建
+## 发布审阅构建（模型自己完成）
 
-先提交，再发布。这样 label 和 commit 对得上：
-
-```bash
-git rev-parse --short=8 HEAD
-pwsh fucode/publish-local.ps1 -ReviewLabel "<branch>@<short-sha>" -NoRun
-```
-
-示例：
+先提交，再在 feature 工作树里运行一条命令：
 
 ```bash
-pwsh fucode/publish-local.ps1 -ReviewLabel "feature/review-ui@a1b2c3d4" -NoRun
+pwsh fucode/feature-publish.ps1
 ```
+
+它会自动完成：
+
+- 确认当前不是 `main`、工作树干净；
+- 读取分支和 HEAD，生成 `branch@commit` label；
+- 调用 `publish-local.ps1` 构建到主工作树的 `out/review/<分支名>`；
+- 读回 `review.json`，核对 label、commit 和 exe；
+- 打印交付卡需要的分支、commit、label、目录。
+
+常用变体：
+
+```bash
+pwsh fucode/feature-publish.ps1 -NoRestore
+pwsh fucode/feature-publish.ps1 -AllowDirty
+```
+
+`-AllowDirty` 只用于确认未提交改动确实要进入本次审阅构建；正常情况下应先提交。
 
 规则：
 
-- **不需要写 `-OutputRoot`。** 脚本会自动放到主工作树的
-  `out/review/<分支名>`（`/` 换成 `-`）。
-- 不要省略 `-ReviewLabel`。在 feature 工作树里省略它会变成普通本地构建，
-  可能覆盖 `out/app` 或写本地更新指针。
-- `-NoRun` 表示只发布，不启动。审阅窗口由用户从审阅板启动。
-- 发布不会停止用户正在运行的应用，也不会写
-  `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
-- 如果脚本报告构建失败，保留完整错误，修完重新提交、重新发布；不要只发一个旧产物。
+- **不需要写 `-OutputRoot` 或手动拼 label。**
+- 不要直接运行裸的 `publish-local.ps1` 代替本脚本；本脚本会核对产物，避免“以为发布了”。
+- 构建失败时保留完整错误，修完重新提交、重新运行；不要只发旧产物。
+- 发布不会启动应用、不会停止用户正在运行的应用，也不会覆盖 `out/app` 或写本地更新指针。
+- 审阅窗口由用户从审阅板启动，模型不替用户启动。
 
 发布成功后，`review.json` 和 `app/build-info.json` 会包含：
 
@@ -152,8 +159,8 @@ pwsh fucode/feature-worktree.ps1 -Name <id> -Remove
 2. 一个工作树只有一个写入者；发现不属于本任务的未提交改动，停下报告。
 3. 不覆盖 out/app，不写本地更新指针，不停止用户正在运行的应用。
 4. 完成后先提交，再从工作树运行：
-   pwsh fucode/publish-local.ps1 -ReviewLabel "<branch>@<short-sha>" -NoRun
-   不要省略 -ReviewLabel；不要自行删除工作树。
+   pwsh fucode/feature-publish.ps1
+   不要自行删除工作树；构建失败必须修完重新发布。
 5. 最终回复必须包含：分支、HEAD commit、审阅 label、审阅目录、构建退出码、
    已运行测试、未运行项、未提交改动、阻塞与需要主控接线的事项。
 
