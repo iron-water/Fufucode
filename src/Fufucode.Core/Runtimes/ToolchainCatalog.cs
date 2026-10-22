@@ -204,6 +204,17 @@ public static class ToolchainCatalog
                 Path.Combine("bin", "bash.exe"),
                 [".", "bin", Path.Combine("usr", "bin"), Path.Combine("mingw64", "bin")], []),
 
+            // ── 可选执行沙箱 ──
+            new("nvx", "NVX Micro-VM Sandbox", ToolchainKind.Runtime,
+                "微软 NVX/OpenVMM 微虚拟机沙箱。Windows 使用 WHP，载荷安装后才可启动。",
+                ["nvx-rs", "openvmm"],
+                [
+                    Path.Combine(localAppData, "Fufucode", "runtime", "nvx", "bin", "nvx-rs.exe"),
+                    Path.Combine(localAppData, "Fufucode", "runtime", "nvx", "bin", "openvmm.exe"),
+                ],
+                Path.Combine("bin", "nvx-rs.exe"),
+                [".", "bin"], []),
+
             // ── 后端 CLI ──
             new("pi", "Pi", ToolchainKind.Backend,
                 "Pi RPC 后端。脚本型工具：依赖 node 工具链。",

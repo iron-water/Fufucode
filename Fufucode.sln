@@ -79,6 +79,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Codex", "s
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Dsh", "src\Fufucode.Plugins.Dsh\Fufucode.Plugins.Dsh.csproj", "{2A944C12-2BC7-4B25-8226-7462A2B3A546}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Nvx", "src\Fufucode.Plugins.Nvx\Fufucode.Plugins.Nvx.csproj", "{B2F80C0A-1AA1-4E22-9F7A-4F09D8A2C7E1}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.App.Automation.SelfTests", "tests\Fufucode.App.Automation.SelfTests\Fufucode.App.Automation.SelfTests.csproj", "{AB23AD50-3F03-4A8F-8B48-FA3E22AF150D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Terminal", "src\Fufucode.Plugins.Terminal\Fufucode.Plugins.Terminal.csproj", "{D789BCF7-5A16-4575-923C-0F367FD4F8A9}"
@@ -98,6 +100,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.SkinLuna", "src\Fufucode.Plugins.SkinLuna\Fufucode.Plugins.SkinLuna.csproj", "{A85FBF1A-D4B3-4EF3-B81B-526E977AA873}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.SkinLiquidGlass", "src\Fufucode.Plugins.SkinLiquidGlass\Fufucode.Plugins.SkinLiquidGlass.csproj", "{A3461DB0-182B-4B66-9F23-B45DF62FDA04}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Fufu", "src\Fufucode.Fufu\Fufucode.Fufu.csproj", "{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.FufuBridge", "src\Fufucode.Plugins.FufuBridge\Fufucode.Plugins.FufuBridge.csproj", "{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Abstractions", "Abstractions", "{F42B91D1-9EC8-8DB1-133E-50E7CB36B70D}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -636,6 +644,30 @@ Global
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04}.Release|x64.Build.0 = Release|Any CPU
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04}.Release|x86.ActiveCfg = Release|Any CPU
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04}.Release|x86.Build.0 = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x64.Build.0 = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Debug|x86.Build.0 = Debug|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x64.ActiveCfg = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x64.Build.0 = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x86.ActiveCfg = Release|Any CPU
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x86.Build.0 = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x64.Build.0 = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x86.Build.0 = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x64.ActiveCfg = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x64.Build.0 = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x86.ActiveCfg = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -684,5 +716,7 @@ Global
 		{8FB2AD05-5ED4-4ABC-8E44-34AF33B41DA9} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A85FBF1A-D4B3-4EF3-B81B-526E977AA873} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

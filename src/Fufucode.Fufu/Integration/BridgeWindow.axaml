@@ -1,0 +1,86 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:int="clr-namespace:Fufucode.Fufu.Integration"
+        x:Class="Fufucode.Fufu.Integration.BridgeWindow"
+        Title="连接 Fufucode" Width="420" Height="620"
+        MinWidth="320" MinHeight="360"
+        ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="Manual"
+        Background="#CC1E1E24" TransparencyLevelHint="AcrylicBlur">
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto,Auto" Margin="10" RowSpacing="6">
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
+      <TextBlock Name="StatusText" Text="未连接 Fufucode" Foreground="#FFB0B0" FontWeight="SemiBold"
+                 VerticalAlignment="Center" />
+      <CheckBox Name="ProactiveCheck" Content="主动行为" Foreground="#B0C0D0" FontSize="11"
+                VerticalAlignment="Center" />
+      <Button Name="RefreshButton" Content="刷新目录" Padding="8,3" HorizontalAlignment="Right" />
+    </StackPanel>
+
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="6">
+      <TextBlock Text="关注：" Foreground="#9090A0" FontSize="11" VerticalAlignment="Center" />
+      <TextBlock Name="WatchText" Text="全部会话" Foreground="#7CD4CC" FontSize="11" VerticalAlignment="Center" />
+      <Button Name="WatchButton" Content="关注选中" Padding="8,2" FontSize="11" />
+      <Button Name="WatchAllButton" Content="关注全部" Padding="8,2" FontSize="11" />
+    </StackPanel>
+
+    <Border Name="ApprovalBar" Grid.Row="2" Background="#553A2A00" CornerRadius="6"
+            Padding="8" IsVisible="False">
+      <StackPanel Spacing="6">
+        <TextBlock Text="Fufucode 请求工具审批" FontWeight="SemiBold" Foreground="#FFD9A0" />
+        <TextBlock Name="ApprovalText" TextWrapping="Wrap" Foreground="#FFC890" FontSize="11" MaxHeight="80" />
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button Name="ApproveButton" Content="允许" Padding="10,4" />
+          <Button Name="DenyButton" Content="拒绝" Padding="10,4" />
+        </StackPanel>
+      </StackPanel>
+    </Border>
+
+    <Grid Grid.Row="3" RowDefinitions="Auto,*" RowSpacing="4">
+      <TextBlock Text="会话目录" Foreground="#9090A0" FontSize="11" />
+      <ListBox Name="SessionList" Grid.Row="1" Background="#23232B" MaxHeight="170">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="int:SessionRow">
+            <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+              <TextBlock Text="{Binding Marker}" Foreground="#7CD47C" />
+              <TextBlock Grid.Column="1" Text="{Binding Watched}" Foreground="#F2C94C" Width="14" />
+              <TextBlock Grid.Column="2" Text="{Binding Title}" Foreground="#E8E8F0" Margin="4,0" />
+              <TextBlock Grid.Column="3" Text="{Binding State}" Foreground="#90A0C0" FontSize="10" />
+            </Grid>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+
+    <Grid Grid.Row="4" RowDefinitions="Auto,Auto" RowSpacing="6" Margin="0,4,0,0">
+      <ScrollViewer Name="EventScroll" Height="110" Background="#1A1A20">
+        <ItemsControl Name="Events">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Text="{Binding}" Foreground="#8090A0" FontSize="10.5" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+      <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" ColumnSpacing="6" Margin="0,6,0,0">
+        <TextBox Name="SubmitBox" PlaceholderText="给选中会话下达任务…"
+                 AcceptsReturn="False" VerticalContentAlignment="Center"
+                 Padding="8,6" Background="#2C2C34" Foreground="#F0F0F0" />
+        <Button Name="SelectButton" Grid.Column="1" Content="切换" Padding="10,6" />
+        <Button Name="SubmitButton" Grid.Column="2" Content="提交任务" Padding="10,6" />
+      </Grid>
+    </Grid>
+
+    <Grid Grid.Row="5" RowDefinitions="Auto,*" RowSpacing="4" Margin="0,4,0,0">
+      <TextBlock Text="任务日志" Foreground="#9090A0" FontSize="11" />
+      <ScrollViewer Grid.Row="1" Height="90" Background="#16161B">
+        <ItemsControl Name="LogItems">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="x:String">
+              <TextBlock Text="{Binding}" Foreground="#707880" FontSize="10" TextWrapping="Wrap" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</Window>

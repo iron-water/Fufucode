@@ -65,7 +65,7 @@ internal static class CliRuntimeCommands
             }
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException(
-                    "Usage: fufucode runtime install <node|bun|python|git-bash|pi|omp|claude|codex|dsh> --from <zip|url> [--sha256 HEX]");
+                    "Usage: fufucode runtime install <node|bun|python|git-bash|nvx|pi|omp|claude|codex|dsh> --from <zip|url> [--sha256 HEX]");
             var descriptor = ToolchainCatalog.Find(id)
                 ?? throw new ArgumentException($"未知工具链 '{id}'。");
             if (string.IsNullOrWhiteSpace(from))
@@ -78,12 +78,32 @@ internal static class CliRuntimeCommands
             return 0;
         }
 
+        if (string.Equals(arguments[0], "probe", StringComparison.OrdinalIgnoreCase))
+        {
+            var id = arguments.Count > 1 ? arguments[1] : "nvx";
+            if (!string.Equals(id, "nvx", StringComparison.OrdinalIgnoreCase))
+                throw new ArgumentException("Usage: fufucode runtime probe nvx");
+            var host = NvxHostProbe.Probe();
+            var toolchain = ToolchainCatalog.Detect(layout, "nvx");
+            if (options.Json)
+                output.WriteLine(JsonSerializer.Serialize(new { host, toolchain }));
+            else
+            {
+                output.WriteLine($"host      : {(host.IsWindows ? "windows" : "unsupported")}");
+                output.WriteLine($"whp       : {host.HypervisorAvailable}");
+                output.WriteLine($"nvx       : {toolchain.Available}");
+                output.WriteLine($"detail    : {host.Diagnostic}");
+                if (toolchain.Diagnostic is not null) output.WriteLine($"toolchain : {toolchain.Diagnostic}");
+            }
+            return host.CanRunNvx && toolchain.Available ? 0 : 3;
+        }
+
         if (string.Equals(arguments[0], "remove", StringComparison.OrdinalIgnoreCase))
         {
             var id = arguments.Count > 1 ? arguments[1] : null;
             if (string.IsNullOrWhiteSpace(id))
                 throw new ArgumentException(
-                    "Usage: fufucode runtime remove <node|bun|python|git-bash|pi|omp|claude|codex|dsh>");
+                    "Usage: fufucode runtime remove <node|bun|python|git-bash|nvx|pi|omp|claude|codex|dsh>");
             var descriptor = ToolchainCatalog.Find(id)
                 ?? throw new ArgumentException($"未知工具链 '{id}'。");
             new RuntimePackageService(layout).Remove(descriptor.Id);
@@ -92,7 +112,7 @@ internal static class CliRuntimeCommands
         }
 
         throw new ArgumentException(
-            "Usage: fufucode runtime status [id] | install <id> --from <zip|url> [--sha256 HEX] | remove <id>");
+            "Usage: fufucode runtime status [id] | probe nvx | install <id> --from <zip|url> [--sha256 HEX] | remove <id>");
     }
 
     private static void Print(TextWriter output, bool json, ToolchainStatus status)
