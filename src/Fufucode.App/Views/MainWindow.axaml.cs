@@ -99,6 +99,7 @@ public partial class MainWindow : Window
         InitializeWorkspaceShell();
         Core.Diagnostics.StartupProbe.Mark("window.workspace-shell", "dock/workbench pages registered");
         InitializeCaption();
+        InitializeRowHover();
         InitializeGlobalWorkspace();
         Core.Diagnostics.StartupProbe.Mark("window.global", "caption and global workspace ready");
         InitializeCustomization();
