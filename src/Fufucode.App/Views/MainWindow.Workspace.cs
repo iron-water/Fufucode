@@ -32,9 +32,6 @@ public partial class MainWindow
     private BuiltInModuleViewModel _browserModule = null!;
     private BuiltInModuleViewModel _libraryModule = null!;
     private BuiltInModuleViewModel _localReviewModule = null!;
-    private BuiltInModuleViewModel _automationModule = null!;
-    private Features.Plugins.AutomationPageHost? _automationPageHost;
-    private string? _automationDatabase;
     private LibraryService? _libraryService;
     private BrowserPageState? _browserPageState;
     private DockZone? _browserDormantZone;
@@ -141,17 +138,7 @@ public partial class MainWindow
         _workbenchPages.RegisterOptional("local-review", "本地审查", "ShieldCheckmark", "builtin.local-review",
             CreateLocalReviewPage, control => ((Features.LocalReview.LocalReviewPageView)control).Detach());
         _localReviewModule = new("builtin.local-review", "本地审查", SetLocalReviewModuleEnabled);
-        _workbenchPages.RegisterOptional("automation", "自动开发", "Automation", "builtin.automation", () =>
-        {
-            // 页面内容由插件贡献；未安装时容器显示真实安装指引，页签身份仍由宿主保留。
-            if (_automationPageHost is null)
-            {
-                _automationPageHost = new Features.Plugins.AutomationPageHost();
-                _automationPageHost.DatabaseConnected += OnAutomationDatabaseConnected;
-            }
-            return _automationPageHost;
-        }, control => ((Features.Plugins.AutomationPageHost)control).Detach());
-        _automationModule = new("builtin.automation", "自动开发", SetAutomationModuleEnabled);
+        // 自动开发页完全由 automation.auto-dev 插件贡献；宿主不再保留页面壳。
         Add("sidechat", "侧边聊天", "Chat", CreateSideChatHost());
         WorkspacePanel.PreviewRequested += () => OpenDockPage("files", DockZone.Right);
         foreach (var dock in Docks())
@@ -251,7 +238,7 @@ public partial class MainWindow
                 BrowserState: _browserPageState,
                 LibraryEnabled: _workbenchPages.ContainsKey("library"),
                 LocalReviewEnabled: _workbenchPages.ContainsKey("local-review"),
-                AutomationEnabled: _workbenchPages.ContainsKey("automation"), AutomationDatabase: _automationDatabase).Serialize());
+                AutomationEnabled: false, AutomationDatabase: null).Serialize());
     }
 
     private void ApplyLibraryModuleState(bool enabled)
@@ -263,52 +250,6 @@ public partial class MainWindow
         });
         RenderDockPages();
         _actions.RefreshCapabilities();
-    }
-
-    private string SetAutomationModuleEnabled(bool enabled)
-    {
-        _workbenchPages.SetEnabled("automation", enabled, content =>
-        { foreach (var dock in AllDockHosts()) dock.DetachPage(content); _parkedPages.Children.Remove(content); });
-        RenderDockPages(); _actions.RefreshCapabilities(); _modulePreferencesCanWrite = true;
-        if (enabled) RestoreAutomationConnection();
-        try { SaveModulePreferences(); return enabled ? "已启用" : "已停用"; }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException) { return "状态保存失败：" + error.Message; }
-    }
-    private void RestoreAutomationConnection()
-    {
-        if (!_workbenchPages.ContainsKey("automation") || _automationPageHost is null) return;
-        _automationPageHost.SetProjectContext(_layoutContext);
-        _automationPageHost.Disconnect();
-        if (!string.IsNullOrWhiteSpace(_automationDatabase)) _ = _automationPageHost.ConnectAsync(_automationDatabase);
-    }
-
-    /// <summary>
-    /// 从插件宿主取自动开发页贡献并挂到已保留的页签上。插件未激活/已停用时只清空内容，
-    /// 不创建宿主内替代实现。停靠、浮动与布局状态因此不随插件装卸而失效。
-    /// </summary>
-    private void AttachAutomationPluginPage()
-    {
-        if (_automationPageHost is null) return;
-        var contribution = _pluginPackageManager?.PageContribution(PluginAccess.AutoDevPluginId);
-        if (contribution is null || !string.Equals(contribution.PageId, "automation", StringComparison.Ordinal))
-        {
-            _automationPageHost.Detach();
-            return;
-        }
-        if (_automationPageHost.Controller is not null) return;
-        if (contribution.CreateView() is not Avalonia.Controls.Control view) return;
-        _automationPageHost.Attach(view);
-        _automationPageHost.SetProjectContext(_layoutContext);
-        if (!string.IsNullOrWhiteSpace(_automationDatabase)) _ = _automationPageHost.ConnectAsync(_automationDatabase);
-    }
-
-    private void OnAutomationDatabaseConnected(string database, string? context)
-    {
-        if (context != _layoutContext) return;
-        _automationDatabase = database;
-        try { SaveModulePreferences(); }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
-        { if (_vm is not null) _vm.Timeline.AddNotification("连接已完成，但保存入口失败：" + error.Message); }
     }
 
     private string SetLibraryModuleEnabled(bool enabled)
@@ -517,11 +458,6 @@ public partial class MainWindow
                 _libraryModule.ApplyState(modules.LibraryEnabled, diagnostic ?? (modules.LibraryEnabled ? "已启用" : "已停用"));
                 ApplyLocalReviewModuleState(modules.LocalReviewEnabled);
                 _localReviewModule.ApplyState(modules.LocalReviewEnabled, diagnostic ?? (modules.LocalReviewEnabled ? "已启用" : "已停用"));
-                _automationDatabase = modules.AutomationDatabase;
-                _workbenchPages.SetEnabled("automation", modules.AutomationEnabled, content =>
-                { foreach (var dock in AllDockHosts()) dock.DetachPage(content); _parkedPages.Children.Remove(content); });
-                _automationModule.ApplyState(modules.AutomationEnabled, diagnostic ?? (modules.AutomationEnabled ? "已启用" : "已停用"));
-                RestoreAutomationConnection();
                 if (diagnostic is not null) vm.Timeline.AddNotification(diagnostic);
                 var text = _host?.Manager.Metadata.GetPreference(LayoutPreferenceKey());
                 _dockLayout = WorkbenchLayoutState.Restore(text,_workbenchPages.KnownPageIds);
@@ -536,7 +472,7 @@ public partial class MainWindow
         RenderDockPages();
         Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.dock-render", "dock pages rendered");
         UpdateLocalReviewProject(path);
-        vm.Settings.AttachBuiltInModules([_browserModule, _libraryModule, _localReviewModule, _automationModule]);
+        vm.Settings.AttachBuiltInModules([_browserModule, _libraryModule, _localReviewModule]);
         vm.Settings.ShortcutsContent = _shortcutsPage;
         // 快捷键页内部分组下钻 → 同步到设置页子页路由，让面包屑/标题/淡入一起走。
         _shortcutsPage.GroupOpened += group => vm.Settings.OpenShortcutsGroup(group);

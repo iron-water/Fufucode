@@ -21,7 +21,7 @@ public sealed class AutoDevPluginPackage : IPluginPackage
 
     /// <summary>自动开发页：数据根取自宿主上下文，项目上下文由宿主回调更新。</summary>
     public PluginPageContribution? CreatePageContribution(PluginPackageContext context) =>
-        new("automation", "自动开发", "Automation", "builtin.automation",
+        new("automation", "自动开发", "Automation", "automation.auto-dev",
             () => CreatePage(context),
             view => (view as AutomationControlPageView)?.Detach(),
             (view, projectPath) =>

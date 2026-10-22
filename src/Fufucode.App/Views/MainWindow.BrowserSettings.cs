@@ -70,9 +70,7 @@ public partial class MainWindow
             if (type == typeof(ExternalBrowserBridge)) return _externalBrowserBridge;
             return null;
         });
-        _pluginPackageManager.PagesChanged += AttachAutomationPluginPage;
         _pluginPackageManager.InitializeInstalledPlugins(_host?.ProjectPath);
-        AttachAutomationPluginPage();
     }
 
     /// <summary>
