@@ -151,6 +151,7 @@ public partial class MainWindow : Window
         Loaded += OnLoaded;
         Closing += OnClosing;
         Closed += OnClosed;
+        AttachBackgroundMode(EffectiveSettingsStore);
     }
 
     private void AttachSession(IChatSession session, IReadOnlyList<SessionItemViewModel>? sessions,
@@ -1415,14 +1416,13 @@ public partial class MainWindow : Window
         else Dispatcher.UIThread.Post(ApplyBackgroundMode);
     }
 
-    /// <summary>设置开 → 建托盘并显示；设置关 → 隐藏托盘；若窗口正藏在托盘，先恢复再关。</summary>
+    /// <summary>应用运行时托盘图标常驻可见；关闭窗口时是退出还是最小化到托盘由 CloseToTrayEnabled 决定。</summary>
     private void ApplyBackgroundMode()
     {
         if (_closed) return;
-        var enabled = CloseToTrayEnabled;
-        if (enabled) EnsureTrayIcon();
-        if (_trayIcon is { } tray) tray.IsVisible = enabled;
-        if (!enabled && _hiddenToTray) ShowFromTray();
+        EnsureTrayIcon();
+        if (_trayIcon is { } tray) tray.IsVisible = true;
+        if (!CloseToTrayEnabled && _hiddenToTray) ShowFromTray();
     }
 
     private void EnsureTrayIcon()
