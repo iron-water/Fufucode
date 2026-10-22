@@ -43,11 +43,9 @@ public partial class MainWindow
 
     private void ApplyLocalReviewModuleState(bool enabled)
     {
-        _workbenchPages.SetEnabled("local-review", enabled, content =>
-        {
-            foreach (var dock in AllDockHosts()) dock.DetachPage(content);
-            _parkedPages.Children.Remove(content);
-        });
+        try { _pluginPageHost?.Manager.SetPackageEnabled("workspace.local-review", enabled); }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { _vm?.Timeline.AddNotification("本地审查插件状态切换失败：" + error.Message); }
         RenderDockPages();
         _actions.RefreshCapabilities();
     }

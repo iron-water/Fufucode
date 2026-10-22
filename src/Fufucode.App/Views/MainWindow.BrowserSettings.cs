@@ -150,13 +150,15 @@ public partial class MainWindow
             await _externalBrowserBridge.StartAsync(settings.ExternalBrowserPort, settings.ExternalBrowserPin);
             var extension = ExternalBrowserExtensionInstaller.Ensure(
                 _browserSettingsRoot(), _externalBrowserBridge.Port, settings.ExternalBrowserPin);
+            var bridgeStatus = _externalBrowserBridge.Status;
             _browserSettings.ViewModel.ReportExternalBrowser(
-                _externalBrowserBridge.Running
-                    ? $"运行中 · 端口 {_externalBrowserBridge.Port} · " + (_externalBrowserBridge.IsConnected ? "扩展已连接" : "等待扩展连接")
+                bridgeStatus.Running
+                    ? $"运行中 · 端口 {bridgeStatus.Port} · " + (bridgeStatus.HandshakeComplete ? "扩展已就绪" : bridgeStatus.Connected ? "扩展已连接，等待握手" : "等待扩展连接")
                     : "启动失败",
-                _externalBrowserBridge.Port,
-                _externalBrowserBridge.IsConnected,
-                extension);
+                bridgeStatus.Port,
+                bridgeStatus.Connected,
+                extension,
+                bridgeStatus);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
         {
@@ -182,13 +184,15 @@ public partial class MainWindow
         }
         var extension = ExternalBrowserExtensionInstaller.Ensure(
             _browserSettingsRoot(), _externalBrowserBridge.Port, settings.ExternalBrowserPin);
+        var bridgeStatus = _externalBrowserBridge.Status;
         _browserSettings.ViewModel.ReportExternalBrowser(
-            _externalBrowserBridge.Running
-                ? $"运行中 · 端口 {_externalBrowserBridge.Port} · " + (_externalBrowserBridge.IsConnected ? "扩展已连接" : "等待扩展连接")
+            bridgeStatus.Running
+                ? $"运行中 · 端口 {bridgeStatus.Port} · " + (bridgeStatus.HandshakeComplete ? "扩展已就绪" : bridgeStatus.Connected ? "扩展已连接，等待握手" : "等待扩展连接")
                 : "未启动",
-            _externalBrowserBridge.Port,
-            _externalBrowserBridge.IsConnected,
-            extension);
+            bridgeStatus.Port,
+            bridgeStatus.Connected,
+            extension,
+            bridgeStatus);
     }
 
     private void UpdateExternalBrowserStatus()

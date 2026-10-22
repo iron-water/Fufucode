@@ -152,6 +152,16 @@ public static class PluginMarketplaceCatalog
             "1.0.0", "Fufucode Team", ["WebView2 运行时", "网页导航与本地文件预览", "可选 CDP 控制"],
             DefaultInstalled: false, DefaultEnabled: false),
 
+        new("workspace.library", "资料库", PluginCategory.ToolExtension,
+            "资料条目、来源回溯与聊天引用；安装后出现在工作区页面中。",
+            "1.0.0", "Fufucode Team", ["本地资料存储", "引用复制到聊天"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
+        new("workspace.local-review", "本地审查", PluginCategory.ToolExtension,
+            "基于 Git 差异的本地只读审查、发现项与导出；安装后出现在工作区页面中。",
+            "1.0.0", "Fufucode Team", ["读取项目 Git 差异", "调用审查执行器"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("workspace.terminal", "交互终端", PluginCategory.ToolExtension,
             "项目级交互式终端：ConPTY 原生 shell、备用屏与全屏 TUI、滚动区域、查找、选中复制、IME 与命令历史。",
             "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],

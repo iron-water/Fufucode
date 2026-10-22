@@ -206,6 +206,24 @@ Get-ChildItem -LiteralPath $browserOut -Filter 'Avalonia*.dll' -ErrorAction Sile
 Get-ChildItem -LiteralPath $browserOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 if (Test-Path (Join-Path $browserOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $browserOut 'runtimes') -Recurse -Force }
 
+# 可选资料库 / 本地审查插件：放进 plugins-dist，供插件市场安装；默认不播种、不激活。
+foreach ($plugin in @(
+    @{ Id='workspace.library'; Project='src/Fufucode.Plugins.Library/Fufucode.Plugins.Library.csproj'; Dll='Fufucode.Plugins.Library.dll' },
+    @{ Id='workspace.local-review'; Project='src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj'; Dll='Fufucode.Plugins.LocalReview.dll' }
+)) {
+    Write-Host "Publishing $($plugin.Id) plugin -> staging ..."
+    $pluginOut = Join-Path $stagingApp "plugins-dist/$($plugin.Id)"
+    $pluginArgs = @('publish', (Join-Path $root $plugin.Project), '-c', $Configuration, '-o', $pluginOut, '--nologo', '-v', 'q')
+    if ($NoRestore) { $pluginArgs += '--no-restore' }
+    & dotnet @pluginArgs
+    if ($LASTEXITCODE -ne 0) { throw "$($plugin.Id) plugin publish failed." }
+    Get-ChildItem -LiteralPath $pluginOut -Filter 'Fufucode.*.dll' |
+        Where-Object { $_.Name -ne $plugin.Dll } | Remove-Item -Force
+    Get-ChildItem -LiteralPath $pluginOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+    Get-ChildItem -LiteralPath $pluginOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+    if (Test-Path (Join-Path $pluginOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $pluginOut 'runtimes') -Recurse -Force }
+}
+
 # 本地调试只需要自有程序集的 PDB；Skia/HarfBuzz 的原生 PDB 合计约 100 MB，删掉。
 Get-ChildItem -LiteralPath $stagingApp -Recurse -File -Filter *.pdb |
     Where-Object { $_.Name -notlike 'Fufucode.*.pdb' } |
