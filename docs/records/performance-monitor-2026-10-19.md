@@ -107,11 +107,11 @@ turn (model, executionMode, promptChars, queueMs, outcome)
 ### 验证
 
 - `dotnet build Fufucode.sln -c Debug`：45 工程 0 错误 0 警告。
-- `dotnet run --project tests/Fufucode.PerformanceMonitor.Tests`：全部 8 组通过；新增 `snapshot` 组覆盖层级、Token、阻塞节点、过滤。
+- `dotnet run --project tests/Fufucode.PerformanceMonitor.Tests`：全部 8 组通过；新增 `snapshot` 组覆盖层级、Token、阻塞节点、过滤；`native` 组新增 stdout 头断言。
 - 审阅构建 `feature/perf-ui@fbd00a91` 已生成并启动浮窗；无头 `invoke perf --allow-action --perf-turn` 执行成功，无异常输出。
 
 ### 未验证
 
 - 真实桌面浮窗在真实会话数据下的视觉密度与滚动/缩放手感；需审阅窗口确认。
-- 命令 stdout/stderr 正文未进入性能页，检查器只显示字节数；完整输出仍在聊天工具卡/日志。
+- 命令输出只进入检查器的头部（各最多 220 字符，已脱敏）；完整输出仍在聊天工具卡/日志。
 
