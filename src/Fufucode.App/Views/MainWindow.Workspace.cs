@@ -570,8 +570,14 @@ public partial class MainWindow
     private void OnPluginPageStateChanged(object? sender, EventArgs e)
     {
         _actions.RefreshCapabilities();
-        if (_syncingDockState || _terminalPage is null) return;
-        if (_terminalPage.IsVisible) OpenDockPage("terminal", DockZone.Bottom);
+        if (_syncingDockState || _renderingDockPages || _terminalPage is null) return;
+        if (_terminalPage.IsVisible)
+        {
+            // 用户点“收起”后，插件在下架视图时仍可能回报 IsVisible=true；
+            // 此时不能再把底栏自动打开，否则表现为“收起无效”。
+            if (_dockLayout.Hidden[DockZone.Bottom] && _dockLayout.Find("terminal") == DockZone.Bottom) return;
+            OpenDockPage("terminal", DockZone.Bottom);
+        }
         else if (_dockLayout.Find("terminal") is not null) CloseDockPage("terminal");
     }
 
