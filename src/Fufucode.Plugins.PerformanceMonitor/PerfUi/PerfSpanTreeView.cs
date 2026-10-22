@@ -90,7 +90,7 @@ internal static class PerfTreeBuilder
     {
         if (!visited.Add(node.Span.SpanId) || depth > 64) return;
         node.Depth = depth;
-        if (!node.IsExpanded && depth <= 2) node.IsExpanded = true;
+        if (!node.IsExpanded && depth <= 3) node.IsExpanded = true;
         foreach (var child in node.Children) SetDepth(child, depth + 1, visited);
     }
 
