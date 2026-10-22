@@ -698,10 +698,12 @@
                             VerticalAlignment="Center" Classes="meta"/>
                 </Grid>
                 <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedRight">
+                  <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened">
                     <Border Width="380" Classes="card" Padding="10">
                       <StackPanel Spacing="8">
-                        <TextBox Text="{Binding Settings.ModelPickerFilter}"
+                        <TextBox x:Name="ModelPickerSearchBox"
+                                 Text="{Binding Settings.ModelPickerFilter, UpdateSourceTrigger=PropertyChanged}"
+                                 TextChanged="ModelPickerSearchBox_TextChanged"
                                  PlaceholderText="搜索模型…"/>
                         <!-- 关键字快捷：最多三行 -->
                         <ItemsControl ItemsSource="{Binding Settings.ModelSearchKeywords}" MaxHeight="84">
@@ -729,6 +731,14 @@
                                 IsVisible="{Binding Settings.HasDismissedKeywords}"
                                 Command="{Binding Settings.RestoreSearchKeywordsCommand}"/>
                         <TextBlock Classes="meta" Text="{Binding Settings.ModelPickerSummary}"/>
+                        <TextBlock Classes="meta" Text="正在加载模型…"
+                                   IsVisible="{Binding Settings.IsModelsLoading}"/>
+                        <TextBlock Classes="meta" Text="{Binding Settings.ModelsError}"
+                                   IsVisible="{Binding Settings.HasModelsError}" TextWrapping="Wrap"/>
+                        <Button Classes="subtle" Content="刷新模型" FontSize="11" Padding="8,2" MinHeight="24"
+                                HorizontalAlignment="Left"
+                                IsVisible="{Binding Settings.HasModelsError}"
+                                Command="{Binding Settings.RefreshModelsCommand}"/>
                         <!-- 右侧预留滚轮宽度：否则 Pin 按钮会被滚动条压住。 -->
                         <ScrollViewer MaxHeight="320" Padding="0,0,12,0">
                           <ItemsControl ItemsSource="{Binding Settings.FilteredModelChoices}">

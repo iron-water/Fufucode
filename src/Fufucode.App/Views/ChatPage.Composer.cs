@@ -174,6 +174,19 @@ public partial class ChatPage
         (sender as Button)?.Flyout?.Hide();
     }
 
+    /// <summary>每次打开模型选择器都从空搜索开始，避免上次的关键字把新提供商的模型全部过滤掉。</summary>
+    private void ModelPicker_Opened(object? sender, EventArgs e)
+    {
+        if (DataContext is MainViewModel vm) vm.Settings.ModelPickerFilter = string.Empty;
+    }
+
+    /// <summary>搜索框显式同步到 VM；不依赖控件的默认绑定触发时机。</summary>
+    private void ModelPickerSearchBox_TextChanged(object? sender, TextChangedEventArgs e)
+    {
+        if (DataContext is MainViewModel vm && sender is TextBox box)
+            vm.Settings.ModelPickerFilter = box.Text ?? string.Empty;
+    }
+
     private void ComposerChanged(object? sender, PropertyChangedEventArgs e) => RefreshComposerTools();
     private void TimelineChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => RefreshRuler();
     private void RefreshComposerTools()
