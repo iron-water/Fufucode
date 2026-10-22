@@ -62,8 +62,8 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
     public string? SessionId { get { lock (_gate) return _threadId; } }
 
     public IReadOnlyList<ExtensionUiRequest> PendingExtensionUiRequests => [];
-    public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Verified;
-    public string? ApprovalDiagnostic => "Codex 官方 CLI 审批流已适配。";
+    public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Unavailable;
+    public string? ApprovalDiagnostic => "Codex CLI 以 bypass 模式运行；审批桥尚未接入。";
 
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {

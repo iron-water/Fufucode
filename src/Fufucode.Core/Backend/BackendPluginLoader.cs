@@ -57,6 +57,13 @@ public static class BackendPluginLoader
             {
                 SessionFactories.Remove(backend);
                 DisabledBackends.Add(backend);
+                // Pi/OMP 共用 Pi 程序集；停用后清掉探测缓存，避免重启用时沿用
+                // 旧路径或旧程序集判断。已在默认 ALC 中的程序集仍会由 CreateRpcFactory 拒绝。
+                if (backend is BackendId.Pi or BackendId.Omp)
+                {
+                    _piAssembly = null;
+                    _piProbed = false;
+                }
             }
         }
     }
@@ -145,6 +152,10 @@ public static class BackendPluginLoader
     public static IRpcClientFactory? CreateRpcFactory(BackendProcessSpec spec)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        lock (Gate)
+        {
+            if (DisabledBackends.Contains(spec.Backend)) return null;
+        }
         return spec.Backend switch
         {
             BackendId.Pi or BackendId.Omp => CreatePiFactory(spec),

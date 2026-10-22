@@ -20,7 +20,8 @@ public sealed class PluginDistributionService
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(10) };
     }
 
-    public string Directory(string pluginId) => Path.Combine(_layout.Root, "distribution", pluginId);
+    public string Directory(string pluginId) => PluginPathGuard.Within(
+        _layout.Root, "distribution", PluginPathGuard.Segment(pluginId));
 
     public bool IsInstalled(string pluginId) =>
         File.Exists(Path.Combine(Directory(pluginId), "manifest.json"));
@@ -79,8 +80,25 @@ public sealed class PluginDistributionService
             }
 
             var target = Directory(pluginId);
-            if (System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
-            System.IO.Directory.Move(staging, target);
+            var backup = target + ".old-" + Guid.NewGuid().ToString("N");
+            var movedOld = false;
+            try
+            {
+                if (System.IO.Directory.Exists(target))
+                {
+                    System.IO.Directory.Move(target, backup);
+                    movedOld = true;
+                }
+                System.IO.Directory.Move(staging, target);
+            }
+            catch
+            {
+                // 新载荷移动失败时恢复旧安装，避免留下半删除的插件目录。
+                if (System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, true);
+                if (movedOld && System.IO.Directory.Exists(backup)) System.IO.Directory.Move(backup, target);
+                throw;
+            }
+            if (movedOld) System.IO.Directory.Delete(backup, true);
             return new PluginDistributionStatus(pluginId, true, target,
                 System.IO.Directory.GetFiles(target, "*", SearchOption.AllDirectories).Length);
         }

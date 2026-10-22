@@ -495,6 +495,7 @@ public sealed class SubagentRunner
     private static async Task<(string Output, string? Error)> RunGitAsync(string workingDirectory,
         IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
+        Process? process = null;
         try
         {
             var psi = new ProcessStartInfo
@@ -510,18 +511,25 @@ public sealed class SubagentRunner
             psi.ArgumentList.Add(workingDirectory);
             foreach (var argument in arguments) psi.ArgumentList.Add(argument);
 
-            using var process = new Process { StartInfo = psi };
+            process = new Process { StartInfo = psi };
             process.Start();
-            var stdout = await process.StandardOutput.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-            var stderr = await process.StandardError.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(30));
+            // 必须同时读 stdout/stderr：只读一路会让另一路填满管道后互相等待。
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
+            await Task.WhenAll(stdoutTask, stderrTask).ConfigureAwait(false);
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
-            return (stdout.Trim(), process.ExitCode == 0 ? null : stderr.Trim());
+            return (stdoutTask.Result.Trim(), process.ExitCode == 0 ? null : stderrTask.Result.Trim());
         }
         catch (Exception error)
         {
+            try { if (process is { HasExited: false }) process.Kill(entireProcessTree: true); } catch { }
             return (string.Empty, error.Message);
+        }
+        finally
+        {
+            process?.Dispose();
         }
     }
 }

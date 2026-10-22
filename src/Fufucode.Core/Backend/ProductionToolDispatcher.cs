@@ -160,6 +160,16 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         _ => false,
     };
 
+    /// <summary>
+    /// Plan 模式只放行明确只读的原生工具。插件/MCP/子代理等第三方工具
+    /// 无法静态证明只读，必须按变更性处理，不能只拦三个内置写工具。
+    /// </summary>
+    public static bool IsPlanSafeTool(string toolName) => toolName switch
+    {
+        "read_file" or "list_dir" or "grep_search" or "glob_files" or "update_plan" => true,
+        _ => false,
+    };
+
     /// <summary>是否为原生内置工具名（插件不得同名覆盖）。`skill` 也属于保留名。</summary>
     public static bool IsBuiltinToolName(string toolName) =>
         string.Equals(toolName, SkillRegistry.ToolName, StringComparison.Ordinal) ||
@@ -172,8 +182,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         ArgumentNullException.ThrowIfNull(call);
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Plan 模式权限守卫：只允许读取与规划，拦截任何文件修改与命令执行
-        if (Mode == PermissionMode.Plan && IsMutatingTool(call.Name))
+        // Plan 模式权限守卫：只允许明确只读的原生工具与 update_plan。
+        // 第三方插件/MCP/子代理无法证明只读，统一按变更性拦截。
+        if (Mode == PermissionMode.Plan && !IsPlanSafeTool(call.Name))
         {
             return new PureToolResult(call.Id, false,
                 $"【Plan 规划模式拦截】：当前会话处于只读 Plan 模式，禁止执行变更工具 '{call.Name}'。请先使用 update_plan 整理并确认规划，再由用户切换执行模式。");
@@ -222,31 +233,43 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         path.Equals(_workspaceRoot, PathComparison) ||
         path.StartsWith(_workspacePrefix, PathComparison);
 
-    /// <summary>解析最近一个已存在祖先的符号链接/目录联接，防止链接把访问引出工作区。</summary>
+    /// <summary>
+    /// 逐级解析符号链接/目录联接。只解析叶子或最近的已存在祖先前不够：
+    /// 工作区内若存在 link -&gt; C:\outside，已存在的 link\victim.txt 会绕过检查。
+    /// </summary>
     private static string ResolveRealPath(string path)
     {
-        var current = path;
-        var suffix = string.Empty;
-        while (!File.Exists(current) && !Directory.Exists(current))
-        {
-            var parent = Path.GetDirectoryName(current);
-            if (parent is null) return path;
-            suffix = Path.Combine(Path.GetFileName(current), suffix);
-            current = parent;
-        }
+        var full = Path.GetFullPath(path);
+        var root = Path.GetPathRoot(full);
+        if (string.IsNullOrEmpty(root)) return full;
 
+        var relative = full[root.Length..]
+            .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
+                StringSplitOptions.RemoveEmptyEntries);
+        var current = root;
+        var index = 0;
+        for (; index < relative.Length; index++)
+        {
+            var next = Path.Combine(current, relative[index]);
+            if (!File.Exists(next) && !Directory.Exists(next)) break;
+            current = ResolveOne(next);
+        }
+        for (; index < relative.Length; index++) current = Path.Combine(current, relative[index]);
+        return Path.GetFullPath(current);
+    }
+
+    private static string ResolveOne(string path)
+    {
         try
         {
-            FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
-            var target = info.ResolveLinkTarget(returnFinalTarget: true);
-            if (target is not null) current = target.FullName;
+            FileSystemInfo info = Directory.Exists(path) ? new DirectoryInfo(path) : new FileInfo(path);
+            return info.ResolveLinkTarget(returnFinalTarget: true)?.FullName ?? path;
         }
         catch
         {
-            // 无权限解析链接时保持原路径；外层仍按字面路径判断。
+            // 无权限解析链接时保持字面路径；外层仍会做包含判断。
+            return path;
         }
-
-        return Path.GetFullPath(suffix.Length == 0 ? current : Path.Combine(current, suffix));
     }
 
     private async Task<PureToolResult> ExecuteReadFileAsync(PureToolCall call, CancellationToken ct)
