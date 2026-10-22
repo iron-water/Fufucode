@@ -28,16 +28,18 @@ public sealed class WorkbenchLayoutState
     public Dictionary<DockZone, List<string>> Pages { get; set; } = new()
     {
         [DockZone.Left] = ["overview", "files"],
-        [DockZone.Right] = ["changes", "browser"],
-        [DockZone.Bottom] = ["terminal"],
+        // 浏览器和终端都是默认未安装的可选能力；安装/启用后由页面贡献或动作打开，
+        // 不再预置空页签。
+        [DockZone.Right] = ["changes"],
+        [DockZone.Bottom] = [],
     };
     public Dictionary<DockZone, string?> Selected { get; set; } = new()
     {
-        [DockZone.Left] = "overview", [DockZone.Right] = "changes", [DockZone.Bottom] = "terminal",
+        [DockZone.Left] = "overview", [DockZone.Right] = "changes", [DockZone.Bottom] = null,
     };
     public Dictionary<DockZone, bool> Hidden { get; set; } = new()
     {
-        [DockZone.Left] = false, [DockZone.Right] = false, [DockZone.Bottom] = false,
+        [DockZone.Left] = false, [DockZone.Right] = false, [DockZone.Bottom] = true,
     };
     public double LeftWidth { get; set; } = 232;
     public double RightWidth { get; set; } = 320;

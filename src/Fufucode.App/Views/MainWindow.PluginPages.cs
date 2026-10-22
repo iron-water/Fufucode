@@ -101,6 +101,7 @@ public partial class MainWindow
     private void SyncTerminalPageReference()
     {
         var next = _pluginPageHost?.TryGet("terminal", out var page) == true ? page : null;
+        var gained = _terminalPage is null && next is not null;
         if (!ReferenceEquals(next, _terminalPage))
         {
             if (_terminalPage is not null) _terminalPage.StateChanged -= OnPluginPageStateChanged;
@@ -113,6 +114,9 @@ public partial class MainWindow
                     _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers);
             }
         }
+        // 默认不预置终端页签；插件安装/启用后才把它放进底部停靠区。
+        // 只在“从无到有”时打开一次，用户之后手动关闭不再强行弹回。
+        if (gained && _dockLayout.Find("terminal") is null) OpenDockPage("terminal", DockZone.Bottom);
         else _terminalPage?.SetProject(_layoutContext, _options.Mode == AppSessionMode.Mock);
         if (_shortcuts is not null) UpdateShortcutLabels();
         _actions.RefreshCapabilities();

@@ -60,7 +60,7 @@ internal static class WorkbenchDemoSelfTest
             Check(registry["browser"].ModuleId == "builtin.browser", "Modules: activation restores a stable module identity");
         }
         var invalidModules = WorkbenchModulePreferences.Restore("{broken", out var invalidDiagnostic);
-        Check(invalidModules.BrowserEnabled && invalidDiagnostic is not null, "Modules: malformed preferences degrade without blocking core");
+        Check(!invalidModules.BrowserEnabled && invalidDiagnostic is not null, "Modules: malformed preferences degrade without blocking core");
         WorkbenchModulePreferences.Restore("{\"Version\":99}", out var unknownDiagnostic);
         Check(unknownDiagnostic is not null, "Modules: unsupported preference version is diagnosed");
         var state = new WorkbenchLayoutState();
@@ -225,6 +225,8 @@ internal static class WorkbenchDemoSelfTest
                     "Moving files retains the live control: " + zone);
             }
             window.MoveDockPage("files", DockZone.Left);
+            // 浏览器页默认不启用；本段验证启用/停用生命周期，先显式启用。
+            window.BrowserModuleForTesting.IsEnabled = true; await Ready();
             var browserPage = (Views.BrowserView)window.PageForTesting("browser");
             browserPage.ViewModel.AddressText = "browser address draft";
             window.MoveDockPage("browser", DockZone.Bottom); await Ready();
@@ -268,8 +270,8 @@ internal static class WorkbenchDemoSelfTest
                 "L08: invalid drop leaves layout unchanged");
             window.UpdateDockDropTarget(null);
             window.ResetDockLayout(); await Ready();
-            Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") == DockZone.Right && !window.DockLayoutForTesting.Hidden[DockZone.Bottom],
-                "L16: reset restores default positions and hidden regions");
+            Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") is null && window.DockLayoutForTesting.Hidden[DockZone.Bottom],
+                "L16: reset restores default positions without optional browser/terminal pages");
             // L17: 关空右侧页签后 Hidden 仍可能被用户切回 false，空区不可见（不收起规则）形成死区；
             // 打开操作必须回填默认页签，否则右栏永远打不开（真实缺陷：关空后「右区」按钮失效）。
             window.CloseDockPageForTesting("changes");

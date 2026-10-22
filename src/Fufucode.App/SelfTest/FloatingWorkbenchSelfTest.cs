@@ -19,6 +19,10 @@ internal static class FloatingWorkbenchSelfTest
     {
         void Check(bool value, string name) { if (value) pass("FloatingDock: " + name); else fail("FloatingDock: " + name); }
         var layout = new WorkbenchLayoutState();
+        // 浏览器和终端默认不预置；这个测试专门验证浮动/停靠顺序，显式打开它们。
+        layout.Open("browser", DockZone.Right);
+        layout.Selected[DockZone.Right] = "changes";
+        layout.Open("terminal", DockZone.Bottom);
         var individual = layout.FloatPage("files")!;
         Check(layout.Find("files") is null && individual.HomeZone == DockZone.Left && individual.HomeIndices["files"] == 1,
             "floating a page removes its docked identity and remembers its original slot");

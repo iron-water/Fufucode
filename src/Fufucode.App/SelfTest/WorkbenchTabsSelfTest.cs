@@ -46,11 +46,13 @@ internal static class WorkbenchTabsSelfTest
             await workspace.RefreshAsync();
             foreach (var id in WorkbenchLayoutState.KnownPages)
             {
-                // "terminal" is an optional plugin page now; without the plugin payload it must not exist.
+                // "terminal" and "browser" are optional pages now; without their module/plugin
+                // they must not exist, and the test should not treat their absence as a failure.
                 if (!window.PageAvailableForTesting(id))
                 {
-                    Check(id == "terminal" && window.TerminalPageForTesting is null,
-                        id + " is absent because its optional plugin is not installed");
+                    Check(id is "terminal" or "browser" &&
+                          (id != "terminal" || window.TerminalPageForTesting is null),
+                        id + " is absent because its optional module/plugin is not installed");
                     continue;
                 }
                 window.MoveDockPage(id, DockZone.Left); await Ready();
