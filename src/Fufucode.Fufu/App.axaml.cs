@@ -4,6 +4,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
+using Fufucode.App.Abstractions;
 using Fufucode.Fufu.Bot;
 using Fufucode.Fufu.Integration;
 using Fufucode.Fufu.Pet;
@@ -22,6 +23,8 @@ public sealed class App : Application
     private BotHost? _bot;
     private FufuSessionHost? _sessionHost;
     private PetChatWindow? _chatWindow;
+    private FufuPipeServer? _pipeServer;
+    private BridgeWindow? _bridgeWindow;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
     private PixelPoint? _lastPos; // 显式跟踪位置：Window.Position 在 Hide/Show 往返后可能复位为 0,0
@@ -50,6 +53,12 @@ public sealed class App : Application
         _wander = new WanderController(_behavior);
         _bot = new BotHost(_behavior);
         _sessionHost = new FufuSessionHost(dataRoot, _behavior);
+        _pipeServer = new FufuPipeServer();
+        _pipeServer.AgentEventReceived += OnBridgeEvent;
+        _pipeServer.ApprovalReceived += (_, _, _, _) =>
+            Dispatcher.UIThread.Post(() => _behavior.Notify(PetState.Attention));
+        _pipeServer.ConnectionChanged += connected =>
+            Dispatcher.UIThread.Post(() => _behavior.Notify(connected ? PetState.Success : PetState.Idle));
 
         var renderer = new PlaceholderPetRenderer();
         var settings = _settings.Current;
@@ -146,6 +155,10 @@ public sealed class App : Application
         chatItem.Click += (_, _) => ShowChat();
         menu.Items.Add(chatItem);
 
+        var bridgeItem = new NativeMenuItem("连接 Fufucode…");
+        bridgeItem.Click += (_, _) => ShowBridge();
+        menu.Items.Add(bridgeItem);
+
         var pauseItem = new NativeMenuItem("暂停移动") { IsChecked = s.MovementPaused };
         pauseItem.Click += (_, _) =>
         {
@@ -203,6 +216,10 @@ public sealed class App : Application
             var chatItem = new MenuItem { Header = "和 FUFU 聊天…" };
             chatItem.Click += (_, _) => ShowChat();
             menu.Items.Add(chatItem);
+
+            var bridgeItem = new MenuItem { Header = "连接 Fufucode…" };
+            bridgeItem.Click += (_, _) => ShowBridge();
+            menu.Items.Add(bridgeItem);
 
             var pauseItem = new MenuItem { Header = "暂停移动", IsChecked = s.MovementPaused };
             pauseItem.Click += (_, _) =>
@@ -264,6 +281,44 @@ public sealed class App : Application
         _chatWindow = chat;
     }
 
+    /// <summary>桥接事件 → 宠物状态：真实 Agent 活动驱动（FUFU-04）。</summary>
+    private void OnBridgeEvent(string sessionId, string type, string summary)
+    {
+        // 管道线程回调：跨线程触碰宠物视觉会抛异常，状态切换一律回到 UI 线程。
+        Dispatcher.UIThread.Post(() => _behavior?.Notify(type switch
+        {
+            "activity" => summary switch
+            {
+                nameof(SessionActivity.Running) or nameof(SessionActivity.Compacting)
+                    or nameof(SessionActivity.Cancelling) => PetState.Working,
+                nameof(SessionActivity.Retrying) => PetState.Attention,
+                _ => PetState.Thinking,
+            },
+            "settled" => summary is "已完成" or "Completed" ? PetState.Success : PetState.Error,
+            "error" => PetState.Error,
+            "subagent" => PetState.Working,
+            _ => PetState.Thinking,
+        }));
+    }
+
+    /// <summary>打开/聚焦桥接面板。</summary>
+    private void ShowBridge()
+    {
+        if (_pipeServer is null) return;
+        if (_bridgeWindow is { } w) { w.Activate(); return; }
+        var window = new BridgeWindow(_pipeServer);
+        if (_petWindow is { } pet)
+        {
+            var scaling = pet.Screens.ScreenFromPoint(pet.Position)?.Scaling ?? 1.0;
+            window.Position = new PixelPoint(
+                Math.Max(0, pet.Position.X + (int)(pet.Width * scaling) + 8),
+                Math.Max(0, pet.Position.Y));
+        }
+        window.Closed += (_, _) => _bridgeWindow = null;
+        window.Show();
+        _bridgeWindow = window;
+    }
+
     /// <summary>托盘退出：真正结束 FUFU 进程（任务书 §六.6）。</summary>
     private void Quit()
     {
@@ -273,6 +328,8 @@ public sealed class App : Application
         SavePosition();
         _tray?.Dispose();
         _chatWindow?.Close();
+        _bridgeWindow?.Close();
+        _pipeServer?.Dispose();
         _sessionHost?.Dispose();
         _petWindow?.Close();
         _wander?.Stop();

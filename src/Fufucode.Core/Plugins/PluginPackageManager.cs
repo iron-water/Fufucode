@@ -14,6 +14,9 @@ namespace Fufucode.Core.Plugins;
 public sealed class PluginPackageManager : IAsyncDisposable
 {
     public static IRemoteControlService? ActiveRemoteControlService { get; set; }
+
+    /// <summary>当前激活的 FUFU 桥接服务（service.fufu-bridge 插件注册）。</summary>
+    public static IFufuBridge? ActiveFufuBridge { get; set; }
     // 进程级工厂登记表：键是插件 id，数量受市场目录限制；提供注销入口供测试/卸载清理，
     // 避免宿主生命周期内重复登记留下无法回收的闭包。
     private static readonly ConcurrentDictionary<string, Func<IPluginPackage>> _registeredFactories = new(StringComparer.OrdinalIgnoreCase);
