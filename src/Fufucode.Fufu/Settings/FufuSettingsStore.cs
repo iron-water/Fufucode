@@ -22,7 +22,13 @@ public sealed record FufuSettings(
     double Scale = 1.0,
     // 上次退出时的窗口位置（屏幕坐标）；null 表示首次启动。
     double? PositionX = null,
-    double? PositionY = null);
+    double? PositionY = null,
+    // 主动行为总开关（FUFU-05）：关闭时事件规则与看门狗全部静默，授权随时可收回。
+    bool ProactiveEnabled = true,
+    // 关注全部 Fufucode 会话；false 时仅 WatchedSessionId 驱动通知与桌宠状态。
+    bool WatchAllSessions = true,
+    // 关注的会话 id（WatchAllSessions=false 时生效）。
+    string? WatchedSessionId = null);
 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(FufuSettings))]
