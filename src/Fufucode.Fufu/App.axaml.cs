@@ -25,6 +25,9 @@ public sealed class App : Application
     private PetChatWindow? _chatWindow;
     private FufuPipeServer? _pipeServer;
     private BridgeWindow? _bridgeWindow;
+    private ProactiveEngine? _proactive;
+    private TaskLog? _taskLog;
+    private NoticeBubble? _bubble;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
     private PixelPoint? _lastPos; // 显式跟踪位置：Window.Position 在 Hide/Show 往返后可能复位为 0,0
@@ -54,6 +57,11 @@ public sealed class App : Application
         _bot = new BotHost(_behavior);
         _sessionHost = new FufuSessionHost(dataRoot, _behavior);
         _pipeServer = new FufuPipeServer();
+        _taskLog = new TaskLog(dataRoot);
+        _proactive = new ProactiveEngine(_pipeServer, _settings, _taskLog);
+        _bubble = new NoticeBubble();
+        _proactive.Noticed += text => _bubble.ShowNotice(text, _lastPos ?? _petWindow?.Position ?? new PixelPoint(0, 0));
+        _proactive.StateSuggested += state => _behavior.Notify(state);
         _pipeServer.AgentEventReceived += OnBridgeEvent;
         _pipeServer.ApprovalReceived += (_, _, _, _) =>
             Dispatcher.UIThread.Post(() => _behavior.Notify(PetState.Attention));
@@ -159,6 +167,16 @@ public sealed class App : Application
         bridgeItem.Click += (_, _) => ShowBridge();
         menu.Items.Add(bridgeItem);
 
+        var proactiveItem = new NativeMenuItem("主动行为") { IsChecked = s.ProactiveEnabled };
+        proactiveItem.Click += (_, _) =>
+        {
+            var on = !_settings.Current.ProactiveEnabled;
+            _settings.Update(v => v with { ProactiveEnabled = on });
+            _taskLog?.Append("user", "proactive", "", on ? "启用主动行为" : "停止主动行为");
+            _tray?.RebuildMenu();
+        };
+        menu.Items.Add(proactiveItem);
+
         var pauseItem = new NativeMenuItem("暂停移动") { IsChecked = s.MovementPaused };
         pauseItem.Click += (_, _) =>
         {
@@ -220,6 +238,16 @@ public sealed class App : Application
             var bridgeItem = new MenuItem { Header = "连接 Fufucode…" };
             bridgeItem.Click += (_, _) => ShowBridge();
             menu.Items.Add(bridgeItem);
+
+            var proactiveItem = new MenuItem { Header = "主动行为", IsChecked = s.ProactiveEnabled };
+            proactiveItem.Click += (_, _) =>
+            {
+                var on = !_settings.Current.ProactiveEnabled;
+                _settings.Update(v => v with { ProactiveEnabled = on });
+                _taskLog?.Append("user", "proactive", "", on ? "启用主动行为" : "停止主动行为");
+                _tray?.RebuildMenu();
+            };
+            menu.Items.Add(proactiveItem);
 
             var pauseItem = new MenuItem { Header = "暂停移动", IsChecked = s.MovementPaused };
             pauseItem.Click += (_, _) =>
@@ -304,9 +332,9 @@ public sealed class App : Application
     /// <summary>打开/聚焦桥接面板。</summary>
     private void ShowBridge()
     {
-        if (_pipeServer is null) return;
+        if (_pipeServer is null || _proactive is null || _settings is null || _taskLog is null) return;
         if (_bridgeWindow is { } w) { w.Activate(); return; }
-        var window = new BridgeWindow(_pipeServer);
+        var window = new BridgeWindow(_pipeServer, _proactive, _settings, _taskLog);
         if (_petWindow is { } pet)
         {
             var scaling = pet.Screens.ScreenFromPoint(pet.Position)?.Scaling ?? 1.0;
@@ -329,6 +357,8 @@ public sealed class App : Application
         _tray?.Dispose();
         _chatWindow?.Close();
         _bridgeWindow?.Close();
+        _bubble?.Close();
+        _proactive?.Dispose();
         _pipeServer?.Dispose();
         _sessionHost?.Dispose();
         _petWindow?.Close();
