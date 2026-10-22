@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="Fufucode.PerformanceMonitor.Tests" />
   </ItemGroup>
 
   <ItemGroup>

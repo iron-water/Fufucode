@@ -45,10 +45,11 @@ public partial class MainWindow
             System.Diagnostics.Trace.TraceWarning("Perf host collector unavailable: {0}", error.Message);
         }
 
-        Register("perf", "性能监控", "诊断", "", "打开性能停靠页：回合瀑布、慢调用、异常与记录", () =>
+        Register("perf", "性能监控", "诊断", "", "打开性能分析窗口：概览、启动、全链路 span、时间线与检查器", () =>
         {
             if (!_workbenchPages.ContainsKey("perf")) return Task.CompletedTask;
             OpenDockPage("perf", DockZone.Right);
+            FloatDockPage("perf", preferredWidth: 1180, preferredHeight: 760);
             return Task.CompletedTask;
         }, () => _workbenchPages.ContainsKey("perf") ? null : "未安装或未启用性能监控插件");
     }
