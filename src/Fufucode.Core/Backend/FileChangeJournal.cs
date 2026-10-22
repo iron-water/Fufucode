@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 
 namespace Fufucode.Core.Backend;
@@ -162,6 +164,11 @@ public static class FileChangeJournal
         }
     }
 
-    private static string BackupPath(string toolCallId) => System.IO.Path.Combine(Root, toolCallId + ".bak");
-    private static string MetaPath(string toolCallId) => System.IO.Path.Combine(Root, toolCallId + ".json");
+    // 工具调用 id 来自模型/网关，不能直接当文件名；哈希成定长十六进制名，
+    // 既避免 ..\ 路径穿越，也避免超长或非法字符。
+    private static string SafeId(string toolCallId) =>
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(toolCallId))).ToLowerInvariant();
+
+    private static string BackupPath(string toolCallId) => System.IO.Path.Combine(Root, SafeId(toolCallId) + ".bak");
+    private static string MetaPath(string toolCallId) => System.IO.Path.Combine(Root, SafeId(toolCallId) + ".json");
 }

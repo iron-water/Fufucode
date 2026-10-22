@@ -55,8 +55,8 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
     public event Action<PiExtensionUiRequestEvent>? ExtensionUiNotification { add { } remove { } }
     public event Action<PiExtensionErrorEvent>? ExtensionError { add { } remove { } }
 
-    public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Verified;
-    public string? ApprovalDiagnostic => "DeepSeek Harness 官方 CLI 审批流已适配。";
+    public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Unavailable;
+    public string? ApprovalDiagnostic => "DeepSeek Harness 审批桥尚未接入。";
 
     public bool IsInIdleMaintenance { get { lock (_gate) return _idleMaintenance; } }
     public bool CanSendPrompt { get { lock (_gate) return !_idleMaintenance && _chat.CanSend; } }
@@ -276,8 +276,8 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
         [],
         _error,
         SessionFaultKind.None,
-        ApprovalAvailability.Verified,
-        "DeepSeek Harness 官方 CLI 审批流已适配。");
+        ApprovalAvailability.Unavailable,
+        "DeepSeek Harness 审批桥尚未接入。");
 
     public async ValueTask DisposeAsync()
     {

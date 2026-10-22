@@ -55,8 +55,8 @@ public sealed class CodexSessionCoordinator : ISessionCoordinator, IExtensionUiS
     public event Action<PiExtensionUiRequestEvent>? ExtensionUiNotification { add { } remove { } }
     public event Action<PiExtensionErrorEvent>? ExtensionError { add { } remove { } }
 
-    public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Verified;
-    public string? ApprovalDiagnostic => "Codex 官方 CLI 审批流已适配。";
+    public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Unavailable;
+    public string? ApprovalDiagnostic => "Codex CLI 以 bypass 模式运行；审批桥尚未接入。";
 
     public bool IsInIdleMaintenance { get { lock (_gate) return _idleMaintenance; } }
     public bool CanSendPrompt { get { lock (_gate) return !_idleMaintenance && _chat.CanSend; } }
@@ -277,8 +277,8 @@ public sealed class CodexSessionCoordinator : ISessionCoordinator, IExtensionUiS
         [],
         _error,
         SessionFaultKind.None,
-        ApprovalAvailability.Verified,
-        "Codex 官方 CLI 审批流已适配。");
+        ApprovalAvailability.Unavailable,
+        "Codex CLI 以 bypass 模式运行；审批桥尚未接入。");
 
     public async ValueTask DisposeAsync()
     {
