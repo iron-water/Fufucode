@@ -135,6 +135,12 @@ public sealed partial class PetChatWindow : Window
         if (string.IsNullOrEmpty(text)) return;
         if (_host.Endpoint is null) { Append("（未配置端点，无法发送）", SysBubble, HorizontalAlignment.Left); return; }
         InputBox.Text = "";
+        if (_host.TryHandleResidentCommand(text, out var residentResponse))
+        {
+            Append(text, UserBubble, HorizontalAlignment.Right);
+            Append(residentResponse, SysBubble, HorizontalAlignment.Left);
+            return;
+        }
         try { await _host.SendAsync(text); }
         catch (Exception ex) { Append($"发送失败：{ex.Message}", SysBubble, HorizontalAlignment.Left); }
         MessageScroll.ScrollToEnd();
