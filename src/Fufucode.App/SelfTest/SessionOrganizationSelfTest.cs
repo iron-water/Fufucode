@@ -3,8 +3,11 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.LogicalTree;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.Views;
@@ -84,9 +87,11 @@ internal static class SessionOrganizationSelfTest
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             window.RenderOverview();
             var view = (OverviewView)window.PageForTesting("overview");
-            Check(new[] { "置顶", "分区", "项目", "会话" }.All(label => view.Body.Children.OfType<TextBlock>().Any(t => t.Text == label)),
+            var headingTexts = view.Body.GetLogicalDescendants().OfType<TextBlock>().Select(t => t.Text).ToHashSet();
+            Check(new[] { "置顶", "分区", "项目", "会话" }.All(headingTexts.Contains),
                 "default management page exposes all four top-level categories");
-            var options = view.Toolbar.Children.OfType<Grid>().Single().Children.OfType<Button>().Single(b => b.ContextMenu is not null);
+            var options = view.Toolbar.Children.OfType<Grid>().Single().Children.OfType<Button>()
+                .Single(b => AutomationProperties.GetName(b) == "会话视图选项");
             var submenu = options.ContextMenu!.Items.OfType<MenuItem>().Single(i => (string?)i.Header == "显示");
             Check(submenu.Items.OfType<MenuItem>().Select(i => i.Header).SequenceEqual(new[] { "优先事项部分", "置顶", "定时任务" }),
                 "priority display choices are real nested menu items");
