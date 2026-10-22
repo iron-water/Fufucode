@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Fufucode.Fufu.Pet.EndpointSettingsWindow"
+        Title="FUFU 模型端点"
+        Width="440" Height="430"
+        MinWidth="360" MinHeight="360"
+        ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="CenterOwner"
+        Background="#CC1E1E24" TransparencyLevelHint="AcrylicBlur">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="18">
+    <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,12">
+      <TextBlock Text="配置 FUFU 的模型端点" FontSize="18" FontWeight="SemiBold" Foreground="#F0F0F0" />
+      <TextBlock Text="支持 OpenAI 兼容接口。API Key 只从环境变量读取，不会写入 settings.json。"
+                 TextWrapping="Wrap" FontSize="11" Foreground="#B8B8C0" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+      <StackPanel Spacing="12">
+        <StackPanel Spacing="4">
+          <TextBlock Text="提供商名称" Foreground="#D8D8E0" />
+          <TextBox Name="ProviderBox" PlaceholderText="例如 openai 或 deepseek" />
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="兼容 API 地址" Foreground="#D8D8E0" />
+          <TextBox Name="BaseUrlBox" PlaceholderText="例如 https://api.openai.com/v1" />
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="模型 ID" Foreground="#D8D8E0" />
+          <TextBox Name="ModelBox" PlaceholderText="例如 gpt-4o-mini" />
+        </StackPanel>
+        <StackPanel Spacing="4">
+          <TextBlock Text="API Key 环境变量名" Foreground="#D8D8E0" />
+          <TextBox Name="ApiKeyVariableBox" PlaceholderText="例如 OPENAI_API_KEY" />
+        </StackPanel>
+        <Border Name="ErrorBorder" Background="#55332222" CornerRadius="6" Padding="8" IsVisible="False">
+          <TextBlock Name="ErrorText" TextWrapping="Wrap" Foreground="#FFD0D0" FontSize="11" />
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,14,0,0">
+      <Button Name="ClearButton" Content="清除端点" Padding="12,6" />
+      <Button Name="CancelButton" Content="取消" Padding="12,6" />
+      <Button Name="SaveButton" Content="保存" Padding="14,6" />
+    </StackPanel>
+  </Grid>
+</Window>

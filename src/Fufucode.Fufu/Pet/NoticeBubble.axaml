@@ -1,0 +1,15 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Fufucode.Fufu.Pet.NoticeBubble"
+        Title="FUFU" Width="260" Height="52"
+        ShowInTaskbar="False" Topmost="True"
+        CanResize="False" SizeToContent="WidthAndHeight"
+        WindowDecorations="None" ExtendClientAreaToDecorationsHint="True"
+        WindowStartupLocation="Manual" ShowActivated="False"
+        Background="Transparent" TransparencyLevelHint="Transparent">
+  <Border CornerRadius="10" Padding="10,8" Margin="2" MaxWidth="300"
+          Background="#E6222A30" BorderBrush="#7CD4CC" BorderThickness="1"
+          BoxShadow="0 2 8 0 #60000000">
+    <TextBlock Name="Text" Foreground="#F0F4F4" FontSize="12" TextWrapping="Wrap" MaxWidth="280" />
+  </Border>
+</Window>

@@ -98,6 +98,7 @@
        不再给单行套卡片/描边，避免多层 box 叠在一起。 -->
   <Style Selector="Border.overviewGroup">
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="4"/>
@@ -238,7 +239,7 @@
   <!-- 左侧导航宿主（Windows 设置度量）：浮为侧栏面，比内容区亮一档形成明度差。
        深色下走 AppSettingsNavBackground（FufucodeTheme 里定义为实色 #2C2C2C，
        因为 Fluent 的 Quaternary 是透明叠加、不是实色）。 -->
-  <!-- 侧栏透页面底（Win11 设置侧栏就是窗口底色，不另起卡片）。 -->
+  <!-- 设置页左导航：整列透页面底（原色），每条导航项自己用中间灰卡片。 -->
   <Style Selector="Border.settingsNavHost">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="Padding" Value="0,0,8,0"/>
@@ -272,7 +273,7 @@
        无缝 Margin 0，选中/hover 块即整行。 -->
   <Style Selector="ListBox.settingsNav ListBoxItem">
     <Setter Property="Padding" Value="0"/>
-    <Setter Property="Margin" Value="0"/>
+    <Setter Property="Margin" Value="0,0,0,2"/>
     <Setter Property="MinHeight" Value="40"/>
     <Setter Property="CornerRadius" Value="4"/>
     <Setter Property="Background" Value="Transparent"/>
@@ -280,7 +281,7 @@
   <!-- 单一 navFill 整行背景层：常态透明，pointerover 染浅（AppListHover）、
        selected 染深（AppListSelected），BrushTransition 渐变。 -->
   <Style Selector="Border.navFill">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
     <Setter Property="CornerRadius" Value="4"/>
     <Setter Property="Transitions">
       <Transitions>
@@ -900,6 +901,16 @@
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="BoxShadow" Value="0 0 0 0 #00000000"/>
+  </Style>
+  <!-- 行悬停兜底：窗口级 PointerMoved 添加 pointerHover，覆盖所有横条类型。 -->
+  <Style Selector="Border.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Grid.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Button.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
   <!-- 危险确认按钮：透明底 + critical 描边/文字，悬停用 critical 浅底（权限升级确认）。 -->
   <Style Selector="Button.danger">

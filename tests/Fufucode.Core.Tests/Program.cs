@@ -23,6 +23,7 @@ if (args.Contains("--a13-only")) { await A13ContractTests.RunAsync(root, fake, d
 if (args.Contains("--crash-repro-only")) { await CrashReproTests.RunAsync(root, node, cli); return; }
 if (args.Contains("--worktree-only")) { await ProjectForkTests.RunAsync(root, node, cli); return; }
 if (args.Contains("--adapter-stop-only")) { await AdapterStopTests.RunAsync(root, fake, dotnet); return; }
+if (args.Contains("--nvx-only")) { NvxProtocolTests.Run(); return; }
 PiRpcOptions fakeOptions() => new(dotnet, [fake], root);
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); Console.WriteLine($"PASS {name}"); }
 HistoryMappingTests.Run();
