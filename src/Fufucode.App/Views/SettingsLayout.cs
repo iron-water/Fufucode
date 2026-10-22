@@ -21,9 +21,6 @@ internal static class SettingsLayout
 {
     private sealed class SearchTermsOwner { }
 
-    /// <summary>组与组之间的固定上间隔（8px 网格的整数倍）。</summary>
-    public const double SectionTopGap = 24;
-
     /// <summary>供设置页搜索使用的行语义词。由标准行构件统一写入，页面不重复维护过滤条件。</summary>
     public static readonly AttachedProperty<string?> SearchTermsProperty =
         AvaloniaProperty.RegisterAttached<SearchTermsOwner, Control, string?>("SearchTerms");

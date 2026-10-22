@@ -130,6 +130,23 @@ public static class HeadlessUiRunner
             if (pageSubIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --settings-page value.");
             settingsPage = arguments[pageSubIndex + 1]; arguments.RemoveRange(pageSubIndex, 2);
         }
+        var settingsScroll = 0d;
+        var scrollIndex = arguments.IndexOf("--settings-scroll");
+        if (scrollIndex >= 0)
+        {
+            if (scrollIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --settings-scroll value.");
+            if (!double.TryParse(arguments[scrollIndex + 1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out settingsScroll))
+                throw new ArgumentException("Invalid --settings-scroll value.");
+            arguments.RemoveRange(scrollIndex, 2);
+        }
+        string? settingsAnchor = null;
+        var anchorIndex = arguments.IndexOf("--settings-anchor");
+        if (anchorIndex >= 0)
+        {
+            if (anchorIndex + 1 >= arguments.Count) throw new ArgumentException("Missing --settings-anchor value.");
+            settingsAnchor = arguments[anchorIndex + 1]; arguments.RemoveRange(anchorIndex, 2);
+        }
         var perfTurnIndex = arguments.IndexOf("--perf-turn");
         if (perfTurnIndex >= 0) arguments.RemoveAt(perfTurnIndex);
         string? shortcutsGroup = null;
@@ -179,6 +196,20 @@ public static class HeadlessUiRunner
         {
             settingsVm.SelectCategory(settingsCategory);
             if (settingsPage is not null) settingsVm.OpenPage(settingsPage);
+            await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
+        }
+        if (settingsScroll > 0 && window.FindControl<ScrollViewer>("SettingsScroller") is { } settingsScroller)
+        {
+            settingsScroller.Offset = new Vector(0, settingsScroll);
+            await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
+        }
+        if (!string.IsNullOrWhiteSpace(settingsAnchor))
+        {
+            var anchor = window.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>()
+                .FirstOrDefault(block => block.Text == settingsAnchor);
+            if (anchor is null) throw new ArgumentException("Settings anchor not found: " + settingsAnchor);
+            anchor.BringIntoView();
+            await Task.Delay(100);
             await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
         }
         if (shortcutsGroup is not null &&
