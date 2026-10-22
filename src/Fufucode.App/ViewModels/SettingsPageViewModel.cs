@@ -628,6 +628,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private string? _modelsError;
 
     [ObservableProperty]
+    private bool _isModelsLoading;
+
+    [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasModelsInfo))]
     private string? _modelsInfo;
 
@@ -1930,6 +1933,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     {
         if (_context is not { QueryModels: { } query } ctx)
         {
+            IsModelsLoading = false;
             return;
         }
 
@@ -1938,6 +1942,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         _queryCts = new CancellationTokenSource();
         var cancellation = _queryCts.Token;
         var generation = _attachmentGeneration;
+        IsModelsLoading = true;
+        ModelsError = null;
         try
         {
             var response = await query(cancellation);
@@ -1981,6 +1987,10 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             if (generation == _attachmentGeneration) ModelsError = ex.GetBaseException().Message;
         }
         catch (OperationCanceledException) when (cancellation.IsCancellationRequested) { }
+        finally
+        {
+            if (generation == _attachmentGeneration) IsModelsLoading = false;
+        }
     }
 
     /// <summary>InformationalVersion → 显示用 "1.0.0 (abcdef0)"；无元数据时原样。</summary>
