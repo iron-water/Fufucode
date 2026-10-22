@@ -22,6 +22,9 @@ public partial class ChatPage : UserControl
     private bool _preeditHooked;
     private bool _programmaticScroll;
     private Avalonia.Threading.DispatcherTimer? _scrollTimer;
+
+    /// <summary>已经播放过进入动画的条目。虚拟化在滚动时会重建容器，不能重复播放。</summary>
+    private readonly System.Collections.Generic.HashSet<string> _animatedEntries = new(StringComparer.Ordinal);
     private long _programmaticUntilTicks;
     private long _lastUserInputTicks;
     private MainViewModel? _attachedViewModel;
@@ -53,6 +56,7 @@ public partial class ChatPage : UserControl
         DataContextChanged += (_, _) =>
         {
             PluginContentBridge.Reset();
+            _animatedEntries.Clear();
             if (_attachedViewModel is { } previous)
             { previous.Input.FocusRequested -= OnInputFocusRequested; previous.Input.PropertyChanged -= ComposerChanged; previous.Timeline.Entries.CollectionChanged -= TimelineChanged; previous.Timeline.ScrollToEndSmoothRequested -= AnimateScrollToEnd; }
             _attachedViewModel = DataContext as MainViewModel;
@@ -84,6 +88,9 @@ public partial class ChatPage : UserControl
     {
         if (sender is not Control control) return;
         control.Loaded -= OnMessageEntryLoaded;
+
+        // 虚拟化滚动会重新实例化容器；按条目 id 记账，避免来回滑动时反复淡入闪烁。
+        if (control.DataContext is TimelineEntryViewModel entry && !_animatedEntries.Add(entry.Id)) return;
         Motion.AnimateIn(control);
     }
 

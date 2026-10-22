@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Avalonia;
+using Avalonia.Input;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
@@ -76,6 +78,20 @@ internal static class FloatingWorkbenchSelfTest
         try
         {
             await Ready();
+            // 整栏浮动必须有可见入口：栏头“浮动整栏”按钮把左/右/底栏变成独立窗口。
+            var leftDock = window.FindControl<Fufucode.App.Views.DockRegionView>("LeftDock")!;
+            var floatRegionButton = leftDock.GetVisualDescendants().OfType<Button>()
+                .First(button => AutomationProperties.GetName(button) == "浮动整栏（变为独立窗口）");
+            var floatPoint = floatRegionButton.TranslatePoint(new Point(15, 15), window)!.Value;
+            window.MouseDown(floatPoint, MouseButton.Left); window.MouseUp(floatPoint, MouseButton.Left); await Ready();
+            var leftFloating = window.DockLayoutForTesting.FindFloating("overview");
+            Check(leftFloating is not null && window.FloatingDockWindowForTesting(leftFloating.Id)!.IsVisible &&
+                !window.FindControl<Border>("SidebarBorder")!.IsVisible,
+                "the dock header float button turns the whole bar into an independent window");
+            window.DockFloatingRegion(leftFloating!.Id); await Ready();
+            Check(window.DockLayoutForTesting.Find("overview") == DockZone.Left &&
+                window.FindControl<Border>("SidebarBorder")!.IsVisible,
+                "the floated bar docks back into its original region");
             window.MoveDockPage("files", DockZone.Left); await Ready();
             var files = window.PageForTesting("files");
             var tab = window.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "dock-tab-files");
@@ -84,6 +100,10 @@ internal static class FloatingWorkbenchSelfTest
             await Ready();
             var state = window.DockLayoutForTesting.FindFloating("files")!;
             var floatingWindow = window.FloatingDockWindowForTesting(state.Id)!;
+            var floatingShell = (Grid)floatingWindow.Content!;
+            Check(floatingShell.RowDefinitions.Count == 2 &&
+                Grid.GetRow(floatingShell.Children.OfType<Fufucode.App.Views.DockRegionView>().Single()) == 1,
+                "the floating window merges dock tools into a single caption row");
             Check(floatingWindow.IsVisible && ReferenceEquals(TopLevel.GetTopLevel(files), floatingWindow) && ReferenceEquals(files, window.PageForTesting("files")),
                 "real menu moves the original control into a second Window");
             floatingWindow.Close(); await Ready();

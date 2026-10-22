@@ -9,11 +9,12 @@
 3. [前端能力分级与生命周期](design/frontend-capability-hierarchy.md)：2026-10-20 前端权威基线。
 4. [Fluent 暗色用色原则](design/color-principles.md)：三档底色、主题色、模型输出强调色。
 5. [设置页设计规范](settings-design-spec.md)：设置页结构、样式与硬性纪律。
-6. [项目总原则](design/project-principles.md)：目录、状态、分级、验证的总纲。
-7. [执行契约](tasks/execution-contract.md)：先读顶部状态说明；后端默认已由 Pi 改为 FUMO。
-8. [当前进度](progress.md)：追加式进度日志，只看最新日期段。
-9. [运行基线](runtime-baseline.md)：顶部已声明 FUMO 默认；Pi 段落是历史基线。
-10. [验证记录](verification.md)：历史验证；最新验证以 `records/` 与交付记录为准。
+6. [页面设计原则](design/page-design-principles.md)：从设置页抽象出的通用页面方法论。
+7. [项目总原则](design/project-principles.md)：目录、状态、分级、验证的总纲。
+8. [执行契约](tasks/execution-contract.md)：先读顶部状态说明；后端默认已由 Pi 改为 FUMO。
+9. [当前进度](progress.md)：追加式进度日志，只看最新日期段。
+10. [运行基线](runtime-baseline.md)：顶部已声明 FUMO 默认；Pi 段落是历史基线。
+11. [验证记录](verification.md)：历史验证；最新验证以 `records/` 与交付记录为准。
 
 ## 二、前端设计文档状态
 

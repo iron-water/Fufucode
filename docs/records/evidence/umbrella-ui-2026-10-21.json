@@ -1,0 +1,34 @@
+{
+  "layout": {
+    "pages": {
+      "left": [
+        "overview",
+        "perf"
+      ],
+      "right": [
+        "changes",
+        "browser"
+      ],
+      "bottom": []
+    },
+    "selected": {
+      "left": "overview",
+      "right": "changes",
+      "bottom": null
+    },
+    "hidden": {
+      "left": false,
+      "right": true,
+      "bottom": true
+    },
+    "leftWidth": 500,
+    "rightWidth": 631.2,
+    "bottomHeight": 240,
+    "pinnedPages": [
+      "overview"
+    ],
+    "floating": [],
+    "notificationMigrationApplied": true
+  },
+  "version": 1
+}

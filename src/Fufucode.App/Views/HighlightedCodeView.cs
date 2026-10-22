@@ -2,6 +2,8 @@ using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using LiveMarkdown.Avalonia;
@@ -42,12 +44,19 @@ public sealed class HighlightedCodeView : ContentControl
         set => SetValue(LanguageProperty, value);
     }
 
+    private ScrollViewer? _innerScroll;
+
     public HighlightedCodeView()
     {
         Content = _block;
         // 自带标题栏（语言名 + 换行/复制）与聊天页卡片头部重复，挂载后隐藏，
         // 复制与折叠仍由聊天页自己的卡片提供。模板若变更，最多表现为多一条标题栏。
-        _block.Loaded += (_, _) => HideBuiltInHeader();
+        _block.Loaded += (_, _) => { HideBuiltInHeader(); HookInnerScroll(); };
+
+        // 代码块内部自带 ScrollViewer；鼠标经过时它会抢走滚轮，导致滑动页面像在代码块里跳。
+        // 与 Mermaid 一致：先在代码块上按一下，才允许内部滚动。
+        AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Tunnel);
+        PointerExited += (_, _) => ReleaseInnerScroll();
         ApplyTheme();
         ActualThemeVariantChanged += (_, _) => ApplyTheme();
     }
@@ -63,6 +72,24 @@ public sealed class HighlightedCodeView : ContentControl
         {
             _block.Language = Normalize(change.NewValue as string);
         }
+    }
+
+    private void HookInnerScroll()
+    {
+        if (_innerScroll is not null) return;
+        _innerScroll = _block.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+        ReleaseInnerScroll();
+    }
+
+    private void OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (_innerScroll is null) return;
+        _innerScroll.IsHitTestVisible = true;
+    }
+
+    private void ReleaseInnerScroll()
+    {
+        if (_innerScroll is not null) _innerScroll.IsHitTestVisible = false;
     }
 
     private void HideBuiltInHeader()

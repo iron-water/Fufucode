@@ -102,7 +102,9 @@
                         HorizontalAlignment="Stretch">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
-                <VirtualizingStackPanel />
+                <!-- 不使用虚拟化：消息容器被回收重建会让代码块重新做语法高亮，
+                     滚动经过时表现为闪烁与位置跳动。会话长度可接受，稳定优先。 -->
+                <StackPanel />
               </ItemsPanelTemplate>
             </ItemsControl.ItemsPanel>
 
