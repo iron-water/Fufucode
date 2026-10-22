@@ -267,7 +267,6 @@ public sealed class WorkbenchSectionsView : UserControl
         Group(rows, "主题色与强调色",
             FluentOnly(ToggleRow("跟随系统主题色", "Fluent 使用此选项；Metro 与 Material 3 使用各自固定主题色。", s => s.Accent == "system",
                 value => vm.Change(s => s with { Accent = value ? "system" : Hex(s.EffectiveAccent) }))),
-            FluentOnly(SwatchRow(vm)),
             FluentOnly(ColorPickerRow(vm,
                 "自定义主题色", "UI 通用颜色：选中、链接、主按钮；格式 #RRGGBB",
                 s => s.Accent == "system" ? Hex(s.EffectiveAccent) : s.Accent,
@@ -770,22 +769,6 @@ public sealed class WorkbenchSectionsView : UserControl
         }
         _bindings.Add(current => { if (!input.IsFocused && input.Text != get(current)) input.Text = get(current); });
         return SettingsLayout.Row(label, description, input);
-    }
-
-    private Control SwatchRow(WorkbenchCustomizationViewModel vm)
-    {
-        var colors = new WrapPanel { HorizontalAlignment = HorizontalAlignment.Right };
-        foreach (var hex in new[] { "#0078D4", "#087E66", "#B14670", "#7B51B5", "#B15B00", "#6B7075" })
-        {
-            var swatch = new Button { Width = 22, Height = 22, Margin = new Thickness(4), Padding = new Thickness(0),
-                Background = new SolidColorBrush(Color.Parse(hex)), CornerRadius = new CornerRadius(11) };
-            swatch.Classes.Add("accentSwatch");
-            ToolTip.SetTip(swatch, hex); AutomationProperties.SetName(swatch, "主题色 " + hex);
-            swatch.Click += (_, _) => vm.Change(s => s with { Accent = hex });
-            _bindings.Add(current => swatch.Classes.Set("selected", current.Accent.Equals(hex, StringComparison.OrdinalIgnoreCase)));
-            colors.Children.Add(swatch);
-        }
-        return SettingsLayout.Row("主题色", "UI 通用颜色；不是模型输出强调色", colors);
     }
 
     private Control ColorPickerRow(WorkbenchCustomizationViewModel vm, string title, string description,
