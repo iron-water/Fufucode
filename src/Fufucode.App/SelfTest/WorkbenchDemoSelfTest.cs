@@ -351,7 +351,7 @@ internal static class WorkbenchDemoSelfTest
             window.Width = 1440;
             window.Height = 900;
             Application.Current.RequestedThemeVariant = ThemeVariant.Light;
-            foreach (var id in known.Where(id => id != "overview"))
+            foreach (var id in known.Where(id => id != "overview" && window.PageAvailableForTesting(id)))
             {
                 window.MoveDockPage(id, DockZone.Right); await Ready();
                 var control = window.PageForTesting(id);

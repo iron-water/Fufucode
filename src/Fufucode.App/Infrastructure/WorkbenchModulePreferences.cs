@@ -4,8 +4,8 @@ using Fufucode.App.Infrastructure.Browser;
 
 namespace Fufucode.App.Infrastructure;
 
-internal sealed record WorkbenchModulePreferences(int Version = 2, bool BrowserEnabled = false, BrowserPageState? BrowserState = null, bool LibraryEnabled = true,
-    bool LocalReviewEnabled = true, bool AutomationEnabled = true, string? AutomationDatabase = null)
+internal sealed record WorkbenchModulePreferences(int Version = 3, bool BrowserEnabled = false, BrowserPageState? BrowserState = null, bool LibraryEnabled = true,
+    bool LocalReviewEnabled = true, bool AutomationEnabled = false, string? AutomationDatabase = null)
 {
     public string Serialize() => JsonSerializer.Serialize(this);
 
@@ -17,14 +17,14 @@ internal sealed record WorkbenchModulePreferences(int Version = 2, bool BrowserE
         {
             var state = JsonSerializer.Deserialize<WorkbenchModulePreferences>(text)
                 ?? throw new JsonException("Module settings are empty.");
-            // v1 时浏览器页是默认开启的内置模块；新版本把它降为默认不安装。
-            // 只迁移一次，保留其它模块选择，避免用户已有布局整体重置。
-            if (state.Version == 1)
-                return new WorkbenchModulePreferences(Version: 2, BrowserEnabled: false,
+            // v1/v2 时浏览器和自动开发还是默认开启的内置模块；新版本把它们降为
+            // 默认不安装。只迁移一次，保留资料库/本地审查等其它选择。
+            if (state.Version is 1 or 2)
+                return new WorkbenchModulePreferences(Version: 3, BrowserEnabled: false,
                     BrowserState: state.BrowserState, LibraryEnabled: state.LibraryEnabled,
-                    LocalReviewEnabled: state.LocalReviewEnabled, AutomationEnabled: state.AutomationEnabled,
+                    LocalReviewEnabled: state.LocalReviewEnabled, AutomationEnabled: false,
                     AutomationDatabase: state.AutomationDatabase);
-            if (state.Version != 2) throw new JsonException("Unsupported module settings version: " + state.Version);
+            if (state.Version != 3) throw new JsonException("Unsupported module settings version: " + state.Version);
             return state;
         }
         catch (JsonException error)
