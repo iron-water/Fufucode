@@ -202,7 +202,7 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
         var result = new List<KeyValuePair<string, string>>(tags.Count);
         foreach (var (key, value) in tags)
         {
-            if (key == "command" && !captureCommand)
+            if (key is "command" or "stdoutHead" or "stderrHead" && !captureCommand)
             {
                 result.Add(new(key, "[已关闭命令文本记录]"));
                 continue;

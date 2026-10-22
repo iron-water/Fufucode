@@ -146,7 +146,7 @@ internal sealed class PerfInspectorView : UserControl
         {
             "属性" => RenderTags(_span),
             "事件" => RenderEvents("事件", errorOnly: false),
-            "日志" => RenderEvents("日志", errorOnly: false),
+            "日志" => RenderLogs(),
             "原始" => RenderRaw(_span),
             _ => RenderSummary(_span),
         };
@@ -169,6 +169,8 @@ internal sealed class PerfInspectorView : UserControl
         AddField(panel, "超时", span.Tag("timedOut"));
         AddField(panel, "stdout", span.Tag("stdoutBytes") is { } stdout ? $"{stdout} B" : null);
         AddField(panel, "stderr", span.Tag("stderrBytes") is { } stderr ? $"{stderr} B" : null);
+        AddField(panel, "stdout 头部", span.Tag("stdoutHead"));
+        AddField(panel, "stderr 头部", span.Tag("stderrHead"));
         AddField(panel, "丢弃输出", span.Tag("dropped") is { } dropped ? $"{dropped} B" : null);
         AddField(panel, "启动延迟", span.Tag("startMs") is { } startMs ? $"{startMs} ms" : null);
         AddField(panel, "审批等待", span.Tag("approvalMs") is { } approval ? $"{approval} ms" : null);
@@ -210,6 +212,43 @@ internal sealed class PerfInspectorView : UserControl
             row.Children.Add(valueText);
             panel.Children.Add(row);
         }
+        return panel;
+    }
+
+    private Control RenderLogs()
+    {
+        var panel = new StackPanel { Spacing = 8 };
+        panel.Children.Add(Title("命令输出（头部，最多 220 字符）"));
+        var stdout = _span?.Tag("stdoutHead");
+        var stderr = _span?.Tag("stderrHead");
+        if (string.IsNullOrEmpty(stdout) && string.IsNullOrEmpty(stderr))
+        {
+            panel.Children.Add(Muted("该 span 未记录输出头部；完整输出仍在聊天工具卡中。"));
+        }
+        else
+        {
+            if (!string.IsNullOrEmpty(stdout)) panel.Children.Add(OutputBlock("stdout", stdout));
+            if (!string.IsNullOrEmpty(stderr)) panel.Children.Add(OutputBlock("stderr", stderr));
+        }
+        panel.Children.Add(RenderEvents("事件", errorOnly: false));
+        return panel;
+    }
+
+    private static Control OutputBlock(string label, string text)
+    {
+        var panel = new StackPanel { Spacing = 3 };
+        panel.Children.Add(Title(label));
+        var block = new TextBlock
+        {
+            Text = text,
+            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+            FontSize = 10,
+            TextWrapping = TextWrapping.Wrap,
+            MaxHeight = 120,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+        };
+        block.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        panel.Children.Add(block);
         return panel;
     }
 
