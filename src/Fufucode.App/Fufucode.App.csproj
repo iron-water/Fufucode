@@ -47,6 +47,7 @@
   -->
   <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <TrimmerRootAssembly Include="System.Console" />
+    <TrimmerRootAssembly Include="System.IO.Pipes" />
   </ItemGroup>
 
   <ItemGroup>

@@ -101,6 +101,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.SkinLiquid
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Fufu", "src\Fufucode.Fufu\Fufucode.Fufu.csproj", "{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.FufuBridge", "src\Fufucode.Plugins.FufuBridge\Fufucode.Plugins.FufuBridge.csproj", "{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Abstractions", "Abstractions", "{F42B91D1-9EC8-8DB1-133E-50E7CB36B70D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -650,6 +654,18 @@ Global
 		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x64.Build.0 = Release|Any CPU
 		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x86.ActiveCfg = Release|Any CPU
 		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D}.Release|x86.Build.0 = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x64.Build.0 = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Debug|x86.Build.0 = Debug|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x64.ActiveCfg = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x64.Build.0 = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x86.ActiveCfg = Release|Any CPU
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -699,5 +715,6 @@ Global
 		{A85FBF1A-D4B3-4EF3-B81B-526E977AA873} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{A3461DB0-182B-4B66-9F23-B45DF62FDA04} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{9BBDE819-DB5B-4E61-A0AA-A47C0987532D} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{7D7E5EB0-CC9F-4FF0-9BE7-E2824C0B49DF} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

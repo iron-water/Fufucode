@@ -716,6 +716,11 @@ public partial class MainWindow : Window
         remoteService?.ConfigureSessionDirectory(BuildRemoteSessionCatalog, SwitchSessionFromRemoteAsync);
         remoteService?.Attach(host.Chat, host.ProjectPath);
         remoteService?.LoadHistory(host.CurrentTranscript());
+        var fufuBridge = Fufucode.Core.Plugins.PluginPackageManager.ActiveFufuBridge;
+        fufuBridge?.ConfigureSessionDirectory(BuildRemoteSessionCatalog, SwitchSessionFromRemoteAsync,
+            SubmitTaskFromBridgeAsync);
+        fufuBridge?.Attach(host.Chat, host.ProjectPath);
+        fufuBridge?.LoadHistory(host.CurrentTranscript());
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {
             // 换会话/重建：先解除旧接线，避免旧时间线与输入框继续接收扩展事件。
@@ -1121,6 +1126,34 @@ public partial class MainWindow : Window
         catch (Exception error)
         {
             return new(false, "切换失败：" + error.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>FUFU 受控提交：目标会话若不是当前会话先切换，再把文本交给会话输入管线。</summary>
+    private async Task<RemoteCommandResult> SubmitTaskFromBridgeAsync(
+        string sessionId, string text, CancellationToken cancellationToken)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+            return await Dispatcher.UIThread.InvokeAsync(
+                () => SubmitTaskFromBridgeAsync(sessionId, text, cancellationToken));
+        if (_closed || _host is null)
+            return new(false, "电脑端不可用。");
+        if (string.IsNullOrWhiteSpace(text))
+            return new(false, "提交内容为空。");
+        try
+        {
+            if (_host.Current.Session.Id != sessionId)
+            {
+                var switched = await SwitchSessionFromRemoteCoreAsync(sessionId, cancellationToken);
+                if (!switched.Accepted) return switched;
+            }
+            if (_host is null) return new(false, "会话未就绪。");
+            await _host.Chat.SendAsync(text, cancellationToken);
+            return new(true, "已提交。");
+        }
+        catch (Exception error)
+        {
+            return new(false, "提交失败：" + error.GetBaseException().Message);
         }
     }
 
