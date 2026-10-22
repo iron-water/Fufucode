@@ -238,10 +238,10 @@ internal static class WorkbenchDemoSelfTest
             Check(window.ActionsForTesting.GetDisabledReason("browser")?.Contains("已停用") == true &&
                 window.GetVisualDescendants().OfType<Views.DockRegionView>().All(dock => dock.Catalog.All(item => item.Id != "browser")),
                 "Modules: page menus and command palette agree on disabled browser");
-            Check(vm.Input.DraftText == centralDraft && window.DockLayoutForTesting.Find("browser") == DockZone.Bottom,
-                "Modules: disabling preserves central draft and dormant placement");
+            Check(vm.Input.DraftText == centralDraft && window.DockLayoutForTesting.Find("browser") is null,
+                "Modules: disabling preserves central draft and removes the plugin page from layout");
             window.OpenDockPage("browser", DockZone.Left);
-            Check(window.DockLayoutForTesting.Find("browser") == DockZone.Bottom, "Modules: disabled page cannot be opened through direct entry");
+            Check(window.DockLayoutForTesting.Find("browser") is null, "Modules: disabled plugin page cannot be opened through direct entry");
             window.BrowserModuleForTesting.IsEnabled = true; await Ready();
             var reactivated = (Views.BrowserView)window.PageForTesting("browser");
             Check(!ReferenceEquals(browserPage, reactivated) && !reactivated.HostForTesting.IsDisposedForTesting &&

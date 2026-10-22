@@ -37,6 +37,7 @@ public partial class MainWindow
     private string? _automationDatabase;
     private LibraryService? _libraryService;
     private BrowserPageState? _browserPageState;
+    private DockZone? _browserDormantZone;
     private bool _modulePreferencesCanWrite = true;
     private readonly WorkspacePanelView WorkspacePanel = new();
     private readonly OverviewView _overview = new();
@@ -124,8 +125,7 @@ public partial class MainWindow
         _overview.DataContextChanged += (_, _) => RenderOverview();
         Add("files", "文件", "Folder", files);
         Add("changes", "变更", "Branch", changes);
-        _workbenchPages.RegisterOptional("browser", "浏览器", "Globe", "builtin.browser",
-            () => CreateBrowserPage(), control => ((BrowserView)control).Dispose());
+        // 浏览器页由 workspace.browser 插件贡献；未安装时这里不预留页面。
         _browserModule = new("builtin.browser", "浏览器", SetBrowserModuleEnabled);
         _workbenchPages.RegisterOptional("library", "资料库", "Folder", "builtin.library", () =>
         {
@@ -201,21 +201,25 @@ public partial class MainWindow
 
     private void ApplyBrowserModuleState(bool enabled)
     {
-        if (!enabled && _workbenchPages.ContainsKey("browser"))
-            _browserPageState = ((BrowserView)_workbenchPages["browser"].Content).CaptureState();
-        var activating = enabled && !_workbenchPages.ContainsKey("browser");
-        var wasFocused = _workbenchPages.ContainsKey("browser") &&
-            _workbenchPages["browser"].Content.IsEffectivelyVisible;
-        _workbenchPages.SetEnabled("browser", enabled, content =>
+        // 浏览器页由 workspace.browser 插件提供；模块开关只驱动插件启停，
+        // 页面注册/释放统一走 PluginWorkspacePageHost，避免宿主再维护第二套页面生命周期。
+        if (!enabled && _pluginPageHost?.TryGet("browser", out var oldPage) == true &&
+            oldPage.View is BrowserView oldView)
         {
-            foreach (var dock in AllDockHosts()) dock.DetachPage(content);
-            _parkedPages.Children.Remove(content);
-        });
-        if (activating) ((BrowserView)_workbenchPages["browser"].Content).RestoreState(_browserPageState);
+            _browserPageState = oldView.CaptureState();
+            _browserDormantZone = _dockLayout.Find("browser");
+        }
+        try { _pluginPageHost?.Manager.SetPackageEnabled("workspace.browser", enabled); }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { _vm?.Timeline.AddNotification("浏览器插件状态切换失败：" + error.Message); }
+        if (enabled && _pluginPageHost?.TryGet("browser", out var newPage) == true &&
+            newPage.View is BrowserView newView)
+        {
+            if (_browserPageState is { } state) newView.RestoreState(state);
+            OpenDockPage("browser", _browserDormantZone ?? DockZone.Right);
+        }
         RenderDockPages();
         _actions.RefreshCapabilities();
-        if (!enabled && wasFocused && _vm?.IsChatPage == true)
-            RestoreFocus(_chatPage.FindControl<TextBox>("InputBox"));
     }
 
     private string SetBrowserModuleEnabled(bool enabled)
@@ -239,9 +243,12 @@ public partial class MainWindow
     private void SaveModulePreferences()
     {
         if (_host is null || !_modulePreferencesCanWrite) return;
-        if (_workbenchPages.ContainsKey("browser")) _browserPageState = ((BrowserView)_workbenchPages["browser"].Content).CaptureState();
+        if (_pluginPageHost?.TryGet("browser", out var browserPage) == true &&
+            browserPage.View is BrowserView browserView)
+            _browserPageState = browserView.CaptureState();
         _host.Manager.Metadata.SetPreference(ModulePreferenceKey(),
-            new WorkbenchModulePreferences(BrowserEnabled: _workbenchPages.ContainsKey("browser"), BrowserState: _browserPageState,
+            new WorkbenchModulePreferences(BrowserEnabled: _pluginPageHost?.TryGet("browser", out _) == true,
+                BrowserState: _browserPageState,
                 LibraryEnabled: _workbenchPages.ContainsKey("library"),
                 LocalReviewEnabled: _workbenchPages.ContainsKey("local-review"),
                 AutomationEnabled: _workbenchPages.ContainsKey("automation"), AutomationDatabase: _automationDatabase).Serialize());
@@ -494,22 +501,18 @@ public partial class MainWindow
                 try { SaveModulePreferences(); }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
                 { vm.Timeline.AddNotification("前一项目模块状态保存失败：" + error.Message); }
-                ApplyBrowserModuleState(false);
             }
             _layoutContext = key;
             try
             {
                 var modules = WorkbenchModulePreferences.Restore(_host?.Manager.Metadata.GetPreference(ModulePreferenceKey()), out var diagnostic);
                 _modulePreferencesCanWrite = diagnostic is null;
-                var wasEnabled = _workbenchPages.ContainsKey("browser");
-                if (!modules.BrowserEnabled) ApplyBrowserModuleState(false);
                 _browserPageState = modules.BrowserState;
-                if (modules.BrowserEnabled)
-                {
-                    ApplyBrowserModuleState(true);
-                    if (wasEnabled) ((BrowserView)_workbenchPages["browser"].Content).RestoreState(_browserPageState);
-                }
-                _browserModule.ApplyState(modules.BrowserEnabled, diagnostic ?? (modules.BrowserEnabled ? "已启用" : "已停用"));
+                Features.Plugins.IPluginWorkspacePage? browserPage = null;
+                var browserActive = _pluginPageHost?.TryGet("browser", out browserPage) == true;
+                _browserModule.ApplyState(browserActive, browserActive ? "已安装" : "未安装");
+                if (browserActive && browserPage?.View is BrowserView browserView && modules.BrowserState is { } browserState)
+                    browserView.RestoreState(browserState);
                 ApplyLibraryModuleState(modules.LibraryEnabled);
                 _libraryModule.ApplyState(modules.LibraryEnabled, diagnostic ?? (modules.LibraryEnabled ? "已启用" : "已停用"));
                 ApplyLocalReviewModuleState(modules.LocalReviewEnabled);
