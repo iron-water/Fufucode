@@ -6,28 +6,24 @@ using Fufucode.Core.Backend;
 namespace Fufucode.App.Features.Backend;
 
 /// <summary>
-/// 会话后端徽标：显示名称、图标标识与专属徽标颜色。
-/// 颜色为十六进制字符串，界面不猜测、不按名称匹配。
+/// 会话后端徽标：显示名称与图标标识。
+/// 不使用颜色区分内核——默认内核与插件内核一律走同一套三档底色。
 /// </summary>
-public sealed record BackendBadge(string BackendId, string DisplayName, string IconKey, string BadgeColor)
-{
-    /// <summary>用于绘制的颜色值（#RRGGBB）。</summary>
-    public string Color => BadgeColor;
-}
+public sealed record BackendBadge(string BackendId, string DisplayName, string IconKey);
 
 /// <summary>
-/// 后端徽标目录。颜色约定：FUMO=紫色（默认内核）、Pi=绿色、OMP=橙色、Codex=蓝色、DSH=青色、Claude=暖橙红。
+/// 后端徽标目录。
 /// </summary>
 public static class BackendBadgeCatalog
 {
     public static BackendBadge For(EngineId engine) => engine switch
     {
-        EngineId.Pi => new BackendBadge("pi", "Pi", "pi", "#2EA043"),
-        EngineId.Omp => new BackendBadge("omp", "OMP", "omp", "#D97706"),
-        EngineId.Codex => new BackendBadge("codex", "Codex", "codex", "#2563EB"),
-        EngineId.Dsh => new BackendBadge("dsh", "DSH", "dsh", "#0891B2"),
-        EngineId.Claude => new BackendBadge("claude", "Claude", "claude", "#C15F3C"),
-        EngineId.NativeCSharp => new BackendBadge("fumo", "FUMO", "code", "#8B5CF6"),
+        EngineId.Pi => new BackendBadge("pi", "Pi", "pi"),
+        EngineId.Omp => new BackendBadge("omp", "OMP", "omp"),
+        EngineId.Codex => new BackendBadge("codex", "Codex", "codex"),
+        EngineId.Dsh => new BackendBadge("dsh", "DSH", "dsh"),
+        EngineId.Claude => new BackendBadge("claude", "Claude", "claude"),
+        EngineId.NativeCSharp => new BackendBadge("fumo", "FUMO", "code"),
         _ => throw new ArgumentOutOfRangeException(nameof(engine), engine, "Unknown backend engine id."),
     };
 
