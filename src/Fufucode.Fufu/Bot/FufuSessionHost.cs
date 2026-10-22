@@ -31,6 +31,7 @@ public sealed class FufuSessionHost : IDisposable
 
     /// <summary>端点未配置时为 null —— UI 据此提示用户填写 settings.json，不伪造可用。</summary>
     public CompatibleEndpoint? Endpoint => _settings.Current.Endpoint;
+    public AppSettingsStore Settings => _settings;
 
     public string SettingsPath => Path.Combine(_layout.Root, "settings.json");
 
