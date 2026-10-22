@@ -338,15 +338,15 @@ public partial class MainWindow
     /// </summary>
     private static readonly string[] FluentDeepKeys =
     [
-        "AppWindowBackground", "AppMicaPageBackground", "AppContentBackground",
+        "AppWindowBackground", "AppMicaPageBackground", "AppContentBackground", "AppSidebarBackground", "AppDockBackground",
         "SolidBackgroundFillColorBaseBrush", "SolidBackgroundFillColorSecondaryBrush",
     ];
 
     private static readonly string[] FluentBarKeys =
     [
-        "AppTitleBarBackground", "AppSidebarBackground", "AppMicaSidebarBackground", "AppSettingsNavBackground",
+        "AppTitleBarBackground", "AppMicaSidebarBackground", "AppSettingsNavBackground",
         "AppSurfaceBackground", "AppCardBackground", "AppToolCardBackground", "AppDialogBackground",
-        "AppDialogFooterBackground", "AppChromeBackground", "AppDockBackground", "AppDockHeaderBackground",
+        "AppDialogFooterBackground", "AppChromeBackground", "AppDockHeaderBackground",
         "AppCodeBackground", "MenuSurfaceBrush", "LayerFillColorDefaultBrush", "LayerFillColorAltBrush",
         "SolidBackgroundFillColorTertiaryBrush", "SolidBackgroundFillColorQuaternaryBrush",
         "CardBackgroundFillColorDefaultBrush", "ControlFillColorDefaultBrush", "ControlFillColorInputActiveBrush",
