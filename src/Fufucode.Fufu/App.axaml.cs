@@ -23,6 +23,7 @@ public sealed class App : Application
     private BotHost? _bot;
     private FufuSessionHost? _sessionHost;
     private PetChatWindow? _chatWindow;
+    private EndpointSettingsWindow? _endpointSettingsWindow;
     private FufuPipeServer? _pipeServer;
     private BridgeWindow? _bridgeWindow;
     private ProactiveEngine? _proactive;
@@ -163,6 +164,10 @@ public sealed class App : Application
         chatItem.Click += (_, _) => ShowChat();
         menu.Items.Add(chatItem);
 
+        var endpointItem = new NativeMenuItem("配置模型端点…");
+        endpointItem.Click += (_, _) => ShowEndpointSettings();
+        menu.Items.Add(endpointItem);
+
         var bridgeItem = new NativeMenuItem("连接 Fufucode…");
         bridgeItem.Click += (_, _) => ShowBridge();
         menu.Items.Add(bridgeItem);
@@ -235,6 +240,10 @@ public sealed class App : Application
             chatItem.Click += (_, _) => ShowChat();
             menu.Items.Add(chatItem);
 
+            var endpointItem = new MenuItem { Header = "配置模型端点…" };
+            endpointItem.Click += (_, _) => ShowEndpointSettings();
+            menu.Items.Add(endpointItem);
+
             var bridgeItem = new MenuItem { Header = "连接 Fufucode…" };
             bridgeItem.Click += (_, _) => ShowBridge();
             menu.Items.Add(bridgeItem);
@@ -289,6 +298,23 @@ public sealed class App : Application
             menu.Items.Add(quitItem);
         };
         return menu;
+    }
+
+    /// <summary>打开/聚焦端点设置窗口：密钥值仍由用户在环境变量中维护。</summary>
+    private void ShowEndpointSettings()
+    {
+        if (_settings is null) return;
+        if (_endpointSettingsWindow is { } existing) { existing.Activate(); return; }
+
+        if (_sessionHost is null) return;
+        var window = new EndpointSettingsWindow(_sessionHost.Settings, () =>
+        {
+            _chatWindow?.Close();
+            _tray?.RebuildMenu();
+        });
+        window.Closed += (_, _) => _endpointSettingsWindow = null;
+        window.Show();
+        _endpointSettingsWindow = window;
     }
 
     /// <summary>打开/聚焦聊天窗：窗口锚到宠物附近。</summary>
@@ -356,6 +382,7 @@ public sealed class App : Application
         SavePosition();
         _tray?.Dispose();
         _chatWindow?.Close();
+        _endpointSettingsWindow?.Close();
         _bridgeWindow?.Close();
         _bubble?.Close();
         _proactive?.Dispose();
