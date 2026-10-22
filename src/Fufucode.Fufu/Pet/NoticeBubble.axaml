@@ -4,7 +4,7 @@
         Title="FUFU" Width="260" Height="52"
         ShowInTaskbar="False" Topmost="True"
         CanResize="False" SizeToContent="WidthAndHeight"
-        SystemDecorations="None" ExtendClientAreaToDecorationsHint="True"
+        WindowDecorations="None" ExtendClientAreaToDecorationsHint="True"
         WindowStartupLocation="Manual" ShowActivated="False"
         Background="Transparent" TransparencyLevelHint="Transparent">
   <Border CornerRadius="10" Padding="10,8" Margin="2" MaxWidth="300"

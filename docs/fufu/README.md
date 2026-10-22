@@ -27,11 +27,38 @@
 - 单实例：`Local\FufuPet.SingleInstance.v1` 命名 Mutex + 激活事件（参照 `SingleInstanceGuard`）。
 - 透明穿透：窗口本体即角色包围盒 + Win32 `WM_NCHITTEST` 命中判定（`ICharacterRenderer.HitTest`）。
 
-## IPC 契约（FUFU-04 预定义）
+## IPC 契约（FUFU-04 实现版）
 
-Named Pipe `\\.\pipe\fufu.fufucode.v1`，JSON Lines。Bridge 插件为客户端、FUFU 为服务端。
-握手（协议版本+身份）→ 会话列表/快照订阅 → 事件流（任务开始/执行/完成/失败/审批需求）
-→ 受控命令（focus/submitTask/cancel），带授权令牌与能力白名单。详见实现时 `docs/fufu/bridge-protocol.md`。
+双向命名管道 `\\.\pipe\fufu.fufucode.v1`（插件写 → FUFU 读）与
+`\\.\pipe\fufu.fufucode.v1.back`（FUFU 写 → 插件读），JSON Lines。
+单句柄挂起读会阻塞写（本机实测），故读写各走一条单向管道。
+Bridge 插件为客户端、FUFU 为服务端；握手 `hello`/`helloAck`（协议版本协商），
+服务端 `GetNamedPipeClientProcessId` 校验客户端进程名须为 `Fufucode*`，否则断开。
+
+消息（`Fufucode.App.Abstractions.FufuBridgeProtocol`）：
+插件→FUFU `hello / snapshot / event / approval / approvalClosed / ping`；
+FUFU→插件 `helloAck / submit / select / approve / pong / error`。
+
+## 运行与打包（FUFU-06）
+
+```powershell
+pwsh fucode/publish-fufu.ps1            # 产出 out/fufu-06/{fufu, service.fufu-bridge, *.zip}
+```
+
+- `fufu/fufu.exe`：自包含 win-x64，双击独立运行（不拉起 Fufucode，无 .NET 依赖）。
+- `service.fufu-bridge/`：插件载荷 = `manifest.json` + `Fufucode.Plugins.FufuBridge.dll`
+  （宿主从 Default ALC 解析 Core/Abstractions，载荷不带宿主程序集副本）。
+- **安装**：Fufucode 插件市场 → `service.fufu-bridge`（FUFU 桌宠桥接）→ 安装；
+  或把载荷目录复制到 `%LOCALAPPDATA%\Fufucode\plugins\service.fufu-bridge\` 再重启 Fufucode。
+  市场条目 `DefaultInstalled=false` —— FUFU 不默认安装（任务书硬性要求）。
+- **更新**：重新 publish 后在市场点「更新」或覆盖 plugins/ 下载荷；`plugins.json` 记录状态。
+- **卸载**：市场卸载仅删载荷；FUFU 数据 `%LOCALAPPDATA%\FufuPet\`
+  （`fufu-settings.json`、`task-log.jsonl`、sessions/）与 `%LOCALAPPDATA%\Fufucode\fufu-bridge.log`
+  全部保留，不随卸载删除。
+- **进程隔离**：FUFU 独立进程；关闭 Fufucode → FUFU 仍运行（实测 `Responding=True`），
+  插件断开后按 0.5s→8s 指数退避自动重连（实测 3 次成功）。
+- **权限**：pipe 是本机（`\\.\pipe`）同用户通道；服务端按客户端 PID→进程名校验，
+  非 Fufucode 进程（powershell 实测）被拒绝；提交/切换/审批必须经 FUFU 面板用户操作发出。
 
 ## 任务分工
 
