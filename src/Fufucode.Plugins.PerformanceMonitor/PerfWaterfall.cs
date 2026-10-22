@@ -77,7 +77,7 @@ public sealed class PerfWaterfall : UserControl
             var barWidth = Math.Max(2, (span.EndTicks - span.StartTicks) / (double)total * width);
             var color = span.Status == "Error" ? Color.FromRgb(0xE8, 0x5A, 0x5A)
                 : span.Status == "Cancelled" ? Color.FromRgb(0x8A, 0x8A, 0x8E)
-                : PerfDockPage.CategoryColor(span.Category);
+                : PerfPalette.CategoryColor(span.Category);
             var bar = new Border
             {
                 Width = barWidth,

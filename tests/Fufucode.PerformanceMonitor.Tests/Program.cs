@@ -13,6 +13,7 @@ var tests = new (string Id, Action Run)[]
     ("jsonl", JsonlTests.Run),
     ("recorder", RecorderTests.Run),
     ("plugin", PluginTests.Run),
+    ("snapshot", SnapshotTests.Run),
     ("native", NativePipelineTests.Run),
 };
 
