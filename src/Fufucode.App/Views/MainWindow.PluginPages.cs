@@ -27,7 +27,7 @@ public partial class MainWindow
         if (Program.SelfTestMode)
         {
             SelfTest.SelfTestTerminalPlugin.EnsureInstalled(root);
-            SelfTest.SelfTestBrowserPlugin.EnsureInstalled(root);
+            SelfTest.SelfTestOptionalPlugins.EnsureInstalled(root);
         }
 
         // 默认随包插件先把载荷同步到数据根，页面宿主的激活扫描才能找到它。
@@ -37,7 +37,10 @@ public partial class MainWindow
         // 浏览器页面由 workspace.browser 插件贡献；宿主只向插件暴露受控的页面工厂。
         var priorResolver = _pluginPageHost.Manager.ServiceResolver;
         _pluginPageHost.Manager.ServiceResolver = type =>
-            type == typeof(IBrowserPageFactory) ? this : priorResolver?.Invoke(type);
+            type == typeof(IBrowserPageFactory) || type == typeof(ILibraryPageFactory) ||
+            type == typeof(ILocalReviewPageFactory)
+                ? this
+                : priorResolver?.Invoke(type);
         _pluginPageHost.PagesChanged += OnPluginPagesChanged;
         // 性能监控插件页需要宿主服务（页面工厂、设置注册），必须在 InitializeInstalledPlugins 之前接好。
         InitializePerformance(root);

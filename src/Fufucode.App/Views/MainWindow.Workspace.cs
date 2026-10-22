@@ -124,21 +124,9 @@ public partial class MainWindow
         Add("changes", "变更", "Branch", changes);
         // 浏览器页由 workspace.browser 插件贡献；未安装时这里不预留页面。
         _browserModule = new("builtin.browser", "浏览器", SetBrowserModuleEnabled);
-        _workbenchPages.RegisterOptional("library", "资料库", "Folder", "builtin.library", () =>
-        {
-            _libraryService ??= new LibraryService(Path.Combine(
-                Program.SelfTestDataRoot ?? _options.CreateAppDataLayout().Root, "library"));
-            var view = new LibraryPageView();
-            var library = new LibraryViewModel(_libraryService);
-            library.CitationCopyRequested += text => library.StatusText = AcceptLibraryCitation(text);
-            view.Attach(library);
-            return view;
-        }, control => ((LibraryPageView)control).Detach());
         _libraryModule = new("builtin.library", "资料库", SetLibraryModuleEnabled);
-        _workbenchPages.RegisterOptional("local-review", "本地审查", "ShieldCheckmark", "builtin.local-review",
-            CreateLocalReviewPage, control => ((Features.LocalReview.LocalReviewPageView)control).Detach());
         _localReviewModule = new("builtin.local-review", "本地审查", SetLocalReviewModuleEnabled);
-        // 自动开发页完全由 automation.auto-dev 插件贡献；宿主不再保留页面壳。
+        // 资料库、本地审查、浏览器、终端、自动开发都由插件贡献；宿主不保留页面壳。
         Add("sidechat", "侧边聊天", "Chat", CreateSideChatHost());
         WorkspacePanel.PreviewRequested += () => OpenDockPage("files", DockZone.Right);
         foreach (var dock in Docks())
@@ -243,11 +231,9 @@ public partial class MainWindow
 
     private void ApplyLibraryModuleState(bool enabled)
     {
-        _workbenchPages.SetEnabled("library", enabled, content =>
-        {
-            foreach (var dock in AllDockHosts()) dock.DetachPage(content);
-            _parkedPages.Children.Remove(content);
-        });
+        try { _pluginPageHost?.Manager.SetPackageEnabled("workspace.library", enabled); }
+        catch (Exception error) when (error is InvalidOperationException or IOException or UnauthorizedAccessException)
+        { _vm?.Timeline.AddNotification("资料库插件状态切换失败：" + error.Message); }
         RenderDockPages();
         _actions.RefreshCapabilities();
     }
@@ -454,10 +440,10 @@ public partial class MainWindow
                 _browserModule.ApplyState(browserActive, browserActive ? "已安装" : "未安装");
                 if (browserActive && browserPage?.View is BrowserView browserView && modules.BrowserState is { } browserState)
                     browserView.RestoreState(browserState);
-                ApplyLibraryModuleState(modules.LibraryEnabled);
-                _libraryModule.ApplyState(modules.LibraryEnabled, diagnostic ?? (modules.LibraryEnabled ? "已启用" : "已停用"));
-                ApplyLocalReviewModuleState(modules.LocalReviewEnabled);
-                _localReviewModule.ApplyState(modules.LocalReviewEnabled, diagnostic ?? (modules.LocalReviewEnabled ? "已启用" : "已停用"));
+                var libraryActive = _pluginPageHost?.TryGet("library", out _) == true;
+                _libraryModule.ApplyState(libraryActive, libraryActive ? "已安装" : "未安装");
+                var reviewActive = _pluginPageHost?.TryGet("local-review", out _) == true;
+                _localReviewModule.ApplyState(reviewActive, reviewActive ? "已安装" : "未安装");
                 if (diagnostic is not null) vm.Timeline.AddNotification(diagnostic);
                 var text = _host?.Manager.Metadata.GetPreference(LayoutPreferenceKey());
                 _dockLayout = WorkbenchLayoutState.Restore(text,_workbenchPages.KnownPageIds);
@@ -472,8 +458,8 @@ public partial class MainWindow
         RenderDockPages();
         Fufucode.Core.Diagnostics.StartupProbe.Mark("workspace.dock-render", "dock pages rendered");
         UpdateLocalReviewProject(path);
-        // 设置里只暴露真正的内建可选模块；浏览器/终端/自动开发的安装状态统一由插件市场管理。
-        vm.Settings.AttachBuiltInModules([_libraryModule, _localReviewModule]);
+        // 所有可选页面安装状态统一由插件市场管理；设置不再维护第二套模块开关。
+        vm.Settings.AttachBuiltInModules([]);
         vm.Settings.ShortcutsContent = _shortcutsPage;
         // 快捷键页内部分组下钻 → 同步到设置页子页路由，让面包屑/标题/淡入一起走。
         _shortcutsPage.GroupOpened += group => vm.Settings.OpenShortcutsGroup(group);

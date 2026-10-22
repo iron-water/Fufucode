@@ -198,9 +198,9 @@ internal static class WorkbenchDemoSelfTest
                 "Optional pages: opening local review survives appearance layout synchronization");
             Check(reviewVm.ProjectPath == vm.WorkspacePanel.ProjectPath && !reviewVm.HasExecutor,
                 "Local review integration: mock shell shares project context without inventing a model executor");
-            Check(vm.Settings.BuiltInModules.Any(module => module.Id == "builtin.local-review") &&
+            Check(!vm.Settings.BuiltInModules.Any(module => module.Id == "builtin.local-review") &&
                 window.ActionsForTesting.Actions.Any(action => action.Id == "page.local-review"),
-                "Local review integration: settings and action registry expose the real optional page");
+                "Local review integration: plugin page is exposed through the shared action registry, not a duplicate settings module");
             window.LocalReviewModuleForTesting.IsEnabled = false;
             Check(!window.PageAvailableForTesting("local-review") && reviewVm.IsDisposed,
                 "Local review integration: disabling releases its model and cancels only its own review");

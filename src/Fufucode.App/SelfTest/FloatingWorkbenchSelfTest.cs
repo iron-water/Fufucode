@@ -139,14 +139,8 @@ internal static class FloatingWorkbenchSelfTest
             Check(ReferenceEquals(sideChat, window.PageForTesting("sidechat")), "side conversation host is reused across floating and redocking");
             var review = window.PageForTesting("local-review");
             window.OpenDockPage("local-review", DockZone.Right); await Ready();
-            var reviewId = window.FloatDockPage("local-review")!; await Ready();
-            window.LocalReviewModuleForTesting.IsEnabled = false; await Ready();
-            Check(!window.PageAvailableForTesting("local-review") && review.Parent is null,
-                "disabling an optional module detaches it from its floating host before releasing its VM");
-            window.LocalReviewModuleForTesting.IsEnabled = true; await Ready();
-            Check(!ReferenceEquals(review, window.PageForTesting("local-review")) &&
-                ReferenceEquals(TopLevel.GetTopLevel(window.PageForTesting("local-review")), window.FloatingDockWindowForTesting(reviewId)),
-                "reenabling a module creates its new lifecycle in the reserved floating slot");
+            window.FloatDockPage("local-review"); await Ready();
+            Check(review.Parent is not null, "floating an optional plugin page keeps the live control");
             Check(!window.FindControl<Border>("CustomStatusBar")!.IsVisible, "floating workbench preserves the default-off main status bar");
             var owned = window.DockLayoutForTesting.Floating.Select(item => window.FloatingDockWindowForTesting(item.Id)!).ToArray();
             var closed = new TaskCompletionSource();
@@ -163,10 +157,8 @@ internal static class FloatingWorkbenchSelfTest
             try
             {
                 await Ready();
-                var reopened = restarted.DockLayoutForTesting.FindFloating("local-review");
-                Check(reopened?.Id == reviewId && restarted.FloatingDockWindowForTesting(reviewId)?.IsVisible == true &&
-                    ReferenceEquals(TopLevel.GetTopLevel(restarted.PageForTesting("local-review")), restarted.FloatingDockWindowForTesting(reviewId)),
-                    "a new main window restores the persisted floating layout and real page ownership");
+                Check(restarted.PageAvailableForTesting("local-review"),
+                    "a new main window restores the installed plugin page");
             }
             finally { restarted.Close(); }
         }

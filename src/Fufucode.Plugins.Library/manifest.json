@@ -1,0 +1,9 @@
+{
+  "id": "workspace.library",
+  "name": "资料库",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Library.dll",
+  "packageType": "Fufucode.Plugins.Library.LibraryPluginPackage",
+  "category": "Workspace",
+  "capabilities": ["WorkspacePage"]
+}
