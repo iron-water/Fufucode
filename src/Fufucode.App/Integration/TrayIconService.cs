@@ -1,4 +1,5 @@
 using System;
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 
@@ -30,11 +31,25 @@ internal sealed class TrayIconService : IDisposable
         {
             ToolTipText = "Fufucode",
             Menu = _menu,
-            IsVisible = false,
+            IsVisible = true,
         };
         // Win32 实现对左键单击触发 Clicked；右键由平台弹出 Menu。
         _tray.Clicked += (_, _) => showWindow();
         if (TryLoadBrandIcon() is { } icon) _tray.Icon = icon;
+
+        if (Application.Current is { } app)
+        {
+            var icons = TrayIcon.GetIcons(app);
+            if (icons is null)
+            {
+                icons = new TrayIcons();
+                TrayIcon.SetIcons(app, icons);
+            }
+            if (!icons.Contains(_tray))
+            {
+                icons.Add(_tray);
+            }
+        }
     }
 
     internal NativeMenu MenuForTesting => _menu;
@@ -72,6 +87,11 @@ internal sealed class TrayIconService : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        if (Application.Current is { } app)
+        {
+            var icons = TrayIcon.GetIcons(app);
+            icons?.Remove(_tray);
+        }
         _tray.Dispose();
     }
 }
