@@ -103,7 +103,7 @@
                     <SolidColorBrush x:Key="AppEmphasis" Color="#FFD400"/>
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="AppBaseDeep"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="AppBaseBar"/>
-                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppSidebarBackground"  ResourceKey="AppBaseDeep"/>
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
@@ -142,7 +142,7 @@
                     <!-- chrome/停靠与侧栏同层；内容区由 AppMicaPageBackground→Deep 提供。 -->
                     <StaticResource x:Key="AppChromeBackground"   ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppContentBackground"  ResourceKey="AppBaseDeep"/>
-                    <StaticResource x:Key="AppDockBackground"     ResourceKey="AppBaseBar"/>
+                    <StaticResource x:Key="AppDockBackground"     ResourceKey="AppBaseDeep"/>
                     <StaticResource x:Key="AppDockHeaderBackground" ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppTabSelectedBackground" ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="AppSubtleBackground"   ResourceKey="AppBaseHighlight"/>
