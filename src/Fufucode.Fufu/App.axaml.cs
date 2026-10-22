@@ -32,6 +32,8 @@ public sealed class App : Application
     private ResidentTaskStore? _residentTasks;
     private ResidentSupervisor? _residentSupervisor;
     private ResidentTaskWindow? _residentTaskWindow;
+    private ResidentTriggerStore? _residentTriggers;
+    private ResidentTriggerEngine? _residentTriggerEngine;
     private NoticeBubble? _bubble;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
@@ -67,6 +69,8 @@ public sealed class App : Application
         _resident.Observe("system", "started", "fufu", "FUFU resident core started");
         _residentTasks = new ResidentTaskStore(Path.Combine(dataRoot, "resident"));
         _residentSupervisor = new ResidentSupervisor(_pipeServer, _residentTasks, _resident, _taskLog);
+        _residentTriggers = new ResidentTriggerStore(Path.Combine(dataRoot, "resident"));
+        _residentTriggerEngine = new ResidentTriggerEngine(_pipeServer, _residentTriggers, _residentTasks, _resident, _taskLog);
         _proactive = new ProactiveEngine(_pipeServer, _settings, _taskLog);
         _bubble = new NoticeBubble();
         _proactive.Noticed += text => _bubble.ShowNotice(text, _lastPos ?? _petWindow?.Position ?? new PixelPoint(0, 0));
@@ -417,6 +421,7 @@ public sealed class App : Application
         _bubble?.Close();
         _proactive?.Dispose();
         _residentSupervisor?.Dispose();
+        _residentTriggerEngine?.Dispose();
         _pipeServer?.Dispose();
         _sessionHost?.Dispose();
         _resident?.Observe("system", "stopped", "fufu", "FUFU resident core stopped");

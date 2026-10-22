@@ -41,6 +41,7 @@ try
     Check(reopened.ReadObservations().Count == 1, "observations survive reopening the resident core");
 
     TaskStoreTests.Run();
+    TriggerStoreTests.Run();
     Console.WriteLine("Fufu Resident Core tests passed.");
 }
 finally
