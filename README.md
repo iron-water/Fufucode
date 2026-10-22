@@ -54,10 +54,12 @@ Several models can work at once without sharing a worktree or overwriting `out/a
 pwsh fucode/feature-worktree.ps1 -Name review-ui
 ```
 
-Commit in that worktree, then let the model publish its own isolated review build:
+Small fixes can stay on `main`; large or blocking features use a worktree. Publish either lane
+with one command:
 
 ```bash
-pwsh fucode/feature-publish.ps1
+pwsh fucode/feature-publish.ps1          # feature worktree
+pwsh fucode/feature-publish.ps1 -Main    # small change on main
 ```
 
 The script refuses `main`, checks that the worktree is clean, generates the
@@ -70,6 +72,13 @@ Each build lands in `out/review/<branch>`, has a `branch@commit` label, and uses
 
 ```bash
 pwsh fucode/review-parallel.ps1 -NoBuild -Open
+```
+
+After the user approves a feature, merge it with a guard that only accepts a clean,
+main-synchronized branch:
+
+```bash
+pwsh fucode/feature-merge.ps1 -Name review-ui
 ```
 
 Cleanup is refused unless the worktree is clean and merged:
