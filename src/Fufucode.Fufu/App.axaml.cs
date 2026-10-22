@@ -28,6 +28,7 @@ public sealed class App : Application
     private BridgeWindow? _bridgeWindow;
     private ProactiveEngine? _proactive;
     private TaskLog? _taskLog;
+    private ResidentCore? _resident;
     private NoticeBubble? _bubble;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
@@ -59,11 +60,15 @@ public sealed class App : Application
         _sessionHost = new FufuSessionHost(dataRoot, _behavior);
         _pipeServer = new FufuPipeServer();
         _taskLog = new TaskLog(dataRoot);
+        _resident = new ResidentCore(dataRoot);
+        _resident.Observe("system", "started", "fufu", "FUFU resident core started");
         _proactive = new ProactiveEngine(_pipeServer, _settings, _taskLog);
         _bubble = new NoticeBubble();
         _proactive.Noticed += text => _bubble.ShowNotice(text, _lastPos ?? _petWindow?.Position ?? new PixelPoint(0, 0));
         _proactive.StateSuggested += state => _behavior.Notify(state);
         _pipeServer.AgentEventReceived += OnBridgeEvent;
+        _pipeServer.AgentEventReceived += (sessionId, type, summary) =>
+            _resident?.Observe("fufucode-bridge", type, sessionId, summary);
         _pipeServer.ApprovalReceived += (_, _, _, _) =>
             Dispatcher.UIThread.Post(() => _behavior.Notify(PetState.Attention));
         _pipeServer.ConnectionChanged += connected =>
@@ -388,6 +393,7 @@ public sealed class App : Application
         _proactive?.Dispose();
         _pipeServer?.Dispose();
         _sessionHost?.Dispose();
+        _resident?.Observe("system", "stopped", "fufu", "FUFU resident core stopped");
         _petWindow?.Close();
         _wander?.Stop();
         _behavior?.Dispose();
