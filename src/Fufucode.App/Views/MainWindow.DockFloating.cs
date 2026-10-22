@@ -88,36 +88,16 @@ public partial class MainWindow
             var window = new Window
             {
                 Title = "Fufucode · 辅助栏", Width = floating.Width, Height = floating.Height,
-                MinWidth = 320, MinHeight = 200, ShowInTaskbar = false,
+                // 单行标题栏需同时容纳标题、停靠工具与三枚窗口键；420 是它们不挤压的最小宽度。
+                MinWidth = 420, MinHeight = 200, ShowInTaskbar = false,
                 WindowDecorations = WindowDecorations.BorderOnly,
                 WindowStartupLocation = WindowStartupLocation.Manual,
                 RequestedThemeVariant = RequestedThemeVariant, Topmost = floating.Topmost
             };
             window.Bind(BackgroundProperty, new DynamicResourceExtension("AppWindowBackground"));
-            var tools = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(8, 4) };
-            var dockBack = new Button { Content = "停靠回原栏" };
-            dockBack.Click += (_, _) => DockFloatingRegion(id);
-            tools.Children.Add(dockBack);
-            var destinations = new Button { Content = "停靠到…" };
-            destinations.Click += (_, _) =>
-            {
-                var menu = new MenuFlyout();
-                foreach (var zone in Enum.GetValues<DockZone>())
-                {
-                    var target = zone;
-                    var item = new MenuItem { Header = zone switch { DockZone.Left => "左栏", DockZone.Right => "右栏", _ => "底栏" } };
-                    item.Click += (_, _) => DockFloatingRegion(id, target); menu.Items.Add(item);
-                }
-                menu.ShowAt(destinations);
-            };
-            tools.Children.Add(destinations);
-            var topmost = new CheckBox { Content = "置顶", IsChecked = floating.Topmost, VerticalAlignment = VerticalAlignment.Center };
-            topmost.IsCheckedChanged += (_, _) =>
-            {
-                if (FindState() is not { } state) return;
-                state.Topmost = window.Topmost = topmost.IsChecked == true; SaveWorkspaceDimensions();
-            };
-            tools.Children.Add(topmost);
+            // 单行标题栏：标题（拖动区）+ 两个紧凑图标键 + 窗口按钮。
+            // 文字按钮与自绘复选框夹在 32px 标题栏里会互相挤压、裁切；
+            // “停靠回原栏”保留一键直达，其余停靠目标与置顶收进 ⋯ 菜单。
             var title = new TextBlock { Text = window.Title, Margin = new Thickness(12, 0), VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
             title.Bind(TextBlock.TextProperty, window.GetObservable(TitleProperty));
@@ -128,6 +108,37 @@ public partial class MainWindow
                 if (e.ClickCount == 2) window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
                 else window.BeginMoveDrag(e);
             };
+            var dockBack = Views.WorkbenchUi.IconButton("ArrowEnterLeft", "停靠回原栏");
+            dockBack.Classes.Add("toolButton");
+            dockBack.Width = dockBack.Height = 28;
+            dockBack.Click += (_, _) => DockFloatingRegion(id);
+            var optionsMenu = new MenuFlyout();
+            foreach (var zone in Enum.GetValues<DockZone>())
+            {
+                var target = zone;
+                var item = new MenuItem { Header = zone switch { DockZone.Left => "停靠到左栏", DockZone.Right => "停靠到右栏", _ => "停靠到底栏" } };
+                item.Click += (_, _) => DockFloatingRegion(id, target);
+                optionsMenu.Items.Add(item);
+            }
+            optionsMenu.Items.Add(new Separator());
+            var topmostItem = new MenuItem
+            {
+                Header = "置顶窗口", ToggleType = MenuItemToggleType.CheckBox, IsChecked = floating.Topmost
+            };
+            topmostItem.Click += (_, _) =>
+            {
+                if (FindState() is not { } state) return;
+                state.Topmost = window.Topmost = topmostItem.IsChecked;
+                SaveWorkspaceDimensions();
+            };
+            optionsMenu.Items.Add(topmostItem);
+            var options = Views.WorkbenchUi.IconButton("More", "更多停靠选项与置顶");
+            options.Classes.Add("toolButton");
+            options.Width = options.Height = 28;
+            options.Flyout = optionsMenu;
+            var dockActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4,
+                Margin = new Thickness(4, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+            dockActions.Children.Add(dockBack); dockActions.Children.Add(options);
             var captionActions = new StackPanel { Orientation = Orientation.Horizontal };
             var minimize = new CaptionAssetButton { Kind = "minimize" };
             var maximize = new CaptionAssetButton { Kind = "maximize" };
@@ -140,13 +151,14 @@ public partial class MainWindow
             Avalonia.Automation.AutomationProperties.SetName(maximize, "最大化或还原辅助栏");
             Avalonia.Automation.AutomationProperties.SetName(close, "隐藏辅助栏");
             captionActions.Children.Add(minimize); captionActions.Children.Add(maximize); captionActions.Children.Add(close);
-            var captionGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Height = 32 };
-            captionGrid.Children.Add(titleDrag); Grid.SetColumn(captionActions, 1); captionGrid.Children.Add(captionActions);
+            var captionGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Height = 32 };
+            captionGrid.Children.Add(titleDrag);
+            Grid.SetColumn(dockActions, 1); captionGrid.Children.Add(dockActions);
+            Grid.SetColumn(captionActions, 2); captionGrid.Children.Add(captionActions);
             var captionBar = new Border { Child = captionGrid, Height = 32 }; captionBar.Classes.Add("chromeBar");
-            var toolBar = new Border { Child = tools }; toolBar.Classes.Add("floatingToolbar");
-            var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*") };
-            root.Children.Add(captionBar); Grid.SetRow(toolBar, 1); root.Children.Add(toolBar);
-            Grid.SetRow(dock, 2); root.Children.Add(dock); window.Content = root;
+            var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
+            root.Children.Add(captionBar);
+            Grid.SetRow(dock, 1); root.Children.Add(dock); window.Content = root;
             dock.OpenRequested += (pageId, _) =>
             {
                 if (!_workbenchPages.ContainsKey(pageId)) return;

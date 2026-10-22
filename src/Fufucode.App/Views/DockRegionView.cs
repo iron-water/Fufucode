@@ -33,7 +33,10 @@ internal sealed class DockRegionView : UserControl
     private readonly Grid _root = new() { RowDefinitions = new RowDefinitions("40,*") };
     private double _rowHeight = 40;
     private readonly MenuItem _floatRegionItem = new() { Header = "浮动整栏" };
+    private readonly ContextMenu _regionMenu = new();
     private Button? _hideButton;
+    private Button? _floatButton;
+    internal ContextMenu RegionMenuForTesting => _regionMenu;
     private DockZone _zone;
     public DockZone Zone
     {
@@ -89,26 +92,48 @@ internal sealed class DockRegionView : UserControl
         var add = WorkbenchUi.IconButton("Add", "打开功能页");
         var hide = WorkbenchUi.IconButton("ChevronDown", "隐藏此区域（页面与进程保留）");
         _hideButton = hide;
-        var regionMenu = new ContextMenu();
+        // 整栏浮动必须有可见入口：页签占满栏头时右键只能落到页签菜单，
+        // 只靠栏头空白右击会让“浮动整栏/变成独立窗口”事实上不可达。
+        var floatRegion = WorkbenchUi.IconButton("WindowNew", "浮动整栏（变为独立窗口）");
+        _floatButton = floatRegion;
+        floatRegion.Click += (_, _) => FloatRegionRequested?.Invoke();
+        var regionMenu = _regionMenu;
         _floatRegionItem.Click += (_, _) => FloatRegionRequested?.Invoke();
         regionMenu.Items.Add(_floatRegionItem);
-        // Resolve the hit row explicitly. A parent ContextMenu can otherwise intercept the
-        // child's context request and open the region menu even over a page title.
+        // 右键落到页签行之外的栏头空白时打开整栏菜单（浮动整栏/停靠回原栏）。
+        // 页签自身有 ContextMenu，原生右键会先打开页签菜单；栏头空白没有菜单宿主，
+        // 因此这里显式接管。ContextRequested 只在部分输入路径触发，PointerReleased
+        // 兜底可保证鼠标、触控与无头合成的右键都能打开同一个入口。
+        bool OverTabRow(object? source)
+        {
+            if (source is not Visual visual) return false;
+            var ancestors = visual.GetVisualAncestors().Prepend(visual).ToArray();
+            return _buttons.Values.Any(item => ancestors.Contains(item.Row));
+        }
+        void OpenRegionMenu()
+        {
+            if (!regionMenu.IsOpen) regionMenu.Open(_header);
+        }
         _header.AddHandler(ContextRequestedEvent, (_, e) =>
         {
-            var source = e.Source as Visual;
-            var ancestors = source?.GetVisualAncestors().Prepend(source).ToArray() ?? [];
-            var entry = _buttons.Values.FirstOrDefault(item => ancestors.Contains(item.Row));
-            if (entry.Tab is not null) entry.Tab.ContextMenu!.Open(entry.Tab);
-            else regionMenu.Open(_header);
+            if (OverTabRow(e.Source)) return;
+            OpenRegionMenu();
+            e.Handled = true;
+        }, Avalonia.Interactivity.RoutingStrategies.Bubble);
+        _header.AddHandler(PointerReleasedEvent, (_, e) =>
+        {
+            if (e.InitialPressMouseButton != MouseButton.Right || OverTabRow(e.Source)) return;
+            OpenRegionMenu();
             e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-        add.Classes.Add("toolButton"); hide.Classes.Add("toolButton");
+        add.Classes.Add("toolButton"); hide.Classes.Add("toolButton"); floatRegion.Classes.Add("toolButton");
         add.Margin = new Thickness(0, 0, 2, 0); hide.Margin = new Thickness(0, 0, 6, 0);
-        add.VerticalAlignment = hide.VerticalAlignment = VerticalAlignment.Center;
+        floatRegion.Margin = new Thickness(0, 0, 2, 0);
+        add.VerticalAlignment = hide.VerticalAlignment = floatRegion.VerticalAlignment = VerticalAlignment.Center;
         hide.Click += (_, _) => HideRequested?.Invoke(Zone);
         var header = _header;
         DockPanel.SetDock(hide, Dock.Right); header.Children.Add(hide);
+        DockPanel.SetDock(floatRegion, Dock.Right); header.Children.Add(floatRegion);
         DockPanel.SetDock(add, Dock.Right); header.Children.Add(add);
         _tabScroll.Content = _tabs;
         AutomationProperties.SetName(_tabScroll, "页签栏，可用滚轮横向浏览");
@@ -184,6 +209,8 @@ internal sealed class DockRegionView : UserControl
     {
         _state = state;
         _floatRegionItem.Header = FloatingId is null ? "浮动整栏" : "停靠回原栏";
+        // 浮动窗口自带“停靠回原栏”工具栏，页签栏不再重复显示浮动键。
+        if (_floatButton is not null) _floatButton.IsVisible = FloatingId is null;
         var ids = PageIds(state).Where(id => Catalog.Any(page => page.Id == id)).ToList();
         _empty.IsVisible = ids.Count == 0;
         var selected = ids.Contains(SelectedPage(state)!) ? SelectedPage(state) : ids.FirstOrDefault();
