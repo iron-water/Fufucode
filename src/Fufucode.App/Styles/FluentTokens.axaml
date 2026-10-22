@@ -211,7 +211,7 @@
             <SolidColorBrush x:Key="MenuDividerBrush"       Color="#15FFFFFF"/>
             <SolidColorBrush x:Key="SmokeFillColorDefaultBrush" Color="#4D000000"/>
             <StaticResource x:Key="ButtonBackground"           ResourceKey="ControlFillColorDefaultBrush"/>
-            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="ControlFillColorSecondaryBrush"/>
+            <StaticResource x:Key="ButtonBackgroundPointerOver" ResourceKey="ControlFillColorTertiaryBrush"/>
             <StaticResource x:Key="ButtonBackgroundPressed"    ResourceKey="ControlFillColorTertiaryBrush"/>
             <StaticResource x:Key="ButtonBackgroundDisabled"   ResourceKey="ControlFillColorDisabledBrush"/>
             <StaticResource x:Key="ButtonForeground"           ResourceKey="TextFillColorPrimaryBrush"/>

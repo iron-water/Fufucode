@@ -98,6 +98,7 @@
        不再给单行套卡片/描边，避免多层 box 叠在一起。 -->
   <Style Selector="Border.overviewGroup">
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="4"/>
@@ -118,6 +119,7 @@
   </Style>
   <Style Selector="Border.overviewSession">
     <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Margin" Value="0,1"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="MinHeight" Value="32"/>
@@ -238,9 +240,9 @@
   <!-- 左侧导航宿主（Windows 设置度量）：浮为侧栏面，比内容区亮一档形成明度差。
        深色下走 AppSettingsNavBackground（FufucodeTheme 里定义为实色 #2C2C2C，
        因为 Fluent 的 Quaternary 是透明叠加、不是实色）。 -->
-  <!-- 侧栏透页面底（Win11 设置侧栏就是窗口底色，不另起卡片）。 -->
+  <!-- 设置页左导航 = 中间灰面，和深层页面底形成两层（用户指定）。 -->
   <Style Selector="Border.settingsNavHost">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
     <Setter Property="Padding" Value="0,0,8,0"/>
   </Style>
   <Style Selector="ListBox.settingsNav">
