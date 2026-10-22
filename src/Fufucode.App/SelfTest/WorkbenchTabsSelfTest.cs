@@ -50,7 +50,7 @@ internal static class WorkbenchTabsSelfTest
                 // they must not exist, and the test should not treat their absence as a failure.
                 if (!window.PageAvailableForTesting(id))
                 {
-                    Check(id is "terminal" or "browser" &&
+                    Check(id is "terminal" or "browser" or "automation" &&
                           (id != "terminal" || window.TerminalPageForTesting is null),
                         id + " is absent because its optional module/plugin is not installed");
                     continue;
