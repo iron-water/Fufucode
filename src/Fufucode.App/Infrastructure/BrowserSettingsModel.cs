@@ -39,7 +39,7 @@ public sealed record BrowserSettings
 
     // ── 设备自带浏览器控制扩展 ──
     /// <summary>是否启动外部浏览器桥（本机回环服务 + Chrome/Edge 扩展）。</summary>
-    public bool ExternalBrowserEnabled { get; init; } = true;
+    public bool ExternalBrowserEnabled { get; init; } = false;
     /// <summary>外部浏览器桥首选端口；被占用时实际端口从设置页状态读取。</summary>
     public int ExternalBrowserPort { get; init; } = 54321;
     /// <summary>扩展配对用的 4 位 PIN；为空时由应用生成并落盘。</summary>
