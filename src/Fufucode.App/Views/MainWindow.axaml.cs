@@ -380,7 +380,8 @@ public partial class MainWindow : Window
             {
                 var metadata = new DesktopMetadataStore(_options.CreateAppDataLayout());
                 var recent = ProjectPreferences.LoadRecent(metadata)
-                    .Where(path => !ProjectArchive.IsArchivedPath(metadata, path))
+                    .Where(path => !ProjectArchive.IsArchivedPath(metadata, path) &&
+                        !ScratchWorkspace.Matches(_options.CreateAppDataLayout(), path))
                     .ToArray();
                 var resolved = ProjectPreferences.ResolveStartupProject(
                     _options.ProjectPath, recent, Directory.Exists);
@@ -680,8 +681,10 @@ public partial class MainWindow : Window
             CurrentSessionId: current.Id,
             SwitchProjectRequested: path => SwitchProjectAsync(path),
             OpenProjectRequested: () => OpenProjectAsync(),
+            // 独立工作区是内部目录，不作为“最近项目”展示。
             RecentProjects: ProjectPreferences.LoadRecent(host.Manager.Metadata)
-                .Where(path => !ProjectArchive.IsArchivedPath(host.Manager.Metadata, path))
+                .Where(path => !ProjectArchive.IsArchivedPath(host.Manager.Metadata, path) &&
+                    !ScratchWorkspace.Matches(_options.CreateAppDataLayout(), path))
                 .ToArray(),
             NewSessionBackends: BuildNewSessionBackendOptions(host),
             NewSessionWithBackendRequested: key =>

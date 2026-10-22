@@ -21,6 +21,20 @@ public static class ScratchWorkspace
         return path;
     }
 
+    /// <summary>路径是否属于独立工作区（含其下任一子目录）。</summary>
+    public static bool Contains(AppDataLayout layout, string projectPath)
+    {
+        if (string.IsNullOrWhiteSpace(projectPath)) return false;
+        try
+        {
+            var full = Path.GetFullPath(projectPath).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            var root = Path.GetFullPath(PathFor(layout)).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            return string.Equals(full, root, StringComparison.OrdinalIgnoreCase) ||
+                full.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception) { return false; }
+    }
+
     public static bool Matches(AppDataLayout layout, string projectPath) =>
         RealPathEquals(PathFor(layout), projectPath);
 
