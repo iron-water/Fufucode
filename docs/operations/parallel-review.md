@@ -4,8 +4,8 @@
 
 ## 规则（短，不靠模型自觉）
 
-1. `main` 只做集成，不直接承载并行 feature。
-2. 一个 feature 名 = 一个分支 = 一个工作树 = 一个写入者。
+1. 小改动直接写 `main`，收尾用 `feature-publish.ps1 -Main`；大功能、阻塞或长期试错用独立 feature 工作树。
+2. 一个 feature 名 = 一个分支 = 一个工作树 = 一个写入者；`main` 同一时间也只有一个写入者。
 3. 模型不共享工作树；同一工作树只有一个写入者。
 4. 模型收尾必须运行 `fucode/feature-publish.ps1` 自主发布，自动写到主工作树 `out/review/<分支名>` 并立即启动窗口；同 feature 重新发布只停掉自己上一轮的窗口，不覆盖 `out/app`，不写本地更新指针，不停用户的主实例。
 5. 清理只允许 `fucode/feature-worktree.ps1 -Remove`：工作树必须干净且分支已合并，否则拒绝。
@@ -90,6 +90,26 @@ label/commit/exe 后立即启动新窗口。模型不需要知道主仓库路径
 - 不覆盖 `out/app`，不写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
 - 裸 `publish-local.ps1 -ReviewLabel ...` 只作为脚本不可用时的故障回退。
 - 模型必须按 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md) 回报 label、commit、目录、PID 和构建结果。
+
+## 主工作树小改动
+
+小功能、快速修复直接改 `main`，收尾运行：
+
+```bash
+pwsh fucode/feature-publish.ps1 -Main
+```
+
+它构建并启动 `main@commit` 窗口，仍然使用独立输出和 data-root，不覆盖 `out/app`。
+
+## 验收后合入
+
+用户点头后：
+
+```bash
+pwsh fucode/feature-merge.ps1 -Name <id>
+```
+
+脚本要求 feature 已同步 main、feature/main 两边都干净，并且 main 是 feature 的祖先；只做 fast-forward，否则拒绝。合入后先用 `feature-publish.ps1 -Main` 看集成结果，再清理工作树。合入不会自动更新其它已有 feature 分支，它们需要自己 `git merge main` 后重新发布。
 
 ## 人类反馈循环
 
