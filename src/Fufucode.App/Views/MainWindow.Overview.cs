@@ -404,8 +404,13 @@ public partial class MainWindow
             if (on) row.Classes.Add("hover"); else row.Classes.Remove("hover");
             tail.IsVisible = on;
         }
-        row.PointerEntered += (_, _) => SetHover(true);
-        row.PointerExited += (_, _) => { if (!row.IsKeyboardFocusWithin) SetHover(false); };
+        // PointerEntered/Exited 是直接事件、不冒泡：行内按钮铺满后 Border 永远收不到，
+        // 表现为"悬停不亮、移开闪一下"。用 IsPointerOver 属性（覆盖子树）驱动。
+        row.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == Avalonia.Input.InputElement.IsPointerOverProperty)
+                SetHover(row.IsPointerOver || row.IsKeyboardFocusWithin);
+        };
         row.GotFocus += (_, _) => SetHover(true);
         row.LostFocus += (_, _) => { if (!row.IsPointerOver) SetHover(false); };
 
