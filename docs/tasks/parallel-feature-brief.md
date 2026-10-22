@@ -52,27 +52,30 @@ pwsh fucode/feature-publish.ps1
 它会自动完成：
 
 - 确认当前不是 `main`、工作树干净；
+- 停掉该 feature 上一次启动的审阅窗口；
 - 读取分支和 HEAD，生成 `branch@commit` label；
 - 调用 `publish-local.ps1` 构建到主工作树的 `out/review/<分支名>`；
 - 读回 `review.json`，核对 label、commit 和 exe；
-- 打印交付卡需要的分支、commit、label、目录。
+- **立即启动新窗口**，用户直接看效果；打印分支、commit、label、目录和 PID。
 
 常用变体：
 
 ```bash
 pwsh fucode/feature-publish.ps1 -NoRestore
 pwsh fucode/feature-publish.ps1 -AllowDirty
+pwsh fucode/feature-publish.ps1 -NoLaunch
 ```
 
 `-AllowDirty` 只用于确认未提交改动确实要进入本次审阅构建；正常情况下应先提交。
+`-NoLaunch` 只用于 CI/批量验证，不作为交付方式。
 
 规则：
 
 - **不需要写 `-OutputRoot` 或手动拼 label。**
-- 不要直接运行裸的 `publish-local.ps1` 代替本脚本；本脚本会核对产物，避免“以为发布了”。
+- 不要直接运行裸的 `publish-local.ps1` 代替本脚本；本脚本会核对产物并启动窗口。
 - 构建失败时保留完整错误，修完重新提交、重新运行；不要只发旧产物。
-- 发布不会启动应用、不会停止用户正在运行的应用，也不会覆盖 `out/app` 或写本地更新指针。
-- 审阅窗口由用户从审阅板启动，模型不替用户启动。
+- 发布只会停掉**同一 feature 上一次由本脚本启动的窗口**，不会停止用户的主实例或别的 feature。
+- 不会覆盖 `out/app`，不会写本地更新指针。
 
 发布成功后，`review.json` 和 `app/build-info.json` 会包含：
 
@@ -95,6 +98,7 @@ HEAD commit：
 审阅 label：
 审阅目录：out/review/<branch-slug>
 构建结果：通过 / 失败（附退出码）
+窗口 PID：
 已运行测试：
 未运行/未验证：
 未提交改动：有/无（有则说明原因）
@@ -105,23 +109,18 @@ HEAD commit：
 
 ## 人类审阅循环
 
-用户会运行：
+`feature-publish.ps1` 构建成功后会直接弹出带 label 的窗口，用户不需要去审阅板选择。
+审阅板只是盘点和回退入口：
 
 ```bash
 pwsh fucode/review-parallel.ps1 -NoBuild -Open
 ```
 
-或只启动你这一项：
-
-```bash
-pwsh fucode/review-parallel.ps1 -NoBuild -LaunchSlug <branch-slug>
-```
-
 用户的反馈回到你这个会话后：
 
 1. 在原工作树修改，不要另开工作树。
-2. 重新提交、重新发布，label 使用新的 commit。
-3. 再次回报新的 label、commit 和构建结果。
+2. 重新提交、重新运行 `feature-publish.ps1`；它会先关掉你上一轮的窗口，再弹出新构建。
+3. 再次回报新的 label、commit、PID 和构建结果。
 4. 不要自行删除工作树；等主控确认已合入 `main` 后再清理。
 
 ## 清理

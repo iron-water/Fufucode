@@ -7,7 +7,7 @@
 1. `main` 只做集成，不直接承载并行 feature。
 2. 一个 feature 名 = 一个分支 = 一个工作树 = 一个写入者。
 3. 模型不共享工作树；同一工作树只有一个写入者。
-4. 模型收尾必须运行 `fucode/feature-publish.ps1` 自主发布，自动写到主工作树 `out/review/<分支名>`；不覆盖 `out/app`，不写本地更新指针，不停止正在运行的应用。
+4. 模型收尾必须运行 `fucode/feature-publish.ps1` 自主发布，自动写到主工作树 `out/review/<分支名>` 并立即启动窗口；同 feature 重新发布只停掉自己上一轮的窗口，不覆盖 `out/app`，不写本地更新指针，不停用户的主实例。
 5. 清理只允许 `fucode/feature-worktree.ps1 -Remove`：工作树必须干净且分支已合并，否则拒绝。
 6. 审阅构建的窗口标题必须带 `branch@commit` label；没有 label 的窗口不作为审阅对象。
 
@@ -80,23 +80,23 @@ out/review/index.html
 pwsh fucode/feature-publish.ps1
 ```
 
-它做四件事：确认不是 `main`、检查工作树干净、用 `branch@commit` 发布到主工作树的
-`out/review/<分支名>`、读回 `review.json` 核对 label/commit/exe。模型不需要知道主仓库路径，
-也不应该让用户代为构建。
+它做五件事：确认不是 `main`、检查工作树干净、停掉同 feature 上一轮窗口、用
+`branch@commit` 发布到主工作树的 `out/review/<分支名>`、读回 `review.json` 核对
+label/commit/exe 后立即启动新窗口。模型不需要知道主仓库路径，也不应该让用户代为构建。
 
 - 有未提交改动时默认拒绝；确认要一起构建时加 `-AllowDirty`。
 - 构建失败会返回非零退出码，模型必须修完重新发布。
-- 不会启动应用、不会停止现有应用、不会覆盖 `out/app`、不会写
-  `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
+- 只停掉同一 feature 上一次由本脚本启动的窗口；不停止用户主实例或别的 feature。
+- 不覆盖 `out/app`，不写 `%LOCALAPPDATA%\Fufucode\updates\local` 指针。
 - 裸 `publish-local.ps1 -ReviewLabel ...` 只作为脚本不可用时的故障回退。
-- 模型必须按 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md) 回报 label、commit、目录和构建结果。
+- 模型必须按 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md) 回报 label、commit、目录、PID 和构建结果。
 
 ## 人类反馈循环
 
 1. 模型各自在自己的工作树实现并提交。
-2. 模型用 `publish-local.ps1 -ReviewLabel "<branch>@<sha>" -NoRun` 发布自己的构建。
-3. 用户运行 `review-parallel.ps1 -NoBuild -Open` 看审阅板，按 label 选择构建。
-4. 用 `-NoBuild -LaunchSlug <slug>` 逐个启动，窗口标题和 data-root 都指向该 feature。
+2. 模型运行 `feature-publish.ps1`，构建成功后窗口直接出现；用户不需要去审阅板选。
+3. 同一 feature 再次发布时，旧窗口先关闭，新窗口自动出现。
+4. 审阅板 `review-parallel.ps1 -NoBuild -Open` 只用于盘点/回退。
 5. 审阅意见回到对应会话；只有合入 main 后才用 `feature-worktree.ps1 -Remove` 清理。
 
 模型侧的执行规则、发布命令和交付格式见 [parallel-feature-brief.md](../tasks/parallel-feature-brief.md)。
