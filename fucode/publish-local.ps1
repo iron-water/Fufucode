@@ -191,6 +191,21 @@ Get-ChildItem -LiteralPath $perfOut -Filter 'Avalonia*.dll' -ErrorAction Silentl
 Get-ChildItem -LiteralPath $perfOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 if (Test-Path (Join-Path $perfOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $perfOut 'runtimes') -Recurse -Force }
 
+# 可选内置浏览器插件：放进 plugins-dist，供插件市场安装；默认不播种、不激活。
+Write-Host "Publishing workspace.browser plugin -> staging ..."
+$browserOut = Join-Path $stagingApp 'plugins-dist/workspace.browser'
+$browserArgs = @('publish', (Join-Path $root 'src/Fufucode.Plugins.Browser/Fufucode.Plugins.Browser.csproj'),
+    '-c', $Configuration, '-o', $browserOut, '--nologo', '-v', 'q')
+if ($NoRestore) { $browserArgs += '--no-restore' }
+& dotnet @browserArgs
+if ($LASTEXITCODE -ne 0) { throw 'Browser plugin publish failed.' }
+Get-ChildItem -LiteralPath $browserOut -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.Browser.dll' } |
+    Remove-Item -Force
+Get-ChildItem -LiteralPath $browserOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+Get-ChildItem -LiteralPath $browserOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+if (Test-Path (Join-Path $browserOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $browserOut 'runtimes') -Recurse -Force }
+
 # 本地调试只需要自有程序集的 PDB；Skia/HarfBuzz 的原生 PDB 合计约 100 MB，删掉。
 Get-ChildItem -LiteralPath $stagingApp -Recurse -File -Filter *.pdb |
     Where-Object { $_.Name -notlike 'Fufucode.*.pdb' } |

@@ -1,0 +1,9 @@
+{
+  "id": "workspace.browser",
+  "name": "内置浏览器",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Browser.dll",
+  "packageType": "Fufucode.Plugins.Browser.BrowserPluginPackage",
+  "category": "Workspace",
+  "capabilities": ["WorkspacePage"]
+}

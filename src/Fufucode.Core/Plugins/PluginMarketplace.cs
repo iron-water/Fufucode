@@ -147,6 +147,11 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: true, DefaultEnabled: true),
 
         // ── 工作区页面插件（默认未安装，按需从市场安装） ──
+        new("workspace.browser", "内置浏览器", PluginCategory.ToolExtension,
+            "在右栏打开内置 WebView2 浏览器：导航、下载、站点权限与 Agent 页面控制。默认不安装。",
+            "1.0.0", "Fufucode Team", ["WebView2 运行时", "网页导航与本地文件预览", "可选 CDP 控制"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("workspace.terminal", "交互终端", PluginCategory.ToolExtension,
             "项目级交互式终端：ConPTY 原生 shell、备用屏与全屏 TUI、滚动区域、查找、选中复制、IME 与命令历史。",
             "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],

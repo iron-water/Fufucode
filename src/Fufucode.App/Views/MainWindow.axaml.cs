@@ -23,7 +23,7 @@ using Avalonia.VisualTree;
 
 namespace Fufucode.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory
 {
     // M3.1：启动时可由最近项目解析或“选择项目”态补全；运行中切换项目整体替换。
     private AppOptions _options;

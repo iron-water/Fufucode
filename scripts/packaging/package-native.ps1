@@ -216,6 +216,7 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.SkinLiquidGlass.dll',
     'Fufucode.Plugins.AutoDev.dll',
     'Fufucode.Plugins.Terminal.dll',
+    'Fufucode.Plugins.Browser.dll',
     'Fufucode.Plugins.PerformanceMonitor.dll'
 )
 foreach ($dll in $forbiddenPluginDlls) {
@@ -361,6 +362,7 @@ $plugins = @(
     @{ Id = 'skin.liquidglass'; Project = 'src/Fufucode.Plugins.SkinLiquidGlass/Fufucode.Plugins.SkinLiquidGlass.csproj' },
     @{ Id = 'automation.auto-dev'; Project = 'src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj' },
     @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
+    @{ Id = 'workspace.browser'; Project = 'src/Fufucode.Plugins.Browser/Fufucode.Plugins.Browser.csproj' },
     # 性能监控插件：可选安装，默认包不含其程序集。
     @{ Id = 'performance.monitor'; Project = 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj' },
     # 五类后端插件结构完全同级；各自携带协议适配器，运行时由用户安装或按需下发。
