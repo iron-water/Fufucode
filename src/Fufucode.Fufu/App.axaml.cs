@@ -31,6 +31,7 @@ public sealed class App : Application
     private ResidentCore? _resident;
     private ResidentTaskStore? _residentTasks;
     private ResidentSupervisor? _residentSupervisor;
+    private ResidentTaskWindow? _residentTaskWindow;
     private NoticeBubble? _bubble;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
@@ -181,6 +182,10 @@ public sealed class App : Application
         bridgeItem.Click += (_, _) => ShowBridge();
         menu.Items.Add(bridgeItem);
 
+        var taskItem = new NativeMenuItem("常驻任务…");
+        taskItem.Click += (_, _) => ShowResidentTasks();
+        menu.Items.Add(taskItem);
+
         var proactiveItem = new NativeMenuItem("主动行为") { IsChecked = s.ProactiveEnabled };
         proactiveItem.Click += (_, _) =>
         {
@@ -256,6 +261,10 @@ public sealed class App : Application
             var bridgeItem = new MenuItem { Header = "连接 Fufucode…" };
             bridgeItem.Click += (_, _) => ShowBridge();
             menu.Items.Add(bridgeItem);
+
+            var taskItem = new MenuItem { Header = "常驻任务…" };
+            taskItem.Click += (_, _) => ShowResidentTasks();
+            menu.Items.Add(taskItem);
 
             var proactiveItem = new MenuItem { Header = "主动行为", IsChecked = s.ProactiveEnabled };
             proactiveItem.Click += (_, _) =>
@@ -364,6 +373,17 @@ public sealed class App : Application
         }));
     }
 
+    /// <summary>打开/聚焦常驻任务状态窗口。</summary>
+    private void ShowResidentTasks()
+    {
+        if (_residentTasks is null) return;
+        if (_residentTaskWindow is { } existing) { existing.Activate(); return; }
+        var window = new ResidentTaskWindow(_residentTasks);
+        window.Closed += (_, _) => _residentTaskWindow = null;
+        window.Show();
+        _residentTaskWindow = window;
+    }
+
     /// <summary>打开/聚焦桥接面板。</summary>
     private void ShowBridge()
     {
@@ -392,6 +412,7 @@ public sealed class App : Application
         _tray?.Dispose();
         _chatWindow?.Close();
         _endpointSettingsWindow?.Close();
+        _residentTaskWindow?.Close();
         _bridgeWindow?.Close();
         _bubble?.Close();
         _proactive?.Dispose();
