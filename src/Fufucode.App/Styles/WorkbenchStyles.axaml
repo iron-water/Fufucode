@@ -551,6 +551,10 @@
     <Setter Property="Opacity" Value="0"/>
     <Setter Property="IsHitTestVisible" Value="False"/>
   </Style>
+  <!-- 停靠区页签条也是"横条"：悬停整条升高亮层。 -->
+  <Style Selector="Grid.dockTabRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
   <Style Selector="Grid.dockTabRow:pointerover Button.dockTabClose, Grid.dockTabRow:focus-within Button.dockTabClose, Grid.dockTabRow.selected Button.dockTabClose">
     <Setter Property="Opacity" Value="1"/>
     <Setter Property="IsHitTestVisible" Value="True"/>
@@ -880,6 +884,18 @@
   </Style>
   <Style Selector="Border.islandLiveBar Border.failed">
     <Setter Property="Background" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <!-- Flyout 自带一层表面（底/描边/阴影）。内容里再套 .card 就会画成"两层框"，
+       这里把 flyout 内的卡片降级为透明容器，只保留内边距与内容。 -->
+  <Style Selector="FlyoutPresenter Border.card">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="BoxShadow" Value="0 0 0 0 #00000000"/>
+  </Style>
+  <Style Selector="MenuFlyoutPresenter Border.card">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="BoxShadow" Value="0 0 0 0 #00000000"/>
   </Style>
   <!-- 危险确认按钮：透明底 + critical 描边/文字，悬停用 critical 浅底（权限升级确认）。 -->
   <Style Selector="Button.danger">

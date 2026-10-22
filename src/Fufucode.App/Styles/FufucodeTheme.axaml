@@ -72,6 +72,8 @@
                     <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
                     <!-- ListBoxItem 模板内部按这些键取色：选中态改为 subtle 底 + 主文字色（accent 指示条由模板内 navPill 提供） -->
                     <SolidColorBrush x:Key="ListBoxItemBackgroundSelected" Color="#1CFFFFFF"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundPointerOver" ResourceKey="SubtleFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <SolidColorBrush x:Key="ListBoxItemBackgroundSelectedPointerOver" Color="#26FFFFFF"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedDisabled"    ResourceKey="SubtleFillColorDisabledBrush"/>
@@ -150,6 +152,8 @@
                     <StaticResource x:Key="AppMicaPageBackground" ResourceKey="AppWindowBackground"/>
                     <StaticResource x:Key="AppMicaSidebarBackground" ResourceKey="AppSidebarBackground"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelected" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundPointerOver" ResourceKey="AppBaseHighlight"/>
+                    <StaticResource x:Key="ListBoxItemBackgroundPressed"     ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPointerOver" ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ListBoxItemBackgroundSelectedPressed"     ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="ComboBoxItemBackgroundSelected"            ResourceKey="AppBaseHighlight"/>

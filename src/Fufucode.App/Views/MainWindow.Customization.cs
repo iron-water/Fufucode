@@ -363,6 +363,7 @@ public partial class MainWindow
         "ComboBoxItemBackgroundSelected", "ComboBoxItemBackgroundSelectedPointerOver",
         "ComboBoxItemBackgroundSelectedPressed", "ComboBoxItemBackgroundPointerOver",
         "ComboBoxItemBackgroundPressed", "ComboBoxBackgroundPointerOver", "ComboBoxBackgroundPressed",
+        "ListBoxItemBackgroundPointerOver", "ListBoxItemBackgroundPressed",
         "ComboBoxBackground", "TextControlBackground", "TextControlBackgroundPointerOver",
         "TextControlBackgroundFocused", "TextControlBackgroundDisabled",
         "ControlFillColorSecondaryBrush",
