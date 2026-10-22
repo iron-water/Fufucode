@@ -79,6 +79,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Codex", "s
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Dsh", "src\Fufucode.Plugins.Dsh\Fufucode.Plugins.Dsh.csproj", "{2A944C12-2BC7-4B25-8226-7462A2B3A546}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Nvx", "src\Fufucode.Plugins.Nvx\Fufucode.Plugins.Nvx.csproj", "{B2F80C0A-1AA1-4E22-9F7A-4F09D8A2C7E1}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.App.Automation.SelfTests", "tests\Fufucode.App.Automation.SelfTests\Fufucode.App.Automation.SelfTests.csproj", "{AB23AD50-3F03-4A8F-8B48-FA3E22AF150D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Plugins.Terminal", "src\Fufucode.Plugins.Terminal\Fufucode.Plugins.Terminal.csproj", "{D789BCF7-5A16-4575-923C-0F367FD4F8A9}"

@@ -152,6 +152,11 @@ public static class PluginMarketplaceCatalog
             "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],
             DefaultInstalled: false, DefaultEnabled: false),
 
+        new("sandbox.nvx", "NVX 微虚拟机沙箱", PluginCategory.AgentCapability,
+            "通过微软 NVX/OpenVMM 在 Windows WHP 微虚拟机中执行不受信任工作负载。默认不安装，不改变现有宿主命令执行路径。",
+            "0.1.0", "Microsoft / Fufucode", ["Windows Hypervisor Platform", "NVX 运行时载荷", "独立沙箱工作目录"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("performance.monitor", "性能监控", PluginCategory.ToolExtension,
             "逐回合追踪 harness 每一次模型请求、工具与命令执行、审批等待、上下文压缩、会话持久化与界面线程卡顿，" +
             "提供瀑布图、慢调用、异常规则与脱敏诊断包导出。未启用时埋点开销仅为一次空判断。",

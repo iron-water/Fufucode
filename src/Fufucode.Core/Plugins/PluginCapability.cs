@@ -30,6 +30,9 @@ public enum PluginCapability
     /// 自动开发工作台：DAG 目标规划与多步骤推进（automation.auto-dev）。
     /// </summary>
     AutoDevelopment,
+
+    /// <summary>NVX 硬件隔离执行沙箱（sandbox.nvx）。</summary>
+    SandboxExecution,
 }
 
 /// <summary>
@@ -48,6 +51,7 @@ public static class PluginCapabilityRegistry
             [PluginCapability.ComputerControl] = "Computer Use",
             [PluginCapability.ReverseLab] = "Seep 逆向工程工作台",
             [PluginCapability.AutoDevelopment] = "自动开发工作台",
+            [PluginCapability.SandboxExecution] = "NVX 执行沙箱",
         };
 
     /// <summary>能力在提示语中的短名称；未登记时回退插件 ID。</summary>
@@ -61,6 +65,7 @@ public static class PluginCapabilityRegistry
             [PluginCapability.ComputerControl] = "agent.computer-use",
             [PluginCapability.ReverseLab] = "tool.seep-reverse-lab",
             [PluginCapability.AutoDevelopment] = "automation.auto-dev",
+            [PluginCapability.SandboxExecution] = "sandbox.nvx",
         };
 
     /// <summary>提供该能力的插件 ID；没有对应插件时返回 null（不抛异常）。</summary>
