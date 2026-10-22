@@ -93,8 +93,8 @@ UserControl (AppMicaPageBackground = AppWindowBackground → SolidBackgroundFill
 | 组内项间距 | 8 (`settingsGroupList` Spacing) |
 | 行内标题↔说明 | 2 (StackPanel Spacing) |
 | 行内列间距 | 14 (`settingsControlRow` ColumnSpacing) |
-| 组间 | 8 (`settingsGroupList` 尾部) + 32 (`settingsGroupHeader` 上边距) |
-| 无标题组的上间隔 | 24 (`SettingsLayout.SectionTopGap`) |
+| 组间（有标题） | 8 (`settingsGroupList` 尾部) + 32 (`settingsGroupHeader` 上边距) |
+| 无标题组/跨组下钻入口 | 与普通行相同 8，禁止额外组级 margin |
 | 页内缩 | 24,20,20,24 (`settingsContentHost` Padding) |
 
 ## 6. 状态色
@@ -174,10 +174,10 @@ Fluent 暗色只允许三档底色（`AppBaseDeep/AppBaseBar/AppBaseHighlight`�
    页面的组直接平铺在同一个 `Spacing` 容器里。
 5. 每个分区的第一个组标题必须带 `.first`；无标题首组也必须消费“页首”状态
    （`WorkbenchSectionsView.Group` 已处理，禁止绕开它直接 `rows.Children.Add` 组）。
-6. 组内行距固定 8；组头上边距 32（首个 0）；无标题组之间用
-   `SettingsLayout.SectionTopGap`（24）。禁止出现 6/10/16/20/24/28 混用。
-7. 页面内容区外边距只允许：`settingsContentHost` 的 24,20,20,24、根 StackPanel 的
-   `MaxWidth=880`、以及 `SectionTopGap`。其他数值必须来自 token。
+6. 组内行距固定 8；组头上边距 32（首个 0）；无标题组和跨组下钻入口
+   同样是 8，不得手工加组级 top margin。禁止出现 6/10/16/20/24/28 混用。
+7. 页面内容区外边距只允许：`settingsContentHost` 的 24,20,20,24 与根 StackPanel 的
+   `MaxWidth=880`。其他数值必须来自 token。
 
 ### 10.3 样式集中
 

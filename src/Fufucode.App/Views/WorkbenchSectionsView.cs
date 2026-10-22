@@ -310,10 +310,9 @@ public sealed class WorkbenchSectionsView : UserControl
             ChoiceRow(vm, "阅读宽度", "正文的最大阅读宽度；代码与表格不受限", new[] { "窄", "标准", "宽", "自由" }, s => s.ReadingWidth, (s, v) => s with { ReadingWidth = v }, "Document", "narrow", "standard", "wide", "free"));
         var arrangeEntry = SettingsLayout.ChevronRow("前端功能排布", "区域显隐、页面位置、辅助栏与入口位置",
             () => PageRequested?.Invoke("appearance.arrange"), "PanelLeft");
-        // 跨组下钻入口：整个分组壳加组级顶距，与上一组拉开，不并进"字体与密度"的行距节奏。
-        var arrangeGroup = (Control)SettingsLayout.Group(arrangeEntry);
-        arrangeGroup.Margin = new Thickness(0, SettingsLayout.SectionTopGap, 0, 0);
-        rows.Children.Add(arrangeGroup);
+        // 跨组下钻入口也沿用 8px 行距。不要再加组级 top margin：
+        // 那会让同一页出现两套节奏（2026-10-21 截图指出的间距不一致）。
+        rows.Children.Add(SettingsLayout.Group(arrangeEntry));
 
         Control FluentOnly(Control row)
         {
@@ -346,9 +345,7 @@ public sealed class WorkbenchSectionsView : UserControl
 
         var auxEntry = SettingsLayout.ChevronRow("辅助栏", "逐个功能选择出现在左辅助、右辅助，或不出现",
             () => PageRequested?.Invoke("appearance.arrange.aux"), "AppsList");
-        var auxGroup = (Control)SettingsLayout.Group(auxEntry);
-        auxGroup.Margin = new Thickness(0, SettingsLayout.SectionTopGap, 0, 0);
-        rows.Children.Add(auxGroup);
+        rows.Children.Add(SettingsLayout.Group(auxEntry));
 
         var entryRows = vm.Actions.Select(action => PlacementRow(vm, action)).Cast<Control>().ToArray();
         var entryBody = SettingsLayout.Group(entryRows);

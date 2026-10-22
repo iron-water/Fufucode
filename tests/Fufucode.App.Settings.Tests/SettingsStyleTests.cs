@@ -85,6 +85,10 @@ internal static class SettingsStyleTests
         check(!code.Contains("Classes.Add(\"settingsRow\")", StringComparison.Ordinal),
             "WorkbenchSectionsView 不手工拼装 settingsRow 卡");
 
+        // 8b. 跨组下钻入口不得单独加组级间距；组内节奏统一为 8px。
+        check(!code.Contains("SectionTopGap", StringComparison.Ordinal),
+            "WorkbenchSectionsView 不给跨组入口额外加组级间距");
+
         // 9. 导航目录：id 唯一、搜索词与图标齐备、图标键存在。
         var ids = SettingsNavCatalog.All.Select(item => item.Id).ToArray();
         check(ids.Distinct(StringComparer.Ordinal).Count() == ids.Length, "设置导航 id 唯一");
