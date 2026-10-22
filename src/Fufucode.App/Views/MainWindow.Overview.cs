@@ -62,6 +62,10 @@ public partial class MainWindow
     }
 
     private static bool IsQuickAction(string id) => SessionQuickActions.Any(action => action.Id == id);
+
+    /// <summary>会话是否属于“不在项目中工作”的独立工作区。</summary>
+    private bool IsScratchSession(SessionRecord session) =>
+        ScratchProject() is { } scratch && session.ProjectId == scratch.Id;
     /// <summary>真实会话用宿主元数据；mock 用一次性临时库，保证归档页也有一致的空态。</summary>
     private DesktopMetadataStore MetadataOrMock() => _host?.Manager.Metadata ??
         (_mockOrganizationStore ??= new(new AppDataLayout(Path.Combine(Path.GetTempPath(), "Fufucode",
@@ -171,9 +175,18 @@ public partial class MainWindow
             foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId is null))
                 OverviewProjectRow(project, organization, all);
         OverviewHeading("会话");
-        // 只列未归入项目的会话，避免与项目下的会话重复。
-        OverviewSessionGroup(all.Where(s => organization.Placement(s.Id).ProjectId is null)
-            .OrderByDescending(SessionActivityAt), organization);
+        // “会话”列出所有未归入用户项目的会话：显式无项目，以及“不在项目中工作”的独立工作区。
+        var scratch = ScratchProject();
+        var loose = all.Where(s =>
+        {
+            var placement = organization.Placement(s.Id);
+            // 放置记录为空或与真实归属不同（存在展示分组）时按放置判断。
+            if (organization.State.Sessions.ContainsKey(s.Id))
+                return placement.ProjectId is null || placement.ProjectId == scratch?.Id;
+            return s.ProjectId == scratch?.Id;
+        }).OrderByDescending(SessionActivityAt).ToArray();
+        OverviewSessionGroup(loose, organization);
+        if (loose.Length == 0) OverviewEmpty("没有不在项目中的会话");
         if (_host is null)
             foreach (var demo in _vm.Sidebar.Sessions)
             {
@@ -182,18 +195,35 @@ public partial class MainWindow
             }
     }
 
+    /// <summary>“不在项目中工作”的独立工作区不是用户项目：不作为项目行展示。</summary>
+    private ProjectRecord? ScratchProject()
+    {
+        var layout = _options.CreateAppDataLayout();
+        var path = ScratchWorkspace.PathFor(layout);
+        if (!Directory.Exists(path)) return null;
+        try { return MetadataOrMock().TryGetProject(path); }
+        catch (Exception) { return null; }
+    }
+
     private IReadOnlyList<ProjectRecord> OverviewProjects()
     {
         var metadata = MetadataOrMock();
         var currentProjectId = _host?.Current.Project.Id;
+        var scratchId = ScratchProject()?.Id;
         var visible = metadata.ListProjects()
+            .Where(project => project.Id != scratchId)
             .Where(project => project.Id == currentProjectId || !ProjectArchive.IsArchived(metadata, project.Id))
             .ToArray();
         // 新登记的项目默认排在最前，不用在列表里逐个翻找。
         return ProjectOrder.Apply(metadata, visible);
     }
-    private IEnumerable<SessionRecord> OverviewSessions() => OverviewProjects()
-        .SelectMany(project => _host!.Manager.Metadata.ListSessions(project.Id));
+
+    /// <summary>所有会话（含独立工作区），项目行只展示真正的项目。</summary>
+    private IEnumerable<SessionRecord> OverviewSessions()
+    {
+        var metadata = MetadataOrMock();
+        return metadata.ListProjects().SelectMany(project => metadata.ListSessions(project.Id));
+    }
 
     /// <summary>会话最后活动时间：优先会话文件写入时间，缺失时退回打开时间。</summary>
     private static DateTimeOffset SessionActivityAt(SessionRecord session) =>
@@ -239,7 +269,9 @@ public partial class MainWindow
     private void OverviewSessionGroup(IEnumerable<SessionRecord> sessions, SessionOrganization organization,
         double indent = 0)
     {
-        var rows = sessions.Select(session => BuildOverviewSessionRow(session, organization, indent)).ToArray();
+        // 独立工作区的会话用「无项目」标记，避免用户看到内部目录名。
+        var rows = sessions.Select(session => BuildOverviewSessionRow(session, organization, indent,
+            IsScratchSession(session) ? "不在项目中" : null)).ToArray();
         if (rows.Length == 0) return;
         var stack = new StackPanel { Spacing = 2 };
         foreach (var row in rows) stack.Children.Add(row);
@@ -360,7 +392,8 @@ public partial class MainWindow
         }
         _overview.Body.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
     }
-    private Control BuildOverviewSessionRow(SessionRecord session, SessionOrganization organization, double indent = 0)
+    private Control BuildOverviewSessionRow(SessionRecord session, SessionOrganization organization,
+        double indent = 0, string? projectLabel = null)
     {
         var metadata = _host!.Manager.Metadata;
         var presentation = SessionPresentation.Load(metadata, session.Id);
@@ -368,18 +401,21 @@ public partial class MainWindow
         var projectPath = metadata.GetProject(session.ProjectId).Path;
         var isCurrent = session.Id == CurrentSessionId;
 
+        var titleText = new TextBlock
+        {
+            Text = title, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis,
+            FontWeight = isCurrent ? FontWeight.SemiBold : FontWeight.Normal,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
         var button = new Button
         {
             Classes = { "subtle" }, Background = Brushes.Transparent, BorderThickness = new Thickness(0),
             Padding = new Thickness(0), HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 30,
-            Content = new TextBlock
-            {
-                Text = title, FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis,
-                FontWeight = isCurrent ? FontWeight.SemiBold : FontWeight.Normal,
-            },
+            Content = titleText,
         };
-        ToolTip.SetTip(button, OverviewSessionCard(session, presentation, projectPath, title));
+        ToolTip.SetTip(button, OverviewSessionCard(session, presentation,
+            projectLabel ?? projectPath, title));
         ToolTip.SetShowDelay(button, 500);
         AutomationProperties.SetAutomationId(button, "session.row." + session.Id);
         button.Click += (_, _) => OverviewRun(() => ActivateOverviewSessionAsync(session));
