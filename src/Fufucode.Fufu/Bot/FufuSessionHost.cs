@@ -81,6 +81,40 @@ public sealed class FufuSessionHost : IDisposable
         return _session;
     }
 
+    /// <summary>
+    /// 打开 FUFU 聊天窗时读取当前会话的历史正文。
+    /// 工具调用与工具结果保留在 FUMO 上下文中，但不伪装成聊天气泡。
+    /// </summary>
+    public async Task<IReadOnlyList<ChatMessage>> LoadChatHistoryAsync()
+    {
+        var session = await EnsureSessionAsync().ConfigureAwait(false);
+        if (session is null) return Array.Empty<ChatMessage>();
+
+        var result = new List<ChatMessage>();
+        var index = 0;
+        foreach (var message in session.GetHistoryMessages())
+        {
+            var role = message.Role switch
+            {
+                PureAgentRole.User => MessageRole.User,
+                PureAgentRole.Assistant => MessageRole.Assistant,
+                _ => (MessageRole?)null,
+            };
+            if (role is null || string.IsNullOrWhiteSpace(message.Content)) continue;
+
+            index++;
+            result.Add(new ChatMessage(
+                $"history-{index}",
+                role.Value,
+                role == MessageRole.Assistant ? session.CurrentModel : null,
+                [new TextBlock(message.Content)],
+                null,
+                true));
+        }
+
+        return result;
+    }
+
     public async Task SendAsync(string text, CancellationToken ct = default)
     {
         var session = await EnsureSessionAsync().ConfigureAwait(false)
