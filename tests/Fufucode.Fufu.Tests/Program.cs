@@ -40,6 +40,7 @@ try
     Check(reopened.Identity.Personality == "观察优先。", "identity survives reopening the resident core");
     Check(reopened.ReadObservations().Count == 1, "observations survive reopening the resident core");
 
+    TaskStoreTests.Run();
     Console.WriteLine("Fufu Resident Core tests passed.");
 }
 finally
