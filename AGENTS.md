@@ -89,8 +89,8 @@
 
 - **执行模型开工前必须读 `docs/tasks/parallel-feature-brief.md`**；主控派工时把该路径写进 prompt，旧工作树没有该文件时把 brief 的核心命令直接附在 prompt 里。
 - `main` 只做集成；并行 feature 用 `fucode/feature-worktree.ps1 -Name <id>` 建独立分支/工作树，一个工作树只有一个写入者。
-- 执行模型收尾必须自己运行 `fucode/feature-publish.ps1` 发布，不得让用户代为构建；它检查分支/干净状态、生成 `branch@commit` label、构建到主工作树 `out/review/<分支名>` 并核对产物。裸 `publish-local.ps1 -ReviewLabel ...` 仅作故障回退，相对 `-OutputRoot` 也以主工作树为基准。不得覆盖 `out/app`、写本地更新指针或停止别人的运行实例。
-- 审阅用 `fucode/review-parallel.ps1 -NoBuild -Open` 盘点模型已发布的构建，或 `-Open` 集中重建；每项带 `branch@commit` label、独立 `--data-root`，窗口标题显示 label，落后于当前 HEAD 会标注。
+- 执行模型收尾必须自己运行 `fucode/feature-publish.ps1` 发布，不得让用户代为构建；它检查分支/干净状态、生成 `branch@commit` label、构建到主工作树 `out/review/<分支名>`、核对产物，并**立即启动独立审阅窗口**。同一 feature 重新发布会先停掉上一次由它启动的窗口。用户不需要去审阅板里挑构建。裸 `publish-local.ps1 -ReviewLabel ...` 仅作故障回退，相对 `-OutputRoot` 也以主工作树为基准。不得覆盖 `out/app`、写本地更新指针或停止别人的运行实例。
+- 审阅板 `fucode/review-parallel.ps1 -NoBuild -Open` 只用于盘点/回退；常态是模型发布后窗口直接出现。每项带 `branch@commit` label、独立 `--data-root`，窗口标题显示 label，落后于当前 HEAD 会标注。
 - 模型最终回复必须回报：分支、HEAD、label、审阅目录、构建退出码、已运行/未运行测试、未提交改动和待接线项。
 - 工作树清理只用 `feature-worktree.ps1 -Remove`，且必须干净并已合入 `main`；禁止强删未提交工作。详见 `docs/operations/parallel-review.md` 与 `docs/tasks/parallel-feature-brief.md`。
 

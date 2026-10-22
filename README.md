@@ -61,18 +61,17 @@ pwsh fucode/feature-publish.ps1
 ```
 
 The script refuses `main`, checks that the worktree is clean, generates the
-`branch@commit` label, builds into the main worktree's `out/review/<branch>`, and verifies
-the resulting `review.json` and executable.
+`branch@commit` label, builds into the main worktree's `out/review/<branch>`, verifies the
+result, and **launches the new window immediately**. Re-publishing the same feature closes
+its previous window first; other features and the user's main instance keep running.
 
-Open the review board, then launch one build at a time:
+Each build lands in `out/review/<branch>`, has a `branch@commit` label, and uses its own
+`--data-root` and window title. The review board is only an inventory/fallback:
 
 ```bash
 pwsh fucode/review-parallel.ps1 -NoBuild -Open
-pwsh fucode/review-parallel.ps1 -NoBuild -LaunchSlug feature-review-ui
 ```
 
-Each build lands in `out/review/<branch>`, has a `branch@commit` label, and uses its own
-`--data-root` and window title. Stale builds are marked when the branch has moved on.
 Cleanup is refused unless the worktree is clean and merged:
 
 ```bash
