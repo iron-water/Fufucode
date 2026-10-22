@@ -6,9 +6,16 @@
 
 ## 一句话
 
-一个 feature = 一个分支 = 一个工作树 = 一个写入者；在自己的工作树提交，用
-`feature-publish.ps1` 自主发布到主仓库的 `out/review/<分支>`；不要碰 `main`、
-`out/app` 和别人的运行实例。
+## 先选车道
+
+- **小改动、快速修复**：直接在主工作树 `main` 改，收尾运行
+  `pwsh fucode/feature-publish.ps1 -Main`，构建并弹出 `main@commit` 窗口。
+- **大功能、会阻塞别人、需要长期试错**：用独立 feature 工作树，收尾运行
+  `pwsh fucode/feature-publish.ps1`，构建并弹出该 feature 的窗口。
+- 一个 feature = 一个分支 = 一个工作树 = 一个写入者；同一时间主工作树也只有一个写入者。
+
+用户点头后由主控运行 `fucode/feature-merge.ps1 -Name <id>` 合入 main。feature 必须先
+`git merge main` 并重新发布，脚本只做 fast-forward，不合条件就拒绝。
 
 ## 开工前先核对
 
@@ -123,9 +130,17 @@ pwsh fucode/review-parallel.ps1 -NoBuild -Open
 3. 再次回报新的 label、commit、PID 和构建结果。
 4. 不要自行删除工作树；等主控确认已合入 `main` 后再清理。
 
-## 清理
+## 合入与清理
 
-只有主控或用户确认分支已合入 `main` 后，才允许：
+用户点头后，主控运行：
+
+```bash
+pwsh fucode/feature-merge.ps1 -Name <id>
+```
+
+它要求 feature 已同步 main、两边工作树干净，只做 fast-forward；否则拒绝。合入后不要立刻删工作树，先 `feature-publish.ps1 -Main` 看集成结果。
+
+确认 main 正常后才允许：
 
 ```bash
 pwsh fucode/feature-worktree.ps1 -Name <id> -Remove

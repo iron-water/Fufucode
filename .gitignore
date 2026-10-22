@@ -16,6 +16,7 @@ out/
 
 # 工具与会话数据（不入库）
 .claude/
+.fufucode/
 .workbuddy/
 output/
 .playwright-mcp/

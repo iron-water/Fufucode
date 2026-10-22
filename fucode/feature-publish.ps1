@@ -13,6 +13,7 @@
     pwsh fucode/feature-publish.ps1 -NoRestore
     pwsh fucode/feature-publish.ps1 -AllowDirty
     pwsh fucode/feature-publish.ps1 -NoLaunch   # 只构建，不启动
+    pwsh fucode/feature-publish.ps1 -Main       # 主工作树小改动，main@commit
 
 成功后把输出的 branch / commit / label / output / PID 写进交付卡。
 #>
@@ -21,7 +22,9 @@ param(
     [switch]$NoRestore,
     [switch]$AllowDirty,
     # 只构建不启动（CI/批量验证用）。默认构建成功后立即启动审阅窗口。
-    [switch]$NoLaunch
+    [switch]$NoLaunch,
+    # 主工作树的小改动：允许在 main 上构建并启动 main@commit 窗口。
+    [switch]$Main
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,8 +50,15 @@ if ($LASTEXITCODE -ne 0 -or $branch.Count -eq 0) {
     Stop-WithError "无法读取当前分支。"
 }
 $branch = $branch[0].Trim()
-if ($branch -in @('main', 'master', 'HEAD')) {
-    Stop-WithError "当前分支是 $branch。并行 feature 必须在独立工作树和 feature 分支上发布。"
+$isMainBranch = $branch -in @('main', 'master')
+if ($branch -eq 'HEAD') {
+    Stop-WithError "当前是 detached HEAD，不能发布。"
+}
+if ($isMainBranch -and -not $Main) {
+    Stop-WithError "当前分支是 $branch。并行 feature 请加自己的 feature 分支；主工作树小改动用 -Main。"
+}
+if (-not $isMainBranch -and $Main) {
+    Stop-WithError "-Main 只能在 main/master 工作树使用；当前分支是 $branch。"
 }
 
 $dirty = @(& git -C $root status --porcelain 2>$null)
@@ -63,14 +73,16 @@ if ($LASTEXITCODE -ne 0 -or $sha.Count -eq 0) {
     Stop-WithError "无法读取 HEAD。"
 }
 $sha = $sha[0].Trim()
-$label = "$branch@$sha"
+$label = if ($isMainBranch) { "main@$sha" } else { "$branch@$sha" }
 
 $commonDir = @(& git -C $root rev-parse --path-format=absolute --git-common-dir 2>$null)
 if ($LASTEXITCODE -ne 0 -or $commonDir.Count -eq 0) {
     Stop-WithError "无法定位主工作树。"
 }
 $sharedRoot = Split-Path -Parent $commonDir[0].Trim()
-$slug = ($branch -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
+$slug = if ($isMainBranch) { 'main' } else {
+    ($branch -replace '[^A-Za-z0-9._-]+', '-').Trim('-', '.', '_')
+}
 $reviewOut = Join-Path $sharedRoot "out/review/$slug"
 $reviewFile = Join-Path $reviewOut 'review.json'
 $launchFile = Join-Path $reviewOut 'launch.json'
