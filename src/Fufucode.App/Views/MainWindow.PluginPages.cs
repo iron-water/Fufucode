@@ -98,7 +98,8 @@ public partial class MainWindow
             _actions.Register(new AppActionDefinition(actionId, "打开" + title, "工作台", "",
                 "打开插件贡献的工作区页面",
                 () => { OpenDockPage(page.PageId, DockZone.Right); return Task.CompletedTask; },
-                () => _workbenchPages.ContainsKey(page.PageId) ? null : "插件页面当前不可用。"));
+                () => _workbenchPages.ContainsKey(page.PageId) ? null : "插件页面当前不可用。",
+                HideWhenUnavailable: true));
             _pluginPageActions[page.PageId] = actionId;
         }
     }
