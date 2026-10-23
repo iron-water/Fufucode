@@ -19,6 +19,7 @@ public sealed class FufuSessionHost : IDisposable
     private readonly PetBehavior _behavior;
     private readonly AppDataLayout _layout;
     private readonly AppSettingsStore _settings;
+    private readonly ResidentCore _resident;
     private NativeCSharpChatSession? _session;
     private bool _disposed;
 
@@ -27,11 +28,13 @@ public sealed class FufuSessionHost : IDisposable
         _behavior = behavior;
         _layout = new AppDataLayout(dataRoot);
         _settings = new AppSettingsStore(_layout);
+        _resident = new ResidentCore(dataRoot);
     }
 
     /// <summary>端点未配置时为 null —— UI 据此提示用户填写 settings.json，不伪造可用。</summary>
     public CompatibleEndpoint? Endpoint => _settings.Current.Endpoint;
     public AppSettingsStore Settings => _settings;
+    public ResidentCore Resident => _resident;
 
     public string SettingsPath => Path.Combine(_layout.Root, "settings.json");
 
@@ -60,6 +63,7 @@ public sealed class FufuSessionHost : IDisposable
         Directory.CreateDirectory(workspace);
         var persist = NativeSessionFactory.SessionFilePath(_layout, ProjectId, SessionId);
         var chat = (NativeCSharpChatSession)NativeSessionFactory.Create(_settings, SessionId, workspace,
+            systemPromptProvider: new ResidentPromptProvider(_resident),
             persistFilePath: persist, supportsImages: false);
         _session = chat;
         // 宠物默认 auto 档：普通编辑工具自动放行，run_command 仍需用户确认（权限门禁真实生效）。
@@ -114,6 +118,63 @@ public sealed class FufuSessionHost : IDisposable
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// 处理本地记忆指令，不把控制命令发送给模型。
+    /// 支持 /memory [scope]、/remember &lt;scope&gt; &lt;text&gt;、/forget &lt;scope&gt; &lt;text&gt;。
+    /// </summary>
+    public bool TryHandleResidentCommand(string text, out string response)
+    {
+        response = string.Empty;
+        var input = text.Trim();
+        if (input.StartsWith("记住 ", StringComparison.Ordinal)) input = "/remember " + input[3..];
+        else if (input.StartsWith("查看记忆", StringComparison.Ordinal)) input = "/memory" + input[4..];
+        else if (input.StartsWith("忘记 ", StringComparison.Ordinal)) input = "/forget " + input[3..];
+        if (!input.StartsWith('/')) return false;
+
+        var parts = input.Split(' ', 3, StringSplitOptions.RemoveEmptyEntries);
+        var command = parts[0].ToLowerInvariant();
+        if (command == "/memory")
+        {
+            if (parts.Length == 1)
+            {
+                response = "可用记忆：identity、user、project、agent。用 /memory user 查看某一类记忆。";
+                return true;
+            }
+            if (!ResidentCore.TryParseScope(parts[1], out var scope))
+            {
+                response = "无法识别记忆作用域。可用：identity、user、project、agent。";
+                return true;
+            }
+            response = _resident.ReadMemory(scope).Trim();
+            if (string.IsNullOrWhiteSpace(response)) response = $"{scope} 记忆目前为空。";
+            return true;
+        }
+
+        if (command is "/remember" or "/forget")
+        {
+            if (parts.Length < 3 || !ResidentCore.TryParseScope(parts[1], out var scope))
+            {
+                response = $"用法：{command} <identity|user|project|agent> <内容>";
+                return true;
+            }
+            if (command == "/remember")
+            {
+                _resident.AppendMemory(scope, parts[2]);
+                _resident.Observe("user", "memory.remembered", scope.ToString(), parts[2]);
+                response = $"已记住到 {scope} 记忆。";
+            }
+            else
+            {
+                var removed = _resident.ForgetMemory(scope, parts[2]);
+                _resident.Observe("user", "memory.forgotten", scope.ToString(), parts[2]);
+                response = removed ? $"已从 {scope} 记忆中删除匹配内容。" : "没有找到匹配的记忆内容。";
+            }
+            return true;
+        }
+
+        return false;
     }
 
     public async Task SendAsync(string text, CancellationToken ct = default)
