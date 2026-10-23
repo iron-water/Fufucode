@@ -286,7 +286,6 @@ public partial class MainWindow
         _chatPage.SessionContextRequested = () =>
         {
             if (_host is null) return null;
-            var backend = BackendCapabilities.For(_host.Current.Session.Backend);
             var project = _host.Manager.Metadata.GetProject(_host.Current.Session.ProjectId);
             var organization = new SessionOrganization(_host.Manager.Metadata);
             var name = organization.Project(project).Name;
@@ -294,7 +293,7 @@ public partial class MainWindow
             var canChange = !HasUserMessage(_host.Current.Session);
             return new Views.ChatPage.SessionContextInfo(
                 project.Id, string.IsNullOrWhiteSpace(name) ? Path.GetFileName(project.Path) : name,
-                backend.Name, BackendBadgeColor(backend.Id), canChange);
+                canChange);
         };
         _chatPage.ChangeProjectRequested = async () =>
         {
@@ -385,16 +384,6 @@ public partial class MainWindow
         }
         catch (Exception) { return true; }
     }
-
-    private static string BackendBadgeColor(Fufucode.Core.BackendId backend) => backend switch
-    {
-        Fufucode.Core.BackendId.Pi => "#6CCB5F",
-        Fufucode.Core.BackendId.Omp => "#FF9E4C",
-        Fufucode.Core.BackendId.Codex => "#3399FF",
-        Fufucode.Core.BackendId.Dsh => "#2BD4C4",
-        Fufucode.Core.BackendId.Claude => "#E8794A",
-        _ => "#8B5CF6",
-    };
 
     private void AttachWorkspaceContext(MainViewModel vm)
     {
@@ -507,8 +496,14 @@ public partial class MainWindow
     private void OnPluginPageStateChanged(object? sender, EventArgs e)
     {
         _actions.RefreshCapabilities();
-        if (_syncingDockState || _terminalPage is null) return;
-        if (_terminalPage.IsVisible) OpenDockPage("terminal", DockZone.Bottom);
+        if (_syncingDockState || _renderingDockPages || _terminalPage is null) return;
+        if (_terminalPage.IsVisible)
+        {
+            // 用户点“收起”后，插件在下架视图时仍可能回报 IsVisible=true；
+            // 此时不能再把底栏自动打开，否则表现为“收起无效”。
+            if (_dockLayout.Hidden[DockZone.Bottom] && _dockLayout.Find("terminal") == DockZone.Bottom) return;
+            OpenDockPage("terminal", DockZone.Bottom);
+        }
         else if (_dockLayout.Find("terminal") is not null) CloseDockPage("terminal");
     }
 

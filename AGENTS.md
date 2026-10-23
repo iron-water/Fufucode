@@ -91,7 +91,10 @@
 ## 并行 Feature（2026-10-21）
 
 - **执行模型开工前必须读 `docs/tasks/parallel-feature-brief.md`**；主控派工时把该路径写进 prompt，旧工作树没有该文件时把 brief 的核心命令直接附在 prompt 里。
-- `main` 是默认的小功能写入点，也是最终集成点；大功能、会阻塞别人的改动、需要长期试错的改动用 `fucode/feature-worktree.ps1 -Name <id>` 建独立分支/工作树。一个工作树只有一个写入者，主工作树同一时间也只有一个写入者。
+- **小改动直接在 `main` 上做**（一行样式、文案、单个 bug、少量文件）：提交后运行 `feature-publish.ps1 -Main`，不要新建 feature。
+- 只有功能过大、改动面广或与其它会话并发冲突明显时，才用 `fucode/feature-worktree.ps1 -Name <id>` 建独立分支/工作树；feature 一旦可用就**尽早**用 `feature-merge.ps1` 合回 `main`，不长期挂在分支上。
+- **已并入 `main` 的 feature 分支视为终结**：不再在其工作树上开发，后续修改回到 `main`。
+- 一个工作树只有一个写入者，主工作树同一时间也只有一个写入者。
 - 执行模型收尾必须自己运行 `fucode/feature-publish.ps1` 发布，不得让用户代为构建；它检查分支/干净状态、生成 `branch@commit` label、构建到主工作树 `out/review/<分支名>`、核对产物，并**立即启动独立审阅窗口**。同一 feature 重新发布会先停掉上一次由它启动的窗口。用户不需要去审阅板里挑构建。裸 `publish-local.ps1 -ReviewLabel ...` 仅作故障回退，相对 `-OutputRoot` 也以主工作树为基准。不得覆盖 `out/app`、写本地更新指针或停止别人的运行实例。
 - 主工作树的小改动用 `feature-publish.ps1 -Main` 构建并启动 `main@commit` 窗口；它和 feature 窗口走同一套隔离输出、label 和数据根。
 - 用户点头后，用 `fucode/feature-merge.ps1 -Name <id>` 合入：脚本要求 feature 已同步 main、两边工作树干净，只做 fast-forward；不合条件就拒绝，不在 main 留半合并状态。合入后运行 `feature-publish.ps1 -Main` 看集成结果，再决定是否 `feature-worktree.ps1 -Remove`。

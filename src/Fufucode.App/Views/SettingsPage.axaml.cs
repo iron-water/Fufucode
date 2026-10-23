@@ -278,6 +278,8 @@ public partial class SettingsPage : UserControl
     {
         if (DataContext is not SettingsPageViewModel vm) return;
         if (!e.GetCurrentPoint(sender as Control).Properties.IsLeftButtonPressed) return;
+        // 行内删除按钮自行处理点击，不再触发行跳转。
+        if (e.Source is Button || (e.Source is Visual v && v.GetVisualAncestors().Any(a => a is Button))) return;
         if (sender is not Control { Tag: EndpointProviderItem provider }) return;
         vm.EditProviderCommand.Execute(provider);
     }
