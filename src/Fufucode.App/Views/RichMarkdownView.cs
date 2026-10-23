@@ -24,7 +24,6 @@ public sealed class RichMarkdownView : ContentControl
     private readonly ObservableStringBuilder _builder = new();
     private string _markdown = string.Empty;
     private bool _attached;
-    private bool _diagramPinned;
 
     public RichMarkdownView()
     {
@@ -36,11 +35,9 @@ public sealed class RichMarkdownView : ContentControl
         _renderer.UpdateProducer = new MarkdownUpdateProducer { MarkdownBuilder = _builder };
         Content = _renderer;
 
-        // Mermaid 图表自带的平移/缩放会抢滚轮：页面滚动经过图表时会被误缩放。
-        // 这里在隧道阶段拦截：只有先在图表上按过鼠标（pinned）才放行缩放。
-        AddHandler(PointerWheelChangedEvent, OnRichWheel, RoutingStrategies.Tunnel);
+        // 图表交互统一在 ApplyDiagramGuard 里禁用：LiveMarkdown 的 PanAndZoom
+        // 会抢滚轮，点击还会触发栈溢出崩溃（"无法创建新的堆栈防护页面"）。
         AddHandler(PointerPressedEvent, OnRichPressed, RoutingStrategies.Tunnel);
-        PointerExited += (_, _) => _diagramPinned = false;
 
         // 链接：优先在内置浏览器打开，失败再交给系统默认浏览器。
         _renderer.LinkClick += (_, e) => OpenLink(e.HRef);
@@ -88,11 +85,8 @@ public sealed class RichMarkdownView : ContentControl
 
     private void OnRichPressed(object? sender, PointerPressedEventArgs e)
     {
-        var source = e.Source as Visual;
-        _diagramPinned = IsWithinDiagram(source);
-
         // 点图片放大：消息里的图通常很小，需要看清时不必另存。
-        if (FindImage(source) is { Source: { } imageSource })
+        if (FindImage(e.Source as Visual) is { Source: { } imageSource })
         {
             ShowImagePreview(imageSource);
             e.Handled = true;
@@ -121,23 +115,25 @@ public sealed class RichMarkdownView : ContentControl
         if (TopLevel.GetTopLevel(this)?.Launcher is { } fallback) _ = fallback.LaunchUriAsync(uri);
     }
 
-    private void OnRichWheel(object? sender, PointerWheelEventArgs e)
+    /// <summary>
+    /// 禁用图表控件的指针交互。
+    ///
+    /// PanAndZoom 会抢走滚轮，导致鼠标停在图表上时页面滑不动；点击它还会触发
+    /// 栈溢出崩溃（Windows 报"无法创建新的堆栈防护页面"）。
+    /// 图表本身仍然正常显示，只是不再支持平移/缩放。
+    /// </summary>
+    private void ApplyDiagramGuard()
     {
-        // 先钉住再缩放；未钉住时把滚轮交还给时间线，避免滑动页面时误缩放图表。
-        if (IsWithinDiagram(e.Source as Visual) && !_diagramPinned)
+        foreach (var visual in this.GetVisualDescendants())
         {
-            e.Handled = true;
+            if (visual.GetType().Name != "PanAndZoom") continue;
+            if (visual is InputElement element) element.IsHitTestVisible = false;
         }
     }
 
-    private static bool IsWithinDiagram(Visual? source)
-    {
-        for (var current = source; current is not null; current = current.GetVisualParent())
-        {
-            if (current.GetType().Name == "PanAndZoom") return true;
-        }
-        return false;
-    }
+    private void ScheduleDiagramGuard() =>
+        Avalonia.Threading.Dispatcher.UIThread.Post(ApplyDiagramGuard,
+            Avalonia.Threading.DispatcherPriority.Loaded);
 
     /// <summary>把当前 Markdown 交给渲染器。属性可能在构造完成前被赋值，因此要能安全地延后渲染。</summary>
     private void RenderCurrent()
@@ -152,11 +148,13 @@ public sealed class RichMarkdownView : ContentControl
         if (_markdown.StartsWith(current, StringComparison.Ordinal))
         {
             builder.Append(_markdown[current.Length..]);
+            ScheduleDiagramGuard();
             return;
         }
 
         builder.Clear();
         builder.Append(_markdown);
+        ScheduleDiagramGuard();
     }
 
     /// <summary>

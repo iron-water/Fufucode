@@ -35,6 +35,18 @@ public sealed record PluginContentContribution(
     string FenceLanguage,
     Func<PluginContentContext, object> CreateView);
 
+/// <summary>插件贡献的聊天输入栏工具；仅在插件已安装且启用时显示。</summary>
+public sealed record PluginComposerContext(
+    object Owner,
+    bool SupportsImages,
+    Func<string, Task> AttachImageAsync,
+    Func<object, Task<bool>> ShowDialogAsync,
+    Action<string>? Notify = null);
+
+public sealed record PluginComposerContribution(
+    string MenuText,
+    Func<PluginComposerContext, Task> ExecuteAsync);
+
 /// <summary>
 /// 富内容插件的渲染上下文。
 /// Submit：把文本作为一条新的用户消息发给当前会话；返回是否被接受。
@@ -99,6 +111,9 @@ public interface IPluginPackage
     /// 插件贡献的消息富内容渲染（可选）。
     /// </summary>
     PluginContentContribution? CreateContentContribution(PluginPackageContext context) => null;
+
+    /// <summary>插件贡献的聊天输入栏工具（可选）。</summary>
+    PluginComposerContribution? CreateComposerContribution(PluginPackageContext context) => null;
 
     /// <summary>
     /// 插件贡献的主题皮肤（可选）。

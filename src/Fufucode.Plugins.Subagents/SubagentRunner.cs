@@ -35,17 +35,15 @@ public sealed record SubagentResult(
     long? InputTokens = null,
     long? OutputTokens = null,
     long? DurationMs = null,
-    SubagentTier? Tier = null,
     bool Truncated = false);
 
 /// <summary>
 /// 进程内子代理运行器：
-/// - read：只读、低轮次、短超时的快速探索；
+/// - read：只读、隔离上下文的快速探索；轮次/超时只由代理定义决定；
 /// - patch：临时 git worktree 内修改并返回 unified diff，不宣称交付。
 /// </summary>
 public sealed class SubagentRunner
 {
-    private SubagentTier _tier = SubagentTier.Faster;
     private static readonly HashSet<string> ReadOnlyBuiltins = new(StringComparer.Ordinal)
     {
         "read_file", "list_dir", "grep_search", "glob_files"
@@ -101,8 +99,6 @@ public sealed class SubagentRunner
     }
 
     public string JobId { get; }
-    public SubagentTier Tier => _tier;
-    public void SetTier(SubagentTier tier) => _tier = tier;
     public Func<PureToolCall, CancellationToken, Task<bool>>? ApprovalGate { get; set; }
     public Action<SubagentProgress>? Progress { get; set; }
 
@@ -115,14 +111,18 @@ public sealed class SubagentRunner
     private void Report(string agent, string kind, string? detail = null) =>
         Progress?.Invoke(new SubagentProgress(JobId, agent, kind, detail));
 
-    private SubagentRunner CreateChildRunner() => new(
-        _agents, _modelClient, _capabilities, _defaultModelId, _workspaceRoot, _capabilityDefinitions,
-        _depth + 1, _maxDepth, HistoryProvider, JobId)
+    private SubagentRunner CreateChildRunner()
     {
-        ApprovalGate = ApprovalGate,
-        ParentMode = ParentMode,
-        Progress = Progress
-    };
+        var child = new SubagentRunner(
+            _agents, _modelClient, _capabilities, _defaultModelId, _workspaceRoot, _capabilityDefinitions,
+            _depth + 1, _maxDepth, HistoryProvider, JobId)
+        {
+            ApprovalGate = ApprovalGate,
+            ParentMode = ParentMode,
+            Progress = Progress
+        };
+        return child;
+    }
 
     public async Task<SubagentResult> RunAsync(string agentName, string prompt, string? modelOverride,
         CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null)
@@ -180,14 +180,12 @@ public sealed class SubagentRunner
         var capabilityNames = mode == SubagentMode.Read
             ? _capabilityDefinitions.Select(definition => definition.Name).ToHashSet(StringComparer.Ordinal)
             : [];
-        // stronger 的实际差异必须开箱生效：只读任务可继续分解为并行子代理。
-        // 旧实现要求代理定义主动声明 subagent，内置代理都没声明，等于档位切换没有效果。
-        // patch 模式仍禁止嵌套，避免绕过 worktree 隔离边界。
-        var canNest = _tier == SubagentTier.Stronger && mode == SubagentMode.Read && _depth < _maxDepth;
+        // 默认子代理不嵌套：只有代理定义显式声明 subagent，且未到深度上限时才开放。
+        // patch 模式始终禁止嵌套，避免绕过 worktree 隔离边界。
+        var canNest = mode == SubagentMode.Read && _depth < _maxDepth &&
+                      agent.Tools.Contains(SubagentDispatcher.ToolName, StringComparer.Ordinal);
 
         var allowedTools = new List<string>(agent.Tools);
-        if (canNest && !allowedTools.Contains(SubagentDispatcher.ToolName, StringComparer.Ordinal))
-            allowedTools.Add(SubagentDispatcher.ToolName);
 
         var allowed = allowedTools
             .Where(name => builtins.Contains(name) || capabilityNames.Contains(name) ||
@@ -280,7 +278,7 @@ public sealed class SubagentRunner
             Report(agent.Name, truncated ? "truncated" : "completed", null);
             return new SubagentResult(true, agent.Name, mode, content, result.ToolResults.Count, null, JobId,
                 structured, null, null, null, null, trace,
-                result.Usage?.InputTokens, result.Usage?.OutputTokens, Tier: _tier, Truncated: truncated);
+                result.Usage?.InputTokens, result.Usage?.OutputTokens, Truncated: truncated);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSpan is not null)
         {
@@ -381,12 +379,9 @@ public sealed class SubagentRunner
             builder.Append("\n你只应做最小必要修改；最终说明改动与验证结果，改动会以补丁形式交回父会话，不会直接交付。");
         else
             builder.Append("\n当前是 read 模式：只允许只读工具；写入、编辑与命令执行不可用，不要尝试。")
-                .Append("\n请尽可能高效地并行收集证据，并给出可定位的结论。")
-                .Append("\n结论必须区分“已确认（有文件:行号或命令输出证据）”与“推测”，不要编造未读到的代码。");
-        if (_tier == SubagentTier.Stronger && mode == SubagentMode.Read && _depth < _maxDepth)
-            builder.Append("\n你处于 stronger 档位：任务包含 3 个以上互不依赖的子问题时，必须先并行派出只读子代理分头调查，")
-                .Append("再汇总它们的结论；只有一个子问题时直接自己做，不要为了派发而派发。")
-                .Append("每个子代理只负责一个明确子问题，派发时用 context 传入已知线索，不要重复它们已完成的检索。");
+                .Append("\n先用 grep/glob 定位，再只读必要片段；证据足够就立即给出可用结论，不要为了完整性遍历无关文件或重复确认。")
+                .Append("\n结论必须区分“已确认（有文件:行号或命令输出证据）”与“推测”，不要编造未读到的代码。")
+                .Append("\n不要用“再查一点”换取边际很小的完整性；标注哪些结论尚未完整验证。");
         if (!string.IsNullOrWhiteSpace(agent.OutputSchema))
         {
             builder.Append("\n\n最终答复必须是符合以下 JSON Schema 的纯 JSON（不要代码块、不要额外说明）：\n")

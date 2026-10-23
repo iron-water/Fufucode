@@ -10,6 +10,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Features.Plugins;
 
 namespace Fufucode.App.Views;
 
@@ -122,7 +123,9 @@ public partial class ChatPage
         var commands = new MenuItem { Header = "命令与技能" };
         commands.Click += (_, _) => CommandFlyoutButton.Flyout?.ShowAt(ComposerMoreButton);
         var hide = new MenuItem { Header = "隐藏输入区" }; hide.Click += (_, _) => ToggleComposer();
-        menu.Items.Add(preview); menu.Items.Add(commands); menu.Items.Add(hide); ComposerMoreButton.Flyout = menu;
+        menu.Items.Add(preview); menu.Items.Add(commands); menu.Items.Add(hide);
+        ComposerMoreButton.Flyout = menu;
+        RefreshComposerPluginMenu();
         DraftPreview.PointerPressed += (_, e) =>
         {
             if (e.GetCurrentPoint(DraftPreview).Properties.IsLeftButtonPressed) { _previewDraft = false; RefreshComposerTools(); Input.Focus(); }
@@ -185,6 +188,15 @@ public partial class ChatPage
     {
         if (DataContext is MainViewModel vm && sender is TextBox box)
             vm.Settings.ModelPickerFilter = box.Text ?? string.Empty;
+    }
+
+    internal PluginComposerHost? ComposerPluginHost { get; set; }
+
+    internal void RefreshComposerPluginMenu()
+    {
+        if (ComposerMoreButton.Flyout is not MenuFlyout menu || DataContext is not MainViewModel vm) return;
+        while (menu.Items.Count > 3) menu.Items.RemoveAt(3);
+        ComposerPluginHost?.Populate(menu, vm);
     }
 
     private void ComposerChanged(object? sender, PropertyChangedEventArgs e) => RefreshComposerTools();

@@ -28,18 +28,22 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         "\"width\":{\"type\":\"integer\"},\"height\":{\"type\":\"integer\"}," +
         "\"returnBase64\":{\"type\":\"boolean\",\"description\":\"true 返回 PNG 数据；默认只返回文件信息。\"}," +
         "\"deliveryMode\":{\"type\":\"string\",\"enum\":[\"background\",\"foreground\"],\"default\":\"background\"}," +
+        "\"route\":{\"type\":\"string\",\"enum\":[\"auto\",\"sky\",\"cua\",\"win32\",\"visible\"],\"default\":\"auto\"}," +
         "\"processId\":{\"type\":\"integer\"},\"windowId\":{\"type\":\"integer\"}," +
-        "\"session\":{\"type\":\"string\"}},\"required\":[]}";
+        "\"agentId\":{\"type\":\"string\"},\"session\":{\"type\":\"string\"}},\"required\":[]}";
 
     private const string MouseSchema =
         "{\"type\":\"object\",\"properties\":{" +
         "\"action\":{\"type\":\"string\",\"enum\":[\"move\",\"click\",\"double_click\",\"right_click\",\"scroll\"]}," +
         "\"x\":{\"type\":\"integer\"},\"y\":{\"type\":\"integer\"}," +
+        "\"screenX\":{\"type\":\"integer\",\"description\":\"虚拟光标使用的全局屏幕物理像素 X；缺省时回退到 x。\"}," +
+        "\"screenY\":{\"type\":\"integer\",\"description\":\"虚拟光标使用的全局屏幕物理像素 Y；缺省时回退到 y。\"}," +
         "\"delta\":{\"type\":\"integer\",\"description\":\"滚动增量，正数向上。\"}," +
         "\"deliveryMode\":{\"type\":\"string\",\"enum\":[\"background\",\"foreground\"],\"default\":\"background\"}," +
+        "\"route\":{\"type\":\"string\",\"enum\":[\"auto\",\"sky\",\"cua\",\"win32\",\"visible\"],\"default\":\"auto\"}," +
         "\"processId\":{\"type\":\"integer\",\"description\":\"后台投递目标进程。\"}," +
         "\"windowId\":{\"type\":\"integer\",\"description\":\"后台投递目标窗口。\"}," +
-        "\"elementToken\":{\"type\":\"string\"},\"session\":{\"type\":\"string\"}}," +
+        "\"agentId\":{\"type\":\"string\"},\"elementToken\":{\"type\":\"string\"},\"session\":{\"type\":\"string\"}}," +
         "\"required\":[\"action\"]}";
 
     private const string KeyboardSchema =
@@ -48,24 +52,28 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         "\"text\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"}," +
         "\"keys\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
         "\"deliveryMode\":{\"type\":\"string\",\"enum\":[\"background\",\"foreground\"],\"default\":\"background\"}," +
+        "\"route\":{\"type\":\"string\",\"enum\":[\"auto\",\"sky\",\"cua\",\"win32\",\"visible\"],\"default\":\"auto\"}," +
         "\"processId\":{\"type\":\"integer\",\"description\":\"后台投递目标进程。\"}," +
         "\"windowId\":{\"type\":\"integer\",\"description\":\"后台投递目标窗口。\"}," +
-        "\"elementToken\":{\"type\":\"string\"},\"session\":{\"type\":\"string\"}}," +
+        "\"agentId\":{\"type\":\"string\"},\"elementToken\":{\"type\":\"string\"},\"session\":{\"type\":\"string\"}}," +
         "\"required\":[\"action\"]}";
 
     private readonly string? _outputDirectory;
     private readonly IReadOnlyList<IComputerUseBackend> _backends;
     private readonly IComputerUseOperationGate _operationGate;
+    private readonly IComputerUseCursorRegistry _cursorRegistry;
 
     public ComputerUsePlugin(
         IComputerScreenCapture? capture = null,
         IComputerInput? input = null,
         string? outputDirectory = null,
         IEnumerable<IComputerUseBackend>? backends = null,
-        IComputerUseOperationGate? operationGate = null)
+        IComputerUseOperationGate? operationGate = null,
+        IComputerUseCursorRegistry? cursorRegistry = null)
     {
         _outputDirectory = string.IsNullOrWhiteSpace(outputDirectory) ? null : outputDirectory;
         _operationGate = operationGate ?? ComputerUseOperationGate.Shared;
+        _cursorRegistry = cursorRegistry ?? ComputerUseVirtualCursorRegistry.Shared;
 
         if (backends is not null)
         {
@@ -159,7 +167,7 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             context);
         var result = await ExecuteWithFallbackAsync(
             (backend, token) => backend.CaptureAsync(request, token),
-            context.DeliveryMode,
+            context,
             cancellationToken).ConfigureAwait(false);
         if (!result.Success || result.PngBytes is null)
             return Failure(call.Id, result);
@@ -210,12 +218,26 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         if (context.DeliveryMode == ComputerUseDeliveryMode.Background && context.Target?.HasWindow != true)
             return Missing(call.Id, "后台鼠标动作需要 processId 与 windowId；没有窗口目标时不会触碰用户真实鼠标。");
 
-        await using var lease = await _operationGate.EnterAsync("input", cancellationToken).ConfigureAwait(false);
+        // Background input is isolated per target window; foreground SendInput/UIA
+        // activation touches the shared desktop focus, so it stays globally serialized.
+        var inputLockKey = context.DeliveryMode == ComputerUseDeliveryMode.Background
+            ? $"input:{context.Target?.ResourceKey ?? "desktop"}"
+            : "input:foreground";
+        await using var lease = await _operationGate.EnterAsync(inputLockKey, cancellationToken).ConfigureAwait(false);
+
+        var screenX = ReadInt(root, "screenX") ?? x;
+        var screenY = ReadInt(root, "screenY") ?? y;
+        var isClick = action is "click" or "double_click" or "right_click";
+        // Show the press before the backend call so the overlay reflects an
+        // in-flight click; clear it afterwards whether the backend succeeded or not.
+        if (isClick) UpdateVirtualCursor(context, action, screenX, screenY, "按下", pressed: true);
+
         var request = new ComputerUseMouseRequest(action, x, y, delta, context);
         var result = await ExecuteWithFallbackAsync(
             (backend, token) => backend.MouseAsync(request, token),
-            context.DeliveryMode,
+            context,
             cancellationToken).ConfigureAwait(false);
+        if (isClick) UpdateVirtualCursor(context, action, screenX, screenY, result.Message, pressed: false);
         return result.Success
             ? new PureToolResult(call.Id, true, result.Message)
             : Failure(call.Id, result);
@@ -246,11 +268,14 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         if (context.DeliveryMode == ComputerUseDeliveryMode.Background && context.Target?.HasWindow != true)
             return Missing(call.Id, "后台键盘动作需要 processId 与 windowId；不会把按键发送给用户当前焦点窗口。");
 
-        await using var lease = await _operationGate.EnterAsync("input", cancellationToken).ConfigureAwait(false);
+        var inputLockKey = context.DeliveryMode == ComputerUseDeliveryMode.Background
+            ? $"input:{context.Target?.ResourceKey ?? "desktop"}"
+            : "input:foreground";
+        await using var lease = await _operationGate.EnterAsync(inputLockKey, cancellationToken).ConfigureAwait(false);
         var request = new ComputerUseKeyboardRequest(action, text, key, keys, context);
         var result = await ExecuteWithFallbackAsync(
             (backend, token) => backend.KeyboardAsync(request, token),
-            context.DeliveryMode,
+            context,
             cancellationToken).ConfigureAwait(false);
         return result.Success
             ? new PureToolResult(call.Id, true, result.Message)
@@ -259,11 +284,11 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
 
     private async Task<ComputerUseBackendResult> ExecuteWithFallbackAsync(
         Func<IComputerUseBackend, CancellationToken, Task<ComputerUseBackendResult>> execute,
-        ComputerUseDeliveryMode mode,
+        ComputerUseActionContext context,
         CancellationToken cancellationToken)
     {
         ComputerUseBackendResult? last = null;
-        foreach (var backend in OrderedBackends(mode))
+        foreach (var backend in OrderedBackends(context))
         {
             if (!backend.IsAvailable)
             {
@@ -272,14 +297,14 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
                     ErrorCode: "backend_unavailable");
                 continue;
             }
-            if (mode == ComputerUseDeliveryMode.Background && !backend.SupportsBackground)
+            if (context.DeliveryMode == ComputerUseDeliveryMode.Background && !backend.SupportsBackground)
             {
                 last = new ComputerUseBackendResult(false,
                     $"{backend.Kind} 后端没有经过验证的后台投递通道。",
                     ErrorCode: "background_unavailable");
                 continue;
             }
-            if (mode == ComputerUseDeliveryMode.Foreground && !backend.SupportsForeground)
+            if (context.DeliveryMode == ComputerUseDeliveryMode.Foreground && !backend.SupportsForeground)
             {
                 last = new ComputerUseBackendResult(false,
                     $"{backend.Kind} 后端不支持前台投递。",
@@ -289,6 +314,9 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
 
             last = await execute(backend, cancellationToken).ConfigureAwait(false);
             if (last.Success) return last;
+            // An explicit route is a pin, not a preference: do not silently try another stack.
+            if (context.Route is not (ComputerUseRouteMode.Auto or ComputerUseRouteMode.Visible))
+                return last;
             if (last.ErrorCode is not ("backend_unavailable" or "background_unavailable" or "process_failed"))
                 return last;
         }
@@ -296,16 +324,74 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         return last ?? new ComputerUseBackendResult(false, "没有已配置的电脑操控后端。", ErrorCode: "backend_unavailable");
     }
 
-    private IEnumerable<IComputerUseBackend> OrderedBackends(ComputerUseDeliveryMode mode)
+    /// <summary>
+    /// Hybrid routing policy:
+    /// - background / auto: strict CUA window delivery first (Sky is foreground-only by contract).
+    /// - foreground / visible: Sky first for higher success, then CUA, then Win32 compatibility.
+    /// - explicit route pins exactly one backend and never silently substitutes another.
+    /// </summary>
+    private IEnumerable<IComputerUseBackend> OrderedBackends(ComputerUseActionContext context)
     {
-        // Preserve registration order: host-injected Sky first, then CUA, then Win32.
-        // Win32 is intentionally skipped for background actions unless a custom backend
-        // explicitly advertises the requested mode; its implementation returns a refusal.
+        var pinned = context.Route switch
+        {
+            ComputerUseRouteMode.Sky => ComputerUseBackendKind.Sky,
+            ComputerUseRouteMode.CuaDriver => ComputerUseBackendKind.CuaDriver,
+            ComputerUseRouteMode.Win32 => ComputerUseBackendKind.Win32,
+            _ => (ComputerUseBackendKind?)null,
+        };
+        if (pinned is { } kind)
+            return _backends.Where(backend => backend.Kind == kind).ToArray();
+
+        var visibleFirst = context.Route == ComputerUseRouteMode.Visible ||
+                           context.DeliveryMode == ComputerUseDeliveryMode.Foreground;
+        var priorities = visibleFirst
+            ? new[]
+            {
+                ComputerUseBackendKind.Sky,
+                ComputerUseBackendKind.CuaDriver,
+                ComputerUseBackendKind.Win32,
+            }
+            : new[]
+            {
+                ComputerUseBackendKind.CuaDriver,
+                ComputerUseBackendKind.Sky,
+                ComputerUseBackendKind.Win32,
+            };
         return _backends
-            .Where(backend => mode == ComputerUseDeliveryMode.Background
-                ? backend.Kind is ComputerUseBackendKind.Sky or ComputerUseBackendKind.CuaDriver
-                    || backend.Kind == ComputerUseBackendKind.Win32
-                : true);
+            .OrderBy(backend => Array.IndexOf(priorities, backend.Kind))
+            .ThenBy(backend => backend.Kind)
+            .ToArray();
+    }
+
+    /// <summary>把鼠标动作同步到虚拟光标层；只更新绘制状态，不产生系统输入。</summary>
+    private void UpdateVirtualCursor(
+        ComputerUseActionContext context,
+        string action,
+        int? x,
+        int? y,
+        string backendMessage,
+        bool pressed)
+    {
+        if (string.IsNullOrWhiteSpace(context.AgentId) || x is null || y is null) return;
+        _cursorRegistry.Update(new ComputerUseCursorState(
+            context.AgentId,
+            x.Value,
+            y.Value,
+            ColorFor(context.AgentId),
+            context.AgentId,
+            IsPressed: pressed,
+            Backend: backendMessage,
+            TargetWindow: context.Target?.HasWindow == true
+                ? $"{context.Target.ProcessId}:{context.Target.WindowId}"
+                : null));
+    }
+
+    private static string ColorFor(string agentId)
+    {
+        var palette = new[] { "#4F8EF7", "#35C28D", "#F2994A", "#EB5757", "#9B51E0", "#2D9CDB" };
+        var hash = 0;
+        foreach (var ch in agentId) hash = unchecked(hash * 31 + ch);
+        return palette[Math.Abs(hash) % palette.Length];
     }
 
     private PureToolResult DescribeCapabilities(string id)
@@ -315,7 +401,9 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             .ToArray();
         return new PureToolResult(id, true,
             "电脑操控后端能力：" + string.Join(" | ", descriptions) +
-            "。并发策略：输入动作全局串行；不同窗口截图按目标资源隔离。后台失败不会自动升级前台。");
+            "。路由：background/auto 优先 CUA 窗口投递；foreground/visible 优先 Sky；显式 route=sky|cua|win32 只走指定后端。" +
+            " 并发策略：后台输入按目标窗口分桶、前台输入全局串行；不同窗口截图按目标资源隔离。" +
+            " agentId 存在时会同步虚拟光标 Overlay，不产生系统输入。后台失败不会自动升级前台。");
     }
 
     private static ComputerUseActionContext ReadContext(JsonElement root)
@@ -325,14 +413,23 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             "foreground" => ComputerUseDeliveryMode.Foreground,
             _ => ComputerUseDeliveryMode.Background,
         };
+        var route = ReadString(root, "route")?.ToLowerInvariant() switch
+        {
+            "sky" => ComputerUseRouteMode.Sky,
+            "cua" or "cua-driver" => ComputerUseRouteMode.CuaDriver,
+            "win32" => ComputerUseRouteMode.Win32,
+            "visible" => ComputerUseRouteMode.Visible,
+            _ => ComputerUseRouteMode.Auto,
+        };
         var processId = ReadInt(root, "processId") ?? ReadInt(root, "pid");
         var windowId = ReadLong(root, "windowId") ?? ReadLong(root, "window_id");
         var token = ReadString(root, "elementToken") ?? ReadString(root, "element_token");
         var session = ReadString(root, "session");
+        var agentId = ReadString(root, "agentId") ?? ReadString(root, "agent_id");
         var target = processId is not null || windowId is not null || token is not null
             ? new ComputerUseTarget(processId, windowId, token, session)
             : null;
-        return new ComputerUseActionContext(mode, target);
+        return new ComputerUseActionContext(mode, target, agentId, route);
     }
 
     private static PureToolResult Failure(string id, ComputerUseBackendResult result)
@@ -399,6 +496,7 @@ public sealed class ComputerUsePluginPackage : IPluginPackage
         var outputDir = context.ProjectPath is not null
             ? Path.Combine(context.ProjectPath, "output", "screenshots")
             : null;
-        return new ComputerUsePlugin(null, null, outputDir, backends);
+        var cursors = context.GetService<IComputerUseCursorRegistry>();
+        return new ComputerUsePlugin(null, null, outputDir, backends, cursorRegistry: cursors);
     }
 }

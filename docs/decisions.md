@@ -831,3 +831,36 @@ EAD
 5. 阻塞可见：`ui.stall`/`ui.batch` 事件补成树节点与时间线标记；审批等待单独轨道；模型条首段显示 TTFT；系统轨道绘制 CPU 采样。模型流最大帧间隔、p95 帧间隔、usage、命令、cwd、退出码、输出字节保留在检查器与原始 JSON。
 6. `tool.process` 新增 stdout/stderr 头部（各最多 220 字符，经统一脱敏；关闭命令文本记录时一并遮蔽），完整输出仍在聊天工具卡与既有日志中；不把任意命令输出全文写入性能日志。
 
+
+2026-10-23 电脑操控混合后端、多 Agent 虚拟光标与并发分桶决定：
+1. 后端定位分开：Sky 作为高成功率的可见桌面后端（允许必要时激活目标窗口），CUA Driver 作为严格后台窗口投递后端，Win32 仅保留为显式前台兼容路径。不得把 Sky 的窗口对象或前台激活包装成“独立后台鼠标”。
+2. 混合路由：`route=auto` 时，后台优先 CUA；前台或 `route=visible` 时优先 Sky，再 CUA，最后 Win32。显式 `route=sky|cua|win32` 是固定路由，失败时不静默换栈，真实错误交给上层决定。
+3. 虚拟光标：新增 `IComputerUseCursorRegistry` 与 `ComputerCursorOverlayWindow`。Overlay 透明、置顶、点击穿透、不激活，按 Agent 绘制箭头、颜色与名称；它只表达逻辑位置，不移动系统指针，也不发送任何输入。首个光标出现才创建，全部移除或窗口关闭即销毁；无头自测不创建真实窗口。
+4. 光标同步：工具参数 `agentId` 存在且鼠标动作成功时更新注册表；`screenX/screenY` 提供全局屏幕坐标，缺省回退到窗口相对 `x/y`。这只覆盖已成功执行的动作，不伪造“正在移动”的中间状态。
+5. 并发：后台输入按 `pid:windowId` 分桶，可并行操作不同窗口；前台输入仍全局串行，因为前台激活共享用户桌面焦点；截图锁与输入锁分离。普通桌面上的多个 Overlay 光标不隔离焦点、键盘队列与应用状态；真正完全隔离的并发仍应使用独立 VM / RDP Session。
+6. 验证：解决方案相关工程 0 警告 0 错误；`Fufucode.App.Backend.Tests` 946 项断言通过，新增后台/前台路由优先级、显式 route 固定、后台窗口目标传递、虚拟光标状态同步断言。未验证：真实 cua-driver 后台投递、Sky 宿主桥实机、多显示器/DPI/多 Agent 同时动作的 Overlay 截图。
+
+2026-10-23（第五轮，WriteTex→SGline 分阶段长程实测与档位补课）：
+1. 真实任务：把 writetexx（WriteTex AOT 重建工程）的手写→LaTeX 能力合并进 SGline，拆成模型/编解码、识别服务、仓储/控制器、UI 接线四阶段，同一会话连续执行。阶段 4 自称全绿，但独立复核发现 130 个测试里仍有 2 个自写测试按旧契约失败；定向修复 3.42 分钟后全量 130/130、隐藏 18/18、analyze 0 error。总计 29.98 分钟、121 次工具调用。
+2. 阶段 3 暴露真实回归：空笔画返回兜底文本导致 ok=true，违反“空输入 latex 为空”；隐藏测试已补断言。阶段 4 全量时修复。
+3. 性能日志定位并修复两处 Harness 阻塞：
+   - 系统提示自动加载仓库根 AGENTS.md/CLAUDE.md（限长 32k，标注来源）；此前每阶段都要先花工具轮次找约定。
+   - 提示新增验证纪律：同一改动不重复跑耗时检查、先定向后全量、改共享模块必须重跑既有测试。
+   - 阶段 1 A/B：7.59→4.97 分钟、28→21 次工具、billable 239k→50k、analyze error 1→0（基线 `const` 错误同时修复）。
+4. faster/stronger 补课（8 点取证审计，swe-2）：faster 90.5/136.7 秒、12/27 工具、覆盖 8/8、引用有效 17/19 与 24/25；旧 stronger 585.6 秒、47 工具、覆盖相同、嵌套零触发。废弃“扩大取证+证据矩阵”的 stronger，改为同范围取证 + 程序化引用校验 + 仅在坏引用时派定向校验子代理；修正后 stronger 56.3/94.3 秒、30/28 工具，引用有效 33/36、16/18。结论：stronger 目前是复核档，不是默认；嵌套价值仍未获实证。
+5. 验证：Core/Subagents 单独构建通过；Backend.Tests 长程定向 39 项通过。全量解决方案在记录时被并发 UI 改动（ChatPage.axaml 标签、CollapsiblePanel 类型）阻塞，未宣称全量通过。详见 `docs/records/fumo-writetex-merge-2026-10-23.md`。
+
+2026-10-23（第六轮）归档 Subagent 档位：
+1. 实测结论：同一 8 点取证审计下，旧 stronger（扩大取证+证据矩阵）为 faster 的 4~6 倍耗时，覆盖相同，嵌套零触发；改为“同范围取证 + 引用校验”后成本回到同一量级，但引用有效率未稳定优于单遍模式，且修正列表没有改变最终结论质量。没有可证明的能力增量支撑第二档。
+2. 产品只保留一种子代理行为：删除 `SubagentTier`、`SetTier`、结果档位标记、设置页档位按钮、`AppSettings.SubagentTier` 字段；旧 settings.json 的 `subagentTier` 会被忽略，不阻塞加载。
+3. 默认行为采用原 faster 的早停取向：grep/glob 定位、只读必要片段、证据足够即停、未验证项标注；模式层仍不设轮次/超时/推理强度限制。
+4. 嵌套改为显式能力：只有代理定义声明 `subagent` 且未到 maxDepth 才开放；内置 explore 不声明，避免默认递归与成本失控。
+5. 删除仅供档位对照的 `LiveSubagentProbe`/`LiveOptimizationBench` 探针（它们依赖已删除的档位 API）；档位实测数据保留在 `docs/records/fumo-writetex-merge-2026-10-23.md`。
+6. 验证：Core、Subagents、App 项目分别构建通过；全量测试工程被并发 UI 改动（BackendBadge.BadgeColor）阻塞，未宣称全量通过。
+
+2026-10-23（第七轮）工具层对齐 pi-fff / OMP / 五家 edit 设计：
+1. grep/glob 引入会话级工作区文件索引（并非 Rust/SIMD）：首次枚举后缓存相对路径，写文件、编辑、run_command 后失效，另有 30 秒 TTL；grep/glob 共用，避免每次重复递归。纯字面量 pattern 走 `string.Contains` 快路径，含正则元字符才编译 Regex。保留既有的按文件分组、命中排序、游标分页。未抄 fff 的 SIMD/mmap/frecency/Aho-Corasick 多模式与 Git 加权。
+2. read_file 增加 OMP 风格行选区：`file:N`、`file:A-B`、`file:A+C`、`file:-N`、逗号多段；与 offset/limit 互斥。选区输出带总行数/字符数；单行超过 8 KiB 截断标注；单行超过整读上限不再返回“前 0 行 + offset 1”，而是明确要求分页/命令。
+3. edit_file 增加 `edits[]` 批量（最多 20 条）：所有锚点先对原始文件求值、检测区间重叠，再从后往前应用；任一条失败整体不写盘；单条 old_string/new_string 保持兼容。语义对齐 Pi 的批量编辑，不引入 Codex/DSH 的 patch 文本格式。
+4. 对比结论：Claude Code 是精确唯一 + 先读；Codex 是上下文行 apply_patch、多文件 hunk；DSH 生态用 Codex 兼容 apply_patch 替换原生 edit，强调失败原子与回滚；Pi 是 oldText 精确唯一 + 同调用多条对原文匹配；OMP 的 read 用路径选行 + 50 KiB/3000 行上限 + footer 续读。FUMO 取“精确匹配 + 批量原子 + 行选区”，不引入 patch 格式。
+5. 验证：Core 构建通过；独立 ToolProbe 10/10 通过（行选区、批量编辑、重叠拒绝、失败不写盘、字面量 grep、写后索引失效、glob 索引）。Backend.Tests 仍被并发 UI 的 `BackendBadge.BadgeColor` 改动阻塞，未宣称全量通过。

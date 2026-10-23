@@ -210,6 +210,8 @@ public sealed partial class InputViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanSend))]
     private async Task SendAsync()
     {
+        // 命令入口（快捷键、脚本、程序调用）可能绕过 CanExecute；空白内容一律不发送。
+        if (!CanSend) return;
         if ((HasReferenceContext || HasAttachments) && IsExtensionCommand(DraftText.TrimStart()))
         {
             OperationFailed?.Invoke("带引用时不能执行扩展命令，请先移除引用或改用普通消息。");

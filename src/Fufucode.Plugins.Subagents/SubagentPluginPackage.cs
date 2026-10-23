@@ -8,7 +8,7 @@ using Fufucode.Core.Plugins;
 
 namespace Fufucode.Plugins.Subagents;
 
-/// <summary>可选 Subagent 插件：安装后默认 faster，stronger 只能由用户手动切换。</summary>
+/// <summary>可选 Subagent 插件：install 后提供单一、默认开启的子代理能力，无档位选择。</summary>
 public sealed class SubagentPluginPackage : IPluginPackage
 {
     public const string PluginId = "workspace.subagents";
@@ -39,23 +39,14 @@ public sealed class SubagentPluginPackage : IPluginPackage
 
     private sealed class SubagentFactory : INativeSubagentFactory
     {
-        private SubagentTier _tier = SubagentTier.Faster;
-
         public INativeSubagentRuntime Create(IPureModelClient modelClient, IPureToolDispatcher capabilities,
             string? defaultModelId, string? workspaceRoot,
             IReadOnlyList<PureToolDefinition> capabilityDefinitions)
         {
             var runtime = new SubagentRuntime(modelClient, capabilities, defaultModelId, workspaceRoot,
                 capabilityDefinitions);
-            runtime.SetTier(_tier);
             _runtimes.Add(runtime);
             return runtime;
-        }
-
-        public void SetTier(SubagentTier tier)
-        {
-            _tier = tier;
-            foreach (var runtime in _runtimes) runtime.SetTier(tier);
         }
 
         public void Clear() => _runtimes.Clear();
@@ -71,7 +62,6 @@ public sealed class SubagentPluginPackage : IPluginPackage
         private readonly string? _workspaceRoot;
         private readonly IReadOnlyList<PureToolDefinition> _capabilityDefinitions;
         private SubagentRunner _runner;
-        private SubagentTier _tier = SubagentTier.Faster;
 
         public SubagentRuntime(IPureModelClient modelClient, IPureToolDispatcher capabilities,
             string? defaultModelId, string? workspaceRoot,
@@ -85,7 +75,6 @@ public sealed class SubagentPluginPackage : IPluginPackage
             _runner = CreateRunner();
         }
 
-        public SubagentTier Tier => _tier;
         public IPureToolDispatcher Inner => _capabilities;
         public bool IsActive => true;
         public Func<PureToolCall, CancellationToken, Task<bool>>? ApprovalGate
@@ -110,17 +99,8 @@ public sealed class SubagentPluginPackage : IPluginPackage
         }
         private Action<NativeSubagentProgress>? _progress;
 
-        public void SetTier(SubagentTier tier)
-        {
-            _tier = tier;
-            _runner.SetTier(tier);
-        }
-
-        public IPureToolDispatcher Wrap(IPureToolDispatcher inner)
-        {
-            _runner.SetTier(_tier);
-            return new SubagentDispatcher(inner, _runner);
-        }
+        public IPureToolDispatcher Wrap(IPureToolDispatcher inner) =>
+            new SubagentDispatcher(inner, _runner);
 
         public IReadOnlyList<NativeSubagentDescriptor> Agents =>
             _runner.Agents.Select(agent => new NativeSubagentDescriptor(

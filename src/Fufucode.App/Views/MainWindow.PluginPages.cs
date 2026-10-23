@@ -8,6 +8,8 @@ using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
+using Fufucode.Core.Plugins;
+using Fufucode.App.Views;
 
 namespace Fufucode.App;
 
@@ -15,6 +17,9 @@ public partial class MainWindow
 {
     /// <summary>由插件页自动注册的动作：pageId → actionId。纯代码贡献的页面也能进入统一动作面。</summary>
     private readonly Dictionary<string, string> _pluginPageActions = new(StringComparer.Ordinal);
+
+    internal PluginPackageManager? PluginManager => _pluginPageHost?.Manager;
+    internal ChatPage ChatPageForPlugins => _chatPage;
     /// <summary>
     /// 在共享外壳就绪后挂接可选插件页面。终端等页面不再由 App 静态创建：
     /// 插件未安装/未启用时页面不存在，动作会给出真实原因。
@@ -34,13 +39,17 @@ public partial class MainWindow
         PluginBootstrapper.EnsureBundled(new AppDataLayout(root));
         _pluginPageHost = new PluginWorkspacePageHost(root, _workbenchPages,
             () => _options.Mode == AppSessionMode.Mock);
+        _chatPage.ComposerPluginHost = new Features.Plugins.PluginComposerHost(this);
+        _pluginPageHost.ComposerContributionsChanged += _chatPage.RefreshComposerPluginMenu;
         // 浏览器页面由 workspace.browser 插件贡献；宿主只向插件暴露受控的页面工厂。
         var priorResolver = _pluginPageHost.Manager.ServiceResolver;
         _pluginPageHost.Manager.ServiceResolver = type =>
             type == typeof(IBrowserPageFactory) || type == typeof(ILibraryPageFactory) ||
             type == typeof(ILocalReviewPageFactory)
                 ? this
-                : priorResolver?.Invoke(type);
+                : type == typeof(Fufucode.Core.Plugins.IComputerUseCursorRegistry)
+                    ? _computerCursors
+                    : priorResolver?.Invoke(type);
         _pluginPageHost.PagesChanged += OnPluginPagesChanged;
         // 性能监控插件页需要宿主服务（页面工厂、设置注册），必须在 InitializeInstalledPlugins 之前接好。
         InitializePerformance(root);
@@ -103,6 +112,7 @@ public partial class MainWindow
         RenderDockPages();
         SyncPluginPageActions();
         _actions.RefreshCapabilities();
+        _chatPage.RefreshComposerPluginMenu();
         _customization.SetActions(_actions.Actions);
         _customization.NotifyPagesChanged();
         _perfWiring?.OnPluginsSynced();

@@ -209,7 +209,8 @@ if (Test-Path (Join-Path $browserOut 'runtimes')) { Remove-Item -LiteralPath (Jo
 # 可选资料库 / 本地审查插件：放进 plugins-dist，供插件市场安装；默认不播种、不激活。
 foreach ($plugin in @(
     @{ Id='workspace.library'; Project='src/Fufucode.Plugins.Library/Fufucode.Plugins.Library.csproj'; Dll='Fufucode.Plugins.Library.dll' },
-    @{ Id='workspace.local-review'; Project='src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj'; Dll='Fufucode.Plugins.LocalReview.dll' }
+    @{ Id='workspace.local-review'; Project='src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj'; Dll='Fufucode.Plugins.LocalReview.dll' },
+    @{ Id='tool.sketch'; Project='src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj'; Dll='Fufucode.Plugins.Sketch.dll' }
 )) {
     Write-Host "Publishing $($plugin.Id) plugin -> staging ..."
     $pluginOut = Join-Path $stagingApp "plugins-dist/$($plugin.Id)"

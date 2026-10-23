@@ -26,12 +26,31 @@
 - `src/Fufucode.Core/Plugins/PluginMarketplace.cs` 与 `manifest.json`
   - Computer Use 升级到 1.1.0，市场文案明确后台投递与前台显式升级。
 
+## 2026-10-23 混合路由、虚拟光标与并发分桶
+
+1. **混合路由（`route` 参数）**：
+   - `auto` + `background`：优先 CUA Driver 的严格窗口投递；Sky 契约上不支持后台，因此不冒充。
+   - `auto` + `foreground` / `visible`：优先 Sky 提高成功率，再 CUA，最后 Win32 前台兼容。
+   - 显式 `route=sky|cua|win32` 是固定路由，失败时不静默换栈；上层可读到真实错误后再决定。
+2. **虚拟光标 Overlay**：
+   - `ComputerUseVirtualCursorRegistry` 只保存 Agent 光标状态（坐标、颜色、按压态、目标窗口），不调用 `SendInput`、UIA 或任何输入 API。
+   - `ComputerCursorOverlayWindow` 是透明、置顶、`WS_EX_TRANSPARENT | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE` 的点击穿透层，铺满主屏，按 Agent 绘制箭头与名称胶囊。
+   - 首个光标出现时才创建，全部移除或窗口关闭时销毁；无头自测不创建真实窗口。
+   - 插件参数 `agentId` 存在且鼠标动作成功时更新光标；`screenX/screenY` 可给出全局屏幕坐标，缺省回退到窗口相对 `x/y`。
+   - 这实现的是“可见的多个虚拟光标”，不是第二个 Windows 系统指针；目标应用内部感知的指针位置仍由 UIA/窗口消息或前台输入决定。
+3. **并发分桶**：
+   - 后台输入锁键为 `input:window:{pid}:{wid}`，不同目标窗口可以并行；前台输入锁为 `input:foreground`，仍然全局串行，因为前台激活共享用户桌面焦点。
+   - 截图按目标窗口资源加锁，与输入锁分离。
+   - 真正完全隔离的多桌面并发仍应使用独立 VM / RDP Session；普通桌面上的多个 Overlay 光标不会隔离焦点与输入队列。
+
 ## 未验证项
 
 - 本机没有发现 `cua-driver` 可执行文件，因此未运行真实后台 UIA/PostMessage 投递。
 - 当前会话没有可用的 `node_repl`/Sky 宿主桥，未对 Sky 真实窗口执行输入。
 - 未对 Electron/Chromium、终端、Canvas、游戏和多显示器环境做实机覆盖。
 - 现有定向测试使用替身后端和旧 Win32 替身；真实桌面验收仍需在 CUA Driver 已安装且交互式 Session 运行时执行。
+- 虚拟光标 Overlay 只验证了状态同步与构建，未在真实多显示器/125% DPI/多 Agent 同时动作下做实机截图核对。
+- 后台按窗口分桶已由代码与闸门测试覆盖，但未用两个真实窗口并发执行 CUA 动作做端到端压力测试。
 
 ## 外部依据
 

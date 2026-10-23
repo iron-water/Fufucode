@@ -3,13 +3,6 @@ using System.Collections.Generic;
 
 namespace Fufucode.Core.Backend;
 
-/// <summary>用户手动选择的子代理档位。插件安装后固定默认为 Faster。</summary>
-public enum SubagentTier
-{
-    Faster,
-    Stronger,
-}
-
 public sealed record NativeSubagentDescriptor(string Name, string Description, string Mode);
 
 public sealed record NativeSubagentProgress(string JobId, string Agent, string Kind, string? Detail);
@@ -17,8 +10,6 @@ public sealed record NativeSubagentProgress(string JobId, string Agent, string K
 /// <summary>原生会话与可选 Subagent 插件之间的最小运行时契约。</summary>
 public interface INativeSubagentRuntime
 {
-    SubagentTier Tier { get; }
-    void SetTier(SubagentTier tier);
     IPureToolDispatcher Wrap(IPureToolDispatcher inner);
     IReadOnlyList<NativeSubagentDescriptor> Agents { get; }
     string BuildPromptSection();
@@ -43,8 +34,6 @@ public interface INativeSubagentFactory
         string? defaultModelId,
         string? workspaceRoot,
         IReadOnlyList<PureToolDefinition> capabilityDefinitions);
-
-    void SetTier(SubagentTier tier);
 }
 
 /// <summary>由 Subagent 插件在激活时注册；核心未安装插件时保持 null。</summary>
@@ -52,13 +41,6 @@ public static class NativeSubagentRegistry
 {
     private static readonly object Gate = new();
     private static INativeSubagentFactory? _factory;
-    private static SubagentTier _tier = SubagentTier.Faster;
-
-    public static SubagentTier Tier
-    {
-        get { lock (Gate) return _tier; }
-        set { lock (Gate) { _tier = value; _factory?.SetTier(value); } }
-    }
 
     public static INativeSubagentFactory? Factory
     {
@@ -71,7 +53,6 @@ public static class NativeSubagentRegistry
         lock (Gate)
         {
             _factory = factory;
-            _factory.SetTier(_tier);
         }
     }
 

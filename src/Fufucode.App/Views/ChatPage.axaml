@@ -183,7 +183,7 @@
                                                          Payload="{Binding Payload}" Margin="0,4"/>
                               </DataTemplate>
                               <DataTemplate DataType="vm:CodeSegmentViewModel" x:DataType="vm:CodeSegmentViewModel">
-                                <Border Classes="codeCard" Margin="0,4">
+                                <Border Classes="codeCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
                                   <StackPanel>
                                     <!-- 头部条：语言名 + 复制 -->
                                     <!-- UI-1：容器内结构划分用单向 1px 发丝细线（6% 白/黑），不用闭合框。 -->
@@ -200,7 +200,7 @@
                                       </DockPanel>
                                     </Border>
                                     <views:HighlightedCodeView Code="{Binding Code}" Language="{Binding Language}"
-                                                               MaxHeight="{Binding MaxHeight}" Margin="12,8" />
+                                                               IsExpanded="{Binding IsExpanded}" Margin="12,8" />
                                     <Button Classes="subtle" Content="{Binding ExpandLabel}"
                                             Command="{Binding ToggleExpandCommand}"
                                             Click="OnBlockLayoutToggled"
@@ -232,10 +232,11 @@
                                             IsVisible="{Binding IsCollapsed}"/>
                                 </StackPanel>
                               </Button>
-                              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="10,0,10,10"
-                                         Classes="caption"
-                                         Foreground="{DynamicResource AppTextSecondary}"
-                                         IsVisible="{Binding IsExpanded}"/>
+                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="10,0,10,10"
+                                           Classes="caption"
+                                           Foreground="{DynamicResource AppTextSecondary}"/>
+                              </views:CollapsiblePanel>
                             </StackPanel>
                           </Border>
                         </DataTemplate>
@@ -261,17 +262,11 @@
                               <TextBlock Classes="meta mono" Text="{Binding LatestHint, StringFormat='  └ {0}'}"
                                          TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                          Margin="30,0,12,6" IsVisible="{Binding HasHint}"/>
-                              <ItemsControl ItemsSource="{Binding Tools}" IsVisible="{Binding IsExpanded}"
-                                            Opacity="{Binding IsExpanded, Converter={StaticResource BoolToOpacity}}"
-                                            Margin="0,0,0,6">
-                                <ItemsControl.Transitions>
-                                  <Transitions>
-                                    <DoubleTransition Property="Opacity" Duration="0:0:0.16"/>
-                                  </Transitions>
-                                </ItemsControl.Transitions>
+                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="0,0,0,6">
+                              <ItemsControl ItemsSource="{Binding Tools}">
                                 <ItemsControl.DataTemplates>
                                   <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                                    <Border Classes="toolCard" Margin="10,3">
+                                    <Border Classes="toolCard" Margin="10,3" Loaded="OnTransientBlockLoaded">
                                       <StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,7,12,3">
                                           <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold"
@@ -311,13 +306,14 @@
                                   </DataTemplate>
                                 </ItemsControl.DataTemplates>
                               </ItemsControl>
+                              </views:CollapsiblePanel>
                             </StackPanel>
                           </Border>
                         </DataTemplate>
 
                         <!-- 工具卡片（未分组的单次调用） -->
                         <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                          <Border Classes="toolCard" Margin="0,4">
+                          <Border Classes="toolCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
                             <StackPanel>
                               <!-- 头部行：wrench + 工具名 + 状态徽章 -->
                               <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8,12,4">
@@ -412,14 +408,9 @@
                   </Border>
                   <!-- 回合结束的变更总结卡（对齐 Codex）：文件数、增删行、查看与撤销。 -->
                   <Panel IsVisible="{DynamicResource UiShowChangeSummary}">
-                    <Border Classes="changeCard" IsVisible="{Binding ChangeCard.HasChanges}" Margin="0,8,0,0"
-                            Opacity="{Binding ChangeCard.HasChanges, Converter={StaticResource BoolToOpacity}}"
+                    <views:CollapsiblePanel IsExpanded="{Binding ChangeCard.HasChanges}" Margin="0,8,0,0">
+                    <Border Classes="changeCard"
                             AutomationProperties.AutomationId="MSG-TURN-CHANGE-CARD">
-                      <Border.Transitions>
-                        <Transitions>
-                          <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
-                        </Transitions>
-                      </Border.Transitions>
                       <StackPanel>
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,10,12,8" ColumnSpacing="10">
                           <Border Grid.Column="0" Classes="changeIcon" Width="28" Height="28" CornerRadius="8">
@@ -493,8 +484,11 @@
                                    IsVisible="{Binding ChangeCard.HasUndoFeedback}" Margin="12,0,12,8"/>
                       </StackPanel>
                     </Border>
+                    </views:CollapsiblePanel>
                   </Panel>
-                  <views:MessageActionsView IsVisible="{Binding ShowMetaCard}"/>
+                  <views:CollapsiblePanel IsExpanded="{Binding ShowMetaCard}">
+                    <views:MessageActionsView/>
+                  </views:CollapsiblePanel>
                   </StackPanel>
                 </Grid>
               </DataTemplate>
@@ -530,9 +524,16 @@
 
         <!-- 回到最新：浮动 pill + 阴影（阴影挂在包裹层，Button 无 BoxShadow）。
              靠右放置，避免压住居中排版的正文。 -->
-        <Border Grid.Column="1" IsVisible="{Binding Timeline.ShowBackToLatest}" CornerRadius="{DynamicResource AppCornerPill}"
+        <Border Grid.Column="1" CornerRadius="{DynamicResource AppCornerPill}"
+                Opacity="{Binding Timeline.ShowBackToLatest, Converter={StaticResource BoolToOpacity}}"
+                IsHitTestVisible="{Binding Timeline.ShowBackToLatest}"
                 BoxShadow="{DynamicResource FluentPillShadow}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,10">
+          <Border.Transitions>
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
+            </Transitions>
+          </Border.Transitions>
         <Button x:Name="BackToLatestButton" Classes="backToLatest"
                 Command="{Binding Timeline.ScrollToLatestSmoothCommand}">
           <StackPanel Orientation="Horizontal" Spacing="6">

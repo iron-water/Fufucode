@@ -25,6 +25,9 @@ public partial class ChatPage : UserControl
 
     /// <summary>已经播放过进入动画的条目。虚拟化在滚动时会重建容器，不能重复播放。</summary>
     private readonly System.Collections.Generic.HashSet<string> _animatedEntries = new(StringComparer.Ordinal);
+
+    /// <summary>输入区可见性是否已经初始化过；首次应用外观不播动画。</summary>
+    private bool _composerVisibilityInitialized;
     private long _programmaticUntilTicks;
     private long _lastUserInputTicks;
     private MainViewModel? _attachedViewModel;
@@ -70,6 +73,7 @@ public partial class ChatPage : UserControl
                 // 富内容插件只拿到这两个窄回调：提交一段文本、填入输入框。
                 PluginContentBridge.SubmitAsync = text => vm.Input.SubmitExternalAsync(text);
                 PluginContentBridge.InsertDraft = text => vm.Input.DraftText = text;
+                RefreshComposerPluginMenu();
                 RefreshComposerTools();
             }
         };
@@ -118,8 +122,9 @@ public partial class ChatPage : UserControl
     /// <summary>沉浸式模式下展开被收起的输入区，并把焦点交给输入框。</summary>
     private void OnExpandComposer(object? sender, RoutedEventArgs e)
     {
-        ComposerCard.IsVisible = true;
-        ComposerRevealButton.IsVisible = false;
+        _composerVisibilityInitialized = true;
+        Motion.SetVisible(ComposerCard, true, offsetY: 8);
+        Motion.SetVisible(ComposerRevealButton, false);
         InputBox.Focus();
         if (DataContext is MainViewModel { Timeline.IsAtBottom: true })
             TimelineScroller.ScrollToEnd();
@@ -202,6 +207,14 @@ public partial class ChatPage : UserControl
             if (atBottom) ScrollToEnd();
             else TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, offset);
         }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>流式过程中新出现的工具卡：轻微淡入，避免突然插入。</summary>
+    private void OnTransientBlockLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control) return;
+        control.Loaded -= OnTransientBlockLoaded;
+        Motion.AnimateIn(control, offsetY: 3, Motion.FastDuration);
     }
 
     private void UpdateComposerToolbar()
@@ -418,6 +431,15 @@ public partial class ChatPage : UserControl
 
         if (DataContext is MainViewModel vm)
         {
+            // RelayCommand.Execute 不检查 CanExecute；空白输入必须在这里拦住，
+            // 否则回车会直接发出一个空消息。
+            var steering = e.KeyModifiers.HasFlag(KeyModifiers.Control) && vm.Input.IsTurnActive;
+            if (steering ? !vm.Input.CanSteer : !vm.Input.CanSend)
+            {
+                e.Handled = true;
+                return;
+            }
+
             // P2-17：Ctrl+Enter —— 运行中插入（steer），空闲等同普通发送（Immediate）；
             // 与普通 Enter 经过同一个 ImeEnterGuard（组合中不会走到这里）。
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))

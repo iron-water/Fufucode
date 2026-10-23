@@ -394,8 +394,85 @@ internal static class PureCSharpContractTests
             checks.Check(loopPruned.Contains("使用 offset:"),
                 "续读提示不被循环层 64KiB 二次截断");
 
+            // 单行超过整读上限：不能返回“前 0 行 + offset 1”造成无限重试；
+            // 分页读取时单行也必须截断并标注，保证游标前进且不撑爆上下文。
+            var giantLineFile = Path.Combine(tempDir, "GiantLine.txt");
+            await File.WriteAllTextAsync(giantLineFile, new string('x', 60_000));
+            var giantRead = await dispatcher.DispatchAsync(new PureToolCall("r_giant", "read_file",
+                "{\"path\":\"GiantLine.txt\"}"));
+            checks.Check(!giantRead.Success && giantRead.Content.Contains("offset/limit"),
+                "单行超过整读上限时明确要求分页，而不是返回空页");
+            var giantPaged = await dispatcher.DispatchAsync(new PureToolCall("r_giant_page", "read_file",
+                "{\"path\":\"GiantLine.txt\",\"offset\":1,\"limit\":1}"));
+            checks.Check(giantPaged.Success && giantPaged.Content.Contains("已截断") &&
+                         giantPaged.Content.Length < 10_000,
+                "分页读取超长单行时截断并标注，游标仍可前进");
+
             var offsetHint = System.Text.RegularExpressions.Regex.Match(longRead.Content, @"使用 offset: (\d+)");
             checks.Check(offsetHint.Success, "截断提示包含具体的下一段 offset");
+
+            // ════════════════ 行选区（OMP 风格）与批量编辑（Pi 风格） ════════════════
+            var selectFile = Path.Combine(tempDir, "Select.txt");
+            await File.WriteAllTextAsync(selectFile,
+                string.Join('\n', Enumerable.Range(1, 50).Select(i => $"line{i}")));
+            var selected = await dispatcher.DispatchAsync(new PureToolCall("sel1", "read_file",
+                "{\"path\":\"Select.txt:10-12\"}"));
+            checks.Check(selected.Success && selected.Content.Contains("10\tline10") &&
+                         selected.Content.Contains("12\tline12") && !selected.Content.Contains("13\tline13"),
+                "read_file 支持 A-B 行选区且不越界");
+            var lastLines = await dispatcher.DispatchAsync(new PureToolCall("sel2", "read_file",
+                "{\"path\":\"Select.txt:-5\"}"));
+            checks.Check(lastLines.Success && lastLines.Content.Contains("46\tline46") &&
+                         lastLines.Content.Contains("50\tline50"), "read_file 支持 -N 读取末尾");
+            var withContext = await dispatcher.DispatchAsync(new PureToolCall("sel3", "read_file",
+                "{\"path\":\"Select.txt:3+2\"}"));
+            checks.Check(withContext.Success && withContext.Content.Contains("3\tline3") &&
+                         withContext.Content.Contains("5\tline5") && !withContext.Content.Contains("6\tline6"),
+                "read_file 支持 A+C 选区");
+            var ambiguous = await dispatcher.DispatchAsync(new PureToolCall("sel4", "read_file",
+                "{\"path\":\"Select.txt:10-12\",\"offset\":1}"));
+            checks.Check(!ambiguous.Success && ambiguous.Content.Contains("不能与 offset/limit"),
+                "行选区与 offset/limit 同时出现时明确拒绝");
+
+            var batchFile = Path.Combine(tempDir, "Batch.cs");
+            await File.WriteAllTextAsync(batchFile, "alpha\nbeta\ngamma\n");
+            var batchEdit = await dispatcher.DispatchAsync(new PureToolCall("be1", "edit_file",
+                "{\"path\":\"Batch.cs\",\"edits\":[" +
+                "{\"old_string\":\"alpha\",\"new_string\":\"ALPHA\"}," +
+                "{\"old_string\":\"gamma\",\"new_string\":\"GAMMA\"}]}"));
+            var batchText = await File.ReadAllTextAsync(batchFile);
+            checks.Check(batchEdit.Success && batchText.Contains("ALPHA") && batchText.Contains("GAMMA"),
+                "edits 数组一次提交多条编辑");
+
+            await File.WriteAllTextAsync(batchFile, "alpha\nbeta\ngamma\n");
+            var overlap = await dispatcher.DispatchAsync(new PureToolCall("be2", "edit_file",
+                "{\"path\":\"Batch.cs\",\"edits\":[" +
+                "{\"old_string\":\"alpha\\nbeta\",\"new_string\":\"x\"}," +
+                "{\"old_string\":\"beta\",\"new_string\":\"y\"}]}"));
+            checks.Check(!overlap.Success && overlap.Content.Contains("重叠") &&
+                         (await File.ReadAllTextAsync(batchFile)).Contains("alpha\nbeta"),
+                "重叠编辑被拒绝且文件保持原样");
+
+            var atomic = await dispatcher.DispatchAsync(new PureToolCall("be3", "edit_file",
+                "{\"path\":\"Batch.cs\",\"edits\":[" +
+                "{\"old_string\":\"alpha\",\"new_string\":\"ALPHA\"}," +
+                "{\"old_string\":\"missing\",\"new_string\":\"x\"}]}"));
+            checks.Check(!atomic.Success && (await File.ReadAllTextAsync(batchFile)).StartsWith("alpha"),
+                "批量编辑任一条失败时整体不写盘");
+
+            var grepIndexFile = Path.Combine(tempDir, "IndexGrep.txt");
+            await File.WriteAllTextAsync(grepIndexFile, "needle one");
+            var firstGrep = await dispatcher.DispatchAsync(new PureToolCall("gi1", "grep_search",
+                "{\"pattern\":\"NEEDLE\",\"glob\":\"IndexGrep.txt\"}"));
+            checks.Check(firstGrep.Success && firstGrep.Content.Contains("needle one"),
+                "字面量检索大小写不敏感并命中索引文件");
+            await dispatcher.DispatchAsync(new PureToolCall("gi2", "write_file",
+                "{\"path\":\"IndexGrep.txt\",\"content\":\"needle two\"}"));
+            var secondGrep = await dispatcher.DispatchAsync(new PureToolCall("gi3", "grep_search",
+                "{\"pattern\":\"needle\",\"glob\":\"IndexGrep.txt\"}"));
+            checks.Check(secondGrep.Success && secondGrep.Content.Contains("needle two") &&
+                         !secondGrep.Content.Contains("needle one"),
+                "写文件后工作区索引失效，下一次 grep 看到新内容");
             var nextOffset = int.Parse(offsetHint.Groups[1].Value);
             var longContinue = await dispatcher.DispatchAsync(new PureToolCall("r_long2", "read_file",
                 $"{{\"path\":\"Long.cs\",\"offset\":{nextOffset},\"limit\":5000}}"));
@@ -858,9 +935,8 @@ internal static class PureCSharpContractTests
             var subagentCall = await subagentDispatcher.DispatchAsync(new PureToolCall("sa2", "subagent",
                 "{\"agent\":\"explore\",\"prompt\":\"查找入口\"}"));
             checks.Check(subagentCall.Success && subagentCall.Content.Contains("[子代理 explore · read") &&
-                         subagentCall.Content.Contains("faster") &&
                          subagentCall.Content.Contains("子代理完成"),
-                "subagent 工具调用返回带模式与档位标记的结论");
+                "subagent 工具调用返回带模式标记的结论");
 
             checks.Check(NativeSubagentContract.Definition.Name == "subagent" &&
                          NativeSubagentContract.Definition.ParametersJsonSchema.Contains("prompt"),
@@ -978,32 +1054,19 @@ internal static class PureCSharpContractTests
             {
                 Progress = nestedProgress.Add
             };
-            nestedRunner.SetTier(SubagentTier.Stronger);
             var nestedResult = await nestedRunner.RunAsync("lead", "开始", null, CancellationToken.None);
             checks.Check(nestedResult.Success &&
                          nestedProgress.Count(p => p.Kind == "started") >= 2,
                 "read 子代理在 maxDepth 内可继续派生只读子代理");
-            checks.Equal(SubagentTier.Stronger, nestedResult.Tier, "子代理结果标注实际档位");
-
-            // stronger 必须对内置 explore 开箱生效：旧实现要求代理定义显式声明 subagent，
-            // 内置代理都没有声明，导致切换档位没有任何实际效果。
-            var builtinNestedCapturing = new CapturingTextClient("内置嵌套完成");
+            // 嵌套不再是档位自动能力：只有代理定义显式声明 subagent 才开放。
+            // 内置 explore 默认不声明，保证默认子代理轻量、不会意外递归派发。
+            var builtinNestedCapturing = new CapturingTextClient("内置完成");
             var builtinNestedRunner = new SubagentRunner(
                 AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
                 builtinNestedCapturing, new RecordingDispatcher(), "m", tempDir, depth: 0, maxDepth: 1);
-            builtinNestedRunner.SetTier(SubagentTier.Stronger);
             await builtinNestedRunner.RunAsync("explore", "检查入口", null, CancellationToken.None);
-            checks.Check(builtinNestedCapturing.Requests[0].ToolNames.Contains("subagent"),
-                "stronger 档位下内置 explore 自动获得嵌套派发能力");
-
-            var fasterNestedCapturing = new CapturingTextClient("faster 完成");
-            var fasterNestedRunner = new SubagentRunner(
-                AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
-                fasterNestedCapturing, new RecordingDispatcher(), "m", tempDir, depth: 0, maxDepth: 1);
-            fasterNestedRunner.SetTier(SubagentTier.Faster);
-            await fasterNestedRunner.RunAsync("explore", "检查入口", null, CancellationToken.None);
-            checks.Check(!fasterNestedCapturing.Requests[0].ToolNames.Contains("subagent"),
-                "faster 档位不声明嵌套 subagent，保持轻量");
+            checks.Check(!builtinNestedCapturing.Requests[0].ToolNames.Contains("subagent"),
+                "默认 explore 不声明嵌套 subagent，保持轻量");
 
             // 轮次耗尽必须如实标注，不能把半成品当完整交付。
             var truncatedCall = new PureToolCall("trunc1", "read_file", "{\"path\":\"sample.txt\"}");

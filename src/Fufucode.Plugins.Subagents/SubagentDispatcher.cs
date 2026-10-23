@@ -130,9 +130,7 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
 
         var mode = result.Mode == SubagentMode.Patch ? "patch" : "read";
         var builder = new StringBuilder();
-        builder.Append("[子代理 ").Append(result.AgentName).Append(" · ").Append(mode);
-        if (result.Tier is { } tier) builder.Append(" · ").Append(tier.ToString().ToLowerInvariant());
-        builder.Append(']')
+        builder.Append("[子代理 ").Append(result.AgentName).Append(" · ").Append(mode).Append(']')
             .Append("（工具调用 ").Append(result.ToolCalls).Append(" 次");
         if (result.DurationMs is { } duration) builder.Append("，").Append(duration).Append(" ms");
         builder.AppendLine("）");
