@@ -1334,10 +1334,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
     private void ShowStartup(string message, bool inProgress)
     {
-        ReturnStartupPlugins();
         StartupText.Text = message;
         StartupProgress.IsVisible = inProgress;
-        StartupLocalPluginsButton.IsVisible = !inProgress;
         // 失败态（非进行中）显示 interrupted 空态插画；进行中保持原标识。
         StartupArt.IsVisible = !inProgress;
         // 进行中态不显示“打开其他项目…”；失败态由各自 catch 分支决定。
@@ -1708,7 +1706,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         }
         _closed = true;
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Stop();
-        _speech.Dispose();
+        // 语音服务归插件所有：窗口只解除状态广播订阅，进程由插件管理器在停用时释放。
+        Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
         // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
         await ShutdownReverseLabAsync();
         await CloseSideChatAsync();

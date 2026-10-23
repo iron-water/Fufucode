@@ -38,32 +38,6 @@ public partial class MainWindow
     // 新的真实窗口即使还在bootstrap阶段也会发连接事件；此时插件组合尚未完成。
     private void NotifyLocalPluginHostChanged() => _localPluginViewModel?.NotifyHostChanged();
 
-    private void StartupLocalPlugins_Click(object? sender, RoutedEventArgs e)
-    {
-        if (_closed || !StartupOverlay.IsVisible || StartupProgress.IsVisible ||
-            !StartupLocalPluginsButton.IsVisible || StartupPluginPanel.IsVisible) return;
-        // 同一控件、目录与VM；不创建演示会话，也不重新启动失败的引擎。
-        StartupPluginHost.Content = _extensionsPage.TakeLocalPlugins();
-        StartupSummary.IsVisible = false;
-        StartupPluginPanel.IsVisible = true;
-        StartupPluginReturnButton.Focus();
-    }
-
-    private void StartupPluginReturn_Click(object? sender, RoutedEventArgs e)
-    {
-        ReturnStartupPlugins();
-        StartupLocalPluginsButton.Focus();
-    }
-
-    private void ReturnStartupPlugins()
-    {
-        if (!StartupPluginPanel.IsVisible) return;
-        StartupPluginHost.Content = null;
-        _extensionsPage.RestoreLocalPlugins();
-        StartupPluginPanel.IsVisible = false;
-        StartupSummary.IsVisible = true;
-    }
-
     private sealed class LocalPluginStoragePicker(Control owner) : ILocalPluginPicker
     {
         public async Task<string?> PickPluginDirectoryAsync(CancellationToken cancellationToken = default)

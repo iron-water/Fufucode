@@ -61,6 +61,10 @@ public partial class MainWindow
             _pluginPageHost.Manager.RequestPageResync();
         }
         _pluginPageHost.Start(_layoutContext);
+        // 语音服务没有页面贡献，页面事件不会通知宿主；改用全局插件状态广播，
+        // 安装/启用/停用/卸载后立即刷新朗读按钮、菜单与设置面板。
+        PluginStateNotifier.Changed += OnPluginStateChanged;
+        SyncSpeechService();
         SyncTerminalPageReference();
         SyncPerformanceSettings();
         PruneDockLayout();
@@ -102,6 +106,15 @@ public partial class MainWindow
                 HideWhenUnavailable: true));
             _pluginPageActions[page.PageId] = actionId;
         }
+    }
+
+    /// <summary>插件状态广播可能来自非 UI 线程（设置页安装、命令行部署），投影前统一切回 UI 线程。</summary>
+    private void OnPluginStateChanged()
+    {
+        if (_closed) return;
+        // 插件的激活/停用由管理器在同一广播里同步执行；排队到下一拍再投影，
+        // 保证读到的是本次变更后的真实服务，而不是变更前的快照。
+        Dispatcher.UIThread.Post(() => { if (!_closed) SyncSpeechService(); });
     }
 
     private void OnPluginPagesChanged()
