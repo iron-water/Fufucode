@@ -306,6 +306,14 @@ public sealed class RemoteControlServer : IAsyncDisposable
             return;
         }
 
+        if (path == "/api/service-info")
+        {
+            await WriteResponseAsync(stream, request, 200,
+                RemoteWire.Serialize(new { service = "remote-control", version = "1", capabilities = new[] { "session-ui", "websocket", "approvals", "session-directory" } }),
+                cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         if (path == "/api/pair")
         {
             await HandlePairAsync(connection, stream, request, cancellationToken).ConfigureAwait(false);

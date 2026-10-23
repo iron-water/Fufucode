@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Fufucode.Core.RemoteControl;
 
 namespace Fufucode.App.Features.RemoteControl;
@@ -678,6 +679,29 @@ button:disabled { opacity:.45; cursor:default; }
             ["/app.css"] = RemoteWebAsset.Text("text/css; charset=utf-8", AppCss),
             ["/app.js"] = RemoteWebAsset.Text("text/javascript; charset=utf-8", AppJs),
         };
+        AddWorkbenchAssets();
+    }
+
+    private void AddWorkbenchAssets()
+    {
+        var roots = new[]
+        {
+            Path.Combine(AppContext.BaseDirectory, "extensions", "browser-extension-mv3", "workbench"),
+            Path.Combine(Environment.CurrentDirectory, "extensions", "browser-extension-mv3", "workbench"),
+            Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "extensions", "browser-extension-mv3", "workbench"),
+        };
+        foreach (var root in roots)
+        {
+            var html = Path.Combine(root, "index.html");
+            var css = Path.Combine(root, "workbench.css");
+            var js = Path.Combine(root, "workbench.js");
+            if (!File.Exists(html) || !File.Exists(css) || !File.Exists(js)) continue;
+            _assets["/workbench"] = new RemoteWebAsset("text/html; charset=utf-8", File.ReadAllBytes(html));
+            _assets["/workbench/index.html"] = _assets["/workbench"];
+            _assets["/workbench/workbench.css"] = new RemoteWebAsset("text/css; charset=utf-8", File.ReadAllBytes(css));
+            _assets["/workbench/workbench.js"] = new RemoteWebAsset("text/javascript; charset=utf-8", File.ReadAllBytes(js));
+            break;
+        }
     }
 
     /// <summary>内嵌页面是否只引用自身资源（无外部 CDN，离线局域网可用）。</summary>
