@@ -5,6 +5,31 @@
              x:DataType="vm:NotificationCenterViewModel"
              AutomationProperties.Name="通知功能页">
   <UserControl.Styles>
+    <!-- 卡片化的通知列表：每一条通知自成一张消息卡，与 Windows 通知设置的卡片层级一致。 -->
+    <Style Selector="Border.notificationCard">
+      <Setter Property="Padding" Value="12,10"/>
+    </Style>
+    <Style Selector="Border.notificationGlyph">
+      <Setter Property="Width" Value="28"/>
+      <Setter Property="Height" Value="28"/>
+      <Setter Property="CornerRadius" Value="14"/>
+      <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+    </Style>
+    <Style Selector="Border.notificationGlyph TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Ellipse.unreadDot">
+      <Setter Property="Width" Value="6"/>
+      <Setter Property="Height" Value="6"/>
+      <Setter Property="Fill" Value="{DynamicResource AppAccent}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Border.notificationEmptyCard">
+      <Setter Property="Padding" Value="16"/>
+      <Setter Property="MinHeight" Value="132"/>
+    </Style>
     <Style Selector="TextBlock.notificationCompleted"><Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/></Style>
     <Style Selector="TextBlock.notificationFailed"><Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/></Style>
     <Style Selector="TextBlock.notificationApproval"><Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/></Style>
@@ -30,37 +55,81 @@
                   MinHeight="28" Padding="10,2" Command="{Binding SetFilterCommand}" CommandParameter="actionable"/>
         </StackPanel>
         <Border x:Name="ChannelPrompt" IsVisible="False" Margin="12,0,12,0" Padding="10"
-                Background="{DynamicResource AppAccentSubtle}" AutomationProperties.Name="通知页提醒">
+                Classes="card" Background="{DynamicResource AppAccentSubtle}" AutomationProperties.Name="通知页提醒">
           <TextBlock x:Name="ChannelPromptText" Classes="caption" TextWrapping="Wrap"/>
         </Border>
       </StackPanel>
       <Grid Grid.Row="2" MinHeight="80">
         <ScrollViewer HorizontalScrollBarVisibility="Disabled">
-          <ItemsControl ItemsSource="{Binding FilteredItems}" Margin="16,0,16,8">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="vm:NotificationItemViewModel">
-                <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="0,12">
-                  <Grid ColumnDefinitions="24,*" ColumnSpacing="8">
-                    <TextBlock Classes="bodyStrong" Classes.notificationCompleted="{Binding IsCompleted}"
-                               Classes.notificationFailed="{Binding IsFailed}" Classes.notificationApproval="{Binding IsApproval}"
-                               Text="{Binding Glyph}" VerticalAlignment="Top"/>
-                    <StackPanel Grid.Column="1" Spacing="6">
-                      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                        <TextBlock Classes="bodyStrong" Text="{Binding Title}" TextWrapping="Wrap"/>
-                        <TextBlock Grid.Column="1" Classes="caption" Text="{Binding TimeText}"/>
-                      </Grid>
-                      <TextBlock Classes="caption" Text="{Binding Message}" TextWrapping="Wrap"/>
-                      <TextBlock Classes="caption mono" Text="{Binding SessionId}" TextTrimming="CharacterEllipsis"/>
-                      <TextBlock Classes="caption" Text="需操作" IsVisible="{Binding RequiresAction}"/>
-                      <Button Classes="subtle" Content="{Binding RouteLabel}" Click="Activate_Click" HorizontalAlignment="Left" MinHeight="32"/>
-                    </StackPanel>
-                  </Grid>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <StackPanel Margin="16,0,16,8" Spacing="8">
+            <!-- 概览卡：一行交代未读 / 待处理 / 总数，没有通知时不占位。 -->
+            <Border Classes="card" Padding="12,10" IsVisible="{Binding HasItems}">
+              <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" AutomationProperties.Name="通知概览">
+                <StackPanel Spacing="1">
+                  <TextBlock Classes="bodyStrong" FontSize="18" Text="{Binding UnreadCount}"/>
+                  <TextBlock Classes="caption" Text="未读"/>
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="1">
+                  <TextBlock Classes="bodyStrong" FontSize="18" Text="{Binding PendingActionCount}"/>
+                  <TextBlock Classes="caption" Text="待处理"/>
+                </StackPanel>
+                <StackPanel Grid.Column="2" Spacing="1">
+                  <TextBlock Classes="bodyStrong" FontSize="18" Text="{Binding TotalCount}"/>
+                  <TextBlock Classes="caption" Text="全部"/>
+                </StackPanel>
+              </Grid>
+            </Border>
+            <ItemsControl ItemsSource="{Binding FilteredItems}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <StackPanel Spacing="8"/>
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:NotificationItemViewModel">
+                  <Border Classes="card notificationCard" AutomationProperties.Name="{Binding Title}">
+                    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
+                      <Border Classes="notificationGlyph">
+                        <TextBlock Classes="bodyStrong" Classes.notificationCompleted="{Binding IsCompleted}"
+                                   Classes.notificationFailed="{Binding IsFailed}" Classes.notificationApproval="{Binding IsApproval}"
+                                   Text="{Binding Glyph}"/>
+                      </Border>
+                      <StackPanel Grid.Column="1" Spacing="6">
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                          <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <Ellipse Classes="unreadDot" IsVisible="{Binding !IsRead}"/>
+                            <TextBlock Classes="bodyStrong" Text="{Binding Title}" TextWrapping="Wrap"/>
+                          </StackPanel>
+                          <TextBlock Grid.Column="1" Classes="caption" Text="{Binding TimeText}" VerticalAlignment="Center"/>
+                        </Grid>
+                        <TextBlock Classes="caption" Text="{Binding Message}" TextWrapping="Wrap"/>
+                        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                          <TextBlock Classes="caption mono" Text="{Binding SessionId}" TextTrimming="CharacterEllipsis"
+                                     VerticalAlignment="Center"/>
+                          <Border Grid.Column="1" Classes="badge attention" IsVisible="{Binding RequiresAction}"
+                                  VerticalAlignment="Center">
+                            <TextBlock Text="需操作"/>
+                          </Border>
+                        </Grid>
+                        <Button Classes="subtle" Content="{Binding RouteLabel}" Click="Activate_Click"
+                                HorizontalAlignment="Left" MinHeight="30"/>
+                      </StackPanel>
+                    </Grid>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <!-- 空状态也放在卡片里，保持“通知区 = 卡片区”的层级。 -->
+            <Border Classes="card notificationEmptyCard" IsVisible="{Binding !HasVisibleItems}"
+                    AutomationProperties.Name="通知空状态">
+              <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="6">
+                <TextBlock Classes="bodyStrong" Text="{Binding FilteredEmptyText}" HorizontalAlignment="Center"/>
+                <TextBlock Classes="caption" Text="完成、失败与待审批会逐条出现在这里。" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" MaxWidth="280"/>
+              </StackPanel>
+            </Border>
+          </StackPanel>
         </ScrollViewer>
-        <TextBlock Classes="caption" Text="{Binding FilteredEmptyText}" IsVisible="{Binding !HasVisibleItems}" Margin="16,16"/>
       </Grid>
       <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
         <StackPanel Spacing="8">

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Fufucode.App.Infrastructure;
+using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 
 namespace Fufucode.App;
@@ -24,6 +25,9 @@ public partial class MainWindow
     private void InitializeNotificationDelivery()
     {
         var root = Program.SelfTestMode ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata") : _options.CreateAppDataLayout().Root;
+        // “始终允许”规则跟随同一个数据根：自测/审阅构建不会读写用户的真实规则。
+        Integration.ApprovalPolicy.Configure(root);
+        if (!Program.SelfTestMode) Infrastructure.WindowsToastService.EnsureProtocolRegistration();
         _notificationDelivery = new(new NotificationDeliveryPreferencesStore(root));
         _notificationDelivery.Changed += RefreshNotificationChannel;
         _settingsPage.AttachNotificationDelivery(_notificationDelivery);
@@ -82,6 +86,38 @@ public partial class MainWindow
         finally { _notificationDeliveryRefreshing = false; }
     }
 
+    /// <summary>
+    /// 系统通知上的三个按钮：允许 / 始终允许 / 拒绝。
+    /// 按钮以协议激活回本应用，链接携带请求 Id、会话与决定；只有仍挂起的同一请求会被应答。
+    /// </summary>
+    internal IReadOnlyList<WindowsToastAction> WindowsActionsFor(NotificationItemViewModel notice)
+    {
+        if (!notice.IsToolApproval) return [];
+        var project = _host?.ProjectPath;
+        // mock/自测会话没有真实 Guid：生成不了可回跳的链接就不放按钮，避免点了没有反应。
+        var allow = Integration.ApprovalLink.TryCreate(notice.RequestId, notice.SessionId, Integration.ApprovalDecision.Allow, project);
+        var always = Integration.ApprovalLink.TryCreate(notice.RequestId, notice.SessionId, Integration.ApprovalDecision.AlwaysAllow, project);
+        var deny = Integration.ApprovalLink.TryCreate(notice.RequestId, notice.SessionId, Integration.ApprovalDecision.Deny, project);
+        if (allow is null || always is null || deny is null) return [];
+        return [new("允许", allow), new("始终允许", always), new("拒绝", deny)];
+    }
+
+    /// <summary>
+    /// 系统通知正文：工具审批要带上被批准的原始命令，否则“允许/始终允许”是盲签。
+    /// 正文过长时截断，完整内容仍在会话页内的审批弹窗里。
+    /// </summary>
+    private string ForwardableMessage(NotificationItemViewModel notice)
+    {
+        if (!notice.IsToolApproval || _dialogHost is null) return notice.Message;
+        var request = (_dialogHost.PendingRequestFor(notice.RequestId!) ?? _sideDialogHost?.PendingRequestFor(notice.RequestId!));
+        if (request is not { } pending) return notice.Message;
+        var detail = ApprovalPolicy.DetailOf(pending);
+        if (string.IsNullOrWhiteSpace(detail)) return notice.Message;
+        const int limit = 240;
+        var text = detail.Length > limit ? detail[..limit] + "…" : detail;
+        return notice.Message + "\n" + text;
+    }
+
     private async Task DeliverWindowsNoticeAsync(NotificationItemViewModel notice)
     {
         WindowsToastResult result;
@@ -89,8 +125,9 @@ public partial class MainWindow
         {
             result = WindowsNoticeDeliveryForTesting is { } test ? await test(notice) : Program.SelfTestMode
                 ? new WindowsToastResult(false, "自测不投递系统通知，已回退应用内提醒")
-                : await WindowsToastService.SendAsync(notice.Key, notice.Title, notice.Message,
-                    _host is null ? null : Integration.SessionDeepLink.Create(notice.SessionId, _host.ProjectPath));
+                : await WindowsToastService.SendAsync(notice.Key, notice.Title, ForwardableMessage(notice),
+                    _host is null ? null : Integration.SessionDeepLink.Create(notice.SessionId, _host.ProjectPath),
+                    WindowsActionsFor(notice));
         }
         catch (Exception error) { result = new(false, "系统通知未送达，已回退应用内提示：" + error.GetBaseException().Message); }
         if (_closed || !_windowsNoticeKeys.Contains(notice.Key)) return;
