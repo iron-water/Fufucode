@@ -864,3 +864,12 @@ EAD
 3. edit_file 增加 `edits[]` 批量（最多 20 条）：所有锚点先对原始文件求值、检测区间重叠，再从后往前应用；任一条失败整体不写盘；单条 old_string/new_string 保持兼容。语义对齐 Pi 的批量编辑，不引入 Codex/DSH 的 patch 文本格式。
 4. 对比结论：Claude Code 是精确唯一 + 先读；Codex 是上下文行 apply_patch、多文件 hunk；DSH 生态用 Codex 兼容 apply_patch 替换原生 edit，强调失败原子与回滚；Pi 是 oldText 精确唯一 + 同调用多条对原文匹配；OMP 的 read 用路径选行 + 50 KiB/3000 行上限 + footer 续读。FUMO 取“精确匹配 + 批量原子 + 行选区”，不引入 patch 格式。
 5. 验证：Core 构建通过；独立 ToolProbe 10/10 通过（行选区、批量编辑、重叠拒绝、失败不写盘、字面量 grep、写后索引失效、glob 索引）。Backend.Tests 仍被并发 UI 的 `BackendBadge.BadgeColor` 改动阻塞，未宣称全量通过。
+
+2026-10-23（语音朗读拆为可选插件 + 设置面板重做）：
+1. 归属：朗读服务只由 `service.speech-synthesis` 插件提供。插件激活时在 `PluginPackageManager.ActiveSpeechService` 登记实现，停用/卸载时撤回。宿主删除原有“运行时反射加载插件 DLL”的旁路（它绕开插件状态机，卸载后仍可用），改为只认登记的服务；多个插件管理器先后激活同一插件时，后来者复用已登记服务，只有创建者负责释放。
+2. 门禁：未安装或已停用时 `speech.start/pause/resume/stop` 以 `hideWhenUnavailable` 整条从菜单消失，消息操作条的喇叭按钮不出现，自动朗读静默跳过。`speech.settings` 始终保留，作为未安装时的说明与插件市场入口——这是唯一仍可达的朗读动作。
+3. 安装状态广播：语音服务没有页面贡献，`PagesChanged` 不会触发。宿主改订阅 `PluginStateNotifier.Changed`，在下一拍（插件激活同步完成后）统一投影到对话页与动作面。
+4. 设置面板按 `docs/design/page-design-principles.md` 重做：`AppDialog` 底色 + 页脚、`SettingsLayout` 行/组构件、三组（播放/声音/播放控制）、`AutoReadReplies` 首次有了真实开关、状态行显示服务上报文本。未安装态只有一段说明与市场入口，不渲染语速/音量控件。尺寸随内容而非固定高。
+5. 通用 `ShowPanelAsync` 一并改走 `AppDialog` + `SkinDialog`：此前裸 `new Window` 丢背景，深色主题下是纯黑窗口（用户截图）。
+6. 载荷：`publish-local.ps1` 与 `package.ps1` 的分发列表补上 `service.speech-synthesis`；插件 csproj 把 `manifest.json` 复制到输出，否则市场安装会因缺真实清单失败。`--speech-probe` 改为加载真实插件载荷，找不到时明确失败而不是拿替身空跑通过。
+7. 验证：解决方案 51 工程 0 错误（5 条既有 Avalonia XAML 警告）；`--selftest --speech-only` 11 项门禁断言 + 4 张亮/暗 × 安装/未安装对话框截图全部通过；`Fufucode.Review.Tests` 新增“激活登记/卸载撤回”两条断言通过。既有失败 `Review.Tests` 2 条（工具注册冲突/注销语义）、`--r05-only` 3 条、`--skins-integration-only` 1 条在干净 HEAD 上同样失败，非本轮引入，未修改。未验证：真实音频听感、真实市场安装后重启进程内的服务登记。

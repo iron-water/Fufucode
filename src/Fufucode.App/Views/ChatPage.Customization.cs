@@ -16,6 +16,11 @@ public partial class ChatPage
 
     /// <summary>语音朗读服务：由宿主注入；未安装语音插件时为 null（按钮不显示）。</summary>
     internal Fufucode.Core.Plugins.ISpeechService? SpeechService { get; set; }
+    /// <summary>插件安装/启停后让已渲染的消息操作条重新判断“朗读”按钮是否显示。</summary>
+    internal void RefreshSpeechAvailability()
+    {
+        foreach (var actions in this.GetVisualDescendants().OfType<MessageActionsView>()) actions.RefreshAvailability();
+    }
     private AppActionRegistry? _workbenchActions;
     internal void AttachWorkbenchActions(AppActionRegistry actions) => _workbenchActions = actions;
     internal void SetHeaderMenu(MenuFlyout menu)
