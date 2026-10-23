@@ -206,11 +206,13 @@ Get-ChildItem -LiteralPath $browserOut -Filter 'Avalonia*.dll' -ErrorAction Sile
 Get-ChildItem -LiteralPath $browserOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 if (Test-Path (Join-Path $browserOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $browserOut 'runtimes') -Recurse -Force }
 
-# 可选资料库 / 本地审查插件：放进 plugins-dist，供插件市场安装；默认不播种、不激活。
+# 可选资料库 / 本地审查 / 草图 / 语音朗读插件：放进 plugins-dist，供插件市场安装；
+# 默认不播种、不激活，未安装时对应入口不出现。
 foreach ($plugin in @(
     @{ Id='workspace.library'; Project='src/Fufucode.Plugins.Library/Fufucode.Plugins.Library.csproj'; Dll='Fufucode.Plugins.Library.dll' },
     @{ Id='workspace.local-review'; Project='src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj'; Dll='Fufucode.Plugins.LocalReview.dll' },
-    @{ Id='tool.sketch'; Project='src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj'; Dll='Fufucode.Plugins.Sketch.dll' }
+    @{ Id='tool.sketch'; Project='src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj'; Dll='Fufucode.Plugins.Sketch.dll' },
+    @{ Id='service.speech-synthesis'; Project='src/Fufucode.Plugins.Speech/Fufucode.Plugins.Speech.csproj'; Dll='Fufucode.Plugins.Speech.dll' }
 )) {
     Write-Host "Publishing $($plugin.Id) plugin -> staging ..."
     $pluginOut = Join-Path $stagingApp "plugins-dist/$($plugin.Id)"

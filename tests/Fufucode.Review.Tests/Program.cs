@@ -125,7 +125,12 @@ static async Task ServiceManifest()
     var active = (System.Collections.IDictionary)typeof(PluginPackageManager)
         .GetField("_activePlugins", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(pm)!;
     Check(active.Contains("service.speech-synthesis"), "market state succeeded but service was never loaded");
+    // 宿主只认插件激活时登记的服务：未登记时朗读入口必须整条不可用，而不是留一个空实现。
+    Check(PluginPackageManager.ActiveSpeechService is not null,
+        "activated speech plugin registered its service for the host");
     pm.UninstallPackage("service.speech-synthesis");
+    Check(PluginPackageManager.ActiveSpeechService is null,
+        "uninstalled speech plugin withdrew its service from the host");
     Check(!pm.HasPhysicalPayload("service.speech-synthesis"), "payload remains after uninstall");
 }
 static async Task FailedInitialization()

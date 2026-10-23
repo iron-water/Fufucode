@@ -41,12 +41,11 @@ internal static class LocalPluginRealSelfTest
         window.Show();
         try
         {
-            await Until(() => window.FindControl<Button>("StartupLocalPluginsButton")!.IsVisible);
+            await Until(() => window.FindControl<Button>("StartupRetryButton")!.IsVisible);
             var plugins = window.LocalPluginViewModelForTesting;
             var section = window.ExtensionsPageForTesting.LocalPluginsForTesting;
-            window.FindControl<Button>("StartupLocalPluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Check(window.DataContext is null && window.CurrentSessionId is null && !plugins.HasHost,
-                "startup failure offers offline management without a fake chat host");
+                "startup failure keeps the shell without a fake chat host");
             var offlineSource = Path.Combine(root, "offline-version"); Directory.CreateDirectory(offlineSource);
             File.WriteAllText(Path.Combine(offlineSource, "index.js"), "export default function(pi) {}\n");
             File.WriteAllText(Path.Combine(offlineSource, "fufucode-plugin.json"), JsonSerializer.Serialize(new
@@ -55,7 +54,6 @@ internal static class LocalPluginRealSelfTest
             await plugins.PreviewCommand.ExecuteAsync(null);
             await plugins.ImportCommand.ExecuteAsync(null);
             Check(plugins.Versions.Count == 1 && !plugins.CanApply, "offline import precedes actual Pi startup");
-            window.FindControl<Button>("StartupPluginReturnButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.FindControl<Button>("StartupRetryButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             // Host identity becomes known before AttachRealSession's catalog refresh finishes.
             // Assert the recovered page after the actual startup overlay and refresh have settled.
@@ -70,9 +68,6 @@ internal static class LocalPluginRealSelfTest
             Check(opens == 2 && ReferenceEquals(section.ViewModel, plugins) && !plugins.IsDisposed && plugins.Versions.Count == 1 &&
                   ReferenceEquals(TopLevel.GetTopLevel(section), window),
                 "real recovery restores the original section, catalog and view model without duplicate bootstrap");
-            window.FindControl<Button>("StartupLocalPluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Check(!window.FindControl<Grid>("StartupPluginPanel")!.IsVisible,
-                "late startup-entry event cannot cover the recovered live workspace");
             Check(plugins.ApplyButtonText == "安全重启并应用", "real shared page displays the safe restart action label");
             async Task Import(string version, string body)
             {

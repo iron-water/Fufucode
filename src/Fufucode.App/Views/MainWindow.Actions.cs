@@ -33,8 +33,9 @@ public partial class MainWindow
 
     private void RegisterWorkbenchActions()
     {
-        void Action(string id, string title, string group, Func<Task> operation, Func<string?>? reason = null, string shortcut = "") =>
-            Register(id, title, group, shortcut, title, operation, reason);
+        void Action(string id, string title, string group, Func<Task> operation, Func<string?>? reason = null,
+            string shortcut = "", bool hideWhenUnavailable = false) =>
+            Register(id, title, group, shortcut, title, operation, reason, hideWhenUnavailable);
         void Now(string id, string title, string group, System.Action operation, Func<string?>? reason = null, string shortcut = "", bool hideWhenUnavailable = false) =>
             Register(id, title, group, shortcut, title, () => { operation(); return Task.CompletedTask; }, reason, hideWhenUnavailable);
         Now("toggle.left", "左侧边栏", "布局", () => ToggleDock(DockZone.Left));
@@ -55,12 +56,18 @@ public partial class MainWindow
         Action("session.new", "新聊天", "会话", NewChatAsync, Ready);
         Now("window.new", "新建窗口", "窗口", () => new MainWindow(_options with { SessionId = null }).Show());
         Action("window.session", "在新窗口中打开当前会话", "窗口", MoveSessionToWindowAsync, IdleReal);
-        _speech.Changed += () => Avalonia.Threading.Dispatcher.UIThread.Post(_actions.RefreshCapabilities);
-        Now("speech.stop", "停止朗读", "会话", _speech.Stop, () => _speech.IsSpeaking ? null : "没有正在朗读的回复");
-        Action("speech.pause", "暂停朗读", "会话", _speech.PauseAsync, () => _speech.IsSpeaking && !_speech.IsPaused ? null : "没有可暂停的朗读");
-        Action("speech.resume", "继续朗读", "会话", _speech.ResumeAsync, () => _speech.IsPaused ? null : "朗读未暂停");
+        // 朗读只在 service.speech-synthesis 插件激活时存在：未安装时播放类动作整条从菜单消失，
+        // 不留一排灰色条目；设置动作始终保留，作为未安装时的说明与安装入口。
+        string? SpeechReady() => SpeechInstalled ? null : "未安装或未启用语音朗读插件，请在插件市场安装 service.speech-synthesis";
+        Now("speech.stop", "停止朗读", "会话", Speech.Stop,
+            () => SpeechReady() ?? (Speech.IsSpeaking ? null : "没有正在朗读的回复"), hideWhenUnavailable: true);
+        Action("speech.pause", "暂停朗读", "会话", Speech.PauseAsync,
+            () => SpeechReady() ?? (Speech.IsSpeaking && !Speech.IsPaused ? null : "没有可暂停的朗读"), hideWhenUnavailable: true);
+        Action("speech.resume", "继续朗读", "会话", Speech.ResumeAsync,
+            () => SpeechReady() ?? (Speech.IsPaused ? null : "朗读未暂停"), hideWhenUnavailable: true);
         Action("speech.settings", "朗读设置", "会话", ShowSpeechSettingsAsync);
-        Action("speech.start", "开始朗读", "会话", () => _speech.SpeakAsync(LastAssistantText()), () => LastAssistantText().Length == 0 ? "没有可朗读的回复" : null);
+        Action("speech.start", "开始朗读", "会话", () => Speech.SpeakAsync(LastAssistantText()),
+            () => SpeechReady() ?? (LastAssistantText().Length == 0 ? "没有可朗读的回复" : null), hideWhenUnavailable: true);
         Now("session.rename", "重命名", "会话", () => _chatPage.BeginRename(), () => _vm?.Sidebar.IsReal == true ? null : "Mock 会话没有持久名称");
         Now("session.search", "会话内查找", "会话", _chatPage.FindConversation, Ready);
         Now("session.pin", "置顶/取消置顶", "会话", () => ChangeSessionPresentation(s => s with { Pinned = !s.Pinned }), Ready);
@@ -380,12 +387,32 @@ public partial class MainWindow
         await _vm.Settings.CheckAndUpgradeAsync();
     }
     private Task ShowTextAsync(string title, string text) => ShowPanelAsync(title, new TextBox { Text = text, IsReadOnly = true, AcceptsReturn = true, TextWrapping = Avalonia.Media.TextWrapping.Wrap, MinHeight = 200 });
+    /// <summary>
+    /// 通用面板对话框：沿用 <see cref="Views.AppDialog"/> 的底色与页脚，
+    /// 不再裸 new Window——那会让深色主题下丢失背景，出现纯黑窗口。
+    /// </summary>
     private async Task ShowPanelAsync(string title, Control content)
     {
-        var close = new Button { Content = "关闭", HorizontalAlignment = HorizontalAlignment.Right, IsCancel = true };
-        var dialog = new Window { Title = title, Width = 640, Height = 480, MinWidth = 400, MinHeight = 250, WindowStartupLocation = WindowStartupLocation.CenterOwner };
-        var grid = new Grid { Margin = new Thickness(20), RowDefinitions = new RowDefinitions("*,Auto"), RowSpacing = 12 };
-        grid.Children.Add(new ScrollViewer { Content = content }); Grid.SetRow(close, 1); grid.Children.Add(close);
-        dialog.Content = grid; close.Click += (_, _) => dialog.Close(); await dialog.ShowDialog(this);
+        var close = new Button { Content = "关闭", IsCancel = true, MinWidth = 88 };
+        var dialog = Views.AppDialog.Create(title, 640);
+        dialog.CanResize = true;
+        dialog.SizeToContent = SizeToContent.Manual;
+        dialog.Height = 480;
+        dialog.MinWidth = 400;
+        dialog.MinHeight = 250;
+
+        var body = new Border
+        {
+            Margin = new Thickness(24, 4, 24, 16),
+            Child = new ScrollViewer { Content = content },
+        };
+        var footer = Views.AppDialog.Footer(close);
+        var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+        root.Children.Add(body);
+        Grid.SetRow(footer, 1);
+        root.Children.Add(footer);
+        dialog.Content = root;
+        close.Click += (_, _) => dialog.Close();
+        await Views.SkinDialog.ShowAsync(dialog, this);
     }
 }

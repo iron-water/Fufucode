@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Fufucode.Core.Plugins;
 
@@ -87,12 +88,39 @@ public sealed class ReplySpeechService : ISpeechService
 }
 
 /// <summary>
-/// 语音朗读插件包入口。
+/// 语音朗读插件包入口：激活时把自己登记为进程内唯一的朗读服务，
+/// 停用/卸载时撤回登记并释放残留的朗读进程。
 /// </summary>
 public sealed class SpeechPluginPackage : IPluginPackage
 {
+    private ReplySpeechService? _owned;
+
     public string Id => "service.speech-synthesis";
     public string Version => "1.0.0";
 
     public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => null;
+
+    /// <summary>
+    /// 宿主可能有多个插件管理器（工作台页宿主、设置页市场）先后激活同一插件。
+    /// 朗读服务是进程内共享的：后来者复用已登记的服务，只由创建者负责释放，
+    /// 避免第二个管理器因“已有宿主”而把一次正常激活记成加载失败。
+    /// </summary>
+    public Task InitializeAsync(PluginPackageContext context, CancellationToken cancellationToken = default)
+    {
+        if (_owned is not null || PluginPackageManager.ActiveSpeechService is not null) return Task.CompletedTask;
+        _owned = new ReplySpeechService();
+        PluginPackageManager.ActiveSpeechService = _owned;
+        return Task.CompletedTask;
+    }
+
+    public Task ShutdownAsync(CancellationToken cancellationToken = default)
+    {
+        var owned = _owned;
+        _owned = null;
+        if (owned is null) return Task.CompletedTask;
+        if (ReferenceEquals(PluginPackageManager.ActiveSpeechService, owned))
+            PluginPackageManager.ActiveSpeechService = null;
+        owned.Dispose();
+        return Task.CompletedTask;
+    }
 }
