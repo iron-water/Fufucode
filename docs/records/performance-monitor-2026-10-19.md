@@ -95,3 +95,23 @@ turn (model, executionMode, promptChars, queueMs, outcome)
 
 - 插件 `IsEffectivelyVisible` 依赖宿主停靠区可见性，隐藏时暂停实时刷新（重新显示时下一次刷新）。
 - 宿主样本以同步追加方式写 `host-*.jsonl`（每 2 秒若干行），极端磁盘阻塞时可能短暂拖慢采样线程。
+
+## 2026-10-22 概览/分析双视图重构
+
+- 新的 `PerfCenterView` 取代单一横向工具栏页面：左栏“概览 / 分析”，概览只保留用户指标，分析提供启动总览、Span 树、共享时间轴和检查器。
+- 时间线改为自绘控件：7 条轨道、TTFT 段、UI 阻塞刻度、审批等待、持久化、CPU 采样；轮滚缩放、双击复位；点击条与 Span 树、检查器联动。
+- Span 树用虚拟化 `ListBox`，支持搜索、折叠、过滤时保留命中节点及祖先；`ui.stall`/`ui.batch` 事件补成树节点，保证阻塞在树里也能看到。
+- 页面首次打开改为 1180×760 浮窗（`FloatDockPage` 增加首选尺寸），仍可停靠回任意栏；右栏收起不再影响性能页。
+- 快照改为后台线程构建，UI 线程只应用结果；刷新节拍 1.5s，实时开关可关闭。
+
+### 验证
+
+- `dotnet build Fufucode.sln -c Debug`：45 工程 0 错误 0 警告。
+- `dotnet run --project tests/Fufucode.PerformanceMonitor.Tests`：全部 8 组通过；新增 `snapshot` 组覆盖层级、Token、阻塞节点、过滤；`native` 组新增 stdout 头断言。
+- 审阅构建 `feature/perf-ui@fbd00a91` 已生成并启动浮窗；无头 `invoke perf --allow-action --perf-turn` 执行成功，无异常输出。
+
+### 未验证
+
+- 真实桌面浮窗在真实会话数据下的视觉密度与滚动/缩放手感；需审阅窗口确认。
+- 命令输出只进入检查器的头部（各最多 220 字符，已脱敏）；完整输出仍在聊天工具卡/日志。
+

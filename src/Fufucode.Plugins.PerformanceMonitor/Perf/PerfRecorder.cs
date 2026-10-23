@@ -1,4 +1,5 @@
 using Fufucode.Core.Diagnostics;
+using Fufucode.Core.Diagnostics.Perf;
 
 namespace Fufucode.Plugins.PerformanceMonitor;
 
@@ -18,8 +19,10 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
     private readonly string _dataRoot;
     private readonly List<Anomaly> _anomalies = [];
     private readonly Queue<PerfEventRecord> _recentEvents = new();
+    private readonly Queue<PerfHostSample> _hostSamples = new();
     private const int MaxAnomalies = 2_000;
     private const int MaxRecentEvents = 5_000;
+    private const int MaxHostSamples = 2_400;
     private long _spanCount;
     private string? _currentSessionId;
 
@@ -54,6 +57,29 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
     public long Dropped => _writer?.Dropped ?? 0;
 
     public void SetCurrentSession(string? sessionId) => Volatile.Write(ref _currentSessionId, sessionId);
+
+    public string? CurrentSessionId => Volatile.Read(ref _currentSessionId);
+
+    /// <summary>宿主最近的进程/UI 样本，按时间顺序返回尾部 limit 条。</summary>
+    public IReadOnlyList<PerfHostSample> HostSamples(int limit = 1_200)
+    {
+        lock (_hostSamples)
+        {
+            if (_hostSamples.Count == 0 || limit <= 0) return [];
+            var all = _hostSamples.ToArray();
+            var take = Math.Min(limit, all.Length);
+            return all[^take..];
+        }
+    }
+
+    public void AddHostSample(PerfHostSample sample)
+    {
+        lock (_hostSamples)
+        {
+            _hostSamples.Enqueue(sample);
+            while (_hostSamples.Count > MaxHostSamples) _hostSamples.Dequeue();
+        }
+    }
 
     public IReadOnlyList<Anomaly> Anomalies()
     {
@@ -160,6 +186,7 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
         _aggregator.Clear();
         lock (_anomalies) _anomalies.Clear();
         lock (_recentEvents) _recentEvents.Clear();
+        lock (_hostSamples) _hostSamples.Clear();
     }
 
     public void Dispose()
@@ -175,7 +202,7 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
         var result = new List<KeyValuePair<string, string>>(tags.Count);
         foreach (var (key, value) in tags)
         {
-            if (key == "command" && !captureCommand)
+            if (key is "command" or "stdoutHead" or "stderrHead" && !captureCommand)
             {
                 result.Add(new(key, "[已关闭命令文本记录]"));
                 continue;

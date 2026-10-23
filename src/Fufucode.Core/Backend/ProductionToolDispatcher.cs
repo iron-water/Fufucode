@@ -1161,6 +1161,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         span.Tag("stdoutBytes", stdout.TotalChars);
         span.Tag("stderrBytes", stderr.TotalChars);
         span.Tag("dropped", stdout.Dropped || stderr.Dropped);
+        // 性能页只带一个有界头部（tag 上限 256 字符），完整输出仍在工具结果里。
+        if (Head(stdout.Head, 220) is { Length: > 0 } stdoutHead) span.Tag("stdoutHead", stdoutHead);
+        if (Head(stderr.Head, 220) is { Length: > 0 } stderrHead) span.Tag("stderrHead", stderrHead);
         if (timedOut) span.Fail("timeout");
         else if (process.ExitCode != 0) span.Tag("ok", false);
 
@@ -1181,6 +1184,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
     private const int CommandOutputHeadChars = 32 * 1024;
     private const int CommandOutputTailChars = 32 * 1024;
+
+    private static string Head(string value, int limit) => value.Length <= limit ? value : value[..limit];
 
     private readonly record struct CapturedOutput(string Head, string Tail, bool Dropped, long TotalChars);
 
