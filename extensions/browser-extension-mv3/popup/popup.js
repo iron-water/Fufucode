@@ -7,6 +7,7 @@ const pairBtn = document.getElementById("pair-btn");
 const authError = document.getElementById("auth-error");
 const collectBtn = document.getElementById("collect-btn");
 const inspectBtn = document.getElementById("inspect-btn");
+const workbenchBtn = document.getElementById("workbench-btn");
 const retryBtn = document.getElementById("retry-btn");
 const hostInput = document.getElementById("host-input");
 const saveHostBtn = document.getElementById("save-host-btn");
@@ -110,6 +111,13 @@ collectBtn.addEventListener("click", async () => {
         alert("发送失败：" + (res ? res.error : "未知错误"));
       }
     });
+  });
+});
+
+if (workbenchBtn) workbenchBtn.addEventListener("click", () => {
+  chrome.runtime.sendMessage({ type: "OPEN_WORKBENCH" }, result => {
+    if (!result?.ok) alert(result?.error || "无法打开工作台");
+    else window.close();
   });
 });
 
