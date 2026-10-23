@@ -339,10 +339,13 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
     public Task<RpcResponse> SetSessionNameAsync(string name, CancellationToken cancellationToken = default) =>
         Task.FromResult(new RpcResponse("fumo", "set_session_name", true, null, null));
 
-    /// <summary>FUMO 尚未实现真正的会话分叉；如实返回失败，不伪造成功。</summary>
+    /// <summary>
+    /// FUMO 的分叉由 <c>PersistentSessionManager</c> 在桌面层完成（复制历史到新会话文件并重开），
+    /// 协调器本身不持文件所有权，因此这里只报告该路径，不伪造已在本进程内完成。
+    /// </summary>
     public Task<RpcResponse> ForkAsync(string entryId, CancellationToken cancellationToken = default) =>
         Task.FromResult(new RpcResponse("fumo", "fork", false, null,
-            "FUMO 暂不支持会话分叉。请新建会话，或使用其他支持分支的后端。"));
+            "FUMO 分叉由桌面会话层处理；请使用会话菜单中的“分叉”。"));
 
     public Task SetExecutionModeAsync(string mode, CancellationToken cancellationToken = default) =>
         _session.SetExecutionModeAsync(mode, cancellationToken);
