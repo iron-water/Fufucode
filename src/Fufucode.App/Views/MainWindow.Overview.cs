@@ -269,9 +269,9 @@ public partial class MainWindow
     private void OverviewSessionGroup(IEnumerable<SessionRecord> sessions, SessionOrganization organization,
         double indent = 0)
     {
-        // 独立工作区的会话用「无项目」标记，避免用户看到内部目录名。
-        var rows = sessions.Select(session => BuildOverviewSessionRow(session, organization, indent,
-            IsScratchSession(session) ? "不在项目中" : null)).ToArray();
+        // 独立工作区的会话用「无项目」标记，避免用户看到内部目录名；分叉按父子树缩进。
+        var rows = SessionTree(sessions.ToArray()).Select(entry => BuildOverviewSessionRow(entry.Session,
+            organization, indent, IsScratchSession(entry.Session) ? "不在项目中" : null, entry.Depth)).ToArray();
         if (rows.Length == 0) return;
         var stack = new StackPanel { Spacing = 2 };
         foreach (var row in rows) stack.Children.Add(row);
@@ -368,9 +368,11 @@ public partial class MainWindow
         if (!collapsed)
         {
             var expanded = _expandedProjects.Contains(project.Id);
-            var visible = expanded ? projectSessions : projectSessions.Take(ProjectSessionPreview).ToArray();
-            foreach (var session in visible)
-                stack.Children.Add(BuildOverviewSessionRow(session, organization, 8));
+            // 分叉跟随父会话，预览截断也要按树来截，避免只显示子会话。
+            var tree = SessionTree(projectSessions);
+            var visible = expanded ? tree : tree.Take(ProjectSessionPreview).ToArray();
+            foreach (var entry in visible)
+                stack.Children.Add(BuildOverviewSessionRow(entry.Session, organization, 8, null, entry.Depth));
             if (projectSessions.Length > ProjectSessionPreview)
             {
                 var rest = projectSessions.Length - ProjectSessionPreview;
@@ -392,8 +394,33 @@ public partial class MainWindow
         }
         _overview.Body.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
     }
+    /// <summary>按父子关系展开会话树：分叉紧跟父会话，并记录缩进层级。</summary>
+    private static IReadOnlyList<(SessionRecord Session, int Depth)> SessionTree(
+        IReadOnlyList<SessionRecord> sessions)
+    {
+        var list = sessions.ToArray();
+        var ids = list.Select(session => session.Id).ToHashSet(StringComparer.Ordinal);
+        var children = list.Where(session => session.ParentSessionId is { Length: > 0 } parent && ids.Contains(parent))
+            .GroupBy(session => session.ParentSessionId!)
+            .ToDictionary(group => group.Key,
+                group => group.OrderByDescending(SessionActivityAt).ToArray(), StringComparer.Ordinal);
+        var roots = list.Where(session => session.ParentSessionId is not { Length: > 0 } parent || !ids.Contains(parent))
+            .OrderByDescending(SessionActivityAt);
+        var result = new List<(SessionRecord, int)>();
+        var guard = 0;
+        void Add(SessionRecord session, int depth)
+        {
+            if (guard++ > 200) return;
+            result.Add((session, depth));
+            if (depth >= 8 || !children.TryGetValue(session.Id, out var kids)) return;
+            foreach (var child in kids) Add(child, depth + 1);
+        }
+        foreach (var root in roots) Add(root, 0);
+        return result;
+    }
+
     private Control BuildOverviewSessionRow(SessionRecord session, SessionOrganization organization,
-        double indent = 0, string? projectLabel = null)
+        double indent = 0, string? projectLabel = null, int depth = 0)
     {
         var metadata = _host!.Manager.Metadata;
         var presentation = SessionPresentation.Load(metadata, session.Id);
@@ -487,6 +514,22 @@ public partial class MainWindow
         menu.Items.Add(OverviewMenu("永久删除", () => DeleteOverviewSessionAsync(session),
             session.Id != CurrentSessionId));
         button.ContextMenu = menu;
+
+        // 分叉关系：子会话缩进，并在左侧画一条竖线（对齐 Claude Code 的分支树）。
+        if (depth > 0)
+        {
+            row.Margin = new Thickness(indent + depth * 14, 0, 0, 0);
+            var guide = new Border
+            {
+                Width = 1, Margin = new Thickness(-9, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                IsHitTestVisible = false,
+            };
+            guide.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppCardStroke"));
+            var host = new Grid { Children = { guide, row } };
+            return host;
+        }
         return row;
     }
 

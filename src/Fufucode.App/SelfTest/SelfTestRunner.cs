@@ -60,6 +60,13 @@ public static class SelfTestRunner
             return Failures.Count == 0 ? 0 : 1;
         }
 
+        if (args.Contains("--fork-only"))
+        {
+            await ForkSelfTest.RunAsync(Pass, Fail);
+            Console.WriteLine($"Fork failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--archive-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => ArchiveSelfTest.RunAsync(Pass, Fail));
