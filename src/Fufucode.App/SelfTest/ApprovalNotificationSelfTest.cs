@@ -1,0 +1,153 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Threading.Tasks;
+using Fufucode.App.Integration;
+using Fufucode.App.Infrastructure;
+using Fufucode.App.ViewModels;
+using Fufucode.Core;
+
+namespace Fufucode.App.SelfTest;
+
+/// <summary>
+/// 系统通知审批按钮的无头验收：链接解析、规则落盘、横幅 XML 三个按钮。
+/// 这些路径不依赖真实 Windows 通知中心，可全部在无头进程内断言。
+/// </summary>
+internal static class ApprovalNotificationSelfTest
+{
+    internal static async Task RunAsync(Action<string> pass, Action<string> fail)
+    {
+        void Check(bool value, string name) { if (value) pass("ApprovalNotification: " + name); else fail("ApprovalNotification: " + name); }
+
+        var session = Guid.NewGuid().ToString();
+        var root = Path.Combine(Path.GetTempPath(), "fufucode-approval-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+
+        // 1) 链接：三种决定都能往返，且拒绝非法输入。
+        foreach (var decision in new[] { ApprovalDecision.Allow, ApprovalDecision.AlwaysAllow, ApprovalDecision.Deny })
+        {
+            var link = ApprovalLink.Create("req-1", session, decision, root);
+            Check(ApprovalLink.TryParse(link, out var parsed) && parsed.RequestId == "req-1" &&
+                  parsed.SessionId == session && parsed.Decision == decision &&
+                  parsed.ProjectPath == Path.GetFullPath(root), "round-trip " + decision);
+        }
+        Check(!ApprovalLink.TryParse("fufucode://approval/req-1?session=" + session + "&decision=maybe", out _) &&
+              !ApprovalLink.TryParse("fufucode://approval/../x?session=" + session + "&decision=allow", out _) &&
+              !ApprovalLink.TryParse("fufucode://approval/req-1?session=not-a-guid&decision=allow", out _) &&
+              !ApprovalLink.TryParse("fufucode://approval/req-1?session=" + session + "&decision=allow&extra=1", out _) &&
+              !ApprovalLink.TryParse("https://approval/req-1", out _),
+            "malformed or spoofed approval links are rejected");
+        Check(!ApprovalLink.TryParse(ApprovalLink.Create("req-1", session, ApprovalDecision.Allow)
+              .Replace("fufucode-approval://approval/", "fufucode://session/"), out _), "an approval link is not mistaken for a session link");
+
+        // 2) “始终允许”规则：按项目 + 工具名落盘，其它项目/其它工具不受影响。
+        ApprovalPolicy.Configure(root);
+        var request = ApprovalRequest("run_command");
+        Check(!ApprovalPolicy.IsAlwaysAllowed(request, root), "no rule means the tool still asks");
+        Check(ApprovalPolicy.Remember(request, root) && ApprovalPolicy.IsAlwaysAllowed(request, root),
+            "always-allow persists for the project and tool");
+        Check(ApprovalPolicy.IsAlwaysAllowed(request, root + Path.DirectorySeparatorChar),
+            "a trailing separator does not create a second rule");
+        Check(!ApprovalPolicy.IsAlwaysAllowed(ApprovalRequest("write_file"), root) &&
+              !ApprovalPolicy.IsAlwaysAllowed(request, Path.Combine(root, "other")),
+            "the rule does not widen to other tools or other projects");
+        var rulesFile = Path.Combine(root, "approval-rules.json");
+        Check(File.Exists(rulesFile), "rules are written to the app data root");
+        // 换一个数据根重新加载同一份规则内容：规则仍按项目生效，说明落盘字段可回读。
+        var reloadedRoot = Path.Combine(root, "reload");
+        Directory.CreateDirectory(reloadedRoot);
+        File.Copy(rulesFile, Path.Combine(reloadedRoot, "approval-rules.json"));
+        ApprovalPolicy.Configure(reloadedRoot);
+        Check(ApprovalPolicy.IsAlwaysAllowed(request, root), "rules survive a reload from disk");
+        File.WriteAllText(Path.Combine(root, "approval-rules.json"), "{ not json");
+        ApprovalPolicy.Configure(Path.Combine(root, "fresh"));
+        Check(!ApprovalPolicy.IsAlwaysAllowed(request, root), "a corrupt rule file never silently allows tools");
+
+        // 3) 系统通知：三个按钮各自带独立动作链接，且都在协议允许的长度内。
+        var actions = new[]
+        {
+            new WindowsToastAction("允许", ApprovalLink.Create("req-1", session, ApprovalDecision.Allow)),
+            new WindowsToastAction("始终允许", ApprovalLink.Create("req-1", session, ApprovalDecision.AlwaysAllow)),
+            new WindowsToastAction("拒绝", ApprovalLink.Create("req-1", session, ApprovalDecision.Deny)),
+        };
+        var xml = WindowsToastService.CreateXml("有一项工具待批准", "允许执行 run_command？", "fufucode://session/x?project=C%3A",
+            actions);
+        var document = System.Xml.Linq.XDocument.Parse(xml);
+        var buttons = document.Root?.Element("actions")?.Elements("action").ToArray() ?? [];
+        Check(buttons.Length == 3 && buttons.Select(button => button.Attribute("content")?.Value).SequenceEqual(["允许", "始终允许", "拒绝"]),
+            "the Windows toast carries allow / always-allow / deny");
+        Check(buttons.All(button => button.Attribute("activationType")?.Value == "protocol") &&
+              buttons.Select(button => button.Attribute("arguments")?.Value).All(value => ApprovalLink.TryParse(value, out _)),
+            "each toast button activates through a valid protocol link");
+        Check(WindowsToastService.CreateXml("标题", "正文", null).Contains("<actions", StringComparison.Ordinal) == false,
+            "toasts without an approval decision carry no buttons");
+
+        // 4) 端到端：待批工具 → 通知条目带工具名 → 按钮链接 → 宿主按请求 Id 应答。
+        var stub = new StubExtensionUiSession();
+        var stubProject = Path.Combine(root, "project");
+        Directory.CreateDirectory(stubProject);
+        ApprovalPolicy.Configure(Path.Combine(root, "e2e"));
+        var dialogs = new ExtensionUiDialogHost(owner: null) { ProjectPath = stubProject };
+        dialogs.AlwaysAllow = pending => ApprovalPolicy.IsAlwaysAllowed(pending, dialogs.ProjectPath);
+        dialogs.Attach(stub);
+        var toolRequest = ToolRequest("run_command");
+        stub.RaiseRequest(toolRequest);
+
+        var center = new NotificationCenterViewModel(new NotificationPreferencesViewModel(
+            new NotificationPreferencesStore(Path.Combine(root, "notification-preferences.json"))));
+        // 通知中心只接受与连接代数一致的请求：用请求自己的 generation 挂接。
+        var e2eSession = Guid.NewGuid().ToString();
+        center.Attach(e2eSession, toolRequest.Generation, stub);
+        await center.FlushAsync();
+        var notice = center.Items.FirstOrDefault(item => item.RequestId == toolRequest.Id);
+        Check(notice is { IsToolApproval: true, ToolName: "run_command" } &&
+              notice.Message.Contains("run_command", StringComparison.Ordinal),
+            "a pending tool approval becomes a tool-specific notice");
+
+        // 系统通知上的“始终允许”链接：解析后按请求 Id 应答，并落规则。
+        var alwaysLink = ApprovalLink.Create(toolRequest.Id, notice!.SessionId, ApprovalDecision.AlwaysAllow, stubProject);
+        Check(ApprovalLink.TryParse(alwaysLink, out var always) && always.Decision == ApprovalDecision.AlwaysAllow,
+            "the always-allow button link parses");
+        PiExtensionUiResponse? answered = null;
+        stub.Responded = (_, response) => answered = response;
+        Check(await dialogs.RespondByIdAsync(always.RequestId, always.Decision) && answered?.Confirmed == true,
+            "always-allow answers the original request with an approval");
+        Check(ApprovalPolicy.IsAlwaysAllowed(toolRequest, stubProject),
+            "always-allow leaves a reusable rule for this project and tool");
+
+        // 已应答/不存在的请求：不应答、不报成功。
+        answered = null;
+        Check(!await dialogs.RespondByIdAsync(always.RequestId, ApprovalDecision.Allow) && answered is null,
+            "a stale or unknown request id is never answered");
+
+        // 命中规则的第二个同类请求由宿主直接放行，不再打扰用户。
+        var repeat = ToolRequest("run_command");
+        stub.RaiseRequest(repeat);
+        Check(answered is not null && answered.Confirmed == true && dialogs.AutoAnsweredCount >= 1,
+            "an always-allowed tool is answered without prompting again");
+        dialogs.Detach();
+
+        // 拒绝按钮：同一请求得到明确否决。
+        var denyStub = new StubExtensionUiSession();
+        var denyHost = new ExtensionUiDialogHost(owner: null) { ProjectPath = stubProject };
+        denyHost.Attach(denyStub);
+        var denyRequest = ToolRequest("write_file");
+        denyStub.RaiseRequest(denyRequest);
+        PiExtensionUiResponse? denied = null;
+        denyStub.Responded = (_, response) => denied = response;
+        Check(await denyHost.RespondByIdAsync(denyRequest.Id, ApprovalDecision.Deny) && denied?.Confirmed == false,
+            "deny answers the original request with a refusal");
+        denyHost.Detach();
+        center.Dispose();
+        await Task.CompletedTask;
+    }
+
+    private static ExtensionUiRequest ToolRequest(string tool) => new(Guid.NewGuid(), Guid.NewGuid().ToString("N"), "confirm",
+        JsonSerializer.SerializeToElement(new { title = "工具执行确认", message = "允许执行？", toolName = tool, arguments = "{}" }),
+        DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+
+    private static ExtensionUiRequest ApprovalRequest(string tool) => new(Guid.NewGuid(), "req-" + tool, "confirm",
+        JsonSerializer.SerializeToElement(new { title = "工具执行确认", message = "允许执行？", toolName = tool, arguments = "{}" }),
+        DateTimeOffset.UtcNow, TimeSpan.FromMinutes(5));
+}

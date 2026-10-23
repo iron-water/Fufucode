@@ -439,7 +439,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             }
 
             _host = host;
-            _dialogHost = new ExtensionUiDialogHost(this);
+            _dialogHost = CreateDialogHost(host.ProjectPath);
             AttachRealSession();
             ProjectPreferences.RecordOpened(host.Manager.Metadata, host.ProjectPath);
             HideStartupOverlay();
@@ -447,6 +447,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             ScrollToEnd();
             Core.Diagnostics.StartupProbe.Mark("session.ready", "startup overlay hidden, timeline scrolled");
             Program.Startup?.FinishAfterRender();
+            // 由系统通知按钮启动的实例：会话就绪后应答那条审批（找不到对应请求就什么也不做）。
+            if (Program.StartupActivationPayload is { } startPayload)
+            {
+                Program.StartupActivationPayload = null;
+                _ = HandleApprovalPayloadAsync(startPayload);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -581,7 +587,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             _options = newOptions;
             await CloseSideChatAsync();
             _host = next;
-            _dialogHost = new ExtensionUiDialogHost(this);
+            _dialogHost = CreateDialogHost(next.ProjectPath);
             await previous.DisposeAsync();
             AttachRealSession();
             ProjectPreferences.RecordOpened(_host.Manager.Metadata, _host.ProjectPath);

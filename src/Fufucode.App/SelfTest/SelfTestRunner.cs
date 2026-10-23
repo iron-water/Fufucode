@@ -121,6 +121,7 @@ public static class SelfTestRunner
         if (args.Contains("--notification-page-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => NotificationPageSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(() => ApprovalNotificationSelfTest.RunAsync(Pass, Fail));
             Console.WriteLine($"Notification page failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
@@ -294,6 +295,7 @@ public static class SelfTestRunner
         await RunOnHeadlessUiThreadAsync(() => WorkbenchTabsSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => FloatingWorkbenchSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => NotificationPageSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => ApprovalNotificationSelfTest.RunAsync(Pass, Fail));
         await RunAutomationSelfTestsAsync();
         await RunOnHeadlessUiThreadAsync(() => BrowserIntegrationSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => WorkbenchCustomizationSelfTest.RunAsync(Pass, Fail));

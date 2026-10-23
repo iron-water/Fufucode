@@ -12,6 +12,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fufucode.App.Abstractions;
 using Fufucode.App.Infrastructure;
+using Fufucode.App.Integration;
 using Fufucode.Core;
 
 namespace Fufucode.App.ViewModels;
@@ -29,6 +30,10 @@ public sealed partial class NotificationItemViewModel : ViewModelBase
     }
     public string Key { get; }
     public string SessionId { get; }
+    /// <summary>工具审批对应的工具名；空表示不是可直接应答的工具审批。</summary>
+    public string ToolName { get; init; } = string.Empty;
+    /// <summary>系统通知上的“允许/始终允许/拒绝”只对工具审批有意义。</summary>
+    public bool IsToolApproval => IsApproval && !string.IsNullOrEmpty(ToolName) && !string.IsNullOrEmpty(RequestId);
     public Guid Generation { get; }
     public long Run { get; }
     public AppNotificationKind Kind { get; }
@@ -76,7 +81,8 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
         public Action<ExtensionUiRequest>? ClosedHandler;
     }
     private sealed record Notice(Attachment Context, string Key, long Run, AppNotificationKind Kind,
-        string Title, string Message, string? RequestId, bool WasFocused, bool IsClosedRequest = false);
+        string Title, string Message, string? RequestId, bool WasFocused, bool IsClosedRequest = false,
+        string ToolName = "");
     private sealed record Envelope(Notice? Notice = null, TaskCompletionSource? Barrier = null);
     private readonly object _gate = new();
     private readonly Channel<Envelope> _events = Channel.CreateBounded<Envelope>(new BoundedChannelOptions(64)
@@ -108,6 +114,8 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
     public bool HasVisibleItems => FilteredItems.Count > 0;
     public int UnreadCount => Items.Count(item => !item.IsRead);
     public int PendingActionCount => Items.Count(item => item.RequiresAction);
+    /// <summary>概览卡展示的保留记录总数（包含已读，不等于当前过滤结果）。</summary>
+    public int TotalCount => Items.Count;
     public string SummaryText => PendingActionCount > 0 ? $"{PendingActionCount} 项待处理" : UnreadCount > 0 ? $"{UnreadCount} 条新通知" : "通知";
     public bool HasPrompt => LatestPrompt is not null;
 
@@ -263,7 +271,13 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
             if (_disposed || !ReferenceEquals(_attachment, context) || request.Generation != context.Generation) return;
             var key = $"{context.SessionId}/{request.Generation:N}/request/{request.Id}";
             if (!MarkSeen(key)) return;
-            notice = new(context, key, context.Run, AppNotificationKind.Approval, "有一项权限或问题待处理", "请返回所属会话查看并作出决定。", request.Id, _windowFocused);
+            // 工具审批单独成条：系统通知要据此给出“允许/始终允许/拒绝”三个按钮。
+            var tool = request.Method == "confirm" ? ApprovalPolicy.ToolOf(request) ?? string.Empty : string.Empty;
+            notice = tool.Length > 0
+                ? new(context, key, context.Run, AppNotificationKind.Approval, "有一项工具待批准",
+                    $"允许执行 {tool}？选择“始终允许”后，本项目的同类工具不再询问。", request.Id, _windowFocused, ToolName: tool)
+                : new(context, key, context.Run, AppNotificationKind.Approval, "有一项权限或问题待处理",
+                    "请返回所属会话查看并作出决定。", request.Id, _windowFocused);
         }
         Enqueue(notice);
     }
@@ -315,7 +329,7 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
         var proactive = notice.Kind == AppNotificationKind.Approval ? Preferences.NotifyApprovals && !notice.WasFocused
             : Preferences.CompletionPolicy == CompletionNotificationPolicy.Always || Preferences.CompletionPolicy == CompletionNotificationPolicy.Unfocused && !notice.WasFocused;
         var row = new NotificationItemViewModel(notice.Key, notice.Context.SessionId, notice.Context.Generation, notice.Run,
-            notice.Kind, notice.Title, notice.Message, notice.RequestId, proactive);
+            notice.Kind, notice.Title, notice.Message, notice.RequestId, proactive) { ToolName = notice.ToolName };
         Items.Insert(0, row); while (Items.Count > 128) Items.RemoveAt(Items.Count - 1);
         if (proactive) LatestPrompt = row;
         NotifyCounts();
@@ -356,7 +370,8 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
     private void NotifyCounts()
     {
         OnPropertyChanged(nameof(HasItems)); OnPropertyChanged(nameof(UnreadCount));
-        OnPropertyChanged(nameof(PendingActionCount)); OnPropertyChanged(nameof(SummaryText));
+        OnPropertyChanged(nameof(PendingActionCount)); OnPropertyChanged(nameof(TotalCount));
+        OnPropertyChanged(nameof(SummaryText));
     }
     public void Open() => IsOpen = true;
     [RelayCommand] private void Toggle() => IsOpen = !IsOpen;
