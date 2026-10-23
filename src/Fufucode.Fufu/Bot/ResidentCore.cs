@@ -27,6 +27,19 @@ public sealed record ResidentObservation(
 /// </summary>
 public sealed class ResidentCore
 {
+    private static readonly IReadOnlyDictionary<string, ResidentMemoryScope> ScopeAliases =
+        new Dictionary<string, ResidentMemoryScope>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["identity"] = ResidentMemoryScope.Identity,
+            ["身份"] = ResidentMemoryScope.Identity,
+            ["user"] = ResidentMemoryScope.User,
+            ["用户"] = ResidentMemoryScope.User,
+            ["project"] = ResidentMemoryScope.Project,
+            ["项目"] = ResidentMemoryScope.Project,
+            ["agent"] = ResidentMemoryScope.Agent,
+            ["代理"] = ResidentMemoryScope.Agent,
+        };
+
     private const int SchemaVersion = 1;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
@@ -68,6 +81,29 @@ public sealed class ResidentCore
     }
 
     /// <summary>读取某个作用域的 Markdown 记忆；文件不存在时返回空正文。</summary>
+    public static bool TryParseScope(string value, out ResidentMemoryScope scope) =>
+        ScopeAliases.TryGetValue(value.Trim(), out scope);
+
+    public string BuildPromptSection()
+    {
+        var identity = Identity;
+        var sections = new List<string>
+        {
+            "## FUFU 常驻身份",
+            $"名称：{identity.Name}",
+            $"描述：{identity.Description}",
+            $"人格原则：{identity.Personality}",
+        };
+        foreach (var scope in Enum.GetValues<ResidentMemoryScope>())
+        {
+            var text = ReadMemory(scope).Trim();
+            if (string.IsNullOrWhiteSpace(text)) continue;
+            sections.Add($"\n## FUFU 记忆：{scope}\n{text}");
+        }
+        sections.Add("\n记忆规则：只有用户明确要求记住的内容才能写入长期记忆；不确定时先询问。长期记忆可被用户查看、修改或删除。当前阶段只观察，不自行创建后台任务或向外部渠道发送消息。");
+        return string.Join("\n", sections);
+    }
+
     public string ReadMemory(ResidentMemoryScope scope)
     {
         var path = MemoryPath(scope);
@@ -83,6 +119,25 @@ public sealed class ResidentCore
             Directory.CreateDirectory(_memoryRoot);
             File.WriteAllText(MemoryPath(scope), markdown);
         }
+    }
+
+    public void AppendMemory(ResidentMemoryScope scope, string fact)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(fact);
+        var current = ReadMemory(scope).TrimEnd();
+        var entry = $"\n- {DateTimeOffset.UtcNow:yyyy-MM-dd}: {fact.Trim()}\n";
+        WriteMemory(scope, current + entry);
+    }
+
+    public bool ForgetMemory(ResidentMemoryScope scope, string text)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        var current = ReadMemory(scope);
+        var lines = current.Split(["\r\n", "\n"], StringSplitOptions.None);
+        var kept = lines.Where(line => !line.Contains(text.Trim(), StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (kept.Length == lines.Length) return false;
+        WriteMemory(scope, string.Join(Environment.NewLine, kept));
+        return true;
     }
 
     /// <summary>
