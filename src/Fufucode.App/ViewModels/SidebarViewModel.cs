@@ -136,6 +136,9 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
     /// <summary>新建会话可选后端（默认后端始终在首位）。mock 模式为空。</summary>
     public IReadOnlyList<NewSessionBackendOption> NewSessionBackends { get; }
 
+    /// <summary>有多个可用后端时才显示“选择后端”入口；只有一个时直接新建，避免死按钮。</summary>
+    public bool HasBackendChoice => NewSessionBackends.Count(option => option.Available) > 1;
+
     private readonly IChatSession _session;
     private readonly TimelineViewModel _timeline;
     private readonly Callbacks? _callbacks;

@@ -80,7 +80,7 @@ public partial class MainWindow
         Register("changes", "变更", "工作区", "", "查看工作树或会话直接写入范围", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Changes), WorkAreaUnavailable);
         Register("terminal", "交互终端", "工作区", "Ctrl+J", "独立于 Agent RPC 的项目终端（终端插件提供）",
             () => { if (_terminalPage is null) return Task.CompletedTask; OpenDockPage("terminal", DockZone.Bottom); _terminalPage.Show(); return Task.CompletedTask; },
-            () => _terminalPage is null ? "未安装或未启用交互终端插件" : WorkAreaUnavailable());
+            () => _terminalPage is null ? "未安装或未启用交互终端插件" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         string? TerminalMissing() => _terminalPage is null ? "未安装或未启用交互终端插件" : _terminalPage.HasTabs ? null : "请先打开终端";
         Register("terminal.copy", "复制终端选区", "终端", "", "复制固定输出快照中的选择，退出后仍可用", () => _terminalPage?.CopySelectionAsync() ?? Task.CompletedTask,
             () => _terminalPage?.HasOutputSelection == true ? null : "请先选择终端输出");
@@ -94,9 +94,9 @@ public partial class MainWindow
             () => _terminalPage is null ? "未安装或未启用交互终端插件" : null);
         Register("notifications", "通知中心", "全局", "", "完成、失败与待审批归属", () => { OpenNotificationCenterOverlay(); return Task.CompletedTask; });
         Register("browser", "浏览器", "工作区", "", "内置浏览器", () => { OpenDockPage("browser", DockZone.Right); return Task.CompletedTask; },
-            () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable());
+            () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         Register("library", "资料库", "工作区", "", "导入、检索与引用本地资料", () => { OpenDockPage("library", DockZone.Right); return Task.CompletedTask; },
-            () => !_workbenchPages.ContainsKey("library") ? "资料库模块已停用，可在设置中启用" : WorkAreaUnavailable());
+            () => !_workbenchPages.ContainsKey("library") ? "资料库模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         CaptionCommands.Command = _actions.GetCommand("commands");
         CaptionNotifications.Command = _actions.GetCommand("notifications");
         Activated += (_, _) => _notifications.SetWindowFocused(true);
@@ -106,7 +106,8 @@ public partial class MainWindow
     }
 
     private void Register(string id, string title, string group, string shortcut, string description,
-        Func<Task> action, Func<string?>? disabled = null) => _actions.Register(new(id, title, group, shortcut, description, action, disabled));
+        Func<Task> action, Func<string?>? disabled = null, bool hideWhenUnavailable = false) =>
+        _actions.Register(new(id, title, group, shortcut, description, action, disabled, false, hideWhenUnavailable));
 
     /// <summary>命令面板的会话结果：只列当前项目内仍在会话列表中的条目。</summary>
     private IReadOnlyList<CommandPaletteItemViewModel> PaletteSessions()

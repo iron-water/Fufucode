@@ -35,17 +35,17 @@ public partial class MainWindow
     {
         void Action(string id, string title, string group, Func<Task> operation, Func<string?>? reason = null, string shortcut = "") =>
             Register(id, title, group, shortcut, title, operation, reason);
-        void Now(string id, string title, string group, System.Action operation, Func<string?>? reason = null, string shortcut = "") =>
-            Register(id, title, group, shortcut, title, () => { operation(); return Task.CompletedTask; }, reason);
+        void Now(string id, string title, string group, System.Action operation, Func<string?>? reason = null, string shortcut = "", bool hideWhenUnavailable = false) =>
+            Register(id, title, group, shortcut, title, () => { operation(); return Task.CompletedTask; }, reason, hideWhenUnavailable);
         Now("toggle.left", "左侧边栏", "布局", () => ToggleDock(DockZone.Left));
         Now("toggle.right", "右侧边栏", "布局", () => ToggleDock(DockZone.Right));
         Now("toggle.bottom", "底部面板", "布局", () => ToggleDock(DockZone.Bottom), shortcut: "Ctrl+J");
         Now("layout.reset", "恢复默认布局", "布局", ResetDockLayout);
         Now("page.automation", "自动开发", "工作台", () => OpenDockPage("automation", DockZone.Right),
-            () => _workbenchPages.ContainsKey("automation") ? null : "请先在设置中启用自动开发模块");
+            () => _workbenchPages.ContainsKey("automation") ? null : "请先在设置中启用自动开发模块", hideWhenUnavailable: true);
         Now("page.local-review", "本地审查", "项目", () => OpenDockPage("local-review", DockZone.Right),
             () => !_workbenchPages.ContainsKey("local-review") ? "请先在设置中启用本地审查模块" :
-                _vm is null ? "会话尚未就绪" : !_vm.IsChatPage ? "返回工作区后可使用" : null);
+                _vm is null ? "会话尚未就绪" : !_vm.IsChatPage ? "返回工作区后可使用" : null, hideWhenUnavailable: true);
         Now("composer.toggle", "显示/隐藏输入区", "布局", () => _customization.Change(s => s with { Composer = s.Composer == "hidden" ? "reading" : "hidden" }));
         Now("summary.toggle", "变更摘要", "布局", () => _customization.Change(s => s with { ShowChangeSummary = !s.ShowChangeSummary }));
         Action("navigate.back", "返回", "导航", () => MoveHistoryAsync(-1), () => _navigationIndex > 0 ? null : "没有上一位置");

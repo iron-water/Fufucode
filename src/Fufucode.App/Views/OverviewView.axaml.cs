@@ -29,7 +29,7 @@ public partial class OverviewView : UserControl
 
         if (flyout.Items.Count == 0)
         {
-            flyout.Items.Add(new MenuItem { Header = "没有可用的后端", IsEnabled = false });
+            flyout.Items.Add(new MenuItem { Header = "使用默认后端新建会话", Command = viewModel.Sidebar.NewSessionCommand });
         }
     }
 }
