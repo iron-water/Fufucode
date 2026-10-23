@@ -124,10 +124,10 @@ Fluent 暗色只允许三档底色（`AppBaseDeep/AppBaseBar/AppBaseHighlight`�
 
 ### 7.1 功能状态页
 
-`terminal`、`files`、`automation`、`usage` 不是可编辑设置页，而是**功能状态页**：
+`terminal`、`files`、`automation` 不是可编辑设置页，而是**功能状态页**：
 
 - 状态来自宿主真实事实（插件页/控制器是否存在、内建页是否注册），不写“尚未接线”。
-- 只提供一个真实入口（打开终端/文件/自动开发/用量）和两个配置入口（插件市场、工作台模块）。
+- 只提供一个真实入口（打开终端/文件/自动开发）和两个配置入口（插件市场、工作台模块）。
 - 状态由 `WorkbenchCustomizationViewModel.FeatureStatus` 注入；页面不自行判断插件状态。
 - 插件页 ID 与内建页壳冲突时，内建注册优先；插件贡献不得删除 core/optional 页注册。
 

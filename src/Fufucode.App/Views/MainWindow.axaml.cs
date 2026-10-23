@@ -1724,7 +1724,6 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _extensionsPage.ReleaseLocalPlugins();
         _libraryService?.Dispose();
         _palette.Dispose();
-        _usage.Dispose();
         _notifications.Dispose();
         if (_workspaceSession is not null) _workspaceSession.Event -= OnWorkspaceSessionEvent;
         _vm?.WorkspacePanel.Dispose();

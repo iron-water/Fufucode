@@ -101,12 +101,9 @@ public partial class MainWindow
 
     private void SynchronizeAuxiliaryPageVisibility()
     {
-        if (_notifications is null || _usage is null) return;
+        if (_notifications is null) return;
         _notificationsView.SetCloseAllowed(!_dockLayout.PinnedPages.Contains("notifications"));
-        _usageView.SetCloseAllowed(!_dockLayout.PinnedPages.Contains("usage"));
         _notifications.IsOpen = _notificationsView.IsEffectivelyVisible;
-        if (_usageView.IsEffectivelyVisible && !_usage.IsOpen) _usage.Open();
-        else if (!_usageView.IsEffectivelyVisible) _usage.IsOpen = false;
     }
 
     private void RefreshNotificationFocus()

@@ -419,7 +419,6 @@ public partial class MainWindow
         "automation" => _pluginPageHost?.TryGet("automation", out _) == true
             ? new("已启用", "自动开发工作台已就绪。", null, "page.automation", "打开自动开发")
             : new("未安装", "自动开发由 automation.auto-dev 插件提供；安装并启用后才出现。", "marketplace", null, "前往插件市场"),
-        "usage" => new("内建", "用量详情在右栏页面展示当前会话、本轮与全部记录口径。", null, "usage", "打开用量"),
         _ => new("未知", "宿主尚未提供该功能的运行状态。"),
     };
 

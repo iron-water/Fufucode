@@ -82,8 +82,7 @@ public static class SettingsNavCatalog
             "WindowNew", "#4CC2FF"),
         new("config", "配置文件", SettingsNavTier.Other,
             "JSON 导入 导出 项目覆盖 全局 ui.json config", "Code", "#B48CFF"),
-        new("usage", "用量", SettingsNavTier.Other,
-            "用量 token 消耗 统计 配额 usage tokens", "History", "#8A8A8E"),
+        // usage 已并入性能中心，不再提供独立设置/页面。
         new("performance", "性能", SettingsNavTier.Other,
             "性能 监控 耗时 延迟 卡顿 慢 追踪 trace 诊断 perf performance trace latency", "History", "#6CCB5F"),
         new("modules", "工作台模块", SettingsNavTier.Other,

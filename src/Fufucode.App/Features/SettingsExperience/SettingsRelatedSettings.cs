@@ -28,7 +28,6 @@ public static class SettingsRelatedSettings
         ("automation", "browser", "自动开发可驱动浏览器能力"),
         ("automation", "terminal", "自动开发可驱动终端能力"),
         ("notifications", "functions", "通知渠道与会话消息显示相关"),
-        ("usage", "models", "用量与所选模型和思考等级相关"),
     ];
 
     private static readonly IReadOnlyDictionary<string, IReadOnlyList<SettingsRelatedLink>> Map = BuildMap();

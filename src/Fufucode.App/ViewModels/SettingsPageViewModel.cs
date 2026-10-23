@@ -193,11 +193,11 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// 等子页会保留控件树但整体不可见，表现为“点了没反应”。
     /// </summary>
     public bool ShowWorkbenchSection => SelectedCategory?.Id is
-        "appearance" or "functions" or "config" or "browser" or "terminal" or "files" or "automation" or "usage";
+        "appearance" or "functions" or "config" or "browser" or "terminal" or "files" or "automation";
     public string WorkbenchSectionId => SelectedCategory?.Id switch
     {
         "functions" => "functions", "config" => "config", "browser" => "browser",
-        "terminal" or "files" or "automation" or "usage" => SelectedCategory.Id,
+        "terminal" or "files" or "automation" => SelectedCategory.Id,
         _ => "appearance",
     };
 

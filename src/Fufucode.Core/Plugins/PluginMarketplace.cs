@@ -123,8 +123,8 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("agent.computer-use", "Computer Use 电脑操控", PluginCategory.AgentCapability,
-            "允许智能体截取当前桌面屏幕、模拟鼠标点击与键盘输入，直接操控 Windows 应用。",
-            "1.0.0", "Fufucode Team", ["屏幕截图获取", "鼠标与键盘模拟", "窗口激活"],
+            "通过 Sky、CUA Driver 或显式前台 Win32 后端操控 Windows 应用；后台路径按目标窗口投递，失败时不会静默抢前台。",
+            "1.1.0", "Fufucode Team", ["按窗口后台投递", "屏幕截图获取", "鼠标与键盘模拟", "前台显式升级"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         // ── 工具扩展（默认未安装，按需从市场安装） ──

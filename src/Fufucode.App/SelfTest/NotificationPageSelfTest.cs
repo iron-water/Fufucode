@@ -48,7 +48,7 @@ internal static class NotificationPageSelfTest
         var futureVm = new NotificationDeliveryViewModel(new(futureRoot)); futureVm.DeliversToWindows = true;
         Check(futureVm.SaveError is not null && File.ReadAllText(futurePath) == "{\"Version\":99}", "unsupported new versions are not silently downgraded");
         new WorkbenchAppearanceStore(root).Save(new() { Layout = new() { Selected = new()
-            { [DockZone.Left] = "overview", [DockZone.Right] = "browser", [DockZone.Bottom] = "terminal" } } }, false);
+            { [DockZone.Left] = "overview", [DockZone.Right] = "changes", [DockZone.Bottom] = "terminal" } } }, false);
         var previousRoot = Program.SelfTestDataRoot;
         Program.SelfTestDataRoot = root;
         var window = new MainWindow { Width = 1440, Height = 900 }; window.Show();
@@ -58,7 +58,7 @@ internal static class NotificationPageSelfTest
             var layout = window.DockLayoutForTesting;
             var state = layout.FindFloating("notifications")!;
             Check(state is { Hidden: true, X: 100, Y: 120 } && layout.NotificationMigrationApplied &&
-                layout.Selected[DockZone.Right] == "browser", "legacy position seeds one hidden generic container without changing the selected page");
+                layout.Selected[DockZone.Right] == "changes", "legacy position seeds one hidden generic container without changing the selected page");
             Check(window.FloatingDockWindowForTesting(state.Id)?.IsVisible == false && window.FindControl<Border>("CustomStatusBar")!.IsVisible == false,
                 "migration opens neither an unsolicited window nor the default-off status bar");
             await window.ActionsForTesting.ExecuteAsync("notifications"); await Ready();
@@ -105,24 +105,13 @@ internal static class NotificationPageSelfTest
             await window.ActionsForTesting.ExecuteAsync("notifications"); await Ready();
             Check(ReferenceEquals(window.PageForTesting("notifications"), page) && floating.IsVisible && center.Items.Count == 2,
                 "reopening the page preserves control identity and history");
-            await window.ActionsForTesting.ExecuteAsync("usage"); await Ready();
-            var usage = window.PageForTesting("usage");
-            Check(usage.IsEffectivelyVisible && ReferenceEquals(usage.DataContext, window.UsageForTesting) && window.UsageForTesting.IsOpen,
-                "usage uses the same data source in a normal function page");
-            var usageId = window.FloatDockPage("usage")!; await Ready();
-            var usageWindow = window.FloatingDockWindowForTesting(usageId)!;
-            usageWindow.Width = 320; usageWindow.Height = 560; await Ready();
-            Check(ReferenceEquals(usage, window.PageForTesting("usage")) && ReferenceEquals(TopLevel.GetTopLevel(usage), usageWindow),
-                "usage floats through the common host without creating another data source");
             foreach (var theme in new[] { ThemeVariant.Light, ThemeVariant.Dark })
             {
-                usageWindow.RequestedThemeVariant = theme; floating.RequestedThemeVariant = theme;
-                floating.Width = 320; await Ready();
+                floating.RequestedThemeVariant = theme;
+                floating.Width = 420; await Ready();
                 using var notificationFrame = floating.CaptureRenderedFrame();
-                using var usageFrame = usageWindow.CaptureRenderedFrame();
-                notificationFrame?.Save(Path.Combine(root, "notifications-320-" + theme + ".png"), PngBitmapEncoderOptions.Default);
-                usageFrame?.Save(Path.Combine(root, "usage-320-" + theme + ".png"), PngBitmapEncoderOptions.Default);
-                Check(notificationFrame?.PixelSize.Width == 320 && usageFrame?.PixelSize.Width == 320, "320-DIP notification and usage pages render in " + theme);
+                notificationFrame?.Save(Path.Combine(root, "notifications-420-" + theme + ".png"), PngBitmapEncoderOptions.Default);
+                Check(notificationFrame?.PixelSize.Width == 420, "420-DIP notification page renders in " + theme);
             }
             window.ResetDockLayout(); await Ready();
             Check(layout != window.DockLayoutForTesting && window.DockLayoutForTesting.NotificationMigrationApplied &&

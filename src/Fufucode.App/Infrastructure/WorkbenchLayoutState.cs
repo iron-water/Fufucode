@@ -24,7 +24,7 @@ public sealed class FloatingDockState
 
 public sealed class WorkbenchLayoutState
 {
-    public static readonly string[] KnownPages = ["overview", "files", "changes", "browser", "library", "local-review", "automation", "terminal", "sidechat", "notifications", "usage", "perf"];
+    public static readonly string[] KnownPages = ["overview", "files", "changes", "browser", "library", "local-review", "automation", "terminal", "sidechat", "notifications", "perf"];
     public Dictionary<DockZone, List<string>> Pages { get; set; } = new()
     {
         [DockZone.Left] = ["overview", "files"],
