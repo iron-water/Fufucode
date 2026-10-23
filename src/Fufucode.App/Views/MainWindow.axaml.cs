@@ -1635,7 +1635,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
     /// <summary>只有用户主动关窗才隐藏；系统注销/关闭与显式退出仍走真实退出流程。</summary>
     private bool ShouldHideToTray(WindowCloseReason reason) =>
-        !_closed && !_exitRequested && reason == WindowCloseReason.WindowClosing &&
+        !_closed && !_exitRequested &&
+        reason is WindowCloseReason.WindowClosing or WindowCloseReason.Undefined &&
         CloseToTrayEnabled && TrayAvailable;
 
     private void HideToTray()
