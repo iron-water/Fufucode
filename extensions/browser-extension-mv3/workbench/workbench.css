@@ -57,6 +57,7 @@ button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px
   .mobile-actions { display: grid; grid-template-columns: repeat(3, 1fr); height: 46px; background: var(--bar); border-top: 1px solid var(--line); z-index: 5; }.mobile-actions button { border: 0; border-right: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 12px; }.mobile-actions button:last-child { border-right: 0; }.mobile-actions button:hover { color: var(--ink); background: var(--highlight); }.mobile-actions span { display: inline-grid; place-items: center; min-width: 16px; height: 16px; margin-left: 3px; border-radius: 8px; background: var(--danger); color: #fff; font-size: 10px; }
   .welcome { margin-top: 12vh; }.welcome h2 { font-size: 19px; }
 }
+.page-context-strip, .quick-actions { display: none; }
 @media (max-width: 520px) {
   /* 真正的浏览器侧边栏：打开功能后占满可用宽度，避免三栏内容横向被裁切。 */
   .sidebar, .context-panel { width: 100vw; }
@@ -67,3 +68,47 @@ button:focus-visible, textarea:focus-visible, input:focus-visible { outline: 2px
   .connection #connectionText { display: none; }.topbar { height: 42px; }.shell { height: calc(100% - 42px); }.timeline { padding-left: 10px; padding-right: 10px; }.bubble { max-width: 92%; }.conversation-head h1 { font-size: 15px; }.session-list { padding: 4px; }
 }
 @media (prefers-reduced-motion: reduce) { .sidebar, .context-panel { transition: none; } }
+
+/* 侧边栏专用表面：对话是唯一主内容，其他能力按需进入抽屉。 */
+body.sidepanel-surface { min-width: 0; width: 100%; background: var(--bg); }
+body.sidepanel-surface .topbar { height: 44px; padding: 0 12px; }
+body.sidepanel-surface .brand-mark { width: 23px; height: 23px; }
+body.sidepanel-surface .brand-name { font-size: 14px; }
+body.sidepanel-surface .connection { font-size: 11px; }
+body.sidepanel-surface .shell { display: block; height: calc(100% - 44px); }
+body.sidepanel-surface .sidebar,
+body.sidepanel-surface .context-panel { position: absolute; z-index: 30; inset: 0; width: 100%; max-width: none; border: 0; transform: translateX(-105%); transition: transform .16s ease; box-shadow: 0 12px 30px rgba(0,0,0,.32); }
+body.sidepanel-surface .context-panel { transform: translateX(105%); }
+body.sidepanel-surface.sessions-drawer-open .sidebar { transform: translateX(0); }
+body.sidepanel-surface.context-drawer-open .context-panel { transform: translateX(0); }
+body.sidepanel-surface .conversation { height: calc(100% - 46px); }
+body.sidepanel-surface .conversation-head { min-height: 52px; padding: 0 12px; }
+body.sidepanel-surface .page-context-strip { display: flex; }
+body.sidepanel-surface .quick-actions { display: grid; }
+body.sidepanel-surface .conversation-head h1 { font-size: 15px; }
+body.sidepanel-surface .drawer-button { display: inline-block; padding: 5px 8px; }
+body.sidepanel-surface .page-context-strip { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 6px 12px; border-bottom: 1px solid var(--line-soft); background: var(--bg); }
+body.sidepanel-surface .context-pulse { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); flex: none; }
+body.sidepanel-surface .page-context-copy { min-width: 0; flex: 1; display: grid; gap: 1px; }
+body.sidepanel-surface .page-context-copy strong, body.sidepanel-surface .page-context-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.sidepanel-surface .page-context-copy strong { font-size: 12px; font-weight: 600; }
+body.sidepanel-surface .page-context-copy span { color: var(--muted); font: 10px "Cascadia Mono", Consolas, monospace; }
+body.sidepanel-surface .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; padding: 7px 10px; border-bottom: 1px solid var(--line-soft); background: var(--bg); }
+body.sidepanel-surface .quick-action { min-width: 0; display: grid; justify-items: center; gap: 3px; padding: 6px 3px; border: 1px solid transparent; border-radius: 5px; background: transparent; color: var(--muted); font-size: 10px; }
+body.sidepanel-surface .quick-action:hover { background: var(--highlight); border-color: var(--line); color: var(--ink); }
+body.sidepanel-surface .quick-icon { display: grid; place-items: center; width: 23px; height: 23px; border-radius: 5px; background: var(--surface); color: var(--accent); font-size: 15px; }
+body.sidepanel-surface .quick-count { position: absolute; margin: -28px 0 0 25px; min-width: 14px; height: 14px; display: grid; place-items: center; padding: 0 3px; border-radius: 7px; background: var(--danger); color: white; font-size: 9px; }
+body.sidepanel-surface .timeline { padding: 16px 12px 10px; }
+body.sidepanel-surface .welcome { margin-top: 18vh; padding: 0 20px; }
+body.sidepanel-surface .welcome-mark { width: 32px; height: 32px; font-size: 17px; }
+body.sidepanel-surface .welcome h2 { font-size: 18px; margin-top: 11px; }
+body.sidepanel-surface .welcome p { font-size: 13px; line-height: 1.55; }
+body.sidepanel-surface .composer-wrap { padding: 8px 10px 7px; }
+body.sidepanel-surface .composer { border-radius: 6px; background: var(--surface); }
+body.sidepanel-surface .mobile-actions { display: none; }
+body.sidepanel-surface .sidebar-head { min-height: 48px; }
+body.sidepanel-surface .sidebar-foot { padding: 10px; }
+body.sidepanel-surface .context-panel .panel-title { min-height: 46px; }
+body.sidepanel-surface .context-card, body.sidepanel-surface .settings-card { margin: 10px; }
+body.sidepanel-surface .mobile-actions { position: absolute; left: 0; right: 0; bottom: 0; }
+body.sidepanel-surface .conversation { padding-bottom: 46px; }

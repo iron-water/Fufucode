@@ -26,6 +26,14 @@
   const $ = id => document.getElementById(id);
   const escapeText = value => String(value ?? "");
 
+  function syncSurfaceMode() {
+    const isExtension = typeof chrome !== "undefined" && !!chrome.runtime;
+    const isNarrow = window.innerWidth <= 820;
+    document.body.classList.toggle("sidepanel-surface", isNarrow || (isExtension && window.innerWidth < 980));
+  }
+  syncSurfaceMode();
+  window.addEventListener("resize", syncSurfaceMode);
+
   function normalizeHost(value) {
     let host = String(value || "").trim().replace(/\/$/, "");
     if (!host) return "";
@@ -266,6 +274,8 @@
     const root = $("approvalList"); root.innerHTML = "";
     $("mobileApprovalCount").textContent = String(state.approvals.length);
     $("mobileApprovalCount").hidden = state.approvals.length === 0;
+    $("quickApprovalCount").textContent = String(state.approvals.length);
+    $("quickApprovalCount").hidden = state.approvals.length === 0;
     if (!state.approvals.length) { root.innerHTML = '<div class="context-placeholder">暂无待处理审批</div>'; return; }
     state.approvals.forEach(item => {
       const node = document.createElement("div"); node.className = "approval";
@@ -318,6 +328,8 @@
   function renderContext() {
     const root = $("contextCard");
     const context = state.context;
+    $("quickContextTitle").textContent = context?.title || "当前网页";
+    $("quickContextUrl").textContent = context?.url || "未读取页面";
     if (!context?.url) { root.innerHTML = '<div class="context-placeholder">打开一个网页后，这里会显示当前标签页。</div>'; return; }
     root.innerHTML = '<div class="context-title"></div><div class="context-url"></div><div class="context-actions"><button class="secondary">引用当前页面</button><button class="secondary">读取页面状态</button></div>';
     root.querySelector(".context-title").textContent = context.title || "当前页面";
@@ -351,6 +363,11 @@
   }
 
   $("sessionDrawerBtn").addEventListener("click", () => toggleDrawer("sessions-drawer"));
+  $("quickCollect").addEventListener("click", () => runBrowserAction("collect"));
+  $("quickRead").addEventListener("click", () => runBrowserAction("state"));
+  $("quickBrowser").addEventListener("click", () => toggleDrawer("context-drawer"));
+  $("quickApproval").addEventListener("click", () => { toggleDrawer("context-drawer"); $("approvalList").scrollIntoView({ block: "start" }); });
+  $("quickContextRefresh").addEventListener("click", refreshContext);
   $("contextDrawerBtn").addEventListener("click", () => toggleDrawer("context-drawer"));
   $("mobileSessionBtn").addEventListener("click", () => toggleDrawer("sessions-drawer"));
   $("mobileContextBtn").addEventListener("click", () => toggleDrawer("context-drawer"));
