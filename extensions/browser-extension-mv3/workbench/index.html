@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Fufucode Workbench</title>
+  <link rel="stylesheet" href="workbench.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">F</span><span>Fufucode</span><span class="product">BROWSER WORKBENCH</span></div>
+    <div class="connection"><span id="connectionDot" class="dot"></span><span id="connectionText">未连接</span><button id="reconnectBtn" class="quiet">重连</button></div>
+  </header>
+  <main class="shell">
+    <aside class="sidebar">
+      <div class="sidebar-head"><span>会话</span><button id="refreshSessions" class="icon-button" title="刷新会话">↻</button></div>
+      <div id="sessionList" class="session-list"><div class="empty">连接后加载会话</div></div>
+      <div class="sidebar-foot"><button id="openExternal" class="secondary full">打开当前网页上下文</button></div>
+    </aside>
+    <section class="conversation">
+      <div class="conversation-head"><div><h1 id="sessionTitle">Fufucode 会话</h1><div id="sessionMeta" class="muted">等待连接</div></div><button id="stopBtn" class="danger hidden">停止</button></div>
+      <div id="timeline" class="timeline"><div class="welcome"><div class="welcome-mark">✦</div><h2>浏览器里的 Fufucode</h2><p>连接桌面会话后，你可以在这里对话、查看工具执行、处理审批，并把当前网页作为上下文交给 Agent。</p></div></div>
+      <div class="composer-wrap"><div id="draftHint" class="draft-hint"></div><div class="composer"><textarea id="composer" rows="1" placeholder="给 Fufucode 发消息…"></textarea><button id="sendBtn" class="send" title="发送">↑</button></div><div class="composer-foot"><span>Enter 发送 · Shift+Enter 换行</span><span id="queueText"></span></div></div>
+    </section>
+    <aside class="context-panel">
+      <div class="panel-title"><span>浏览器上下文</span><button id="refreshContext" class="icon-button" title="刷新当前页面">↻</button></div>
+      <div id="contextCard" class="context-card"><div class="context-placeholder">打开一个网页后，这里会显示当前标签页。</div></div>
+      <div class="panel-title tools-title">工具与审批</div>
+      <div id="approvalList" class="approval-list"><div class="context-placeholder">暂无待处理审批</div></div>
+      <div class="panel-title tools-title">连接设置</div>
+      <div class="settings-card"><label>Fufucode 远控地址<input id="hostInput" placeholder="例如 http://127.0.0.1:53124"></label><label>配对 PIN<input id="pinInput" inputmode="numeric" maxlength="4" placeholder="0000"></label><button id="pairBtn" class="primary full">连接桌面会话</button><div id="errorText" class="error"></div></div>
+    </aside>
+  </main>
+  <script src="workbench.js"></script>
+</body>
+</html>
