@@ -912,6 +912,27 @@
   <Style Selector="Button.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
+  <!-- 启动卡：深色背景上的一张中间灰卡，图标 + 品牌名 + 主操作。 -->
+  <Style Selector="Border.startupCard">
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="14"/>
+    <Setter Property="Padding" Value="28,26"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
+  </Style>
+  <Style Selector="Border.startupBadge">
+    <Setter Property="Width" Value="48"/>
+    <Setter Property="Height" Value="48"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="Padding" Value="10"/>
+  </Style>
+  <Style Selector="TextBlock.startupWordmark">
+    <Setter Property="FontSize" Value="24"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
   <!-- 危险确认按钮：透明底 + critical 描边/文字，悬停用 critical 浅底（权限升级确认）。 -->
   <Style Selector="Button.danger">
     <Setter Property="Background" Value="Transparent"/>
