@@ -43,6 +43,9 @@ public static class ChangeRangeQuery
             }
             var parts = status.Output.Split('\0');
             var files = new List<ChangedFile>();
+            // 未跟踪文件要读内容才知道行数；大仓库里可能有成千上万个，
+            // 只给前 N 个计数，其余保持未知——宁可少一个 ± 也不拖慢整个面板。
+            var untrackedBudget = 200;
             for (var i = 0; i < parts.Length; i++)
             {
                 var item = parts[i]; if (item.Length == 0) continue;
@@ -61,8 +64,19 @@ public static class ChangeRangeQuery
                 var kind = x == '?' && y == '?' ? "untracked" : x == 'U' || y == 'U' || item[..2] is "AA" or "DD" ? "unmerged" :
                     x == 'R' || y == 'R' ? "renamed" : x == 'C' || y == 'C' ? "copied" :
                     x == 'D' || y == 'D' ? "deleted" : x == 'A' || y == 'A' ? "added" : x == 'T' || y == 'T' ? "type-changed" : "modified";
+                // Untracked files are absent from numstat; they are entirely new, so counting their
+                // lines is a real count rather than an estimate. Anything unreadable stays null.
+                var added = stat?.Added;
+                var removed = stat?.Removed;
+                if (stat is null && kind == "untracked" && binary == false && untrackedBudget > 0 &&
+                    CountLines(full) is { } lines)
+                {
+                    untrackedBudget--;
+                    added = lines;
+                    removed = 0;
+                }
                 files.Add(new(path, old, kind, x.ToString(), y.ToString(), File.Exists(full), binary, [],
-                    stat?.Added, stat?.Removed));
+                    added, removed));
             }
             return new("workspace", root, true, files.OrderBy(f => f.Path, PathComparer).ToArray(), null);
         }
@@ -120,6 +134,22 @@ public static class ChangeRangeQuery
     }
 
     private static readonly StringComparer PathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
+
+    /// <summary>Line count of an untracked text file; null when it cannot be read cleanly.</summary>
+    private static int? CountLines(string file)
+    {
+        try
+        {
+            var info = new FileInfo(file);
+            if (!info.Exists || info.Length > DiffQuery.MaximumSideBytes) return null;
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            using var reader = new StreamReader(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true);
+            var count = 0;
+            while (reader.ReadLine() is not null) count++;
+            return count;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return null; }
+    }
 
     private static bool? ProbeBinary(string file, string root)
     {

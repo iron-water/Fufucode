@@ -228,6 +228,12 @@ public static class SelfTestRunner
             Console.WriteLine($"Settings apply failures: {Failures.Count}");
             return Failures.Count == 0 ? 0 : 1;
         }
+        if (args.Contains("--changes-shots-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => ChangesPanelShots.RunAsync(Pass, Fail));
+            Console.WriteLine($"== 自测结束：{Failures.Count} 项失败 ==");
+            return Failures.Count == 0 ? 0 : 1;
+        }
         if (args.Contains("--r2-only"))
         {
             await RunWave5R2ChecksAsync(args);

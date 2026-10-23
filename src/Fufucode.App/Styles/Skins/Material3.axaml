@@ -154,8 +154,10 @@
             <SolidColorBrush x:Key="AppSelectionForeground" Color="#FF21005D"/>
             <SolidColorBrush x:Key="AppDiffAddedBackground"   Color="#FFDDEFE3"/>
             <SolidColorBrush x:Key="AppDiffAddedForeground"   Color="#FF23503A"/>
+            <SolidColorBrush x:Key="AppDiffAddedStrong"       Color="#4D23503A"/>
             <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#FFF7DFE2"/>
             <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FF8C1D18"/>
+            <SolidColorBrush x:Key="AppDiffRemovedStrong"     Color="#4D8C1D18"/>
             <SolidColorBrush x:Key="AppSuccessBackground" Color="#FFDDEFE3"/>
             <SolidColorBrush x:Key="AppCautionBackground" Color="#FFFDF3DC"/>
 
@@ -333,8 +335,10 @@
             <SolidColorBrush x:Key="AppSelectionForeground" Color="#FFE8DEF8"/>
             <SolidColorBrush x:Key="AppDiffAddedBackground"   Color="#FF23503A"/>
             <SolidColorBrush x:Key="AppDiffAddedForeground"   Color="#FFC6E9D4"/>
+            <SolidColorBrush x:Key="AppDiffAddedStrong"       Color="#4DC6E9D4"/>
             <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#FF5C2A2C"/>
             <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFF4C6C3"/>
+            <SolidColorBrush x:Key="AppDiffRemovedStrong"     Color="#4DF4C6C3"/>
             <SolidColorBrush x:Key="AppSuccessBackground" Color="#FF1F3327"/>
             <SolidColorBrush x:Key="AppCautionBackground" Color="#FF3A2E14"/>
 
