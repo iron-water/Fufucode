@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using Fufucode.App.Abstractions;
 using Fufucode.Core.Backend;
 
 namespace Fufucode.App.Backend.Tests;
@@ -30,7 +31,48 @@ internal static class LongHorizonTests
         await StreamUsageFallbackAsync(checks);
         ContextOverflowClassification(checks);
         await NoFixedCharThresholdAsync(checks);
+        await ProjectInstructionsAutoLoadedAsync(checks);
         RestoreRepairsToolPairing(checks);
+    }
+
+    private static async Task ProjectInstructionsAutoLoadedAsync(Checks checks)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fumo-agents-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        try
+        {
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"),
+                "# 项目规则\n所有路径使用相对路径。\n测试命令：flutter test。");
+            var engine = new PureCSharpAgentEngine(modelClient: new CapturingTextClient("ok"));
+            await using var session = new NativeCSharpChatSession(
+                engine, "agents-test", "m", workspaceRoot: root);
+            var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.Event += (_, e) => { if (e is SessionEvent.TurnSettled) settled.TrySetResult(); };
+            await session.SendAsync("hi");
+            await settled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            var system = engine.GetState().History!.First(m => m.Role == PureAgentRole.System).Content;
+            checks.Check(system.Contains("自动加载自 AGENTS.md", StringComparison.Ordinal),
+                "系统提示自动标注 AGENTS.md 来源");
+            checks.Check(system.Contains("所有路径使用相对路径", StringComparison.Ordinal),
+                "系统提示包含项目约定正文，模型不必先读一遍");
+
+            File.WriteAllText(Path.Combine(root, "AGENTS.md"), new string('x', 40_000));
+            var engine2 = new PureCSharpAgentEngine(modelClient: new CapturingTextClient("ok"));
+            await using var session2 = new NativeCSharpChatSession(
+                engine2, "agents-test-2", "m", workspaceRoot: root);
+            var settled2 = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            session2.Event += (_, e) => { if (e is SessionEvent.TurnSettled) settled2.TrySetResult(); };
+            await session2.SendAsync("hi");
+            await settled2.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            var system2 = engine2.GetState().History!.First(m => m.Role == PureAgentRole.System).Content;
+            checks.Check(system2.Contains("项目约定过长", StringComparison.Ordinal),
+                "超大项目约定被截断并标注");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
     }
 
     private static async Task NoFixedCharThresholdAsync(Checks checks)

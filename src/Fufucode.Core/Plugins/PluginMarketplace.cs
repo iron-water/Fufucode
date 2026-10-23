@@ -113,7 +113,7 @@ public static class PluginMarketplaceCatalog
 
         // ── 智能体高级能力（默认未安装，按需从市场安装） ──
         new("workspace.subagents", "Subagent 子代理", PluginCategory.AgentCapability,
-            "可选子代理运行时：安装后默认使用 faster，stronger 由用户手动切换。",
+            "可选子代理运行时：安装后提供单一、默认开启的只读/补丁子代理能力，无档位选择。",
             "1.0.0", "Fufucode Team", ["模型调用", "独立 Agent 上下文"],
             DefaultInstalled: false, DefaultEnabled: false),
 
@@ -128,6 +128,11 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: false, DefaultEnabled: false),
 
         // ── 工具扩展（默认未安装，按需从市场安装） ──
+        new("tool.sketch", "草图绘制", PluginCategory.ToolExtension,
+            "在聊天输入栏中打开轻量草图编辑器，绘制后作为图片附件发送给模型。默认不安装、不启用。",
+            "1.0.0", "Fufucode Team", ["图片输入能力", "临时 PNG 导出"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("tool.seep-reverse-lab", "Seep 逆向工程工作台", PluginCategory.ToolExtension,
             "接入 Seep Reverse Lab 工作台：23 个 Radare2 / JADX / Apktool / Frida 逆向工具、"
             + "ReverseLab 知识库检索，以及 127.0.0.1:17890 合规转译中继。"

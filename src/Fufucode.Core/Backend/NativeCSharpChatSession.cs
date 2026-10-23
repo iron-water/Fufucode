@@ -246,7 +246,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             {
                 _subagents.ApprovalGate = pureEngine.ApprovalGate;
                 _subagents.ParentMode = () => pureEngine.Mode;
-                _subagents.SetTier(NativeSubagentRegistry.Tier);
                 _subagents.HistoryProvider = () => pureEngine.GetState().History ?? [];
                 _subagents.Progress = progress => Emit(new SessionEvent.SubagentUpdated(
                     progress.JobId, progress.Agent, progress.Kind, progress.Detail));
@@ -370,6 +369,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var planSnippet = GetCurrentPlanSnippet();
         var skillsSection = _skills?.BuildPromptSection();
         var systemContent = string.IsNullOrWhiteSpace(fragment) ? basePrompt : $"{basePrompt}\n\n{fragment}";
+        // 项目约定（AGENTS.md / CLAUDE.md）是仓库级事实，五个参考后端都会自动带入；
+        // 让模型用工具先找一遍只是浪费轮次。
+        var projectInstructions = BuildProjectInstructionsSection();
 
         void AppendSection(string? section)
         {
@@ -377,6 +379,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             systemContent = string.IsNullOrWhiteSpace(systemContent) ? section : $"{systemContent}\n\n{section}";
         }
 
+        AppendSection(projectInstructions);
         AppendSection(planSnippet);
         AppendSection(skillsSection);
         AppendSection(_mcp?.BuildPromptSection());
@@ -417,8 +420,44 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         }
         sb.AppendLine("3. 目标是实际完成代码开发与落地，不只给出空泛方案。");
         sb.AppendLine("4. 当遇到环境缺少某 SDK/工具链（如未安装对应语言编译器）时，不要陷入无限探测循环；应依据任务书规范自主完成核心架构设计、源代码编写、种子数据准备与必要单元测试，并在最终回复中如实说明环境限制与未验证项。");
+        sb.AppendLine("5. 验证命令要克制：同一处改动后不要重复运行同一个耗时检查；先跑与改动直接相关的测试，最后再跑一次全量。");
+        sb.AppendLine("6. 修改共享模块后，必须重跑覆盖它的既有测试；不要只验证新增路径，旧行为退化要自己发现。");
 
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// 自动加载仓库根的 AGENTS.md / CLAUDE.md。项目约定是仓库级事实，
+    /// 每个参考后端都会在系统上下文里直接提供；让模型先花工具轮次去找是纯浪费。
+    /// 只读根目录第一个存在的文件，限长 32k 字符，避免把超大文档塞满窗口。
+    /// </summary>
+    private string? BuildProjectInstructionsSection()
+    {
+        if (string.IsNullOrWhiteSpace(_workspaceRoot)) return null;
+        foreach (var name in new[] { "AGENTS.md", "CLAUDE.md" })
+        {
+            var path = Path.Combine(_workspaceRoot, name);
+            if (!File.Exists(path)) continue;
+            try
+            {
+                var text = File.ReadAllText(path);
+                if (text.Length > 32_000)
+                {
+                    text = text[..24_000] + "\n\n…[项目约定过长，已截断中间部分]…\n\n" +
+                           text[^8_000..];
+                }
+                return $"## 项目约定（自动加载自 {name}）\n{text.Trim()}";
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+        return null;
     }
 
     private string? GetCurrentPlanSnippet() => (_engine as PureCSharpAgentEngine)?.CurrentPlanSnippet;

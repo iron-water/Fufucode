@@ -375,6 +375,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private async void OnLoaded(object? sender, RoutedEventArgs e)
     {
         ApplyMicaOverrides();
+        AttachComputerCursorOverlay();
         if (_options.Mode == AppSessionMode.Real)
         {
             // M3.1：无显式 --project 时回退到最近一个仍存在的项目；全部缺失则进入“选择项目”态。
@@ -1767,6 +1768,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        DisposeComputerCursorOverlay();
         _bootstrapCts.Dispose();
         if (_backgroundStore is not null)
         {

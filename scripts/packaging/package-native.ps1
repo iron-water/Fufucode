@@ -369,6 +369,8 @@ $plugins = @(
     @{ Id = 'workspace.local-review'; Project = 'src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj' },
     # 性能监控插件：可选安装，默认包不含其程序集。
     @{ Id = 'performance.monitor'; Project = 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj' },
+    # 草图绘制插件：默认不安装；用户从插件市场安装后才向输入栏贡献入口。
+    @{ Id = 'tool.sketch'; Project = 'src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj' },
     # 五类后端插件结构完全同级；各自携带协议适配器，运行时由用户安装或按需下发。
     @{ Id = 'backend.pi'; Project = 'src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj' },
     @{ Id = 'backend.omp'; Project = 'src/Fufucode.Plugins.Omp/Fufucode.Plugins.Omp.csproj' },

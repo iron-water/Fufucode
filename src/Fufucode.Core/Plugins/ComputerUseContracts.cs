@@ -85,7 +85,9 @@ public sealed record ComputerUseTarget(
 /// <summary>单次电脑操控共用上下文。</summary>
 public sealed record ComputerUseActionContext(
     ComputerUseDeliveryMode DeliveryMode = ComputerUseDeliveryMode.Background,
-    ComputerUseTarget? Target = null);
+    ComputerUseTarget? Target = null,
+    string? AgentId = null,
+    ComputerUseRouteMode Route = ComputerUseRouteMode.Auto);
 
 /// <summary>截图后端请求。</summary>
 public sealed record ComputerUseCaptureRequest(

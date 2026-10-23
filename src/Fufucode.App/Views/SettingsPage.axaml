@@ -216,15 +216,6 @@
                           </StackPanel>
                           <TextBlock Classes="caption" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                           <TextBlock Classes="meta" Text="{Binding PermissionsSummary}" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding HasPermissions}"/>
-                          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding ShowSubagentTier}">
-                            <TextBlock Classes="meta" Text="档位" VerticalAlignment="Center"/>
-                            <Button Classes="subtle" Content="faster" Padding="8,2"
-                                    Command="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SetSubagentFasterCommand}"
-                                    CommandParameter="{Binding}"/>
-                            <Button Classes="subtle" Content="stronger" Padding="8,2"
-                                    Command="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SetSubagentStrongerCommand}"
-                                    CommandParameter="{Binding}"/>
-                          </StackPanel>
                         </StackPanel>
 
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

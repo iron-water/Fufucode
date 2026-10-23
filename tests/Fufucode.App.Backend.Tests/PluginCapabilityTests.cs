@@ -48,6 +48,7 @@ internal static class PluginCapabilityTests
             await UninstallRevokes(checks, store, registry, browser, computer, layout);
             await RegistryIsolation(checks, store, gateway, layout);
             await CheckPhysicalPackageLifecycle(checks, layout, store, gateway, registry);
+            await ComposerContributionLifecycle(checks, layout, store, gateway);
         }
         finally
         {
@@ -158,6 +159,63 @@ internal static class PluginCapabilityTests
             "AeroSkin 物理卸载成功：物理目录已彻底删除");
 
         await packageManager.DisposeAsync();
+    }
+
+    /// <summary>草图插件生命周期：默认不提供入口，安装后贡献，停用/卸载后撤销。</summary>
+    private static async Task ComposerContributionLifecycle(
+        Checks checks, AppDataLayout layout, PluginStateStore store, PluginCapabilityGateway gateway)
+    {
+        var definition = PluginMarketplaceCatalog.Find("tool.sketch");
+        checks.Check(definition is { DefaultInstalled: false, DefaultEnabled: false },
+            "草图插件默认不随包安装、不默认启用");
+        checks.Check(!store.IsActive("tool.sketch"), "草图插件初始状态不可用");
+
+        PluginPackageManager.RegisterPackageFactory("tool.sketch", () => new ComposerOnlyPackage());
+        try
+        {
+            var manager = new PluginPackageManager(layout, new PluginToolRegistry(gateway), store);
+            try
+            {
+                checks.Check(!manager.TryGetComposerContribution("tool.sketch", out _),
+                    "未安装时输入栏没有草图入口");
+
+                manager.InstallPackage("tool.sketch");
+                checks.Check(manager.TryGetComposerContribution("tool.sketch", out var installed) &&
+                             installed.MenuText == "绘制草图",
+                    "市场安装后输入栏出现草图入口");
+
+                manager.SetPackageEnabled("tool.sketch", false);
+                checks.Check(!manager.TryGetComposerContribution("tool.sketch", out _),
+                    "停用后草图入口撤销");
+
+                manager.SetPackageEnabled("tool.sketch", true);
+                checks.Check(manager.TryGetComposerContribution("tool.sketch", out _),
+                    "重新启用后草图入口恢复");
+
+                manager.UninstallPackage("tool.sketch");
+                checks.Check(!manager.TryGetComposerContribution("tool.sketch", out _),
+                    "卸载后草图入口与载荷一并撤销");
+                checks.Check(!Directory.Exists(layout.PluginDirectory("tool.sketch")),
+                    "卸载后草图插件物理目录已删除");
+            }
+            finally
+            {
+                await manager.DisposeAsync();
+            }
+        }
+        finally
+        {
+            PluginPackageManager.UnregisterPackageFactory("tool.sketch");
+        }
+    }
+
+    private sealed class ComposerOnlyPackage : IPluginPackage
+    {
+        public string Id => "tool.sketch";
+        public string Version => "1.0.0";
+        public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => null;
+        public PluginComposerContribution? CreateComposerContribution(PluginPackageContext context) =>
+            new("绘制草图", _ => Task.CompletedTask);
     }
 
     private static Task CapabilityMapping(Checks checks)
@@ -287,6 +345,47 @@ internal static class PluginCapabilityTests
                      backgroundBackend.LastMouse.Context.Target.WindowId == 99,
             "后台后端收到精确窗口目标且保持后台投递模式");
 
+        // 混合路由：后台默认优先 CUA，前台/可见优先 Sky；显式 route 是固定而不是偏好。
+        var cua = new FakeComputerBackend(ComputerUseBackendKind.CuaDriver);
+        var sky = new FakeComputerBackend(ComputerUseBackendKind.Sky);
+        var hybrid = new ComputerUsePlugin(backends: new IComputerUseBackend[] { sky, cua });
+        await hybrid.ExecuteAsync(new PureToolCall("r1", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":1,\"y\":2,\"processId\":7,\"windowId\":8,\"deliveryMode\":\"background\"}"));
+        checks.Check(ReferenceEquals(cua.LastMouse?.Context, null) == false && cua.MouseCalls == 1 && sky.MouseCalls == 0,
+            "后台动作优先 CUA 后端");
+        await hybrid.ExecuteAsync(new PureToolCall("r2", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":1,\"y\":2,\"deliveryMode\":\"foreground\"}"));
+        checks.Check(sky.MouseCalls == 1 && cua.MouseCalls == 1,
+            "前台动作优先 Sky 后端");
+        await hybrid.ExecuteAsync(new PureToolCall("r3", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":1,\"y\":2,\"processId\":7,\"windowId\":8,\"deliveryMode\":\"background\",\"route\":\"sky\"}"));
+        checks.Check(sky.MouseCalls == 2 && cua.MouseCalls == 1,
+            "显式 route=sky 固定使用 Sky，不静默切到 CUA");
+
+        // 虚拟光标：成功鼠标动作更新注册表；纯状态层不产生系统输入。
+        var cursors = new ComputerUseVirtualCursorRegistry();
+        var cursorPlugin = new ComputerUsePlugin(backends: new[] { new FakeComputerBackend(ComputerUseBackendKind.CuaDriver) },
+            cursorRegistry: cursors);
+        await cursorPlugin.ExecuteAsync(new PureToolCall("r4", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":11,\"y\":22,\"processId\":7,\"windowId\":8,\"agentId\":\"agent-a\"}"));
+        var cursor = cursors.Snapshot.Single();
+        checks.Check(cursor.AgentId == "agent-a" && Math.Abs(cursor.X - 11) < 0.001 && Math.Abs(cursor.Y - 22) < 0.001 &&
+                     !cursor.IsPressed && cursor.TargetWindow == "7:8",
+            "成功动作同步虚拟光标位置、释放态与目标窗口");
+
+        // 按下态必须在动作执行期间可见，而不是只在成功后补一个“已点击”。
+        var slowCursors = new ComputerUseVirtualCursorRegistry();
+        var slowBackend = new FakeComputerBackend(ComputerUseBackendKind.CuaDriver) { MouseDelay = TimeSpan.FromMilliseconds(150) };
+        var slowPlugin = new ComputerUsePlugin(backends: new[] { slowBackend }, cursorRegistry: slowCursors);
+        var slowTask = slowPlugin.ExecuteAsync(new PureToolCall("r5", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":3,\"y\":4,\"processId\":7,\"windowId\":8,\"agentId\":\"agent-b\"}"));
+        await Task.Delay(40);
+        checks.Check(slowCursors.Snapshot.Single().IsPressed,
+            "点击执行期间虚拟光标显示按下态");
+        await slowTask;
+        checks.Check(!slowCursors.Snapshot.Single().IsPressed,
+            "点击完成后虚拟光标恢复释放态");
+
         // 权限开关：关闭后如实拒绝，而不是伪装成功。
         var locked = new ComputerUsePlugin(new FakeScreenCapture(), new FakeInput())
         {
@@ -389,22 +488,28 @@ internal static class PluginCapabilityTests
     /// <summary>可控的后台电脑后端替身：记录精确窗口目标，不驱动真实桌面。</summary>
     private sealed class FakeComputerBackend : IComputerUseBackend
     {
-        public ComputerUseBackendKind Kind => ComputerUseBackendKind.CuaDriver;
+        public FakeComputerBackend(ComputerUseBackendKind kind = ComputerUseBackendKind.CuaDriver) => Kind = kind;
+
+        public ComputerUseBackendKind Kind { get; }
         public bool IsAvailable => true;
         public string? UnavailableReason => null;
-        public bool SupportsBackground => true;
+        public bool SupportsBackground => Kind != ComputerUseBackendKind.Win32;
         public bool SupportsForeground => true;
         public ComputerUseMouseRequest? LastMouse { get; private set; }
+        public int MouseCalls { get; private set; }
+        public TimeSpan MouseDelay { get; init; }
 
         public Task<ComputerUseBackendResult> CaptureAsync(ComputerUseCaptureRequest request,
             CancellationToken cancellationToken = default) =>
             Task.FromResult(new ComputerUseBackendResult(true, "fake capture", [0x89, (byte)'P', (byte)'N', (byte)'G'], 1, 1));
 
-        public Task<ComputerUseBackendResult> MouseAsync(ComputerUseMouseRequest request,
+        public async Task<ComputerUseBackendResult> MouseAsync(ComputerUseMouseRequest request,
             CancellationToken cancellationToken = default)
         {
             LastMouse = request;
-            return Task.FromResult(new ComputerUseBackendResult(true, "fake mouse"));
+            MouseCalls++;
+            if (MouseDelay > TimeSpan.Zero) await Task.Delay(MouseDelay, cancellationToken);
+            return new ComputerUseBackendResult(true, "fake mouse");
         }
 
         public Task<ComputerUseBackendResult> KeyboardAsync(ComputerUseKeyboardRequest request,

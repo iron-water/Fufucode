@@ -29,9 +29,19 @@ public partial class ChatPage
         TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12, 16, 28), "airy" => new Thickness(28, 24, 28, 40), _ => new Thickness(24, 20, 24, 32) };
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
         var composerVisible = settings.Composer != "hidden";
-        ComposerCard.IsVisible = composerVisible;
-        // 输入区收起后必须留一个可点的恢复入口（浮动向上箭头）。
-        ComposerRevealButton.IsVisible = !composerVisible;
+        if (!_composerVisibilityInitialized)
+        {
+            // 首次应用外观时不播动画，避免启动瞬间输入区自己淡入。
+            _composerVisibilityInitialized = true;
+            ComposerCard.IsVisible = composerVisible;
+            ComposerRevealButton.IsVisible = !composerVisible;
+        }
+        else
+        {
+            // 沉浸式切换走平滑显示/隐藏，而不是瞬间消失。
+            Motion.SetVisible(ComposerCard, composerVisible, offsetY: 8);
+            Motion.SetVisible(ComposerRevealButton, !composerVisible);
+        }
         // 沉浸式收起时由窗口层保留重新展开入口；这里只控制卡片本身。
         ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
