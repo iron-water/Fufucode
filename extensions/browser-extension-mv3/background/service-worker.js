@@ -380,6 +380,41 @@ chrome.alarms.onAlarm.addListener(alarm => {
 poll();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "OPEN_WORKBENCH") {
+    (async () => {
+      const url = chrome.runtime.getURL("workbench/index.html");
+      const tabs = await chrome.tabs.query({ url: `${chrome.runtime.getURL("workbench/index.html")}*` });
+      if (tabs[0]?.id) {
+        await chrome.tabs.update(tabs[0].id, { active: true });
+        await chrome.windows.update(tabs[0].windowId, { focused: true }).catch(() => {});
+        return { ok: true, tabId: tabs[0].id, url };
+      }
+      const tab = await chrome.tabs.create({ url, active: true });
+      return { ok: true, tabId: tab.id, url };
+    })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message.type === "WORKBENCH_CONTEXT") {
+    (async () => {
+      const tab = await activeTab();
+      if (!tab) return { ok: false, error: "没有活动标签页。" };
+      return { ok: true, tabId: tab.id, url: tab.url || "", title: tab.title || "", host: tab.url && /^https?:/i.test(tab.url) ? new URL(tab.url).host : "" };
+    })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message.type === "WORKBENCH_BROWSER_ACTION") {
+    (async () => {
+      const tab = await activeTab();
+      if (!tab?.id) return { ok: false, error: "没有活动标签页。" };
+      if (message.action === "collect") {
+        const page = await sendToContent(tab.id, "extract_page", {});
+        if (!page || page.ok === false) return page || { ok: false, error: "无法读取页面。" };
+        return await sendCollect({ title: page.title, url: page.url, content: page.content });
+      }
+      return await executeCommand({ action: message.action, arguments: { tabId: tab.id } });
+    })().then(sendResponse).catch(error => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message.type === "CHECK_STATUS") { checkStatus().then(sendResponse); return true; }
   if (message.type === "PAIR") { pair(message.pin).then(async result => { if (result.success) await handshake(true); sendResponse(result); }); return true; }
   if (message.type === "HANDSHAKE") { handshake(true).then(sendResponse); return true; }
