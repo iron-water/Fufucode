@@ -208,7 +208,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     }
     private void NotifyPageState()
     {
-        foreach (var name in new[] { nameof(CurrentPageId), nameof(Breadcrumb), nameof(BreadcrumbTrail), nameof(PageTitle), nameof(BackToolTip), nameof(IsSubPage), nameof(CategorySubPages), nameof(HasSubPages), nameof(ActivePageId), nameof(IsSearching), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins), nameof(ShowPinSection) })
+        foreach (var name in new[] { nameof(CurrentPageId), nameof(Breadcrumb), nameof(BreadcrumbTrail), nameof(PageTitle), nameof(ShowDraftBanner), nameof(BackToolTip), nameof(IsSubPage), nameof(CategorySubPages), nameof(HasSubPages), nameof(ActivePageId), nameof(IsSearching), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins), nameof(ShowPinSection) })
             OnPropertyChanged(name);
         NotifyCategoryVisibility();
     }
@@ -315,6 +315,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     public bool IsSettingsBusy => IsModelApplying || IsEndpointSaving;
     public bool ShowEndpointForm => ShowEndpointRow && EndpointFormOpen;
     public string UnsavedChangesText => string.Join("、", new[] { HasProxyDraft ? "代理草稿" : null, HasEndpointDraft ? "端点草稿" : null }.Where(x => x is not null));
+    /// <summary>草稿提示只在对应分类内出现，浏览其它设置时不反复弹“未保存”。</summary>
+    public bool ShowDraftBanner =>
+        (IsModelsCategory && HasEndpointDraft) || (SelectedCategory?.Id == "network" && HasProxyDraft);
 
     // ── 后台与托盘 ──
     /// <summary>关闭窗口时最小化到托盘。默认关闭（关窗即退出）。由主窗口订阅设置存储即时生效。</summary>
@@ -428,6 +431,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         OnPropertyChanged(nameof(HasEndpointDraft));
         OnPropertyChanged(nameof(HasUnsavedChanges));
         OnPropertyChanged(nameof(UnsavedChangesText));
+        OnPropertyChanged(nameof(ShowDraftBanner));
     }
     /// <summary>本机 Magpie 网关的默认地址（OpenAI 兼容，不校验密钥）。</summary>
     private const string MagpieBaseUrl = "http://127.0.0.1:3425/v1";

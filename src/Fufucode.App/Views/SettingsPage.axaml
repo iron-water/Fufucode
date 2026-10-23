@@ -106,7 +106,7 @@
               <TextBlock Classes="caption" Text="试试“主题”“代理”或“通知”。"/>
             </StackPanel>
 
-            <Border Classes="errorCard info" IsVisible="{Binding HasUnsavedChanges}" Margin="0,0,0,8">
+            <Border Classes="errorCard info" IsVisible="{Binding ShowDraftBanner}" Margin="0,0,0,8">
               <StackPanel Spacing="4">
                 <TextBlock Classes="bodyStrong" Text="有未保存的草稿"/>
                 <TextBlock Classes="caption" Text="{Binding UnsavedChangesText}" TextWrapping="Wrap"/>
@@ -492,7 +492,7 @@
                       <DataTemplate x:DataType="vm:EndpointProviderItem">
                         <Border Classes="settingsRow clickable" Tag="{Binding}"
                                 PointerPressed="OnEditProviderPressed">
-                          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
+                          <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="10">
                             <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Globe}" Width="18" Height="18"
                                       VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Left">
@@ -500,7 +500,14 @@
                               <TextBlock Classes="settingsRowDesc" Text="{Binding BaseUrl}" TextWrapping="Wrap"/>
                               <TextBlock Classes="meta" Text="{Binding SelectedCountText}"/>
                             </StackPanel>
-                            <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
+                            <!-- 删除入口：没有它，误选的提供商会一直留在列表里。 -->
+                            <Button Grid.Column="2" Classes="iconButton" Width="28" Height="28"
+                                    ToolTip.Tip="删除此提供商" AutomationProperties.Name="删除提供商"
+                                    Command="{Binding $parent[ItemsControl].((vm:SettingsPageViewModel)DataContext).RemoveProviderCommand}"
+                                    CommandParameter="{Binding}">
+                              <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/>
+                            </Button>
+                            <PathIcon Grid.Column="3" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
                                       VerticalAlignment="Center"/>
                           </Grid>
                         </Border>
