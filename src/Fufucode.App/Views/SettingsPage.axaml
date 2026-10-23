@@ -76,8 +76,8 @@
       <Border x:Name="SettingsContentHost" Grid.Column="1" Classes="settingsContentHost"
               Margin="0,0,0,24">
       <Grid x:Name="SettingsContentArea" RowDefinitions="Auto,*">
-        <!-- 页面标题＝面包屑：Windows 设置把"系统 > 屏幕"直接当标题 -->
-        <!-- 面包屑一行：父级与当前页同字号同字重，只靠颜色区分层级。 -->
+        <!-- 页面标题＝面包屑：逐级展开（模型与思考 › 提供商 › 添加提供商），
+             每一级都可点返回；当前页是普通文字。 -->
         <ItemsControl Grid.Row="0" ItemsSource="{Binding BreadcrumbTrail}" Margin="0,4,0,4"
                       VerticalAlignment="Bottom" AutomationProperties.Name="设置路径">
           <ItemsControl.ItemsPanel>
@@ -491,6 +491,7 @@
                               <TextBlock Classes="settingsRowDesc" Text="{Binding BaseUrl}" TextWrapping="Wrap"/>
                               <TextBlock Classes="meta" Text="{Binding SelectedCountText}"/>
                             </StackPanel>
+                            <!-- 删除入口：没有它，误选的提供商会一直留在列表里。 -->
                             <Button Grid.Column="2" Classes="iconButton" Width="28" Height="28"
                                     ToolTip.Tip="删除此提供商" AutomationProperties.Name="删除提供商"
                                     Command="{Binding $parent[ItemsControl].((vm:SettingsPageViewModel)DataContext).RemoveProviderCommand}"
