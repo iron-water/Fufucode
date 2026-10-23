@@ -88,17 +88,27 @@ public static class NativeSubagentContract
 {
     public const string ToolName = "subagent";
 
+    /// <summary>
+    /// 父会话与嵌套子代理共用的唯一 Schema。
+    /// `action` 支持 list（列出可用代理）与 run（默认）；`context` 用于预取已知线索，
+    /// 让子代理不必从零开始发现文件。
+    /// </summary>
     public static PureToolDefinition Definition { get; } = new(
         ToolName,
-        "运行已安装的子代理插件；默认档位由用户设置决定。",
+        "派发一个隔离上下文的子代理。read 模式只读、快速，适合搜索、定位与审查；" +
+        "patch 模式在临时 git worktree 中修改并返回候选补丁（不直接写入父工作区）。" +
+        "省略 agent 时按 mode 选择内置代理；省略 prompt 时列出可用代理。",
         """
         {
-          "type":"object",
-          "properties":{
-            "agent":{"type":"string","description":"子代理名称；省略时使用默认代理"},
-            "prompt":{"type":"string","description":"任务说明"},
-            "model":{"type":"string","description":"可选模型 id"},
-            "fork":{"type":"boolean","description":"是否继承父会话上下文"}
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["run", "list"], "description": "run 执行任务（默认）；list 列出可用子代理" },
+            "agent": { "type": "string", "description": "子代理名称；read 默认 explore，patch 默认 general" },
+            "prompt": { "type": "string", "description": "任务说明；省略时列出可用子代理" },
+            "mode": { "type": "string", "enum": ["read", "patch"], "description": "覆盖代理模式；与代理定义冲突时会被拒绝" },
+            "context": { "type": "string", "description": "已知线索：文件路径、符号名、报错原文、已排除的方向。用于减少子代理的发现轮次" },
+            "model": { "type": "string", "description": "可选模型 id" },
+            "fork": { "type": "boolean", "description": "是否继承父会话最近历史" }
           }
         }
         """);

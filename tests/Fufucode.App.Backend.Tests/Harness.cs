@@ -189,6 +189,50 @@ internal sealed class FixedToolCallClient(PureToolCall call, string finalText = 
     }
 }
 
+/// <summary>
+/// 连续多轮发出同一个工具调用，用于验证子代理运行内的只读结果去重。
+/// 前 rounds 次请求返回同一调用，之后返回最终文本。
+/// </summary>
+internal sealed class RepeatingToolCallClient(PureToolCall call, int rounds, string finalText = "done")
+    : IPureModelClient
+{
+    private int _issued;
+
+    public Task<PureModelResponse> GenerateAsync(PureModelRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (_issued < rounds)
+        {
+            _issued++;
+            var id = _issued == 1 ? call.Id : call.Id + "_" + _issued;
+            return Task.FromResult(PureModelResponse.FromToolCalls(
+                new[] { new PureToolCall(id, call.Name, call.ArgumentsJson) }));
+        }
+        return Task.FromResult(PureModelResponse.FromText(finalText));
+    }
+}
+
+/// <summary>
+/// 永不收敛的工具调用客户端：每轮都请求同一工具，用于验证显式轮次预算。
+/// 记录最后一次请求是否携带工具。
+/// </summary>
+internal sealed class RecordingToolCallClient(PureToolCall call) : IPureModelClient
+{
+    private int _issued;
+    public bool LastRequestHadNoTools { get; private set; }
+
+    public Task<PureModelResponse> GenerateAsync(PureModelRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        LastRequestHadNoTools = request.ToolNames.Count == 0 && request.ToolDefinitions is null;
+        _issued++;
+        return Task.FromResult(PureModelResponse.FromToolCalls(
+            new[] { new PureToolCall(call.Id + "_" + _issued, call.Name, call.ArgumentsJson) }));
+    }
+}
+
 /// <summary>测试用插件调度器：声明一个工具并返回固定结果，用于验证组合路由。</summary>
 internal sealed class FakePluginDispatcher(string toolName, string result) : IPureToolDispatcher, IPluginToolCatalog
 {

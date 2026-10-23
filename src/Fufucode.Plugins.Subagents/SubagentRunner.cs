@@ -34,7 +34,9 @@ public sealed record SubagentResult(
     IReadOnlyList<SubagentToolTrace>? ToolTrace = null,
     long? InputTokens = null,
     long? OutputTokens = null,
-    long? DurationMs = null);
+    long? DurationMs = null,
+    SubagentTier? Tier = null,
+    bool Truncated = false);
 
 /// <summary>
 /// 进程内子代理运行器：
@@ -48,6 +50,7 @@ public sealed class SubagentRunner
     {
         "read_file", "list_dir", "grep_search", "glob_files"
     };
+
     private static readonly HashSet<string> PatchBuiltins = new(StringComparer.Ordinal)
     {
         "read_file", "write_file", "edit_file", "list_dir", "grep_search", "glob_files", "run_command"
@@ -177,8 +180,16 @@ public sealed class SubagentRunner
         var capabilityNames = mode == SubagentMode.Read
             ? _capabilityDefinitions.Select(definition => definition.Name).ToHashSet(StringComparer.Ordinal)
             : [];
-        var canNest = _tier == SubagentTier.Stronger && _depth < _maxDepth;
-        var allowed = agent.Tools
+        // stronger 的实际差异必须开箱生效：只读任务可继续分解为并行子代理。
+        // 旧实现要求代理定义主动声明 subagent，内置代理都没声明，等于档位切换没有效果。
+        // patch 模式仍禁止嵌套，避免绕过 worktree 隔离边界。
+        var canNest = _tier == SubagentTier.Stronger && mode == SubagentMode.Read && _depth < _maxDepth;
+
+        var allowedTools = new List<string>(agent.Tools);
+        if (canNest && !allowedTools.Contains(SubagentDispatcher.ToolName, StringComparer.Ordinal))
+            allowedTools.Add(SubagentDispatcher.ToolName);
+
+        var allowed = allowedTools
             .Where(name => builtins.Contains(name) || capabilityNames.Contains(name) ||
                            (canNest && string.Equals(name, SubagentDispatcher.ToolName, StringComparison.Ordinal)))
             .Distinct(StringComparer.Ordinal)
@@ -189,6 +200,9 @@ public sealed class SubagentRunner
         IPureToolDispatcher chain = baseDispatcher;
         if (allowed.Contains(SubagentDispatcher.ToolName, StringComparer.Ordinal))
             chain = new NestedSubagentDispatcher(chain, this.CreateChildRunner());
+        // 同一次子代理运行内重复读取同一文件/同一检索是最常见的浪费：
+        // 缓存命中直接复用结果，不重复落盘、不重复递归扫描。跨运行不共享，避免读到过期内容。
+        chain = new RunScopedReadCache(chain);
         var childDispatcher = new AllowedToolDispatcher(chain, allowed.ToHashSet(StringComparer.Ordinal));
 
         var definitions = allowed.Select(name => _definitions[name]).ToArray();
@@ -201,9 +215,8 @@ public sealed class SubagentRunner
             messages.AddRange(BuildForkHistory());
         messages.Add(new PureAgentMessage(PureAgentRole.User, prompt));
 
-        // 轮次只由代理定义决定；模式层不再截断。
-        var maxTurns = Math.Max(1, agent.MaxTurns);
-        var engine = new PureCSharpAgentEngine(childDispatcher, _modelClient, maxTurns)
+        // 未声明 maxTurns 时不设置轮次预算；模式层不截断子代理。
+        var engine = new PureCSharpAgentEngine(childDispatcher, _modelClient, agent.MaxTurns)
         {
             ApprovalGate = ApprovalGate
         };
@@ -240,6 +253,10 @@ public sealed class SubagentRunner
                     result.Usage?.InputTokens, result.Usage?.OutputTokens);
 
             var content = result.Response.Text ?? string.Empty;
+            // 轮次耗尽不是成功交付：父会话必须知道结论可能不完整，而不是把半成品当定论。
+            // 以引擎的显式标记为准；文本匹配只作为旧客户端的兜底。
+            var truncated = result.Truncated ||
+                            content.Contains("已达到最大轮次限制", StringComparison.Ordinal);
             string? structured = null;
             if (!string.IsNullOrWhiteSpace(agent.OutputSchema))
             {
@@ -260,10 +277,10 @@ public sealed class SubagentRunner
                     ? "（子代理执行了工具但没有返回文本。）"
                     : "（子代理没有返回内容。）";
 
-            Report(agent.Name, "completed", null);
+            Report(agent.Name, truncated ? "truncated" : "completed", null);
             return new SubagentResult(true, agent.Name, mode, content, result.ToolResults.Count, null, JobId,
                 structured, null, null, null, null, trace,
-                result.Usage?.InputTokens, result.Usage?.OutputTokens);
+                result.Usage?.InputTokens, result.Usage?.OutputTokens, Tier: _tier, Truncated: truncated);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSpan is not null)
         {
@@ -364,7 +381,12 @@ public sealed class SubagentRunner
             builder.Append("\n你只应做最小必要修改；最终说明改动与验证结果，改动会以补丁形式交回父会话，不会直接交付。");
         else
             builder.Append("\n当前是 read 模式：只允许只读工具；写入、编辑与命令执行不可用，不要尝试。")
-                .Append("\n请尽可能高效地并行收集证据，并给出可定位的结论。");
+                .Append("\n请尽可能高效地并行收集证据，并给出可定位的结论。")
+                .Append("\n结论必须区分“已确认（有文件:行号或命令输出证据）”与“推测”，不要编造未读到的代码。");
+        if (_tier == SubagentTier.Stronger && mode == SubagentMode.Read && _depth < _maxDepth)
+            builder.Append("\n你处于 stronger 档位：任务包含 3 个以上互不依赖的子问题时，必须先并行派出只读子代理分头调查，")
+                .Append("再汇总它们的结论；只有一个子问题时直接自己做，不要为了派发而派发。")
+                .Append("每个子代理只负责一个明确子问题，派发时用 context 传入已知线索，不要重复它们已完成的检索。");
         if (!string.IsNullOrWhiteSpace(agent.OutputSchema))
         {
             builder.Append("\n\n最终答复必须是符合以下 JSON Schema 的纯 JSON（不要代码块、不要额外说明）：\n")
@@ -450,6 +472,42 @@ public sealed class SubagentRunner
                 ? inner.DispatchAsync(call, cancellationToken)
                 : Task.FromResult(new PureToolResult(call.Id, false,
                     $"<tool_use_error>子代理未获授权使用工具 '{call.Name}'。</tool_use_error>"));
+    }
+
+    /// <summary>
+    /// 单次子代理运行内的只读结果缓存。只缓存确定性只读工具的成功结果；
+    /// 失败结果不缓存（可能是临时占用/超时），写工具永不缓存。
+    /// </summary>
+    private sealed class RunScopedReadCache(IPureToolDispatcher inner) : IPureToolDispatcher
+    {
+        private static readonly HashSet<string> Cacheable = new(StringComparer.Ordinal)
+        {
+            "read_file", "list_dir", "grep_search", "glob_files"
+        };
+
+        private readonly Dictionary<string, PureToolResult> _cache = new(StringComparer.Ordinal);
+        private readonly object _gate = new();
+
+        public async Task<PureToolResult> DispatchAsync(PureToolCall call,
+            CancellationToken cancellationToken = default)
+        {
+            if (!Cacheable.Contains(call.Name))
+                return await inner.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
+
+            var key = call.Name + "\n" + call.ArgumentsJson;
+            lock (_gate)
+            {
+                if (_cache.TryGetValue(key, out var cached))
+                    return cached with { Id = call.Id };
+            }
+
+            var result = await inner.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
+            if (result.Success)
+            {
+                lock (_gate) _cache[key] = result;
+            }
+            return result;
+        }
     }
 
     private sealed class NestedSubagentDispatcher(IPureToolDispatcher inner, SubagentRunner child)

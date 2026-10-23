@@ -31,6 +31,7 @@ public static class StatusColors
         return outcome switch
         {
             SessionOutcome.Completed => StatusTone.Success,
+            SessionOutcome.Truncated => StatusTone.Caution,
             SessionOutcome.Failed => StatusTone.Critical,
             _ => StatusTone.Neutral,
         };

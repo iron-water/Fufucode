@@ -539,6 +539,7 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         Phase = outcome switch
         {
             SessionOutcome.Completed => TurnPhase.Completed,
+            SessionOutcome.Truncated => TurnPhase.Failed,
             SessionOutcome.Failed => TurnPhase.Failed,
             SessionOutcome.Interrupted => TurnPhase.Cancelled,
             _ => TurnPhase.Completed,

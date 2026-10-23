@@ -36,7 +36,9 @@ public static class Program
                 pipedInput = await ReadPipedStdinAsync(cancellation.Token, expectStdin);
             }
 
-            if (options.Command.Length == 0 && !string.IsNullOrWhiteSpace(pipedInput))
+            // `fufucode` 与 `fufucode chat` 都应接受管道输入；只判断无参数形式会漏掉显式 chat。
+            if (options.Command is "" or "chat" && options.Arguments.Count == 0 &&
+                !string.IsNullOrWhiteSpace(pipedInput))
                 return await ChatAsync(options with { Command = "chat" }, pipedInput, cancellation.Token);
 
             if (options.Command.Length == 0) return await RunReplAsync(options, cancellation.Token);
@@ -480,6 +482,7 @@ public static class Program
     private static int ExitCode(CliChatResult result) => result.FailureExitCode ?? (result.Outcome switch
     {
         Fufucode.App.Abstractions.SessionOutcome.Completed => 0,
+        Fufucode.App.Abstractions.SessionOutcome.Truncated => 2,
         Fufucode.App.Abstractions.SessionOutcome.Interrupted => 130,
         _ => RuntimeError
     });
@@ -625,7 +628,7 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
           -y, --yes, --auto-approve                        Auto-approve tool execution (non-interactive / script safe)
           --plan                                           Run in read-only planning mode
           --permission-mode <default|plan|auto|full>       Execution permission mode
-          --max-iterations, --max-turns <N>                Max iterations limit per turn (default: 50)
+          --max-iterations, --max-turns <N>                Optional per-turn iteration budget (default: unlimited)
           --thinking, --thinking-level <level>             Thinking level (off|low|medium|high|max)
           --project PATH                                   Project working directory (default: current directory)
           --session ID                                     Specific session ID

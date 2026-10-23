@@ -23,6 +23,7 @@ public static class CliChatRunner
         var stopwatch = System.Diagnostics.Stopwatch.StartNew();
         var toolCalls = 0;
         UsageInfo? lastUsage = null;
+        long totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheWrite = 0;
         using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         using var sending = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var settled = new TaskCompletionSource<SessionOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -36,7 +37,14 @@ public static class CliChatRunner
         var denied = false;
         var wasHandled = false;
         var handledSession = chat as IPromptHandledSession;
-        void Handled() { wasHandled = true; settled.TrySetResult(SessionOutcome.Completed); }
+        // PromptHandled 只表示“这条输入没有产生模型回合”。若 TurnSettled 已先到达，
+        // 说明这是一次真实回合，不能再用 Completed 覆盖真实终态（预算截断/失败会被洗白）。
+        void Handled()
+        {
+            if (settled.Task.IsCompleted || failure.Task.IsCompleted) return;
+            wasHandled = true;
+            settled.TrySetResult(SessionOutcome.Completed);
+        }
         EventHandler<SessionEvent> onEvent = (_, ev) =>
         {
             lock (gate)
@@ -50,7 +58,14 @@ public static class CliChatRunner
                             streamingText[text.MessageId] = partial = new System.Text.StringBuilder();
                         partial.Append(text.Delta); output.Write(text.Delta); output.Flush(); break;
                     case SessionEvent.MessageFinished message:
-                        if (message.CumulativeUsage is { } usage) lastUsage = usage;
+                        if ((message.CumulativeUsage ?? message.FinalMessage.CumulativeUsage) is { } usage)
+                        {
+                            lastUsage = usage;
+                            totalInput += usage.InputTokens ?? 0;
+                            totalOutput += usage.OutputTokens ?? 0;
+                            totalCacheRead += usage.CacheReadTokens ?? 0;
+                            totalCacheWrite += usage.CacheWriteTokens ?? 0;
+                        }
                         if (message.FinalMessage.Role == MessageRole.Assistant)
                         {
                             var final = string.Concat(message.FinalMessage.Blocks.OfType<TextBlock>().Select(b => b.Text));
@@ -124,7 +139,15 @@ public static class CliChatRunner
                         durationMs,
                         toolCalls,
                         model = chat.CurrentModel,
-                        usage = usageData
+                        usage = usageData,
+                        totalUsage = new
+                        {
+                            inputTokens = totalInput,
+                            outputTokens = totalOutput,
+                            cachedTokens = totalCacheRead,
+                            cacheWriteTokens = totalCacheWrite,
+                            totalTokens = totalInput + totalOutput
+                        }
                     }));
                 }
                 else if (result.Text.Length > 0) output.WriteLine();

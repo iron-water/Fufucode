@@ -28,11 +28,34 @@ read 的速度来自实现层，而不是限制：
 - 不创建/清理 worktree；
 - 只读工具可在一轮内并行执行；
 - 多个 read 子代理可并行扇出；
-- 共享文件读取缓存，重复读取不再落盘；
+- 单次运行内对 `read_file`/`list_dir`/`grep_search`/`glob_files` 的成功结果去重（`RunScopedReadCache`），同一调用不重复落盘或重复递归扫描；失败结果不缓存，写工具永不缓存，跨运行不共享以避免读到过期内容；
 - 可通过 `context` 预取已知线索，减少发现轮次；
 - 可通过代理定义的 `model` 指定更快的模型。
 
 `timeoutSeconds` 只有显式写入代理定义时才生效，默认不设子代理级超时；父会话 Stop 始终可取消。
+
+## 档位实际差异
+
+| 维度 | `faster`（安装后默认） | `stronger`（手动切换） |
+|---|---|---|
+| read 工具集 | 代理定义声明的只读工具 | 同左，且自动获得 `subagent` 嵌套派发（depth < maxDepth） |
+| patch 模式 | 与 faster 相同 | 与 faster 相同（patch 不嵌套，保持 worktree 隔离边界） |
+| 系统提示 | 标准只读约束 | 额外要求按子问题并行分解并在结果中标注证据 |
+| 结果标记 | `[子代理 explore · read · faster]` | `[子代理 explore · read · stronger]` |
+
+`stronger` 不改变模型、轮次、超时或推理强度——这些只由代理定义决定。把档位做成"自动换更贵模型"会让用户无法预测成本，因此不做。
+
+## 档位实证
+
+`tests/Fufucode.App.Backend.Tests` 提供真实端点对照探针：
+
+```
+dotnet run --project tests/Fufucode.App.Backend.Tests -- \
+  --live-subagent-bench <baseUrl> <model> [apiKey] [workspace]
+```
+
+同一任务、同一模型、同一工作区分别跑两个档位，输出成功与否、事实命中数、工具调用数、token 与耗时。
+这是判断档位差异的唯一依据；单次结果受上游噪声影响，至少跑两轮再看结论。2026-10-22 首轮实测：两档均 3/3 命中，`stronger` 163s/8 次工具，`faster` 273s/9 次工具，均未触发嵌套派发——说明当前任务规模还不足以让 `stronger` 体现价值。
 
 ## 内置与自定义
 
@@ -94,7 +117,11 @@ fork: true                                # 可选：继承父会话最近历史
 - 省略 `agent` 时：`read` 使用 `explore`，`patch` 使用 `general`。
 - 省略 `prompt` 时列出可用代理及模式。
 - 显式 `mode` 与代理定义冲突时明确拒绝，不静默改写。
+- `context` 传入已确认的线索（文件路径、符号、报错原文、已排除方向），会附在任务说明后面，直接减少子代理的发现轮次。
+- `action: "list"` 与省略 `prompt` 等价，列出可用代理。
 - `subagent` 调用可并行：read 交互只读；patch 写入各自独立 worktree，worktree 创建内部串行化。
+- 结果首行标注代理、模式与档位；达到轮次上限时额外标注"结论可能不完整"，不把半成品当定论。
+- 失败结果会附带已执行工具轨迹，父会话可以据此判断是重试、缩小范围还是换 agent。
 
 ## patch 补丁契约
 

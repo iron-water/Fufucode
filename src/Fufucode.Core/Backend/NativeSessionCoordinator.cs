@@ -424,6 +424,7 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
                         SessionOutcome.Completed => TaskResult.Completed,
                         SessionOutcome.Failed => TaskResult.Failed,
                         SessionOutcome.Interrupted => TaskResult.Interrupted,
+                        SessionOutcome.Truncated => TaskResult.Unknown,
                         _ => TaskResult.Unknown,
                     };
                     _error = settled.Summary;

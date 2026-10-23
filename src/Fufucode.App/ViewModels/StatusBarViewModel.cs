@@ -159,6 +159,7 @@ public sealed partial class StatusBarViewModel : ViewModelBase
         {
             SessionOutcome.Completed => "上次任务：完成",
             SessionOutcome.Failed => "上次任务：失败",
+            SessionOutcome.Truncated => "上次任务：预算耗尽（未必完成）",
             SessionOutcome.Interrupted => "上次任务：已中断",
             SessionOutcome.Unknown => "上次任务：未知",
             null => string.Empty,

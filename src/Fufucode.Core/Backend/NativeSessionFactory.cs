@@ -75,8 +75,27 @@ public static class NativeSessionFactory
         // 调度链：可选 Subagent → MCP → Skill → 插件/内置。
         var dispatcher = subagents?.Wrap(capabilities) ?? capabilities;
 
-        var effectiveMaxIterations = maxIterations ?? 50;
-        var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations: effectiveMaxIterations);
+        // 主会话默认不设置轮次预算。CLI/无人值守调用方如需预算，显式传入 maxIterations。
+        var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations);
+
+        // 上下文压缩阈值来自模型目录声明的真实窗口，而不是写死的字符数。
+        // 目录不可用时返回 null，引擎退回物理内存保护。
+        if (client is not null && current.Endpoint is { } contextEndpoint &&
+            !string.IsNullOrWhiteSpace(contextEndpoint.BaseUrl))
+        {
+            var baseUrl = contextEndpoint.BaseUrl;
+            var key = apiKey ?? Environment.GetEnvironmentVariable(contextEndpoint.ApiKeyEnvironmentVariable);
+            var fallbackModel = modelId;
+            engine.ContextLengthResolver = async (requestedModel, cancellationToken) =>
+            {
+                var target = string.IsNullOrWhiteSpace(requestedModel) ? fallbackModel : requestedModel;
+                if (string.IsNullOrWhiteSpace(target)) return null;
+                using var catalog = new ModelCatalogClient();
+                var entries = await catalog.ListAsync(baseUrl, key, cancellationToken).ConfigureAwait(false);
+                return entries.FirstOrDefault(entry =>
+                    string.Equals(entry.Id, target, StringComparison.OrdinalIgnoreCase))?.ContextLength;
+            };
+        }
         var chat = new NativeCSharpChatSession(
             engine, sessionId, modelId,
             systemPromptProvider: systemPromptProvider,

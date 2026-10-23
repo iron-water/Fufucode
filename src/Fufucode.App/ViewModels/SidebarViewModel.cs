@@ -72,7 +72,7 @@ public sealed class SessionItemViewModel : ObservableObject
     {
         IsRunning = activity is SessionActivity.Running or SessionActivity.Compacting or
             SessionActivity.Retrying or SessionActivity.Cancelling;
-        IsFailed = !IsRunning && (outcome == SessionOutcome.Failed || connection == SessionConnection.Faulted);
+        IsFailed = !IsRunning && (outcome is SessionOutcome.Failed or SessionOutcome.Truncated || connection == SessionConnection.Faulted);
         OnPropertyChanged(nameof(StatusDescription));
     }
 
