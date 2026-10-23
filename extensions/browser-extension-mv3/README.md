@@ -19,10 +19,15 @@
 
 也可以直接加载仓库里的 `extensions/browser-extension-mv3/`，在弹窗底部填写应用设置页显示的实际端口，再用 PIN 配对。
 
-## 动作协议
+## 连接与动作协议
 
-桌面端 → 扩展：`GET /api/next`（长轮询）返回 `{id, action, arguments}`。
+扩展安装后先用 PIN 换取长期令牌，然后向桌面端发送 `POST /api/extension/handshake`，上报稳定 `clientId`、浏览器版本、活动标签页、标签页数量和能力清单。桌面端只有在收到握手和后续轮询/结果流量后才把扩展标记为“已就绪”；弹窗会分别显示未连接、需配对、等待握手和已就绪。
+
+桌面端 → 扩展：`GET /api/next`（最长 25 秒长轮询）返回 `{id, action, arguments}`。
 扩展 → 桌面端：`POST /api/result` 回传 `{id, ok, result | error}`。
+扩展 → 桌面端：`POST /api/extension/handshake` 更新连接快照。
+
+所有接口只监听回环地址，并要求 `Authorization: Bearer <token>`；PIN 错误达到上限后短暂锁定。扩展重启会复用 `clientId`，桌面端重启会清除旧握手状态，避免把过期客户端显示为在线。
 
 | action | 参数 | 说明 |
 |---|---|---|

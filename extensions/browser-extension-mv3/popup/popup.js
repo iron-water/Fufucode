@@ -11,12 +11,27 @@ const retryBtn = document.getElementById("retry-btn");
 const hostInput = document.getElementById("host-input");
 const saveHostBtn = document.getElementById("save-host-btn");
 const hostHint = document.getElementById("host-hint");
+const browserDetail = document.getElementById("browser-detail");
+const pageDetail = document.getElementById("page-detail");
+const tabsDetail = document.getElementById("tabs-detail");
+const capabilitiesDetail = document.getElementById("capabilities-detail");
+const handshakeBtn = document.getElementById("handshake-btn");
+const readyError = document.getElementById("ready-error");
 
 function showPanel(panel) {
   authPanel.classList.add("hidden");
   readyPanel.classList.add("hidden");
   offlinePanel.classList.add("hidden");
   panel.classList.remove("hidden");
+}
+
+function updateDiagnostics(status) {
+  const data = status || {};
+  if (browserDetail) browserDetail.textContent = [data.browser, data.browserVersion].filter(Boolean).join(" ") || "未识别";
+  if (pageDetail) pageDetail.textContent = data.activeUrl || "没有活动页面";
+  if (tabsDetail) tabsDetail.textContent = data.tabCount == null ? "未知" : `${data.tabCount} 个`;
+  if (capabilitiesDetail) capabilitiesDetail.textContent = Array.isArray(data.capabilities) && data.capabilities.length
+    ? data.capabilities.join(", ") : "未上报";
 }
 
 function updateStatus() {
@@ -28,15 +43,22 @@ function updateStatus() {
       statusBadge.className = "badge disconnected";
       statusBadge.textContent = "未连接";
       showPanel(offlinePanel);
-    } else if (res.needsAuth) {
+      return;
+    }
+    if (res.needsAuth || !res.paired) {
       statusBadge.className = "badge needs-auth";
       statusBadge.textContent = "需配对";
       showPanel(authPanel);
-    } else {
-      statusBadge.className = "badge connected";
-      statusBadge.textContent = "已连接";
-      showPanel(readyPanel);
+      return;
     }
+    statusBadge.className = res.ready ? "badge connected" : "badge needs-auth";
+    statusBadge.textContent = res.ready ? "已就绪" : "等待握手";
+    updateDiagnostics(res.status);
+    if (readyError) {
+      readyError.textContent = res.ready ? "" : "桥已连接，但扩展握手尚未完成。点击“重新握手”或检查桌面端日志。";
+      readyError.classList.toggle("hidden", !!res.ready);
+    }
+    showPanel(readyPanel);
   });
 }
 
@@ -66,9 +88,9 @@ collectBtn.addEventListener("click", async () => {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.id) return;
 
-  chrome.tabs.sendMessage(tab.id, { type: "EXTRACT_PAGE" }, pageData => {
-    if (!pageData) {
-      alert("无法读取当前页面内容（可能为受保护页面如 chrome://）");
+  chrome.runtime.sendMessage({ type: "EXTRACT_PAGE", tabId: tab.id }, pageData => {
+    if (!pageData || pageData.ok === false) {
+      alert(pageData?.error || "无法读取当前页面内容（可能为受保护页面如 chrome://）");
       return;
     }
     collectBtn.disabled = true;
@@ -101,6 +123,22 @@ inspectBtn.addEventListener("click", async () => {
 
 retryBtn.addEventListener("click", updateStatus);
 
+if (handshakeBtn) handshakeBtn.addEventListener("click", () => {
+  handshakeBtn.disabled = true;
+  handshakeBtn.textContent = "握手中...";
+  chrome.runtime.sendMessage({ type: "HANDSHAKE" }, res => {
+    handshakeBtn.disabled = false;
+    handshakeBtn.textContent = "重新握手";
+    if (!res || !res.success) {
+      if (readyError) {
+        readyError.textContent = res?.error || "握手失败";
+        readyError.classList.remove("hidden");
+      }
+    }
+    updateStatus();
+  });
+});
+
 saveHostBtn.addEventListener("click", () => {
   let host = (hostInput.value || "").trim();
   if (!host) return;
@@ -114,6 +152,7 @@ saveHostBtn.addEventListener("click", () => {
 chrome.runtime.sendMessage({ type: "CHECK_STATUS" }, res => {
   const config = res && res.status ? res.status : null;
   if (config && config.port) hostInput.value = "http://127.0.0.1:" + config.port;
+  updateDiagnostics(config);
 });
 
 // 初始化检测

@@ -21,6 +21,14 @@ namespace Fufucode.App.Features.ExternalBrowser;
 public sealed record ExternalBrowserBridgeStatus(
     bool Running, int Port, bool Connected, DateTimeOffset? LastSeenUtc, string? LastError)
 {
+    public string? ClientId { get; init; }
+    public string? BrowserName { get; init; }
+    public string? BrowserVersion { get; init; }
+    public string? ActiveUrl { get; init; }
+    public int TabCount { get; init; }
+    public IReadOnlyList<string> Capabilities { get; init; } = Array.Empty<string>();
+    public bool HandshakeComplete { get; init; }
+
     public static ExternalBrowserBridgeStatus Stopped(string? error = null) =>
         new(false, 0, false, null, error);
 }
@@ -50,9 +58,15 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
     private int _pinFailures;
     private DateTimeOffset _pinLockedUntil = DateTimeOffset.MinValue;
     private DateTimeOffset _lastSeenUtc = DateTimeOffset.MinValue;
+    private DateTimeOffset _lastHandshakeUtc = DateTimeOffset.MinValue;
     private string? _lastHost;
     private string? _lastUrl;
     private string? _lastError;
+    private string? _clientId;
+    private string? _browserName;
+    private string? _browserVersion;
+    private int _tabCount;
+    private string[] _capabilities = Array.Empty<string>();
 
     public ExternalBrowserBridgeServer(Func<BrowserSettings> settingsAccessor, string token, string pin)
     {
@@ -67,13 +81,26 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
     public string Pin { get { lock (_pinGate) return _pin; } }
     public int Port { get; private set; }
     public bool Running => _listener is not null;
-    public override bool IsConnected => Running && DateTimeOffset.UtcNow - _lastSeenUtc < ConnectedWindow;
+    public override bool IsConnected => Running &&
+        _lastHandshakeUtc != DateTimeOffset.MinValue &&
+        DateTimeOffset.UtcNow - _lastHandshakeUtc < ConnectedWindow &&
+        DateTimeOffset.UtcNow - _lastSeenUtc < ConnectedWindow;
     public override string? LastPageHost => _lastHost;
 
     public ExternalBrowserBridgeStatus Status => new(
         Running, Port, IsConnected,
         _lastSeenUtc == DateTimeOffset.MinValue ? null : _lastSeenUtc,
-        _lastError);
+        _lastError)
+    {
+        ClientId = _clientId,
+        BrowserName = _browserName,
+        BrowserVersion = _browserVersion,
+        ActiveUrl = _lastUrl,
+        TabCount = _tabCount,
+        Capabilities = _capabilities,
+        HandshakeComplete = _lastHandshakeUtc != DateTimeOffset.MinValue &&
+                            DateTimeOffset.UtcNow - _lastHandshakeUtc < ConnectedWindow,
+    };
 
     public Func<ExternalBrowserPageReference, Task<string>>? PageReferenceHandler { get; set; }
     public Func<BrowserApprovalRequest, CancellationToken, Task<bool>>? ApprovalHandler { get; set; }
@@ -130,6 +157,15 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
         _cts = null;
         _listener = null;
         Port = 0;
+        _lastSeenUtc = DateTimeOffset.MinValue;
+        _lastHandshakeUtc = DateTimeOffset.MinValue;
+        _clientId = null;
+        _browserName = null;
+        _browserVersion = null;
+        _lastUrl = null;
+        _lastHost = null;
+        _tabCount = 0;
+        _capabilities = Array.Empty<string>();
         try { cts?.Cancel(); } catch (ObjectDisposedException) { }
         try { listener?.Stop(); } catch (SocketException) { }
         foreach (var pending in _pending.Values) pending.TrySetResult(Error("外部浏览器桥已停止。"));
@@ -266,7 +302,6 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
                     return;
                 }
 
-                _lastSeenUtc = DateTimeOffset.UtcNow;
                 switch (request.Path)
                 {
                     case "/api/status":
@@ -275,9 +310,20 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
                             ok = true,
                             paired = IsAuthorized(request),
                             connected = IsConnected,
+                            handshake = Status.HandshakeComplete,
                             port = Port,
                             version = typeof(ExternalBrowserBridgeServer).Assembly.GetName().Version?.ToString(),
+                            clientId = _clientId,
+                            browser = _browserName,
+                            browserVersion = _browserVersion,
+                            activeUrl = _lastUrl,
+                            tabCount = _tabCount,
+                            capabilities = _capabilities,
                         }), cancellationToken).ConfigureAwait(false);
+                        return;
+                    case "/api/extension/handshake":
+                        if (!IsAuthorized(request)) { await WriteJsonAsync(stream, 401, Error("未配对。"), cancellationToken); return; }
+                        await HandleHandshakeAsync(stream, request, cancellationToken).ConfigureAwait(false);
                         return;
                     case "/api/pair":
                         await HandlePairAsync(stream, request, cancellationToken).ConfigureAwait(false);
@@ -339,6 +385,7 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
 
     private async Task HandleNextAsync(NetworkStream stream, CancellationToken cancellationToken)
     {
+        _lastSeenUtc = DateTimeOffset.UtcNow;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(25));
         try
@@ -359,8 +406,42 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
         }
     }
 
+    private async Task HandleHandshakeAsync(NetworkStream stream, ExternalHttpRequest request, CancellationToken cancellationToken)
+    {
+        if (!request.Method.Equals("POST", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteJsonAsync(stream, 405, Error("仅支持 POST。"), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        var clientId = ReadString(request.Body, "clientId");
+        if (string.IsNullOrWhiteSpace(clientId) || clientId.Length > 128)
+        {
+            await WriteJsonAsync(stream, 400, Error("缺少有效的 clientId。"), cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
+        _clientId = clientId.Trim();
+        _browserName = ReadString(request.Body, "browser")?.Trim();
+        _browserVersion = ReadString(request.Body, "browserVersion")?.Trim();
+        _tabCount = ReadInt(request.Body, "tabCount");
+        _capabilities = ReadStringArray(request.Body, "capabilities");
+        _lastHandshakeUtc = DateTimeOffset.UtcNow;
+        _lastSeenUtc = _lastHandshakeUtc;
+        _lastError = null;
+        StatusChanged?.Invoke();
+        await WriteJsonAsync(stream, 200, JsonSerializer.Serialize(new
+        {
+            ok = true,
+            session = _clientId,
+            serverVersion = typeof(ExternalBrowserBridgeServer).Assembly.GetName().Version?.ToString(),
+            pollTimeoutSeconds = 25,
+        }), cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task HandleResultAsync(NetworkStream stream, ExternalHttpRequest request, CancellationToken cancellationToken)
     {
+        _lastSeenUtc = DateTimeOffset.UtcNow;
         var id = ReadString(request.Body, "id");
         if (string.IsNullOrWhiteSpace(id) || !_pending.TryGetValue(id, out var completion))
         {
@@ -380,6 +461,7 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
 
     private async Task HandleCollectAsync(NetworkStream stream, ExternalHttpRequest request, CancellationToken cancellationToken)
     {
+        _lastSeenUtc = DateTimeOffset.UtcNow;
         var reference = new ExternalBrowserPageReference(
             ReadString(request.Body, "title") ?? "网页引用",
             ReadString(request.Body, "url") ?? string.Empty,
@@ -452,6 +534,37 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
                 : null;
         }
         catch (JsonException) { return null; }
+    }
+
+    private static int ReadInt(string json, string name)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            return doc.RootElement.ValueKind == JsonValueKind.Object &&
+                   doc.RootElement.TryGetProperty(name, out var value) &&
+                   value.TryGetInt32(out var result) ? Math.Clamp(result, 0, 100000) : 0;
+        }
+        catch (JsonException) { return 0; }
+    }
+
+    private static string[] ReadStringArray(string json, string name)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "{}" : json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object ||
+                !doc.RootElement.TryGetProperty(name, out var value) ||
+                value.ValueKind != JsonValueKind.Array) return Array.Empty<string>();
+            return value.EnumerateArray()
+                .Where(item => item.ValueKind == JsonValueKind.String)
+                .Select(item => item.GetString() ?? string.Empty)
+                .Where(item => item.Length > 0 && item.Length <= 64)
+                .Distinct(StringComparer.Ordinal)
+                .Take(64)
+                .ToArray();
+        }
+        catch (JsonException) { return Array.Empty<string>(); }
     }
 
     private static bool ReadBool(string json, string name)

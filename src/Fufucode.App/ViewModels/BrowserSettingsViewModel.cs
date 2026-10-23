@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using CommunityToolkit.Mvvm.Input;
+using Fufucode.App.Features.ExternalBrowser;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
 
@@ -131,17 +132,38 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
     public string ExternalBrowserStatus { get => _externalBrowserStatus; private set => SetProperty(ref _externalBrowserStatus, value); }
     public int ExternalBrowserActualPort { get; private set; }
     public bool ExternalBrowserConnected { get; private set; }
+    public bool ExternalBrowserHandshakeComplete { get; private set; }
+    public string ExternalBrowserName { get; private set; } = "";
+    public string ExternalBrowserVersion { get; private set; } = "";
+    public string ExternalBrowserActiveUrl { get; private set; } = "";
+    public int ExternalBrowserTabCount { get; private set; }
+    public string ExternalBrowserCapabilities { get; private set; } = "";
     private string _externalBrowserExtensionPath = "";
     public string ExternalBrowserExtensionPath { get => _externalBrowserExtensionPath; private set => SetProperty(ref _externalBrowserExtensionPath, value); }
 
-    public void ReportExternalBrowser(string status, int actualPort, bool connected, string extensionPath)
+    public void ReportExternalBrowser(string status, int actualPort, bool connected, string extensionPath,
+        ExternalBrowserBridgeStatus? bridgeStatus = null)
     {
         ExternalBrowserStatus = status;
         ExternalBrowserActualPort = actualPort;
         ExternalBrowserConnected = connected;
+        ExternalBrowserHandshakeComplete = bridgeStatus?.HandshakeComplete == true;
+        ExternalBrowserName = bridgeStatus?.BrowserName ?? "";
+        ExternalBrowserVersion = bridgeStatus?.BrowserVersion ?? "";
+        ExternalBrowserActiveUrl = bridgeStatus?.ActiveUrl ?? "";
+        ExternalBrowserTabCount = bridgeStatus?.TabCount ?? 0;
+        ExternalBrowserCapabilities = bridgeStatus?.Capabilities is { Count: > 0 } capabilities
+            ? string.Join(", ", capabilities)
+            : "";
         ExternalBrowserExtensionPath = extensionPath;
         OnPropertyChanged(nameof(ExternalBrowserActualPort));
         OnPropertyChanged(nameof(ExternalBrowserConnected));
+        OnPropertyChanged(nameof(ExternalBrowserHandshakeComplete));
+        OnPropertyChanged(nameof(ExternalBrowserName));
+        OnPropertyChanged(nameof(ExternalBrowserVersion));
+        OnPropertyChanged(nameof(ExternalBrowserActiveUrl));
+        OnPropertyChanged(nameof(ExternalBrowserTabCount));
+        OnPropertyChanged(nameof(ExternalBrowserCapabilities));
         OnPropertyChanged(nameof(ExternalBrowserExtensionPath));
     }
 
