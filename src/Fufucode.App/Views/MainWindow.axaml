@@ -47,7 +47,6 @@
           <Button x:Name="NavChatButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回对话"><PathIcon Data="{DynamicResource Icon.Chat}" Width="16" Height="16"/></Button>
           <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" ToolTip.Tip="扩展"><PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
           <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" ToolTip.Tip="明暗主题"><PathIcon Data="{DynamicResource Icon.Color}" Width="16" Height="16"/></Button>
-          <Button x:Name="CaptionUsage" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="用量"><PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16"/></Button>
           <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="通知"><PathIcon Data="{DynamicResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
           <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}" ToolTip.Tip="设置"><PathIcon Data="{DynamicResource Icon.Settings}" Width="16" Height="16"/></Button>
         </StackPanel>

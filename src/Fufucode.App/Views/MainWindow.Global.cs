@@ -19,18 +19,15 @@ public partial class MainWindow
 {
     private readonly AppActionRegistry _actions = new();
     private CommandPaletteViewModel _palette = null!;
-    private readonly UsageDetailsViewModel _usage = new();
     private NotificationPreferencesViewModel _notificationPreferences = null!;
     private NotificationCenterViewModel _notifications = null!;
     private readonly Views.CommandPaletteView _paletteView = new();
-    private readonly Views.UsageDetailsView _usageView = new();
     private readonly Views.NotificationCenterView _notificationsView = new();
     private Control? _overlayReturnFocus;
     private string? _overlayKind;
     internal AppActionRegistry ActionsForTesting => _actions;
     internal Task ExecuteWorkbenchActionAsync(string id) => _actions.ExecuteAsync(id);
     internal CommandPaletteViewModel PaletteForTesting => _palette;
-    internal UsageDetailsViewModel UsageForTesting => _usage;
     internal NotificationCenterViewModel NotificationsForTesting => _notifications;
     internal bool NotificationCenterVisibleForTesting => _notificationsView.IsEffectivelyVisible;
 
@@ -57,14 +54,11 @@ public partial class MainWindow
             _vm?.Settings.SelectCategory(id);
         };
         _paletteView.DataContext = _palette;
-        _usageView.DataContext = _usage;
         _notificationsView.DataContext = _notifications;
         _palette.CloseRequested += () => CloseGlobalOverlay("commands");
-        _usage.CloseRequested += () => CloseDockPage("usage");
         _notifications.CloseRequested += () => CloseDockPage("notifications");
         _workbenchPages.RegisterCore("notifications", "通知", "Alert", _notificationsView);
-        _workbenchPages.RegisterCore("usage", "用量", "Info", _usageView);
-        _notificationsView.Focusable = _usageView.Focusable = true;
+        _notificationsView.Focusable = true;
         _notifications.SessionRequested += async id =>
         {
             if (_host is not null && _host.Current.Session.Id != id) await SwitchSessionAsync(id);
@@ -98,14 +92,12 @@ public partial class MainWindow
             () => _terminalPage?.HasRunningTab == true ? null : "没有运行中的终端");
         Register("terminal.new", "新建终端", "终端", "", "在当前项目新增独立终端", () => { _terminalPage?.CreateTerminal(); return Task.CompletedTask; },
             () => _terminalPage is null ? "未安装或未启用交互终端插件" : null);
-        Register("usage", "用量详情", "会话", "", "当前会话、本轮、全部记录口径", () => { OpenDockPage("usage", DockZone.Right); _usage.Open(); _usageView.Focus(); return Task.CompletedTask; }, SessionUnavailable);
         Register("notifications", "通知中心", "全局", "", "完成、失败与待审批归属", () => { OpenNotificationCenterOverlay(); return Task.CompletedTask; });
         Register("browser", "浏览器", "工作区", "", "内置浏览器", () => { OpenDockPage("browser", DockZone.Right); return Task.CompletedTask; },
             () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable());
         Register("library", "资料库", "工作区", "", "导入、检索与引用本地资料", () => { OpenDockPage("library", DockZone.Right); return Task.CompletedTask; },
             () => !_workbenchPages.ContainsKey("library") ? "资料库模块已停用，可在设置中启用" : WorkAreaUnavailable());
         CaptionCommands.Command = _actions.GetCommand("commands");
-        CaptionUsage.Command = _actions.GetCommand("usage");
         CaptionNotifications.Command = _actions.GetCommand("notifications");
         Activated += (_, _) => _notifications.SetWindowFocused(true);
         Deactivated += (_, _) => Dispatcher.UIThread.Post(RefreshNotificationFocus);
@@ -145,16 +137,12 @@ public partial class MainWindow
         vm.Settings.AttachNotificationPreferences(_notificationPreferences);
         if (_host is { } host)
         {
-            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.usage.begin", "usage context");
-            _usage.AttachRealContext(host.Manager.Layout, host.ProjectPath, host.Current.Session.Id, host.Current.Coordinator);
-            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.usage.end", "usage context ready");
             Fufucode.Core.Diagnostics.StartupProbe.Mark("global.notifications.begin", "notification context");
             _notifications.Attach(host.Current.Session.Id, host.Current.Coordinator.Snapshot.Generation ?? Guid.Empty, vm.Session);
             Fufucode.Core.Diagnostics.StartupProbe.Mark("global.notifications.end", "notification context ready");
         }
         else
         {
-            _usage.AttachMock();
             _notifications.Attach("mock-window", Guid.NewGuid(), vm.Session);
         }
         // Input.SubmissionStarting/SubmissionRejected 在 AttachSession 中随 VM 创建接一次，
@@ -190,7 +178,7 @@ public partial class MainWindow
         if (_overlayKind is null) _overlayReturnFocus = FocusManager?.GetFocusedElement() as Control;
         _palette.IsOpen = false;
         _overlayKind = kind;
-        GlobalOverlayHost.Content = kind switch { "commands" => _paletteView, "usage" => _usageView, _ => (object)_notificationsView };
+        GlobalOverlayHost.Content = kind == "commands" ? _paletteView : _notificationsView;
         GlobalOverlay.IsVisible = true;
         SetBrowserOcclusion(true);
         ResizeGlobalOverlay();
