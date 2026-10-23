@@ -5,6 +5,14 @@ const DEFAULT_HOST = "http://127.0.0.1:54321";
 let configCache = null;
 let polling = false;
 let lastPollAt = 0;
+let handshakeInFlight = null;
+let lastHandshakeAt = 0;
+const HANDSHAKE_INTERVAL_MS = 15000;
+const CLIENT_ID_KEY = "fufucodeClientId";
+const CAPABILITIES = [
+  "tabs", "state", "navigate", "click", "type", "hover", "scroll", "key",
+  "select", "wait", "get_dom", "screenshot", "evaluate", "collect", "inspect"
+];
 
 async function readPackagedConfig() {
   if (configCache) return configCache;
@@ -25,6 +33,57 @@ async function getConfig() {
   };
 }
 
+async function getClientId() {
+  const stored = await chrome.storage.local.get([CLIENT_ID_KEY]);
+  if (stored[CLIENT_ID_KEY]) return stored[CLIENT_ID_KEY];
+  const value = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  await chrome.storage.local.set({ [CLIENT_ID_KEY]: value });
+  return value;
+}
+
+async function browserSnapshot() {
+  const tabs = await chrome.tabs.query({});
+  const active = tabs.find(tab => tab.active) || tabs[0] || null;
+  return {
+    tabCount: tabs.length,
+    activeUrl: active?.url || "",
+    activeTitle: active?.title || "",
+    activeTabId: active?.id ?? null
+  };
+}
+
+async function handshake(force = false) {
+  if (handshakeInFlight) return handshakeInFlight;
+  if (!force && Date.now() - lastHandshakeAt < HANDSHAKE_INTERVAL_MS) return { success: true, skipped: true };
+  handshakeInFlight = (async () => {
+    const config = await getConfig();
+    if (!config.token) return { success: false, error: "未配对" };
+    try {
+      const snapshot = await browserSnapshot();
+      const response = await fetch(`${config.host}/api/extension/handshake`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${config.token}` },
+        body: JSON.stringify({
+          clientId: await getClientId(),
+          browser: /Edg\//.test(navigator.userAgent) ? "Edge" : "Chrome",
+          browserVersion: navigator.userAgent,
+          capabilities: CAPABILITIES,
+          ...snapshot
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) return { success: false, error: data.error || `握手失败（${response.status}）` };
+      lastHandshakeAt = Date.now();
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      handshakeInFlight = null;
+    }
+  })();
+  return handshakeInFlight;
+}
+
 async function checkStatus() {
   const config = await getConfig();
   try {
@@ -32,9 +91,17 @@ async function checkStatus() {
       headers: config.token ? { "Authorization": `Bearer ${config.token}` } : {}
     });
     if (res.ok) {
-      const data = await res.json();
-      await setBadge(config.token ? "✓" : "?", config.token ? "#1f7a3a" : "#9a6700");
-      return { connected: true, paired: !!config.token, status: data };
+      let data = await res.json();
+      const hello = config.token ? await handshake() : { success: false };
+      if (hello.success && !hello.skipped) {
+        const refreshed = await fetch(`${config.host}/api/status`, {
+          headers: { "Authorization": `Bearer ${config.token}` }
+        }).catch(() => null);
+        if (refreshed?.ok) data = await refreshed.json();
+      }
+      const ready = !!config.token && !!hello.success && data.handshake !== false;
+      await setBadge(ready ? "✓" : config.token ? "!" : "?", ready ? "#1f7a3a" : "#9a6700");
+      return { connected: true, paired: !!config.token, ready, needsHandshake: !!config.token && !hello.success, status: data };
     }
     if (res.status === 401) {
       await setBadge("?", "#9a6700");
@@ -268,6 +335,7 @@ async function poll() {
     }
     const tokenConfig = await getConfig();
     if (!tokenConfig.token) return;
+    await handshake();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 30000);
     let res;
@@ -313,7 +381,21 @@ poll();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "CHECK_STATUS") { checkStatus().then(sendResponse); return true; }
-  if (message.type === "PAIR") { pair(message.pin).then(sendResponse); return true; }
+  if (message.type === "PAIR") { pair(message.pin).then(async result => { if (result.success) await handshake(true); sendResponse(result); }); return true; }
+  if (message.type === "HANDSHAKE") { handshake(true).then(sendResponse); return true; }
+  if (message.type === "EXTRACT_PAGE") {
+    (async () => {
+      const tab = await activeTab(message.tabId);
+      if (!tab?.id || !/^https?:/i.test(tab.url || "")) return { ok: false, error: "无法读取当前页面（仅支持 http/https 页面）。" };
+      try {
+        const result = await sendToContent(tab.id, "extract_page", {});
+        return result || { ok: false, error: "页面没有返回内容。" };
+      } catch (error) {
+        return { ok: false, error: `页面脚本不可用：${error.message}` };
+      }
+    })().then(sendResponse);
+    return true;
+  }
   if (message.type === "COLLECT_PAGE") { sendCollect(message.payload).then(sendResponse); return true; }
   if (message.type === "RECONNECT") { configCache = null; poll(); sendResponse({ ok: true }); return true; }
   if (message.type === "SET_HOST") {

@@ -54,18 +54,25 @@
     return { ok: true, url: location.href, title: document.title, ...info };
   }
 
+  function setNativeValue(el, value) {
+    const prototype = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+    if (descriptor?.set) descriptor.set.call(el, value);
+    else el.value = value;
+  }
+
   function type(args) {
     const el = find(args.selector);
     if (!el) return { ok: false, error: "未找到输入元素：" + args.selector };
     const value = args.text == null ? "" : String(args.text);
     el.focus();
-    if (args.clear) {
-      if ("value" in el) el.value = "";
-      else el.textContent = "";
+    if ("value" in el) {
+      const current = args.clear ? "" : String(el.value || "");
+      setNativeValue(el, current + value);
+    } else {
+      el.textContent = (args.clear ? "" : el.textContent) + value;
     }
-    if ("value" in el) el.value = (args.clear ? "" : el.value) + value;
-    else el.textContent = (args.clear ? "" : el.textContent) + value;
-    el.dispatchEvent(new Event("input", { bubbles: true }));
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: value }));
     el.dispatchEvent(new Event("change", { bubbles: true }));
     return { ok: true, ...describe(el) };
   }
@@ -104,6 +111,7 @@
   function select(args) {
     const el = find(args.selector);
     if (!el) return { ok: false, error: "未找到元素：" + args.selector };
+    if (!(el instanceof HTMLSelectElement)) return { ok: false, error: "目标元素不是下拉框：" + args.selector };
     el.focus();
     el.value = args.value == null ? "" : String(args.value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
@@ -142,6 +150,13 @@
   async function run(action, args) {
     switch (action) {
       case "state": return state();
+      case "extract_page": return {
+        ok: true,
+        title: document.title,
+        url: location.href,
+        content: document.querySelector("article, main")?.innerText?.trim().slice(0, 12000) || document.body?.innerText?.trim().slice(0, 12000) || "",
+        hasSelection: !!window.getSelection()?.toString().trim()
+      };
       case "click": return click(args);
       case "type": return type(args);
       case "hover": return hover(args);

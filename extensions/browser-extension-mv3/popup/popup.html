@@ -42,6 +42,14 @@
           <div class="btn-desc">点击页面任意元素并复制选择器</div>
         </div>
       </button>
+      <div class="diagnostics" id="diagnostics">
+        <div><span class="diagnostic-label">浏览器</span><span id="browser-detail">—</span></div>
+        <div><span class="diagnostic-label">当前页面</span><span id="page-detail">—</span></div>
+        <div><span class="diagnostic-label">标签页</span><span id="tabs-detail">—</span></div>
+        <div><span class="diagnostic-label">能力</span><span id="capabilities-detail">—</span></div>
+      </div>
+      <button id="handshake-btn" class="btn secondary">重新握手</button>
+      <div id="ready-error" class="error-text hidden"></div>
     </div>
 
     <!-- 服务未启动态 -->
