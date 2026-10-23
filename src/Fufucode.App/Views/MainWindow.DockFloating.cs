@@ -38,11 +38,14 @@ public partial class MainWindow
     private IEnumerable<DockRegionView> AllDockHosts() => Docks().Concat(_floatingDocks.Values.Select(host => host.Dock));
     internal Window? FloatingDockWindowForTesting(string id) => _floatingDocks.GetValueOrDefault(id)?.Window;
 
-    internal string? FloatDockPage(string id)
+    internal string? FloatDockPage(string id, double? preferredWidth = null, double? preferredHeight = null)
     {
         if (!_workbenchPages.ContainsKey(id)) return null;
         var floating = _dockLayout.FloatPage(id);
         if (floating is null) return null;
+        // 性能页等信息密集型页面需要在首次显示前就有足够画布；已有更大尺寸时保留用户设置。
+        if (preferredWidth is { } width) floating.Width = Math.Max(floating.Width, width);
+        if (preferredHeight is { } height) floating.Height = Math.Max(floating.Height, height);
         RenderDockPages(); SaveWorkspaceDimensions();
         return floating.Id;
     }

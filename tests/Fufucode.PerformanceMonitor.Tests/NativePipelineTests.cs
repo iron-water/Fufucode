@@ -90,6 +90,8 @@ internal static class NativePipelineTests
             TestUtil.Check(process is not null, "run_command span recorded");
             TestUtil.Check(process!.Tag("command") == "echo done", "command text recorded");
             TestUtil.Check(process.LongTag("exitCode") == 0, "command exit code recorded");
+            TestUtil.Check(process.Tag("stdoutHead")?.Contains("done", StringComparison.Ordinal) == true,
+                "stdout head recorded");
             TestUtil.Check(process.ParentSpanId == spans.Single(s => s.Name == "tool" && s.Tag("tool") == "run_command").SpanId,
                 "process span hangs under the run_command tool span");
 

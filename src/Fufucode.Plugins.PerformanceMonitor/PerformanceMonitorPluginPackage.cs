@@ -42,10 +42,10 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
 
         // 宿主服务：测试或 CLI 环境没有宿主时为 null，接收端照常工作，只是没有页面。
         _bridge = ResolveBridge(context);
-        // 宿主样本（回合耗时、进程指标）即时追加落盘，不依赖页面是否打开。
-        PerfHostSamples.Subscribe(new HostSampleSink(Path.Combine(_dataRoot, "perf")));
         var settings = PerfSettings.Load(_dataRoot);
         var recorder = new PerfRecorder(settings, Path.Combine(_dataRoot, "perf"));
+        // 宿主样本（回合耗时、进程指标）即时追加落盘，并在内存留一份给概览/时间线；不依赖页面是否打开。
+        PerfHostSamples.Subscribe(new HostSampleSink(Path.Combine(_dataRoot, "perf"), recorder));
         // 同一进程里可能有两个插件管理器（页面宿主与工具宿主）各加载一份本程序集：
         // 第一个接收端获胜，其余按程序集身份判定为同一插件而沿用，只有真正不同的实现才失败。
         if (PerfOwnership.TryInstall(recorder, recorder) is { } failure)
@@ -116,12 +116,13 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
     /// <summary>
     /// 宿主样本 → JSONL：每 2 秒若干行，直接同步追加；与页面和异步写入器解耦。
     /// </summary>
-    private sealed class HostSampleSink(string directory) : IPerfHostSampleSink
+    private sealed class HostSampleSink(string directory, PerfRecorder recorder) : IPerfHostSampleSink
     {
         private readonly object _gate = new();
 
         public void Publish(PerfHostSample sample)
         {
+            recorder.AddHostSample(sample);
             try
             {
                 lock (_gate)
