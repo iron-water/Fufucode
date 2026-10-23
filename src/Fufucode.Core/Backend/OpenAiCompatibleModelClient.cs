@@ -22,6 +22,10 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
     private readonly string _baseUrl;
     private readonly string? _apiKey;
     private readonly string _defaultModelId;
+    private readonly TimeSpan? _requestTimeout;
+
+    /// <summary>模型请求的可选 wall-clock 超时；null 表示由调用方取消或 HttpClient 自身策略决定。</summary>
+    public TimeSpan? RequestTimeout => _requestTimeout;
 
     /// <summary>流式路径使用的额外请求头（例如自定义网关鉴权）。</summary>
     public IDictionary<string, string> AdditionalHeaders { get; } = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -30,14 +34,18 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         string baseUrl,
         string? apiKey = null,
         string defaultModelId = "",
-        HttpClient? httpClient = null)
+        HttpClient? httpClient = null,
+        TimeSpan? requestTimeout = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
         _baseUrl = baseUrl.TrimEnd('/');
         _apiKey = apiKey;
         // 不设内置默认模型：模型一律由端点配置给出，避免悄悄回退到一个过时的名字。
         _defaultModelId = defaultModelId;
-        _httpClient = httpClient ?? new HttpClient();
+        // 不继承 HttpClient 的 100 秒默认超时：长推理请求在真实开发中经常超过它。
+        // 生命周期由调用方取消或显式 RequestTimeout 控制；注入的 HttpClient 保持其自身配置。
+        _httpClient = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
+        _requestTimeout = requestTimeout is { } timeout && timeout > TimeSpan.Zero ? timeout : null;
     }
 
     /// <summary>已解析的 Chat Completions 端点。</summary>
@@ -53,30 +61,38 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var httpRequest = CreateRequest(request, streaming: false);
         using var span = PerfTracer.Step("model.http", "mode", "non-streaming");
-        HttpResponseMessage? response = null;
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
-            span.Tag("status", (long)response.StatusCode);
-            var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-            span.Tag("responseChars", (long)responseJson.Length);
-            return ParseNonStreaming(response, responseJson, span);
-        }
-        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-        {
-            span.Cancel();
-            throw;
-        }
-        catch (Exception error)
-        {
-            span.Fail(error.GetType().Name);
-            throw;
-        }
-        finally
-        {
-            response?.Dispose();
+            using var httpRequest = CreateRequest(request, streaming: false);
+            HttpResponseMessage? response = null;
+            try
+            {
+                response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                span.Tag("status", (long)response.StatusCode);
+                var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                span.Tag("responseChars", (long)responseJson.Length);
+                return ParseNonStreaming(response, responseJson, span);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                span.Cancel();
+                throw;
+            }
+            catch (Exception error) when (attempt < MaxAttempts && IsRetryable(error))
+            {
+                span.Tag($"retry{attempt}", error.GetType().Name);
+                await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                span.Fail(error.GetType().Name);
+                throw;
+            }
+            finally
+            {
+                response?.Dispose();
+            }
         }
     }
 
@@ -178,28 +194,106 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
 
-        using var httpRequest = CreateRequest(request, streaming: true);
         using var http = PerfTracer.Step("model.http", "mode", "streaming");
-        HttpResponseMessage response;
+        for (var attempt = 1; ; attempt++)
+        {
+            using var httpRequest = CreateRequest(request, streaming: true);
+            var delivered = false;
+            var tracked = TrackDeliveries(callbacks, () => delivered = true);
+            try
+            {
+                using var response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                http.Tag("status", (long)response.StatusCode);
+                return await ReadStreamAsync(response, tracked, cancellationToken).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                http.Cancel();
+                throw;
+            }
+            catch (ModelClientException error) when (attempt < MaxAttempts && !delivered &&
+                                                     _streamUsageSupported &&
+                                                     error.Kind == ModelClientErrorKind.InvalidRequest &&
+                                                     MentionsStreamOptions(error))
+            {
+                // 旧网关不认识 stream_options：去掉它再试，不消耗重试预算。
+                _streamUsageSupported = false;
+                http.Tag("streamOptions", "unsupported");
+                attempt--;
+                continue;
+            }
+            // 瞬时故障可以重放：已经交付过增量时先通知 UI 丢弃半成品，
+            // 否则重试文本会拼在旧文本后面。工具尚未执行，重放不会产生副作用。
+            catch (Exception error) when (attempt < MaxAttempts && IsRetryable(error))
+            {
+                http.Tag($"retry{attempt}", error.GetType().Name);
+                if (delivered) callbacks?.OnRestart?.Invoke();
+                await DelayBeforeRetryAsync(attempt, cancellationToken).ConfigureAwait(false);
+            }
+            // SSE 通道持续失败但普通通道可用时，降级为一次性请求完成本轮。
+            // 工具尚未执行，因此这不是重放副作用；UI 通过 OnRestart 丢弃半成品。
+            catch (Exception error) when (attempt >= MaxAttempts && IsRetryable(error))
+            {
+                http.Tag("fallback", "non-streaming");
+                if (delivered) callbacks?.OnRestart?.Invoke();
+                return await GenerateNonStreamingCompletionAsync(request, callbacks, error, cancellationToken)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception error)
+            {
+                http.Fail(error.GetType().Name);
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 流式通道不可用时的降级路径：走一次性请求，并把最终结果按“整块”回放给回调。
+    /// 这是真实的一次性投递，不伪造分片边界。
+    /// </summary>
+    private async Task<StreamedCompletion> GenerateNonStreamingCompletionAsync(
+        PureModelRequest request, ModelStreamCallbacks? callbacks, Exception streamFailure,
+        CancellationToken cancellationToken)
+    {
+        PureModelResponse response;
         try
         {
-            response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+            response = await GenerateAsync(request, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
-            http.Cancel();
+            throw;
+        }
+        catch (ModelClientException)
+        {
             throw;
         }
         catch (Exception error)
         {
-            http.Fail(error.GetType().Name);
-            throw;
+            // 降级通道也失败时必须给出结构化传输错误，而不是把解析异常漏给上层。
+            throw new ModelClientException(ModelClientErrorKind.Transport,
+                $"流式失败后降级请求也失败：{error.Message}（原始流错误：{streamFailure.Message}）",
+                innerException: error);
         }
-        using (response)
+        var completion = new StreamedCompletion();
+        var choice = completion.Choice(0);
+        if (!string.IsNullOrEmpty(response.Text))
         {
-            http.Tag("status", (long)response.StatusCode);
-            return await ReadStreamAsync(response, callbacks, cancellationToken).ConfigureAwait(false);
+            choice.AppendText(response.Text);
+            callbacks?.OnTextDelta?.Invoke(response.Text);
         }
+        for (var i = 0; i < response.ToolCalls.Count; i++)
+        {
+            var call = response.ToolCalls[i];
+            choice.AppendToolCallChunk(i, call.Id, call.Name, call.ArgumentsJson);
+            callbacks?.OnToolCallChunk?.Invoke(call.Id, call.Name, call.ArgumentsJson);
+            callbacks?.OnToolCallChunkIndexed?.Invoke(i, call.Id, call.Name, call.ArgumentsJson);
+        }
+        choice.SetFinishReason(response.FinishReason ?? "stop");
+        completion.Usage = response.Usage;
+        completion.SawDone = true;
+        callbacks?.OnCompleted?.Invoke();
+        return completion;
     }
 
     /// <summary>读取 SSE 流：逐帧解析，并在启用埋点时统计帧数、TTFT 与帧间隔。</summary>
@@ -315,7 +409,7 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         if (string.IsNullOrWhiteSpace(model))
             throw new ModelClientException(ModelClientErrorKind.InvalidRequest,
                 "未配置模型：请在设置中填写端点模型或选择可用模型。");
-        var requestBody = BuildRequestBody(request, model, streaming);
+        var requestBody = BuildRequestBody(request, model, streaming, _streamUsageSupported);
 
         var json = JsonSerializer.Serialize(requestBody);
         var httpRequest = new HttpRequestMessage(HttpMethod.Post, Endpoint)
@@ -341,15 +435,105 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         return httpRequest;
     }
 
+    /// <summary>
+    /// 单个请求的最大尝试次数（含首次）。只对限流、5xx 与传输层失败重试；
+    /// 4xx 参数/鉴权错误重试没有意义，会立即失败。
+    /// </summary>
+    public int MaxAttempts { get; set; } = 3;
+
+    /// <summary>网关明确拒绝 stream_options 后降级，后续请求不再索取流式 usage。</summary>
+    private bool _streamUsageSupported = true;
+
+    private static bool IsRetryable(Exception error) => error switch
+    {
+        ModelClientException mapped => mapped.IsRetryable ||
+                                       mapped.Kind == ModelClientErrorKind.Transport ||
+                                       IsTransientStreamError(mapped),
+        TimeoutException => false,
+        _ => false,
+    };
+
+    /// <summary>
+    /// 网关会把上游断流包装成 SSE error 帧（StreamError），而不是 HTTP/传输异常。
+    /// 只有明确是连接/上游瞬时故障的文本才重试；鉴权、参数与内容错误不重试。
+    /// </summary>
+    private static bool IsTransientStreamError(ModelClientException error)
+    {
+        if (error.Kind != ModelClientErrorKind.StreamError) return false;
+        var text = string.Join(' ', error.ErrorCode ?? "", error.ErrorBody ?? "", error.Message ?? "");
+        return text.Contains("ECONNRESET", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("broke off", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("socket", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("connection", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("upstream", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("timed out", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("502", StringComparison.Ordinal) ||
+               text.Contains("503", StringComparison.Ordinal) ||
+               text.Contains("504", StringComparison.Ordinal);
+    }
+
+    private static bool MentionsStreamOptions(ModelClientException error) =>
+        (error.ErrorBody ?? "").Contains("stream_options", StringComparison.OrdinalIgnoreCase) ||
+        (error.Message ?? "").Contains("stream_options", StringComparison.OrdinalIgnoreCase);
+
+    private static Task DelayBeforeRetryAsync(int attempt, CancellationToken cancellationToken)
+    {
+        // 400ms、800ms、1.6s…… 封顶 5s；不引入随机抖动，便于测试与诊断复现。
+        var delay = TimeSpan.FromMilliseconds(Math.Min(5000, 400 * Math.Pow(2, attempt - 1)));
+        return Task.Delay(delay, cancellationToken);
+    }
+
+    /// <summary>
+    /// 包装流式回调并记录“是否已经向调用方交付过可见增量”。
+    /// usage 与完成事件不算可见内容：它们不会造成重放重复。
+    /// </summary>
+    private static ModelStreamCallbacks? TrackDeliveries(ModelStreamCallbacks? callbacks, Action delivered)
+    {
+        if (callbacks is null) return null;
+        return new ModelStreamCallbacks
+        {
+            OnTextDelta = delta => { delivered(); callbacks.OnTextDelta?.Invoke(delta); },
+            OnThinkingDelta = delta => { delivered(); callbacks.OnThinkingDelta?.Invoke(delta); },
+            OnToolCallChunk = (id, name, arguments) =>
+            {
+                delivered();
+                callbacks.OnToolCallChunk?.Invoke(id, name, arguments);
+            },
+            OnToolCallChunkIndexed = (index, id, name, arguments) =>
+            {
+                delivered();
+                callbacks.OnToolCallChunkIndexed?.Invoke(index, id, name, arguments);
+            },
+            OnUsage = callbacks.OnUsage,
+            OnCompleted = callbacks.OnCompleted,
+            OnRestart = callbacks.OnRestart,
+        };
+    }
+
     /// <summary>发送 HTTP 请求。virtual 供本机/离线环境注入脚本化响应（测试与诊断探针）。</summary>
     protected virtual async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         HttpResponseMessage response;
+        using var timeout = _requestTimeout is { } duration
+            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
+            : null;
+        if (timeout is not null) timeout.CancelAfter(_requestTimeout!.Value);
+        var effectiveToken = timeout?.Token ?? cancellationToken;
         try
         {
             response = await _httpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, effectiveToken)
                 .ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout?.IsCancellationRequested == true)
+        {
+            throw new TimeoutException($"模型请求超过配置的 {_requestTimeout!.Value.TotalSeconds:0.#} 秒超时。", null);
+        }
+        catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
+        {
+            // 不是用户取消，而是注入的 HttpClient 自带超时：按可重试的传输失败处理。
+            throw new ModelClientException(ModelClientErrorKind.Transport,
+                "模型请求被 HTTP 客户端超时取消。", innerException: error);
         }
         catch (OperationCanceledException)
         {
@@ -400,7 +584,8 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             ? body
             : body[..ModelClientErrorMapper.MaxErrorBodyLength] + "…";
 
-    public static Dictionary<string, object> BuildRequestBody(PureModelRequest request, string model, bool streaming)
+    public static Dictionary<string, object> BuildRequestBody(PureModelRequest request, string model, bool streaming,
+        bool includeStreamUsage = true)
     {
         var messagesList = new List<object>();
         foreach (var msg in request.Messages)
@@ -480,9 +665,7 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             .GroupBy(d => d.Name, StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
 
-        var builtinMap = ProductionToolDispatcher.GetBuiltinToolDefinitions()
-            .GroupBy(d => d.Name, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        var builtinMap = BuiltinDefinitionMap;
 
         var toolsList = new List<object>();
         foreach (var tool in request.ToolNames.Distinct(StringComparer.Ordinal).OrderBy(t => t, StringComparer.Ordinal))
@@ -498,9 +681,13 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         {
             ["model"] = model,
             ["messages"] = messagesList,
-            ["temperature"] = 0.2,
             ["stream"] = streaming
         };
+
+        // 采样温度只在调用方显式指定时发送。此前固定 0.2 是一个没有依据的"更稳"猜测：
+        // 推理型模型会直接拒绝非默认 temperature，其它端点也会因此偏离自己的调优默认值。
+        if (request.Temperature is { } temperature)
+            requestBody["temperature"] = temperature;
 
         if (!string.IsNullOrWhiteSpace(request.ReasoningEffort) &&
             !string.Equals(request.ReasoningEffort, "off", StringComparison.OrdinalIgnoreCase))
@@ -515,6 +702,14 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             requestBody["tool_choice"] = "auto";
         }
 
+        // 流式请求默认不返回 usage；显式索取后网关会在最后一帧给出真实 token 数。
+        // 这是用量统计与长程上下文预算的唯一可信来源，缺失时只能估算。
+        // 极少数旧网关不认 stream_options：收到明确拒绝后自动降级，不让整个会话失败。
+        if (streaming && includeStreamUsage)
+        {
+            requestBody["stream_options"] = new { include_usage = true };
+        }
+
         return requestBody;
     }
 
@@ -525,22 +720,11 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
     {
         if (definitions.TryGetValue(toolName, out var def) || builtins.TryGetValue(toolName, out def))
         {
-            object parameters;
-            try
-            {
-                using var document = JsonDocument.Parse(def.ParametersJsonSchema);
-                parameters = document.RootElement.Clone();
-            }
-            catch
-            {
-                parameters = new { type = "object" };
-            }
-
             return new
             {
                 name = def.Name,
                 description = def.Description,
-                parameters = parameters
+                parameters = ParseToolSchema(def.Name, def.ParametersJsonSchema)
             };
         }
 
@@ -550,5 +734,56 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             description = $"自定义工具 {toolName}",
             parameters = new { type = "object" }
         };
+    }
+
+    private static Dictionary<string, PureToolDefinition> CreateBuiltinDefinitionMap() =>
+        ProductionToolDispatcher.GetBuiltinToolDefinitions()
+            .GroupBy(d => d.Name, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+
+    private static readonly IReadOnlyDictionary<string, PureToolDefinition> BuiltinDefinitionMap =
+        CreateBuiltinDefinitionMap();
+
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, JsonElement> SchemaCache =
+        new(StringComparer.Ordinal);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> InvalidSchemaWarned =
+        new(StringComparer.Ordinal);
+
+    /// <summary>宽松参数 Schema：`{ "type": "object" }`。解析失败或无 Schema 时使用。</summary>
+    private static readonly JsonElement LooseSchema = CreateLooseSchema();
+
+    private static JsonElement CreateLooseSchema()
+    {
+        using var document = JsonDocument.Parse("""{"type":"object"}""");
+        return document.RootElement.Clone();
+    }
+
+    /// <summary>
+    /// 解析并缓存工具参数 Schema。工具声明每个回合都会重新组装，
+    /// 重复 JsonDocument.Parse 既拖慢请求构建，也会制造大量短命 JsonElement。
+    /// 缓存按 Schema 文本去重；解析失败时保留可调度性但发出一次诊断，不再静默无迹。
+    /// </summary>
+    public static JsonElement ParseToolSchema(string toolName, string schemaText)
+    {
+        if (string.IsNullOrWhiteSpace(schemaText)) return LooseSchema;
+        if (SchemaCache.TryGetValue(schemaText, out var cached)) return cached;
+
+        JsonElement parsed;
+        try
+        {
+            using var document = JsonDocument.Parse(schemaText);
+            parsed = document.RootElement.Clone();
+        }
+        catch (JsonException error)
+        {
+            if (InvalidSchemaWarned.TryAdd(toolName, 0))
+                System.Diagnostics.Trace.TraceWarning(
+                    "Tool '{0}' 的参数 Schema 不是合法 JSON，已回退为宽松对象：{1}", toolName, error.Message);
+            return LooseSchema;
+        }
+
+        // 插件可能动态生成 Schema；给缓存一个上限，避免长期运行会话无限增长。
+        if (SchemaCache.Count > 1024) SchemaCache.Clear();
+        return SchemaCache.GetOrAdd(schemaText, parsed);
     }
 }

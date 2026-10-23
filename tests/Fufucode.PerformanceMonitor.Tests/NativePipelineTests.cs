@@ -93,8 +93,10 @@ internal static class NativePipelineTests
             TestUtil.Check(process.ParentSpanId == spans.Single(s => s.Name == "tool" && s.Tag("tool") == "run_command").SpanId,
                 "process span hangs under the run_command tool span");
 
-            var persist = spans.SingleOrDefault(s => s.Name == "persist.history");
-            TestUtil.Check(persist is not null && persist.LongTag("messages") > 0, "persist span records message count");
+            // 长回合会在工具轮之后节流落盘，终态再完整落盘；断言至少一次且都带消息数。
+            var persists = spans.Where(s => s.Name == "persist.history").ToArray();
+            TestUtil.Check(persists.Length >= 1 && persists.All(s => s.LongTag("messages") > 0),
+                "persist span records message count");
             TestUtil.Check(File.Exists(Path.Combine(root, "session.json")), "session persisted for real");
             TestUtil.Check(spans.Where(s => s.Name != "turn").All(s => s.TraceId == turn.TraceId),
                 "every span shares the turn trace");

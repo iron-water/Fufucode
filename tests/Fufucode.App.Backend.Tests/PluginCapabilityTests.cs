@@ -242,14 +242,15 @@ internal static class PluginCapabilityTests
             "安装后截图/鼠标/键盘工具全部注册");
 
         // 截图经可注入替身执行：验证参数解析、真实落盘与尺寸回填。
-        var shot = await registry.DispatchAsync(new PureToolCall("s1", ComputerUsePlugin.ScreenshotTool, "{}"));
+        var shot = await registry.DispatchAsync(new PureToolCall("s1", ComputerUsePlugin.ScreenshotTool,
+            "{\"deliveryMode\":\"foreground\"}"));
         checks.Check(shot.Success && shot.Content.Contains("屏幕截图成功", StringComparison.Ordinal), "截图工具经替身成功执行");
         var files = Directory.Exists(Path.Combine(root, "shots"))
             ? Directory.GetFiles(Path.Combine(root, "shots"), "*.png") : Array.Empty<string>();
         checks.Check(files.Length == 1, "截图按真实路径落盘到输出目录");
 
         var region = await registry.DispatchAsync(new PureToolCall("s2", ComputerUsePlugin.ScreenshotTool,
-            "{\"left\":10,\"top\":20,\"width\":200,\"height\":100}"));
+            "{\"left\":10,\"top\":20,\"width\":200,\"height\":100,\"deliveryMode\":\"foreground\"}"));
         checks.Check(region.Success, "带区域的截图同样成功");
 
         // 参数校验：错误参数不得被当作成功。
@@ -257,13 +258,34 @@ internal static class PluginCapabilityTests
         checks.Check(!bad.Success && bad.Content.Contains("参数错误", StringComparison.Ordinal),
             "缺少坐标的鼠标动作按参数错误拒绝");
 
+        // 输入动作默认后台；没有窗口目标时按设计拒绝。替身验证走显式 foreground。
         var click = await registry.DispatchAsync(new PureToolCall("s4", ComputerUsePlugin.MouseTool,
-            "{\"action\":\"click\",\"x\":12,\"y\":34}"));
+            "{\"action\":\"click\",\"x\":12,\"y\":34,\"deliveryMode\":\"foreground\"}"));
         checks.Check(click.Success, "合法鼠标点击执行成功");
 
+        var backgroundClick = await registry.DispatchAsync(new PureToolCall("s4b", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":12,\"y\":34}"));
+        checks.Check(!backgroundClick.Success && backgroundClick.Content.Contains("后台鼠标动作需要", StringComparison.Ordinal),
+            "后台鼠标没有窗口目标时拒绝，不触碰真实鼠标");
+
         var hotkey = await registry.DispatchAsync(new PureToolCall("s5", ComputerUsePlugin.KeyboardTool,
-            "{\"action\":\"hotkey\",\"keys\":[\"Ctrl\",\"S\"]}"));
+            "{\"action\":\"hotkey\",\"keys\":[\"Ctrl\",\"S\"],\"deliveryMode\":\"foreground\"}"));
         checks.Check(hotkey.Success, "组合键执行成功");
+
+        var capabilities = await registry.DispatchAsync(new PureToolCall("s6", ComputerUsePlugin.CapabilitiesTool, "{}"));
+        checks.Check(capabilities.Success && capabilities.Content.Contains("后台", StringComparison.Ordinal),
+            "能力查询报告后台与前台通道");
+
+        // 注入式后台后端：验证窗口身份和 deliveryMode 会沿调用链传递，
+        // 不需要启动真实桌面或移动用户鼠标。
+        var backgroundBackend = new FakeComputerBackend();
+        var routed = new ComputerUsePlugin(backends: new[] { backgroundBackend });
+        var routedResult = await routed.ExecuteAsync(new PureToolCall("s7", ComputerUsePlugin.MouseTool,
+            "{\"action\":\"click\",\"x\":4,\"y\":5,\"processId\":42,\"windowId\":99,\"deliveryMode\":\"background\"}"));
+        checks.Check(routedResult.Success && backgroundBackend.LastMouse?.Context.DeliveryMode == ComputerUseDeliveryMode.Background &&
+                     backgroundBackend.LastMouse.Context.Target?.ProcessId == 42 &&
+                     backgroundBackend.LastMouse.Context.Target.WindowId == 99,
+            "后台后端收到精确窗口目标且保持后台投递模式");
 
         // 权限开关：关闭后如实拒绝，而不是伪装成功。
         var locked = new ComputerUsePlugin(new FakeScreenCapture(), new FakeInput())
@@ -276,6 +298,14 @@ internal static class PluginCapabilityTests
         var lockedKey = await locked.ExecuteAsync(new PureToolCall("l2", ComputerUsePlugin.KeyboardTool,
             "{\"action\":\"key\",\"key\":\"A\"}"));
         checks.Check(!lockedKey.Success, "输入开关关闭时拒绝键盘模拟");
+
+        var gate = ComputerUseOperationGate.Shared;
+        await using var first = await gate.EnterAsync("test-input");
+        var waiting = gate.EnterAsync("test-input").AsTask();
+        checks.Check(!waiting.IsCompleted, "相同输入资源的并发调用会等待前一个动作释放");
+        await first.DisposeAsync();
+        await using var second = await waiting;
+        checks.Check(second is not null, "输入资源释放后下一调用获得独占权");
         _ = computer;
     }
 
@@ -354,6 +384,32 @@ internal static class PluginCapabilityTests
         public bool TypeText(string text) { Calls.Add("type:" + text.Length); return true; }
         public bool PressKey(string key) { Calls.Add("key:" + key); return true; }
         public bool Hotkey(IReadOnlyList<string> keys) { Calls.Add("hotkey:" + string.Join("+", keys)); return true; }
+    }
+
+    /// <summary>可控的后台电脑后端替身：记录精确窗口目标，不驱动真实桌面。</summary>
+    private sealed class FakeComputerBackend : IComputerUseBackend
+    {
+        public ComputerUseBackendKind Kind => ComputerUseBackendKind.CuaDriver;
+        public bool IsAvailable => true;
+        public string? UnavailableReason => null;
+        public bool SupportsBackground => true;
+        public bool SupportsForeground => true;
+        public ComputerUseMouseRequest? LastMouse { get; private set; }
+
+        public Task<ComputerUseBackendResult> CaptureAsync(ComputerUseCaptureRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ComputerUseBackendResult(true, "fake capture", [0x89, (byte)'P', (byte)'N', (byte)'G'], 1, 1));
+
+        public Task<ComputerUseBackendResult> MouseAsync(ComputerUseMouseRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            LastMouse = request;
+            return Task.FromResult(new ComputerUseBackendResult(true, "fake mouse"));
+        }
+
+        public Task<ComputerUseBackendResult> KeyboardAsync(ComputerUseKeyboardRequest request,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ComputerUseBackendResult(true, "fake keyboard"));
     }
 
     /// <summary>可控的浏览器桥替身：回显方法名，不驱动真实浏览器。</summary>

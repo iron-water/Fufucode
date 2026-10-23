@@ -13,13 +13,13 @@ public enum SubagentMode
     Patch,
 }
 
-/// <summary>子代理定义：名称、模式、工具白名单、轮次上限、输出契约与系统提示。</summary>
+/// <summary>子代理定义：名称、模式、工具白名单、可选外部预算、输出契约与系统提示。</summary>
 public sealed record AgentDefinition(
     string Name,
     string Description,
     IReadOnlyList<string> Tools,
     string SystemPrompt,
-    int MaxTurns = 6,
+    int? MaxTurns = null,
     string? ModelId = null,
     string? Effort = null,
     string? OutputSchema = null,
@@ -93,7 +93,6 @@ public sealed class AgentRegistry
             readOnly,
             "你是只读探索子代理。使用读取、目录列表、正则搜索与通配查找收集事实，" +
             "不要尝试修改文件或执行命令。返回简洁结论，并给出文件:行号证据。",
-            MaxTurns: 12,
             Mode: SubagentMode.Read);
 
         yield return new AgentDefinition(
@@ -102,7 +101,6 @@ public sealed class AgentRegistry
             patchTools,
             "你是一个隔离修改子代理。只处理交给你的任务：先阅读相关代码，再做最小必要修改；" +
             "可以运行验证命令。完成后用简洁文本说明改动、验证结果与未完成项。",
-            MaxTurns: 12,
             Mode: SubagentMode.Patch);
     }
 
@@ -120,9 +118,10 @@ public sealed class AgentRegistry
                               ?? string.Empty;
             var tools = ParseList(Read(frontmatter, "tools"))
                         ?? new[] { "read_file", "list_dir", "grep_search", "glob_files" };
-            var maxTurns = int.TryParse(Read(frontmatter, "maxTurns"), out var turns)
-                ? Math.Clamp(turns, 1, 30)
-                : 6;
+            // 未声明 maxTurns 表示不设置轮次预算；显式值才作为自动化/实验预算。
+            var maxTurns = int.TryParse(Read(frontmatter, "maxTurns"), out var turns) && turns > 0
+                ? turns
+                : (int?)null;
 
             var mode = string.Equals(Read(frontmatter, "mode"), "patch", StringComparison.OrdinalIgnoreCase)
                 ? SubagentMode.Patch
@@ -194,6 +193,10 @@ public sealed class AgentRegistry
         var builder = new StringBuilder();
         builder.AppendLine("# 可用子代理");
         builder.AppendLine("需要隔离上下文时调用 subagent 工具；read 只读探索，patch 在隔离工作树中修改并返回补丁。");
+        // 何时该派发：写清判断依据，避免模型对所有任务都派发（增加成本）或从不派发（插件形同虚设）。
+        builder.AppendLine("适合派发：大范围搜索/定位、需要阅读大量文件才能回答、可拆成多个互不依赖的子问题、审查独立模块。");
+        builder.AppendLine("不要派发：单文件小改、已知位置的精确读取、需要保留完整上下文的连续修改——直接调用内置工具更快。");
+        builder.AppendLine("派发时用 context 传入已确认的文件路径、符号名或报错原文，避免子代理重复发现。");
         foreach (var agent in All)
             builder.Append("- ").Append(agent.Name).Append("（")
                 .Append(agent.Mode == SubagentMode.Patch ? "patch" : "read").Append("）：")

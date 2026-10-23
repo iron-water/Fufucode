@@ -40,6 +40,12 @@ public sealed class ModelStreamCallbacks
     /// <summary>流结束（收到 data: [DONE]）回调，用于 UI 收尾。</summary>
     public Action? OnCompleted { get; init; }
 
+    /// <summary>
+    /// 已输出的流因瞬时故障被丢弃、即将从头重试时触发。
+    /// UI 应关闭当前半成品消息并从新消息继续，避免把重试增量拼到旧文本后面。
+    /// </summary>
+    public Action? OnRestart { get; init; }
+
     /// <summary>空回调集合。</summary>
     public static ModelStreamCallbacks None { get; } = new();
 }

@@ -41,6 +41,26 @@ internal static class Program
             return await NativeChatSessionStreamingTests.RunLiveAsync(args[1], model, apiKey);
         }
 
+        // 可选的真实端点重复实验：子代理档位 + 压缩约束召回（不进默认套件）。
+        if (args.Length >= 3 && args[0] == "--live-bench")
+        {
+            var model = args.Length >= 3 ? args[2] : "devin/swe-2";
+            var key = args.Length >= 4 ? args[3] : null;
+            var workspace = args.Length >= 5 && args[4] != "-" ? args[4] : null;
+            var repeats = args.Length >= 6 && int.TryParse(args[5], out var n) ? n : 3;
+            return await LiveOptimizationBench.RunAsync(args[1], model, key, workspace, repeats);
+        }
+
+        // 可选的真实端点探针：同一任务下 faster / stronger 子代理对照（不进默认套件）。
+        if (args.Length >= 3 && args[0] == "--live-subagent-bench")
+        {
+            var model = args.Length >= 3 ? args[2] : "devin/swe-2";
+            var key = args.Length >= 4 ? args[3] : null;
+            var workspace = args.Length >= 5 ? args[4] : null;
+            var task = args.Length >= 6 ? args[5] : "facts";
+            return await LiveSubagentProbe.RunAsync(args[1], model, key, workspace, task);
+        }
+
         // 可选的真实联调探针：真实启动 seep MCP 子进程（需本机部署工作台 + Python）。
         if (args.Length >= 1 && args[0] == "--seep-live")
         {
@@ -62,6 +82,12 @@ internal static class Program
                 Console.WriteLine($"\n会话层通过：{checks.Passed} 项断言");
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--long-horizon-only")
+            {
+                await LongHorizonTests.RunAsync(checks);
+                Console.WriteLine($"\n长程能力通过：{checks.Passed} 项断言");
+                return 0;
+            }
             BackendContractTests.Run(checks);
             SessionPdfExportTests.Run(checks);
             DefaultBackendTests.Run(checks);
@@ -78,6 +104,7 @@ internal static class Program
             await SseProtocolTests.RunAsync(checks);
             await ModelClientStreamingTests.RunAsync(checks);
             await StreamingLoopTests.RunAsync(checks);
+            await LongHorizonTests.RunAsync(checks);
             await SseCounterexampleTests.RunAsync(checks);
             await NativeChatSessionStreamingTests.RunAsync(checks);
             Console.WriteLine($"\n全部通过：{checks.Passed} 项断言");

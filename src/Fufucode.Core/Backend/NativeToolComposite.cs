@@ -46,13 +46,25 @@ public sealed class NativeToolComposite : IPureToolDispatcher, IPluginToolCatalo
     {
         ArgumentNullException.ThrowIfNull(call);
         var providers = _providers?.Invoke() ?? [];
+
         foreach (var provider in providers)
         {
             if (provider is not IPluginToolCatalog catalog) continue;
-            if (!catalog.ActiveToolNames.Contains(call.Name, StringComparer.Ordinal)) continue;
+            if (!Contains(catalog.ActiveToolNames, call.Name)) continue;
             return await provider.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
         }
 
         return await _builtin.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>目录实现可能返回集合或数组；两者都按 O(1) / O(n) 各自最优方式判断。</summary>
+    private static bool Contains(IReadOnlyList<string> names, string name)
+    {
+        if (names is HashSet<string> set) return set.Contains(name);
+        for (var i = 0; i < names.Count; i++)
+        {
+            if (string.Equals(names[i], name, StringComparison.Ordinal)) return true;
+        }
+        return false;
     }
 }
