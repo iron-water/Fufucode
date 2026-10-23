@@ -38,17 +38,48 @@ public sealed partial class WorkspacePanelTabViewModel : ViewModelBase
 }
 
 /// <summary>Read-only presentation of A8. No line counts are invented; nullable flags stay unknown.</summary>
-public sealed class WorkspacePanelChangedFileViewModel : ViewModelBase
+public sealed partial class WorkspacePanelChangedFileViewModel : ViewModelBase
 {
     public WorkspacePanelChangedFileViewModel(ChangedFile source, string root)
     {
         Source = source;
         FullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, source.Path));
+        var name = System.IO.Path.GetFileName(source.Path.Replace('/', System.IO.Path.DirectorySeparatorChar));
+        Name = name.Length > 0 ? name : source.Path;
+        Folder = source.Path.Length > Name.Length
+            ? source.Path[..(source.Path.Length - Name.Length - 1)]
+            : string.Empty;
     }
 
     public ChangedFile Source { get; }
     public string Path => Source.Path;
     public string FullPath { get; }
+    /// <summary>文件名与所在目录分开存放：列表按目录分组，行内只显示文件名。</summary>
+    public string Name { get; }
+    public string Folder { get; }
+    /// <summary>扩展名，供语法高亮选择语法；隐藏文件没有扩展名时为空。</summary>
+    public string Extension => System.IO.Path.GetExtension(Name).TrimStart('.').ToLowerInvariant();
+    public int? AddedLines => Source.AddedLines;
+    public int? RemovedLines => Source.RemovedLines;
+    public bool HasLineCounts => Source.AddedLines is not null || Source.RemovedLines is not null;
+    public bool HasFolder => Folder.Length > 0;
+    /// <summary>列表内的选中态；由面板在 SelectedChange 变化时同步。</summary>
+    [ObservableProperty] private bool _isSelected;
+    public string AddedText => Source.AddedLines is { } added ? "+" + added : string.Empty;
+    public string RemovedText => Source.RemovedLines is { } removed ? "−" + removed : string.Empty;
+    public bool HasAdded => Source.AddedLines is > 0;
+    public bool HasRemoved => Source.RemovedLines is > 0;
+    /// <summary>单字符状态标记，替代旧版整句 "已修改 · index M · worktree —"。</summary>
+    public string StatusMark => Source.Kind switch
+    {
+        "added" or "untracked" or "written" => "A",
+        "deleted" or "missing" => "D",
+        "renamed" => "R",
+        "copied" => "C",
+        "unmerged" => "!",
+        "type-changed" => "T",
+        _ => "M",
+    };
     public string? OldPath => Source.OldPath;
     public bool HasOldPath => OldPath is not null;
     public bool IsNew => Source.IsNew == true;
@@ -78,6 +109,39 @@ public sealed record WorkspacePanelFileItemViewModel(string Name, string Relativ
     public string Detail => IsLink ? "链接 · 不展开" : IsDirectory ? "文件夹" : "文件";
 }
 
+/// <summary>变更列表里的一组文件（按所在目录），目录可折叠。</summary>
+public sealed partial class WorkspaceChangeGroupViewModel : ViewModelBase
+{
+    public WorkspaceChangeGroupViewModel(string folder)
+    {
+        Folder = folder;
+        Header = folder.Length == 0 ? "根目录" : folder;
+    }
+
+    public string Folder { get; }
+    public string Header { get; }
+    public System.Collections.ObjectModel.ObservableCollection<WorkspacePanelChangedFileViewModel> Files { get; } = new();
+    [ObservableProperty] private bool _isExpanded = true;
+    public bool IsCollapsed => !IsExpanded;
+    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(IsCollapsed));
+    public string CountText => Files.Count.ToString();
+}
+
+/// <summary>
+/// 变更列表的呈现行：目录头是单独的对象，文件行直接复用文件 ViewModel 本身。
+/// 共用同一批实例，选中项仍是 <see cref="WorkspacePanelChangedFileViewModel"/>，
+/// 既有"按文件选中"的契约与快捷键导航都不需要改。
+/// </summary>
+public sealed partial class WorkspaceChangeGroupRowViewModel : ViewModelBase
+{
+    public WorkspaceChangeGroupRowViewModel(WorkspaceChangeGroupViewModel group) => Group = group;
+    public WorkspaceChangeGroupViewModel Group { get; }
+    public string Header => Group.Header;
+    public string CountText => Group.CountText;
+    public bool IsExpanded => Group.IsExpanded;
+    public bool IsCollapsed => Group.IsCollapsed;
+}
+
 /// <summary>Files and Changes view host. Queries are injected by the composition root; it never owns Core sessions.</summary>
 public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
 {
@@ -102,6 +166,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
 
     /// <summary>请求把当前图表保存为图片；由视图执行渲染与文件选择。</summary>
     public event EventHandler? DiagramDownloadRequested;
+
 
     [ObservableProperty] private bool _isDiagramPreview;
     [ObservableProperty] private string _diagramSource = "";
@@ -326,6 +391,122 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private WorkspacePanelChangedFileViewModel? _selectedChange;
     public bool HasSelectedChange => SelectedChange is not null;
 
+    /// <summary>
+    /// 变更列表的呈现行：目录头与文件行混排成一条平铺列表。
+    /// 文件行的选中语义不变（SelectedChange 仍是 WorkspacePanelChangedFileViewModel），分组只在显示层。
+    /// </summary>
+    public ObservableCollection<object> ChangeRows { get; } = new();
+
+    private readonly List<WorkspaceChangeGroupViewModel> _groups = new();
+    public IReadOnlyList<WorkspaceChangeGroupViewModel> ChangeGroups => _groups;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChangeFilter))]
+    private string _changeFilter = string.Empty;
+
+    public bool HasChangeFilter => ChangeFilter.Trim().Length > 0;
+    public bool HasFilteredOut => HasChangeFilter && Changes.Count > 0 && ChangeRows.Count == 0;
+    public bool IsChangeListEmpty => !IsChangesLoading && !HasChangesError && !HasChanges;
+
+    [ObservableProperty] private object? _selectedChangeRow;
+
+    /// <summary>栏宽够时左右分栏，窄栏退回"列表 ↔ 文件"的单栏切换。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsChangeListVisible))]
+    [NotifyPropertyChangedFor(nameof(IsChangeListNarrow))]
+    private bool _isChangePaneWide;
+
+    /// <summary>宽栏列表固定宽度；窄栏里选中文件后列表让位给 diff。</summary>
+    public bool IsChangeListVisible => IsChangePaneWide || !HasSelectedChange;
+    /// <summary>窄栏才需要"返回列表"入口，宽栏列表一直可见。</summary>
+    public bool IsChangeListNarrow => !IsChangePaneWide;
+    [ObservableProperty] private bool _isDark = true;
+    public string AddedTotalText => "+" + Changes.Sum(file => file.AddedLines ?? 0);
+    public string RemovedTotalText => "−" + Changes.Sum(file => file.RemovedLines ?? 0);
+    public bool HasTotals => Changes.Any(file => file.HasLineCounts);
+
+    /// <summary>
+    /// 列表选中项：文件行转给 SelectedChange，目录头就地折叠且不留选中态。
+    /// </summary>
+    partial void OnSelectedChangeRowChanged(object? value)
+    {
+        if (value is WorkspaceChangeGroupRowViewModel header)
+        {
+            header.Group.IsExpanded = !header.Group.IsExpanded;
+            _suppressRowSync = true;
+            SelectedChangeRow = null;
+            _suppressRowSync = false;
+            return;
+        }
+        if (_suppressRowSync) return;
+        SelectedChange = value as WorkspacePanelChangedFileViewModel;
+    }
+
+    private bool _suppressRowSync;
+
+    partial void OnChangeFilterChanged(string value)
+    {
+        RebuildChangeGroups();
+        OnPropertyChanged(nameof(HasChangeFilter));
+    }
+
+    /// <summary>筛选匹配路径任意片段；分组重算后重建平铺行。</summary>
+    private void RebuildChangeGroups()
+    {
+        _groups.Clear();
+        var filter = ChangeFilter.Trim();
+        var visible = string.IsNullOrEmpty(filter)
+            ? Changes.AsEnumerable()
+            : Changes.Where(file => file.Path.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        foreach (var group in visible.GroupBy(file => file.Folder, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var item = new WorkspaceChangeGroupViewModel(group.Key);
+            foreach (var file in group.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)) item.Files.Add(file);
+            item.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(WorkspaceChangeGroupViewModel.IsExpanded)) RebuildChangeRows();
+            };
+            _groups.Add(item);
+        }
+        RebuildChangeRows();
+        OnPropertyChanged(nameof(ChangeGroups));
+        OnPropertyChanged(nameof(HasFilteredOut));
+        OnPropertyChanged(nameof(IsChangeListEmpty));
+    }
+
+    private void ClearChangeRows()
+    {
+        _groups.Clear();
+        ChangeRows.Clear();
+        OnPropertyChanged(nameof(ChangeGroups));
+    }
+
+    /// <summary>目录折叠/展开后只重建平铺行，不重新分组。</summary>
+    private void RebuildChangeRows()
+    {
+        ChangeRows.Clear();
+        foreach (var group in _groups)
+        {
+            ChangeRows.Add(new WorkspaceChangeGroupRowViewModel(group));
+            if (!group.IsExpanded) continue;
+            foreach (var file in group.Files) ChangeRows.Add(file);
+        }
+    }
+
+    /// <summary>
+    /// 由视图注入：语法着色按深浅主题取调色板。
+    /// 颜色是烘进 diff 行里的，主题变了要重新取一次，否则阅读区还停在旧配色。
+    /// </summary>
+    public void SetDarkTheme(bool dark)
+    {
+        if (IsDark == dark) return;
+        IsDark = dark;
+        if (SelectedChange is not null && DiffModel is not null) _ = RefreshSelectedDiffAsync();
+    }
+
+    private bool IsDarkTheme() => IsDark;
+
     [ObservableProperty] private string _currentDirectory = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
@@ -386,6 +567,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             _changeGeneration++;
             _fileGeneration++;
             Changes.Clear();
+            ClearChangeRows();
             Files.Clear();
             SelectedChange = null;
             SelectedFile = null;
@@ -422,6 +604,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     {
         SelectedChange = null;
         Changes.Clear();
+        ClearChangeRows();
         ChangesRoot = string.Empty;
         ExcludedPaths = 0;
         NotifyChangeRows();
@@ -431,7 +614,15 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     partial void OnSelectedChangeChanged(WorkspacePanelChangedFileViewModel? value)
     {
         CopyFeedback = string.Empty;
+        foreach (var file in Changes) file.IsSelected = ReferenceEquals(file, value);
+        if (!_suppressRowSync)
+        {
+            _suppressRowSync = true;
+            SelectedChangeRow = value;
+            _suppressRowSync = false;
+        }
         OnPropertyChanged(nameof(HasSelectedChange));
+        OnPropertyChanged(nameof(IsChangeListVisible));
         _ = RefreshSelectedDiffAsync();
     }
     partial void OnSelectedFileChanged(WorkspacePanelFileItemViewModel? value)
@@ -509,6 +700,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             if (generation == _changeGeneration && !_disposed)
             {
                 Changes.Clear();
+                ClearChangeRows();
                 SelectedChange = null;
                 ChangesError = $"变更查询失败：{error.Message}";
                 NotifyChangeRows();
@@ -536,6 +728,10 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             foreach (var file in report.Files) Changes.Add(new(file, report.Root));
             SelectedChange = Changes.FirstOrDefault(x => x.Path == selectedPath);
         }
+        RebuildChangeGroups();
+        // 重新分组后行是新对象，选中态要再同步一次。
+        if (SelectedChange is { } current)
+            foreach (var file in Changes) file.IsSelected = ReferenceEquals(file, current);
         NotifyChangeRows();
     }
 
@@ -650,6 +846,12 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasChanges));
         OnPropertyChanged(nameof(IsChangesEmpty));
         OnPropertyChanged(nameof(ChangesCountText));
+        OnPropertyChanged(nameof(IsChangeListEmpty));
+        OnPropertyChanged(nameof(HasFilteredOut));
+        OnPropertyChanged(nameof(AddedTotalText));
+        OnPropertyChanged(nameof(RemovedTotalText));
+        OnPropertyChanged(nameof(HasTotals));
+        OnPropertyChanged(nameof(HasSelectedChange));
     }
     private void NotifyFileRows()
     {

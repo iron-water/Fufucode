@@ -670,6 +670,153 @@
     <Setter Property="MinHeight" Value="44"/>
     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
   </Style>
+    <!-- 变更面板：分段式范围开关（两个并排胶囊，选中态用底色而不是描边）。 -->
+    <Style Selector="Border.scopeSwitch">
+      <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+      <Setter Property="Padding" Value="2"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="Button.scopeChip">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+      <Setter Property="Padding" Value="10,3"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    </Style>
+    <Style Selector="Button.scopeChip:pointerover">
+      <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    </Style>
+    <Style Selector="Button.scopeChip.selected">
+      <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+      <Setter Property="FontWeight" Value="SemiBold"/>
+    </Style>
+    <!-- 目录组标题：弱于文件行，只在悬停时给底。 -->
+    <Style Selector="Button.groupRow">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="Button.groupRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <!-- 文件行：整行可点，选中用底色 + 左侧强调条。 -->
+    <Style Selector="Button.fileRow">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="2,0,0,0"/>
+      <Setter Property="BorderBrush" Value="Transparent"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+      <Setter Property="MinHeight" Value="0"/>
+    </Style>
+    <Style Selector="Button.fileRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <Style Selector="Button.fileRow.selected">
+      <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    </Style>
+    <Style Selector="TextBlock.statusMark">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+      <Setter Property="Width" Value="11"/>
+    </Style>
+    <Style Selector="TextBlock.fileName">
+      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    </Style>
+    <Style Selector="TextBlock.diffStatAdded">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppDiffAddedForeground}"/>
+    </Style>
+    <Style Selector="TextBlock.diffStatRemoved">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppDiffRemovedForeground}"/>
+    </Style>
+    <!-- 逐行 diff：底色表达增删，行号列固定宽度避免滚动时跳动。 -->
+    <Style Selector="Border.diffRow">
+      <Setter Property="Padding" Value="0,0,4,0"/>
+      <Setter Property="MinHeight" Value="19"/>
+    </Style>
+    <Style Selector="Border.diffRow.added">
+      <Setter Property="Background" Value="{DynamicResource AppDiffAddedBackground}"/>
+    </Style>
+    <Style Selector="Border.diffRow.removed">
+      <Setter Property="Background" Value="{DynamicResource AppDiffRemovedBackground}"/>
+    </Style>
+    <Style Selector="TextBlock.diffGutter">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Padding" Value="0,0,6,0"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppDiffLineNumber}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.diffMarker">
+      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="Width" Value="12"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+    </Style>
+    <Style Selector="TextBlock.diffMarker.added">
+    <Setter Property="Foreground" Value="{DynamicResource AppDiffAddedForeground}"/>
+  </Style>
+  <Style Selector="TextBlock.diffMarker.removed">
+    <Setter Property="Foreground" Value="{DynamicResource AppDiffRemovedForeground}"/>
+  </Style>
+  <!-- 变更列表的选中态自己画：默认 ListBoxItem 的强调色块在侧栏里太重。 -->
+  <Style Selector="ListBox.changesList ListBoxItem">
+    <Setter Property="Padding" Value="4,0"/>
+    <Setter Property="MinHeight" Value="0"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="ListBox.changesList ListBoxItem:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="ListBox.changesList ListBoxItem:selected">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="ListBox.changesList ListBoxItem:selected:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <!-- Fluent 的 ListBoxItem 模板自带选中底色，必须打到模板内的 ContentPresenter 才覆盖得掉。 -->
+  <Style Selector="ListBox.changesList ListBoxItem /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+  <Style Selector="ListBox.changesList ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="ListBox.changesList ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="ListBox.changesList ListBoxItem:selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="TextBlock.diffText">
+      <Setter Property="FontSize" Value="12"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+      <Setter Property="TextWrapping" Value="NoWrap"/>
+    </Style>
+    <Style Selector="Border.diffHunkHeader">
+      <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+      <Setter Property="Padding" Value="8,2"/>
+      <Setter Property="Margin" Value="0,4,0,0"/>
+    </Style>
+    <Style Selector="Button.diffGap">
+      <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="0"/>
+      <Setter Property="MinHeight" Value="0"/>
+      <Setter Property="Padding" Value="0"/>
+    </Style>
+    <Style Selector="Button.diffGap:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+
   <Style Selector="TextBlock.addedFlag">
     <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
   </Style>

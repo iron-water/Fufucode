@@ -864,3 +864,11 @@ EAD
 3. edit_file 增加 `edits[]` 批量（最多 20 条）：所有锚点先对原始文件求值、检测区间重叠，再从后往前应用；任一条失败整体不写盘；单条 old_string/new_string 保持兼容。语义对齐 Pi 的批量编辑，不引入 Codex/DSH 的 patch 文本格式。
 4. 对比结论：Claude Code 是精确唯一 + 先读；Codex 是上下文行 apply_patch、多文件 hunk；DSH 生态用 Codex 兼容 apply_patch 替换原生 edit，强调失败原子与回滚；Pi 是 oldText 精确唯一 + 同调用多条对原文匹配；OMP 的 read 用路径选行 + 50 KiB/3000 行上限 + footer 续读。FUMO 取“精确匹配 + 批量原子 + 行选区”，不引入 patch 格式。
 5. 验证：Core 构建通过；独立 ToolProbe 10/10 通过（行选区、批量编辑、重叠拒绝、失败不写盘、字面量 grep、写后索引失效、glob 索引）。Backend.Tests 仍被并发 UI 的 `BackendBadge.BadgeColor` 改动阻塞，未宣称全量通过。
+
+2026-10-23（第八轮）变更面板重做为逐行 diff 审阅视图：
+1. 问题：旧面板把 hunk 拼成制表符分隔文本塞进只读 TextBox，没有行号、增色/删色、语法着色与折叠；"范围说明"折叠块和根路径常驻顶部，右栏被元信息占满。视图局部样式写在 `UserControl.Styles` 里，而 ChangesContent 会被 `TakeDockPages` 摘到停靠区，样式实际不生效，这也是"难看"的直接原因之一。
+2. 结构：Changes 页改为"文件列表 ↔ diff"主从视图，栏宽 ≥620 时左右分栏（列表 224），窄栏仍是单栏切换、窄栏默认折行。文件按目录分组可折叠，行内给单字符状态与真实 ± 行数；顶部只留范围开关、± 合计、刷新与筛选框。
+3. diff 呈现：`DiffQuery.FileAsync` 的 hunk 展开成行模型（新旧行号、增删标记、hunk 头、可点击展开的上下文省略行）。语法着色用 LiveMarkdown 已带入的 TextMateSharp（深/浅各一套调色板，按规则 foreground 取色并以 `Theme.GetColor` 为准，直接索引 GetColorMap 会整体错位一格）；等量替换做词级比对，只强调真正变化的片段。两侧全文由新增的只读 `DiffQuery.SidesAsync` 提供（HEAD blob + 工作区副本，2 MiB 上限），读不到时降级为单色 diff，上下文省略行不可展开。
+4. 令牌：Fluent 基准新增 `AppDiffAddedBackground/Strong/Foreground`、`AppDiffRemovedBackground/Strong/Foreground`、`AppDiffLineNumber`，均为半透明叠加而非新的不透明底色；五套皮肤补 `Strong` 两键并保留各自原有取值。面板样式移入共享 `WorkbenchStyles`，停靠宿主下同样生效。
+5. 未做：并排（split）视图、行内批注、隐藏空白字符、整文件上下文加载；大文件超过 4000 行不着色。
+6. 验证：App 构建 0 警告 0 错误；`--selftest --r2-only`、`--tabs-only`、`--workbench-only`、`--d6-only`、`--changes-shots-only` 全过；Core `--a13-only` 全过；Skins 工程 297 项断言通过。截图证据在 `tmp/changes-shots/`（窄栏列表、窄栏 diff、宽栏 diff、深色 diff），已目视核对行号、色块铺满、语法色与词级强调。未跑全量 `--selftest`（依赖真实 Pi 运行时的段落未在本机执行）。

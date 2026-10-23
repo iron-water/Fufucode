@@ -85,8 +85,10 @@
       <SolidColorBrush x:Key="AppTerminalAccent"     Color="#FF7FD5A6"/>
       <SolidColorBrush x:Key="AppDiffAddedBackground"   Color="#FFE6F5E9"/>
       <SolidColorBrush x:Key="AppDiffAddedForeground"   Color="#FF1D5C2E"/>
+      <SolidColorBrush x:Key="AppDiffAddedStrong"       Color="#4D1D5C2E"/>
       <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#FFFBE9EA"/>
       <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FF922028"/>
+      <SolidColorBrush x:Key="AppDiffRemovedStrong"     Color="#4D922028"/>
 
       <!-- Aero chrome 专用：窗口外框/状态栏/浮动窗口阴影（§2 层级 L0/L5） -->
       <SolidColorBrush x:Key="AeroFrameOuter" Color="#FF3D5A78"/>
@@ -365,8 +367,10 @@
       <SolidColorBrush x:Key="AppTerminalAccent"     Color="#FF7FD5A6"/>
       <SolidColorBrush x:Key="AppDiffAddedBackground"   Color="#FF17331F"/>
       <SolidColorBrush x:Key="AppDiffAddedForeground"   Color="#FF9FE0AE"/>
+      <SolidColorBrush x:Key="AppDiffAddedStrong"       Color="#4D9FE0AE"/>
       <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#FF3A1A1E"/>
       <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFFFAAB2"/>
+      <SolidColorBrush x:Key="AppDiffRemovedStrong"     Color="#4DFFAAB2"/>
 
       <SolidColorBrush x:Key="AeroFrameOuter" Color="#FF05090F"/>
       <SolidColorBrush x:Key="AeroFrameInner" Color="#29FFFFFF"/>
