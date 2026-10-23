@@ -264,6 +264,8 @@
 
   function renderApprovals() {
     const root = $("approvalList"); root.innerHTML = "";
+    $("mobileApprovalCount").textContent = String(state.approvals.length);
+    $("mobileApprovalCount").hidden = state.approvals.length === 0;
     if (!state.approvals.length) { root.innerHTML = '<div class="context-placeholder">暂无待处理审批</div>'; return; }
     state.approvals.forEach(item => {
       const node = document.createElement("div"); node.className = "approval";
@@ -343,6 +345,16 @@
     if (clear) { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(SESSION_KEY); }
     setConnection(clear ? "未连接" : "已断开", clear ? "" : "error");
   }
+
+  function toggleDrawer(name) {
+    document.body.classList.toggle(`${name}-open`);
+  }
+
+  $("sessionDrawerBtn").addEventListener("click", () => toggleDrawer("sessions-drawer"));
+  $("contextDrawerBtn").addEventListener("click", () => toggleDrawer("context-drawer"));
+  $("mobileSessionBtn").addEventListener("click", () => toggleDrawer("sessions-drawer"));
+  $("mobileContextBtn").addEventListener("click", () => toggleDrawer("context-drawer"));
+  $("mobileApprovalBtn").addEventListener("click", () => { toggleDrawer("context-drawer"); $("approvalList").scrollIntoView({ block: "start" }); });
 
   $("pairBtn").addEventListener("click", pair);
   $("pinInput").addEventListener("keydown", event => { if (event.key === "Enter") pair(); });
