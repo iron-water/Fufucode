@@ -149,6 +149,38 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         }
     }
 
+    /// <summary>面包屑逐级条目：TargetId 为空表示分类首页。</summary>
+    public IReadOnlyList<SettingsCrumb> BreadcrumbTrail
+    {
+        get
+        {
+            var crumbs = new List<SettingsCrumb>();
+            if (CurrentPageId.Length == 0)
+            {
+                crumbs.Add(new(CategoryTitle, "", true));
+                return crumbs;
+            }
+            crumbs.Add(new(CategoryTitle, "", false));
+            var prefix = "";
+            foreach (var segment in CurrentPageId.Split('.'))
+            {
+                prefix = prefix.Length == 0 ? segment : prefix + "." + segment;
+                var title = SubPages.FirstOrDefault(p => p.Id == prefix)?.Title
+                    ?? SubPageFallbackTitle(prefix);
+                if (title is { Length: > 0 }) crumbs.Add(new(title, prefix, false));
+            }
+            if (crumbs.Count > 1) crumbs[^1] = crumbs[^1] with { IsCurrent = true };
+            return crumbs;
+        }
+    }
+
+    [RelayCommand]
+    private void OpenCrumb(string? id)
+    {
+        if (string.IsNullOrEmpty(id)) GoBack();
+        else OpenPage(id);
+    }
+
     /// <summary>动态子页的标题回退：shortcuts.{group} 直接用组名。</summary>
     private static string? SubPageFallbackTitle(string id) =>
         id.StartsWith("shortcuts.", StringComparison.Ordinal)
@@ -176,7 +208,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     }
     private void NotifyPageState()
     {
-        foreach (var name in new[] { nameof(CurrentPageId), nameof(Breadcrumb), nameof(PageTitle), nameof(BackToolTip), nameof(IsSubPage), nameof(CategorySubPages), nameof(HasSubPages), nameof(ActivePageId), nameof(IsSearching), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins), nameof(ShowPinSection) })
+        foreach (var name in new[] { nameof(CurrentPageId), nameof(Breadcrumb), nameof(BreadcrumbTrail), nameof(PageTitle), nameof(BackToolTip), nameof(IsSubPage), nameof(CategorySubPages), nameof(HasSubPages), nameof(ActivePageId), nameof(IsSearching), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins), nameof(ShowPinSection) })
             OnPropertyChanged(name);
         NotifyCategoryVisibility();
     }
@@ -2136,3 +2168,6 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         SavePerformance(restartRequired: true);
     }
 }
+
+/// <summary>设置面包屑的一级（标题 + 跳转目标 + 是否当前页）。</summary>
+public sealed record SettingsCrumb(string Title, string TargetId, bool IsCurrent);

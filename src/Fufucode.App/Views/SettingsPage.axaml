@@ -76,18 +76,28 @@
       <Border x:Name="SettingsContentHost" Grid.Column="1" Classes="settingsContentHost"
               Margin="0,0,0,24">
       <Grid x:Name="SettingsContentArea" RowDefinitions="Auto,*">
-        <!-- 页面标题＝面包屑：Windows 设置把"系统 > 屏幕"直接当标题 -->
-        <!-- 面包屑一行：父级与当前页同字号同字重，只靠颜色区分层级。 -->
-        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,4,0,4"
-                    VerticalAlignment="Bottom">
-          <Button Classes="crumbLink" Content="{Binding CategoryTitle}" IsVisible="{Binding IsSubPage}"
-                  Command="{Binding BackToCategoryCommand}" AutomationProperties.Name="返回分类首页"
-                  VerticalAlignment="Bottom" Margin="0"/>
-          <TextBlock Classes="breadcrumb" Text="›" IsVisible="{Binding IsSubPage}"
-                     VerticalAlignment="Bottom" Margin="0"/>
-          <TextBlock x:Name="SettingsPageTitle" Classes="settingsPageTitle" Text="{Binding PageTitle}"
-                     AutomationProperties.Name="设置路径" VerticalAlignment="Bottom"/>
-        </StackPanel>
+        <!-- 页面标题＝面包屑：逐级展开（模型与思考 › 提供商 › 添加提供商），
+             每一级都可点返回；当前页是普通文字。 -->
+        <ItemsControl Grid.Row="0" ItemsSource="{Binding BreadcrumbTrail}" Margin="0,4,0,4"
+                      VerticalAlignment="Bottom" AutomationProperties.Name="设置路径">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate><StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom"/></ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:SettingsCrumb">
+              <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Bottom">
+                <Button Classes="crumbLink" Content="{Binding Title}" IsVisible="{Binding !IsCurrent}"
+                        Command="{Binding $parent[ItemsControl].((vm:SettingsPageViewModel)DataContext).OpenCrumbCommand}"
+                        CommandParameter="{Binding TargetId}"
+                        VerticalAlignment="Bottom" Margin="0"/>
+                <TextBlock Classes="breadcrumb" Text="›" IsVisible="{Binding !IsCurrent}"
+                           VerticalAlignment="Bottom" Margin="0"/>
+                <TextBlock Classes="settingsPageTitle" Text="{Binding Title}"
+                           IsVisible="{Binding IsCurrent}" VerticalAlignment="Bottom"/>
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
 
         <ScrollViewer x:Name="SettingsScroller" Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
           <StackPanel MaxWidth="880" Margin="4,0,8,32" Spacing="0" HorizontalAlignment="Stretch">
