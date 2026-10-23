@@ -34,6 +34,7 @@ public sealed class App : Application
     private ResidentTaskWindow? _residentTaskWindow;
     private ResidentTriggerStore? _residentTriggers;
     private ResidentTriggerEngine? _residentTriggerEngine;
+    private ResidentMemoryWindow? _residentMemoryWindow;
     private NoticeBubble? _bubble;
     private bool _exiting;
     private bool _petShown = true; // 显式跟踪显隐：Window.IsVisible 对顶层窗口不可靠
@@ -190,6 +191,10 @@ public sealed class App : Application
         taskItem.Click += (_, _) => ShowResidentTasks();
         menu.Items.Add(taskItem);
 
+        var memoryItem = new NativeMenuItem("记忆与观察规则…");
+        memoryItem.Click += (_, _) => ShowResidentMemory();
+        menu.Items.Add(memoryItem);
+
         var proactiveItem = new NativeMenuItem("主动行为") { IsChecked = s.ProactiveEnabled };
         proactiveItem.Click += (_, _) =>
         {
@@ -269,6 +274,10 @@ public sealed class App : Application
             var taskItem = new MenuItem { Header = "常驻任务…" };
             taskItem.Click += (_, _) => ShowResidentTasks();
             menu.Items.Add(taskItem);
+
+            var memoryItem = new MenuItem { Header = "记忆与观察规则…" };
+            memoryItem.Click += (_, _) => ShowResidentMemory();
+            menu.Items.Add(memoryItem);
 
             var proactiveItem = new MenuItem { Header = "主动行为", IsChecked = s.ProactiveEnabled };
             proactiveItem.Click += (_, _) =>
@@ -377,6 +386,17 @@ public sealed class App : Application
         }));
     }
 
+    /// <summary>打开/聚焦记忆管理窗口。</summary>
+    private void ShowResidentMemory()
+    {
+        if (_resident is null) return;
+        if (_residentMemoryWindow is { } existing) { existing.Activate(); return; }
+        var window = new ResidentMemoryWindow(_resident);
+        window.Closed += (_, _) => _residentMemoryWindow = null;
+        window.Show();
+        _residentMemoryWindow = window;
+    }
+
     /// <summary>打开/聚焦常驻任务状态窗口。</summary>
     private void ShowResidentTasks()
     {
@@ -417,6 +437,7 @@ public sealed class App : Application
         _chatWindow?.Close();
         _endpointSettingsWindow?.Close();
         _residentTaskWindow?.Close();
+        _residentMemoryWindow?.Close();
         _bridgeWindow?.Close();
         _bubble?.Close();
         _proactive?.Dispose();

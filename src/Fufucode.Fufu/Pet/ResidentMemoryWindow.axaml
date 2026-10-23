@@ -1,0 +1,39 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:pet="clr-namespace:Fufucode.Fufu.Pet"
+        x:Class="Fufucode.Fufu.Pet.ResidentMemoryWindow"
+        Title="FUFU 记忆与观察规则"
+        Width="700" Height="560"
+        MinWidth="520" MinHeight="360"
+        ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="CenterOwner"
+        Background="#CC1E1E24" TransparencyLevelHint="AcrylicBlur">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="14" RowSpacing="8">
+    <StackPanel Grid.Row="0" Spacing="3">
+      <TextBlock Text="FUFU 记忆与观察规则" FontSize="18" FontWeight="SemiBold" Foreground="#F0F0F0" />
+      <TextBlock Text="记忆可直接编辑。观察规则只创建记录任务，不会自动调用模型或执行工具。"
+                 FontSize="11" Foreground="#B8B8C0" TextWrapping="Wrap" />
+    </StackPanel>
+    <Grid Grid.Row="1" ColumnDefinitions="180,*" ColumnSpacing="10">
+      <ListBox Name="ScopeList" Background="#23232B">
+        <ListBox.ItemTemplate>
+          <DataTemplate x:DataType="pet:MemoryScopeRow">
+            <TextBlock Text="{Binding Name}" Padding="8" Foreground="#E0E0E8" />
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+      <Grid Grid.Column="1" RowDefinitions="Auto,*,Auto" RowSpacing="6">
+        <TextBlock Name="ScopeTitle" Text="记忆" Foreground="#F0F0F0" FontWeight="SemiBold" />
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+          <TextBox Name="MemoryBox" AcceptsReturn="True" TextWrapping="Wrap"
+                   Background="#23232B" Foreground="#F0F0F0" />
+        </ScrollViewer>
+        <Button Name="SaveMemoryButton" Grid.Row="2" Content="保存记忆" HorizontalAlignment="Right" Padding="12,5" />
+      </Grid>
+    </Grid>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="RefreshButton" Content="刷新" Padding="12,5" />
+      <Button Name="CloseButton" Content="关闭" Padding="12,5" />
+    </StackPanel>
+  </Grid>
+</Window>
