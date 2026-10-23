@@ -175,7 +175,9 @@ $backendPlugins = @(
     @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
     # 性能监控插件（2026-10-19）：可选安装。
     @{ Id = 'performance.monitor'; Project = 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj' },
-    @{ Id = 'tool.sketch'; Project = 'src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj' }
+    @{ Id = 'tool.sketch'; Project = 'src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj' },
+    # 语音朗读（2026-10-23）：可选服务插件，默认不安装；未安装时朗读入口整条不出现。
+    @{ Id = 'service.speech-synthesis'; Project = 'src/Fufucode.Plugins.Speech/Fufucode.Plugins.Speech.csproj' }
 )
 foreach ($p in $backendPlugins) {
     $proj = Join-Path $root $p.Project

@@ -81,6 +81,14 @@ public static class SelfTestRunner
             return Failures.Count == 0 ? 0 : 1;
         }
 
+        if (args.Contains("--speech-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => SpeechPluginSelfTest.RunAsync(Pass, Fail));
+            await RunOnHeadlessUiThreadAsync(TestSpeechDialogShotsAsync);
+            Console.WriteLine($"Speech failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--cross-global-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => CrossGlobalSelfTest.RunAsync(Pass, Fail));
@@ -97,7 +105,6 @@ public static class SelfTestRunner
         if (args.Contains("--local-plugins-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => LocalPluginIntegrationSelfTest.RunAsync(Pass, Fail));
-            await RunOnHeadlessUiThreadAsync(() => LocalPluginStartupSelfTest.RunAsync(Pass, Fail));
             await RunOnHeadlessUiThreadAsync(() => LocalPluginReceiptSelfTest.RunAsync(Pass, Fail));
             await RunOnHeadlessUiThreadAsync(() => LocalPluginInFlightSelfTest.RunAsync(Pass, Fail));
             await RunOnHeadlessUiThreadAsync(() => LocalPluginCallbackJournalSelfTest.RunAsync(Pass, Fail));
@@ -307,7 +314,6 @@ public static class SelfTestRunner
 
         // H3 扩展管理页：get_commands 解析、发现扫描、填入规则、安全重启守卫
         await RunOnHeadlessUiThreadAsync(() => LocalPluginIntegrationSelfTest.RunAsync(Pass, Fail));
-        await RunOnHeadlessUiThreadAsync(() => LocalPluginStartupSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => LocalPluginReceiptSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => LocalPluginInFlightSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => LocalPluginCallbackJournalSelfTest.RunAsync(Pass, Fail));
@@ -338,6 +344,8 @@ public static class SelfTestRunner
 
         // H2 视觉基座：Light/Dark 截图证据（tmp/h2-shots/）
         await RunOnHeadlessUiThreadAsync(TestVisualShotsAsync);
+        // 语音朗读对话框：未安装/安装两态 × Light/Dark
+        await RunOnHeadlessUiThreadAsync(TestSpeechDialogShotsAsync);
 
         // H3 扩展页截图（tmp/h3-shots/）：夹具快照 light/dark + 命令 Flyout
         await RunOnHeadlessUiThreadAsync(TestH3ShotsAsync);
@@ -3997,6 +4005,55 @@ public static class SelfTestRunner
         }
     }
 
+    // ── H2 语音朗读对话框截图：未安装态与安装态 × 亮/暗 ──
+    private static async Task TestSpeechDialogShotsAsync()
+    {
+        Console.WriteLine("[语音朗读对话框截图]");
+        var shotsDir = EvidenceDirectory("speech-shots");
+        var previousTheme = Application.Current!.RequestedThemeVariant;
+        var previousService = Fufucode.Core.Plugins.PluginPackageManager.ActiveSpeechService;
+        MainWindow? window = null;
+        try
+        {
+            window = new MainWindow { Width = 1280, Height = 800 };
+            window.Show();
+            await Task.Delay(800);
+            foreach (var (variant, tag) in new[] { (ThemeVariant.Light, "light"), (ThemeVariant.Dark, "dark") })
+            {
+                Application.Current!.RequestedThemeVariant = variant;
+                // 未安装态：真实门禁，不登记任何服务。
+                Fufucode.Core.Plugins.PluginPackageManager.ActiveSpeechService = null;
+                window.SyncSpeechForTesting();
+                using (var subscription = new MainWindow.SpeechSubscription())
+                {
+                    var speech = window.BuildSpeechSettingsDialog(subscription);
+                    speech.Show();
+                    await Task.Delay(400);
+                    SaveShot(speech, Path.Combine(shotsDir, $"speech-dialog-{tag}.png"));
+                    speech.Close();
+                }
+                // 安装态：用自测替身登记服务，只证明布局；结束后立即撤回。
+                Fufucode.Core.Plugins.PluginPackageManager.ActiveSpeechService = new SpeechDialogProbe();
+                window.SyncSpeechForTesting();
+                using (var subscription = new MainWindow.SpeechSubscription())
+                {
+                    var installed = window.BuildSpeechSettingsDialog(subscription);
+                    installed.Show();
+                    await Task.Delay(400);
+                    SaveShot(installed, Path.Combine(shotsDir, $"speech-dialog-installed-{tag}.png"));
+                    installed.Close();
+                }
+            }
+        }
+        catch (Exception ex) { Fail("语音朗读对话框截图异常：" + ex.GetType().Name + " " + ex.Message); }
+        finally
+        {
+            Fufucode.Core.Plugins.PluginPackageManager.ActiveSpeechService = previousService;
+            Application.Current!.RequestedThemeVariant = previousTheme;
+            window?.Close();
+        }
+    }
+
     private static void SaveShot(Window window, string path)
     {
         var frame = window.CaptureRenderedFrame();
@@ -4504,4 +4561,23 @@ public static class SelfTestRunner
 
         await tcs.Task;
     }
+}
+
+/// <summary>
+/// 截图专用朗读服务替身：只提供状态文本与可配参数，不启动任何进程。
+/// 它只用于“已安装”外观的视觉证据，不代表插件已安装或音频可用。
+/// </summary>
+internal sealed class SpeechDialogProbe : Fufucode.Core.Plugins.ISpeechService
+{
+    public bool IsSpeaking => false;
+    public bool IsPaused => false;
+    public int Rate { get; set; } = 1;
+    public int Volume { get; set; } = 80;
+    public string Status => "就绪（自测替身，未启动语音进程）";
+    public event Action? Changed { add { } remove { } }
+    public Task SpeakAsync(string text) => Task.CompletedTask;
+    public Task PauseAsync() => Task.CompletedTask;
+    public Task ResumeAsync() => Task.CompletedTask;
+    public void Stop() { }
+    public void Dispose() { }
 }

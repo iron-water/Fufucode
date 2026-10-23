@@ -113,20 +113,8 @@
             <Button x:Name="StartupDisableExtensionButton" Content="停用该扩展并重启" IsVisible="False" HorizontalAlignment="Stretch" Click="StartupDisableExtensionButton_Click"/>
             <Button x:Name="StartupOpenOtherButton" Content="打开其他项目" IsVisible="False" HorizontalAlignment="Stretch" Click="StartupOpenOther_Click"/>
           </StackPanel>
-          <Border Height="1" Background="{DynamicResource AppDividerSubtle}" Margin="0,4"/>
-          <Button x:Name="StartupLocalPluginsButton" Classes="subtle" Content="管理本地插件" IsVisible="False"
-                  HorizontalAlignment="Center" Click="StartupLocalPlugins_Click"/>
         </StackPanel>
         </Border>
-        <Grid x:Name="StartupPluginPanel" IsVisible="False" RowDefinitions="Auto,*" Margin="24,12">
-          <StackPanel Spacing="8" Margin="0,0,0,12">
-            <Button x:Name="StartupPluginReturnButton" Classes="subtle" HorizontalAlignment="Left" Content="返回启动页" Click="StartupPluginReturn_Click"/>
-            <TextBlock Classes="caption" Text="会话尚未就绪。可以预览和导入本地插件；应用版本需等待 Pi 会话连接。" TextWrapping="Wrap"/>
-          </StackPanel>
-          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
-            <ContentControl x:Name="StartupPluginHost" MaxWidth="880" HorizontalAlignment="Stretch"/>
-          </ScrollViewer>
-        </Grid>
         </Grid>
       </Border>
     </Grid>

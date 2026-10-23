@@ -145,6 +145,9 @@ public sealed class MessageActionsView : UserControl
         AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
     }
 
+    /// <summary>宿主在语音插件安装/启停后调用，重新计算依赖服务可用性的按钮。</summary>
+    internal void RefreshAvailability() => Bind();
+
     /// <summary>按当前消息类型刷新可见性与元信息。</summary>
     private void Bind()
     {

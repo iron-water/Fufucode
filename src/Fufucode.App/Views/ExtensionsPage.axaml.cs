@@ -20,14 +20,6 @@ public partial class ExtensionsPage : UserControl
 
     internal LocalPluginSectionView LocalPluginsForTesting => LocalPluginsSection;
 
-    internal LocalPluginSectionView TakeLocalPlugins()
-    {
-        LocalPluginsSlot.Content = null;
-        return LocalPluginsSection;
-    }
-
-    internal void RestoreLocalPlugins() => LocalPluginsSlot.Content = LocalPluginsSection;
-
     private void ExtensionsHeader_SizeChanged(object? sender, SizeChangedEventArgs e)
     {
         if (sender is not Grid grid ||
