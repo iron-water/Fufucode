@@ -98,11 +98,22 @@ public partial class ChatPage : UserControl
         Motion.AnimateIn(control);
     }
 
-    /// <summary>变更卡的"查看变更"：打开工作区的变更面板。变更来源由 WorkspacePanel 自己判断。</summary>
-    private void OnViewChanges(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// 变更卡的"查看变更"：打开变更面板并切到"本次会话"口径——
+    /// 卡片列的是本回合的写入，工作区口径会把外部改动也混进来。
+    /// </summary>
+    private async void OnViewChanges(object? sender, RoutedEventArgs e)
     {
         if (TopLevel.GetTopLevel(this) is not MainWindow window) return;
-        window.OpenDockPage("changes", DockZone.Right);
+        await window.ShowTurnChangesAsync(null);
+    }
+
+    /// <summary>卡里单个文件：打开变更面板并直接选中它。</summary>
+    private async void OnOpenFileInChanges(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: TurnFileChangeViewModel file }) return;
+        if (TopLevel.GetTopLevel(this) is not MainWindow window) return;
+        await window.ShowTurnChangesAsync(file.Path);
     }
 
     /// <summary>撤销本轮文件改动：回到每个文件在本回合首次写入前的状态。</summary>
@@ -133,7 +144,8 @@ public partial class ChatPage : UserControl
     /// <summary>展开/收起某个文件的内联 diff。</summary>
     private void OnToggleFileDiff(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { DataContext: TurnFileChangeViewModel file }) file.ToggleDiff();
+        if (sender is not Control { DataContext: TurnFileChangeViewModel file }) return;
+        file.ToggleDiff(ActualThemeVariant != Avalonia.Styling.ThemeVariant.Light);
     }
 
     /// <summary>复制工具输出原文，便于在别处继续处理。</summary>

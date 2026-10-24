@@ -189,6 +189,17 @@ public static class WorkspacePanelSelfTest
         Check(bare.AddedLines == 1 && bare.Rows.Count > 0 && bare.Rows.Any(r => r.IsBody),
             "缺少两侧文本时保留行结构，不因无法着色丢掉 diff");
 
+        // 会话变更卡与面板共用同一份行模型：按前后文本直接出行号。
+        var cardModel = DiffViewModel.FromTexts(
+            "namespace Demo;\nclass A { }\n", "namespace Demo;\nclass B { }\n", "cs", dark: true);
+        Check(cardModel.AddedLines == 1 && cardModel.RemovedLines == 1 &&
+              cardModel.Rows.Any(r => r.IsAdded && r.NewNumber == "2") &&
+              cardModel.Rows.Any(r => r.IsRemoved && r.OldNumber == "2") &&
+              cardModel.Rows.Where(r => r.IsBody).Any(r => r.Runs.Any(run => run.Foreground is not null)),
+            "卡内 diff 由前后文本推出行号、增删标记与语法着色");
+        Check(DiffViewModel.FromTexts(null, null, "cs", dark: true).Rows.All(r => !r.IsBody),
+            "无前后文本时不伪造差异");
+
         // 语法着色：认识的扩展名出多色片段，不认识的整体退化为单色。
         var colored = SyntaxHighlighter.Highlight("public class Foo { }", "cs", dark: true);
         Check(colored is { Count: 1 } && colored[0].Any(span => span.Color is not null),
