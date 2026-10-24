@@ -221,6 +221,20 @@ public partial class ChatPage : UserControl
         }, Avalonia.Threading.DispatcherPriority.Loaded);
     }
 
+    /// <summary>点工具卡展开/收起明细；点复制等按钮时不触发。</summary>
+    private void OnToolCardPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
+        if (sender is not Control { DataContext: ToolCallBlockViewModel tool }) return;
+
+        // 按钮/选择区域内的点击有自己的行为，不切换卡片。
+        if (e.Source is Visual source &&
+            source.GetVisualAncestors().Prepend(source).OfType<Button>().Any()) return;
+
+        tool.ToggleExpanded();
+        e.Handled = true;
+    }
+
     /// <summary>流式过程中新出现的工具卡：轻微淡入，避免突然插入。</summary>
     private void OnTransientBlockLoaded(object? sender, RoutedEventArgs e)
     {

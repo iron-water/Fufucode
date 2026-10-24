@@ -184,6 +184,16 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     /// <summary>块创建即视为工具开始时间；后端协议里没有可靠的起止时间戳。</summary>
     public ToolCallBlockViewModel() => _startedAt = DateTimeOffset.Now;
 
+    /// <summary>单张工具卡是否展开明细。默认收起，点击卡片切换。</summary>
+    [ObservableProperty]
+    private bool _isExpanded;
+
+    public bool IsCollapsed => !IsExpanded;
+
+    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(IsCollapsed));
+
+    public void ToggleExpanded() => IsExpanded = !IsExpanded;
+
     /// <summary>工具调用 id：工具组用它做稳定身份与结果回填。</summary>
     public string ToolCallId
     {

@@ -1291,6 +1291,16 @@
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
   </Style>
+  <!-- 卡片描边按状态着色：成功绿、失败红、其它（运行/待定）黄。 -->
+  <Style Selector="Border.toolCard.success">
+    <Setter Property="BorderBrush" Value="#22C55E"/>
+  </Style>
+  <Style Selector="Border.toolCard.failed">
+    <Setter Property="BorderBrush" Value="#EF4444"/>
+  </Style>
+  <Style Selector="Border.toolCard.running">
+    <Setter Property="BorderBrush" Value="#F59E0B"/>
+  </Style>
   <!-- 悬停必须排在基础样式之后，否则基础背景会把高亮覆盖掉。 -->
   <Style Selector="Border.toolCard.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
