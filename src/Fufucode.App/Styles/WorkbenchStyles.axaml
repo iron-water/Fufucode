@@ -6,6 +6,45 @@
   <Style Selector="Button.subtle">
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
+  <!-- Fluent 按钮模板在 ContentPresenter 上自带 hover/pressed 底色，会盖住 Button.Background：
+       表现为“按下不是预期底色、移开鼠标闪一下亮色”。所有自定义按钮类都必须同时覆盖模板层，
+       与 iconButton 的处理保持一致。 -->
+  <Style Selector="Button.subtle /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.subtle:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+  </Style>
+
+  <!-- 会话管理的分组标题条：默认与悬停都不铺底色，只有按下时出现二级色。 -->
+  <Style Selector="Button.overviewHeading">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Transitions">
+      <Transitions>
+        <BrushTransition Property="Background" Duration="0:0:0.083"/>
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Button.overviewHeading:pointerover">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.overviewHeading:pressed">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.overviewHeading /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.overviewHeading:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.overviewHeading:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
 
   <!-- 外框：标题栏与状态栏同属 chrome 层，与停靠区同底；分隔降为发丝细线，
        Win11 深色里 6% 白线比 6% 黑线更隐形，整体观感是无框、层叠式。 -->
@@ -117,6 +156,15 @@
   <Style Selector="Button.overviewProject:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
+  <Style Selector="Button.overviewProject /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.overviewProject:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.overviewProject:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+  </Style>
   <Style Selector="Border.overviewSession">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
@@ -146,6 +194,15 @@
   </Style>
   <Style Selector="Button.contextChip:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.contextChip /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+  </Style>
+  <Style Selector="Button.contextChip:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.contextChip:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
 
   <!-- 会话行内的标题按钮只负责点击与文本，不能再画自己的悬停底色：

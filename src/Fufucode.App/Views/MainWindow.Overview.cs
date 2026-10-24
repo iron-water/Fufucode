@@ -30,6 +30,8 @@ public partial class MainWindow
     private readonly HashSet<string> _collapsedSections = new(StringComparer.Ordinal);
     private readonly HashSet<string> _expandedProjects = new(StringComparer.Ordinal);
     private bool _allProjectsCollapsed;
+    private bool _allSectionsCollapsed;
+    private bool _looseSessionsCollapsed;
     // 项目内默认先显示最近活动的几条会话，其余折叠起来。
     private const int ProjectSessionPreview = 4;
 
@@ -153,8 +155,15 @@ public partial class MainWindow
         var pinned = all.Where(s => SessionPresentation.Load(_host!.Manager.Metadata, s.Id).Pinned).ToArray();
         OverviewSessionGroup(pinned, organization);
         if (pinned.Length == 0) OverviewEmpty("无置顶会话");
-        OverviewHeading("分区");
-        foreach (var section in state.Sections)
+        // “分区”整条可点：收起/展开下面所有分区（与“项目”同一套交互）。
+        var sectionsHeading = OverviewCollapsibleHeading("分区", _allSectionsCollapsed,
+            () => _allSectionsCollapsed = !_allSectionsCollapsed);
+        AutomationProperties.SetAutomationId(sectionsHeading, "sections.heading");
+        if (_allSectionsCollapsed)
+        {
+            OverviewEmpty(state.Sections.Count == 0 ? "无分区" : "分区已收起");
+        }
+        else foreach (var section in state.Sections)
         {
             var sectionCollapsed = _collapsedSections.Contains(section.Id);
             var header = OverviewCollapsibleHeading(section.Name, sectionCollapsed, () =>
@@ -177,19 +186,25 @@ public partial class MainWindow
         if (!_allProjectsCollapsed)
             foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId is null))
                 OverviewProjectRow(project, organization, all);
-        OverviewHeading("会话");
-        // “会话”列出所有未归入用户项目的会话：显式无项目，以及“不在项目中工作”的独立工作区。
-        var scratch = ScratchProject();
-        var loose = all.Where(s =>
+        // “会话”整条可点：收起/展开所有无项目会话（与“项目”同一套交互）。
+        var sessionsHeading = OverviewCollapsibleHeading("会话", _looseSessionsCollapsed,
+            () => _looseSessionsCollapsed = !_looseSessionsCollapsed);
+        AutomationProperties.SetAutomationId(sessionsHeading, "loose-sessions.heading");
+        if (!_looseSessionsCollapsed)
         {
-            var placement = organization.Placement(s.Id);
-            // 放置记录为空或与真实归属不同（存在展示分组）时按放置判断。
-            if (organization.State.Sessions.ContainsKey(s.Id))
-                return placement.ProjectId is null || placement.ProjectId == scratch?.Id;
-            return s.ProjectId == scratch?.Id;
-        }).OrderByDescending(SessionActivityAt).ToArray();
-        OverviewSessionGroup(loose, organization);
-        if (loose.Length == 0) OverviewEmpty("没有不在项目中的会话");
+            // “会话”列出所有未归入用户项目的会话：显式无项目，以及“不在项目中工作”的独立工作区。
+            var scratch = ScratchProject();
+            var loose = all.Where(s =>
+            {
+                var placement = organization.Placement(s.Id);
+                // 放置记录为空或与真实归属不同（存在展示分组）时按放置判断。
+                if (organization.State.Sessions.ContainsKey(s.Id))
+                    return placement.ProjectId is null || placement.ProjectId == scratch?.Id;
+                return s.ProjectId == scratch?.Id;
+            }).OrderByDescending(SessionActivityAt).ToArray();
+            OverviewSessionGroup(loose, organization);
+            if (loose.Length == 0) OverviewEmpty("没有不在项目中的会话");
+        }
         if (_host is null)
             foreach (var demo in _vm.Sidebar.Sessions)
             {
@@ -259,7 +274,9 @@ public partial class MainWindow
         Grid.SetColumn(text, 1); content.Children.Add(text);
         var button = new Button
         {
-            Classes = { "subtle" }, Content = content, HorizontalAlignment = HorizontalAlignment.Stretch,
+            // 分组标题：默认/悬停不铺底，只有按下时出现二级色（见 overviewHeading 样式）。
+            Classes = { "overviewHeading" }, Content = content,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Padding = new Thickness(indent + 8, 4), MinHeight = 28,
         };
