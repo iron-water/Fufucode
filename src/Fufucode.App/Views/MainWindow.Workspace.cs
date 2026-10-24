@@ -42,6 +42,12 @@ public partial class MainWindow
     private IChatSession? _workspaceSession;
     private string? _layoutContext;
     private bool _applyingWorkspaceLayout;
+
+    /// <summary>下一次布局是否由用户主动开关触发；只有这种布局才做宽度动画。</summary>
+    private bool _animateNextLayout;
+    private IDisposable? _leftDockAnimation;
+    private IDisposable? _rightDockAnimation;
+    private IDisposable? _bottomDockAnimation;
     private bool _browserFullView;
 
     /// <summary>
@@ -154,7 +160,7 @@ public partial class MainWindow
         _chatPage.FindControl<Border>("ComposerCard")!.SizeChanged += (_, e) =>
         {
             if (Math.Abs(e.NewSize.Height - e.PreviousSize.Height) > 0.5 && !_resizingDock)
-                Dispatcher.UIThread.Post(ApplyWorkspaceLayout);
+                Dispatcher.UIThread.Post(() => ApplyWorkspaceLayout());
         };
         foreach (var splitter in new[] { LeftPanelSplitter, RightPanelSplitter, TerminalSplitter })
         {
@@ -558,6 +564,7 @@ public partial class MainWindow
     internal void ToggleDockForTesting(DockZone zone) => ToggleDock(zone);
     private void ToggleDock(DockZone zone)
     {
+        _animateNextLayout = true;
         if (zone == DockZone.Left && Bounds.Width < 1100)
         {
             _leftDrawerOpen = !_leftDrawerOpen;
@@ -652,12 +659,64 @@ public partial class MainWindow
         finally { _renderingDockPages = false; }
     }
 
-    private void ApplyWorkspaceLayout()
+    /// <summary>
+    /// 给停靠区列宽做缓冲：从当前实际宽度过渡到目标宽度，主内容随列宽平滑重排。
+    /// 收起完成后再把面板隐藏，避免内容在动画中途先消失。
+    /// </summary>
+    /// <summary>底部停靠区按行高做同样的缓冲；收起完成后再隐藏。</summary>
+    private void AnimateDockRow(RowDefinition panel, RowDefinition splitter,
+        double from, double to, bool opening, Action onClosed, ref IDisposable? handle)
     {
+        handle?.Dispose();
+        panel.Height = new GridLength(from);
+        splitter.Height = new GridLength(from > 1 ? 5 : 0);
+        handle = Views.Motion.AnimateValue(from, to, Views.Motion.StandardDuration,
+            value =>
+            {
+                panel.Height = new GridLength(value);
+                splitter.Height = new GridLength(value > 1 ? 5 : 0);
+            },
+            () =>
+            {
+                panel.Height = new GridLength(to);
+                splitter.Height = new GridLength(to > 1 ? 5 : 0);
+                if (!opening) onClosed();
+            });
+    }
+
+    private void AnimateDockColumn(ColumnDefinition column, ColumnDefinition splitter,
+        double from, double to, bool opening, Action onClosed, ref IDisposable? handle)
+    {
+        handle?.Dispose();
+        column.Width = new GridLength(from);
+        splitter.Width = new GridLength(from > 1 ? 5 : 0);
+        handle = Views.Motion.AnimateValue(from, to, Views.Motion.StandardDuration,
+            value =>
+            {
+                column.Width = new GridLength(value);
+                splitter.Width = new GridLength(value > 1 ? 5 : 0);
+            },
+            () =>
+            {
+                column.Width = new GridLength(to);
+                splitter.Width = new GridLength(to > 1 ? 5 : 0);
+                if (!opening) onClosed();
+            });
+    }
+
+    private void ApplyWorkspaceLayout(bool animate = false)
+    {
+        // 开关触发的布局走动画；窗口缩放、拖分隔条等保持即时，避免跟手操作被延迟。
+        var shouldAnimate = animate || _animateNextLayout;
+        _animateNextLayout = false;
         if (_applyingWorkspaceLayout || _resizingDock) return;
         _applyingWorkspaceLayout = true;
         try
         {
+            // 动画只能从"当前实际宽度"出发，否则会先跳到目标再回跳。
+            var currentLeftWidth = ShellGrid.ColumnDefinitions[0].ActualWidth;
+            var currentRightWidth = WorkspaceShell.ColumnDefinitions[2].ActualWidth;
+            var currentBottomHeight = WorkspaceShell.RowDefinitions[2].ActualHeight;
             var width = Bounds.Width > 0 ? Bounds.Width : Width;
             var settings = _vm?.IsSettingsPage == true;
             var narrow = width < 1100;
@@ -667,10 +726,24 @@ public partial class MainWindow
             // 保持标准 Grid 空间划分：各区域各占一格，互不遮挡，绝不重叠穿模。
             var left = !settings && (narrow ? _leftDrawerOpen : !_dockLayout.Hidden[DockZone.Left]);
             var leftWidth = Math.Clamp(_dockLayout.LeftWidth, 200, Math.Max(200, width - 750));
-            ShellGrid.ColumnDefinitions[0].Width = new GridLength(left && !narrow ? leftWidth : 0);
-            ShellGrid.ColumnDefinitions[1].Width = new GridLength(left && !narrow ? 5 : 0);
-            SidebarBorder.IsVisible = left;
-            LeftPanelSplitter.IsVisible = left && !narrow;
+            var targetLeftWidth = left && !narrow ? leftWidth : 0;
+            if (shouldAnimate && !narrow)
+            {
+                AnimateDockColumn(ShellGrid.ColumnDefinitions[0], ShellGrid.ColumnDefinitions[1],
+                    currentLeftWidth, targetLeftWidth, left,
+                    () => { SidebarBorder.IsVisible = false; LeftPanelSplitter.IsVisible = false; },
+                    ref _leftDockAnimation);
+                SidebarBorder.IsVisible = true;
+                LeftPanelSplitter.IsVisible = targetLeftWidth > 0;
+            }
+            else
+            {
+                ShellGrid.ColumnDefinitions[0].Width = new GridLength(targetLeftWidth);
+                ShellGrid.ColumnDefinitions[1].Width = new GridLength(left && !narrow ? 5 : 0);
+                if (shouldAnimate && narrow) Views.Motion.SetVisible(SidebarBorder, left, offsetY: 0);
+                else SidebarBorder.IsVisible = left;
+                LeftPanelSplitter.IsVisible = left && !narrow;
+            }
             Grid.SetColumn(SidebarBorder, 0);
             Grid.SetColumnSpan(SidebarBorder, narrow ? 3 : 1);
             SidebarBorder.ZIndex = narrow ? 12 : 0;
@@ -695,10 +768,24 @@ public partial class MainWindow
             var rightWidth = Math.Clamp(_dockLayout.RightWidth, 32, Math.Max(32, available - 32));
 
             WorkspaceShell.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
-            WorkspaceShell.ColumnDefinitions[1].Width = new GridLength(right && !IsRightDrawerForTesting ? 5 : 0);
-            WorkspaceShell.ColumnDefinitions[2].Width = new GridLength(right && !IsRightDrawerForTesting ? rightWidth : 0);
-            RightPanelBorder.IsVisible = right;
-            RightPanelSplitter.IsVisible = right && !IsRightDrawerForTesting;
+            var targetRightWidth = right && !IsRightDrawerForTesting ? rightWidth : 0;
+            if (shouldAnimate && !IsRightDrawerForTesting)
+            {
+                AnimateDockColumn(WorkspaceShell.ColumnDefinitions[2], WorkspaceShell.ColumnDefinitions[1],
+                    currentRightWidth, targetRightWidth, right,
+                    () => { RightPanelBorder.IsVisible = false; RightPanelSplitter.IsVisible = false; },
+                    ref _rightDockAnimation);
+                RightPanelBorder.IsVisible = true;
+                RightPanelSplitter.IsVisible = targetRightWidth > 0;
+            }
+            else
+            {
+                WorkspaceShell.ColumnDefinitions[1].Width = new GridLength(right && !IsRightDrawerForTesting ? 5 : 0);
+                WorkspaceShell.ColumnDefinitions[2].Width = new GridLength(targetRightWidth);
+                if (shouldAnimate && IsRightDrawerForTesting) Views.Motion.SetVisible(RightPanelBorder, right, offsetY: 0);
+                else RightPanelBorder.IsVisible = right;
+                RightPanelSplitter.IsVisible = right && !IsRightDrawerForTesting;
+            }
             RightDrawerScrim.IsVisible = right && IsRightDrawerForTesting;
 
             Grid.SetColumn(RightPanelBorder, IsRightDrawerForTesting ? 0 : 2);
@@ -722,11 +809,23 @@ public partial class MainWindow
             var height = WorkspaceShell.Bounds.Height > 0 ? WorkspaceShell.Bounds.Height : Height - 74;
             var bottomHeight = Math.Clamp(_dockLayout.BottomHeight, 160, Math.Max(160, height - 360));
             WorkspaceShell.RowDefinitions[0].Height = new GridLength(1, GridUnitType.Star);
-            WorkspaceShell.RowDefinitions[1].Height = new GridLength(bottom ? 5 : 0);
-            WorkspaceShell.RowDefinitions[2].Height = new GridLength(bottom ? bottomHeight : 0);
-
-            TerminalBorder.IsVisible = bottom;
-            TerminalSplitter.IsVisible = bottom;
+            var targetBottomHeight = bottom ? bottomHeight : 0;
+            if (shouldAnimate)
+            {
+                AnimateDockRow(WorkspaceShell.RowDefinitions[2], WorkspaceShell.RowDefinitions[1],
+                    currentBottomHeight, targetBottomHeight, bottom,
+                    () => { TerminalBorder.IsVisible = false; TerminalSplitter.IsVisible = false; },
+                    ref _bottomDockAnimation);
+                TerminalBorder.IsVisible = true;
+                TerminalSplitter.IsVisible = targetBottomHeight > 0;
+            }
+            else
+            {
+                WorkspaceShell.RowDefinitions[1].Height = new GridLength(bottom ? 5 : 0);
+                WorkspaceShell.RowDefinitions[2].Height = new GridLength(targetBottomHeight);
+                TerminalBorder.IsVisible = bottom;
+                TerminalSplitter.IsVisible = bottom;
+            }
             TerminalBorder.Height = double.NaN;
             TerminalBorder.VerticalAlignment = VerticalAlignment.Stretch;
             Grid.SetColumn(TerminalBorder, 0);
