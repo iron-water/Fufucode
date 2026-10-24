@@ -70,6 +70,15 @@ try
     var markdown = await registry.Resolve(new(root, markdownPath))!.LoadAsync(new(root, markdownPath), CancellationToken.None);
     Check(markdown.Kind == FilePreviewKind.Markdown && markdown.Text!.Contains("```csharp"), "Markdown 保留代码块");
 
+    var pdfPlugin = registry.Plugins.Resolve(new(root, Path.Combine(root, "sample.pdf")));
+    Check(pdfPlugin is not null && pdfPlugin.Descriptor.MediaKind == FilePreviewPluginMediaKind.Document,
+        "PDF 复杂文件由文档预览插件契约接管");
+    var pdfResult = await pdfPlugin!.LoadAsync(new(root, Path.Combine(root, "sample.pdf")), CancellationToken.None);
+    Check(pdfResult.IsError && pdfResult.Error!.Contains("PDF"), "未安装 PDF 插件显示可读降级提示");
+    var videoPlugin = registry.Plugins.Resolve(new(root, Path.Combine(root, "sample.mp4")));
+    Check(videoPlugin is not null && videoPlugin.Descriptor.MediaKind == FilePreviewPluginMediaKind.Audio,
+        "音视频扩展由媒体预览插件契约接管");
+
     var textControl = new TextPreviewControl("alpha\nbeta alpha\nALPHA");
     Check(textControl.Find("alpha") == "1/3 · 第 1 行", "文本查找首个匹配");
     Check(textControl.Find("alpha") == "2/3 · 第 2 行", "文本查找前进循环");
