@@ -140,6 +140,27 @@ internal static class ApprovalNotificationSelfTest
             "deny answers the original request with a refusal");
         denyHost.Detach();
         center.Dispose();
+
+        // 5) 时间线提示：瞬时重复的同文提示合并；提示可以被显式关闭。
+        var timeline = new TimelineViewModel(new Mock.MockChatSession(), SynchronousRefreshScheduler.Instance,
+            new RecordingClipboardService());
+        timeline.AddNotification("粘贴内容较长（2,604 字符），已转为附件，发送时一并引用。");
+        timeline.AddNotification("粘贴内容较长（2,604 字符），已转为附件，发送时一并引用。");
+        var notices = timeline.Entries.OfType<ErrorEntryViewModel>().ToArray();
+        Check(notices.Length == 1, "identical notices arriving together collapse into one card");
+        timeline.Dismiss(notices[0]);
+        Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 0, "a timeline notice can be dismissed");
+
+        // 6) 通知中心条目：可以逐条移除，概览计数随之更新。
+        var dismissCenter = new NotificationCenterViewModel(new NotificationPreferencesViewModel(
+            new NotificationPreferencesStore(Path.Combine(root, "notification-preferences-2.json"))));
+        dismissCenter.Items.Add(new NotificationItemViewModel("dismiss-1", session, Guid.NewGuid(), 1,
+            AppNotificationKind.Completed, "完成", "正文", null, true));
+        Check(dismissCenter.TotalCount == 1, "notification center counts the new record");
+        dismissCenter.DismissItemCommand.Execute(dismissCenter.Items[0]);
+        Check(dismissCenter.TotalCount == 0 && !dismissCenter.HasItems, "a notification record can be removed from the list");
+        dismissCenter.Dispose();
+        timeline.Dispose();
         await Task.CompletedTask;
     }
 

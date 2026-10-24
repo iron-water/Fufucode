@@ -473,6 +473,22 @@ public partial class ChatPage : UserControl
                $"\n\n[粘贴内容过长，仅内嵌前 {MaxEmbeddedPasteChars:N0} 字符；完整内容已保存到 {path}]";
     }
 
+    /// <summary>时间线提示卡进入：淡入并轻微上移；滚动重建容器时也只播一次。</summary>
+    private void NoticeCard_Attached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Control card) Motion.AnimateIn(card, offsetY: 4, Motion.FastDuration);
+    }
+
+    /// <summary>关闭一条时间线提示：先播放退场动画，动画结束后才从时间线移除。</summary>
+    private void NoticeDismiss_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control button || button.DataContext is not TimelineEntryViewModel entry) return;
+        var card = button.FindAncestorOfType<Border>();
+        void Remove() => (DataContext as MainViewModel)?.Timeline.Dismiss(entry);
+        if (card is null) { Remove(); return; }
+        Motion.AnimateOut(card, offsetY: 4, Remove);
+    }
+
     /// <summary>
     /// Ctrl+V 的统一入口：短文本走 TextBox 原生粘贴；长文本写成会话临时文件并作为附件引用。
     /// 临时文件只落在系统临时目录，不写入项目工作区。

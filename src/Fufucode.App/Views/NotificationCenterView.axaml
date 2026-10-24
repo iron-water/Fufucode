@@ -87,7 +87,8 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="vm:NotificationItemViewModel">
-                  <Border Classes="card notificationCard" AutomationProperties.Name="{Binding Title}">
+                  <Border Classes="card notificationCard" AutomationProperties.Name="{Binding Title}"
+                          AttachedToVisualTree="Card_Attached">
                     <Grid ColumnDefinitions="Auto,*" ColumnSpacing="10">
                       <Border Classes="notificationGlyph">
                         <TextBlock Classes="bodyStrong" Classes.notificationCompleted="{Binding IsCompleted}"
@@ -100,7 +101,13 @@
                             <Ellipse Classes="unreadDot" IsVisible="{Binding !IsRead}"/>
                             <TextBlock Classes="bodyStrong" Text="{Binding Title}" TextWrapping="Wrap"/>
                           </StackPanel>
-                          <TextBlock Grid.Column="1" Classes="caption" Text="{Binding TimeText}" VerticalAlignment="Center"/>
+                          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                            <TextBlock Classes="caption" Text="{Binding TimeText}" VerticalAlignment="Center"/>
+                            <Button Classes="iconButton toolButton" Width="22" Height="22" Click="Dismiss_Click"
+                                    ToolTip.Tip="移除这条通知" AutomationProperties.Name="移除这条通知">
+                              <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="9" Height="9"/>
+                            </Button>
+                          </StackPanel>
                         </Grid>
                         <TextBlock Classes="caption" Text="{Binding Message}" TextWrapping="Wrap"/>
                         <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
