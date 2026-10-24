@@ -172,6 +172,30 @@ public partial class MainWindow
         void Add(string id, string title, string icon, Control control) => _workbenchPages.RegisterCore(id, title, icon, control);
     }
 
+    /// <summary>
+    /// 从会话里的变更卡跳到变更面板：切到"本次会话"口径、刷新，并尽量选中被点的文件。
+    /// 路径可能是工具入参里的绝对路径，也可能是项目相对路径，这里统一归一化后再匹配。
+    /// </summary>
+    internal async Task ShowTurnChangesAsync(string? path)
+    {
+        OpenDockPage("changes", DockZone.Right);
+        if (_vm is not { } vm) return;
+        var panel = vm.WorkspacePanel;
+        if (panel.SelectedScope != WorkspaceChangeScope.SessionWrites)
+            panel.SelectedScope = WorkspaceChangeScope.SessionWrites;
+        await panel.RefreshChangesAsync();
+        if (string.IsNullOrWhiteSpace(path)) return;
+
+        var slash = path.Replace('\\', '/');
+        var relative = slash;
+        var project = Path.GetFullPath(panel.ProjectPath).Replace('\\', '/').TrimEnd('/');
+        if (slash.StartsWith(project + "/", StringComparison.OrdinalIgnoreCase))
+            relative = slash[(project.Length + 1)..];
+        panel.SelectedChange = panel.Changes.FirstOrDefault(file =>
+            string.Equals(file.Path, relative, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(file.FullPath.Replace('\\', '/'), slash, StringComparison.OrdinalIgnoreCase));
+    }
+
     private string ModulePreferenceKey() => "workbench:modules:v1:" + _layoutContext;
 
     private void ApplyBrowserModuleState(bool enabled)

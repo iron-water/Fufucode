@@ -110,7 +110,17 @@ internal static class WorkbenchTabsSelfTest
             window.ResetDockLayout(); window.OpenDockPage("changes", DockZone.Right); await Ready();
             Check(changes.GetVisualDescendants().OfType<ListBox>().Single(l => l.Name == "ChangesList").Bounds.Height > 60,
                 "default layout keeps change list usable when the diff and bottom terminal are open");
-            using (var frame = window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "changes.png"), PngBitmapEncoderOptions.Default);
+            // 会话变更卡的"查看变更"：必须切到本次会话口径并定位到被点的文件。
+            await window.ShowTurnChangesAsync("tracked.txt");
+            await Until(() => workspace.IsSessionScope && workspace.SelectedChange?.Path == "tracked.txt");
+            Check(workspace.IsSessionScope && workspace.SelectedChange?.Path == "tracked.txt" &&
+                  window.PageForTesting("changes").IsEffectivelyVisible,
+                "change card jump switches to session scope, opens the panel and selects the file");
+            workspace.SelectedChange = null;
+            workspace.WorkspaceScopeCommand.Execute(null);
+            await workspace.RefreshChangesAsync();
+            window.OpenDockPage("changes", DockZone.Right); await Ready();
+                        using (var frame = window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "changes.png"), PngBitmapEncoderOptions.Default);
             var mainSession = vm.Session;
             window.OpenDockPage("sidechat", DockZone.Right); await Ready();
             var side = window.PageForTesting("sidechat");

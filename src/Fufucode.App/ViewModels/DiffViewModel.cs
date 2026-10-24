@@ -13,7 +13,7 @@ namespace Fufucode.App.ViewModels;
 /// <summary>一行 diff 里的一段文本；Emphasis 表示词级 diff 的强调片段。</summary>
 public sealed record DiffRun(string Text, IBrush? Foreground, bool Emphasis);
 
-public enum DiffRowKind { Context, Added, Removed, Header, Gap }
+public enum DiffRowKind { Context, Added, Removed, Header, Gap, Note }
 
 /// <summary>
 /// diff 视图的一行。正文行、hunk 头、省略的上下文提示行共用一个类型，
@@ -49,6 +49,7 @@ public sealed partial class DiffRowViewModel : ViewModelBase
     public bool IsGap => Kind == DiffRowKind.Gap;
     public bool IsHeader => Kind == DiffRowKind.Header;
     public bool IsBody => Kind is DiffRowKind.Context or DiffRowKind.Added or DiffRowKind.Removed;
+    public bool IsNote => Kind == DiffRowKind.Note;
     public bool HasEmphasis => Runs.Any(run => run.Emphasis);
     /// <summary>标记列颜色与底色一致：+ 绿、− 红。</summary>
     public bool IsMarkerNeutral => Kind is DiffRowKind.Context or DiffRowKind.Header or DiffRowKind.Gap;
@@ -60,6 +61,9 @@ public sealed partial class DiffRowViewModel : ViewModelBase
     /// hunk 头只保留行号区间与上下文标题：git 的 "@@" 记号对阅读没有帮助，
     /// 去掉后 "−10,6 +10,7 public sealed class Widget" 更像一句位置说明。
     /// </summary>
+    /// <summary>提示行：例如文本比对被截断。</summary>
+    public static DiffRowViewModel Note(string text) => new(DiffRowKind.Note) { HeaderText = text };
+
     public static DiffRowViewModel Header(string text) =>
         new(DiffRowKind.Header) { HeaderText = string.Join(' ', text.Replace("@@", " ").Split(' ', StringSplitOptions.RemoveEmptyEntries)) };
 
@@ -149,6 +153,54 @@ public sealed partial class DiffViewModel : ViewModelBase
             model._newSpans = SyntaxHighlighter.Highlight(sides?.NewText ?? string.Empty, extension, dark);
         }
         model.Load(diff);
+        return model;
+    }
+
+    /// <summary>
+    /// 由"改动前 / 改动后"两段文本构建（会话里的变更卡用这一条）。
+    /// 行号在本地推演，语法着色沿用面板同一套；两边文本都没有时返回空模型。
+    /// </summary>
+    public static DiffViewModel FromTexts(string? before, string? after, string? extension, bool dark)
+    {
+        var model = new DiffViewModel();
+        if (extension is { Length: > 0 })
+        {
+            model._oldSpans = SyntaxHighlighter.Highlight(before ?? string.Empty, extension, dark);
+            model._newSpans = SyntaxHighlighter.Highlight(after ?? string.Empty, extension, dark);
+        }
+
+        var oldNumber = 1;
+        var newNumber = 1;
+        foreach (var line in LineDiff.Compute(before, after))
+        {
+            switch (line.Kind)
+            {
+                case '+':
+                    model._all.Add(DiffRowViewModel.Body('+', 0, newNumber, line.Text,
+                        model.RunsFor('+', line.Text, 0, newNumber)));
+                    newNumber++;
+                    break;
+                case '-':
+                    model._all.Add(DiffRowViewModel.Body('-', oldNumber, 0, line.Text,
+                        model.RunsFor('-', line.Text, oldNumber, 0)));
+                    oldNumber++;
+                    break;
+                case '…':
+                    model._all.Add(DiffRowViewModel.Note(line.Text));
+                    break;
+                default:
+                    model._all.Add(DiffRowViewModel.Body(' ', oldNumber, newNumber, line.Text,
+                        model.RunsFor(' ', line.Text, oldNumber, newNumber)));
+                    oldNumber++;
+                    newNumber++;
+                    break;
+            }
+        }
+
+        model.AddedLines = model._all.Count(row => row.IsAdded);
+        model.RemovedLines = model._all.Count(row => row.IsRemoved);
+        model.NumberColumnWidth = Math.Max(30, (Math.Max(oldNumber, newNumber).ToString().Length * 7.4) + 14);
+        model.Rebuild();
         return model;
     }
 

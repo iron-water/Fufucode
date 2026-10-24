@@ -872,3 +872,10 @@ EAD
 4. 令牌：Fluent 基准新增 `AppDiffAddedBackground/Strong/Foreground`、`AppDiffRemovedBackground/Strong/Foreground`、`AppDiffLineNumber`，均为半透明叠加而非新的不透明底色；五套皮肤补 `Strong` 两键并保留各自原有取值。面板样式移入共享 `WorkbenchStyles`，停靠宿主下同样生效。
 5. 未做：并排（split）视图、行内批注、隐藏空白字符、整文件上下文加载；大文件超过 4000 行不着色。
 6. 验证：App 构建 0 警告 0 错误；`--selftest --r2-only`、`--tabs-only`、`--workbench-only`、`--d6-only`、`--changes-shots-only` 全过；Core `--a13-only` 全过；Skins 工程 297 项断言通过。截图证据在 `tmp/changes-shots/`（窄栏列表、窄栏 diff、宽栏 diff、深色 diff），已目视核对行号、色块铺满、语法色与词级强调。未跑全量 `--selftest`（依赖真实 Pi 运行时的段落未在本机执行）。
+
+2026-10-23（第九轮）变更卡与变更面板联动：
+1. 旧联动只有一句 `OpenDockPage("changes")`：不切口径、不选文件、不刷新；卡内内联 diff 还是独立的纯文本渲染（无行号、无底色、无语法色），与面板两套观感。
+2. 现在卡上的"查看变更"统一走 `MainWindow.ShowTurnChangesAsync(path)`：打开面板 → 切到"本次会话"口径 → 刷新 → 按路径选中文件（入参可能是工具给的绝对路径，按项目根归一化后再匹配）。
+3. 卡内每个文件行右侧新增"在变更面板中查看"入口，直接定位该文件；行本身仍是展开内联 diff。
+4. 卡内 diff 改用与面板同一份 `DiffViewModel`（新增 `FromTexts` 按前后文本推演行号）+ `DiffLineText` 渲染，行号、增删底色、语法着色与面板一致；无快照时仍明确提示"没有可用的改动前快照"。
+5. 验证：App 构建 0 警告 0 错误；`--r2-only`、`--tabs-only` 全过（后者新增"卡跳转切会话口径并选中文件"断言）；新增 `FromTexts` 行号/着色断言。未跑全量自测。
