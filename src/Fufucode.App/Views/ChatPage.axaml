@@ -493,11 +493,13 @@
                 </Grid>
               </DataTemplate>
 
-              <!-- 错误 / 提示条目（InfoBar 风格；H1 严重性类保留） -->
+              <!-- 错误 / 提示条目（InfoBar 风格；H1 严重性类保留）
+                   提示卡有明确的退场机制（右上 ×）与进出动画：进入时淡入上移，关闭时淡出后删除。 -->
               <DataTemplate DataType="vm:ErrorEntryViewModel" x:DataType="vm:ErrorEntryViewModel">
                 <Border Classes="errorCard" Classes.neutral="{Binding IsNeutral}"
-                        Classes.info="{Binding IsInfo}" Margin="0,6">
-                  <Grid ColumnDefinitions="Auto,*">
+                        Classes.info="{Binding IsInfo}" Margin="0,6"
+                        AttachedToVisualTree="NoticeCard_Attached">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
                     <PathIcon Grid.Column="0" Width="18" Height="18" Margin="0,1,0,0"
                               Data="{DynamicResource Icon.ErrorCircle}"
                               IsVisible="{Binding IsError}"/>
@@ -514,6 +516,11 @@
                       </StackPanel>
                       <SelectableTextBlock Classes="body" Text="{Binding Message}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
+                    <Button Grid.Column="2" Classes="iconButton toolButton" Width="24" Height="24" Margin="4,-4,-4,0"
+                            VerticalAlignment="Top" Click="NoticeDismiss_Click"
+                            ToolTip.Tip="关闭这条提示" AutomationProperties.Name="关闭提示">
+                      <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/>
+                    </Button>
                   </Grid>
                 </Border>
               </DataTemplate>

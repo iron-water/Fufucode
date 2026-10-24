@@ -68,8 +68,8 @@ public partial class MainWindow
         _notificationDeliveryRefreshing = true;
         try
         {
-            NotificationPrompt.IsVisible = _notifications.HasPrompt && (_notificationDelivery.DeliversToToast ||
-                (_notificationDelivery.DeliversToWindows && _notifications.LatestPrompt is { } latest && _windowsFallbackKeys.Contains(latest.Key)));
+            SetNotificationPromptVisible(_notifications.HasPrompt && (_notificationDelivery.DeliversToToast ||
+                (_notificationDelivery.DeliversToWindows && _notifications.LatestPrompt is { } latest && _windowsFallbackKeys.Contains(latest.Key))));
             ToolTip.SetTip(CaptionNotifications, _notifications.SummaryText);
             _notificationsView.ShowChannelPrompt(_notificationDelivery.DeliversToPage
                 ? _notifications.Items.FirstOrDefault(item => item.IsProactive && !item.IsRead && (!item.IsApproval || item.RequiresAction)) : null);

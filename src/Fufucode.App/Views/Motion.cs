@@ -36,7 +36,10 @@ internal static class Motion
     /// <summary>Windows Fluent 的 fast-out-slow-in 曲线。</summary>
     public static Easing FluentEasing { get; } = new ExponentialEaseOut();
 
-    public static bool Reduced => MotionPreference.ReducedMotion;
+    /// <summary>
+    /// 无头自测里动画一律即时落终态：断言检查的是最终可见性，不能被 150–250ms 的过渡时序影响。
+    /// </summary>
+    public static bool Reduced => Program.SelfTestMode || MotionPreference.ReducedMotion;
 
     /// <summary>
     /// 消息进入：淡入并轻微上移。只在元素第一次挂到可视树时调用，

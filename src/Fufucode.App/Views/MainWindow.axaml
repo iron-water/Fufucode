@@ -13,6 +13,30 @@
       <ResourceDictionary x:Key="Dark"><imaging:Bitmap x:Key="StartupArtBitmap">avares://Fufucode.App/Assets/Brand/empty/interrupted-dark@2x.png</imaging:Bitmap></ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries></ResourceDictionary>
   </Window.Resources>
+  <!-- 通知三处（时间线提示卡 / 右上提醒 / 通知中心卡片）共用同一套状态字形与配色。 -->
+  <Window.Styles>
+    <Style Selector="Border.toastGlyph">
+      <Setter Property="Width" Value="24"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+    </Style>
+    <Style Selector="Border.toastGlyph TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    </Style>
+    <Style Selector="Border.toastGlyph.success TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+    </Style>
+    <Style Selector="Border.toastGlyph.critical TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    </Style>
+    <Style Selector="Border.toastGlyph.attention TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/>
+    </Style>
+  </Window.Styles>
   <Grid x:Name="ChromeRoot" RowDefinitions="48,*,26">
     <Border x:Name="CustomCaption" Classes="chromeBar" Background="Transparent" PointerPressed="CaptionDrag_PointerPressed">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
@@ -126,11 +150,18 @@
       </Grid>
     </Border>
     <Border x:Name="NotificationPrompt" Grid.Row="1" ZIndex="20" IsVisible="False" x:DataType="vm:NotificationItemViewModel" Classes="toast" HorizontalAlignment="Right" VerticalAlignment="Top" Width="360" Margin="16" Padding="16,12">
-      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
-        <TextBlock Text="{Binding Title}" Classes="bodyStrong"/>
-        <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
-        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Message}" TextWrapping="Wrap" Classes="caption"/>
-        <Button Grid.Row="2" Classes="subtle" Padding="0,2" Content="{Binding RouteLabel}" Click="NotificationPromptOpen_Click"/>
+      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+        <Border Grid.RowSpan="2" Classes="toastGlyph"
+                Classes.success="{Binding IsCompleted}" Classes.critical="{Binding IsFailed}"
+                Classes.attention="{Binding IsApproval}">
+          <TextBlock Classes="bodyStrong" Text="{Binding Glyph}"/>
+        </Border>
+        <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="bodyStrong" VerticalAlignment="Center"
+                   TextWrapping="Wrap"/>
+        <Button Grid.Column="2" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
+        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Message}" TextWrapping="Wrap" Classes="caption"/>
+        <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Classes="subtle" Padding="0,2" HorizontalAlignment="Left"
+                Content="{Binding RouteLabel}" Click="NotificationPromptOpen_Click"/>
       </Grid>
     </Border>
     <Grid x:Name="GlobalOverlay" Grid.Row="1" ZIndex="30" IsVisible="False">

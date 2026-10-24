@@ -873,3 +873,11 @@ EAD
 5. 通用 `ShowPanelAsync` 一并改走 `AppDialog` + `SkinDialog`：此前裸 `new Window` 丢背景，深色主题下是纯黑窗口（用户截图）。
 6. 载荷：`publish-local.ps1` 与 `package.ps1` 的分发列表补上 `service.speech-synthesis`；插件 csproj 把 `manifest.json` 复制到输出，否则市场安装会因缺真实清单失败。`--speech-probe` 改为加载真实插件载荷，找不到时明确失败而不是拿替身空跑通过。
 7. 验证：解决方案 51 工程 0 错误（5 条既有 Avalonia XAML 警告）；`--selftest --speech-only` 11 项门禁断言 + 4 张亮/暗 × 安装/未安装对话框截图全部通过；`Fufucode.Review.Tests` 新增“激活登记/卸载撤回”两条断言通过。既有失败 `Review.Tests` 2 条（工具注册冲突/注销语义）、`--r05-only` 3 条、`--skins-integration-only` 1 条在干净 HEAD 上同样失败，非本轮引入，未修改。未验证：真实音频听感、真实市场安装后重启进程内的服务登记。
+
+2026-10-23（通知体系统一：时间线提示 / 右上提醒 / 通知中心卡片）：
+1. 用户反馈：侧边聊天里一次粘贴出现两张一样的“提示”卡，提示卡没有关闭方式也没有动效，三处通知各写各的。
+2. 时间线提示：`TimelineViewModel.AddNotification` 对 2 秒内同文提示去重；提示卡右上加关闭按钮（`Timeline.Dismiss`），删除前播放退场动画。
+3. 动效统一走 `Views/Motion`：卡片进入淡入上移、退出淡出；`Motion.Reduced` 在无头自测里为真，断言只检查终态，不受过渡时序影响。
+4. 右上提醒（`NotificationPrompt`）改由 `SetNotificationPromptVisible` 统一出入口：淡入淡出，非待审批提醒 8 秒自动消失，待审批必须由用户处理；卡片补上与通知中心一致的状态字形与配色。
+5. 通知中心条目可逐条移除（`DismissItem`），移除前播放退场动画；概览卡的未读/待处理/全部随之更新。
+6. 未验证：真实桌面上的动画观感与 8 秒自动消失的手感；Windows 系统通知按钮仍受本机组策略禁用，无法实机点验。

@@ -383,6 +383,16 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
         if (item is null) return;
         item.IsRead = true; LatestPrompt = null; Close(); NotifyCounts(); SessionRequested?.Invoke(item.SessionId);
     }
+    /// <summary>用户从列表里移除一条通知记录；只影响本页历史，不改变会话状态。</summary>
+    [RelayCommand]
+    private void DismissItem(NotificationItemViewModel? item)
+    {
+        if (item is null) return;
+        Items.Remove(item);
+        if (ReferenceEquals(LatestPrompt, item)) LatestPrompt = null;
+        NotifyCounts();
+    }
+
     [RelayCommand]
     private void ClearCompleted()
     {

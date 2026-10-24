@@ -38,6 +38,9 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private UserMessageViewModel? _pendingUser;
     private CancellationTokenSource? _submissionCts;
     private bool _disposed;
+    // 最近一条界面级提示的原文与时间：用于合并瞬间重复的同文提示。
+    private string? _lastNoticeText;
+    private DateTimeOffset _lastNoticeAt;
 
     public TimelineViewModel(IChatSession session, IRefreshScheduler scheduler, IClipboardService clipboard)
     {
@@ -134,12 +137,23 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        // 同一条提示在极短时间内重复到达（例如一次粘贴同时走了两条处理路径）时只保留一条：
+        // 否则界面上会出现两张一模一样的“提示”卡。
+        var now = DateTimeOffset.Now;
+        if (string.Equals(_lastNoticeText, text, StringComparison.Ordinal) &&
+            now - _lastNoticeAt < TimeSpan.FromSeconds(2))
+        {
+            return;
+        }
+        _lastNoticeText = text;
+        _lastNoticeAt = now;
+
         var vm = new ErrorEntryViewModel
         {
             KindText = "提示",
             Message = text,
             Severity = EntrySeverity.Info,
-            Timestamp = DateTimeOffset.Now,
+            Timestamp = now,
         };
         Entries.Add(vm);
 
@@ -151,6 +165,17 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         {
             PendingSinceScrollUp++;
         }
+    }
+
+    /// <summary>移除一条界面级提示：视图先做退场动画，动画结束后调用这里真正删除。</summary>
+    public void Dismiss(TimelineEntryViewModel entry)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => Dismiss(entry));
+            return;
+        }
+        Entries.Remove(entry);
     }
 
     /// <summary>由视图在滚动位置变化时调用，决定流式期间是否自动跟随。</summary>
