@@ -73,8 +73,10 @@ try
     var pdfPlugin = registry.Plugins.Resolve(new(root, Path.Combine(root, "sample.pdf")));
     Check(pdfPlugin is not null && pdfPlugin.Descriptor.MediaKind == FilePreviewPluginMediaKind.Document,
         "PDF 复杂文件由文档预览插件契约接管");
-    var pdfResult = await pdfPlugin!.LoadAsync(new(root, Path.Combine(root, "sample.pdf")), CancellationToken.None);
-    Check(pdfResult.IsError && pdfResult.Error!.Contains("PDF"), "未安装 PDF 插件显示可读降级提示");
+    var pdfPath = Path.Combine(root, "sample.pdf");
+    await File.WriteAllTextAsync(pdfPath, "%PDF-1.7\n1 0 obj\n<< /Type /Page >>\nBT (Hello PDF) Tj ET\nendobj\n%%EOF");
+    var pdfResult = await pdfPlugin!.LoadAsync(new(root, pdfPath), CancellationToken.None);
+    Check(!pdfResult.IsError && pdfResult.Text!.Contains("Hello PDF") && pdfResult.Tree?.Count == 1, "PDF 签名、页数和文本提取");
     var videoPlugin = registry.Plugins.Resolve(new(root, Path.Combine(root, "sample.mp4")));
     Check(videoPlugin is not null && videoPlugin.Descriptor.MediaKind == FilePreviewPluginMediaKind.Audio,
         "音视频扩展由媒体预览插件契约接管");

@@ -30,7 +30,8 @@ public sealed class FilePreviewRegistry : IDisposable
     public static FilePreviewRegistry CreateDefault()
     {
         var plugins = new FilePreviewPluginRegistry();
-        foreach (var plugin in BuiltInComplexPreviewPlugins.CreateUnavailable()) plugins.Register(plugin);
+        plugins.Register(new PdfPreviewPlugin());
+        foreach (var plugin in BuiltInComplexPreviewPlugins.CreateUnavailable().Where(plugin => plugin.Descriptor.Id != "document.pdf")) plugins.Register(plugin);
         return new([
             new MermaidFilePreviewProvider(),
             new MarkdownFilePreviewProvider(),
