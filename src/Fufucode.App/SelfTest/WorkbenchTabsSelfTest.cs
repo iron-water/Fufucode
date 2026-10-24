@@ -76,17 +76,20 @@ internal static class WorkbenchTabsSelfTest
             window.OpenDockPage("files", DockZone.Right); await Ready();
             var files = window.PageForTesting("files");
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "folder" }));
-            await Until(() => workspace.CurrentDirectory == dir.FullName && !workspace.IsFilesLoading);
-            Check(workspace.Files.Single().Name == "child.txt", "file row enters actual directory");
-            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "上一级"));
-            await Until(() => workspace.CurrentDirectory == project && !workspace.IsFilesLoading);
+            await Until(() => workspace.VisibleFiles.Any(f => f.Name == "child.txt"));
+            Check(workspace.VisibleFiles.Any(f => f.Name == "child.txt"), "file tree lazily expands a directory");
+            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "folder" }));
+            await Ready();
+            Check(!workspace.VisibleFiles.Any(f => f.Name == "child.txt"), "file tree collapses an expanded directory");
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "tracked.txt" })); await Ready();
-            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "打开预览")); await Ready();
-            var previewBrowser = files.GetVisualDescendants().OfType<BrowserView>().Single(b => b.Name == BrowserView.PreviewControlName);
-            Check(workspace.IsFilePreviewOpen && previewBrowser.ViewModel.CurrentFilePath == file, "file preview button opens the actual selected file in-place");
-            var backButton = files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "← 返回列表");
+            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "打开预览"));
+            await Until(() => workspace.PreviewResult is not null);
+            Check(workspace.IsFilePreviewOpen && workspace.PreviewResult?.Path == file &&
+                  workspace.PreviewResult.Kind == Fufucode.App.Features.FilePreview.FilePreviewKind.Text,
+                "file preview button opens the unified provider host for the selected file");
+            var backButton = files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "←");
             Click(backButton); await Ready();
-            Check(!workspace.IsFilePreviewOpen, "returning from in-place file preview restores file list");
+            Check(!workspace.IsFilePreviewOpen, "returning from unified file preview restores file list");
             File.WriteAllText(Path.Combine(project, "refresh.txt"), "refresh\n");
             window.OpenDockPage("files", DockZone.Right); await Ready();
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => Avalonia.Automation.AutomationProperties.GetName(b) == "刷新文件"));
@@ -102,7 +105,8 @@ internal static class WorkbenchTabsSelfTest
             await Until(() => workspace.HasDiff);
             Check(workspace.DiffText.Contains("-original") && workspace.DiffText.Contains("+updated") && !workspace.DiffText.Contains("-staged"), "selected native change row loads HEAD-to-current diff including staged changes");
             Click(changes.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "打开当前文件")); await Ready();
-            Check(workspace.IsFilePreviewOpen && previewBrowser.ViewModel.CurrentFilePath == file, "changes open-current-file opens in-place file preview");
+            await Until(() => workspace.PreviewResult is not null);
+            Check(workspace.IsFilePreviewOpen && workspace.PreviewResult?.Path == file, "changes open-current-file opens unified file preview");
             Click(backButton); await Ready();
             workspace.SelectedChange = workspace.Changes.Single(c => c.Path == "new.txt");
             await Until(() => workspace.HasDiff);
