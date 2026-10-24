@@ -266,12 +266,7 @@ internal sealed class ImageFilePreviewProvider : FilePreviewProviderBase
 
     public override Control CreateView(FilePreviewResult result)
     {
-        try
-        {
-            using var stream = new MemoryStream(result.Bytes ?? []);
-            var bitmap = new Bitmap(stream);
-            return new ScrollViewer { Content = new Image { Source = bitmap, Stretch = Stretch.Uniform, Margin = new Thickness(16) } };
-        }
+        try { return new ImagePreviewControl(result.Bytes ?? []); }
         catch (Exception error) { return Message($"图片解码失败：{error.Message}"); }
     }
 }
@@ -293,21 +288,7 @@ internal sealed class TextFilePreviewProvider : FilePreviewProviderBase
         return new(Kind, read.FullPath, read.Size, "源码", read.Encoding, read.IsTruncated, null, read.Text);
     }
 
-    public override Control CreateView(FilePreviewResult result)
-    {
-        var language = Path.GetExtension(result.Path).TrimStart('.');
-        var lines = (result.Text ?? string.Empty).Replace("\r\n", "\n").Split('\n');
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(10) };
-        for (var index = 0; index < lines.Length; index++)
-        {
-            grid.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            var number = new TextBlock { Text = (index + 1).ToString(), Classes = { "mono" }, Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 12, 0) };
-            var code = new TextBlock { Text = lines[index], FontFamily = new FontFamily("Cascadia Mono,Consolas"), TextWrapping = TextWrapping.NoWrap };
-            Grid.SetRow(number, index); Grid.SetColumn(number, 0); Grid.SetRow(code, index); Grid.SetColumn(code, 1);
-            grid.Children.Add(number); grid.Children.Add(code);
-        }
-        return new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
-    }
+    public override Control CreateView(FilePreviewResult result) => new TextPreviewControl(result.Text ?? string.Empty);
 }
 
 internal sealed class BinaryFilePreviewProvider : FilePreviewProviderBase

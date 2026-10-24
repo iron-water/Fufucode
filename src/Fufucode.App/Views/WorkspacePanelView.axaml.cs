@@ -187,6 +187,12 @@ public partial class WorkspacePanelView : UserControl
         }
     }
 
+    private void PreviewFindBox_TextChanged(object? sender, TextChangedEventArgs args)
+    {
+        if (DataContext is WorkspacePanelViewModel vm && sender is TextBox box)
+            vm.SetFindQuery(box.Text);
+    }
+
     private async void OpenPreviewInSystem_Click(object? sender, RoutedEventArgs args)
     {
         if (DataContext is not WorkspacePanelViewModel vm || string.IsNullOrWhiteSpace(vm.PreviewFilePath)) return;
