@@ -584,14 +584,14 @@
       <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
       <StackPanel x:Name="ComposerHost" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Stretch">
       <!-- 聚焦光带：位于输入卡上方的淡绿色渐变（不依赖 BoxShadow，渲染更可靠）。 -->
-      <Border x:Name="ComposerGlowBand" Height="24" Opacity="0" IsHitTestVisible="False">
+      <Border x:Name="ComposerGlowBand" Height="16" Margin="32,0,32,0" Opacity="0" IsHitTestVisible="False">
         <Border.Effect>
-          <BlurEffect Radius="12"/>
+          <BlurEffect Radius="8"/>
         </Border.Effect>
         <Border.Background>
           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
-            <GradientStop Offset="0" Color="#4D00CC6A"/>
-            <GradientStop Offset="0.5" Color="#1A00CC6A"/>
+            <GradientStop Offset="0" Color="#2E00CC6A"/>
+            <GradientStop Offset="0.6" Color="#1000CC6A"/>
             <GradientStop Offset="1" Color="#0000CC6A"/>
           </LinearGradientBrush>
         </Border.Background>
@@ -673,7 +673,7 @@
 
           <!-- 底部行：命令入口 + 提示 + 停止/发送 -->
           <Grid x:Name="ComposerToolbar" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
-            <Button x:Name="ComposerMoreButton" Classes="iconButton"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/></Button>
+            <Button x:Name="ComposerMoreButton" Classes="iconButton" ToolTip.Tip="附加功能" ToolTip.Placement="Top"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/></Button>
             <Button x:Name="CommandFlyoutButton" Grid.Column="1" Classes="iconButton" VerticalAlignment="Center" IsVisible="False"
                     IsEnabled="{Binding Extensions.CanUseCommands}"
                     ToolTip.Tip="{Binding Extensions.CommandButtonToolTip}">
@@ -715,12 +715,12 @@
                 </Flyout>
               </Button.Flyout>
             </Button>
-            <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
+            <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="添加文件、图片、PDF 或链接" ToolTip.Placement="Top"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
             <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="6"
                         VerticalAlignment="Center" Margin="6,0,8,0" IsVisible="False">
               <Button x:Name="SessionProjectChip" Classes="iconButton" Width="30" Height="30"
-                     
+                      ToolTip.Placement="Top" ToolTip.Tip="更改此会话的项目"
                       AutomationProperties.Name="更改此会话的项目">
                 <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14"/>
               </Button>
@@ -729,8 +729,8 @@
             <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
               <Button x:Name="ModelButton" Classes="iconButton" Width="30" Height="30"
-                      IsEnabled="{Binding Settings.CanChangeModel}"
-                      >
+                      IsEnabled="{Binding Settings.CanChangeModel}" ToolTip.Placement="Top"
+                      ToolTip.Tip="{Binding Settings.SelectedModel.Label, StringFormat='模型：{0}', FallbackValue='选择模型'}">
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened">
@@ -806,7 +806,7 @@
                 </Button.Flyout>
               </Button>
               <Button x:Name="ThinkingButton" Classes="iconButton" Width="30" Height="30"
-                      IsEnabled="{Binding Settings.CanChangeModel}">
+                      IsEnabled="{Binding Settings.CanChangeModel}" ToolTip.Placement="Top" ToolTip.Tip="思考等级">
                 <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14"/>
                 <Button.Flyout>
                   <MenuFlyout Placement="TopEdgeAlignedRight"/>
@@ -829,13 +829,13 @@
                 <Button x:Name="StopButton" Classes="iconButton" Width="32" Height="32"
                         Command="{Binding Input.StopCommand}"
                         IsVisible="{Binding Input.IsTurnActive}"
-                        AutomationProperties.Name="停止">
+                        ToolTip.Placement="Top" ToolTip.Tip="停止当前回合" AutomationProperties.Name="停止">
                   <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
                 </Button>
                 <Button x:Name="SendButton" Classes="accent" Height="32" Padding="12,0"
                         Command="{Binding Input.SendCommand}"
                         IsVisible="{Binding !Input.IsTurnActive}"
-                        AutomationProperties.Name="发送">
+                        ToolTip.Placement="Top" ToolTip.Tip="发送" AutomationProperties.Name="发送">
                   <StackPanel Orientation="Horizontal" Spacing="6">
                     <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13" VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding Input.SendButtonText}" VerticalAlignment="Center"/>

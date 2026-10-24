@@ -130,6 +130,10 @@ public partial class MainWindow
             Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.dock-render", "dock pages rendered from saved layout");
         }
         RequestedThemeVariant = SettingsPageViewModel.ThemeVariantFor(settings.Theme);
+        // Popup（ToolTip/Flyout）是独立顶层，不继承窗口主题；同步到应用级，
+        // 否则深色窗口里的系统提示会按浅色主题渲染成白底黑字。
+        if (Avalonia.Application.Current is { } application)
+            application.RequestedThemeVariant = RequestedThemeVariant;
         // Surface 旧轴下线后：皮肤自己管理材质；Fluent 保留 Mica 基线；
         // LiquidGlass 请求 AcrylicBlur/Blur 让窗后桌面透出（玻璃面折射窗内内容，两者互补）；
         // 其余皮肤不再受 Surface 影响。

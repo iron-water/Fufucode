@@ -132,30 +132,9 @@ public partial class ChatPage
         _executionModeMenu = modeMenu;
         _executionModeButton = modeButton;
         ComposerModes.Children.Insert(0, modeButton);
-        // 输入区底部图标统一用上方浮层提示（离开 0.3s 消失）。
-        // 聚焦辉光：直接给卡片赋 BoxShadows，绕过伪类与样式优先级。
-        void SetComposerGlow(bool on)
-        {
-            // 光带用 Opacity 过渡，BoxShadow 在当前渲染路径下不可见。
-            ComposerGlowBand.Opacity = on ? 1 : 0;
-        }
-        InputBox.GotFocus += (_, _) => SetComposerGlow(true);
-        InputBox.LostFocus += (_, _) =>
-        {
-            if (!ComposerCard.IsKeyboardFocusWithin) SetComposerGlow(false);
-        };
-        ComposerCard.BorderThickness = new Thickness(0);
+        // 系统 ToolTip 已随应用主题同步为深色，并统一显示在上方；
+        // 不再使用自定义 Popup（会与悬停状态互相触发，造成高亮闪烁）。
 
-        MainViewModel? Vm() => DataContext as MainViewModel;
-        HoverTip.Attach(ComposerMoreButton, () => "附加功能");
-        HoverTip.Attach(AttachContextButton, () => "添加文件、图片、PDF 或链接");
-        HoverTip.Attach(SessionProjectChip, () =>
-            Vm()?.Sidebar.ProjectName is { Length: > 0 } project ? "项目：" + project : "更改此会话的项目");
-        HoverTip.Attach(ModelButton, () => "模型：" + (Vm()?.Settings.SelectedModel.Label ?? "选择模型"));
-        HoverTip.Attach(ThinkingButton, () => "思考：" + (Vm()?.Settings.SelectedThinking?.Label ?? "默认"));
-        HoverTip.Attach(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
-        HoverTip.Attach(SendButton, () => "发送");
-        HoverTip.Attach(StopButton, () => "停止当前回合");
         var menu = new MenuFlyout();
         var preview = new MenuItem { Header = "Markdown 草稿预览" };
         preview.Click += (_, _) => { _previewDraft = !_previewDraft; RefreshComposerTools(); };
@@ -324,6 +303,8 @@ public partial class ChatPage
             }
             ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
             if (_executionModeMenu is not null) BuildExecutionModeMenu(_executionModeMenu);
+            if (_executionModeButton is not null)
+                ToolTip.SetTip(_executionModeButton, "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
             if (ThinkingButton.Flyout is MenuFlyout thinkingMenu) BuildThinkingMenu(thinkingMenu, vm);
         }
         finally { _updatingComposer = false; }
