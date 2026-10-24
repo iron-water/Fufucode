@@ -18,21 +18,19 @@ internal static class HoverTip
     public static void Attach(Control target, Func<string?> text)
     {
         ToolTip.SetTip(target, null);
-        var label = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.NoWrap };
-        IBrush BrushOf(string key, Color fallback) =>
-            Application.Current?.TryGetResource(key, null, out var value) == true && value is IBrush brush
-                ? brush : new SolidColorBrush(fallback);
-        var background = BrushOf("AppBaseBar", Color.Parse("#FF2C2C2C"));
-        var borderBrush = BrushOf("AppCardStroke", Color.Parse("#3DFFFFFF"));
-        var foreground = BrushOf("AppTextPrimary", Colors.White);
-        label.Foreground = foreground;
+        var label = new TextBlock
+        {
+            FontSize = 11,
+            TextWrapping = TextWrapping.NoWrap,
+            Foreground = new SolidColorBrush(Color.Parse("#FFFFFFFF")),
+        };
         var border = new Border
         {
             Child = label,
             Padding = new Thickness(8, 4),
             BorderThickness = new Thickness(1),
-            Background = background,
-            BorderBrush = borderBrush,
+            Background = new SolidColorBrush(Color.Parse("#FF2C2C2C")),
+            BorderBrush = new SolidColorBrush(Color.Parse("#3DFFFFFF")),
             CornerRadius = new CornerRadius(4),
         };
         var popup = new Popup
@@ -49,19 +47,24 @@ internal static class HoverTip
             timer.Stop();
             popup.IsOpen = false;
         };
-        target.PointerEntered += (_, _) =>
+        // PointerEntered 是直接事件、不冒泡；指针落在图标子元素上时按钮收不到。
+        // 用 IsPointerOver（覆盖子树）驱动显示/延迟隐藏。
+        target.PropertyChanged += (_, e) =>
         {
-            timer.Stop();
-            var value = text();
-            if (string.IsNullOrWhiteSpace(value)) return;
-            label.Text = value;
-            popup.IsOpen = true;
-        };
-        target.PointerExited += (_, _) =>
-        {
-            if (!popup.IsOpen) return;
-            timer.Stop();
-            timer.Start();
+            if (e.Property != Avalonia.Input.InputElement.IsPointerOverProperty) return;
+            if (target.IsPointerOver)
+            {
+                timer.Stop();
+                var value = text();
+                if (string.IsNullOrWhiteSpace(value)) return;
+                label.Text = value;
+                popup.IsOpen = true;
+            }
+            else if (popup.IsOpen)
+            {
+                timer.Stop();
+                timer.Start();
+            }
         };
         target.DetachedFromVisualTree += (_, _) =>
         {

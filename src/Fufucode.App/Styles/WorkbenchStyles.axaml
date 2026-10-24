@@ -1064,6 +1064,14 @@
   <Style Selector="Button.subtle.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
+  <!-- 输入区聚焦光带：淡入淡出。 -->
+  <Style Selector="Border#ComposerGlowBand">
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
+      </Transitions>
+    </Setter>
+  </Style>
   <!-- 图标浮层提示：固定在上方，离开 0.3s 后消失（HoverTip）。 -->
   <Style Selector="Border.hoverTip">
     <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
