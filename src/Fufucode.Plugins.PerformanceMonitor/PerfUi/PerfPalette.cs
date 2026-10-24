@@ -17,6 +17,34 @@ internal static class PerfPalette
     public static readonly Color System = Color.Parse("#60A5FA");
     public static readonly Color Neutral = Color.Parse("#8A8A8E");
 
+    // 上下文分解专用的 6 类语义色（对应 Magpie / Claude 上下文窗口）
+    public static readonly Color CtxSystemPrompt = Color.Parse("#A78BFA");
+    public static readonly Color CtxTools = Color.Parse("#38BDF8");
+    public static readonly Color CtxMemory = Color.Parse("#FBBF24");
+    public static readonly Color CtxFiles = Color.Parse("#34D399");
+    public static readonly Color CtxToolResults = Color.Parse("#FB7185");
+    public static readonly Color CtxConversation = Color.Parse("#818CF8");
+
+    public static readonly IBrush CtxSystemPromptBrush = new SolidColorBrush(CtxSystemPrompt);
+    public static readonly IBrush CtxToolsBrush = new SolidColorBrush(CtxTools);
+    public static readonly IBrush CtxMemoryBrush = new SolidColorBrush(CtxMemory);
+    public static readonly IBrush CtxFilesBrush = new SolidColorBrush(CtxFiles);
+    public static readonly IBrush CtxToolResultsBrush = new SolidColorBrush(CtxToolResults);
+    public static readonly IBrush CtxConversationBrush = new SolidColorBrush(CtxConversation);
+
+    public static Color ContextCategoryColor(string category) => category switch
+    {
+        "system" or "系统提示词" => CtxSystemPrompt,
+        "tools" or "工具" => CtxTools,
+        "memory" or "记忆" => CtxMemory,
+        "files" or "文件" => CtxFiles,
+        "toolResults" or "工具结果" => CtxToolResults,
+        "conversation" or "会话内容" => CtxConversation,
+        _ => Neutral,
+    };
+
+    public static IBrush ContextCategoryBrush(string category) => new SolidColorBrush(ContextCategoryColor(category));
+
     public static readonly IBrush ModelBrush = new SolidColorBrush(Model);
     public static readonly IBrush ToolBrush = new SolidColorBrush(Tool);
     public static readonly IBrush UiBrush = new SolidColorBrush(Ui);

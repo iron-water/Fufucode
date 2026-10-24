@@ -1,3 +1,7 @@
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Shapes;
@@ -8,54 +12,191 @@ using Avalonia.Media;
 
 namespace Fufucode.Plugins.PerformanceMonitor;
 
-/// <summary>概览：只讲用户能理解的时长、Token、上下文、工具和轮次，不出现内部 span 名称。</summary>
+/// <summary>
+/// 概览：本地化还原 Magpie / Claude 上下文窗口看板。
+/// 包含已用上下文/缓存命中、矩形树图（Treemap）、分类图例、按内容层级拆分进度条列表，以及底部会话历史曲线。
+/// </summary>
 internal sealed class PerfOverviewView : UserControl
 {
     private readonly StackPanel _root = new() { Spacing = 14 };
-    private readonly WrapPanel _kpis = new();
-    private readonly Grid _donuts = new() { ColumnDefinitions = new("*,*"), ColumnSpacing = 14 };
-    private readonly Grid _lower = new() { ColumnDefinitions = new("*,*"), ColumnSpacing = 14 };
-    private readonly Border _tokenCard;
-    private readonly Border _timeCard;
-    private readonly Border _contextCard;
-    private readonly Border _toolsCard;
-    private readonly StackPanel _tokenBody;
-    private readonly StackPanel _timeBody;
-    private readonly StackPanel _contextBody;
-    private readonly StackPanel _toolsBody;
-    private readonly Border _turnCard;
-    private readonly StackPanel _turnBody;
-    private readonly PerfDonut _tokenDonut = new();
-    private readonly PerfDonut _timeDonut = new();
-    private readonly PerfSegmentedBar _contextBar = new(10);
+
+    // 头部用量指标
+    private readonly TextBlock _title = new() { Text = "上下文窗口", FontSize = 18, FontWeight = FontWeight.SemiBold };
+    private readonly Border _modelBadge = new();
+    private readonly TextBlock _modelText = new() { FontSize = 10 };
+    private readonly TextBlock _usedTokensText = new() { FontSize = 28, FontWeight = FontWeight.SemiBold };
+    private readonly TextBlock _usedTokensSub = new() { FontSize = 11 };
+    private readonly TextBlock _cacheHitText = new() { FontSize = 28, FontWeight = FontWeight.SemiBold };
+    private readonly TextBlock _cacheHitSub = new() { FontSize = 11 };
+
+    // 矩形树图与图例
+    private readonly PerfTreemapControl _treemap = new();
+    private readonly WrapPanel _legendPanel = new() { Margin = new Thickness(0, 4, 0, 0) };
+
+    // 内容明细表格
+    private readonly StackPanel _contentPills = new() { Orientation = Orientation.Horizontal, Spacing = 6 };
+    private readonly StackPanel _contentItemsHost = new() { Spacing = 5 };
+    private readonly Button _toggleShowAll = new();
+
+    // 底部会话曲线
+    private readonly TextBlock _breadcrumbText = new() { FontSize = 10.5 };
+    private readonly TextBlock _roundsCountText = new() { FontSize = 11 };
+    private readonly PerfSessionSparkline _sparkline = new();
+    private readonly TextBlock _requestsCountText = new() { FontSize = 11 };
+
     private PerfSnapshot? _snapshot;
-    private bool _narrow;
+    private string _activeCategoryFilter = "all";
+    private bool _showAllItems;
 
     public PerfOverviewView()
     {
-        (_tokenCard, _tokenBody) = MakeCard("Token 构成");
-        (_timeCard, _timeBody) = MakeCard("时间花在哪");
-        (_contextCard, _contextBody) = MakeCard("上下文窗口");
-        (_toolsCard, _toolsBody) = MakeCard("工具使用");
-        (_turnCard, _turnBody) = MakeCard("轮次时间线");
+        _title.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        _modelText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        _usedTokensText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        _usedTokensSub.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        _cacheHitText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        _cacheHitSub.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        _breadcrumbText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        _roundsCountText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
+        _requestsCountText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
 
-        _donuts.Children.Add(_tokenCard);
-        Grid.SetColumn(_timeCard, 1);
-        _donuts.Children.Add(_timeCard);
-        _lower.Children.Add(_contextCard);
-        Grid.SetColumn(_toolsCard, 1);
-        _lower.Children.Add(_toolsCard);
+        // 模型徽章
+        _modelBadge.CornerRadius = new CornerRadius(999);
+        _modelBadge.Padding = new Thickness(8, 2);
+        _modelBadge.VerticalAlignment = VerticalAlignment.Center;
+        _modelBadge.Child = _modelText;
+        _modelBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
 
-        _root.Children.Add(_kpis);
-        _root.Children.Add(_donuts);
-        _root.Children.Add(_lower);
-        _root.Children.Add(_turnCard);
+        var liveDot = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(Color.Parse("#4ADE80")), VerticalAlignment = VerticalAlignment.Center };
+        var liveText = new TextBlock { Text = "实时", FontSize = 10, VerticalAlignment = VerticalAlignment.Center };
+        liveText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        var liveBadge = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center, Children = { liveDot, liveText } };
+
+        var headRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 10 };
+        headRow.Children.Add(_title);
+        Grid.SetColumn(_modelBadge, 2);
+        headRow.Children.Add(_modelBadge);
+        Grid.SetColumn(liveBadge, 3);
+        headRow.Children.Add(liveBadge);
+
+        // 指标双列卡片
+        var metricsGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 12 };
+        var usedBox = new StackPanel { Spacing = 3 };
+        var usedLabel = Text("已用上下文", 11, "AppTextDim");
+        usedBox.Children.Add(usedLabel);
+        usedBox.Children.Add(_usedTokensText);
+        usedBox.Children.Add(_usedTokensSub);
+
+        var cacheBox = new StackPanel { Spacing = 3 };
+        var cacheLabel = Text("提示词缓存", 11, "AppTextDim");
+        cacheBox.Children.Add(cacheLabel);
+        cacheBox.Children.Add(_cacheHitText);
+        cacheBox.Children.Add(_cacheHitSub);
+
+        metricsGrid.Children.Add(usedBox);
+        Grid.SetColumn(cacheBox, 1);
+        metricsGrid.Children.Add(cacheBox);
+
+        var metricsCard = new Border
+        {
+            Padding = new Thickness(16, 14, 16, 14),
+            CornerRadius = new CornerRadius(14),
+            Child = metricsGrid,
+        };
+        BindCard(metricsCard);
+
+        // 树图卡片
+        var treemapInner = new StackPanel { Spacing = 10, Children = { _treemap, _legendPanel } };
+        var treemapCard = new Border
+        {
+            Padding = new Thickness(16, 14, 16, 14),
+            CornerRadius = new CornerRadius(14),
+            Child = treemapInner,
+        };
+        BindCard(treemapCard);
+
+        // 内容细分卡片
+        var contentHead = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(0, 0, 0, 8) };
+        var contentTitle = Text("内容", 13, "AppTextPrimary", FontWeight.SemiBold);
+        contentHead.Children.Add(contentTitle);
+
+        var pillsScroll = new ScrollViewer
+        {
+            Content = _contentPills,
+            HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Margin = new Thickness(0, 0, 0, 10),
+        };
+
+        _toggleShowAll.FontSize = 10.5;
+        _toggleShowAll.Padding = new Thickness(8, 4);
+        _toggleShowAll.Background = Brushes.Transparent;
+        _toggleShowAll.BorderThickness = new Thickness(0);
+        _toggleShowAll.HorizontalAlignment = HorizontalAlignment.Center;
+        _toggleShowAll.Margin = new Thickness(0, 6, 0, 0);
+        _toggleShowAll.Bind(Button.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        _toggleShowAll.Click += (_, _) =>
+        {
+            _showAllItems = !_showAllItems;
+            RenderContentList();
+        };
+
+        var contentBody = new StackPanel { Spacing = 6, Children = { contentHead, pillsScroll, _contentItemsHost, _toggleShowAll } };
+        var contentCard = new Border
+        {
+            Padding = new Thickness(16, 14, 16, 14),
+            CornerRadius = new CornerRadius(14),
+            Child = contentBody,
+        };
+        BindCard(contentCard);
+
+        // 会话历史卡片（底部）
+        var footerTopRow = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        footerTopRow.Children.Add(_breadcrumbText);
+        Grid.SetColumn(_roundsCountText, 1);
+        footerTopRow.Children.Add(_roundsCountText);
+
+        var footerBottomRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 12, Margin = new Thickness(0, 6, 0, 0) };
+        var sessionLabel = Text("本会话", 11.5, "AppTextPrimary", FontWeight.SemiBold);
+        footerBottomRow.Children.Add(sessionLabel);
+        Grid.SetColumn(_sparkline, 1);
+        footerBottomRow.Children.Add(_sparkline);
+        Grid.SetColumn(_requestsCountText, 2);
+        footerBottomRow.Children.Add(_requestsCountText);
+
+        var footerCard = new Border
+        {
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(14),
+            Child = new StackPanel { Spacing = 4, Children = { footerTopRow, footerBottomRow } },
+        };
+        BindCard(footerCard);
+
+        _root.Children.Add(headRow);
+        _root.Children.Add(metricsCard);
+        _root.Children.Add(treemapCard);
+        _root.Children.Add(contentCard);
+        _root.Children.Add(footerCard);
+
         Content = new ScrollViewer
         {
             Content = _root,
             HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+            Padding = new Thickness(16, 12, 16, 16),
         };
-        SizeChanged += (_, _) => UpdateColumns();
+
+        _treemap.CategoryClicked += catKey =>
+        {
+            _activeCategoryFilter = catKey ?? "all";
+            RenderPills();
+            RenderContentList();
+        };
+
+        _sparkline.PointerPressed += (_, _) =>
+        {
+            if (_snapshot?.LatestTurn is { } turn) TurnSelected?.Invoke(turn.TraceId);
+        };
+        _sparkline.Cursor = new Cursor(StandardCursorType.Hand);
     }
 
     public event Action<long>? TurnSelected;
@@ -63,362 +204,261 @@ internal sealed class PerfOverviewView : UserControl
     public void Render(PerfSnapshot snapshot)
     {
         _snapshot = snapshot;
-        RenderKpis(snapshot);
-        RenderToken(snapshot);
-        RenderTime(snapshot);
-        RenderContext(snapshot);
-        RenderTools(snapshot);
-        RenderTurns(snapshot);
-        UpdateColumns();
-    }
+        var breakdown = snapshot.ContextBreakdown;
 
-    private void UpdateColumns()
-    {
-        var narrow = Bounds.Width is > 0 and < 860;
-        if (narrow == _narrow) return;
-        _narrow = narrow;
-        _donuts.ColumnDefinitions = new ColumnDefinitions(narrow ? "*" : "*,*");
-        _donuts.RowDefinitions = new RowDefinitions(narrow ? "Auto,Auto" : "Auto");
-        Grid.SetColumn(_tokenCard, 0);
-        Grid.SetRow(_tokenCard, 0);
-        Grid.SetColumn(_timeCard, narrow ? 0 : 1);
-        Grid.SetRow(_timeCard, narrow ? 1 : 0);
-        _lower.ColumnDefinitions = new ColumnDefinitions(narrow ? "*" : "*,*");
-        _lower.RowDefinitions = new RowDefinitions(narrow ? "Auto,Auto" : "Auto");
-        Grid.SetColumn(_contextCard, 0);
-        Grid.SetRow(_contextCard, 0);
-        Grid.SetColumn(_toolsCard, narrow ? 0 : 1);
-        Grid.SetRow(_toolsCard, narrow ? 1 : 0);
-    }
+        _modelText.Text = string.IsNullOrWhiteSpace(breakdown.ModelName) ? "默认模型" : breakdown.ModelName;
 
-    private void RenderKpis(PerfSnapshot snapshot)
-    {
-        _kpis.Children.Clear();
-        _kpis.Children.Add(Kpi("总会话时长", PerfPalette.FormatDuration(snapshot.WallDuration),
-            $"{snapshot.TurnCount} 轮 · 最近轮次 {PerfPalette.FormatMs(snapshot.LatestTurn?.DurationMs ?? 0)}"));
-        _kpis.Children.Add(Kpi("总 Token", PerfPalette.FormatTokens(snapshot.TotalTokens),
-            $"{PerfPalette.FormatPercent(snapshot.CacheHitRate)} 来自缓存"));
-        _kpis.Children.Add(Kpi("平均轮次", PerfPalette.FormatMs(snapshot.AverageTurnMs),
-            $"共 {snapshot.TurnCount} 轮"));
-        _kpis.Children.Add(Kpi("工具调用", snapshot.ToolCalls.ToString("N0"),
-            $"{snapshot.ModelCalls:N0} 次模型调用 · {snapshot.ErrorCount} 个错误"));
-    }
-
-    private void RenderToken(PerfSnapshot snapshot)
-    {
-        _tokenBody.Children.Clear();
-        var cached = snapshot.CachedTokens;
-        var prompt = snapshot.AllSpans.Sum(span => span.LongTag("promptTokens") ?? 0);
-        var completion = snapshot.AllSpans.Sum(span => span.LongTag("completionTokens") ?? 0);
-        var uncached = Math.Max(0, prompt - cached);
-        var total = cached + uncached + completion;
-        if (total <= 0)
+        if (breakdown.TotalTokens > 0)
         {
-            _tokenBody.Children.Add(Empty("运行一次模型调用后显示 Token 构成。"));
-            return;
+            _usedTokensText.Text = $"{PerfPalette.FormatTokens(breakdown.TotalTokens)} token";
+            _usedTokensSub.Text = breakdown.CapacityTokens is { } cap
+                ? $"{PerfPalette.FormatTokens(breakdown.TotalTokens)} / {PerfPalette.FormatTokens(cap)} · {PerfPalette.FormatPercent((double)breakdown.TotalTokens / cap)}"
+                : "模型的窗口大小未知";
+
+            _cacheHitText.Text = breakdown.CachedTokens > 0
+                ? $"{PerfPalette.FormatPercent(breakdown.CacheHitRate)} 命中"
+                : "—— 命中";
+            _cacheHitSub.Text = breakdown.CachedTokens > 0
+                ? $"{PerfPalette.FormatTokens(breakdown.CachedTokens)} 缓存输入 · {PerfPalette.FormatTokens(breakdown.UncachedTokens)} 未命中"
+                : "供应商回答后可见";
+        }
+        else
+        {
+            _usedTokensText.Text = "0 token";
+            _usedTokensSub.Text = "模型的窗口大小未知";
+            _cacheHitText.Text = "—— 命中";
+            _cacheHitSub.Text = "供应商回答后可见";
         }
 
-        _tokenDonut.SetData(
-        [
-            new PerfDonutSegment(cached, PerfPalette.Tool),
-            new PerfDonutSegment(uncached, PerfPalette.Model),
-            new PerfDonutSegment(completion, PerfPalette.Ui),
-        ], PerfPalette.FormatPercent(snapshot.CacheHitRate), "缓存命中");
+        // 渲染树图
+        _treemap.SetData(breakdown.Categories, breakdown.TotalTokens);
 
-        var legend = new StackPanel { Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-        legend.Children.Add(Legend(PerfPalette.Tool, "缓存输入", cached, cached / total));
-        legend.Children.Add(Legend(PerfPalette.Model, "未命中输入", uncached, uncached / total));
-        legend.Children.Add(Legend(PerfPalette.Ui, "输出（含思考）", completion, completion / total));
-        _tokenBody.Children.Add(new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            ColumnSpacing = 18,
-            Children = { _tokenDonut, legend },
-        });
+        // 渲染图例
+        RenderLegend(breakdown);
+
+        // 渲染筛选按钮
+        RenderPills();
+
+        // 渲染内容细分列表
+        RenderContentList();
+
+        // 渲染底部会话曲线
+        RenderFooter(snapshot);
     }
 
-    private void RenderTime(PerfSnapshot snapshot)
+    private void RenderLegend(PerfContextBreakdown breakdown)
     {
-        _timeBody.Children.Clear();
-        var model = snapshot.TotalModelMs;
-        var tools = snapshot.TotalToolMs;
-        var total = model + tools;
-        if (total <= 0)
+        _legendPanel.Children.Clear();
+        foreach (var cat in breakdown.Categories)
         {
-            _timeBody.Children.Add(Empty("运行一个回合后显示模型与工具的耗时构成。"));
-            return;
-        }
-
-        _timeDonut.SetData(
-        [
-            new PerfDonutSegment(model, PerfPalette.Model),
-            new PerfDonutSegment(tools, PerfPalette.Tool),
-        ], PerfPalette.FormatCompactMs(total), "总耗时");
-
-        var legend = new StackPanel { Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
-        legend.Children.Add(Legend(PerfPalette.Model, $"模型调用 · {snapshot.ModelCalls:N0} 次", model, model / (double)total));
-        legend.Children.Add(Legend(PerfPalette.Tool, $"工具执行 · {snapshot.ToolCalls:N0} 次", tools, tools / (double)total));
-        _timeBody.Children.Add(new Grid
-        {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
-            ColumnSpacing = 18,
-            Children = { _timeDonut, legend },
-        });
-    }
-
-    private void RenderContext(PerfSnapshot snapshot)
-    {
-        _contextBody.Children.Clear();
-        var context = snapshot.Context;
-        if (!context.HasData)
-        {
-            _contextBody.Children.Add(Empty("运行一次模型调用后显示最近请求的上下文用量。"));
-            return;
-        }
-
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
-        header.Children.Add(Text(PerfPalette.FormatTokens(context.PromptTokens), 22, "AppTextPrimary", FontWeight.SemiBold));
-        var trailing = Text($"缓存 {PerfPalette.FormatTokens(context.CachedTokens)} · 未命中 {PerfPalette.FormatTokens(context.UncachedTokens)}",
-            10, "AppTextSecondary");
-        Grid.SetColumn(trailing, 1);
-        header.Children.Add(trailing);
-        _contextBody.Children.Add(header);
-
-        _contextBar.SetData(
-        [
-            new PerfBarSegment(context.CachedTokens, PerfPalette.Tool),
-            new PerfBarSegment(context.UncachedTokens, PerfPalette.Model),
-        ]);
-        _contextBody.Children.Add(_contextBar);
-        _contextBody.Children.Add(Text("最近一次请求的输入 Token；上限由模型或端点决定，本页不做猜测。",
-            10, "AppTextDim", null, true));
-    }
-
-    private void RenderTools(PerfSnapshot snapshot)
-    {
-        _toolsBody.Children.Clear();
-        if (snapshot.Tools.Count == 0)
-        {
-            _toolsBody.Children.Add(Empty("还没有工具调用记录。"));
-            return;
-        }
-
-        var max = Math.Max(1, snapshot.Tools.Max(tool => tool.Count));
-        foreach (var tool in snapshot.Tools.Take(6))
-            _toolsBody.Children.Add(ToolRow(tool, max));
-    }
-
-    private void RenderTurns(PerfSnapshot snapshot)
-    {
-        _turnBody.Children.Clear();
-        var turns = snapshot.Turns.TakeLast(3).ToArray();
-        if (turns.Length == 0)
-        {
-            _turnBody.Children.Add(Empty("还没有完成的回合。"));
-            return;
-        }
-
-        foreach (var turn in turns)
-            _turnBody.Children.Add(TurnBlock(turn));
-    }
-
-    private Control TurnBlock(PerfTurnInfo turn)
-    {
-        var body = new StackPanel { Spacing = 8 };
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto") };
-        header.Children.Add(Text(turn.TimeLabel, 11.5, "AppTextPrimary"));
-        var duration = Text(PerfPalette.FormatMs(turn.DurationMs), 11, "AppTextSecondary");
-        Grid.SetColumn(duration, 1);
-        header.Children.Add(duration);
-        var chip = StatusChip(turn.Errors > 0 ? "有错误" : turn.Outcome, turn.Errors > 0);
-        Grid.SetColumn(chip, 3);
-        header.Children.Add(chip);
-        body.Children.Add(header);
-
-        var bar = new PerfSegmentedBar(4);
-        var other = Math.Max(0, turn.DurationMs - turn.ModelMs - turn.ToolMs);
-        bar.SetData(
-        [
-            new PerfBarSegment(turn.ModelMs, PerfPalette.Model),
-            new PerfBarSegment(turn.ToolMs, PerfPalette.Tool),
-            new PerfBarSegment(other, PerfPalette.Neutral),
-        ]);
-        body.Children.Add(bar);
-
-        foreach (var span in turn.SignificantChildren.Take(4))
-        {
-            var row = new Grid { ColumnDefinitions = new ColumnDefinitions("10,*,Auto") };
-            var dot = new Ellipse
+            if (cat.TotalTokens <= 0) continue;
+            var item = new Border
             {
-                Width = 5,
-                Height = 5,
-                Fill = new SolidColorBrush(turn.Errors > 0 ? PerfPalette.Error : PerfPalette.CategoryColor(span.Category)),
-                VerticalAlignment = VerticalAlignment.Center,
+                Padding = new Thickness(6, 3),
+                CornerRadius = new CornerRadius(6),
+                Margin = new Thickness(0, 0, 8, 4),
+                Cursor = new Cursor(StandardCursorType.Hand),
             };
-            row.Children.Add(dot);
-            var name = span.Name == "model.request" || span.Name == "model.stream" || span.Name == "model.http"
-                ? turn.Root?.Tag("model") ?? "模型调用"
-                : span.Name.StartsWith("tool", StringComparison.Ordinal)
-                    ? PerfPalette.ToolDisplayName(span.Tag("tool"))
-                    : span.Name;
-            var label = Text(name, 11, "AppTextSecondary");
-            Grid.SetColumn(label, 1);
-            row.Children.Add(label);
-            var value = Text(PerfPalette.FormatMs(span.DurationMs), 10.5, "AppTextDim");
-            Grid.SetColumn(value, 2);
-            row.Children.Add(value);
-            body.Children.Add(row);
+            item.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+
+            var dot = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(cat.Color), VerticalAlignment = VerticalAlignment.Center };
+            var text = Text($"{cat.Name} {PerfPalette.FormatTokens(cat.TotalTokens)}", 10.5, "AppTextSecondary");
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { dot, text } };
+            item.Child = row;
+
+            var key = cat.Key;
+            item.PointerPressed += (_, _) =>
+            {
+                _activeCategoryFilter = _activeCategoryFilter == key ? "all" : key;
+                RenderPills();
+                RenderContentList();
+            };
+            _legendPanel.Children.Add(item);
         }
-
-        if (turn.SignificantChildren.Count > 4)
-            body.Children.Add(Text($"+ {turn.SignificantChildren.Count - 4} 个模型/工具节点", 10, "AppTextDim"));
-
-        var card = new Border
-        {
-            Padding = new Thickness(11, 10),
-            CornerRadius = new CornerRadius(10),
-            Margin = new Thickness(0, 0, 0, 8),
-            Cursor = new Cursor(StandardCursorType.Hand),
-            Child = body,
-        };
-        card.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
-        card.PointerPressed += (_, _) => TurnSelected?.Invoke(turn.TraceId);
-        return card;
     }
 
-    private static Grid ToolRow(PerfToolUsage tool, int max)
+    private void RenderPills()
+    {
+        _contentPills.Children.Clear();
+        var filterOptions = new (string Key, string Label)[]
+        {
+            ("all", "全部"),
+            ("system", "系统提示词"),
+            ("tools", "工具"),
+            ("memory", "记忆"),
+            ("files", "文件"),
+            ("toolResults", "工具结果"),
+            ("conversation", "会话内容"),
+        };
+
+        foreach (var (key, label) in filterOptions)
+        {
+            var active = _activeCategoryFilter == key;
+            var btn = new Button
+            {
+                Content = label,
+                FontSize = 10.5,
+                Padding = new Thickness(10, 4),
+                CornerRadius = new CornerRadius(999),
+                Background = active ? new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)) : Brushes.Transparent,
+                BorderThickness = new Thickness(active ? 1 : 0),
+            };
+            btn.Bind(Button.ForegroundProperty, new DynamicResourceExtension(active ? "AppTextPrimary" : "AppTextDim"));
+            if (active) btn.Bind(Button.BorderBrushProperty, new DynamicResourceExtension("AppBorderBrush"));
+
+            btn.Click += (_, _) =>
+            {
+                _activeCategoryFilter = key;
+                RenderPills();
+                RenderContentList();
+            };
+            _contentPills.Children.Add(btn);
+        }
+    }
+
+    private void RenderContentList()
+    {
+        _contentItemsHost.Children.Clear();
+        var breakdown = _snapshot?.ContextBreakdown;
+        if (breakdown is null || breakdown.AllItems.Count == 0)
+        {
+            _contentItemsHost.Children.Add(Text("暂无内容项记录", 11, "AppTextDim"));
+            _toggleShowAll.IsVisible = false;
+            return;
+        }
+
+        var filtered = _activeCategoryFilter == "all"
+            ? breakdown.AllItems
+            : breakdown.AllItems.Where(i => i.CategoryKey == _activeCategoryFilter).ToList();
+
+        if (filtered.Count == 0)
+        {
+            _contentItemsHost.Children.Add(Text("该类别下暂无条目", 11, "AppTextDim"));
+            _toggleShowAll.IsVisible = false;
+            return;
+        }
+
+        var maxTokens = Math.Max(1, filtered.Max(i => i.Tokens));
+        var showCount = _showAllItems ? filtered.Count : Math.Min(8, filtered.Count);
+
+        for (var i = 0; i < showCount; i++)
+        {
+            var item = filtered[i];
+            _contentItemsHost.Children.Add(BuildContentRow(item, maxTokens));
+        }
+
+        if (filtered.Count > 8)
+        {
+            _toggleShowAll.IsVisible = true;
+            _toggleShowAll.Content = _showAllItems ? "收起" : $"显示全部 {filtered.Count} 项";
+        }
+        else
+        {
+            _toggleShowAll.IsVisible = false;
+        }
+    }
+
+    private Control BuildContentRow(PerfContextItem item, long maxTokens)
     {
         var row = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("10,1*,46,90,56"),
-            ColumnSpacing = 9,
-            Height = 24,
-        };
-        row.Children.Add(new Ellipse
-        {
-            Width = 5,
-            Height = 5,
-            Fill = new SolidColorBrush(PerfPalette.Tool),
+            ColumnDefinitions = new ColumnDefinitions("12,*,Auto,90,54"),
+            ColumnSpacing = 8,
+            Height = 27,
             VerticalAlignment = VerticalAlignment.Center,
-        });
-        var name = Text(tool.Name, 11.5, "AppTextPrimary");
-        Grid.SetColumn(name, 1);
-        row.Children.Add(name);
-        var count = Text(tool.Count.ToString("N0"), 11, "AppTextSecondary");
-        count.TextAlignment = TextAlignment.Right;
-        Grid.SetColumn(count, 2);
-        row.Children.Add(count);
+        };
 
-        var track = new Border
+        var dot = new Ellipse
         {
-            Height = 5,
-            CornerRadius = new CornerRadius(3),
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(item.Color),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        row.Children.Add(dot);
+
+        var nameText = new TextBlock
+        {
+            Text = item.Name,
+            FontSize = 11.5,
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        nameText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        Grid.SetColumn(nameText, 1);
+        row.Children.Add(nameText);
+
+        if (!string.IsNullOrEmpty(item.Tag))
+        {
+            var tagBadge = new Border
+            {
+                Padding = new Thickness(5, 1.5),
+                CornerRadius = new CornerRadius(4),
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = new TextBlock
+                {
+                    Text = item.Tag,
+                    FontSize = 9.5,
+                    Foreground = new SolidColorBrush(PerfPalette.Neutral),
+                },
+            };
+            tagBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+            Grid.SetColumn(tagBadge, 2);
+            row.Children.Add(tagBadge);
+        }
+
+        // 相对条
+        var barTrack = new Border
+        {
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
             VerticalAlignment = VerticalAlignment.Center,
             Child = new Border
             {
-                Width = Math.Max(2, 90d * tool.Count / max),
-                Height = 5,
-                CornerRadius = new CornerRadius(3),
-                Background = new SolidColorBrush(PerfPalette.Tool),
+                Width = Math.Max(2, 90d * item.Tokens / maxTokens),
+                Height = 4,
+                CornerRadius = new CornerRadius(2),
+                Background = new SolidColorBrush(item.Color),
                 HorizontalAlignment = HorizontalAlignment.Left,
             },
         };
-        track.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppDividerSubtle"));
-        Grid.SetColumn(track, 3);
-        row.Children.Add(track);
+        barTrack.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppDividerSubtle"));
+        Grid.SetColumn(barTrack, 3);
+        row.Children.Add(barTrack);
 
-        var avg = Text(PerfPalette.FormatCompactMs(tool.AverageMs), 10.5, "AppTextDim");
-        avg.TextAlignment = TextAlignment.Right;
-        Grid.SetColumn(avg, 4);
-        row.Children.Add(avg);
+        var valText = new TextBlock
+        {
+            Text = PerfPalette.FormatTokens(item.Tokens),
+            FontSize = 11,
+            FontWeight = FontWeight.SemiBold,
+            TextAlignment = TextAlignment.Right,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        valText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        Grid.SetColumn(valText, 4);
+        row.Children.Add(valText);
+
         return row;
     }
 
-    private static Control Legend(Color color, string label, long value, double fraction)
+    private void RenderFooter(PerfSnapshot snapshot)
     {
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("12,*,Auto"), ColumnSpacing = 8 };
-        var dot = new Ellipse
-        {
-            Width = 7,
-            Height = 7,
-            Fill = new SolidColorBrush(color),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        grid.Children.Add(dot);
-        var labelText = Text(label, 11.5, "AppTextSecondary");
-        Grid.SetColumn(labelText, 1);
-        grid.Children.Add(labelText);
-        var valueText = Text($"{PerfPalette.FormatTokens(value)}  {PerfPalette.FormatPercent(fraction)}",
-            11, "AppTextPrimary");
-        valueText.TextAlignment = TextAlignment.Right;
-        Grid.SetColumn(valueText, 2);
-        grid.Children.Add(valueText);
-        return grid;
+        var sessionName = _snapshot?.AllSpans.FirstOrDefault()?.SessionId ?? "sgline";
+        var traceId = snapshot.LatestTurn?.TraceId ?? 0;
+        _breadcrumbText.Text = $"Fufucode > {sessionName} > #{traceId:x}";
+        _roundsCountText.Text = $"{snapshot.TurnCount} 轮";
+        _requestsCountText.Text = $"{snapshot.ModelCalls} 个请求";
+
+        // 更新历史折线图
+        var turnTokens = snapshot.Turns.Select(t => (double)(t.PromptTokens + t.CompletionTokens)).ToList();
+        _sparkline.SetData(turnTokens);
     }
 
-    private static Border Kpi(string label, string value, string sub)
+    private static void BindCard(Border card)
     {
-        var body = new StackPanel { Spacing = 5 };
-        body.Children.Add(Text(label, 10.5, "AppTextSecondary"));
-        body.Children.Add(Text(value, 23, "AppTextPrimary", FontWeight.SemiBold));
-        body.Children.Add(Text(sub, 10.5, "AppTextDim", null, true));
-        var border = new Border
-        {
-            Width = 214,
-            Padding = new Thickness(14, 12, 14, 12),
-            CornerRadius = new CornerRadius(12),
-            Margin = new Thickness(0, 0, 10, 10),
-            Child = body,
-        };
-        border.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppCardBackground"));
-        border.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppBorderBrush"));
-        border.BorderThickness = new Thickness(1);
-        return border;
-    }
-
-    private static (Border Card, StackPanel Body) MakeCard(string title)
-    {
-        var content = new StackPanel { Spacing = 12 };
-        var outer = new StackPanel
-        {
-            Spacing = 12,
-            Children =
-            {
-                Text(title, 13, "AppTextPrimary", FontWeight.SemiBold),
-                content,
-            },
-        };
-        var card = new Border
-        {
-            Padding = new Thickness(16, 14, 16, 16),
-            CornerRadius = new CornerRadius(14),
-            Child = outer,
-        };
         card.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppCardBackground"));
         card.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppBorderBrush"));
         card.BorderThickness = new Thickness(1);
-        return (card, content);
-    }
-
-    private static TextBlock Empty(string text)
-    {
-        var block = Text(text, 11.5, "AppTextSecondary", null, true);
-        block.Margin = new Thickness(0, 6, 0, 6);
-        return block;
-    }
-
-    private static Border StatusChip(string text, bool error)
-    {
-        var block = Text(text, 9.5, error ? "AppCriticalForeground" : "AppSuccessForeground");
-        var chip = new Border
-        {
-            Padding = new Thickness(7, 2),
-            CornerRadius = new CornerRadius(999),
-            Child = block,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        chip.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
-        return chip;
     }
 
     private static TextBlock Text(string text, double size, string brush, FontWeight? weight = null, bool wrap = false)
@@ -430,8 +470,74 @@ internal sealed class PerfOverviewView : UserControl
             TextWrapping = wrap ? TextWrapping.Wrap : TextWrapping.NoWrap,
             TextTrimming = wrap ? TextTrimming.None : TextTrimming.CharacterEllipsis,
         };
-        if (weight is { } value) block.FontWeight = value;
+        if (weight is { } val) block.FontWeight = val;
         block.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension(brush));
         return block;
+    }
+}
+
+/// <summary>底部本会话 Token 趋势折线图</summary>
+internal sealed class PerfSessionSparkline : Control
+{
+    private IReadOnlyList<double> _points = [];
+
+    public static readonly StyledProperty<IBrush?> LineBrushProperty =
+        AvaloniaProperty.Register<PerfSessionSparkline, IBrush?>(nameof(LineBrush));
+
+    public PerfSessionSparkline()
+    {
+        Height = 22;
+        ClipToBounds = true;
+        this.Bind(LineBrushProperty, new DynamicResourceExtension("AppAccentText"));
+    }
+
+    public IBrush? LineBrush { get => GetValue(LineBrushProperty); set => SetValue(LineBrushProperty, value); }
+
+    public void SetData(IReadOnlyList<double> points)
+    {
+        _points = points;
+        InvalidateVisual();
+    }
+
+    public override void Render(DrawingContext context)
+    {
+        base.Render(context);
+        var width = Bounds.Width;
+        var height = Bounds.Height;
+        if (width <= 10 || height <= 6) return;
+
+        var brush = LineBrush ?? new SolidColorBrush(PerfPalette.Model);
+        var pen = new Pen(brush, 1.5);
+
+        if (_points.Count < 2)
+        {
+            // 单点或无数据：一条基准细线 + 尾部圆点
+            context.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb(60, 128, 128, 128)), 1),
+                new Point(0, height / 2), new Point(width, height / 2));
+            context.DrawEllipse(brush, null, new Point(width - 4, height / 2), 3, 3);
+            return;
+        }
+
+        var max = Math.Max(1, _points.Max());
+        var min = 0.0;
+        var range = Math.Max(1, max - min);
+
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            for (var i = 0; i < _points.Count; i++)
+            {
+                var x = (width - 8) * (i / (double)(_points.Count - 1)) + 4;
+                var y = height - 4 - ((_points[i] - min) / range * (height - 8));
+                if (i == 0) ctx.BeginFigure(new Point(x, y), false);
+                else ctx.LineTo(new Point(x, y));
+            }
+        }
+        context.DrawGeometry(null, pen, geometry);
+
+        // 终点高亮实心圆点
+        var lastX = width - 4;
+        var lastY = height - 4 - ((_points[^1] - min) / range * (height - 8));
+        context.DrawEllipse(brush, null, new Point(lastX, lastY), 3.5, 3.5);
     }
 }

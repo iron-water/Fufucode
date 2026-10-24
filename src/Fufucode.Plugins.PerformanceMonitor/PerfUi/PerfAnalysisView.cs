@@ -94,9 +94,6 @@ internal sealed class PerfAnalysisView : UserControl
         SizeChanged += (_, _) => UpdateLayoutForWidth();
     }
 
-    public event Action? RefreshRequested;
-
-    /// <summary>从概览点某一轮进入分析视图。</summary>
     public void ShowTrace(long traceId)
     {
         if (_snapshot?.FindTurn(traceId) is not { } turn) return;
@@ -172,10 +169,8 @@ internal sealed class PerfAnalysisView : UserControl
         {
             if (_snapshot?.LatestSession is { } turn) ShowTurn(turn);
         });
-        var refresh = TextButton("刷新", () => RefreshRequested?.Invoke());
         actions.Children.Add(fit);
         actions.Children.Add(latest);
-        actions.Children.Add(refresh);
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
         head.Children.Add(left);
         Grid.SetColumn(actions, 1);
