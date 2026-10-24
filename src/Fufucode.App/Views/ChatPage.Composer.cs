@@ -131,6 +131,17 @@ public partial class ChatPage
         modeButton.Flyout = modeMenu;
         _executionModeButton = modeButton;
         ComposerModes.Children.Insert(0, modeButton);
+        // 输入区底部图标统一用上方浮层提示（离开 0.3s 消失）。
+        MainViewModel? Vm() => DataContext as MainViewModel;
+        HoverTip.Attach(ComposerMoreButton, () => "附加功能");
+        HoverTip.Attach(AttachContextButton, () => "添加文件、图片、PDF 或链接");
+        HoverTip.Attach(SessionProjectChip, () =>
+            Vm()?.Sidebar.ProjectName is { Length: > 0 } project ? "项目：" + project : "更改此会话的项目");
+        HoverTip.Attach(ModelButton, () => "模型：" + (Vm()?.Settings.SelectedModel.Label ?? "选择模型"));
+        HoverTip.Attach(ThinkingButton, () => "思考：" + (Vm()?.Settings.SelectedThinking?.Label ?? "默认"));
+        HoverTip.Attach(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
+        HoverTip.Attach(SendButton, () => "发送");
+        HoverTip.Attach(StopButton, () => "停止当前回合");
         var menu = new MenuFlyout();
         var preview = new MenuItem { Header = "Markdown 草稿预览" };
         preview.Click += (_, _) => { _previewDraft = !_previewDraft; RefreshComposerTools(); };

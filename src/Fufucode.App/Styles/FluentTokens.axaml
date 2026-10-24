@@ -121,6 +121,7 @@
             <BoxShadows x:Key="FluentPillShadow">0 4 12 0 #26000000</BoxShadows>
             <!-- 设置卡/内容卡的极轻浮起阴影：对齐 Win11 设置页"卡比底色高一线"的层次。 -->
             <BoxShadows x:Key="FluentCardShadow">0 1 2 0 #12000000</BoxShadows>
+            <BoxShadows x:Key="ComposerGlowShadow">0 -8 20 2 #3300CC6A</BoxShadows>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <!-- Accent fills (lighter accents on dark bg) -->
@@ -231,6 +232,7 @@
             <BoxShadows x:Key="FluentToastShadow">0 4 18 0 #80000000</BoxShadows>
             <BoxShadows x:Key="FluentPillShadow">0 4 12 0 #55000000</BoxShadows>
             <BoxShadows x:Key="FluentCardShadow">0 1 3 0 #4D000000</BoxShadows>
+            <BoxShadows x:Key="ComposerGlowShadow">0 -8 26 2 #5500CC6A</BoxShadows>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>
