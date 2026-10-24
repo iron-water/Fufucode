@@ -70,6 +70,13 @@ public sealed class StubExtensionUiSession : IChatSession, IExtensionUiSession
         return request;
     }
 
+    /// <summary>登记一个调用方构造的待决请求（带真实 payload），并广播收到事件。</summary>
+    public void RaiseRequest(ExtensionUiRequest request)
+    {
+        _pending.Add(request);
+        ExtensionUiRequestReceived?.Invoke(request);
+    }
+
     /// <summary>移除并广播关闭事件。</summary>
     public void RaiseClosed(ExtensionUiRequest request)
     {
@@ -79,7 +86,15 @@ public sealed class StubExtensionUiSession : IChatSession, IExtensionUiSession
 
     public void RaiseError(PiExtensionErrorEvent error) => ExtensionError?.Invoke(error);
 
+    /// <summary>记录实际应答；默认会话不消费请求，测试据此断言“应答了哪一条、答的是什么”。</summary>
+    public Action<ExtensionUiRequest, PiExtensionUiResponse>? Responded { get; set; }
+
     public Task RespondToExtensionUiAsync(ExtensionUiRequest request,
-        PiExtensionUiResponse response, CancellationToken cancellationToken = default) =>
-        Task.CompletedTask;
+        PiExtensionUiResponse response, CancellationToken cancellationToken = default)
+    {
+        // 与真实 Core 一致：应答即消费，请求不再挂起（重复应答必须失败）。
+        _pending.Remove(request);
+        Responded?.Invoke(request, response);
+        return Task.CompletedTask;
+    }
 }

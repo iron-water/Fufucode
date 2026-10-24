@@ -24,7 +24,9 @@ public sealed record AppOptions(
     string? DshExecutablePath = null,
     // 并行审阅：允许多个实例同时运行，并用标签区分窗口；不影响正常产品启动。
     bool ParallelReview = false,
-    string? ReviewLabel = null)
+    string? ReviewLabel = null,
+    // 系统通知按钮的协议激活负载（fufucode-approval://...）；普通启动为 null。
+    string? ActivationPayload = null)
 {
     public static readonly AppOptions Mock = new(AppSessionMode.Mock, null, null, null, null);
 
@@ -49,8 +51,16 @@ public sealed record AppOptions(
         string? claude = null;
         string? codex = null;
         string? dsh = null;
+        string? activation = null;
         for (var i = 0; i < args.Length; i++)
         {
+            if (ApprovalLink.LooksLikeApprovalLink(args[i]))
+            {
+                if (!ApprovalLink.TryParse(args[i], out _))
+                    throw new System.ArgumentException("无效的 Fufucode 审批链接");
+                activation = args[i];
+                continue;
+            }
             if (args[i].StartsWith("fufucode:", System.StringComparison.OrdinalIgnoreCase))
             {
                 if (!SessionDeepLink.TryParse(args[i], out session, out project))
@@ -103,6 +113,6 @@ public sealed record AppOptions(
         }
 
         return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp, claude, codex, dsh,
-            parallelReview, reviewLabel);
+            parallelReview, reviewLabel, activation);
     }
 }

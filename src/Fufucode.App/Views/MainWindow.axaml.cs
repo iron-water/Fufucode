@@ -439,7 +439,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             }
 
             _host = host;
-            _dialogHost = new ExtensionUiDialogHost(this);
+            _dialogHost = CreateDialogHost(host.ProjectPath);
             AttachRealSession();
             ProjectPreferences.RecordOpened(host.Manager.Metadata, host.ProjectPath);
             HideStartupOverlay();
@@ -447,6 +447,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             ScrollToEnd();
             Core.Diagnostics.StartupProbe.Mark("session.ready", "startup overlay hidden, timeline scrolled");
             Program.Startup?.FinishAfterRender();
+            // 由系统通知按钮启动的实例：会话就绪后应答那条审批（找不到对应请求就什么也不做）。
+            if (Program.StartupActivationPayload is { } startPayload)
+            {
+                Program.StartupActivationPayload = null;
+                _ = HandleApprovalPayloadAsync(startPayload);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -581,7 +587,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             _options = newOptions;
             await CloseSideChatAsync();
             _host = next;
-            _dialogHost = new ExtensionUiDialogHost(this);
+            _dialogHost = CreateDialogHost(next.ProjectPath);
             await previous.DisposeAsync();
             AttachRealSession();
             ProjectPreferences.RecordOpened(_host.Manager.Metadata, _host.ProjectPath);
@@ -1328,10 +1334,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
     private void ShowStartup(string message, bool inProgress)
     {
-        ReturnStartupPlugins();
         StartupText.Text = message;
         StartupProgress.IsVisible = inProgress;
-        StartupLocalPluginsButton.IsVisible = !inProgress;
         // 失败态（非进行中）显示 interrupted 空态插画；进行中保持原标识。
         StartupArt.IsVisible = !inProgress;
         // 进行中态不显示“打开其他项目…”；失败态由各自 catch 分支决定。
@@ -1702,7 +1706,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         }
         _closed = true;
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Stop();
-        _speech.Dispose();
+        // 语音服务归插件所有：窗口只解除状态广播订阅，进程由插件管理器在停用时释放。
+        Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
         // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
         await ShutdownReverseLabAsync();
         await CloseSideChatAsync();
@@ -1723,7 +1728,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _actions.Changed -= OnShortcutCapabilitiesChanged;
         _shortcuts.Changed -= UpdateShortcutLabels;
         _storageManager.Dispose();
-        _extensionsPage.ReleaseLocalPlugins();
+        _localPluginViewModel?.Dispose();
         _libraryService?.Dispose();
         _palette.Dispose();
         _notifications.Dispose();

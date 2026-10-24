@@ -427,9 +427,9 @@
   <!-- 页面标题：Windows 设置的面包屑用 20px，父级次级色、当前页主色 -->
   <!-- 模型选择器关键字胶囊：标签按钮 + 右侧关闭键，二者共用同一底色。 -->
   <Style Selector="Border.keywordChip">
-    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
-    <Setter Property="CornerRadius" Value="12"/>
-    <Setter Property="Height" Value="24"/>
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Height" Value="26"/>
     <Setter Property="Padding" Value="0"/>
   </Style>
   <Style Selector="Button.keywordChipLabel">
@@ -437,7 +437,8 @@
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="9,0,4,0"/>
     <Setter Property="MinHeight" Value="0"/>
-    <Setter Property="Height" Value="24"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="Cursor" Value="Hand"/>
   </Style>
@@ -449,7 +450,8 @@
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="2,0,6,0"/>
     <Setter Property="MinHeight" Value="0"/>
-    <Setter Property="Height" Value="24"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
     <Setter Property="Cursor" Value="Hand"/>
   </Style>
@@ -1059,6 +1061,38 @@
   <Style Selector="Button.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
+  <!-- 模型选择行：中间灰横条，悬停升高亮；与其它列表行同一套层级。 -->
+  <Style Selector="Button.modelChoiceRow">
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Margin" Value="0,1"/>
+    <Setter Property="Padding" Value="8,5"/>
+  </Style>
+  <Style Selector="Button.modelChoiceRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <!-- 启动卡：深色背景上的一张中间灰卡，图标 + 品牌名 + 主操作。 -->
+  <Style Selector="Border.startupCard">
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="14"/>
+    <Setter Property="Padding" Value="28,26"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
+  </Style>
+  <Style Selector="Border.startupBadge">
+    <Setter Property="Width" Value="48"/>
+    <Setter Property="Height" Value="48"/>
+    <Setter Property="CornerRadius" Value="12"/>
+    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+    <Setter Property="Padding" Value="10"/>
+  </Style>
+  <Style Selector="TextBlock.startupWordmark">
+    <Setter Property="FontSize" Value="24"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
   <!-- 危险确认按钮：透明底 + critical 描边/文字，悬停用 critical 浅底（权限升级确认）。 -->
   <Style Selector="Button.danger">
     <Setter Property="Background" Value="Transparent"/>
@@ -1137,9 +1171,29 @@
   <Style Selector="Button.toolGroupHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent"/>
   </Style>
+  <!-- 工具状态点：小圆点 + 鲜艳语义色。 -->
+  <Style Selector="Border.statusDot">
+    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="Border.statusDot.success">
+    <Setter Property="Background" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+  </Style>
+  <Style Selector="Border.statusDot.critical">
+    <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+  </Style>
+  <Style Selector="Border.statusDot.attention">
+    <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+  </Style>
+  <Style Selector="Border.statusDot.neutral">
+    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <!-- 工具卡本身也是横条：悬停升高亮。 -->
+  <Style Selector="Border.toolCard.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
   <Style Selector="Border.toolCard">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBaseHighlight}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
   </Style>

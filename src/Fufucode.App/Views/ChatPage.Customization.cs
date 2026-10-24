@@ -16,6 +16,11 @@ public partial class ChatPage
 
     /// <summary>语音朗读服务：由宿主注入；未安装语音插件时为 null（按钮不显示）。</summary>
     internal Fufucode.Core.Plugins.ISpeechService? SpeechService { get; set; }
+    /// <summary>插件安装/启停后让已渲染的消息操作条重新判断“朗读”按钮是否显示。</summary>
+    internal void RefreshSpeechAvailability()
+    {
+        foreach (var actions in this.GetVisualDescendants().OfType<MessageActionsView>()) actions.RefreshAvailability();
+    }
     private AppActionRegistry? _workbenchActions;
     internal void AttachWorkbenchActions(AppActionRegistry actions) => _workbenchActions = actions;
     internal void SetHeaderMenu(MenuFlyout menu)
@@ -42,8 +47,12 @@ public partial class ChatPage
             Motion.SetVisible(ComposerCard, composerVisible, offsetY: 8);
             Motion.SetVisible(ComposerRevealButton, !composerVisible);
         }
-        // 沉浸式收起时由窗口层保留重新展开入口；这里只控制卡片本身。
-        ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
+        // 输入区始终与阅读宽度对齐：正文多宽，输入框就多宽；
+        // “自由”宽度（Infinity）时才铺满可用区域。
+        ComposerCard.MaxWidth = settings.ReadWidth;
+        ComposerCard.HorizontalAlignment = double.IsInfinity(settings.ReadWidth)
+            ? HorizontalAlignment.Stretch
+            : HorizontalAlignment.Center;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
         else ComposerCard.ClearValue(Border.CornerRadiusProperty);

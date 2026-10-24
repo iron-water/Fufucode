@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using System.IO;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
@@ -19,6 +20,7 @@ public partial class ChatPage
     private readonly ComboBox _executionMode = new() { MinWidth = 112, MinHeight = 28, FontSize = 11 };
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
+    private Button? _executionModeButton;
     private bool _previewDraft;
     private void InitializeComposerTools()
     {
@@ -27,6 +29,12 @@ public partial class ChatPage
         { e.DragEffects = e.DataTransfer.TryGetFiles() is not null ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; });
         ComposerCard.AddHandler(DragDrop.DropEvent, async (_, e) =>
         { e.Handled = true; await AttachFilesAsync(e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()).OfType<string>() ?? []); });
+        // 粘贴：剪贴板里有文件或图片时作为附件加入；否则保持默认文本粘贴。
+        InputBox.AddHandler(KeyDownEvent, async (_, e) =>
+        {
+            if (e.Key != Key.V || !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+            if (await TryPasteAttachmentsAsync()) e.Handled = true;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
         _executionMode.ItemsSource = new[] { "人工确认", "自动审批", "完全访问", "规划模式" };
         ToolTip.SetTip(_executionMode, "自动审批允许内置文件编辑，Shell/未知工具仍需确认；规划模式只允许内置读取工具。不是系统沙箱。");
         _executionMode.SelectionChanged += async (_, _) =>
@@ -116,7 +124,13 @@ public partial class ChatPage
             catch (Exception error) { ReportActionError("权限模式切换失败：" + error.Message); }
             finally { RefreshComposerTools(); }
         };
-        ComposerModes.Children.Add(_executionMode);
+        // 权限模式：底部只留一个小图标，点开才是选项列表；文字进 tooltip。
+        var modeButton = WorkbenchUi.IconButton("ShieldCheckmark", "权限模式", 30);
+        var modeMenu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+        modeMenu.Opening += (_, _) => BuildExecutionModeMenu(modeMenu);
+        modeButton.Flyout = modeMenu;
+        _executionModeButton = modeButton;
+        ComposerModes.Children.Insert(0, modeButton);
         var menu = new MenuFlyout();
         var preview = new MenuItem { Header = "Markdown 草稿预览" };
         preview.Click += (_, _) => { _previewDraft = !_previewDraft; RefreshComposerTools(); };
@@ -144,6 +158,75 @@ public partial class ChatPage
         }
         AttachContextButton.Flyout = attachments;
     }
+    private void BuildExecutionModeMenu(MenuFlyout menu)
+    {
+        menu.Items.Clear();
+        var labels = _executionMode.ItemsSource as System.Collections.IEnumerable;
+        if (labels is null) return;
+        var index = 0;
+        foreach (var label in labels)
+        {
+            var captured = index++;
+            var text = label?.ToString() ?? string.Empty;
+            var item = new MenuItem
+            {
+                Header = (captured == _executionMode.SelectedIndex ? "✓  " : "    ") + text,
+                IsEnabled = _executionMode.IsEnabled,
+            };
+            item.Click += (_, _) => _executionMode.SelectedIndex = captured;
+            menu.Items.Add(item);
+        }
+    }
+
+    /// <summary>思考等级菜单：图标按钮点开后列出可选档位（不支持的置灰）。</summary>
+    internal void ThinkingFlyout_Opening(object? sender, EventArgs e)
+    {
+        if (sender is not MenuFlyout menu || DataContext is not MainViewModel vm) return;
+        menu.Items.Clear();
+        foreach (var choice in vm.Settings.ThinkingChoices)
+        {
+            var captured = choice;
+            var current = Equals(vm.Settings.SelectedThinking, captured);
+            var item = new MenuItem
+            {
+                Header = (current ? "✓  " : "    ") + captured.Label,
+                IsEnabled = captured.IsSupported,
+            };
+            item.Click += (_, _) => vm.Settings.SelectedThinking = captured;
+            menu.Items.Add(item);
+        }
+    }
+
+    /// <summary>剪贴板附件：文件列表、常见图片格式（字节流）。成功时返回 true。</summary>
+    private async System.Threading.Tasks.Task<bool> TryPasteAttachmentsAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return false;
+        try
+        {
+            var transfer = await clipboard.TryGetDataAsync();
+            if (transfer is null) return false;
+            if (await transfer.TryGetFilesAsync() is { Length: > 0 } files)
+            {
+                var paths = files.Select(item => item.TryGetLocalPath()).OfType<string>().ToArray();
+                if (paths.Length > 0) { await AttachFilesAsync(paths); return true; }
+            }
+            // 图片：剪贴板里通常是 PNG 字节流；落成临时文件后按普通附件处理。
+            foreach (var (name, extension) in new[] { ("PNG", ".png"), ("image/png", ".png"), ("image/jpeg", ".jpg"), ("image/bmp", ".bmp") })
+            {
+                var bytes = await transfer.TryGetValueAsync<byte[]>(DataFormat.CreateBytesPlatformFormat(name));
+                if (bytes is { Length: > 0 })
+                {
+                    var path = Path.Combine(Path.GetTempPath(), "fufucode-paste-" + Guid.NewGuid().ToString("N") + extension);
+                    await File.WriteAllBytesAsync(path, bytes);
+                    await AttachFilesAsync(new[] { path });
+                    return true;
+                }
+            }
+        }
+        catch (Exception error) { ReportActionError("粘贴附件失败：" + error.Message); }
+        return false;
+    }
+
     private async System.Threading.Tasks.Task PickAttachmentAsync(string kind)
     {
         if (TopLevel.GetTopLevel(this) is not MainWindow owner) return;
@@ -209,8 +292,15 @@ public partial class ChatPage
         {
             _executionMode.SelectedIndex = Array.IndexOf(_modes, vm.Input.ExecutionMode);
             _executionMode.IsEnabled = vm.Input.CanChangeExecutionMode;
-            // 后端不支持执行模式（例如 FUMO 原生内核）时整个控件隐藏，不留一个点不动的死下拉。
-            _executionMode.IsVisible = vm.Input.ShowsExecutionMode;
+            // 后端不支持执行模式（例如 FUMO 原生内核）时隐藏入口，不留死按钮。
+            if (_executionModeButton is not null)
+            {
+                _executionModeButton.IsEnabled = vm.Input.CanChangeExecutionMode;
+                _executionModeButton.IsVisible = vm.Input.ShowsExecutionMode;
+                ToolTip.SetTip(_executionModeButton, "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
+            }
+            ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
+            ToolTip.SetTip(ThinkingButton, "思考：" + (vm.Settings.SelectedThinking?.Label ?? "默认"));
         }
         finally { _updatingComposer = false; }
         DraftPreview.IsVisible = _previewDraft;
