@@ -1,5 +1,11 @@
 using System.Text;
+using Avalonia;
+using Avalonia.Headless;
 using Fufucode.App.Features.FilePreview;
+
+AppBuilder.Configure<Application>()
+    .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
+    .SetupWithoutStarting();
 
 var passed = 0;
 var root = Path.Combine(Path.GetTempPath(), "fufucode-file-preview-" + Guid.NewGuid().ToString("N"));
@@ -60,6 +66,23 @@ try
     await File.WriteAllTextAsync(markdownPath, "# Demo\n\n```csharp\nvar x = 1;\n```");
     var markdown = await registry.Resolve(new(root, markdownPath))!.LoadAsync(new(root, markdownPath), CancellationToken.None);
     Check(markdown.Kind == FilePreviewKind.Markdown && markdown.Text!.Contains("```csharp"), "Markdown 保留代码块");
+
+    var textControl = new TextPreviewControl("alpha\nbeta alpha\nALPHA");
+    Check(textControl.Find("alpha") == "1/3 · 第 1 行", "文本查找首个匹配");
+    Check(textControl.Find("alpha") == "2/3 · 第 2 行", "文本查找前进循环");
+    Check(textControl.Find("alpha", forward: false) == "1/3 · 第 1 行", "文本查找后退");
+    textControl.SetWordWrap(true);
+    Check(textControl.IsWordWrapEnabled, "文本自动换行开关");
+
+    var imageControl = new ImagePreviewControl(Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));
+    imageControl.ZoomBy(2);
+    imageControl.RotateBy(90);
+    imageControl.ToggleCheckerboard();
+    Check(imageControl.Zoom == 2 && imageControl.RotationDegrees == 90 && imageControl.IsCheckerboard,
+        "图片缩放旋转棋盘状态");
+    imageControl.SetFitMode();
+    Check(imageControl.Zoom == 1 && imageControl.IsFitMode, "图片适配模式");
 
     using var cancellation = new CancellationTokenSource();
     cancellation.Cancel();

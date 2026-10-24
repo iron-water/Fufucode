@@ -25,6 +25,31 @@ public sealed class FilePreviewHost : ContentControl, IDisposable
     public bool CanGoBack => _historyIndex > 0;
     public bool CanGoForward => _historyIndex >= 0 && _historyIndex < _history.Count - 1;
     public event EventHandler? PreviewChanged;
+    public string FindStatus => Content is TextPreviewControl text ? text.FindStatus : string.Empty;
+    public bool IsWordWrapEnabled => Content is TextPreviewControl text && text.IsWordWrapEnabled;
+    public ImagePreviewControl? ImageContent => Content as ImagePreviewControl;
+
+    public string Find(string? query, bool forward = true)
+    {
+        var status = Content is TextPreviewControl text ? text.Find(query, forward) : string.Empty;
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
+        return status;
+    }
+
+    public void ToggleWordWrap()
+    {
+        if (Content is not TextPreviewControl text) return;
+        text.SetWordWrap(!text.IsWordWrapEnabled);
+        PreviewChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void ImageZoomIn() => ImageContent?.ZoomBy(1.25);
+    public void ImageZoomOut() => ImageContent?.ZoomBy(0.8);
+    public void ImageFit() => ImageContent?.SetFitMode();
+    public void ImageOriginal() => ImageContent?.SetOriginalSize();
+    public void ImageRotateLeft() => ImageContent?.RotateBy(-90);
+    public void ImageRotateRight() => ImageContent?.RotateBy(90);
+    public void ImageToggleCheckerboard() => ImageContent?.ToggleCheckerboard();
 
     public async Task OpenAsync(string projectRoot, string path, bool addHistory = true,
         CancellationToken cancellationToken = default)

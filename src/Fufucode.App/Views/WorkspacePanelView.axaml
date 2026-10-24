@@ -143,8 +143,24 @@
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Classes="caption" Text="{Binding PreviewResult.DisplayType}" VerticalAlignment="Center"/>
             <TextBlock Classes="caption mono" Text="{Binding PreviewResult.Format}" VerticalAlignment="Center"/>
-            <Button Classes="subtle" Content="查找" Padding="7,2" ToolTip.Tip="在当前预览内查找"/>
-            <Button Classes="subtle" Content="换行" Padding="7,2" ToolTip.Tip="切换文本换行"/>
+            <TextBox x:Name="PreviewFindBox" Width="150" PlaceholderText="查找文本" Padding="6,2"
+                     IsVisible="{Binding IsTextPreviewToolbar}" TextChanged="PreviewFindBox_TextChanged"
+                     AutomationProperties.Name="预览内查找"/>
+            <Button Classes="subtle" Content="上一个" Padding="7,2" Command="{Binding FindPreviousCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <Button Classes="subtle" Content="下一个" Padding="7,2" Command="{Binding FindNextCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <TextBlock Classes="caption" Text="{Binding FindStatus}" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <Button Classes="subtle" Content="换行" Padding="7,2" Command="{Binding TogglePreviewWordWrapCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}" ToolTip.Tip="切换文本换行"/>
+            <Button Classes="subtle" Content="缩小" Padding="7,2" Command="{Binding ZoomImageOutCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="放大" Padding="7,2" Command="{Binding ZoomImageInCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="适配" Padding="7,2" Command="{Binding FitImageCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="原始尺寸" Padding="7,2" Command="{Binding OriginalImageCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="↶" Padding="7,2" Command="{Binding RotateImageLeftCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向左旋转"/>
+            <Button Classes="subtle" Content="↷" Padding="7,2" Command="{Binding RotateImageRightCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向右旋转"/>
+            <Button Classes="subtle" Content="棋盘" Padding="7,2" Command="{Binding ToggleImageCheckerboardCommand}" IsVisible="{Binding IsImagePreview}"/>
             <Button Classes="subtle" Content="复制路径" Padding="7,2" Command="{Binding CopyPreviewPathCommand}"/>
             <Button Classes="subtle" Content="复制源码" Padding="7,2" Command="{Binding CopyPreviewSourceCommand}" IsVisible="{Binding CanCopyPreviewSource}"/>
             <Button Classes="subtle" Content="系统打开" Padding="7,2" Click="OpenPreviewInSystem_Click"/>

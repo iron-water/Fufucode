@@ -211,6 +211,10 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             OnPropertyChanged(nameof(CanPreviewBack));
             OnPropertyChanged(nameof(CanPreviewForward));
             OnPropertyChanged(nameof(IsPreviewLoading));
+            OnPropertyChanged(nameof(FindStatus));
+            OnPropertyChanged(nameof(IsPreviewWordWrapEnabled));
+            OnPropertyChanged(nameof(IsImagePreview));
+            OnPropertyChanged(nameof(IsTextPreviewToolbar));
         };
         RecreateTabs("unattached");
     }
@@ -265,6 +269,11 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     public bool CanPreviewBack => _previewHost.CanGoBack;
     public bool CanPreviewForward => _previewHost.CanGoForward;
     public bool IsPreviewLoading => PreviewResult is null && IsFilePreviewOpen;
+    public string FindQuery { get; private set; } = string.Empty;
+    public string FindStatus => _previewHost.FindStatus;
+    public bool IsPreviewWordWrapEnabled => _previewHost.IsWordWrapEnabled;
+    public bool IsImagePreview => PreviewResult?.Kind == FilePreviewKind.Image;
+    public bool IsTextPreviewToolbar => !IsImagePreview;
     public bool HasSelectedTab => SelectedTab is not null;
 
     [ObservableProperty] private bool _isFilePreviewOpen;
@@ -290,6 +299,25 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         if (PreviewResult?.Text is { } source && CanCopyPreviewSource)
             await _clipboard.SetTextAsync(source);
     }
+
+    public void SetFindQuery(string? query) => FindQuery = query ?? string.Empty;
+
+    [RelayCommand]
+    private void FindNext() => _previewHost.Find(FindQuery, forward: true);
+
+    [RelayCommand]
+    private void FindPrevious() => _previewHost.Find(FindQuery, forward: false);
+
+    [RelayCommand]
+    private void TogglePreviewWordWrap() => _previewHost.ToggleWordWrap();
+
+    [RelayCommand] private void ZoomImageIn() => _previewHost.ImageZoomIn();
+    [RelayCommand] private void ZoomImageOut() => _previewHost.ImageZoomOut();
+    [RelayCommand] private void FitImage() => _previewHost.ImageFit();
+    [RelayCommand] private void OriginalImage() => _previewHost.ImageOriginal();
+    [RelayCommand] private void RotateImageLeft() => _previewHost.ImageRotateLeft();
+    [RelayCommand] private void RotateImageRight() => _previewHost.ImageRotateRight();
+    [RelayCommand] private void ToggleImageCheckerboard() => _previewHost.ImageToggleCheckerboard();
 
     [RelayCommand]
     private Task PreviewBackAsync() => _previewHost.GoBackAsync();
