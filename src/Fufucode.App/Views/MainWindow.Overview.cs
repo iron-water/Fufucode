@@ -32,6 +32,7 @@ public partial class MainWindow
     private bool _allProjectsCollapsed;
     private bool _allSectionsCollapsed;
     private bool _looseSessionsCollapsed;
+    private bool _pinnedCollapsed;
     // 项目内默认先显示最近活动的几条会话，其余折叠起来。
     private const int ProjectSessionPreview = 4;
 
@@ -151,35 +152,38 @@ public partial class MainWindow
             }
             return;
         }
-        OverviewHeading("置顶");
-        var pinned = all.Where(s => SessionPresentation.Load(_host!.Manager.Metadata, s.Id).Pinned).ToArray();
-        OverviewSessionGroup(pinned, organization);
-        if (pinned.Length == 0) OverviewEmpty("无置顶会话");
-        // “分区”整条可点：收起/展开下面所有分区（与“项目”同一套交互）。
+        // “置顶”“分区”“项目”“会话”四个分组标题同一套交互：
+        // 整条可点、按下才出现二级色、箭头指示展开状态；空分组不画占位行。
+        var pinnedHeading = OverviewCollapsibleHeading("置顶", _pinnedCollapsed,
+            () => _pinnedCollapsed = !_pinnedCollapsed);
+        AutomationProperties.SetAutomationId(pinnedHeading, "pinned.heading");
+        if (!_pinnedCollapsed)
+        {
+            var pinned = all.Where(s => SessionPresentation.Load(_host!.Manager.Metadata, s.Id).Pinned).ToArray();
+            OverviewSessionGroup(pinned, organization);
+        }
         var sectionsHeading = OverviewCollapsibleHeading("分区", _allSectionsCollapsed,
             () => _allSectionsCollapsed = !_allSectionsCollapsed);
         AutomationProperties.SetAutomationId(sectionsHeading, "sections.heading");
-        if (_allSectionsCollapsed)
+        if (!_allSectionsCollapsed)
         {
-            OverviewEmpty(state.Sections.Count == 0 ? "无分区" : "分区已收起");
-        }
-        else foreach (var section in state.Sections)
-        {
-            var sectionCollapsed = _collapsedSections.Contains(section.Id);
-            var header = OverviewCollapsibleHeading(section.Name, sectionCollapsed, () =>
+            foreach (var section in state.Sections)
             {
-                if (!_collapsedSections.Add(section.Id)) _collapsedSections.Remove(section.Id);
-            }, 8);
-            AutomationProperties.SetAutomationId(header, "section.row." + section.Id);
-            header.ContextMenu = OverviewContextMenu();
-            header.ContextMenu.Items.Add(OverviewMenu("重命名", () => EditSectionAsync(section)));
-            if (sectionCollapsed) continue;
-            foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId == section.Id))
-                OverviewProjectRow(project, organization, all);
-            OverviewSessionGroup(all.Where(s => organization.Placement(s.Id).SectionId == section.Id &&
-                organization.Placement(s.Id).ProjectId is null), organization);
+                var sectionCollapsed = _collapsedSections.Contains(section.Id);
+                var header = OverviewCollapsibleHeading(section.Name, sectionCollapsed, () =>
+                {
+                    if (!_collapsedSections.Add(section.Id)) _collapsedSections.Remove(section.Id);
+                }, 8);
+                AutomationProperties.SetAutomationId(header, "section.row." + section.Id);
+                header.ContextMenu = OverviewContextMenu();
+                header.ContextMenu.Items.Add(OverviewMenu("重命名", () => EditSectionAsync(section)));
+                if (sectionCollapsed) continue;
+                foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId == section.Id))
+                    OverviewProjectRow(project, organization, all);
+                OverviewSessionGroup(all.Where(s => organization.Placement(s.Id).SectionId == section.Id &&
+                    organization.Placement(s.Id).ProjectId is null), organization);
+            }
         }
-        if (state.Sections.Count == 0) OverviewEmpty("无分区");
         var projectsHeading = OverviewCollapsibleHeading("项目", _allProjectsCollapsed,
             () => _allProjectsCollapsed = !_allProjectsCollapsed);
         AutomationProperties.SetAutomationId(projectsHeading, "projects.heading");
@@ -203,7 +207,6 @@ public partial class MainWindow
                 return s.ProjectId == scratch?.Id;
             }).OrderByDescending(SessionActivityAt).ToArray();
             OverviewSessionGroup(loose, organization);
-            if (loose.Length == 0) OverviewEmpty("没有不在项目中的会话");
         }
         if (_host is null)
             foreach (var demo in _vm.Sidebar.Sessions)
