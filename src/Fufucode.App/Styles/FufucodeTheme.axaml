@@ -484,9 +484,15 @@
     <Style Selector="Button.iconButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
     </Style>
+    <!-- 二级面（卡片/顶栏/停靠区/设置行/输入卡）上的图标：悬停升到亮色。
+         一级面（聊天时间线等）保持默认的二级色。 -->
     <Style Selector="Border.chromeBar Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
                      Border.dockHost Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
-                     Border.settingsRow Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+                     Border.settingsRow Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Border.card Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Border.toolCard Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Border.overviewGroup Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Border.composerCard Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
     </Style>
     <Style Selector="Button.iconButton:pressed">
@@ -701,8 +707,7 @@
 
     <!-- ================= 输入区（composer） ================= -->
     <Style Selector="Border.composerCard">
-        <!-- 输入区落在页面底（一级），不再抬高一层；图标悬停用二级色即可辨认。 -->
-        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
