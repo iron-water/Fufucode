@@ -705,11 +705,10 @@
         </Setter>
     </Style>
     <!-- 聚焦时描边转 accent：一眼看出焦点在输入区（Windows 文本框同语义）。 -->
-    <!-- 聚焦不用硬描边：上方淡绿色模糊辉光；描边与下划线全部隐藏，避免聚焦瞬间闪一条线。 -->
+    <!-- 聚焦不再用 BoxShadow（会形成一圈很重的绿光）；辉光只由 ComposerGlowBand 表达。 -->
     <Style Selector="Border.composerCard:focus-within">
         <Setter Property="BorderBrush" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="BoxShadow" Value="{DynamicResource ComposerGlowShadow}"/>
     </Style>
     <Style Selector="TextBox.composerInput">
         <Setter Property="Background" Value="Transparent"/>

@@ -1064,6 +1064,22 @@
   <Style Selector="Button.subtle.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
+  <!-- 窗口内图标提示：与卡片同一套栏层配色。 -->
+  <Style Selector="Border#TipBox">
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
+  </Style>
+  <Style Selector="Border#TipBox TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <!-- 输入区聚焦光带：宿主内获得焦点时点亮。 -->
+  <Style Selector="StackPanel#ComposerHost:focus-within Border#ComposerGlowBand">
+    <Setter Property="Opacity" Value="1"/>
+  </Style>
   <!-- 输入区聚焦光带：淡入淡出。 -->
   <Style Selector="Border#ComposerGlowBand">
     <Setter Property="Transitions">

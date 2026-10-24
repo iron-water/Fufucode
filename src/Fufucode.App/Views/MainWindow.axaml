@@ -178,5 +178,11 @@
       </Button>
       <ContentControl x:Name="IslandOverlayHost" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,52,0,0"/>
     </Panel>
+    <!-- 图标提示层：窗口内浮层，不用 Popup。位置按目标控件计算，显示在图标上方。 -->
+    <Panel x:Name="TipLayer" Grid.RowSpan="3" ZIndex="60" IsVisible="False" IsHitTestVisible="False">
+      <Border x:Name="TipBox" HorizontalAlignment="Left" VerticalAlignment="Top">
+        <TextBlock x:Name="TipText" FontSize="11"/>
+      </Border>
+    </Panel>
   </Grid>
 </Window>
