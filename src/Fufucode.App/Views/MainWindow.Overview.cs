@@ -122,8 +122,11 @@ public partial class MainWindow
         _overview.Toolbar.Children.Add(toolbar);
         var metadataForArchive = MetadataOrMock();
         var archivedProjects = ProjectArchive.LoadSet(metadataForArchive);
-        var all = OverviewSessions().Where(s => s.Id == CurrentSessionId ||
-            !SessionArchive.IsArchived(metadataForArchive, s, archivedProjects)).ToArray();
+        // 空会话（还没发第一条消息）不进入会话管理。
+        var all = OverviewSessions()
+            .Where(s => SessionPresence.IsEstablished(metadataForArchive, s))
+            .Where(s => s.Id == CurrentSessionId ||
+                !SessionArchive.IsArchived(metadataForArchive, s, archivedProjects)).ToArray();
         if (state.ActivityView)
         {
             OverviewHeading("优先级");

@@ -394,20 +394,8 @@ public partial class MainWindow
         _ => "fumo",
     };
 
-    private static bool HasUserMessage(Fufucode.Core.SessionRecord session)
-    {
-        if (session.FilePath is not { Length: > 0 } path || !File.Exists(path)) return false;
-        try
-        {
-            // FUMO/协议后端：JSON 里的 messages 数组；Pi：JSONL 每行一条。
-            var text = File.ReadAllText(path);
-            if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-                return text.Contains("\"Role\": 1", StringComparison.Ordinal) ||
-                       text.Contains("\"Role\":1", StringComparison.Ordinal);
-            return text.Contains("\"role\":\"user\"", StringComparison.Ordinal);
-        }
-        catch (Exception) { return true; }
-    }
+    private bool HasUserMessage(Fufucode.Core.SessionRecord session) =>
+        SessionPresence.HasUserMessage(MetadataOrMock(), session);
 
     private void AttachWorkspaceContext(MainViewModel vm)
     {
@@ -483,6 +471,9 @@ public partial class MainWindow
             if (args.PropertyName == nameof(ViewModels.SettingsPageViewModel.CurrentPageId) &&
                 _shortcutsPage.ActiveGroup != vm.Settings.ShortcutsGroupId)
                 _shortcutsPage.SyncGroup(vm.Settings.ShortcutsGroupId);
+            // 设置里改了默认后端：会话管理“新建会话”条上的当前后端同步刷新。
+            if (args.PropertyName == nameof(ViewModels.SettingsPageViewModel.BackendStatusText))
+                RefreshNewSessionBackends();
         };
         vm.Settings.StorageContent = _storagePage;
         // 设置 → 已归档：项目/会话归档管理。宿主更换或数据根变化时重建控件。

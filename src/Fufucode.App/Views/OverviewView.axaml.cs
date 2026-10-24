@@ -1,5 +1,7 @@
-using System;
+using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Fufucode.App.ViewModels;
 
 namespace Fufucode.App.Views;
@@ -10,26 +12,23 @@ public partial class OverviewView : UserControl
     public StackPanel Toolbar => ManagementToolbar;
     public StackPanel Body => ManagementBody;
 
-    /// <summary>新建会话右侧的下拉：列出六类后端，不可用项禁用。</summary>
-    private void NewSessionFlyout_Opening(object? sender, EventArgs e)
+    /// <summary>后端条：点击展开下拉，选哪个后端就用哪个新建会话。</summary>
+    private void BackendChip_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is not MenuFlyout flyout) return;
-        flyout.Items.Clear();
-        if (DataContext is not MainViewModel viewModel) return;
+        if (sender is not Button button || DataContext is not MainViewModel viewModel) return;
+        if (!viewModel.Sidebar.HasBackendChoice) return;
+        var flyout = new MenuFlyout();
         foreach (var option in viewModel.Sidebar.NewSessionBackends)
         {
             flyout.Items.Add(new MenuItem
             {
-                Header = option.Label,
+                Header = option.IsDefault ? option.Label + "（默认）" : option.Label,
                 IsEnabled = option.Available,
                 Command = viewModel.Sidebar.NewSessionWithBackendCommand,
                 CommandParameter = option.Key,
             });
         }
-
-        if (flyout.Items.Count == 0)
-        {
-            flyout.Items.Add(new MenuItem { Header = "使用默认后端新建会话", Command = viewModel.Sidebar.NewSessionCommand });
-        }
+        flyout.ShowAt(button);
+        e.Handled = true;
     }
 }
