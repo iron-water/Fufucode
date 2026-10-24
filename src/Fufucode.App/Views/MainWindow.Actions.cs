@@ -334,22 +334,9 @@ public partial class MainWindow
         };
         panel.Children.Add(custom); return ShowPanelAsync("打开方式", panel);
     }
-    private async Task ShowLocalDocumentAsync(string relative)
-    {
-        var path = Path.Combine(FindRepositoryRoot(), relative);
-        if (!File.Exists(path)) throw new FileNotFoundException("本地文档不可用", path);
-        await ShowTextAsync(Path.GetFileName(path), await File.ReadAllTextAsync(path));
-    }
-    private static string FindRepositoryRoot()
-    {
-        foreach (var start in new[] { Environment.CurrentDirectory, AppContext.BaseDirectory })
-            for (var directory = new DirectoryInfo(start); directory is not null; directory = directory.Parent)
-                if (File.Exists(Path.Combine(directory.FullName, "docs", "AI_DEVELOPMENT_PLAN.md"))) return directory.FullName;
-        return AppContext.BaseDirectory;
-    }
     private Task ShowDiagnosticsAsync() => ShowTextAsync("系统状态与故障排除", DiagnosticSummary());
 
-    /// <summary>关于 Fufucode：版本与数据目录，并把文档、新功能、反馈三个入口收进这里。</summary>
+    /// <summary>关于 Fufucode：版本与数据目录，并把反馈入口收进这里。</summary>
     private Task ShowAboutAsync()
     {
         var panel = new StackPanel { Spacing = 10, MinWidth = 380 };
@@ -359,13 +346,9 @@ public partial class MainWindow
         panel.Children.Add(new TextBlock { Text = "版本 " + version, TextWrapping = Avalonia.Media.TextWrapping.Wrap, Opacity = .75, FontSize = 12 });
         panel.Children.Add(new TextBlock { Text = "数据目录：" + _options.CreateAppDataLayout().Root, TextWrapping = Avalonia.Media.TextWrapping.Wrap, Opacity = .75, FontSize = 12 });
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-        var docs = new Button { Content = "文档" };
-        docs.Click += async (_, _) => await ShowLocalDocumentAsync("docs/AI_DEVELOPMENT_PLAN.md");
-        var changes = new Button { Content = "新功能" };
-        changes.Click += async (_, _) => await ShowLocalDocumentAsync("docs/decisions.md");
         var feedback = new Button { Content = "反馈问题" };
         feedback.Click += async (_, _) => await ExportDiagnosticsAsync();
-        actions.Children.Add(docs); actions.Children.Add(changes); actions.Children.Add(feedback);
+        actions.Children.Add(feedback);
         panel.Children.Add(actions);
         return ShowPanelAsync("关于 Fufucode", panel);
     }

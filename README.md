@@ -16,7 +16,6 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `tools/` | Native launcher and CLI forwarder | yes |
 | `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
 | `tests/` | Executable verification suites | yes |
-| `docs/` | Current authority, design, tasks, records and evidence; start at `docs/README.md` | yes |
 | `android/` | WorkBuddy-style mobile client | yes |
 | `assets/` | Product visual assets | yes |
 | `extensions/` | Optional extension payloads | yes |
@@ -39,56 +38,6 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 ```bash
 dotnet build Fufucode.sln -c Release
 ```
-
-Local development build and deploy:
-
-```bash
-pwsh fucode/publish-local.ps1
-```
-
-## Parallel feature review
-
-Several models can work at once without sharing a worktree or overwriting `out/app`:
-
-```bash
-pwsh fucode/feature-worktree.ps1 -Name review-ui
-```
-
-Small fixes can stay on `main`; large or blocking features use a worktree. Publish either lane
-with one command:
-
-```bash
-pwsh fucode/feature-publish.ps1          # feature worktree
-pwsh fucode/feature-publish.ps1 -Main    # small change on main
-```
-
-The script refuses `main`, checks that the worktree is clean, generates the
-`branch@commit` label, builds into the main worktree's `out/review/<branch>`, verifies the
-result, and **launches the new window immediately**. Re-publishing the same feature closes
-its previous window first; other features and the user's main instance keep running.
-
-Each build lands in `out/review/<branch>`, has a `branch@commit` label, and uses its own
-`--data-root` and window title. The review board is only an inventory/fallback:
-
-```bash
-pwsh fucode/review-parallel.ps1 -NoBuild -Open
-```
-
-After the user approves a feature, merge it with a guard that only accepts a clean,
-main-synchronized branch:
-
-```bash
-pwsh fucode/feature-merge.ps1 -Name review-ui
-```
-
-Cleanup is refused unless the worktree is clean and merged:
-
-```bash
-pwsh fucode/feature-worktree.ps1 -Name review-ui -Remove
-```
-
-See [docs/operations/parallel-review.md](docs/operations/parallel-review.md) for the workflow and
-[docs/tasks/parallel-feature-brief.md](docs/tasks/parallel-feature-brief.md) for the model-facing rules.
 
 ## CLI
 
@@ -150,3 +99,4 @@ Closing the window exits Fufucode by default. Enable **Settings → Other → Ba
 ## Status
 
 Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
+plication code has no licence file yet.
