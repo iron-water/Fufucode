@@ -201,6 +201,13 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _vm = vm;
         // 发送交互：乐观气泡与等待提示只依赖 UI 事件，所有后端表现一致。
         vm.Input.SubmissionStarted += vm.Timeline.BeginSubmission;
+        // 第一条用户消息发出时才把会话标记为已成立，列表随即出现该会话。
+        vm.Input.SubmissionStarted += _ =>
+        {
+            if (_host is null) return;
+            SessionPresence.MarkEstablished(_host.Manager.Metadata, _host.Current.Session.Id);
+            Dispatcher.UIThread.Post(() => { RefreshSessionList(); RenderOverview(); });
+        };
         vm.Input.SubmissionFailed += vm.Timeline.FailSubmission;
         vm.NavigateRequested = NavigateWorkspaceAsync;
         vm.Timeline.ScrollToEndRequested += OnScrollToEndRequested;
@@ -1008,7 +1015,9 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         var currentId = host.Current.Session.Id;
         var currentModel = host.Chat.CurrentModel;
         var archivedProjects = ProjectArchive.LoadSet(host.Manager.Metadata);
-        return host.Sessions.Where(record => record.Id == currentId ||
+        // 还没发过第一条消息的空会话不进入列表（包括当前会话）：会话在第一次发送时才“成立”。
+        return host.Sessions.Where(record => SessionPresence.IsEstablished(host.Manager.Metadata, record))
+            .Where(record => record.Id == currentId ||
                 !SessionArchive.IsArchived(host.Manager.Metadata, record, archivedProjects))
             .OrderByDescending(record => SessionPresentation.Load(host.Manager.Metadata, record.Id).Pinned).Select(record =>
         {
@@ -1171,6 +1180,24 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         }
     }
 
+    /// <summary>
+    /// 当前项目里可复用的空会话：同一后端、既没有名字也没有用户消息、未归档，
+    /// 并且不是当前会话。找不到时返回 null，由调用方新建。
+    /// </summary>
+    private SessionRecord? FindReusableEmptySession(BackendId backend)
+    {
+        if (_host is null) return null;
+        var metadata = _host.Manager.Metadata;
+        var archivedProjects = ProjectArchive.LoadSet(metadata);
+        return _host.Sessions.FirstOrDefault(record =>
+            record.Id != _host.Current.Session.Id &&
+            record.Backend == backend &&
+            string.IsNullOrWhiteSpace(record.Name) &&
+            !SessionPresentation.Load(metadata, record.Id).HasUserMessage &&
+            !SessionArchive.IsArchived(metadata, record, archivedProjects) &&
+            !SessionPresence.HasUserMessage(metadata, record));
+    }
+
     /// <summary>切换（或新建）会话：先落当前草稿，换会话后整体重建视图模型。</summary>
     private async Task SwitchSessionAsync(string? sessionId, BackendId? requestedBackend = null)
     {
@@ -1211,7 +1238,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 {
                     if (sessionId is null)
                     {
-                        await _host!.NewSessionAsync(cancellationToken: _bootstrapCts.Token, backend: newBackend);
+                        // 已经有一个还没发消息的空会话时直接复用它，
+                        // 避免归档后每次“新建”都在项目里堆一条空会话。
+                        if (FindReusableEmptySession(newBackend) is { } empty)
+                            await _host!.SwitchToAsync(empty.Id, _bootstrapCts.Token);
+                        else
+                            await _host!.NewSessionAsync(cancellationToken: _bootstrapCts.Token, backend: newBackend);
                     }
                     else
                     {
@@ -1551,6 +1583,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         var archivedProjects = ProjectArchive.LoadSet(metadata);
         var sessions = metadata.ListProjects()
             .SelectMany(project => metadata.ListSessions(project.Id))
+            .Where(record => SessionPresence.IsEstablished(metadata, record))
             .Where(record => !SessionArchive.IsArchived(metadata, record, archivedProjects))
             .Select(record => (Record: record, Presentation: SessionPresentation.Load(metadata, record.Id)))
             .Where(pair => pinned ? pair.Presentation.Pinned : !pair.Presentation.Pinned)

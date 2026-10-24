@@ -30,26 +30,42 @@ public partial class MainWindow
             $"{lead} {name} 当前不可用，本次新建使用 FUMO 原生内核。{tail}");
     }
 
-    /// <summary>会话管理页“新建会话”下拉：六类后端全部列出，不可用的条目禁用。</summary>
+    /// <summary>会话管理页“新建会话”下拉：六类后端全部列出，不可用的条目禁用，默认后端标记并排第一。</summary>
     private static IReadOnlyList<SidebarViewModel.NewSessionBackendOption> BuildNewSessionBackendOptions(
         RealSessionHost host)
     {
         var manager = host.Manager;
-        return
-        [
-            Option(BackendId.NativeCSharp, "FUMO（默认 · 纯 C#）"),
+        var preferred = manager.PreferredBackend;
+        var options = new System.Collections.Generic.List<SidebarViewModel.NewSessionBackendOption>
+        {
+            Option(BackendId.NativeCSharp, "FUMO"),
             Option(BackendId.Pi, "Pi"),
             Option(BackendId.Omp, "OMP"),
             Option(BackendId.Codex, "Codex"),
             Option(BackendId.Dsh, "DSH"),
             Option(BackendId.Claude, "Claude"),
-        ];
+        };
+        // 默认后端排首位，其余保持声明顺序。
+        var index = options.FindIndex(option => option.Key == BackendCapabilities.StorageId(preferred));
+        if (index > 0)
+        {
+            var preferredOption = options[index];
+            options.RemoveAt(index);
+            options.Insert(0, preferredOption);
+        }
+        return options;
 
         SidebarViewModel.NewSessionBackendOption Option(BackendId backend, string label)
         {
             var available = manager.IsBackendAvailable(backend);
             return new(BackendCapabilities.StorageId(backend),
-                available ? label : label + "（不可用）", available);
+                available ? label : label + "（不可用）", available, backend == preferred);
         }
+    }
+
+    /// <summary>默认后端在设置里改动后刷新会话管理条上的当前后端显示。</summary>
+    private void RefreshNewSessionBackends()
+    {
+        if (_host is { } host && _vm is { } vm) vm.Sidebar.SetBackends(BuildNewSessionBackendOptions(host));
     }
 }
