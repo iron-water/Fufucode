@@ -11,7 +11,6 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
-using Fufucode.App.ViewModels;
 using Fufucode.App.Features.Plugins;
 using Fufucode.Core;
 
@@ -78,24 +77,24 @@ internal static class LocalPluginCallbackJournalSelfTest
         var window = new MainWindow { Width = 1100, Height = 800 }; window.Show();
         try
         {
-            await ((MainViewModel)window.DataContext!).NavigateCommand.ExecuteAsync(AppPage.Extensions);
             var vm = window.LocalPluginViewModelForTesting;
             await vm.RefreshCommand.ExecuteAsync(null);
             await vm.InspectInFlightCommand.ExecuteAsync(null);
-            var text = window.ExtensionsPageForTesting.LocalPluginsForTesting.FindControl<TextBox>("InFlightObservation")!;
-            var viewport = window.FindControl<Control>("PageHost")!;
+            using var surface = new LocalPluginTestSurface(vm);
+            var text = surface.Section.FindControl<TextBox>("InFlightObservation")!;
+            var viewport = surface.Viewport;
             foreach (var size in new[] { (1100, 800), (800, 640) })
             {
-                window.Width = size.Item1; window.Height = size.Item2;
-                await Task.Delay(200); window.UpdateLayout(); text.BringIntoView();
-                await Task.Delay(250); window.UpdateLayout();
-                var top = text.TranslatePoint(default, window);
-                var bottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), window);
+                surface.Window.Width = size.Item1; surface.Window.Height = size.Item2;
+                await Task.Delay(200); surface.Window.UpdateLayout(); text.BringIntoView();
+                await Task.Delay(250); surface.Window.UpdateLayout();
+                var top = text.TranslatePoint(default, surface.Window);
+                var bottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), surface.Window);
                 Check(text.Text!.Contains("调用返回成功（未认证目录提交）") && top is { } t && bottom is { } b &&
-                    t.Y >= 48 && t.Y + text.Bounds.Height <= b.Y + 1,
+                    t.Y >= 0 && t.Y + text.Bounds.Height <= b.Y + 1,
                     $"complete callback-return evidence and its boundaries are visible at {size.Item1}x{size.Item2}");
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick(); await Task.Delay(100);
-                using var frame = window.CaptureRenderedFrame();
+                using var frame = surface.Window.CaptureRenderedFrame();
                 frame?.Save(Path.Combine(root, $"callback-{size.Item1}x{size.Item2}.png"), PngBitmapEncoderOptions.Default);
             }
         }
@@ -207,25 +206,25 @@ internal static class LocalPluginCallbackJournalSelfTest
                 var evidenceWindow = new MainWindow { Width = 1100, Height = 800 }; evidenceWindow.Show();
                 try
                 {
-                    await ((MainViewModel)evidenceWindow.DataContext!).NavigateCommand.ExecuteAsync(AppPage.Extensions);
                     var vm = evidenceWindow.LocalPluginViewModelForTesting;
                     await vm.RefreshCommand.ExecuteAsync(null);
                     await vm.InspectInFlightCommand.ExecuteAsync(null);
-                    var text = evidenceWindow.ExtensionsPageForTesting.LocalPluginsForTesting.FindControl<TextBox>("InFlightObservation")!;
-                    var viewport = evidenceWindow.FindControl<Control>("PageHost")!;
+                    using var surface = new LocalPluginTestSurface(vm);
+                    var text = surface.Section.FindControl<TextBox>("InFlightObservation")!;
+                    var viewport = surface.Viewport;
                     Check(text.IsReadOnly && text.Text!.Contains("原RPC进程已退出：PID 123") && text.Text.Contains("原请求保护保持"),
                         "compiled UI displays injected original exit evidence separately from protection release");
                     foreach (var size in new[] { (1100, 800), (800, 640) })
                     {
-                        evidenceWindow.Width = size.Item1; evidenceWindow.Height = size.Item2;
-                        await Task.Delay(200); evidenceWindow.UpdateLayout(); text.BringIntoView();
-                        await Task.Delay(250); evidenceWindow.UpdateLayout();
-                        var top = text.TranslatePoint(default, evidenceWindow);
-                        var bottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), evidenceWindow);
-                        Check(top is { } t && bottom is { } b && t.Y >= 48 && t.Y + text.Bounds.Height <= b.Y + 1,
+                        surface.Window.Width = size.Item1; surface.Window.Height = size.Item2;
+                        await Task.Delay(200); surface.Window.UpdateLayout(); text.BringIntoView();
+                        await Task.Delay(250); surface.Window.UpdateLayout();
+                        var top = text.TranslatePoint(default, surface.Window);
+                        var bottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), surface.Window);
+                        Check(top is { } t && bottom is { } b && t.Y >= 0 && t.Y + text.Bounds.Height <= b.Y + 1,
                             $"original exit and protection boundary remain fully visible at {size.Item1}x{size.Item2}");
                         AvaloniaHeadlessPlatform.ForceRenderTimerTick(); await Task.Delay(100);
-                        using var frame = evidenceWindow.CaptureRenderedFrame();
+                        using var frame = surface.Window.CaptureRenderedFrame();
                         frame?.Save(Path.Combine(root, $"original-exit-{size.Item1}x{size.Item2}.png"), PngBitmapEncoderOptions.Default);
                     }
                 }

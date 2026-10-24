@@ -1728,7 +1728,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _actions.Changed -= OnShortcutCapabilitiesChanged;
         _shortcuts.Changed -= UpdateShortcutLabels;
         _storageManager.Dispose();
-        _extensionsPage.ReleaseLocalPlugins();
+        _localPluginViewModel?.Dispose();
         _libraryService?.Dispose();
         _palette.Dispose();
         _notifications.Dispose();

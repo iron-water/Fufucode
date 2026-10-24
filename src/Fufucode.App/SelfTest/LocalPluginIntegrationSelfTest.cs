@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.LogicalTree;
 using Fufucode.App.Features.Plugins;
-using Fufucode.App.ViewModels;
 
 namespace Fufucode.App.SelfTest;
 
@@ -33,19 +32,17 @@ internal static class LocalPluginIntegrationSelfTest
         window.Show();
         try
         {
-            var model = (MainViewModel)window.DataContext!;
             var plugins = window.LocalPluginViewModelForTesting;
-            var page = window.ExtensionsPageForTesting;
-            var section = page.LocalPluginsForTesting;
+            using var surface = new LocalPluginTestSurface(plugins);
+            var section = surface.Section;
             Check(window.LocalPluginsForTesting.Root == Path.Combine(Program.SelfTestDataRoot, "plugins", "local"),
                 "shared composition uses the isolated AppDataLayout root");
             Check(section.IsAttached && ReferenceEquals(section.DataContext, plugins),
-                "existing extensions page embeds the actual local version view model");
+                "test host embeds the actual local version view model");
             Check(plugins.CanPickDirectory && !plugins.HasHost, "real picker is wired without inventing a Pi host");
-            await model.NavigateCommand.ExecuteAsync(AppPage.Extensions);
-            await Task.Delay(60); window.UpdateLayout();
-            Check(section.IsAttached && ReferenceEquals(TopLevel.GetTopLevel(section), window),
-                "existing navigation exposes the embedded section in the actual shell");
+            await Task.Delay(60); surface.Window.UpdateLayout();
+            Check(section.IsAttached && ReferenceEquals(TopLevel.GetTopLevel(section), surface.Window),
+                "test host exposes the section in a real window");
             var applyButton = section.GetLogicalDescendants().OfType<Button>()
                 .Single(button => button.Content?.ToString() == "应用所选版本");
             var applyText = new TextBlock { Text = "应用所选版本", FontSize = applyButton.FontSize };
@@ -73,10 +70,8 @@ internal static class LocalPluginIntegrationSelfTest
                 "editing the import source invalidates the prior successful preview immediately");
             plugins.SourceDirectory = source;
             await plugins.PreviewCommand.ExecuteAsync(null);
-            await model.NavigateCommand.ExecuteAsync(AppPage.Chat);
-            await model.NavigateCommand.ExecuteAsync(AppPage.Extensions);
             Check(ReferenceEquals(section.ViewModel, plugins) && !plugins.IsDisposed && plugins.Versions.Count == 1,
-                "return navigation preserves the live local catalog and selection");
+                "the live local catalog and selection survive command round-trips");
             await plugins.RemoveCommand.ExecuteAsync(null);
             Check(plugins.Versions.Count == 1 && plugins.SelectedPlugin!.HasPending,
                 "unknown host removal is pending and keeps the fixed copy");
