@@ -585,7 +585,15 @@ public partial class MainWindow
         }
         // 有效开态 = 未隐藏且有页签：空区不收起时 Pages 空+Hidden=false 也是"关"，
         // 按有效开态切换，一次点击即可从死态恢复（回填默认页后再显示）。
-        var isOpen = !_dockLayout.Hidden[zone] && _dockLayout.Pages[zone].Count > 0;
+        // 以实际可见性为准：页面列表为空但面板仍可见时（插件直接挂内容），
+        // 旧的 Pages.Count 判据会误判为“已关”，点收起反而重新打开。
+        var border = zone switch
+        {
+            DockZone.Left => SidebarBorder,
+            DockZone.Right => RightPanelBorder,
+            _ => TerminalBorder,
+        };
+        var isOpen = border.IsVisible;
         if (isOpen) _dockLayout.Hidden[zone] = true;
         else { EnsureDockHasPages(zone); _dockLayout.Hidden[zone] = false; }
         RenderDockPages(); SaveWorkspaceDimensions();
