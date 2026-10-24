@@ -117,57 +117,56 @@
         </StackPanel>
       </Border>
       </Grid>
-      <!-- 预览态：直接在工作面板内呈现文件内容，显示文件身份（路径、名称、大小）并支持返回列表切换 -->
-      <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,*">
+      <!-- 统一预览宿主：provider 负责分类与加载，面板只显示统一元数据和错误。 -->
+      <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,Auto,*">
         <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
-                Background="{DynamicResource AppCardBackground}" Padding="10,8">
-          <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-            <Button Classes="subtle" Content="← 返回列表" Command="{Binding CloseFilePreviewCommand}"
-                    Padding="8,4" VerticalAlignment="Center" AutomationProperties.Name="返回文件列表"/>
-            <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center" Spacing="2">
+                Background="{DynamicResource AppCardBackground}" Padding="8,6">
+          <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="5" VerticalAlignment="Center">
+            <Button Classes="iconButton" Content="←" Command="{Binding CloseFilePreviewCommand}" ToolTip.Tip="返回文件列表"
+                    AutomationProperties.Name="返回文件列表"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+              <Button Classes="iconButton" Content="‹" Command="{Binding PreviewBackCommand}" IsEnabled="{Binding CanPreviewBack}" ToolTip.Tip="预览后退"/>
+              <Button Classes="iconButton" Content="›" Command="{Binding PreviewForwardCommand}" IsEnabled="{Binding CanPreviewForward}" ToolTip.Tip="预览前进"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Margin="6,0" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="bodyStrong" Text="{Binding PreviewFileName}" TextTrimming="CharacterEllipsis"/>
               <TextBlock Classes="caption mono" Text="{Binding PreviewFilePath}" TextTrimming="CharacterEllipsis"
                          Foreground="{DynamicResource AppTextSecondary}" ToolTip.Tip="{Binding PreviewFilePath}"/>
             </StackPanel>
-            <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+            <StackPanel Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="caption mono" Text="{Binding PreviewFileSize}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
               <TextBlock Classes="caption" Text="{Binding PreviewFileDetail}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
             </StackPanel>
           </Grid>
         </Border>
-        <Grid Grid.Row="1">
-          <!-- BrowserView 自带 DataContext，可见性必须显式绑定到面板 VM。 -->
-          <views:BrowserView x:Name="PreviewBrowser"
-                            IsVisible="{Binding $parent[views:WorkspacePanelView].((vm:WorkspacePanelViewModel)DataContext).IsBrowserPreviewVisible}"/>
-          <!-- Mermaid 文件直接渲染成图表，不交给浏览器显示源码。 -->
-          <Grid IsVisible="{Binding IsDiagramPreview}" RowDefinitions="Auto,*">
-            <Border Grid.Row="0" Padding="10,6" BorderBrush="{DynamicResource AppDividerSubtle}"
-                    BorderThickness="0,0,0,1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBlock Classes="caption" Text="Mermaid 图表" VerticalAlignment="Center"
-                           Foreground="{DynamicResource AppTextSecondary}"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                  <Button Classes="subtle" Content="复制代码" Padding="8,3"
-                          Command="{Binding CopyDiagramSourceCommand}" ToolTip.Tip="复制 .mermaid 源文本"/>
-                  <Button Classes="subtle" Content="下载 PNG" Padding="8,3"
-                          Click="OnDownloadDiagram" ToolTip.Tip="把当前渲染结果保存为图片"/>
-                </StackPanel>
-              </Grid>
-            </Border>
-            <ScrollViewer Grid.Row="1" Padding="10" HorizontalScrollBarVisibility="Disabled">
-              <views:RichMarkdownView x:Name="DiagramPreview" Markdown="{Binding DiagramMarkdown}"
-                                      FontSize="13"/>
-            </ScrollViewer>
-            <TextBlock Grid.Row="1" Classes="caption" Text="{Binding DiagramError}"
-                       IsVisible="{Binding HasDiagramError}" Foreground="{DynamicResource AppCriticalForeground}"
-                       Margin="12" TextWrapping="Wrap"/>
-          </Grid>
-          <!-- 文本/代码文件：原生代码视图，保留语法高亮，不显示浏览器外壳。 -->
-          <ScrollViewer IsVisible="{Binding IsTextPreview}" Padding="10"
-                        HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <views:HighlightedCodeView Code="{Binding PreviewText}" Language="{Binding PreviewLanguage}"/>
-          </ScrollViewer>
-        </Grid>
+        <Border Grid.Row="1" BorderBrush="{DynamicResource AppDividerSubtle}" BorderThickness="0,0,0,1" Padding="8,4">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="caption" Text="{Binding PreviewResult.DisplayType}" VerticalAlignment="Center"/>
+            <TextBlock Classes="caption mono" Text="{Binding PreviewResult.Format}" VerticalAlignment="Center"/>
+            <TextBox x:Name="PreviewFindBox" Width="150" PlaceholderText="查找文本" Padding="6,2"
+                     IsVisible="{Binding IsTextPreviewToolbar}" TextChanged="PreviewFindBox_TextChanged"
+                     AutomationProperties.Name="预览内查找"/>
+            <Button Classes="subtle" Content="上一个" Padding="7,2" Command="{Binding FindPreviousCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <Button Classes="subtle" Content="下一个" Padding="7,2" Command="{Binding FindNextCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <TextBlock Classes="caption" Text="{Binding FindStatus}" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <Button Classes="subtle" Content="换行" Padding="7,2" Command="{Binding TogglePreviewWordWrapCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}" ToolTip.Tip="切换文本换行"/>
+            <Button Classes="subtle" Content="缩小" Padding="7,2" Command="{Binding ZoomImageOutCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="放大" Padding="7,2" Command="{Binding ZoomImageInCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="适配" Padding="7,2" Command="{Binding FitImageCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="原始尺寸" Padding="7,2" Command="{Binding OriginalImageCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="↶" Padding="7,2" Command="{Binding RotateImageLeftCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向左旋转"/>
+            <Button Classes="subtle" Content="↷" Padding="7,2" Command="{Binding RotateImageRightCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向右旋转"/>
+            <Button Classes="subtle" Content="棋盘" Padding="7,2" Command="{Binding ToggleImageCheckerboardCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="复制路径" Padding="7,2" Command="{Binding CopyPreviewPathCommand}"/>
+            <Button Classes="subtle" Content="复制源码" Padding="7,2" Command="{Binding CopyPreviewSourceCommand}" IsVisible="{Binding CanCopyPreviewSource}"/>
+            <Button Classes="subtle" Content="系统打开" Padding="7,2" Click="OpenPreviewInSystem_Click"/>
+          </StackPanel>
+        </Border>
+        <ContentControl x:Name="PreviewHost" Grid.Row="2" Content="{Binding PreviewHost}"/>
       </Grid>
     </Grid>
 
