@@ -209,7 +209,31 @@ public partial class MainWindow
         NotificationPrompt.DataContext = _notifications.LatestPrompt;
         // 浮层只在用户选择该渠道时出现；关掉浮层渠道后浮窗仍按原策略提醒。
         if (_notificationDelivery is not null) RefreshNotificationChannel();
-        else NotificationPrompt.IsVisible = _notifications.HasPrompt;
+        else SetNotificationPromptVisible(_notifications.HasPrompt);
+    }
+
+    private DispatcherTimer? _notificationPromptTimer;
+
+    /// <summary>
+    /// 右上提醒的统一出入口：淡入淡出，不需要操作的通知 8 秒后自动消失。
+    /// 待审批提醒不自动消失——它必须由用户明确允许或拒绝。
+    /// </summary>
+    private void SetNotificationPromptVisible(bool visible)
+    {
+        _notificationPromptTimer?.Stop();
+        _notificationPromptTimer = null;
+        Views.Motion.SetVisible(NotificationPrompt, visible, offsetY: 6);
+        if (!visible || _notifications.LatestPrompt is not { RequiresAction: false }) return;
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_notificationPromptTimer, timer)) _notificationPromptTimer = null;
+            _notifications.DismissPromptCommand.Execute(null);
+        };
+        _notificationPromptTimer = timer;
+        timer.Start();
     }
     private void NotificationPromptOpen_Click(object? sender, RoutedEventArgs e) => _notifications.ActivateCommand.Execute(_notifications.LatestPrompt);
     private void NotificationPromptDismiss_Click(object? sender, RoutedEventArgs e) => _notifications.DismissPromptCommand.Execute(null);

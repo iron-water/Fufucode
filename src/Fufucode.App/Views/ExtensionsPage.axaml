@@ -3,7 +3,6 @@
         xmlns:imaging="using:Avalonia.Media.Imaging"
              xmlns:vm="using:Fufucode.App.ViewModels"
              xmlns:anim="using:Fufucode.App.Infrastructure"
-             xmlns:plugins="using:Fufucode.App.Features.Plugins"
              x:Class="Fufucode.App.Views.ExtensionsPage"
              x:DataType="{x:Type vm:ExtensionsPageViewModel}"
              Background="{DynamicResource AppMicaPageBackground}">
@@ -65,11 +64,6 @@
                  TextWrapping="Wrap"
                  Foreground="{DynamicResource AppTextDim}"
                  IsVisible="{Binding HasRestartDisabledReason}"/>
-
-      <ContentControl x:Name="LocalPluginsSlot">
-        <plugins:LocalPluginSectionView x:Name="LocalPluginsSection" MinHeight="540"
-                                        DataContext="{x:Null}"/>
-      </ContentControl>
 
       <!-- 2. 启动失败（critical）：扩展加载失败会导致后端插件启动即退出 -->
       <Border Classes="errorCard" IsVisible="{Binding HasStartupFailure}">

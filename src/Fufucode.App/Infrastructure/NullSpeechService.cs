@@ -5,7 +5,9 @@ using Fufucode.Core.Plugins;
 namespace Fufucode.App.Infrastructure;
 
 /// <summary>
-/// 语音插件未安装时的安全替身：零外部进程、零 SAPI 依赖。
+/// 语音插件未安装时的空实现兜底：零外部进程、零 SAPI 依赖。
+/// 判断“是否可用”看 <c>PluginPackageManager.ActiveSpeechService</c> 是否为 null，
+/// 不能看类型——替身存在只代表代码路径安全，不代表用户能用朗读。
 /// </summary>
 public sealed class NullSpeechService : ISpeechService
 {

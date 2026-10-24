@@ -41,12 +41,12 @@ internal static class LocalPluginRealSelfTest
         window.Show();
         try
         {
-            await Until(() => window.FindControl<Button>("StartupLocalPluginsButton")!.IsVisible);
+            await Until(() => window.FindControl<Button>("StartupRetryButton")!.IsVisible);
             var plugins = window.LocalPluginViewModelForTesting;
-            var section = window.ExtensionsPageForTesting.LocalPluginsForTesting;
-            window.FindControl<Button>("StartupLocalPluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            using var surface = new LocalPluginTestSurface(plugins);
+            var section = surface.Section;
             Check(window.DataContext is null && window.CurrentSessionId is null && !plugins.HasHost,
-                "startup failure offers offline management without a fake chat host");
+                "startup failure keeps the shell without a fake chat host");
             var offlineSource = Path.Combine(root, "offline-version"); Directory.CreateDirectory(offlineSource);
             File.WriteAllText(Path.Combine(offlineSource, "index.js"), "export default function(pi) {}\n");
             File.WriteAllText(Path.Combine(offlineSource, "fufucode-plugin.json"), JsonSerializer.Serialize(new
@@ -55,7 +55,6 @@ internal static class LocalPluginRealSelfTest
             await plugins.PreviewCommand.ExecuteAsync(null);
             await plugins.ImportCommand.ExecuteAsync(null);
             Check(plugins.Versions.Count == 1 && !plugins.CanApply, "offline import precedes actual Pi startup");
-            window.FindControl<Button>("StartupPluginReturnButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             window.FindControl<Button>("StartupRetryButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             // Host identity becomes known before AttachRealSession's catalog refresh finishes.
             // Assert the recovered page after the actual startup overlay and refresh have settled.
@@ -65,15 +64,11 @@ internal static class LocalPluginRealSelfTest
             var model = (MainViewModel)window.DataContext!;
             await model.NavigateCommand.ExecuteAsync(AppPage.Extensions);
             window.UpdateLayout();
-            await Until(() => ReferenceEquals(TopLevel.GetTopLevel(section), window));
-            Console.WriteLine($"Recovered shell: opens={opens}; sameVM={ReferenceEquals(section.ViewModel, plugins)}; disposed={plugins.IsDisposed}; versions={plugins.Versions.Count}; sameTopLevel={ReferenceEquals(TopLevel.GetTopLevel(section), window)}; page={model.CurrentPage}; parent={section.Parent?.GetType().Name}");
+            Console.WriteLine($"Recovered shell: opens={opens}; sameVM={ReferenceEquals(section.ViewModel, plugins)}; disposed={plugins.IsDisposed}; versions={plugins.Versions.Count}; sameTopLevel={ReferenceEquals(TopLevel.GetTopLevel(section), surface.Window)}; page={model.CurrentPage}; parent={section.Parent?.GetType().Name}");
             Check(opens == 2 && ReferenceEquals(section.ViewModel, plugins) && !plugins.IsDisposed && plugins.Versions.Count == 1 &&
-                  ReferenceEquals(TopLevel.GetTopLevel(section), window),
-                "real recovery restores the original section, catalog and view model without duplicate bootstrap");
-            window.FindControl<Button>("StartupLocalPluginsButton")!.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Check(!window.FindControl<Grid>("StartupPluginPanel")!.IsVisible,
-                "late startup-entry event cannot cover the recovered live workspace");
-            Check(plugins.ApplyButtonText == "安全重启并应用", "real shared page displays the safe restart action label");
+                  ReferenceEquals(TopLevel.GetTopLevel(section), surface.Window),
+                "real recovery keeps the original section, catalog and view model without duplicate bootstrap");
+            Check(plugins.ApplyButtonText == "安全重启并应用", "real shared section displays the safe restart action label");
             async Task Import(string version, string body)
             {
                 var source = Path.Combine(root, "v" + version); Directory.CreateDirectory(source);
@@ -189,24 +184,23 @@ internal static class LocalPluginRealSelfTest
             Check(((MainViewModel)window.DataContext!).CurrentPage == AppPage.Extensions &&
                 ReferenceEquals(window.FindControl<ContentControl>("PageHost")!.Content, window.ExtensionsPageForTesting),
                 "explicit restored fixed version leaves the actual plugin recovery page mounted without test navigation");
-            await Until(() => ReferenceEquals(TopLevel.GetTopLevel(section), window));
             await plugins.InspectInFlightCommand.ExecuteAsync(null);
             plugins.ConfirmRegistrationEnd = true;
             Check(section.FindControl<Button>("ReconcileInFlightButton")!.IsEnabled,
-                "shared real page enables the explicit confirmed action for the original unloaded request");
+                "shared real section enables the explicit confirmed action for the original unloaded request");
             foreach (var size in new[] { (1100, 800), (800, 640) })
             {
-                window.Width = size.Item1; window.Height = size.Item2;
-                await Task.Delay(200); window.UpdateLayout();
+                surface.Window.Width = size.Item1; surface.Window.Height = size.Item2;
+                await Task.Delay(200); surface.Window.UpdateLayout();
                 var button = section.FindControl<Button>("ReconcileInFlightButton")!;
-                button.BringIntoView(); await Task.Delay(250); window.UpdateLayout();
-                var viewport = window.FindControl<Control>("PageHost")!;
-                var top = button.TranslatePoint(default, window);
-                var bottom = viewport.TranslatePoint(new Point(0, viewport.Bounds.Height), window);
-                Check(button.IsEnabled && top is { } t && bottom is { } b && t.Y >= 48 && t.Y + button.Bounds.Height <= b.Y + 1,
+                button.BringIntoView(); await Task.Delay(250); surface.Window.UpdateLayout();
+                var viewport = surface.Viewport;
+                var top = button.TranslatePoint(default, surface.Window);
+                var bottom = viewport.TranslatePoint(new Point(0, viewport.Bounds.Height), surface.Window);
+                Check(button.IsEnabled && top is { } t && bottom is { } b && t.Y >= 0 && t.Y + button.Bounds.Height <= b.Y + 1,
                     $"explicit original-request reconciliation action is reachable at {size.Item1}x{size.Item2}");
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick(); await Task.Delay(100);
-                using var frame = window.CaptureRenderedFrame();
+                using var frame = surface.Window.CaptureRenderedFrame();
                 frame?.Save(Path.Combine(root, $"reconciliation-{size.Item1}x{size.Item2}.png"), PngBitmapEncoderOptions.Default);
             }
             await plugins.ReconcileInFlightCommand.ExecuteAsync(null);

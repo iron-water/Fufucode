@@ -19,6 +19,7 @@ public partial class ExtensionUiDialogWindow : Window
 {
     private readonly ExtensionUiRequest? _request;
     private readonly Func<ExtensionUiRequest, PiExtensionUiResponse, Task>? _respond;
+    private readonly Action? _alwaysAllow;
     private readonly TextBox? _entryBox;
     private readonly ListBox? _optionsList;
     private bool _answered;
@@ -31,10 +32,11 @@ public partial class ExtensionUiDialogWindow : Window
     }
 
     public ExtensionUiDialogWindow(ExtensionUiRequest request,
-        Func<ExtensionUiRequest, PiExtensionUiResponse, Task> respond)
+        Func<ExtensionUiRequest, PiExtensionUiResponse, Task> respond, Action? alwaysAllow = null)
     {
         _request = request;
         _respond = respond;
+        _alwaysAllow = alwaysAllow;
         InitializeComponent();
 
         DialogTitle.Text = Field("title") ?? $"扩展请求（{request.Method}）";
@@ -44,6 +46,9 @@ public partial class ExtensionUiDialogWindow : Window
             case "confirm":
                 AddBodyText(Field("message") ?? "（无说明）");
                 AddButton("拒绝", () => Answer(PiExtensionUiResponse.Confirm(false)));
+                // “始终允许”与系统通知上的同名按钮同义：落一条按项目 + 工具的记忆规则。
+                if (_alwaysAllow is not null)
+                    AddButton("始终允许", () => { _alwaysAllow(); Answer(PiExtensionUiResponse.Confirm(true)); });
                 AddButton("允许", () => Answer(PiExtensionUiResponse.Confirm(true)), accent: true);
                 break;
 

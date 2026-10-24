@@ -67,6 +67,8 @@ internal static class NotificationPageSelfTest
             var floating = window.FloatingDockWindowForTesting(state.Id)!;
             Check(floating.IsVisible && ReferenceEquals(TopLevel.GetTopLevel(page), floating) && ReferenceEquals(page.DataContext, center),
                 "opening migrated notifications reveals the original function page and shared center");
+            // 卡片化布局的静态证据：空状态 + 概览卡 + 消息卡各截一张。
+            await CaptureAsync(floating, Path.Combine(root, "cards-empty-420.png"));
             var delivery = window.NotificationDeliveryForTesting;
             var pending = new Dictionary<string, TaskCompletionSource<WindowsToastResult>>();
             window.WindowsNoticeDeliveryForTesting = notice =>
@@ -86,6 +88,8 @@ internal static class NotificationPageSelfTest
                 "adding notices updates the real empty-state binding without waiting for unrelated notifications");
             var badge = floating.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "dock-tab-notifications");
             Check(badge.Content?.ToString() == "通知 · 2", "floating auxiliary tabs display their actual unread count");
+            await CaptureAsync(floating, Path.Combine(root, "cards-list-420.png"));
+            Check(cardsRendered(page), "each notice renders as its own card with the overview card above it");
             pending["B"].SetResult(new(false, "B 回退")); await Ready();
             Console.WriteLine($"Notification fallback diagnostic B: latest={center.LatestPrompt?.Key}, hasPrompt={center.HasPrompt}, windows={delivery.DeliversToWindows}, status={delivery.WindowsDeliveryStatus}, visible={window.FindControl<Border>("NotificationPrompt")!.IsVisible}");
             Check(window.FindControl<Border>("NotificationPrompt")!.IsVisible, "failed system delivery falls back to the app even with toast disabled");
@@ -121,6 +125,15 @@ internal static class NotificationPageSelfTest
         }
         finally { window.Close(); await Task.Delay(120); Program.SelfTestDataRoot = previousRoot; }
         async Task Ready() { await Task.Delay(70); window.UpdateLayout(); AvaloniaHeadlessPlatform.ForceRenderTimerTick(); }
+        static async Task CaptureAsync(Window target, string path)
+        {
+            await Task.Delay(70); target.UpdateLayout(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
+            using var frame = target.CaptureRenderedFrame();
+            frame?.Save(path, PngBitmapEncoderOptions.Default);
+        }
+        static bool cardsRendered(NotificationCenterView page) =>
+            page.GetVisualDescendants().OfType<Border>().Count(border => border.Classes.Contains("notificationCard")) == 2 &&
+            page.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "未读");
         static NotificationItemViewModel Notice(string id) => new(id, "fixture", Guid.NewGuid(), 1, AppNotificationKind.Completed, "notice-" + id, "local fixture", null, true);
     }
 }

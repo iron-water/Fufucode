@@ -865,6 +865,22 @@ EAD
 4. 对比结论：Claude Code 是精确唯一 + 先读；Codex 是上下文行 apply_patch、多文件 hunk；DSH 生态用 Codex 兼容 apply_patch 替换原生 edit，强调失败原子与回滚；Pi 是 oldText 精确唯一 + 同调用多条对原文匹配；OMP 的 read 用路径选行 + 50 KiB/3000 行上限 + footer 续读。FUMO 取“精确匹配 + 批量原子 + 行选区”，不引入 patch 格式。
 5. 验证：Core 构建通过；独立 ToolProbe 10/10 通过（行选区、批量编辑、重叠拒绝、失败不写盘、字面量 grep、写后索引失效、glob 索引）。Backend.Tests 仍被并发 UI 的 `BackendBadge.BadgeColor` 改动阻塞，未宣称全量通过。
 
+2026-10-23（语音朗读拆为可选插件 + 设置面板重做）：
+1. 归属：朗读服务只由 `service.speech-synthesis` 插件提供。插件激活时在 `PluginPackageManager.ActiveSpeechService` 登记实现，停用/卸载时撤回。宿主删除原有“运行时反射加载插件 DLL”的旁路（它绕开插件状态机，卸载后仍可用），改为只认登记的服务；多个插件管理器先后激活同一插件时，后来者复用已登记服务，只有创建者负责释放。
+2. 门禁：未安装或已停用时 `speech.start/pause/resume/stop` 以 `hideWhenUnavailable` 整条从菜单消失，消息操作条的喇叭按钮不出现，自动朗读静默跳过。`speech.settings` 始终保留，作为未安装时的说明与插件市场入口——这是唯一仍可达的朗读动作。
+3. 安装状态广播：语音服务没有页面贡献，`PagesChanged` 不会触发。宿主改订阅 `PluginStateNotifier.Changed`，在下一拍（插件激活同步完成后）统一投影到对话页与动作面。
+4. 设置面板按 `docs/design/page-design-principles.md` 重做：`AppDialog` 底色 + 页脚、`SettingsLayout` 行/组构件、三组（播放/声音/播放控制）、`AutoReadReplies` 首次有了真实开关、状态行显示服务上报文本。未安装态只有一段说明与市场入口，不渲染语速/音量控件。尺寸随内容而非固定高。
+5. 通用 `ShowPanelAsync` 一并改走 `AppDialog` + `SkinDialog`：此前裸 `new Window` 丢背景，深色主题下是纯黑窗口（用户截图）。
+6. 载荷：`publish-local.ps1` 与 `package.ps1` 的分发列表补上 `service.speech-synthesis`；插件 csproj 把 `manifest.json` 复制到输出，否则市场安装会因缺真实清单失败。`--speech-probe` 改为加载真实插件载荷，找不到时明确失败而不是拿替身空跑通过。
+7. 验证：解决方案 51 工程 0 错误（5 条既有 Avalonia XAML 警告）；`--selftest --speech-only` 11 项门禁断言 + 4 张亮/暗 × 安装/未安装对话框截图全部通过；`Fufucode.Review.Tests` 新增“激活登记/卸载撤回”两条断言通过。既有失败 `Review.Tests` 2 条（工具注册冲突/注销语义）、`--r05-only` 3 条、`--skins-integration-only` 1 条在干净 HEAD 上同样失败，非本轮引入，未修改。未验证：真实音频听感、真实市场安装后重启进程内的服务登记。
+
+2026-10-23（通知体系统一：时间线提示 / 右上提醒 / 通知中心卡片）：
+1. 用户反馈：侧边聊天里一次粘贴出现两张一样的“提示”卡，提示卡没有关闭方式也没有动效，三处通知各写各的。
+2. 时间线提示：`TimelineViewModel.AddNotification` 对 2 秒内同文提示去重；提示卡右上加关闭按钮（`Timeline.Dismiss`），删除前播放退场动画。
+3. 动效统一走 `Views/Motion`：卡片进入淡入上移、退出淡出；`Motion.Reduced` 在无头自测里为真，断言只检查终态，不受过渡时序影响。
+4. 右上提醒（`NotificationPrompt`）改由 `SetNotificationPromptVisible` 统一出入口：淡入淡出，非待审批提醒 8 秒自动消失，待审批必须由用户处理；卡片补上与通知中心一致的状态字形与配色。
+5. 通知中心条目可逐条移除（`DismissItem`），移除前播放退场动画；概览卡的未读/待处理/全部随之更新。
+6. 未验证：真实桌面上的动画观感与 8 秒自动消失的手感；Windows 系统通知按钮仍受本机组策略禁用，无法实机点验。
 2026-10-23（第八轮）变更面板重做为逐行 diff 审阅视图：
 1. 问题：旧面板把 hunk 拼成制表符分隔文本塞进只读 TextBox，没有行号、增色/删色、语法着色与折叠；"范围说明"折叠块和根路径常驻顶部，右栏被元信息占满。视图局部样式写在 `UserControl.Styles` 里，而 ChangesContent 会被 `TakeDockPages` 摘到停靠区，样式实际不生效，这也是"难看"的直接原因之一。
 2. 结构：Changes 页改为"文件列表 ↔ diff"主从视图，栏宽 ≥620 时左右分栏（列表 224），窄栏仍是单栏切换、窄栏默认折行。文件按目录分组可折叠，行内给单字符状态与真实 ± 行数；顶部只留范围开关、± 合计、刷新与筛选框。

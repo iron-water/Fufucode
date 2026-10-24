@@ -13,6 +13,30 @@
       <ResourceDictionary x:Key="Dark"><imaging:Bitmap x:Key="StartupArtBitmap">avares://Fufucode.App/Assets/Brand/empty/interrupted-dark@2x.png</imaging:Bitmap></ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries></ResourceDictionary>
   </Window.Resources>
+  <!-- 通知三处（时间线提示卡 / 右上提醒 / 通知中心卡片）共用同一套状态字形与配色。 -->
+  <Window.Styles>
+    <Style Selector="Border.toastGlyph">
+      <Setter Property="Width" Value="24"/>
+      <Setter Property="Height" Value="24"/>
+      <Setter Property="CornerRadius" Value="12"/>
+      <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
+      <Setter Property="VerticalAlignment" Value="Top"/>
+    </Style>
+    <Style Selector="Border.toastGlyph TextBlock">
+      <Setter Property="HorizontalAlignment" Value="Center"/>
+      <Setter Property="VerticalAlignment" Value="Center"/>
+      <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    </Style>
+    <Style Selector="Border.toastGlyph.success TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+    </Style>
+    <Style Selector="Border.toastGlyph.critical TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    </Style>
+    <Style Selector="Border.toastGlyph.attention TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource SystemFillColorAttentionBrush}"/>
+    </Style>
+  </Window.Styles>
   <Grid x:Name="ChromeRoot" RowDefinitions="48,*,26">
     <Border x:Name="CustomCaption" Classes="chromeBar" Background="Transparent" PointerPressed="CaptionDrag_PointerPressed">
       <Grid ColumnDefinitions="Auto,*,Auto,Auto">
@@ -79,31 +103,42 @@
         </Button>
       </Grid>
       <!-- 启动遮罩使用不透明底色：Mica 皮肤会把 AppMicaPageBackground 变透明，导致半成品侧栏透出来。 -->
-      <Border x:Name="StartupOverlay" Grid.ColumnSpan="3" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" IsVisible="False" ZIndex="20">
+      <Border x:Name="StartupOverlay" Grid.ColumnSpan="3" IsVisible="False" ZIndex="20">
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
+            <GradientStop Offset="0" Color="#FF1F1F1F"/>
+            <GradientStop Offset="1" Color="#FF141414"/>
+          </LinearGradientBrush>
+        </Border.Background>
         <Grid>
-        <StackPanel x:Name="StartupSummary" HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="12" MaxWidth="520">
+        <Border Classes="startupCard" HorizontalAlignment="Center" VerticalAlignment="Center" Width="400">
+        <StackPanel x:Name="StartupSummary" HorizontalAlignment="Stretch" Spacing="14">
           <Image x:Name="StartupArt" Source="{DynamicResource StartupArtBitmap}" Width="200" Height="125" IsVisible="False"/>
-          <TextBlock x:Name="StartupWordmark" Text="Fufucode" Classes="subtitle" HorizontalAlignment="Center"/>
-          <ProgressBar x:Name="StartupProgress" IsIndeterminate="True" Width="240"/>
-          <TextBlock x:Name="StartupText" Classes="secondary" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center"/>
-          <StackPanel x:Name="StartupPickProject" IsVisible="False" Spacing="10">
-            <Button x:Name="StartupOpenProjectButton" Classes="accent" Content="打开项目文件夹" Click="StartupOpenProject_Click"/>
-            <ItemsControl x:Name="StartupRecentProjects"><ItemsControl.ItemTemplate><DataTemplate><Button Click="StartupRecentProject_Click" Content="{Binding}"/></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+          <Border Classes="startupBadge" HorizontalAlignment="Center">
+            <Image Source="avares://Fufucode.App/Assets/Brand/icon-small-32.png" Width="28" Height="28"/>
+          </Border>
+          <TextBlock x:Name="StartupWordmark" Text="Fufucode" Classes="startupWordmark" HorizontalAlignment="Center"/>
+          <ProgressBar x:Name="StartupProgress" IsIndeterminate="True" Width="180" HorizontalAlignment="Center"/>
+          <TextBlock x:Name="StartupText" Classes="secondary" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,4"/>
+          <StackPanel x:Name="StartupPickProject" IsVisible="False" Spacing="8">
+            <Button x:Name="StartupOpenProjectButton" Classes="accent" Content="打开项目文件夹"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="38" FontSize="13"/>
+            <ItemsControl x:Name="StartupRecentProjects">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Button Click="StartupRecentProject_Click" Content="{Binding}" Classes="subtle"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Margin="0,1"/>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
           </StackPanel>
-          <Button x:Name="StartupRetryButton" Content="重试" IsVisible="False" Click="StartupRetryButton_Click"/>
-          <Button x:Name="StartupDisableExtensionButton" Content="停用该扩展并重启" IsVisible="False" Click="StartupDisableExtensionButton_Click"/>
-          <Button x:Name="StartupOpenOtherButton" Content="打开其他项目" IsVisible="False" Click="StartupOpenOther_Click"/>
-          <Button x:Name="StartupLocalPluginsButton" Classes="subtle" Content="管理本地插件" IsVisible="False" Click="StartupLocalPlugins_Click"/>
+          <StackPanel Spacing="8">
+            <Button x:Name="StartupRetryButton" Content="重试" IsVisible="False" HorizontalAlignment="Stretch" Click="StartupRetryButton_Click"/>
+            <Button x:Name="StartupDisableExtensionButton" Content="停用该扩展并重启" IsVisible="False" HorizontalAlignment="Stretch" Click="StartupDisableExtensionButton_Click"/>
+            <Button x:Name="StartupOpenOtherButton" Content="打开其他项目" IsVisible="False" HorizontalAlignment="Stretch" Click="StartupOpenOther_Click"/>
+          </StackPanel>
         </StackPanel>
-        <Grid x:Name="StartupPluginPanel" IsVisible="False" RowDefinitions="Auto,*" Margin="24,12">
-          <StackPanel Spacing="8" Margin="0,0,0,12">
-            <Button x:Name="StartupPluginReturnButton" Classes="subtle" HorizontalAlignment="Left" Content="返回启动页" Click="StartupPluginReturn_Click"/>
-            <TextBlock Classes="caption" Text="会话尚未就绪。可以预览和导入本地插件；应用版本需等待 Pi 会话连接。" TextWrapping="Wrap"/>
-          </StackPanel>
-          <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
-            <ContentControl x:Name="StartupPluginHost" MaxWidth="880" HorizontalAlignment="Stretch"/>
-          </ScrollViewer>
-        </Grid>
+        </Border>
         </Grid>
       </Border>
     </Grid>
@@ -115,11 +150,18 @@
       </Grid>
     </Border>
     <Border x:Name="NotificationPrompt" Grid.Row="1" ZIndex="20" IsVisible="False" x:DataType="vm:NotificationItemViewModel" Classes="toast" HorizontalAlignment="Right" VerticalAlignment="Top" Width="360" Margin="16" Padding="16,12">
-      <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="8">
-        <TextBlock Text="{Binding Title}" Classes="bodyStrong"/>
-        <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
-        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="{Binding Message}" TextWrapping="Wrap" Classes="caption"/>
-        <Button Grid.Row="2" Classes="subtle" Padding="0,2" Content="{Binding RouteLabel}" Click="NotificationPromptOpen_Click"/>
+      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="10" RowSpacing="6">
+        <Border Grid.RowSpan="2" Classes="toastGlyph"
+                Classes.success="{Binding IsCompleted}" Classes.critical="{Binding IsFailed}"
+                Classes.attention="{Binding IsApproval}">
+          <TextBlock Classes="bodyStrong" Text="{Binding Glyph}"/>
+        </Border>
+        <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="bodyStrong" VerticalAlignment="Center"
+                   TextWrapping="Wrap"/>
+        <Button Grid.Column="2" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
+        <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Message}" TextWrapping="Wrap" Classes="caption"/>
+        <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Classes="subtle" Padding="0,2" HorizontalAlignment="Left"
+                Content="{Binding RouteLabel}" Click="NotificationPromptOpen_Click"/>
       </Grid>
     </Border>
     <Grid x:Name="GlobalOverlay" Grid.Row="1" ZIndex="30" IsVisible="False">
