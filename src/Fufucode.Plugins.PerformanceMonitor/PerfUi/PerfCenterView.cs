@@ -1,5 +1,9 @@
+using System;
+using System.Threading;
+using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -7,109 +11,168 @@ using Avalonia.Threading;
 
 namespace Fufucode.Plugins.PerformanceMonitor;
 
-/// <summary>性能中心：左侧两个视图，概览讲人话，分析讲全链路；刷新在后台构建快照。</summary>
+/// <summary>
+/// 性能中心主控件：顶部仅保留 [ 概览 | 分析 ] 切换分段按钮与模型指示；
+/// 无多余边栏与刷新/实时按钮，数据全自动后台感知与实时刷新。
+/// </summary>
 internal sealed class PerfCenterView : UserControl, IDisposable
 {
     private readonly PerfRecorder _recorder;
     private readonly PerfOverviewView _overview = new();
     private readonly PerfAnalysisView _analysis = new();
     private readonly ContentControl _content = new();
-    private readonly ListBox _nav = new()
-    {
-        ItemsSource = new[] { "概览", "分析" },
-        SelectedIndex = 0,
-        Background = Brushes.Transparent,
-        BorderThickness = new Thickness(0),
-        Padding = new Thickness(0),
-    };
-    private readonly TextBlock _title = new() { FontSize = 18, FontWeight = FontWeight.SemiBold };
-    private readonly TextBlock _subtitle = new() { FontSize = 10.5 };
-    private readonly TextBlock _status = new() { FontSize = 9.5, TextWrapping = TextWrapping.Wrap };
-    private readonly CheckBox _live = new() { Content = "实时", IsChecked = true };
+
+    // 顶部超紧凑切换按钮
+    private readonly Button _btnOverview = new();
+    private readonly Button _btnAnalysis = new();
+    private readonly Border _modelBadge = new();
+    private readonly TextBlock _modelText = new() { FontSize = 10 };
+
     private readonly DispatcherTimer _timer;
     private PerfSnapshot? _snapshot;
     private long _lastTotal = -1;
     private int _refreshing;
+    private int _activeViewIndex; // 0 = 概览, 1 = 分析
     private bool _disposed;
 
     public PerfCenterView(PerfRecorder recorder)
     {
         _recorder = recorder;
-        _title.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
-        _subtitle.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        _status.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
 
-        _nav.SelectionChanged += (_, _) => SwitchView();
         _overview.TurnSelected += traceId =>
         {
-            _nav.SelectedIndex = 1;
+            SwitchView(1);
             _analysis.ShowTrace(traceId);
         };
-        _analysis.RefreshRequested += () => Refresh(force: true);
 
-        var titleBlock = new StackPanel { Spacing = 3, Children = { _title, _subtitle } };
-        var refresh = new Button
+        // 分段按钮
+        SetupSegmentButton(_btnOverview, "概览", 0);
+        SetupSegmentButton(_btnAnalysis, "分析", 1);
+
+        var switcherPill = new Border
         {
-            Content = "刷新",
-            FontSize = 10,
-            Padding = new Thickness(9, 5),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(2),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                Spacing = 2,
+                Children = { _btnOverview, _btnAnalysis },
+            },
         };
-        refresh.Click += (_, _) => Refresh(force: true);
-        _live.Margin = new Thickness(8, 0, 0, 0);
-        _live.FontSize = 10.5;
-        var actions = new StackPanel
+        switcherPill.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+
+        // 状态指示：模型徽章 + 实时绿点
+        _modelText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        _modelBadge.CornerRadius = new CornerRadius(999);
+        _modelBadge.Padding = new Thickness(8, 2);
+        _modelBadge.VerticalAlignment = VerticalAlignment.Center;
+        _modelBadge.Child = _modelText;
+        _modelBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+
+        var liveDot = new Ellipse
+        {
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(Color.Parse("#4ADE80")),
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        var liveText = new TextBlock
+        {
+            Text = "实时",
+            FontSize = 10,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        liveText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        var liveBadge = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            Spacing = 6,
+            Spacing = 5,
             VerticalAlignment = VerticalAlignment.Center,
-            Children = { refresh, _live },
+            Children = { liveDot, liveText },
         };
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), Margin = new Thickness(16, 12, 16, 10) };
-        header.Children.Add(titleBlock);
-        Grid.SetColumn(actions, 1);
-        header.Children.Add(actions);
-        var headerBorder = new Border { Child = header, BorderThickness = new Thickness(0, 0, 0, 1) };
-        headerBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
 
-        var navTitle = new TextBlock { Text = "视图", FontSize = 9.5, Margin = new Thickness(8, 4, 8, 4) };
-        navTitle.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        var navPanel = new Grid { RowDefinitions = new RowDefinitions("Auto,*,Auto") };
-        navPanel.Children.Add(navTitle);
-        Grid.SetRow(_nav, 1);
-        navPanel.Children.Add(_nav);
-        _status.Margin = new Thickness(8, 8, 8, 4);
-        Grid.SetRow(_status, 2);
-        navPanel.Children.Add(_status);
-        var navBorder = new Border
+        var rightStatus = new StackPanel
         {
-            Width = 136,
-            Padding = new Thickness(6, 8, 6, 8),
-            Child = navPanel,
-            BorderThickness = new Thickness(0, 0, 1, 0),
+            Orientation = Orientation.Horizontal,
+            Spacing = 8,
+            VerticalAlignment = VerticalAlignment.Center,
+            Children = { _modelBadge, liveBadge },
         };
-        navBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
 
-        _content.Margin = new Thickness(14, 12, 14, 14);
-        var body = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*") };
-        body.Children.Add(navBorder);
-        Grid.SetColumn(_content, 1);
-        body.Children.Add(_content);
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
-        root.Children.Add(headerBorder);
-        Grid.SetRow(body, 1);
-        root.Children.Add(body);
+        var topBar = new Grid
+        {
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            Height = 36,
+            Margin = new Thickness(12, 4, 12, 4),
+        };
+        topBar.Children.Add(switcherPill);
+        Grid.SetColumn(rightStatus, 2);
+        topBar.Children.Add(rightStatus);
+
+        var topBorder = new Border
+        {
+            Child = topBar,
+            BorderThickness = new Thickness(0, 0, 0, 1),
+        };
+        topBorder.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
+
+        var root = new Grid
+        {
+            RowDefinitions = new RowDefinitions("Auto,*"),
+        };
+        root.Children.Add(topBorder);
+        Grid.SetRow(_content, 1);
+        root.Children.Add(_content);
         Content = root;
-        SwitchView();
 
-        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        SwitchView(0);
+
+        // 自动静默定时轮询：数据变动自动重刷，无需人工操作
+        _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
         _timer.Tick += async (_, _) =>
         {
-            if (_disposed || _live.IsChecked != true || !IsEffectivelyVisible) return;
+            if (_disposed || !IsEffectivelyVisible) return;
             if (_recorder.Ring.TotalWritten == _lastTotal) return;
             await RefreshAsync(force: false);
         };
         _timer.Start();
         _ = RefreshAsync(force: true);
+    }
+
+    private void SetupSegmentButton(Button button, string label, int index)
+    {
+        button.Content = label;
+        button.FontSize = 11;
+        button.Padding = new Thickness(14, 4);
+        button.BorderThickness = new Thickness(0);
+        button.CornerRadius = new CornerRadius(6);
+        button.Click += (_, _) => SwitchView(index);
+    }
+
+    private void SwitchView(int index)
+    {
+        _activeViewIndex = index;
+        _content.Content = index == 0 ? _overview : _analysis;
+
+        UpdateSegmentButtonStyle(_btnOverview, index == 0);
+        UpdateSegmentButtonStyle(_btnAnalysis, index == 1);
+    }
+
+    private static void UpdateSegmentButtonStyle(Button button, bool active)
+    {
+        button.FontWeight = active ? FontWeight.SemiBold : FontWeight.Normal;
+        if (active)
+        {
+            button.Bind(Button.BackgroundProperty, new DynamicResourceExtension("AppCardBackground"));
+            button.Bind(Button.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        }
+        else
+        {
+            button.Background = Brushes.Transparent;
+            button.Bind(Button.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        }
     }
 
     public void Refresh(bool force)
@@ -142,7 +205,7 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         }
         catch (Exception error)
         {
-            await Dispatcher.UIThread.InvokeAsync(() => _status.Text = "刷新失败：" + error.Message);
+            System.Diagnostics.Trace.TraceWarning("Perf snapshot build failed: {0}", error.Message);
         }
         finally
         {
@@ -154,39 +217,11 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     {
         _overview.Render(snapshot);
         _analysis.SetSnapshot(snapshot);
-        var settings = _recorder.Settings;
-        var mode = settings.Mode switch { "off" => "关闭", "detailed" => "详细", _ => "标准" };
-        _status.Text = $"{mode} · {_recorder.Ring.Count:N0}/{_recorder.Ring.Capacity:N0} span · " +
-                       $"丢弃 {_recorder.Dropped:N0} · 异常 {_recorder.Anomalies().Count:N0}";
-        UpdateHeader();
-    }
 
-    private void SwitchView()
-    {
-        var index = Math.Max(0, _nav.SelectedIndex);
-        _content.Content = index == 0 ? _overview : _analysis;
-        UpdateHeader();
-    }
-
-    private void UpdateHeader()
-    {
-        var snapshot = _snapshot;
-        if (_nav.SelectedIndex == 0)
-        {
-            _title.Text = "会话概览";
-            _subtitle.Text = snapshot is null
-                ? "正在读取性能数据…"
-                : $"{_recorder.CurrentSessionId ?? "当前会话"} · {PerfPalette.FormatDuration(snapshot.WallDuration)} · " +
-                  $"{snapshot.TurnCount} 轮 · {snapshot.TotalTokens:N0} token";
-        }
-        else
-        {
-            _title.Text = "分析";
-            _subtitle.Text = snapshot is null
-                ? "正在读取性能数据…"
-                : $"启动 → 现在 · {snapshot.AllSpans.Count:N0} 个 span · {snapshot.StallCount} 次阻塞 · " +
-                  $"{snapshot.ErrorCount} 个错误";
-        }
+        var modelName = snapshot.ContextBreakdown.ModelName;
+        _modelText.Text = string.IsNullOrWhiteSpace(modelName)
+            ? (_recorder.CurrentSessionId ?? "当前会话")
+            : modelName;
     }
 
     public void Dispose()

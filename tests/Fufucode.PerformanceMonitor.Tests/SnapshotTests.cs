@@ -65,6 +65,15 @@ internal static class SnapshotTests
         Check(snapshot.Tools[0].SampleCommand == "npm test", "tool sample command");
         Check(snapshot.Context.PromptTokens == 1000 && snapshot.Context.CachedTokens == 700, "context uses latest usage");
 
+        // 上下文分解（Treemap / 内容列表）
+        var bd = snapshot.ContextBreakdown;
+        Check(bd.TotalTokens == 1000, "context breakdown total tokens matches prompt");
+        Check(bd.CachedTokens == 700, "context breakdown cached tokens");
+        Check(bd.Categories.Count >= 2, "context breakdown categories populated");
+        Check(bd.AllItems.Count >= 2, "context breakdown items populated");
+        Check(bd.AllItems.Sum(i => i.Tokens) == 1000, "breakdown items sum up to total context tokens");
+        Check(bd.Categories.Any(c => c.Key == "system" || c.Key == "tools" || c.Key == "toolResults"), "breakdown categories present");
+
         var turnInfo = snapshot.Turns[0];
         Check(turnInfo.EventSpans.Count == 1 && turnInfo.EventSpans[0].Name == "ui.stall", "stall becomes a tree node");
         Check(turnInfo.Spans.Any(span => span.Name == "ui.stall"), "stall included in turn spans");
