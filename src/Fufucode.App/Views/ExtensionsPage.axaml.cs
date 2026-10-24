@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Interactivity;
 using Avalonia.LogicalTree;
-using Fufucode.App.Features.Plugins;
 
 namespace Fufucode.App.Views;
 
@@ -13,12 +12,6 @@ public partial class ExtensionsPage : UserControl
     {
         InitializeComponent();
     }
-
-    public void AttachLocalPlugins(LocalPluginViewModel viewModel) => LocalPluginsSection.Attach(viewModel);
-
-    public void ReleaseLocalPlugins() => LocalPluginsSection.Detach();
-
-    internal LocalPluginSectionView LocalPluginsForTesting => LocalPluginsSection;
 
     private void ExtensionsHeader_SizeChanged(object? sender, SizeChangedEventArgs e)
     {

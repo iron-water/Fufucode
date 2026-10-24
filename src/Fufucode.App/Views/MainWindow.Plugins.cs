@@ -32,7 +32,6 @@ public partial class MainWindow
         _localPlugins = new LocalPluginService(layout, host);
         _localPluginViewModel = new LocalPluginViewModel(_localPlugins,
             new LocalPluginStoragePicker(this));
-        _extensionsPage.AttachLocalPlugins(_localPluginViewModel);
     }
 
     // 新的真实窗口即使还在bootstrap阶段也会发连接事件；此时插件组合尚未完成。

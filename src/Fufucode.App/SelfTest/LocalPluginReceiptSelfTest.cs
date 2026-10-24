@@ -11,7 +11,6 @@ using Avalonia.VisualTree;
 using System.Linq;
 using Avalonia.Controls;
 using Fufucode.App.Features.Plugins;
-using Fufucode.App.ViewModels;
 using Fufucode.Core;
 
 namespace Fufucode.App.SelfTest;
@@ -69,51 +68,52 @@ internal static class LocalPluginReceiptSelfTest
         try
         {
             var plugins = window.LocalPluginViewModelForTesting;
-            await ((MainViewModel)window.DataContext!).NavigateCommand.ExecuteAsync(AppPage.Extensions);
             await plugins.RefreshCommand.ExecuteAsync(null);
-            window.UpdateLayout();
-            var list = window.ExtensionsPageForTesting.LocalPluginsForTesting.FindControl<ListBox>("ReceiptList");
-            Check(list?.ItemCount == 1, "actual compiled extensions page exposes the original unknown receipt for explicit read-only inspection");
+            using var surface = new LocalPluginTestSurface(plugins);
+            var section = surface.Section;
+            surface.Window.UpdateLayout();
+            var list = section.FindControl<ListBox>("ReceiptList");
+            Check(list?.ItemCount == 1, "compiled test host exposes the original unknown receipt for explicit read-only inspection");
             await plugins.InspectReceiptCommand.ExecuteAsync(null);
             Check(plugins.SelectedReceipt?.Receipt.Token == receipt.Token && plugins.ReceiptObservationText.Contains("原结果保持未知"),
                 "shared compiled command reports offline unknown for the exact selected original token");
-            var observation = window.ExtensionsPageForTesting.LocalPluginsForTesting.FindControl<TextBox>("ReceiptObservation")!;
+            var observation = section.FindControl<TextBox>("ReceiptObservation")!;
             Check(observation.IsReadOnly && observation.Text == plugins.ReceiptObservationText,
                 "actual compiled observation binding remains selectable and read-only");
-            window.UpdateLayout(); observation.BringIntoView(); await Task.Delay(50); window.UpdateLayout();
-            var observationTop = observation.TranslatePoint(default, window);
-            var pageHost = window.FindControl<TransitioningContentControl>("PageHost")!;
-            var viewportBottom = pageHost.TranslatePoint(new Avalonia.Point(0, pageHost.Bounds.Height), window);
+            surface.Window.UpdateLayout(); observation.BringIntoView(); await Task.Delay(50); surface.Window.UpdateLayout();
+            var observationTop = observation.TranslatePoint(default, surface.Window);
+            var viewport = surface.Viewport;
+            var viewportBottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), surface.Window);
             Check(observationTop is { } top && viewportBottom is { } bottom && observation.Bounds.Height > 0 &&
-                top.Y >= 48 && top.Y + observation.Bounds.Height <= bottom.Y + 1,
-                "scrolling exposes the full read-only observation inside the actual page viewport");
+                top.Y >= 0 && top.Y + observation.Bounds.Height <= bottom.Y + 1,
+                "scrolling exposes the full read-only observation inside the host viewport");
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             Console.WriteLine("Receipt scroll before: " + string.Join("; ", observation.GetVisualAncestors().OfType<ScrollViewer>().Select(s => $"offset={s.Offset}; extent={s.Extent}; viewport={s.Viewport}; anchor={s.CurrentAnchor?.GetType().Name}")));
             await Task.Delay(100);
             AvaloniaHeadlessPlatform.ForceRenderTimerTick();
             await Task.Delay(100);
-            var settledTop = observation.TranslatePoint(default, window);
+            var settledTop = observation.TranslatePoint(default, surface.Window);
             Console.WriteLine("Receipt scroll after: " + string.Join("; ", observation.GetVisualAncestors().OfType<ScrollViewer>().Select(s => $"offset={s.Offset}; extent={s.Extent}; viewport={s.Viewport}; anchor={s.CurrentAnchor?.GetType().Name}")));
             Check(settledTop is { } settled && viewportBottom is { } visibleBottom &&
                 settled.Y + observation.Bounds.Height <= visibleBottom.Y + 1,
                 "read-only observation remains in the viewport after deferred layout and scrolling settle");
-            using (var frame = window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "receipt-page.png"), PngBitmapEncoderOptions.Default);
-            var details = window.ExtensionsPageForTesting.LocalPluginsForTesting.FindControl<TextBox>("ReceiptOriginalDetails")!;
-            details.BringIntoView(); await Task.Delay(200); window.UpdateLayout();
-            var detailsTop = details.TranslatePoint(default, window);
+            using (var frame = surface.Window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "receipt-page.png"), PngBitmapEncoderOptions.Default);
+            var details = section.FindControl<TextBox>("ReceiptOriginalDetails")!;
+            details.BringIntoView(); await Task.Delay(200); surface.Window.UpdateLayout();
+            var detailsTop = details.TranslatePoint(default, surface.Window);
             Check(details.IsReadOnly && details.Text!.Contains(receipt.Token) && detailsTop is { } detailPoint &&
-                viewportBottom is { } detailBottom && detailPoint.Y >= 48 && detailPoint.Y + details.Bounds.Height <= detailBottom.Y + 1,
+                viewportBottom is { } detailBottom && detailPoint.Y >= 0 && detailPoint.Y + details.Bounds.Height <= detailBottom.Y + 1,
                 "original receipt details remain scrollable and fully accessible for copying after observation");
-            window.Width = 800; window.Height = 640;
-            await Task.Delay(200); window.UpdateLayout(); observation.BringIntoView();
-            await Task.Delay(200); window.UpdateLayout();
-            var narrowTop = observation.TranslatePoint(default, window);
-            var narrowBottom = pageHost.TranslatePoint(new Avalonia.Point(0, pageHost.Bounds.Height), window);
-            Check(narrowTop is { } narrowPoint && narrowBottom is { } narrowLimit && narrowPoint.Y >= 48 &&
+            surface.Window.Width = 800; surface.Window.Height = 640;
+            await Task.Delay(200); surface.Window.UpdateLayout(); observation.BringIntoView();
+            await Task.Delay(200); surface.Window.UpdateLayout();
+            var narrowTop = observation.TranslatePoint(default, surface.Window);
+            var narrowBottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), surface.Window);
+            Check(narrowTop is { } narrowPoint && narrowBottom is { } narrowLimit && narrowPoint.Y >= 0 &&
                 narrowPoint.Y + observation.Bounds.Height <= narrowLimit.Y + 1,
                 "minimum window size retains the complete read-only result after scrolling settles");
             AvaloniaHeadlessPlatform.ForceRenderTimerTick(); await Task.Delay(100);
-            using (var frame = window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "receipt-page-minimum.png"), PngBitmapEncoderOptions.Default);
+            using (var frame = surface.Window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "receipt-page-minimum.png"), PngBitmapEncoderOptions.Default);
             Check(bytes.AsSpan().SequenceEqual(File.ReadAllBytes(Path.Combine(service.Root, PluginCatalogStore.CatalogFileName))),
                 "opening the receipt page leaves original catalog bytes unchanged");
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
