@@ -407,6 +407,8 @@ public partial class MainWindow
     {
         WireSessionContext(vm);
         var path = _host?.ProjectPath ?? Environment.CurrentDirectory;
+        vm.ProjectRootPath = Path.GetFullPath(path);
+        vm.Timeline.ResolveReferencedFiles(vm.ProjectRootPath);
         if (_host is null) vm.WorkspacePanel.AttachMock(path);
         else
         {
