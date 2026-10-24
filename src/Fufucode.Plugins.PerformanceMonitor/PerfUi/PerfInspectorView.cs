@@ -48,7 +48,7 @@ internal sealed class PerfInspectorView : UserControl
         _statusChip = new Border
         {
             Padding = new Thickness(7, 2),
-            CornerRadius = new CornerRadius(999),
+            CornerRadius = new CornerRadius(4),
             Child = _statusText,
             VerticalAlignment = VerticalAlignment.Center,
         };
@@ -82,8 +82,8 @@ internal sealed class PerfInspectorView : UserControl
         };
         var card = new Border
         {
-            Padding = new Thickness(16, 14, 16, 16),
-            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
             Child = body,
         };
         card.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppCardBackground"));
@@ -341,7 +341,7 @@ internal sealed class PerfInspectorView : UserControl
         var card = new Border
         {
             Padding = new Thickness(12, 10),
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = new CornerRadius(4),
             Child = stack,
         };
         card.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
@@ -378,7 +378,7 @@ internal sealed class PerfInspectorView : UserControl
         var border = new Border
         {
             Padding = new Thickness(10, 6),
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(4),
             Child = grid,
         };
         border.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
@@ -403,7 +403,7 @@ internal sealed class PerfInspectorView : UserControl
         var card = new Border
         {
             Padding = new Thickness(12, 10),
-            CornerRadius = new CornerRadius(10),
+            CornerRadius = new CornerRadius(4),
             Child = stack,
         };
         card.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));

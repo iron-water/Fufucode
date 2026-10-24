@@ -63,9 +63,9 @@ internal sealed class PerfCompanionNetworkView : UserControl
         var versionBadge = new Border
         {
             Padding = new Thickness(8, 2),
-            CornerRadius = new CornerRadius(999),
+            CornerRadius = new CornerRadius(4),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = Text("FUFUCODE ↔ FUFU ↔ JIII 规范总线", 10, "AppTextDim"),
+            Child = Text("FUFUCODE ↔ FUFU ↔ JIII 规范总线", 11, "AppTextDim"),
         };
         versionBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
         Grid.SetColumn(versionBadge, 2);
@@ -125,8 +125,8 @@ internal sealed class PerfCompanionNetworkView : UserControl
 
         var auditCard = new Border
         {
-            Padding = new Thickness(16, 14, 16, 14),
-            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
             Child = new StackPanel { Spacing = 6, Children = { auditHead, _auditRowsHost } },
         };
         BindCard(auditCard);
@@ -285,7 +285,7 @@ internal sealed class PerfCompanionNetworkView : UserControl
         var card = new Border
         {
             Padding = new Thickness(14, 12, 14, 12),
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(6),
             Child = body,
         };
         BindCard(card);
@@ -295,14 +295,14 @@ internal sealed class PerfCompanionNetworkView : UserControl
     private static Border KpiBlock(string label, TextBlock valueText, string sub)
     {
         var body = new StackPanel { Spacing = 3 };
-        body.Children.Add(Text(label, 10.5, "AppTextDim"));
+        body.Children.Add(Text(label, 11, "AppTextDim"));
         body.Children.Add(valueText);
-        body.Children.Add(Text(sub, 9.5, "AppTextDim"));
+        body.Children.Add(Text(sub, 10, "AppTextDim"));
 
         var card = new Border
         {
             Padding = new Thickness(12, 10, 12, 10),
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = new CornerRadius(6),
             Child = body,
         };
         BindCard(card);
@@ -314,16 +314,16 @@ internal sealed class PerfCompanionNetworkView : UserControl
         var body = new StackPanel { Spacing = 6 };
         var titleRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = {
             new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(PerfPalette.Approval), VerticalAlignment = VerticalAlignment.Center },
-            Text("FUFUCODE--FUFU--JIII 通路指标扩展插槽（已预留）", 11.5, "AppTextPrimary", FontWeight.SemiBold)
+            Text("FUFUCODE--FUFU--JIII 通路指标扩展插槽（已预留）", 12, "AppTextPrimary", FontWeight.SemiBold)
         }};
         body.Children.Add(titleRow);
         body.Children.Add(Text("1. [JIII 远程] 双向音频流、桌面视频流推流帧延迟与网络抖动监测插槽\n2. [FUFU 桌宠] Live2D 姿态动力学物理计算帧同步吞吐监测插槽\n3. [跨端协同] 跨进程/跨设备意图双向确认 RTT 往返时延插槽",
-            10.5, "AppTextDim", null, true));
+            11, "AppTextDim", null, true));
 
         var card = new Border
         {
             Padding = new Thickness(14, 12, 14, 12),
-            CornerRadius = new CornerRadius(12),
+            CornerRadius = new CornerRadius(6),
             Child = body,
             BorderThickness = new Thickness(1),
         };

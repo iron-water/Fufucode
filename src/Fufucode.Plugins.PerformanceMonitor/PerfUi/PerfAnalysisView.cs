@@ -45,9 +45,9 @@ internal sealed class PerfAnalysisView : UserControl
         _overview.Children.Add(_strip);
         var overviewCard = new Border
         {
-            Padding = new Thickness(16, 14, 16, 12),
-            CornerRadius = new CornerRadius(14),
-            Margin = new Thickness(0, 0, 0, 14),
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
+            Margin = new Thickness(0, 0, 0, 12),
             Child = _overview,
         };
         BindCard(overviewCard);
@@ -180,7 +180,7 @@ internal sealed class PerfAnalysisView : UserControl
         var card = new Border
         {
             Padding = new Thickness(14, 12, 14, 12),
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(6),
             Child = body,
         };
         BindCard(card);

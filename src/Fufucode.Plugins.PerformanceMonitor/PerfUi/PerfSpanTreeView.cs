@@ -229,7 +229,7 @@ internal sealed class PerfSpanTreeView : UserControl
         Content = new Border
         {
             Padding = new Thickness(12, 12, 12, 12),
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(6),
             Child = _rows,
         };
         if (Content is Border border)
