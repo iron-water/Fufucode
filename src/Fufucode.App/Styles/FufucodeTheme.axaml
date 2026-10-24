@@ -468,14 +468,26 @@
         <Setter Property="Padding" Value="0"/>
         <Setter Property="HorizontalContentAlignment" Value="Center"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.083"/>
-            </Transitions>
-        </Setter>
+        <!-- 图标按钮不做背景过渡：进出即时，避免视觉上的“闪烁”。 -->
     </Style>
     <Style Selector="Button.iconButton:pointerover">
-        <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+        <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    </Style>
+    <!-- Fluent 按钮模板在 ContentPresenter 上自带 hover/pressed 底色（#3A），
+         会盖住上面的 Background；图标按钮直接覆盖模板层的底色。 -->
+    <Style Selector="Button.iconButton /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    </Style>
+    <Style Selector="Button.iconButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    </Style>
+    <Style Selector="Border.chromeBar Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Border.dockHost Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Border.settingsRow Button.iconButton:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+        <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
     </Style>
     <Style Selector="Button.iconButton:pressed">
         <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
@@ -689,7 +701,8 @@
 
     <!-- ================= 输入区（composer） ================= -->
     <Style Selector="Border.composerCard">
-        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+        <!-- 输入区落在页面底（一级），不再抬高一层；图标悬停用二级色即可辨认。 -->
+        <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
