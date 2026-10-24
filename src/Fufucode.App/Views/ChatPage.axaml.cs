@@ -227,9 +227,14 @@ public partial class ChatPage : UserControl
         if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
         if (sender is not Control { DataContext: ToolCallBlockViewModel tool }) return;
 
-        // 按钮/选择区域内的点击有自己的行为，不切换卡片。
-        if (e.Source is Visual source &&
-            source.GetVisualAncestors().Prepend(source).OfType<Button>().Any()) return;
+        // 按钮、可选文本、滚动区域内的点击有自己的行为，不切换卡片。
+        if (e.Source is Visual source)
+        {
+            foreach (var ancestor in source.GetVisualAncestors().Prepend(source))
+            {
+                if (ancestor is Button or SelectableTextBlock or ScrollViewer or TextBox) return;
+            }
+        }
 
         tool.ToggleExpanded();
         e.Handled = true;
