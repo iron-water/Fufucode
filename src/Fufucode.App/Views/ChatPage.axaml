@@ -586,7 +586,7 @@
       <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
       <StackPanel x:Name="ComposerHost" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Stretch">
       <!-- 聚焦光带：位于输入卡上方的淡绿色渐变（不依赖 BoxShadow，渲染更可靠）。 -->
-      <Border x:Name="ComposerGlowBand" Height="9" Margin="72,0,72,0" Opacity="0" IsHitTestVisible="False">
+      <Border x:Name="ComposerGlowBand" Height="9" Margin="0" Opacity="0" IsHitTestVisible="False">
         <Border.Effect>
           <BlurEffect Radius="4"/>
         </Border.Effect>
