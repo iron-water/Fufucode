@@ -308,10 +308,8 @@ public partial class ChatPage
             {
                 _executionModeButton.IsEnabled = vm.Input.CanChangeExecutionMode;
                 _executionModeButton.IsVisible = vm.Input.ShowsExecutionMode;
-                ToolTip.SetTip(_executionModeButton, "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
             }
             ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
-            ToolTip.SetTip(ThinkingButton, "思考：" + (vm.Settings.SelectedThinking?.Label ?? "默认"));
         }
         finally { _updatingComposer = false; }
         DraftPreview.IsVisible = _previewDraft;

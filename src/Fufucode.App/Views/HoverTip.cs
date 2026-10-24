@@ -4,6 +4,7 @@ using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Media.Immutable;
 using Avalonia.Threading;
 
 namespace Fufucode.App.Views;
@@ -18,13 +19,22 @@ internal static class HoverTip
     {
         ToolTip.SetTip(target, null);
         var label = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.NoWrap };
+        IBrush BrushOf(string key, Color fallback) =>
+            Application.Current?.TryGetResource(key, null, out var value) == true && value is IBrush brush
+                ? brush : new SolidColorBrush(fallback);
+        var background = BrushOf("AppBaseBar", Color.Parse("#FF2C2C2C"));
+        var borderBrush = BrushOf("AppCardStroke", Color.Parse("#3DFFFFFF"));
+        var foreground = BrushOf("AppTextPrimary", Colors.White);
+        label.Foreground = foreground;
         var border = new Border
         {
             Child = label,
             Padding = new Thickness(8, 4),
             BorderThickness = new Thickness(1),
+            Background = background,
+            BorderBrush = borderBrush,
+            CornerRadius = new CornerRadius(4),
         };
-        border.Classes.Add("hoverTip");
         var popup = new Popup
         {
             PlacementTarget = target,

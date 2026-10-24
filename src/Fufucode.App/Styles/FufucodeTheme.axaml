@@ -705,9 +705,10 @@
         </Setter>
     </Style>
     <!-- 聚焦时描边转 accent：一眼看出焦点在输入区（Windows 文本框同语义）。 -->
-    <!-- 聚焦不用硬描边：改成上方一层淡绿色模糊辉光（Codex 式），描边保持透明。 -->
+    <!-- 聚焦不用硬描边：上方淡绿色模糊辉光；描边与下划线全部隐藏，避免聚焦瞬间闪一条线。 -->
     <Style Selector="Border.composerCard:focus-within">
         <Setter Property="BorderBrush" Value="Transparent"/>
+        <Setter Property="BorderThickness" Value="0"/>
         <Setter Property="BoxShadow" Value="{DynamicResource ComposerGlowShadow}"/>
     </Style>
     <Style Selector="TextBox.composerInput">
@@ -730,13 +731,11 @@
         </Setter>
     </Style>
     <Style Selector="Border.composerCard:pointerover Border.composerUnderline">
-        <Setter Property="Opacity" Value="1"/>
-        <Setter Property="Background" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
+        <Setter Property="Opacity" Value="0"/>
     </Style>
     <!-- focus-within 声明在 pointerover 之后：两者同现时聚焦态（accent）胜出 -->
     <Style Selector="Border.composerCard:focus-within Border.composerUnderline">
-        <Setter Property="Opacity" Value="1"/>
-        <Setter Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
+        <Setter Property="Opacity" Value="0"/>
     </Style>
     <!-- UI-1 单闭合边框原则：composerCard 已闭合，工具栏内的模型/思考选择器降级为无框轻质填充，
          仅靠悬停底色传达可交互性，避免"容器内再套闭合框"。 -->
