@@ -719,18 +719,18 @@
             </Button>
             <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="添加文件、图片、PDF 或链接"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
-            <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="6"
-                        VerticalAlignment="Center" Margin="6,0,8,0" IsVisible="False">
-              <Button x:Name="SessionProjectChip" Classes="iconButton" Width="30" Height="30"
+            <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="4"
+                        VerticalAlignment="Center" IsVisible="False">
+              <Button x:Name="SessionProjectChip" Classes="iconButton" Width="32" Height="32"
                      
                       AutomationProperties.Name="更改此会话的项目">
                 <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14"/>
               </Button>
               <TextBlock x:Name="SessionProjectChipText" IsVisible="False"/>
             </StackPanel>
-            <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
+            <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
-              <Button x:Name="ModelButton" Classes="iconButton" Width="30" Height="30"
+              <Button x:Name="ModelButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}"
                      >
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
@@ -807,7 +807,7 @@
                   </Flyout>
                 </Button.Flyout>
               </Button>
-              <Button x:Name="ThinkingButton" Classes="iconButton" Width="30" Height="30"
+              <Button x:Name="ThinkingButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}">
                 <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14"/>
                 <Button.Flyout>
@@ -815,7 +815,7 @@
                 </Button.Flyout>
               </Button>
             </WrapPanel>
-            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
               <!-- 插入（steer）：仅运行中出现 -->
               <Button Classes="subtle" Command="{Binding Input.SteerCommand}"
                       IsVisible="{Binding Input.IsTurnActive}" Height="32"

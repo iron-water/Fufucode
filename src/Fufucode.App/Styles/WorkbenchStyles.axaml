@@ -1131,6 +1131,11 @@
   <Style Selector="StackPanel#ComposerHost:focus-within Border#ComposerGlowBand">
     <Setter Property="Opacity" Value="1"/>
   </Style>
+  <!-- 输入区工具行：所有图标按钮用同一个 4px 右间距，隐藏控件不占位，
+       避免“左侧三枚 / 右侧三枚”间距不一致。 -->
+  <Style Selector="Grid#ComposerToolbar Button.iconButton">
+    <Setter Property="Margin" Value="0,0,4,0"/>
+  </Style>
   <!-- 透明遮罩按钮（岛/抽屉/全局浮层）：不允许任何 hover/pressed 底色，
        否则指针落上去会把整个窗口刷成高亮色，表现为“离开图标时闪一下”。 -->
   <Style Selector="Button#IslandScrim, Button#RightDrawerScrim, Grid#GlobalOverlay > Button">
