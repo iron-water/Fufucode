@@ -54,6 +54,15 @@
                     <StaticResource x:Key="AppSuccessForeground"  ResourceKey="SystemFillColorSuccessBrush"/>
                     <StaticResource x:Key="AppCautionForeground"  ResourceKey="SystemFillColorCautionBrush"/>
                     <StaticResource x:Key="AppCriticalForeground" ResourceKey="SystemFillColorCriticalBrush"/>
+                    <!-- 变更 diff：整行色块 + 行内强调。色块是半透明叠加，不是第四种不透明底色；
+                         其余皮肤用自己的令牌覆盖同一组键。 -->
+                    <SolidColorBrush x:Key="AppDiffAddedBackground"    Color="#1A107C41"/>
+                    <SolidColorBrush x:Key="AppDiffAddedStrong"        Color="#3D107C41"/>
+                    <SolidColorBrush x:Key="AppDiffAddedForeground"    Color="#FF107C41"/>
+                    <SolidColorBrush x:Key="AppDiffRemovedBackground"  Color="#1AC42B1C"/>
+                    <SolidColorBrush x:Key="AppDiffRemovedStrong"      Color="#3DC42B1C"/>
+                    <SolidColorBrush x:Key="AppDiffRemovedForeground"  Color="#FFC42B1C"/>
+                    <SolidColorBrush x:Key="AppDiffLineNumber"         Color="#66000000"/>
                     <StaticResource x:Key="AppDialogBackground"   ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
@@ -135,6 +144,14 @@
                     <StaticResource x:Key="AppSuccessForeground"  ResourceKey="SystemFillColorSuccessBrush"/>
                     <StaticResource x:Key="AppCautionForeground"  ResourceKey="SystemFillColorCautionBrush"/>
                     <StaticResource x:Key="AppCriticalForeground" ResourceKey="SystemFillColorCriticalBrush"/>
+                    <!-- 变更 diff：半透明色块叠在三档底色之上，不引入新的不透明 surface。 -->
+                    <SolidColorBrush x:Key="AppDiffAddedBackground"    Color="#2232D74B"/>
+                    <SolidColorBrush x:Key="AppDiffAddedStrong"        Color="#4A32D74B"/>
+                    <SolidColorBrush x:Key="AppDiffAddedForeground"    Color="#FF6FD68A"/>
+                    <SolidColorBrush x:Key="AppDiffRemovedBackground"  Color="#22FF5F56"/>
+                    <SolidColorBrush x:Key="AppDiffRemovedStrong"      Color="#4AFF5F56"/>
+                    <SolidColorBrush x:Key="AppDiffRemovedForeground"  Color="#FFFF8B84"/>
+                    <SolidColorBrush x:Key="AppDiffLineNumber"         Color="#66FFFFFF"/>
                     <StaticResource x:Key="AppDialogBackground"   ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppDialogFooterBackground" ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppSmokeBackground"    ResourceKey="SmokeFillColorDefaultBrush"/>
