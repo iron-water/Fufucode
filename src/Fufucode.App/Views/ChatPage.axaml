@@ -709,7 +709,7 @@
                 </Grid>
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened">
-                    <Border Width="380" Classes="card" Padding="10">
+                    <Border Width="380" Classes="card" Padding="10" Background="{DynamicResource AppBaseDeep}">
                       <StackPanel Spacing="8">
                         <TextBox x:Name="ModelPickerSearchBox"
                                  Text="{Binding Settings.ModelPickerFilter, UpdateSourceTrigger=PropertyChanged}"
@@ -755,7 +755,7 @@
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ModelPickerItem">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                  <Button Grid.Column="0" Classes="commandFlyoutItem" Padding="8,5"
+                                  <Button Grid.Column="0" Classes="commandFlyoutItem modelChoiceRow" Padding="8,5"
                                           HorizontalContentAlignment="Stretch"
                                           HorizontalAlignment="Stretch"
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ChooseModelCommand}"
