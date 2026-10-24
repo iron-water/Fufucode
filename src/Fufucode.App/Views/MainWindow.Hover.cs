@@ -27,6 +27,8 @@ public partial class MainWindow
     {
         var row = FindRow(e.Source as Visual);
         if (ReferenceEquals(row, _hoverRow)) return;
+        // 指针仍停留在原控件上时忽略这次“找不到行”的抖动，避免高亮忽明忽暗。
+        if (row is null && _hoverRow is { IsPointerOver: true }) return;
         ClearHoverRow();
         _hoverRow = row;
         row?.Classes.Add("pointerHover");
