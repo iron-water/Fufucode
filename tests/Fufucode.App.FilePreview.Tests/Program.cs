@@ -6,6 +6,9 @@ using Fufucode.App.Features.FilePreview;
 AppBuilder.Configure<Application>()
     .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
     .SetupWithoutStarting();
+// SetupWithoutStarting 会安装 Avalonia 的 SynchronizationContext，但没有消息循环。
+// 测试里的 await 若继续 Post 回该 context 会永久等待；这里改用线程池继续。
+SynchronizationContext.SetSynchronizationContext(null);
 
 var passed = 0;
 var root = Path.Combine(Path.GetTempPath(), "fufucode-file-preview-" + Guid.NewGuid().ToString("N"));
