@@ -49,10 +49,10 @@ public partial class ChatPage
         }
         // 输入区始终与阅读宽度对齐：正文多宽，输入框就多宽；
         // “自由”宽度（Infinity）时才铺满可用区域。
+        // 只靠 MaxWidth 约束：Stretch + MaxWidth 时 Avalonia 会自动居中；
+        // 显式 Center 会让父容器按内容自适应，把输入卡压成窄条。
         ComposerCard.MaxWidth = settings.ReadWidth;
-        ComposerCard.HorizontalAlignment = double.IsInfinity(settings.ReadWidth)
-            ? HorizontalAlignment.Stretch
-            : HorizontalAlignment.Center;
+        ComposerCard.HorizontalAlignment = HorizontalAlignment.Stretch;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
         else ComposerCard.ClearValue(Border.CornerRadiusProperty);
