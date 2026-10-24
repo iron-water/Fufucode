@@ -3,13 +3,6 @@ using System.Collections.Generic;
 
 namespace Fufucode.Core.Backend;
 
-/// <summary>用户手动选择的子代理档位。插件安装后固定默认为 Faster。</summary>
-public enum SubagentTier
-{
-    Faster,
-    Stronger,
-}
-
 public sealed record NativeSubagentDescriptor(string Name, string Description, string Mode);
 
 public sealed record NativeSubagentProgress(string JobId, string Agent, string Kind, string? Detail);
@@ -17,8 +10,6 @@ public sealed record NativeSubagentProgress(string JobId, string Agent, string K
 /// <summary>原生会话与可选 Subagent 插件之间的最小运行时契约。</summary>
 public interface INativeSubagentRuntime
 {
-    SubagentTier Tier { get; }
-    void SetTier(SubagentTier tier);
     IPureToolDispatcher Wrap(IPureToolDispatcher inner);
     IReadOnlyList<NativeSubagentDescriptor> Agents { get; }
     string BuildPromptSection();
@@ -43,8 +34,6 @@ public interface INativeSubagentFactory
         string? defaultModelId,
         string? workspaceRoot,
         IReadOnlyList<PureToolDefinition> capabilityDefinitions);
-
-    void SetTier(SubagentTier tier);
 }
 
 /// <summary>由 Subagent 插件在激活时注册；核心未安装插件时保持 null。</summary>
@@ -52,13 +41,6 @@ public static class NativeSubagentRegistry
 {
     private static readonly object Gate = new();
     private static INativeSubagentFactory? _factory;
-    private static SubagentTier _tier = SubagentTier.Faster;
-
-    public static SubagentTier Tier
-    {
-        get { lock (Gate) return _tier; }
-        set { lock (Gate) { _tier = value; _factory?.SetTier(value); } }
-    }
 
     public static INativeSubagentFactory? Factory
     {
@@ -71,7 +53,6 @@ public static class NativeSubagentRegistry
         lock (Gate)
         {
             _factory = factory;
-            _factory.SetTier(_tier);
         }
     }
 
@@ -88,17 +69,27 @@ public static class NativeSubagentContract
 {
     public const string ToolName = "subagent";
 
+    /// <summary>
+    /// 父会话与嵌套子代理共用的唯一 Schema。
+    /// `action` 支持 list（列出可用代理）与 run（默认）；`context` 用于预取已知线索，
+    /// 让子代理不必从零开始发现文件。
+    /// </summary>
     public static PureToolDefinition Definition { get; } = new(
         ToolName,
-        "运行已安装的子代理插件；默认档位由用户设置决定。",
+        "派发一个隔离上下文的子代理。read 模式只读、快速，适合搜索、定位与审查；" +
+        "patch 模式在临时 git worktree 中修改并返回候选补丁（不直接写入父工作区）。" +
+        "省略 agent 时按 mode 选择内置代理；省略 prompt 时列出可用代理。",
         """
         {
-          "type":"object",
-          "properties":{
-            "agent":{"type":"string","description":"子代理名称；省略时使用默认代理"},
-            "prompt":{"type":"string","description":"任务说明"},
-            "model":{"type":"string","description":"可选模型 id"},
-            "fork":{"type":"boolean","description":"是否继承父会话上下文"}
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["run", "list"], "description": "run 执行任务（默认）；list 列出可用子代理" },
+            "agent": { "type": "string", "description": "子代理名称；read 默认 explore，patch 默认 general" },
+            "prompt": { "type": "string", "description": "任务说明；省略时列出可用子代理" },
+            "mode": { "type": "string", "enum": ["read", "patch"], "description": "覆盖代理模式；与代理定义冲突时会被拒绝" },
+            "context": { "type": "string", "description": "已知线索：文件路径、符号名、报错原文、已排除的方向。用于减少子代理的发现轮次" },
+            "model": { "type": "string", "description": "可选模型 id" },
+            "fork": { "type": "boolean", "description": "是否继承父会话最近历史" }
           }
         }
         """);

@@ -34,7 +34,9 @@ public sealed record PureModelRequest(
     IReadOnlyList<string> ToolNames,
     string? ModelId = null,
     IReadOnlyList<PureToolDefinition>? ToolDefinitions = null,
-    string? ReasoningEffort = null);
+    string? ReasoningEffort = null,
+    /// <summary>采样温度；null 表示不发送该字段，沿用端点默认值。</summary>
+    double? Temperature = null);
 
 /// <summary>图片附件（Base64 编码数据与 MIME 类型）。</summary>
 public sealed record PureImageAttachment(string Base64Data, string MimeType);
@@ -92,7 +94,9 @@ public sealed record PureAgentTurnResult(
     PureModelResponse Response,
     IReadOnlyList<PureToolResult> ToolResults,
     string? Error = null,
-    PureUsage? Usage = null);
+    PureUsage? Usage = null,
+    /// <summary>是否因轮次预算耗尽而被强制收尾；结论可能不完整。</summary>
+    bool Truncated = false);
 
 /// <summary>内核运行状态快照。</summary>
 public sealed record PureAgentState(string? ModelId, int MessageCount, bool IsRunning, IReadOnlyList<PureAgentMessage>? History = null);

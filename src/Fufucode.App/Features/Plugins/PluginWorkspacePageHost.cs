@@ -45,10 +45,14 @@ internal sealed class PluginWorkspacePageHost : IDisposable
             _manager = new PluginPackageManager(layout, new PluginToolRegistry(gateway));
         }
         _manager.PageContributionsChanged += OnContributionsChanged;
+        _manager.ComposerContributionsChanged += OnComposerContributionsChanged;
     }
 
     /// <summary>页面集合变化（插件启停）。在 UI 线程触发；宿主应重新渲染停靠区并清理布局。</summary>
     public event Action? PagesChanged;
+
+    /// <summary>输入栏贡献变化（插件启停）。在 UI 线程触发；宿主应刷新输入栏菜单。</summary>
+    public event Action? ComposerContributionsChanged;
 
     public IReadOnlyDictionary<string, IPluginWorkspacePage> ActivePages => _active;
 
@@ -92,6 +96,13 @@ internal sealed class PluginWorkspacePageHost : IDisposable
         if (_disposed) return;
         if (Dispatcher.UIThread.CheckAccess()) Sync();
         else Dispatcher.UIThread.Post(Sync);
+    }
+
+    private void OnComposerContributionsChanged()
+    {
+        if (_disposed) return;
+        if (Dispatcher.UIThread.CheckAccess()) ComposerContributionsChanged?.Invoke();
+        else Dispatcher.UIThread.Post(() => ComposerContributionsChanged?.Invoke());
     }
 
     private void Sync()
@@ -158,6 +169,7 @@ internal sealed class PluginWorkspacePageHost : IDisposable
         if (_disposed) return;
         _disposed = true;
         _manager.PageContributionsChanged -= OnContributionsChanged;
+        _manager.ComposerContributionsChanged -= OnComposerContributionsChanged;
         foreach (var pluginId in _active.Keys.ToArray()) Remove(pluginId);
         _manager.DisposeAsync().AsTask().GetAwaiter().GetResult();
     }

@@ -16,6 +16,11 @@ public partial class ChatPage
 
     /// <summary>语音朗读服务：由宿主注入；未安装语音插件时为 null（按钮不显示）。</summary>
     internal Fufucode.Core.Plugins.ISpeechService? SpeechService { get; set; }
+    /// <summary>插件安装/启停后让已渲染的消息操作条重新判断“朗读”按钮是否显示。</summary>
+    internal void RefreshSpeechAvailability()
+    {
+        foreach (var actions in this.GetVisualDescendants().OfType<MessageActionsView>()) actions.RefreshAvailability();
+    }
     private AppActionRegistry? _workbenchActions;
     internal void AttachWorkbenchActions(AppActionRegistry actions) => _workbenchActions = actions;
     internal void SetHeaderMenu(MenuFlyout menu)
@@ -28,9 +33,30 @@ public partial class ChatPage
         // 否则最后一条消息贴到输入区上沿、操作条被输入区挡住。
         TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12, 16, 28), "airy" => new Thickness(28, 24, 28, 40), _ => new Thickness(24, 20, 24, 32) };
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
-        ComposerCard.IsVisible = settings.Composer != "hidden";
-        // 沉浸式收起时由窗口层保留重新展开入口；这里只控制卡片本身。
-        ComposerCard.MaxWidth = settings.Composer == "reading" ? settings.ReadWidth : double.PositiveInfinity;
+        var composerVisible = settings.Composer != "hidden";
+        if (!_composerVisibilityInitialized)
+        {
+            // 首次应用外观时不播动画，避免启动瞬间输入区自己淡入。
+            _composerVisibilityInitialized = true;
+            ComposerCard.IsVisible = composerVisible;
+            ComposerRevealButton.IsVisible = !composerVisible;
+        }
+        else
+        {
+            // 沉浸式切换走平滑显示/隐藏，而不是瞬间消失。
+            Motion.SetVisible(ComposerCard, composerVisible, offsetY: 8);
+            Motion.SetVisible(ComposerRevealButton, !composerVisible);
+        }
+        // 输入区始终与阅读宽度对齐：正文多宽，输入框就多宽；
+        // “自由”宽度（Infinity）时才铺满可用区域。
+        // 只靠 MaxWidth 约束：Stretch + MaxWidth 时 Avalonia 会自动居中；
+        // 显式 Center 会让父容器按内容自适应，把输入卡压成窄条。
+        ComposerHost.MaxWidth = settings.ReadWidth;
+        ComposerHost.Width = double.IsInfinity(settings.ReadWidth) ? double.NaN : settings.ReadWidth;
+        ComposerCard.MaxWidth = settings.ReadWidth;
+        // 显式宽度：某些父容器会按内容自适应，仅靠 MaxWidth 会把输入卡压成窄条。
+        ComposerCard.Width = double.IsInfinity(settings.ReadWidth) ? double.NaN : settings.ReadWidth;
+        ComposerCard.HorizontalAlignment = HorizontalAlignment.Stretch;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
         else ComposerCard.ClearValue(Border.CornerRadiusProperty);

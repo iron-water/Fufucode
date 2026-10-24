@@ -9,6 +9,7 @@ using Avalonia;
 using Avalonia.Media.Imaging;
 using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
+using Fufucode.App.Features.FilePreview;
 using Point = Avalonia.Point;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
@@ -80,7 +81,7 @@ public static class Wave5D6SelfTest
             Save(window, directory, "02-narrow-1024-drawer.png");
 
             // ③ 抽屉 + 底栏展开：内容带被两头压缩后的最紧态。
-            window.OpenDockPage("usage", DockZone.Bottom);
+            window.OpenDockPage("notifications", DockZone.Bottom);
             await Task.Delay(220);
             window.UpdateLayout();
             var tightHeader = chat.Bounds.Top + chat.HeaderBandHeight;
@@ -107,7 +108,7 @@ public static class Wave5D6SelfTest
         }
     }
 
-    // ── Files 选中 / 双击 → E1 内置浏览器预览 ──
+    // ── Files 选中 / 双击 → 统一本地文件预览 ──
     private static async Task PreviewWiringAsync(Action<bool, string> check)
     {
         var root = Path.Combine(Path.GetTempPath(), "fufucode-d6-" + Guid.NewGuid().ToString("N"));
@@ -128,10 +129,10 @@ public static class Wave5D6SelfTest
             try
             {
                 host.UpdateLayout();
-                var browser = view.FindControl<BrowserView>(BrowserView.PreviewControlName);
-                check(browser is not null, "x:Name=PreviewBrowser 契约在真实右栏内可定位");
-                if (browser is null) return;
-                check(!browser.ViewModel.IsFileMode, "初始未选择文件时浏览器保持自由导航态");
+                var previewHost = view.FindControl<ContentControl>("PreviewHost");
+                check(previewHost is not null, "x:Name=PreviewHost 契约在真实右栏内可定位");
+                if (previewHost is null) return;
+                check(previewHost.Content is FilePreviewHost, "初始预览由统一 FilePreviewHost 承载");
 
                 // 单击文件：走行内按钮的真实 Click 路由（与用户点击同一路径）。
                 var row = RowOf(view, vm, file);
@@ -139,16 +140,14 @@ public static class Wave5D6SelfTest
                 if (row is null) return;
                 Click(row);
                 await Task.Delay(80);
-                check(browser.ViewModel.IsFileMode && browser.ViewModel.CurrentFilePath == file.FullPath &&
-                      browser.ViewModel.ModeText == "文件预览", "Files 单击文件 → 内置浏览器进入文件预览态");
+                check(vm.SelectedFile?.FullPath == file.FullPath, "Files 单击文件只更新选中项");
                 check(vm.SelectedTab!.Kind == WorkspacePanelKind.Files, "单击只就位预览目标，不抢 Files tab");
 
-                // 双击（同一文件行连续第二次点击）：打开预览并切到 Preview tab。
+                // 双击（同一文件行连续第二次点击）：打开统一预览宿主。
                 Click(row);
-                await Task.Delay(80);
-                check(vm.IsFilePreviewOpen &&
-                      browser.ViewModel.CurrentFilePath == file.FullPath,
-                    "Files 双击文件 → 进入工作面板内文件预览态且预览目标不变");
+                await Task.Delay(120);
+                check(vm.IsFilePreviewOpen && vm.PreviewResult?.Path == file.FullPath,
+                    "Files 双击文件 → 进入统一文件预览态且预览目标不变");
 
                 // 目录不进入预览（只做逐层浏览）。
                 vm.CloseFilePreviewCommand.Execute(null);
@@ -156,8 +155,8 @@ public static class Wave5D6SelfTest
                 var folderRow = RowOf(view, vm, folder);
                 if (folderRow is not null) Click(folderRow);
                 await Task.Delay(120);
-                check(browser.ViewModel.CurrentFilePath == file.FullPath && vm.CurrentDirectory == folder.FullPath,
-                    "目录只做逐层浏览，不抢占预览目标");
+                check(!vm.IsFilePreviewOpen && vm.CurrentDirectory == root,
+                    "目录只做递归展开，不抢占预览目标");
             }
             finally
             {

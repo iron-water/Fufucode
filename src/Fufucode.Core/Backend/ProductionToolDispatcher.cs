@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -28,7 +28,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal)
     {
         ".git", ".claude", "bin", "obj", "node_modules", "out", "artifacts", ".vs", ".idea", ".workbuddy",
-        "dist", "target", "coverage", "venv", ".venv", ".next"
+        "dist", "target", "coverage", "venv", ".venv", ".next", ".gradle", "__pycache__", ".dart_tool",
+        ".pytest_cache", ".mypy_cache", ".terraform", "Pods", "DerivedData", ".next-cache"
     };
 
     public ProductionToolDispatcher(string? workspaceRoot = null)
@@ -47,6 +48,12 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     private GitIgnoreMatcher? _ignoreMatcher;
     private DateTime _ignoreStamp;
     private readonly object _ignoreGate = new();
+
+    // 会话级工作区文件索引（对 fff 的可移植借鉴）：避免每次 grep 都重新递归目录。
+    // 文件写/编辑/命令执行后失效；另有 30 秒 TTL 兜底外部改动。
+    private List<string>? _workspaceFiles;
+    private DateTime _workspaceFilesAt;
+    private readonly object _workspaceFilesGate = new();
 
     /// <summary>读取根 .gitignore 与 .git/info/exclude（按修改时间缓存）；无文件时为空匹配器。</summary>
     private GitIgnoreMatcher IgnoreMatcher()
@@ -78,6 +85,61 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
     private string Relative(string fullPath) =>
         Path.GetRelativePath(_workspaceRoot, fullPath).Replace('\\', '/');
+
+    private void InvalidateWorkspaceIndex()
+    {
+        lock (_workspaceFilesGate) _workspaceFiles = null;
+    }
+
+    /// <summary>
+    /// 返回工作区内参与检索的相对路径（正斜杠）。索引在写/编辑/命令后失效，
+    /// 并带 30 秒 TTL，兼顾同会话重复 grep 与外部改动。
+    /// </summary>
+    private IReadOnlyList<string> WorkspaceFiles(CancellationToken ct)
+    {
+        lock (_workspaceFilesGate)
+        {
+            if (_workspaceFiles is not null &&
+                (DateTime.UtcNow - _workspaceFilesAt).TotalSeconds < 30)
+                return _workspaceFiles;
+
+            var ignore = IgnoreMatcher();
+            var files = new List<string>();
+            var pending = new Stack<string>();
+            pending.Push(_workspaceRoot);
+            while (pending.Count > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+                var dir = pending.Pop();
+                try
+                {
+                    foreach (var file in Directory.EnumerateFiles(dir))
+                    {
+                        var relative = Relative(file);
+                        if (!ignore.IsIgnored(relative)) files.Add(relative);
+                    }
+                    foreach (var subDir in Directory.EnumerateDirectories(dir))
+                    {
+                        var name = Path.GetFileName(subDir);
+                        if (ExcludedDirectories.Contains(name)) continue;
+                        if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
+                        if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
+                        pending.Push(subDir);
+                    }
+                }
+                catch (OperationCanceledException) { throw; }
+                catch
+                {
+                    // 权限/占用/目录被删除：跳过该目录，不中止整个索引。
+                }
+            }
+
+            files.Sort(StringComparer.Ordinal);
+            _workspaceFiles = files;
+            _workspaceFilesAt = DateTime.UtcNow;
+            return _workspaceFiles;
+        }
+    }
 
     /// <summary>轻量 .gitignore 匹配：支持注释、取反、目录规则、前导 /、*、**、?。</summary>
     private sealed class GitIgnoreMatcher
@@ -275,8 +337,16 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     private async Task<PureToolResult> ExecuteReadFileAsync(PureToolCall call, CancellationToken ct)
     {
         using var doc = JsonDocument.Parse(call.ArgumentsJson);
-        if (!doc.RootElement.TryGetProperty("path", out var pathElem) || pathElem.GetString() is not { } relPath)
+        if (!doc.RootElement.TryGetProperty("path", out var pathElem) || pathElem.GetString() is not { } rawPath)
             return new PureToolResult(call.Id, false, "缺少必需参数 'path'。");
+
+        // OMP 风格行选区：file:10-20、file:10+5（第 10 行再带 5 行）、file:-50、
+        // file:5-16,960-973。选区与 offset/limit 二选一，避免两种游标语义冲突。
+        var (relPath, selector) = SplitReadSelector(rawPath);
+        var hasOffset = doc.RootElement.TryGetProperty("offset", out var offsetElem);
+        var hasLimit = doc.RootElement.TryGetProperty("limit", out var limitElem);
+        if (selector is not null && (hasOffset || hasLimit))
+            return new PureToolResult(call.Id, false, "行选区（path:N 或 path:A-B）不能与 offset/limit 同时使用。");
 
         var target = ResolveSafePath(relPath, out var error);
         if (target is null) return new PureToolResult(call.Id, false, error);
@@ -288,8 +358,6 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (await LooksBinaryAsync(target, ct).ConfigureAwait(false))
             return new PureToolResult(call.Id, false, $"'{relPath}' 看起来是二进制文件，read_file 只读取文本。");
 
-        var hasOffset = doc.RootElement.TryGetProperty("offset", out var offsetElem);
-        var hasLimit = doc.RootElement.TryGetProperty("limit", out var limitElem);
         var offset = 1;
         var limit = 2000;
         if (hasOffset && (!offsetElem.TryGetInt32(out offset) || offset < 1))
@@ -298,19 +366,61 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             return new PureToolResult(call.Id, false, "参数 'limit' 必须是大于 0 的整数。");
         limit = Math.Min(limit, 5000);
 
-        // 兼容未提供 offset/limit 时的纯文本返回契约；整文件读取设置 10MB 上限。
+        if (selector is not null)
+            return await ExecuteReadSelectionAsync(call, target, relPath, selector, ct).ConfigureAwait(false);
+
+        // 兼容未提供 offset/limit 时的纯文本返回契约：整文件读取按行有界返回。
+        // 以前这里会整篇返回，再由 Agent 循环从中间硬截断——既切断行边界，也不给续读指引。
+        // 现在在工具层按行边界截断并显式给出下一次 offset，模型可以直接续读。
         if (!hasOffset && !hasLimit)
         {
-            if (new FileInfo(target).Length > 10 * 1024 * 1024)
+            var fileInfo = new FileInfo(target);
+            if (fileInfo.Length > 10 * 1024 * 1024)
                 return new PureToolResult(call.Id, false,
                     $"文件大于 10MB，请使用 offset/limit 分页读取：'{relPath}'。");
             try
             {
-                await using var stream = new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
-                    bufferSize: 8192, useAsync: true);
-                using var strictReader = new StreamReader(stream, new UTF8Encoding(false, true),
-                    detectEncodingFromByteOrderMarks: true);
-                return new PureToolResult(call.Id, true, await strictReader.ReadToEndAsync(ct).ConfigureAwait(false));
+                // UTF-8 的字符数不会超过字节数：文件在上限内时必然不会截断，
+                // 直接读原文即可，既保留原始换行字节，也避免扫描两遍。
+                if (fileInfo.Length <= FullReadCharLimit)
+                {
+                    await using var stream = new FileStream(target, FileMode.Open, FileAccess.Read,
+                        FileShare.ReadWrite, bufferSize: 8192, useAsync: true);
+                    using var strictReader = new StreamReader(stream, new UTF8Encoding(false, true),
+                        detectEncodingFromByteOrderMarks: true);
+                    return new PureToolResult(call.Id, true,
+                        await strictReader.ReadToEndAsync(ct).ConfigureAwait(false));
+                }
+
+                var full = new StringBuilder();
+                var readLines = 0;
+                var truncated = false;
+                using (var reader = new StreamReader(target, new UTF8Encoding(false, true),
+                           detectEncodingFromByteOrderMarks: true))
+                {
+                    while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+                    {
+                        if (full.Length + line.Length > FullReadCharLimit)
+                        {
+                            // 单行本身就超过整读上限时，返回“前 0 行 + offset 1”会让模型无限重试；
+                            // 必须明确告知改用分页或命令处理。
+                            if (readLines == 0)
+                                return new PureToolResult(call.Id, false,
+                                    $"第 1 行长度超过整读上限（{line.Length} 字符）。" +
+                                    "请使用 offset/limit 分页读取，或用 run_command 处理该行。");
+                            truncated = true;
+                            break;
+                        }
+                        full.AppendLine(line);
+                        readLines++;
+                    }
+                }
+
+                if (!truncated)
+                    return new PureToolResult(call.Id, true, full.ToString());
+
+                full.Append($"\n[文件较长，已按行截断到前 {readLines} 行。使用 offset: {readLines + 1} 继续读取]");
+                return new PureToolResult(call.Id, true, full.ToString());
             }
             catch (DecoderFallbackException)
             {
@@ -353,12 +463,29 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         return new PureToolResult(call.Id, true, sb.ToString().TrimEnd('\r', '\n'));
     }
 
+    // 分页读取时单行最多返回的字符数；超出部分标注截断，保证行号游标仍能前进。
+    private const int MaxPagedLineChars = 8 * 1024;
+
+    // 单次整文件读取的字符上限：按行边界截断，避免把超长文件整篇塞进上下文后
+    // 再被循环层从中间切断。必须明显小于 NativeAgentLoop 的 64KiB 工具结果预算，
+    // 否则工具层刚排好的行边界又会被循环层二次截断，续读提示也会被切掉。
+    private const int FullReadCharLimit = 48 * 1024;
+
     private static async Task<bool> LooksBinaryAsync(string path, CancellationToken ct)
     {
         var buffer = new byte[8192];
         await using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite,
             bufferSize: 4096, useAsync: true);
         var read = await stream.ReadAsync(buffer, ct).ConfigureAwait(false);
+        if (read == 0) return false;
+
+        // UTF-16/UTF-32 文本天然含 NUL 字节：先按 BOM 判定为文本，否则大量合法的
+        // Windows 文本文件会被当成二进制拒绝，而 write_file/edit_file 却明确支持它们。
+        if (read >= 2 && ((buffer[0] == 0xFF && buffer[1] == 0xFE) || (buffer[0] == 0xFE && buffer[1] == 0xFF)))
+            return false;
+        if (read >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+            return false;
+
         return buffer.AsSpan(0, read).Contains((byte)0);
     }
 
@@ -384,7 +511,33 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         }
     }
 
-    private static async Task WriteAllTextAtomicAsync(string target, string content, Encoding encoding,
+    /// <summary>
+    /// 写盘前守卫（对应 SWE-agent ACI 的 linter）：JSON 目标必须是可解析的结构。
+    /// 直接把坏 JSON 写进磁盘，会让模型在后续回合拿到一个自己造成的、更难定位的错误；
+    /// 在写盘前拒绝并指出行号，成本更低。允许注释与尾随逗号，避免误伤 JSONC 配置。
+    /// </summary>
+    private static string? ValidateStructuredText(string target, string content)
+    {
+        if (!target.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) return null;
+        if (string.IsNullOrWhiteSpace(content)) return null;
+        try
+        {
+            using var _ = JsonDocument.Parse(content, new JsonDocumentOptions
+            {
+                AllowTrailingCommas = true,
+                CommentHandling = JsonCommentHandling.Skip,
+            });
+            return null;
+        }
+        catch (JsonException error)
+        {
+            var line = error.LineNumber is { } number ? $"第 {number + 1} 行" : "未知位置";
+            return $"写入被拒绝：'{Path.GetFileName(target)}' 的内容不是合法 JSON（{line}）。" +
+                   $"请修正后再写盘，原始错误：{error.Message}";
+        }
+    }
+
+    private async Task WriteAllTextAtomicAsync(string target, string content, Encoding encoding,
         CancellationToken ct)
     {
         var temp = target + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
@@ -392,6 +545,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         {
             await File.WriteAllTextAsync(temp, content, encoding, ct).ConfigureAwait(false);
             File.Move(temp, target, overwrite: true);
+            InvalidateWorkspaceIndex();
         }
         finally
         {
@@ -426,6 +580,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             if (existing is { } decoded) encoding = decoded.Encoding;
         }
 
+        if (ValidateStructuredText(target, content) is { } invalid)
+            return new PureToolResult(call.Id, false, invalid);
+
         FileChangeJournal.Capture(call.Id, target);
         await WriteAllTextAtomicAsync(target, content, encoding, ct).ConfigureAwait(false);
         return new PureToolResult(call.Id, true, $"已成功写入文件 '{relPath}'（{content.Length} 字符）。");
@@ -436,6 +593,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         using var doc = JsonDocument.Parse(call.ArgumentsJson);
         if (!doc.RootElement.TryGetProperty("path", out var pathElem) || pathElem.GetString() is not { } relPath)
             return new PureToolResult(call.Id, false, "缺少必需参数 'path'。");
+
+        if (doc.RootElement.TryGetProperty("edits", out var editsElem))
+            return await ExecuteBatchEditAsync(call, editsElem, relPath, ct).ConfigureAwait(false);
 
         if (!doc.RootElement.TryGetProperty("old_string", out var oldElem) || oldElem.GetString() is not { } oldStr)
             return new PureToolResult(call.Id, false, "缺少必需参数 'old_string'。");
@@ -506,6 +666,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var replacedContent = replaceAll
             ? rawContent.Replace(chosenOld, chosenNew!, StringComparison.Ordinal)
             : ReplaceFirst(rawContent, chosenOld, chosenNew!);
+        if (ValidateStructuredText(target, replacedContent) is { } invalid)
+            return new PureToolResult(call.Id, false, invalid);
+
         FileChangeJournal.Capture(call.Id, target);
         await WriteAllTextAtomicAsync(target, replacedContent, fileEncoding, ct).ConfigureAwait(false);
 
@@ -513,6 +676,241 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var msg = $"已成功更新 '{relPath}'（替换了 {count} 处）。";
         if (!string.IsNullOrEmpty(preview)) msg += $"\n{preview}";
         return new PureToolResult(call.Id, true, msg);
+    }
+
+    private static readonly Regex ReadSelectorPattern = new(
+        @"^(?<path>.+):(?<sel>-?\d+(?:[-+]\d+)?(?:,-?\d+(?:[-+]\d+)?)*)$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
+    private static (string Path, string? Selector) SplitReadSelector(string raw)
+    {
+        var match = ReadSelectorPattern.Match(raw);
+        if (!match.Success) return (raw, null);
+        var path = match.Groups["path"].Value;
+        return string.IsNullOrWhiteSpace(path) ? (raw, null) : (path, match.Groups["sel"].Value);
+    }
+
+    private async Task<PureToolResult> ExecuteReadSelectionAsync(PureToolCall call, string target, string relPath,
+        string selector, CancellationToken ct)
+    {
+        var info = new FileInfo(target);
+        if (info.Length > 10 * 1024 * 1024)
+            return new PureToolResult(call.Id, false,
+                $"文件大于 10MB，请缩小选区：'{relPath}:{selector}'。");
+
+        var lines = new List<string>();
+        try
+        {
+            using var reader = new StreamReader(target, new UTF8Encoding(false, true),
+                detectEncodingFromByteOrderMarks: true);
+            while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+                lines.Add(line);
+        }
+        catch (DecoderFallbackException)
+        {
+            return new PureToolResult(call.Id, false,
+                $"'{relPath}' 不是 UTF-8/UTF-16 文本（可能是 GBK/ANSI 编码），请改用 run_command 处理。");
+        }
+
+        if (lines.Count == 0) return new PureToolResult(call.Id, true, "（文件为空）");
+        if (!TryParseReadRanges(selector, lines.Count, out var ranges, out var rangeError))
+            return new PureToolResult(call.Id, false, rangeError);
+
+        var sb = new StringBuilder();
+        foreach (var (start, end) in ranges)
+        {
+            if (ranges.Count > 1) sb.AppendLine($"--- 第 {start}-{end} 行 ---");
+            for (var lineNo = start; lineNo <= end; lineNo++)
+            {
+                var line = lines[lineNo - 1];
+                var text = line.Length > MaxPagedLineChars
+                    ? line[..MaxPagedLineChars] + $" …[本行共 {line.Length} 字符，已截断]"
+                    : line;
+                sb.Append(lineNo).Append('\t').AppendLine(text);
+            }
+        }
+        var totalChars = lines.Sum(line => (long)line.Length + 1);
+        sb.Append($"[文件共 {lines.Count} 行，{totalChars} 字符]");
+        return new PureToolResult(call.Id, true, sb.ToString().TrimEnd('\r', '\n'));
+    }
+
+    private static bool TryParseReadRanges(string selector, int totalLines,
+        out List<(int Start, int End)> ranges, out string error)
+    {
+        ranges = new List<(int, int)>();
+        error = string.Empty;
+        foreach (var token in selector.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            int start;
+            int end;
+            if (token.StartsWith('-') && int.TryParse(token[1..], out var tail))
+            {
+                if (tail <= 0) { error = $"选区 '{token}' 无效：行数必须大于 0。"; return false; }
+                start = Math.Max(1, totalLines - tail + 1);
+                end = totalLines;
+            }
+            else if (token.Contains('+', StringComparison.Ordinal))
+            {
+                var parts = token.Split('+');
+                if (parts.Length != 2 || !int.TryParse(parts[0], out start) ||
+                    !int.TryParse(parts[1], out var extra) || start < 1 || extra < 0)
+                { error = $"选区 '{token}' 无效：格式应为 A+C。"; return false; }
+                end = start + extra;
+            }
+            else if (token.Contains('-', StringComparison.Ordinal))
+            {
+                var parts = token.Split('-');
+                if (parts.Length != 2 || !int.TryParse(parts[0], out start) ||
+                    !int.TryParse(parts[1], out end) || start < 1 || end < start)
+                { error = $"选区 '{token}' 无效：格式应为 A-B 且 A<=B。"; return false; }
+            }
+            else if (int.TryParse(token, out var single) && single >= 1)
+            {
+                start = end = single;
+            }
+            else
+            {
+                error = $"选区 '{token}' 无效：支持 N、A-B、A+C、-N，可用逗号组合。";
+                return false;
+            }
+
+            if (start > totalLines || end > totalLines)
+            {
+                error = $"选区 {start}-{end} 超出文件总行数（共 {totalLines} 行）。";
+                return false;
+            }
+            ranges.Add((start, Math.Min(end, totalLines)));
+        }
+
+        if (ranges.Count == 0) { error = "至少需要一个行选区。"; return false; }
+        return true;
+    }
+
+    /// <summary>
+    /// 批量编辑：所有锚点都先对原始文件求值，再检查替换区间是否重叠，最后从后往前应用。
+    /// 这样前一条编辑不会让后一条的 old_string 失效；任何一条失败都不会写盘。
+    /// </summary>
+    private async Task<PureToolResult> ExecuteBatchEditAsync(PureToolCall call, JsonElement editsElem,
+        string relPath, CancellationToken ct)
+    {
+        if (editsElem.ValueKind != JsonValueKind.Array || editsElem.GetArrayLength() == 0)
+            return new PureToolResult(call.Id, false, "edits 必须是非空数组。");
+        if (editsElem.GetArrayLength() > 20)
+            return new PureToolResult(call.Id, false, "单次最多提交 20 条编辑。");
+
+        var edits = new List<(int Index, string Old, string New, bool ReplaceAll)>();
+        var index = 0;
+        foreach (var edit in editsElem.EnumerateArray())
+        {
+            if (edit.ValueKind != JsonValueKind.Object)
+                return new PureToolResult(call.Id, false, $"edits[{index}] 必须是对象。");
+            if (!edit.TryGetProperty("old_string", out var oldElem) ||
+                oldElem.GetString() is not { Length: > 0 } oldStr)
+                return new PureToolResult(call.Id, false, $"edits[{index}] 缺少非空 old_string。");
+            if (!edit.TryGetProperty("new_string", out var newElem) ||
+                newElem.GetString() is not { } newStr)
+                return new PureToolResult(call.Id, false, $"edits[{index}] 缺少 new_string。");
+            var replaceAll = edit.TryGetProperty("replace_all", out var repElem) &&
+                             repElem.ValueKind == JsonValueKind.True;
+            edits.Add((index++, oldStr, newStr, replaceAll));
+        }
+
+        var target = ResolveSafePath(relPath, out var error);
+        if (target is null) return new PureToolResult(call.Id, false, error);
+        if (!File.Exists(target))
+            return new PureToolResult(call.Id, false, $"文件不存在：'{relPath}'。");
+
+        var decodedFile = TryDecodeEditable(await File.ReadAllBytesAsync(target, ct).ConfigureAwait(false));
+        if (decodedFile is null)
+            return new PureToolResult(call.Id, false,
+                $"'{relPath}' 不是 UTF-8/UTF-16 文本（可能是 GBK/ANSI 编码），为避免损坏文件已拒绝编辑。");
+        var (rawContent, fileEncoding) = decodedFile.Value;
+
+        var ranges = new List<(int Start, int Length, string NewText, int EditIndex)>();
+        var applied = new List<(string Old, string New)>();
+        foreach (var edit in edits)
+        {
+            var lfOld = edit.Old.Replace("\r\n", "\n");
+            var lfNew = edit.New.Replace("\r\n", "\n");
+            var crlfOld = lfOld.Replace("\n", "\r\n");
+            var crlfNew = lfNew.Replace("\n", "\r\n");
+
+            string? chosenOld = null;
+            string? chosenNew = null;
+            foreach (var (candidateOld, candidateNew) in new[]
+                     {
+                         (edit.Old, edit.New),
+                         (lfOld, lfNew),
+                         (crlfOld, crlfNew),
+                     })
+            {
+                if (candidateOld.Length == 0 ||
+                    !rawContent.Contains(candidateOld, StringComparison.Ordinal)) continue;
+                chosenOld = candidateOld;
+                chosenNew = candidateNew;
+                break;
+            }
+
+            if (chosenOld is null)
+                return new PureToolResult(call.Id, false,
+                    $"edits[{edit.Index}] 在 '{relPath}' 中未找到匹配的 old_string。请使用 read_file 确认最新内容。");
+            if (string.Equals(chosenOld, chosenNew, StringComparison.Ordinal))
+                return new PureToolResult(call.Id, false,
+                    $"edits[{edit.Index}] 的 old_string 与 new_string 完全相同，无需替换。");
+
+            var starts = new List<int>();
+            var cursor = 0;
+            while ((cursor = rawContent.IndexOf(chosenOld, cursor, StringComparison.Ordinal)) >= 0)
+            {
+                starts.Add(cursor);
+                cursor += chosenOld.Length;
+            }
+
+            if (starts.Count > 1 && !edit.ReplaceAll)
+            {
+                var lineNumbers = FindLineNumbers(rawContent, chosenOld);
+                var lineHint = lineNumbers.Count > 0
+                    ? $"（在第 {string.Join("、", lineNumbers.Take(5))} 行）"
+                    : "";
+                return new PureToolResult(call.Id, false,
+                    $"edits[{edit.Index}] 在 '{relPath}' 中找到 {starts.Count} 处匹配{lineHint}。" +
+                    "请提供更多上下文行使其唯一，或设置 replace_all: true。");
+            }
+
+            foreach (var start in starts)
+                ranges.Add((start, chosenOld.Length, chosenNew!, edit.Index));
+            applied.Add((chosenOld, chosenNew!));
+        }
+
+        var ordered = ranges.OrderBy(range => range.Start).ToArray();
+        for (var i = 1; i < ordered.Length; i++)
+        {
+            if (ordered[i].Start < ordered[i - 1].Start + ordered[i - 1].Length)
+                return new PureToolResult(call.Id, false,
+                    $"edits[{ordered[i - 1].EditIndex}] 与 edits[{ordered[i].EditIndex}] 的替换范围重叠，" +
+                    "请拆成互不重叠的编辑。");
+        }
+
+        var replacedContent = rawContent;
+        foreach (var range in ordered.OrderByDescending(range => range.Start))
+            replacedContent = replacedContent.Remove(range.Start, range.Length).Insert(range.Start, range.NewText);
+
+        if (ValidateStructuredText(target, replacedContent) is { } invalid)
+            return new PureToolResult(call.Id, false, invalid);
+
+        FileChangeJournal.Capture(call.Id, target);
+        await WriteAllTextAtomicAsync(target, replacedContent, fileEncoding, ct).ConfigureAwait(false);
+
+        var preview = new StringBuilder();
+        foreach (var (oldText, newText) in applied.Take(3))
+        {
+            var item = BuildEditPreview(rawContent, oldText, newText);
+            if (item.Length > 0) preview.AppendLine().Append(item);
+        }
+
+        var message = $"已成功更新 '{relPath}'（{edits.Count} 条编辑，共替换 {ranges.Count} 处）。";
+        if (preview.Length > 0) message += "\n" + preview.ToString().Trim();
+        return new PureToolResult(call.Id, true, message);
     }
 
     private static List<int> FindLineNumbers(string text, string pattern)
@@ -620,11 +1018,17 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         var contextLines = 0;
         if (doc.RootElement.TryGetProperty("context_lines", out var clElem) && clElem.TryGetInt32(out var cl) && cl > 0)
-            contextLines = Math.Clamp(cl, 0, 5);
+            // 上限 20：足够覆盖一个完整函数体，同时仍受 max_matches 与输出预算约束。
+            contextLines = Math.Clamp(cl, 0, 20);
 
         var maxMatches = 100;
         if (doc.RootElement.TryGetProperty("max_matches", out var mmElem) && mmElem.TryGetInt32(out var mm) && mm > 0)
             maxMatches = Math.Min(mm, 1000);
+
+        // 分页游标：命中很多时按文件分组后分页，避免有用结果被平铺输出埋掉。
+        var offset = 0;
+        if (doc.RootElement.TryGetProperty("offset", out var offElem) && offElem.TryGetInt32(out var off) && off > 0)
+            offset = off;
 
         var targetDir = ResolveSafePath(relPath, out var error);
         if (targetDir is null) return new PureToolResult(call.Id, false, error);
@@ -648,12 +1052,14 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (ReferenceEquals(globRegex, NeverMatch))
             return new PureToolResult(call.Id, false, $"无效的 glob 模式：'{globPattern}'。");
 
-        var matches = new List<string>();
+        // 纯字面量查询走 span/IndexOf 快路径，避免正则引擎开销；含元字符时才用 Regex。
+        var lineMatcher = BuildLineMatcher(pattern, caseSensitive, regex);
+        var collector = new GrepCollector(maxMatches);
         try
         {
             await Task.Run(() =>
             {
-                SearchDirectoryRecursive(targetDir, regex, globRegex, maxMatches, contextLines, matches, IgnoreMatcher(), ct);
+                SearchIndexedFiles(targetDir, lineMatcher, globRegex, collector, contextLines, ct);
             }, ct).ConfigureAwait(false);
         }
         catch (RegexMatchTimeoutException)
@@ -662,27 +1068,198 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 "正则匹配超时（灾难性回溯），搜索已中止。请简化正则表达式后重试。");
         }
 
-        if (matches.Count == 0)
-            return new PureToolResult(call.Id, true, "未找到匹配项。");
+        var skippedNote = collector.SkippedLargeFiles > 0
+            ? $"\n[另有 {collector.SkippedLargeFiles} 个超过 {GrepMaxFileBytes / (1024 * 1024)}MB 的文件未参与检索" +
+              $"（合计 {collector.SkippedLargeBytes / (1024 * 1024)}MB）；若目标可能在其中，请缩小 path 后重试]"
+            : string.Empty;
 
-        var resultText = string.Join("\n", matches);
-        if (matches.Count >= maxMatches)
-            resultText += $"\n[已达到最大匹配数限制（{maxMatches} 条），搜索已截断]";
+        if (collector.Hits.Count == 0)
+            return new PureToolResult(call.Id, true,
+                "未找到匹配项。" + (skippedNote.Length > 0 ? skippedNote : string.Empty));
 
-        return new PureToolResult(call.Id, true, resultText);
+        return new PureToolResult(call.Id, true,
+            FormatGroupedGrepOutput(collector.Hits, maxMatches, offset) + skippedNote);
     }
 
-    private void SearchDirectoryRecursive(string currentDir, Regex regex, Regex? globRegex, int maxMatches, int contextLines, List<string> results, GitIgnoreMatcher ignore, CancellationToken ct)
+    /// <summary>一条检索命中；上下文行与命中行分开记录，便于分组输出。</summary>
+    private readonly record struct GrepHit(string File, int Line, string Text, bool IsMatch);
+
+    /// <summary>检索结果收集器：单独维护命中计数，避免每次判断都遍历列表。</summary>
+    private sealed class GrepCollector(int maxMatches)
+    {
+        public List<GrepHit> Hits { get; } = new();
+        public int MatchCount { get; private set; }
+        public bool IsFull => MatchCount >= maxMatches;
+
+        /// <summary>因体积过大被跳过的文件数：必须回报，否则"未找到匹配"会变成假阴性。</summary>
+        public int SkippedLargeFiles { get; private set; }
+        public long SkippedLargeBytes { get; private set; }
+
+        public void AddContext(string file, int line, string text) =>
+            Hits.Add(new GrepHit(file, line, text, false));
+
+        public void AddMatch(string file, int line, string text)
+        {
+            Hits.Add(new GrepHit(file, line, text, true));
+            MatchCount++;
+        }
+
+        public void SkipLarge(long bytes)
+        {
+            SkippedLargeFiles++;
+            SkippedLargeBytes += bytes;
+        }
+    }
+
+    /// <summary>
+    /// 按文件分组、按相关度排序、支持游标分页的检索输出。
+    ///
+    /// 平铺输出的问题是：前 N 条可能全来自同一个大文件，真正需要的另一个文件永远排不到。
+    /// 这里先按"文件被多个不同位置命中"的程度排序（命中越密集越可能是定义处），
+    /// 同一文件内按行号升序，再分页返回；输出比平铺更短，且第一页信息密度更高。
+    /// </summary>
+    private static string FormatGroupedGrepOutput(List<GrepHit> hits, int maxMatches, int offset)
+    {
+        var groups = hits
+            .GroupBy(hit => hit.File, StringComparer.Ordinal)
+            .Select(group => new
+            {
+                File = group.Key,
+                Hits = group.OrderBy(hit => hit.Line).ToArray(),
+                MatchCount = group.Count(hit => hit.IsMatch),
+            })
+            // 命中次数多的文件更可能是目标；同分时按路径稳定排序，保证结果可复现。
+            .OrderByDescending(group => group.MatchCount)
+            .ThenBy(group => group.File, StringComparer.Ordinal)
+            .ToArray();
+
+        var emittedGroups = 0;
+        var emittedHits = 0;
+        var builder = new StringBuilder();
+        // offset 语义是"跳过前 N 个已看过的文件"，与续页提示中的 offset 一致。
+        var skipGroups = offset;
+
+        foreach (var group in groups)
+        {
+            if (emittedHits >= maxMatches) break;
+            if (skipGroups > 0)
+            {
+                skipGroups--;
+                continue;
+            }
+
+            emittedGroups++;
+            builder.Append("## ").Append(group.File).Append(" (").Append(group.MatchCount).AppendLine(" 处命中)");
+            foreach (var hit in group.Hits)
+            {
+                if (emittedHits >= maxMatches) break;
+                var separator = hit.IsMatch ? ": " : "- ";
+                builder.Append(hit.Line).Append(separator).AppendLine(hit.Text);
+                if (hit.IsMatch) emittedHits++;
+            }
+        }
+
+        if (emittedGroups == 0)
+            return $"[offset {offset} 超出结果范围；共 {groups.Length} 个文件、{hits.Count} 行命中]";
+
+        var totalMatches = hits.Count(hit => hit.IsMatch);
+        if (skipGroups == 0 && offset + emittedGroups < groups.Length)
+        {
+            builder.AppendLine()
+                .Append($"[已返回 {emittedGroups} 个文件、{emittedHits} 行命中（共 {groups.Length} 个文件、{totalMatches} 行）。")
+                .Append($"使用 offset: {offset + emittedGroups} 继续查看后续文件；")
+                .AppendLine("或加 glob / 缩小 path / 把正则写得更具体来收窄范围]");
+        }
+
+        return builder.ToString().TrimEnd();
+    }
+
+    private static Func<string, bool> BuildLineMatcher(string pattern, bool caseSensitive, Regex regex)
+    {
+        const string metacharacters = "\\\\.^$|?*+()[]{}";
+        var literal = pattern.IndexOfAny(metacharacters.ToCharArray()) < 0 ? pattern : null;
+        if (literal is null) return regex.IsMatch;
+        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+        return line => line.Contains(literal, comparison);
+    }
+
+    private void SearchIndexedFiles(string targetDir, Func<string, bool> matches, Regex? globRegex,
+        GrepCollector results, int contextLines, CancellationToken ct)
+    {
+        var prefix = Relative(targetDir).TrimEnd('/');
+        if (prefix == ".") prefix = string.Empty;
+        var prefixWithSeparator = prefix.Length == 0 ? string.Empty : prefix + "/";
+
+        foreach (var relative in WorkspaceFiles(ct))
+        {
+            ct.ThrowIfCancellationRequested();
+            if (results.IsFull) return;
+            if (prefixWithSeparator.Length > 0 &&
+                !relative.StartsWith(prefixWithSeparator, StringComparison.Ordinal)) continue;
+
+            var fileName = Path.GetFileName(relative);
+            if (globRegex is not null &&
+                !WildcardMatches(globRegex, fileName) && !WildcardMatches(globRegex, relative))
+                continue;
+
+            var full = Path.Combine(_workspaceRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            try
+            {
+                var fileLength = new FileInfo(full).Length;
+                if (fileLength > GrepMaxFileBytes)
+                {
+                    results.SkipLarge(fileLength);
+                    continue;
+                }
+                if (contextLines > 0)
+                {
+                    var lines = File.ReadLines(full).ToList();
+                    for (var i = 0; i < lines.Count; i++)
+                    {
+                        if (!matches(lines[i])) continue;
+                        var start = Math.Max(0, i - contextLines);
+                        var end = Math.Min(lines.Count - 1, i + contextLines);
+                        for (var c = start; c <= end; c++)
+                        {
+                            if (c == i) results.AddMatch(relative, c + 1, lines[c].TrimEnd());
+                            else results.AddContext(relative, c + 1, lines[c].TrimEnd());
+                        }
+                        if (results.IsFull) return;
+                        i = end;
+                    }
+                }
+                else
+                {
+                    var lineNum = 0;
+                    foreach (var line in File.ReadLines(full))
+                    {
+                        lineNum++;
+                        if (!matches(line)) continue;
+                        results.AddMatch(relative, lineNum, line.TrimEnd());
+                        if (results.IsFull) return;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch
+            {
+                // 单个文件读取失败（权限/占用/编码）时跳过，不中止整个搜索。
+            }
+        }
+    }
+
+    private void SearchDirectoryRecursive(string currentDir, Regex regex, Regex? globRegex,
+        GrepCollector results, int contextLines, GitIgnoreMatcher ignore, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (results.Count >= maxMatches) return;
+        if (results.IsFull) return;
 
         try
         {
             foreach (var file in Directory.EnumerateFiles(currentDir))
             {
                 ct.ThrowIfCancellationRequested();
-                if (results.Count >= maxMatches) return;
+                if (results.IsFull) return;
 
                 var fileName = Path.GetFileName(file);
                 var relative = Path.GetRelativePath(_workspaceRoot, file).Replace('\\', '/');
@@ -693,7 +1270,12 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
                 try
                 {
-                    if (new FileInfo(file).Length > 5 * 1024 * 1024) continue;
+                    var fileLength = new FileInfo(file).Length;
+                    if (fileLength > GrepMaxFileBytes)
+                    {
+                        results.SkipLarge(fileLength);
+                        continue;
+                    }
                     if (contextLines > 0)
                     {
                         var lines = File.ReadLines(file).ToList();
@@ -705,10 +1287,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                                 var end = Math.Min(lines.Count - 1, i + contextLines);
                                 for (var c = start; c <= end; c++)
                                 {
-                                    var sep = c == i ? ": " : "- ";
-                                    results.Add($"{relative}:{c + 1}{sep}{lines[c].TrimEnd()}");
+                                    if (c == i) results.AddMatch(relative, c + 1, lines[c].TrimEnd());
+                                    else results.AddContext(relative, c + 1, lines[c].TrimEnd());
                                 }
-                                if (results.Count >= maxMatches) return;
+                                if (results.IsFull) return;
                                 i = end;
                             }
                         }
@@ -721,8 +1303,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                             lineNum++;
                             if (regex.IsMatch(line))
                             {
-                                results.Add($"{relative}:{lineNum}: {line.TrimEnd()}");
-                                if (results.Count >= maxMatches) return;
+                                results.AddMatch(relative, lineNum, line.TrimEnd());
+                                if (results.IsFull) return;
                             }
                         }
                     }
@@ -748,7 +1330,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             foreach (var subDir in Directory.EnumerateDirectories(currentDir))
             {
                 ct.ThrowIfCancellationRequested();
-                if (results.Count >= maxMatches) return;
+                if (results.IsFull) return;
 
                 var dirName = Path.GetFileName(subDir);
                 if (ExcludedDirectories.Contains(dirName)) continue;
@@ -756,7 +1338,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
                 if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
 
-                SearchDirectoryRecursive(subDir, regex, globRegex, maxMatches, contextLines, results, ignore, ct);
+                SearchDirectoryRecursive(subDir, regex, globRegex, results, contextLines, ignore, ct);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -802,7 +1384,19 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var matched = new List<string>();
         {
             using var scanSpan = PerfTracer.Step("tool.glob.scan");
-            EnumerateGlobRecursive(targetDir, globRegex, maxResults, matched, IgnoreMatcher(), ct);
+            var prefix = Relative(targetDir).TrimEnd('/');
+            if (prefix == ".") prefix = string.Empty;
+            var prefixWithSeparator = prefix.Length == 0 ? string.Empty : prefix + "/";
+            foreach (var relative in WorkspaceFiles(ct))
+            {
+                ct.ThrowIfCancellationRequested();
+                if (matched.Count >= maxResults) break;
+                if (prefixWithSeparator.Length > 0 &&
+                    !relative.StartsWith(prefixWithSeparator, StringComparison.Ordinal)) continue;
+                var fileName = Path.GetFileName(relative);
+                if (WildcardMatches(globRegex, fileName) || WildcardMatches(globRegex, relative))
+                    matched.Add(relative);
+            }
             scanSpan.Tag("matched", matched.Count);
             scanSpan.Tag("truncated", matched.Count >= maxResults);
         }
@@ -812,7 +1406,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         var output = string.Join("\n", matched);
         if (matched.Count >= maxResults)
-            output += $"\n[已达到最大数量限制（{maxResults} 条），列表已截断]";
+            output +=
+                $"\n[已达到最大数量（{maxResults} 条），列表被截断。收窄方式：让 pattern 更具体（如 src/**/*.cs）、" +
+                "指定更小的 path，或提高 max_results 后重试]";
 
         return new PureToolResult(call.Id, true, output);
     }
@@ -891,10 +1487,12 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             workingDirectory = resolved;
         }
 
-        var timeoutSeconds = 120;
+        // 构建/测试命令经常超过 2 分钟；默认给 5 分钟，仍保留 600 秒硬上限。
+        var timeoutSeconds = 300;
         if (doc.RootElement.TryGetProperty("timeout_seconds", out var timeoutElem) &&
             timeoutElem.TryGetInt32(out var requestedTimeout) && requestedTimeout > 0)
-            timeoutSeconds = Math.Clamp(requestedTimeout, 1, 600);
+            // 上限 3600 秒：完整构建/测试套件可能远超 10 分钟，600 秒的硬顶会误杀正常任务。
+            timeoutSeconds = Math.Clamp(requestedTimeout, 1, 3600);
 
         var isWindows = OperatingSystem.IsWindows();
         var psi = new ProcessStartInfo
@@ -974,6 +1572,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (timedOut) span.Fail("timeout");
         else if (process.ExitCode != 0) span.Tag("ok", false);
 
+        // 命令可能改动了工作区：文件索引必须失效。
+        InvalidateWorkspaceIndex();
         if (timedOut)
         {
             var partial = BuildCommandOutput(-1, stdout, stderr);
@@ -984,6 +1584,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var output = BuildCommandOutput(process.ExitCode, stdout, stderr);
         return new PureToolResult(call.Id, process.ExitCode == 0, output);
     }
+
+    // 超过该体积的文件不参与逐行正则扫描（内存与耗时随体积线性增长）；
+    // 跳过时会在结果里明确告知，避免模型把"跳过"误读成"不存在"。
+    private const long GrepMaxFileBytes = 5 * 1024 * 1024;
 
     private const int CommandOutputHeadChars = 32 * 1024;
     private const int CommandOutputTailChars = 32 * 1024;
@@ -1235,22 +1839,33 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         }
     }
 
-    /// <summary>原生内置工具的完整 JSON Schema 契约列表。</summary>
-    public static IReadOnlyList<PureToolDefinition> GetBuiltinToolDefinitions() =>
+    /// <summary>
+    /// 原生内置工具的完整 JSON Schema 契约列表。
+    /// 结果在进程内只构建一次：每轮请求与模型客户端都会读取它，
+    /// 重复分配既浪费 GC，也让同一会话的工具前缀无法保持引用稳定。
+    /// </summary>
+    public static IReadOnlyList<PureToolDefinition> GetBuiltinToolDefinitions() => BuiltinDefinitions;
+
+    private static readonly PureToolDefinition[] BuiltinDefinitions =
     [
-        new("read_file", "读取本地文本文件内容。支持 offset（起始行）与 limit（行数）分页查看并显示行号。",
+        new("read_file",
+            "读取工作区内的文本文件，返回内容（分页时带行号前缀）。改动文件前先读它确认现状；" +
+            "不要用它读二进制文件或大目录。超过上限会按行截断并给出 offset。也可在 path 末尾直接写行选区：" +
+            "file:50、file:10-20、file:10+5（第 10 行再带 5 行）、file:-50、file:5-16,960-973；选区与 offset/limit 二选一。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "相对于工作区的相对路径或绝对路径" },
-                    "offset": { "type": "integer", "description": "起始行号（从 1 开始），可选" },
-                    "limit": { "type": "integer", "description": "读取的最大行数，可选，默认 2000" }
+                    "path": { "type": "string", "description": "相对路径或绝对路径；可带行选区，如 src/foo.ts:50-200" },
+                    "offset": { "type": "integer", "description": "起始行号（从 1 开始），可选；不能与行选区同用" },
+                    "limit": { "type": "integer", "description": "读取的最大行数，可选，默认 2000；不能与行选区同用" }
                 },
                 "required": ["path"]
             }
             """),
-        new("write_file", "向指定路径写入完整文件内容。如果父目录不存在会自动创建。",
+        new("write_file",
+            "写入整个文件（覆盖），父目录不存在会自动创建。适合新建文件或整体重写；" +
+            "已有文件的小改动一律用 edit_file，避免覆盖掉未读到的内容。",
             """
             {
                 "type": "object",
@@ -1261,20 +1876,38 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 "required": ["path", "content"]
             }
             """),
-        new("edit_file", "精确替换文件中的特定文本段落（差异替换）。通过唯一定位 old_string 并替换为 new_string，自动处理 CRLF/LF 换行符。",
+        new("edit_file",
+            "把文件中的原文精确替换为新文本，自动适配 CRLF/LF。单条编辑用 old_string/new_string；" +
+            "同一文件多处修改优先用 edits 数组一次提交：所有锚点都按原始文件匹配、互不重叠，任一条失败则整体不写盘。" +
+            "old_string 必须逐字一致且唯一；多处命中会拒绝并报行号，补上下文或设 replace_all。成功后返回局部 diff。",
             """
             {
                 "type": "object",
                 "properties": {
                     "path": { "type": "string", "description": "待修改的文件相对路径" },
-                    "old_string": { "type": "string", "description": "待替换的原文本，必须在文件中精确且唯一匹配" },
-                    "new_string": { "type": "string", "description": "替换后的新文本" },
-                    "replace_all": { "type": "boolean", "description": "是否替换所有出现的实例（默认 false）" }
+                    "old_string": { "type": "string", "description": "单条编辑：待替换的原文本，必须精确且唯一匹配" },
+                    "new_string": { "type": "string", "description": "单条编辑：替换后的新文本" },
+                    "replace_all": { "type": "boolean", "description": "单条编辑：是否替换所有出现的实例（默认 false）" },
+                    "edits": {
+                        "type": "array",
+                        "description": "批量编辑（最多 20 条）。与 old_string/new_string 二选一；所有编辑对原始文件求值且不得重叠",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "old_string": { "type": "string" },
+                                "new_string": { "type": "string" },
+                                "replace_all": { "type": "boolean", "description": "默认 false" }
+                            },
+                            "required": ["old_string", "new_string"]
+                        }
+                    }
                 },
-                "required": ["path", "old_string", "new_string"]
+                "required": ["path"]
             }
             """),
-        new("list_dir", "列出目录下的直接文件与子目录。",
+        new("list_dir",
+            "列出目录下的直接子项，标记 [DIR]/[FILE]，不递归。适合先看项目结构；" +
+            "按名字找文件用 glob_files，按内容找用 grep_search——它们会递归并遵守 .gitignore。",
             """
             {
                 "type": "object",
@@ -1283,7 +1916,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 }
             }
             """),
-        new("grep_search", "在工作区代码文件中使用正则表达式进行全文内容检索。自动忽略 .git/bin/obj/node_modules 等目录。",
+        new("grep_search",
+            "用正则在工作区文件内容中检索。结果按文件分组、命中越多越靠前，每组返回行号与内容；" +
+            "自动跳过 .git/bin/obj/node_modules 并遵守 .gitignore。命中很多时用 offset 分页查看后续文件。" +
+            "已知符号名时优先用它定位；需要看函数上下文就设 context_lines（0-20）。结果为空是正常结论，不代表工具失败。",
             """
             {
                 "type": "object",
@@ -1292,13 +1928,16 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     "path": { "type": "string", "description": "搜索起始子目录，默认根目录" },
                     "glob": { "type": "string", "description": "文件名过滤模式，例如 *.cs" },
                     "case_sensitive": { "type": "boolean", "description": "是否区分大小写（默认 false）" },
-                    "context_lines": { "type": "integer", "description": "匹配行周围附带的上下文行数（0-5，默认 0）" },
-                    "max_matches": { "type": "integer", "description": "最大匹配行数（默认 100）" }
+                    "context_lines": { "type": "integer", "description": "匹配行周围附带的上下文行数（0-20，默认 0）" },
+                    "max_matches": { "type": "integer", "description": "本页最大匹配行数（默认 100）" },
+                    "offset": { "type": "integer", "description": "按文件分页的游标：跳过前 N 个命中文件，用于查看后续文件（默认 0）" }
                 },
                 "required": ["pattern"]
             }
             """),
-        new("glob_files", "根据通配符模式（如 **/*.cs）递归查找工作区中的匹配文件路径。",
+        new("glob_files",
+            "按路径通配符递归查找文件，返回相对路径列表（如 **/*.cs、src/**/*.json）。" +
+            "适合确认某类文件是否存在；不知道内容在哪时用 grep_search 而不是逐个 glob。",
             """
             {
                 "type": "object",
@@ -1310,19 +1949,23 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 "required": ["pattern"]
             }
             """),
-        new("run_command", "在当前工作区环境下受控执行 CLI 命令并返回标准输出与错误。支持指定工作目录与超时，输出过长时自动折叠。",
+        new("run_command",
+            "在工作区内执行一条 shell 命令，返回 ExitCode 与标准输出/错误。用于构建、测试、git 等内置工具做不到的事；" +
+            "读写文件优先用内置工具。超时会终止整个进程树，输出过长只保留头尾并标注折叠。",
             """
             {
                 "type": "object",
                 "properties": {
                     "command": { "type": "string", "description": "Shell 命令（CLI 及其参数）" },
                     "cwd": { "type": "string", "description": "工作目录（相对工作区，可选）" },
-                    "timeout_seconds": { "type": "integer", "description": "超时秒数，1-600，默认 120" }
+                    "timeout_seconds": { "type": "integer", "description": "超时秒数，1-3600，默认 300" }
                 },
                 "required": ["command"]
             }
             """),
-        new("update_plan", "创建或更新当前任务的结构化执行计划（Plan）。支持追踪阶段进度，最多只能有 1 个步骤处于 in_progress 状态。",
+        new("update_plan",
+            "创建或更新结构化执行计划，用于多步骤任务追踪进度。同一时刻只能有 1 个步骤是 in_progress；" +
+            "每完成一步就更新一次。计划会在后续回合保留，长任务里它是防止偏离的锚点。",
             """
             {
                 "type": "object",

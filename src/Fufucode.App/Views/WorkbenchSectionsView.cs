@@ -145,7 +145,7 @@ public sealed class WorkbenchSectionsView : UserControl
             case "functions.names": RenderNames(vm, rows); break;
             case "functions.floating": RenderFloating(vm, rows); break;
             case "browser": RenderBrowserSettings(vm, rows); break;
-            case "terminal" or "files" or "automation" or "usage": RenderFeatureStatus(vm, rows); break;
+            case "terminal" or "files" or "automation": RenderFeatureStatus(vm, rows); break;
             default: RenderConfig(vm, rows); break;
         }
         _rows = rows;
@@ -638,7 +638,6 @@ public sealed class WorkbenchSectionsView : UserControl
         "terminal" => "Terminal",
         "files" => "Folder",
         "automation" => "Automation",
-        "usage" => "History",
         _ => "Info",
     };
 
@@ -1003,6 +1002,8 @@ public sealed class WorkbenchSectionsView : UserControl
         status.Classes.Add("settingsRowDesc");
         var path = new TextBlock { TextWrapping = TextWrapping.Wrap };
         path.Classes.Add("settingsRowDesc");
+        var details = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        details.Classes.Add("settingsRowDesc");
         var open = new Button { Content = "打开扩展目录" };
         AutomationProperties.SetAutomationId(open, "external-browser-open-extension");
         open.Click += (_, _) =>
@@ -1026,6 +1027,7 @@ public sealed class WorkbenchSectionsView : UserControl
         var panel = new StackPanel { Spacing = 6, MinWidth = 260 };
         panel.Children.Add(status);
         panel.Children.Add(path);
+        panel.Children.Add(details);
         panel.Children.Add(buttons);
 
         void Sync()
@@ -1036,11 +1038,17 @@ public sealed class WorkbenchSectionsView : UserControl
                 : browser.ExternalBrowserExtensionPath);
             open.IsEnabled = !string.IsNullOrWhiteSpace(browser.ExternalBrowserExtensionPath) &&
                              Directory.Exists(browser.ExternalBrowserExtensionPath);
+            var browserName = string.IsNullOrWhiteSpace(browser.ExternalBrowserName) ? "未识别浏览器" : browser.ExternalBrowserName;
+            var page = string.IsNullOrWhiteSpace(browser.ExternalBrowserActiveUrl) ? "无活动页面" : browser.ExternalBrowserActiveUrl;
+            var capabilities = string.IsNullOrWhiteSpace(browser.ExternalBrowserCapabilities) ? "未上报能力" : browser.ExternalBrowserCapabilities;
+            details.Text = $"{browserName} · {browser.ExternalBrowserTabCount} 个标签页\n当前页：{page}\n能力：{capabilities}";
         }
         browser.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName is nameof(browser.ExternalBrowserStatus) or nameof(browser.ExternalBrowserConnected) or
-                nameof(browser.ExternalBrowserActualPort) or nameof(browser.ExternalBrowserExtensionPath))
+                nameof(browser.ExternalBrowserActualPort) or nameof(browser.ExternalBrowserExtensionPath) or
+                nameof(browser.ExternalBrowserName) or nameof(browser.ExternalBrowserActiveUrl) or
+                nameof(browser.ExternalBrowserTabCount) or nameof(browser.ExternalBrowserCapabilities))
                 Sync();
         };
         Sync();

@@ -113,7 +113,7 @@ public static class PluginMarketplaceCatalog
 
         // ── 智能体高级能力（默认未安装，按需从市场安装） ──
         new("workspace.subagents", "Subagent 子代理", PluginCategory.AgentCapability,
-            "可选子代理运行时：安装后默认使用 faster，stronger 由用户手动切换。",
+            "可选子代理运行时：安装后提供单一、默认开启的只读/补丁子代理能力，无档位选择。",
             "1.0.0", "Fufucode Team", ["模型调用", "独立 Agent 上下文"],
             DefaultInstalled: false, DefaultEnabled: false),
 
@@ -123,11 +123,16 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("agent.computer-use", "Computer Use 电脑操控", PluginCategory.AgentCapability,
-            "允许智能体截取当前桌面屏幕、模拟鼠标点击与键盘输入，直接操控 Windows 应用。",
-            "1.0.0", "Fufucode Team", ["屏幕截图获取", "鼠标与键盘模拟", "窗口激活"],
+            "通过 Sky、CUA Driver 或显式前台 Win32 后端操控 Windows 应用；后台路径按目标窗口投递，失败时不会静默抢前台。",
+            "1.1.0", "Fufucode Team", ["按窗口后台投递", "屏幕截图获取", "鼠标与键盘模拟", "前台显式升级"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         // ── 工具扩展（默认未安装，按需从市场安装） ──
+        new("tool.sketch", "草图绘制", PluginCategory.ToolExtension,
+            "在聊天输入栏中打开轻量草图编辑器，绘制后作为图片附件发送给模型。默认不安装、不启用。",
+            "1.0.0", "Fufucode Team", ["图片输入能力", "临时 PNG 导出"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("tool.seep-reverse-lab", "Seep 逆向工程工作台", PluginCategory.ToolExtension,
             "接入 Seep Reverse Lab 工作台：23 个 Radare2 / JADX / Apktool / Frida 逆向工具、"
             + "ReverseLab 知识库检索，以及 127.0.0.1:17890 合规转译中继。"
@@ -147,9 +152,29 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: true, DefaultEnabled: true),
 
         // ── 工作区页面插件（默认未安装，按需从市场安装） ──
+        new("workspace.browser", "内置浏览器", PluginCategory.ToolExtension,
+            "在右栏打开内置 WebView2 浏览器：导航、下载、站点权限与 Agent 页面控制。默认不安装。",
+            "1.0.0", "Fufucode Team", ["WebView2 运行时", "网页导航与本地文件预览", "可选 CDP 控制"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
+        new("workspace.library", "资料库", PluginCategory.ToolExtension,
+            "资料条目、来源回溯与聊天引用；安装后出现在工作区页面中。",
+            "1.0.0", "Fufucode Team", ["本地资料存储", "引用复制到聊天"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
+        new("workspace.local-review", "本地审查", PluginCategory.ToolExtension,
+            "基于 Git 差异的本地只读审查、发现项与导出；安装后出现在工作区页面中。",
+            "1.0.0", "Fufucode Team", ["读取项目 Git 差异", "调用审查执行器"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("workspace.terminal", "交互终端", PluginCategory.ToolExtension,
             "项目级交互式终端：ConPTY 原生 shell、备用屏与全屏 TUI、滚动区域、查找、选中复制、IME 与命令历史。",
             "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
+        new("sandbox.nvx", "NVX 微虚拟机沙箱", PluginCategory.AgentCapability,
+            "通过微软 NVX/OpenVMM 在 Windows WHP 微虚拟机中执行不受信任工作负载。默认不安装，不改变现有宿主命令执行路径。",
+            "0.1.0", "Microsoft / Fufucode", ["Windows Hypervisor Platform", "NVX 运行时载荷", "独立沙箱工作目录"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("performance.monitor", "性能监控", PluginCategory.ToolExtension,
@@ -164,6 +189,11 @@ public static class PluginMarketplaceCatalog
         new("service.remote-control", "手机远程控制服务", PluginCategory.Service,
             "提供局域网配对与远程会话管理服务，支持 WorkBuddy 手机客户端通过动态配对码连接操控桌面 Agent。",
             "1.0.0", "Fufucode Team", ["局域网网络监听", "会话控制与消息收发"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
+        new("service.fufu-bridge", "FUFU 桌宠桥接", PluginCategory.Service,
+            "通过本机命名管道连接桌面宠物 FUFU：上报会话目录与 Agent 状态、转发工具审批，并可经 FUFU 授权向选中会话提交任务。",
+            "1.0.0", "Fufucode Team", ["本机进程间通信", "会话控制与消息收发"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("service.speech-synthesis", "语音朗读服务", PluginCategory.Service,

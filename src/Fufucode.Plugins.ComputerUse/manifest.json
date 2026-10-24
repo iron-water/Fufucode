@@ -1,7 +1,7 @@
 {
   "id": "agent.computer-use",
   "name": "Computer Use 电脑操控",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "entryAssembly": "Fufucode.Plugins.ComputerUse.dll",
   "packageType": "Fufucode.Plugins.ComputerUse.ComputerUsePluginPackage",
   "capabilities": ["ComputerControl"]

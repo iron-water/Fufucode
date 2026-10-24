@@ -52,11 +52,15 @@ internal sealed class PerfHostWiring : IDisposable
         // 调用发生时页面宿主字段尚未赋值（构造器中），因此管理器由页面宿主在 Start 后再接一次。
         if (manager is null) return;
         _manager = manager;
+        var priorResolver = manager.ServiceResolver;
         manager.ServiceResolver = type =>
         {
-            if (type != typeof(IPerfHostServices)) return null;
-            Bridge.MarkWired();
-            return Bridge;
+            if (type == typeof(IPerfHostServices))
+            {
+                Bridge.MarkWired();
+                return Bridge;
+            }
+            return priorResolver?.Invoke(type);
         };
         // 管理器在构造时读过状态快照（插件可能在之后才登记安装）：重读磁盘并补一次激活扫描。
         manager.StateStore.Reload();

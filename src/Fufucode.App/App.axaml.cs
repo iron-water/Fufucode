@@ -63,7 +63,14 @@ public partial class App : Application
             // 第二个实例的激活请求：恢复主窗口（可能在托盘隐藏）并退出第二个进程。
             // 监听线程在后台，必须切回 UI 线程。
             if (Program.SingleInstance is { } singleInstance)
-                singleInstance.ActivationRequested += () => Avalonia.Threading.Dispatcher.UIThread.Post(window.ShowFromTray);
+            {
+                singleInstance.ActivationRequested += () =>
+                {
+                    Avalonia.Threading.Dispatcher.UIThread.Post(window.ShowFromTray);
+                    // 系统通知按钮经第二个进程转发：取走投递箱里的审批动作再应答。
+                    Avalonia.Threading.Dispatcher.UIThread.Post(window.OnExternalActivation);
+                };
+            }
             desktop.Exit += (_, _) => Program.SingleInstance?.Dispose();
         }
         Fufucode.Core.Diagnostics.StartupProbe.Mark("app.window-created", "MainWindow assigned to lifetime");

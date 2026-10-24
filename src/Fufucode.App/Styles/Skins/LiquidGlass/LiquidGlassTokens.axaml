@@ -109,8 +109,10 @@
       <SolidColorBrush x:Key="AppCriticalForeground" Color="#FFFF3B30"/>
       <SolidColorBrush x:Key="AppDiffAddedBackground"  Color="#1A34C759"/>
       <SolidColorBrush x:Key="AppDiffAddedForeground"  Color="#FF248A3D"/>
+      <SolidColorBrush x:Key="AppDiffAddedStrong"       Color="#4D248A3D"/>
       <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#1AFF3B30"/>
       <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFD70015"/>
+      <SolidColorBrush x:Key="AppDiffRemovedStrong"     Color="#4DD70015"/>
 
       <!-- Fluent 控件链：基础/卡片/列表/控件填充 -->
       <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush"       Color="#FFF2F2F7"/>
@@ -275,8 +277,10 @@
       <SolidColorBrush x:Key="AppCriticalForeground" Color="#FFFF453A"/>
       <SolidColorBrush x:Key="AppDiffAddedBackground"  Color="#2632D74B"/>
       <SolidColorBrush x:Key="AppDiffAddedForeground"  Color="#FF32D74B"/>
+      <SolidColorBrush x:Key="AppDiffAddedStrong"       Color="#4D32D74B"/>
       <SolidColorBrush x:Key="AppDiffRemovedBackground" Color="#26FF453A"/>
       <SolidColorBrush x:Key="AppDiffRemovedForeground" Color="#FFFF6961"/>
+      <SolidColorBrush x:Key="AppDiffRemovedStrong"     Color="#4DFF6961"/>
 
       <SolidColorBrush x:Key="SolidBackgroundFillColorBaseBrush"       Color="#FF000000"/>
       <SolidColorBrush x:Key="SolidBackgroundFillColorSecondaryBrush"  Color="#FF1C1C1E"/>

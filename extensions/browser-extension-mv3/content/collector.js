@@ -11,12 +11,11 @@
   function getPageExcerpt() {
     const selected = getSelectedText();
     if (selected) {
-      return `【网页划选片段】\n${selected}`;
+      return `【网页划选片段】\n${selected.slice(0, 12000)}`;
     }
 
-    // 若无划选，提取文章或主要内容
     const article = document.querySelector("article") || document.querySelector("main") || document.body;
-    const text = article ? article.innerText.trim().slice(0, 2000) : "";
+    const text = article ? (article.innerText || "").trim().slice(0, 12000) : "";
     return `【网页正文节选】\n${text}`;
   }
 

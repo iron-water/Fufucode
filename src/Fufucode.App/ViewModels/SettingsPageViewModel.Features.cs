@@ -69,12 +69,6 @@ public sealed partial class PluginItemViewModel : ObservableObject
     public string ActionButtonText => !IsInstalled ? "安装" : IsCoreBuiltin ? "核心内置" : "卸载";
     public bool CanUninstall => !IsCoreBuiltin && IsInstalled;
     public bool IsSubagent => string.Equals(Id, "workspace.subagents", StringComparison.OrdinalIgnoreCase);
-    public string SubagentTier => NativeSubagentRegistry.Tier.ToString().ToLowerInvariant();
-    public bool ShowSubagentTier => IsSubagent && IsInstalled && IsEnabled;
-    public string SubagentTierLabel => "当前档位：" + SubagentTier;
-
-    public void RefreshSubagentTier() => OnPropertyChanged(nameof(SubagentTier));
-
     public PluginItemViewModel(PluginDefinition definition, bool isInstalled, bool isEnabled)
     {
         Definition = definition;
@@ -184,12 +178,12 @@ public sealed partial class SettingsPageViewModel
 
     public IReadOnlyList<string> BackendEngineChoices { get; } =
     [
-        "FUMO (默认原生内核 · 纯 C# · 紫色)",
-        "Pi (后端插件 · 绿色)",
-        "OMP (后端插件 · 橙色)",
-        "Codex (后端插件 · 蓝色)",
-        "DSH (后端插件 · 青色)",
-        "Claude (后端插件 · 暖橙红)",
+        "FUMO (默认原生内核 · 纯 C#)",
+        "Pi (后端插件)",
+        "OMP (后端插件)",
+        "Codex (后端插件)",
+        "DSH (后端插件)",
+        "Claude (后端插件)",
     ];
 
     private static EngineId EngineForIndex(int value) => value switch
@@ -221,7 +215,7 @@ public sealed partial class SettingsPageViewModel
     private void UpdateBackendStatus(EngineId engine)
     {
         var badge = BackendBadgeCatalog.For(engine);
-        BackendStatusText = $"当前默认：{badge.DisplayName}（{badge.BadgeColor}）" + BackendPluginSuffix(engine);
+        BackendStatusText = $"当前默认：{badge.DisplayName}" + BackendPluginSuffix(engine);
     }
 
     /// <summary>后端选择必须如实反映插件载荷状态；未安装时明确说明新会话会回退。</summary>
@@ -353,10 +347,6 @@ public sealed partial class SettingsPageViewModel
 
     private void NotifyCapabilityState()
     {
-        foreach (var item in MarketplacePlugins.Where(item => item.IsSubagent))
-        {
-            item.RefreshSubagentTier();
-        }
         OnPropertyChanged(nameof(IsBrowserUseInstalled));
         OnPropertyChanged(nameof(BrowserUseAdvancedEnabled));
         OnPropertyChanged(nameof(BrowserUseUnavailableMessage));
@@ -491,12 +481,6 @@ public sealed partial class SettingsPageViewModel
                 manager.InstallPackage(item.Id);
                 item.IsInstalled = true;
                 item.IsEnabled = true;
-                if (item.IsSubagent && _context is { } context)
-                {
-                    context.Store.Update(current => current with { SubagentTier = "faster" });
-                    NativeSubagentRegistry.Tier = SubagentTier.Faster;
-                    item.RefreshSubagentTier();
-                }
                 item.StatusMessage = "已物理安装并激活";
             }
             catch (Exception ex)
@@ -507,30 +491,6 @@ public sealed partial class SettingsPageViewModel
             }
         }
         NotifyCapabilityState();
-    }
-
-    private void SetSubagentTier(PluginItemViewModel item, string tier)
-    {
-        if (!item.IsSubagent || !item.IsInstalled || !item.IsEnabled) return;
-        try
-        {
-            _context?.Store.Update(current => current with { SubagentTier = tier });
-            NativeSubagentRegistry.Tier = tier == "stronger" ? SubagentTier.Stronger : SubagentTier.Faster;
-            item.RefreshSubagentTier();
-        }
-        catch (Exception ex) { item.StatusMessage = "档位保存失败：" + ex.GetBaseException().Message; }
-    }
-
-    [RelayCommand]
-    public void SetSubagentFaster(PluginItemViewModel? item)
-    {
-        if (item is not null) SetSubagentTier(item, "faster");
-    }
-
-    [RelayCommand]
-    public void SetSubagentStronger(PluginItemViewModel? item)
-    {
-        if (item is not null) SetSubagentTier(item, "stronger");
     }
 
     [RelayCommand]

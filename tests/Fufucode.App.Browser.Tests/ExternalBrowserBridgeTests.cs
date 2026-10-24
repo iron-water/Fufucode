@@ -42,6 +42,16 @@ internal static class ExternalBrowserBridgeTests
                   pairDoc.RootElement.GetProperty("token").GetString() == "test-token",
                 "正确 PIN 返回真实长期令牌");
 
+            var handshake = Send(http, HttpMethod.Post, "/api/extension/handshake",
+                "{\"clientId\":\"test-client\",\"browser\":\"Chrome\",\"browserVersion\":\"test\",\"tabCount\":2,\"activeUrl\":\"https://example.com\",\"capabilities\":[\"state\",\"tabs\",\"click\"]}",
+                "test-token");
+            check(handshake.Status == HttpStatusCode.OK, "扩展配对后完成握手");
+            var ready = GetJson(http, "/api/status", "test-token");
+            check(ready.GetProperty("handshake").GetBoolean() &&
+                  ready.GetProperty("clientId").GetString() == "test-client" &&
+                  ready.GetProperty("tabCount").GetInt32() == 2,
+                "状态接口报告真实扩展身份、握手与标签页快照");
+
             var unauthorized = Send(http, HttpMethod.Get, "/api/next", null, null);
             check(unauthorized.Status == HttpStatusCode.Unauthorized, "未授权请求不能取命令");
 

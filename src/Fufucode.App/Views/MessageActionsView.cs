@@ -67,7 +67,14 @@ public sealed class MessageActionsView : UserControl
         _model = new TextBlock { Classes = { "meta" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
         _time = new TextBlock { Classes = { "meta", "tabularNumeric" }, VerticalAlignment = VerticalAlignment.Center };
 
-        _icons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        // 命中区：整条栏 + 图标容器都用透明背景铺满，指针经过间隙时仍算“在栏内”，
+        // 避免显隐按单个图标判定造成的一闪一闪。
+        Background = Brushes.Transparent;
+        _icons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent,
+        };
         _icons.Children.Add(_copy);
         _icons.Children.Add(_speak);
         _icons.Children.Add(_quote);
@@ -79,7 +86,8 @@ public sealed class MessageActionsView : UserControl
         var meta = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 10,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
         };
         meta.Children.Add(_usage);
         meta.Children.Add(_model);
@@ -87,11 +95,12 @@ public sealed class MessageActionsView : UserControl
 
         var row = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
+            // 图标在左、元信息（模型/时间）靠右，避免时间戳停在句子中间。
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             Margin = new Thickness(0, 6, 0, 0),
         };
         Grid.SetColumn(_icons, 0);
-        Grid.SetColumn(meta, 1);
+        Grid.SetColumn(meta, 2);
         row.Children.Add(_icons);
         row.Children.Add(meta);
 
@@ -144,6 +153,9 @@ public sealed class MessageActionsView : UserControl
         };
         AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
     }
+
+    /// <summary>宿主在语音插件安装/启停后调用，重新计算依赖服务可用性的按钮。</summary>
+    internal void RefreshAvailability() => Bind();
 
     /// <summary>按当前消息类型刷新可见性与元信息。</summary>
     private void Bind()

@@ -103,6 +103,7 @@ public sealed class PluginToolRegistry : IPureToolDispatcher, IPluginToolCatalog
             foreach (var registration in registrations)
                 _handlers[registration.Name] = (handler, registration);
         }
+        InvalidateSnapshot();
         Changed?.Invoke();
     }
 
@@ -131,6 +132,7 @@ public sealed class PluginToolRegistry : IPureToolDispatcher, IPluginToolCatalog
             _handlers.Clear();
             foreach (var entry in refreshed) _handlers.Add(entry.Key, entry.Value);
         }
+        InvalidateSnapshot();
         Changed?.Invoke();
     }
 
@@ -149,40 +151,53 @@ public sealed class PluginToolRegistry : IPureToolDispatcher, IPluginToolCatalog
             }
             if (_registeredHandlers.Remove(handler)) removed = true;
         }
-        if (removed) Changed?.Invoke();
+        if (removed)
+        {
+            InvalidateSnapshot();
+            Changed?.Invoke();
+        }
         return removed;
     }
 
     /// <summary>当前真正可调用的工具名（已按插件门禁过滤）。</summary>
-    public IReadOnlyList<string> ActiveToolNames
+    public IReadOnlyList<string> ActiveToolNames => Snapshot().Names;
+
+    /// <summary>当前可调用的动作契约（名称、说明、参数 Schema），供模型请求声明工具。</summary>
+    public IReadOnlyList<PluginToolRegistration> ActiveRegistrations => Snapshot().Registrations;
+
+    /// <summary>
+    /// 工具目录只读快照。每次会话请求都会读取名称与 Schema，原来每次都加锁、
+    /// 过滤、排序并复制一遍；插件变更频率远低于请求频率，改为变更时重建、
+    /// 读取时直接复用同一份不可变数组。
+    /// </summary>
+    private sealed record CatalogSnapshot(
+        IReadOnlyList<string> Names,
+        IReadOnlyList<PluginToolRegistration> Registrations);
+
+    private volatile CatalogSnapshot? _snapshot;
+
+    private CatalogSnapshot Snapshot()
     {
-        get
+        if (_snapshot is { } cached) return cached;
+        lock (_gate)
         {
-            lock (_gate)
-            {
-                return _handlers.Values
-                    .Where(entry => _gateway.IsAvailable(entry.Registration.Capability))
-                    .Select(entry => entry.Registration.Name)
-                    .OrderBy(name => name, StringComparer.Ordinal)
-                    .ToArray();
-            }
+            if (_snapshot is { } existing) return existing;
+            var active = _handlers.Values
+                .Where(entry => _gateway.IsAvailable(entry.Registration.Capability))
+                .Select(entry => entry.Registration)
+                .OrderBy(registration => registration.Name, StringComparer.Ordinal)
+                .ToArray();
+            var created = new CatalogSnapshot(
+                active.Select(registration => registration.Name).ToArray(),
+                active);
+            _snapshot = created;
+            return created;
         }
     }
 
-    /// <summary>当前可调用的动作契约（名称、说明、参数 Schema），供模型请求声明工具。</summary>
-    public IReadOnlyList<PluginToolRegistration> ActiveRegistrations
+    private void InvalidateSnapshot()
     {
-        get
-        {
-            lock (_gate)
-            {
-                return _handlers.Values
-                    .Where(entry => _gateway.IsAvailable(entry.Registration.Capability))
-                    .Select(entry => entry.Registration)
-                    .OrderBy(r => r.Name, StringComparer.Ordinal)
-                    .ToArray();
-            }
-        }
+        _snapshot = null;
     }
 
     /// <summary>某工具当前是否可用；不可用时给出原因（未注册或插件未启用）。</summary>
@@ -246,5 +261,10 @@ public sealed class PluginToolRegistry : IPureToolDispatcher, IPluginToolCatalog
         }
     }
 
-    private void NotifyChanged() => Changed?.Invoke();
+    private void NotifyChanged()
+    {
+        // 能力门禁状态变化会改变可见工具集合，快照必须失效。
+        InvalidateSnapshot();
+        Changed?.Invoke();
+    }
 }

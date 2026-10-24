@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Fufucode.App.Infrastructure;
+using Fufucode.App.Features.FilePreview;
 using Fufucode.Core;
 
 namespace Fufucode.App.ViewModels;
@@ -38,17 +39,48 @@ public sealed partial class WorkspacePanelTabViewModel : ViewModelBase
 }
 
 /// <summary>Read-only presentation of A8. No line counts are invented; nullable flags stay unknown.</summary>
-public sealed class WorkspacePanelChangedFileViewModel : ViewModelBase
+public sealed partial class WorkspacePanelChangedFileViewModel : ViewModelBase
 {
     public WorkspacePanelChangedFileViewModel(ChangedFile source, string root)
     {
         Source = source;
         FullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(root, source.Path));
+        var name = System.IO.Path.GetFileName(source.Path.Replace('/', System.IO.Path.DirectorySeparatorChar));
+        Name = name.Length > 0 ? name : source.Path;
+        Folder = source.Path.Length > Name.Length
+            ? source.Path[..(source.Path.Length - Name.Length - 1)]
+            : string.Empty;
     }
 
     public ChangedFile Source { get; }
     public string Path => Source.Path;
     public string FullPath { get; }
+    /// <summary>文件名与所在目录分开存放：列表按目录分组，行内只显示文件名。</summary>
+    public string Name { get; }
+    public string Folder { get; }
+    /// <summary>扩展名，供语法高亮选择语法；隐藏文件没有扩展名时为空。</summary>
+    public string Extension => System.IO.Path.GetExtension(Name).TrimStart('.').ToLowerInvariant();
+    public int? AddedLines => Source.AddedLines;
+    public int? RemovedLines => Source.RemovedLines;
+    public bool HasLineCounts => Source.AddedLines is not null || Source.RemovedLines is not null;
+    public bool HasFolder => Folder.Length > 0;
+    /// <summary>列表内的选中态；由面板在 SelectedChange 变化时同步。</summary>
+    [ObservableProperty] private bool _isSelected;
+    public string AddedText => Source.AddedLines is { } added ? "+" + added : string.Empty;
+    public string RemovedText => Source.RemovedLines is { } removed ? "−" + removed : string.Empty;
+    public bool HasAdded => Source.AddedLines is > 0;
+    public bool HasRemoved => Source.RemovedLines is > 0;
+    /// <summary>单字符状态标记，替代旧版整句 "已修改 · index M · worktree —"。</summary>
+    public string StatusMark => Source.Kind switch
+    {
+        "added" or "untracked" or "written" => "A",
+        "deleted" or "missing" => "D",
+        "renamed" => "R",
+        "copied" => "C",
+        "unmerged" => "!",
+        "type-changed" => "T",
+        _ => "M",
+    };
     public string? OldPath => Source.OldPath;
     public bool HasOldPath => OldPath is not null;
     public bool IsNew => Source.IsNew == true;
@@ -71,11 +103,82 @@ public sealed class WorkspacePanelChangedFileViewModel : ViewModelBase
     private static string DisplayStatus(string? status) => status is null ? "未知" : status == " " ? "—" : status;
 }
 
-public sealed record WorkspacePanelFileItemViewModel(string Name, string RelativePath, string FullPath,
-    bool IsDirectory, bool IsLink)
+public sealed class WorkspacePanelFileItemViewModel : ViewModelBase
 {
-    public string Glyph => IsDirectory ? "▸" : "·";
-    public string Detail => IsLink ? "链接 · 不展开" : IsDirectory ? "文件夹" : "文件";
+    public WorkspacePanelFileItemViewModel(string name, string relativePath, string fullPath,
+        bool isDirectory, bool isLink, int depth = 0)
+    {
+        Name = name;
+        RelativePath = relativePath;
+        FullPath = fullPath;
+        IsDirectory = isDirectory;
+        IsLink = isLink;
+        Depth = depth;
+    }
+
+    public string Name { get; }
+    public string RelativePath { get; }
+    public string FullPath { get; }
+    public bool IsDirectory { get; }
+    public bool IsLink { get; }
+    public int Depth { get; }
+    public ObservableCollection<WorkspacePanelFileItemViewModel> Children { get; } = new();
+    public bool HasChildren => IsDirectory && !IsLink && (Children.Count > 0 || !ChildrenLoaded);
+    public bool ChildrenLoaded { get; private set; }
+    public bool IsLoadingChildren { get; private set; }
+    public bool IsExpanded { get; private set; }
+    public string Glyph => IsDirectory ? (IsExpanded ? "▾" : "▸") : "·";
+    public string Detail => IsLink ? "链接 · 不展开" : IsDirectory ? (ChildrenLoaded ? $"文件夹 · {Children.Count} 项" : "文件夹 · 点击展开") : "文件";
+
+    public void BeginChildrenLoad() => IsLoadingChildren = true;
+    public void SetChildren(IEnumerable<WorkspacePanelFileItemViewModel> children)
+    {
+        Children.Clear();
+        foreach (var child in children) Children.Add(child);
+        ChildrenLoaded = true;
+        IsLoadingChildren = false;
+        OnPropertyChanged(nameof(HasChildren));
+        OnPropertyChanged(nameof(Detail));
+    }
+    public void SetExpanded(bool expanded)
+    {
+        IsExpanded = expanded;
+        OnPropertyChanged(nameof(IsExpanded));
+        OnPropertyChanged(nameof(Glyph));
+    }
+}
+
+/// <summary>变更列表里的一组文件（按所在目录），目录可折叠。</summary>
+public sealed partial class WorkspaceChangeGroupViewModel : ViewModelBase
+{
+    public WorkspaceChangeGroupViewModel(string folder)
+    {
+        Folder = folder;
+        Header = folder.Length == 0 ? "根目录" : folder;
+    }
+
+    public string Folder { get; }
+    public string Header { get; }
+    public System.Collections.ObjectModel.ObservableCollection<WorkspacePanelChangedFileViewModel> Files { get; } = new();
+    [ObservableProperty] private bool _isExpanded = true;
+    public bool IsCollapsed => !IsExpanded;
+    partial void OnIsExpandedChanged(bool value) => OnPropertyChanged(nameof(IsCollapsed));
+    public string CountText => Files.Count.ToString();
+}
+
+/// <summary>
+/// 变更列表的呈现行：目录头是单独的对象，文件行直接复用文件 ViewModel 本身。
+/// 共用同一批实例，选中项仍是 <see cref="WorkspacePanelChangedFileViewModel"/>，
+/// 既有"按文件选中"的契约与快捷键导航都不需要改。
+/// </summary>
+public sealed partial class WorkspaceChangeGroupRowViewModel : ViewModelBase
+{
+    public WorkspaceChangeGroupRowViewModel(WorkspaceChangeGroupViewModel group) => Group = group;
+    public WorkspaceChangeGroupViewModel Group { get; }
+    public string Header => Group.Header;
+    public string CountText => Group.CountText;
+    public bool IsExpanded => Group.IsExpanded;
+    public bool IsCollapsed => Group.IsCollapsed;
 }
 
 /// <summary>Files and Changes view host. Queries are injected by the composition root; it never owns Core sessions.</summary>
@@ -95,42 +198,40 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     public WorkspacePanelViewModel(IClipboardService clipboard)
     {
         _clipboard = clipboard;
+        _previewHost = new FilePreviewHost();
+        _previewHost.PreviewChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(PreviewResult));
+            OnPropertyChanged(nameof(PreviewSource));
+            OnPropertyChanged(nameof(CanCopyPreviewSource));
+            OnPropertyChanged(nameof(HasPreviewError));
+            OnPropertyChanged(nameof(PreviewError));
+            OnPropertyChanged(nameof(PreviewFileSize));
+            OnPropertyChanged(nameof(PreviewFileDetail));
+            OnPropertyChanged(nameof(CanPreviewBack));
+            OnPropertyChanged(nameof(CanPreviewForward));
+            OnPropertyChanged(nameof(IsPreviewLoading));
+            OnPropertyChanged(nameof(FindStatus));
+            OnPropertyChanged(nameof(IsPreviewWordWrapEnabled));
+            OnPropertyChanged(nameof(IsImagePreview));
+            OnPropertyChanged(nameof(IsTextPreviewToolbar));
+        };
         RecreateTabs("unattached");
     }
 
     public event EventHandler? CloseRequested;
 
-    /// <summary>请求把当前图表保存为图片；由视图执行渲染与文件选择。</summary>
+    /// <summary>请求把当前 Mermaid 图表保存为图片；由视图执行渲染与文件选择。</summary>
     public event EventHandler? DiagramDownloadRequested;
 
-    [ObservableProperty] private bool _isDiagramPreview;
-    [ObservableProperty] private string _diagramSource = "";
-    [ObservableProperty] private string _diagramError = "";
+    private readonly FilePreviewHost _previewHost;
+    public FilePreviewHost PreviewHost => _previewHost;
+    public FilePreviewResult? PreviewResult => _previewHost.Result;
+    public string PreviewSource => PreviewResult?.Text ?? string.Empty;
+    public bool CanCopyPreviewSource => PreviewResult?.Kind is FilePreviewKind.Mermaid;
+    public bool HasPreviewError => PreviewResult?.IsError == true;
+    public string PreviewError => PreviewResult?.Error ?? string.Empty;
 
-    /// <summary>文本/代码文件的侧栏预览：直接显示源码，不交给浏览器。</summary>
-    [ObservableProperty] private bool _isTextPreview;
-    [ObservableProperty] private string _previewText = "";
-    [ObservableProperty] private string _previewLanguage = "";
-
-    /// <summary>喂给富文本渲染器的 Mermaid 围栏文本。</summary>
-    public string DiagramMarkdown => IsDiagramPreview && DiagramSource.Length > 0
-        ? "```mermaid" + (char)10 + DiagramSource + (char)10 + "```"
-        : string.Empty;
-
-    public bool HasDiagramError => DiagramError.Length > 0;
-
-    partial void OnDiagramErrorChanged(string value) => OnPropertyChanged(nameof(HasDiagramError));
-    /// <summary>浏览器预览的可见性；用正向属性避免运行期绑定不支持取反。</summary>
-    public bool IsBrowserPreviewVisible => !IsDiagramPreview && !IsTextPreview;
-
-    partial void OnIsDiagramPreviewChanged(bool value)
-    {
-        OnPropertyChanged(nameof(DiagramMarkdown));
-        OnPropertyChanged(nameof(IsBrowserPreviewVisible));
-    }
-
-    partial void OnIsTextPreviewChanged(bool value) => OnPropertyChanged(nameof(IsBrowserPreviewVisible));
-    partial void OnDiagramSourceChanged(string value) => OnPropertyChanged(nameof(DiagramMarkdown));
     public ObservableCollection<WorkspacePanelTabViewModel> Tabs { get; } = new();
     public ObservableCollection<WorkspacePanelChangedFileViewModel> Changes { get; } = new();
     public ObservableCollection<WorkspacePanelFileItemViewModel> Files { get; } = new();
@@ -139,7 +240,19 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
     private string _fileFilter = "";
     public System.Collections.Generic.IEnumerable<WorkspacePanelFileItemViewModel> VisibleFiles =>
-        Files.Where(file => file.Name.Contains(FileFilter, StringComparison.OrdinalIgnoreCase));
+        Flatten(Files).Where(file => string.IsNullOrWhiteSpace(FileFilter) ||
+            file.Name.Contains(FileFilter, StringComparison.OrdinalIgnoreCase) ||
+            file.RelativePath.Contains(FileFilter, StringComparison.OrdinalIgnoreCase));
+
+    private static IEnumerable<WorkspacePanelFileItemViewModel> Flatten(IEnumerable<WorkspacePanelFileItemViewModel> items)
+    {
+        foreach (var item in items)
+        {
+            yield return item;
+            if (!item.IsExpanded) continue;
+            foreach (var child in Flatten(item.Children)) yield return child;
+        }
+    }
     public string ProjectPath { get; private set; } = string.Empty;
     public string? SessionId { get; private set; }
     public bool IsMock { get; private set; }
@@ -153,6 +266,14 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     public bool IsFilesSelected => SelectedTab?.Kind == WorkspacePanelKind.Files;
     public bool IsChangesSelected => SelectedTab?.Kind == WorkspacePanelKind.Changes;
     public bool IsPreviewSelected => IsFilePreviewOpen;
+    public bool CanPreviewBack => _previewHost.CanGoBack;
+    public bool CanPreviewForward => _previewHost.CanGoForward;
+    public bool IsPreviewLoading => PreviewResult is null && IsFilePreviewOpen;
+    public string FindQuery { get; private set; } = string.Empty;
+    public string FindStatus => _previewHost.FindStatus;
+    public bool IsPreviewWordWrapEnabled => _previewHost.IsWordWrapEnabled;
+    public bool IsImagePreview => PreviewResult?.Kind == FilePreviewKind.Image;
+    public bool IsTextPreviewToolbar => !IsImagePreview;
     public bool HasSelectedTab => SelectedTab is not null;
 
     [ObservableProperty] private bool _isFilePreviewOpen;
@@ -165,132 +286,73 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     public void CloseFilePreview()
     {
         IsFilePreviewOpen = false;
-        IsDiagramPreview = false;
-        DiagramSource = string.Empty;
-        IsTextPreview = false;
-        PreviewText = string.Empty;
-    }
-
-    /// <summary>.mermaid/.mmd 文件不走浏览器预览，直接渲染成图表并给出下载/复制。</summary>
-    private void UpdateDiagramPreview(string full)
-    {
-        var extension = System.IO.Path.GetExtension(full);
-        var isDiagram = extension.Equals(".mermaid", StringComparison.OrdinalIgnoreCase)
-            || extension.Equals(".mmd", StringComparison.OrdinalIgnoreCase);
-        if (!isDiagram)
-        {
-            IsDiagramPreview = false;
-            DiagramSource = string.Empty;
-            UpdateTextPreview(full);
-            return;
-        }
-
-        IsTextPreview = false;
-        PreviewText = string.Empty;
-
-        try
-        {
-            var info = new FileInfo(full);
-            // 图表源文件通常几 KB；超大文件不解析，避免界面卡死。
-            if (!info.Exists || info.Length > 2 * 1024 * 1024)
-            {
-                IsDiagramPreview = false;
-                DiagramSource = string.Empty;
-                return;
-            }
-
-            DiagramSource = File.ReadAllText(full);
-            IsDiagramPreview = true;
-        }
-        catch (Exception ex)
-        {
-            IsDiagramPreview = false;
-            DiagramSource = string.Empty;
-            DiagramError = ex.Message;
-        }
-    }
-
-    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "cs", "fs", "vb", "py", "js", "jsx", "ts", "tsx", "java", "kt", "kts", "go", "rs",
-        "c", "h", "cc", "cpp", "cxx", "hpp", "m", "mm", "swift", "php", "rb", "lua", "dart",
-        "json", "jsonc", "yaml", "yml", "toml", "xml", "xsd", "html", "htm", "css", "scss",
-        "less", "sh", "bash", "zsh", "ps1", "bat", "cmd", "sql", "md", "markdown", "txt",
-        "log", "ini", "conf", "cfg", "env", "gitignore", "editorconfig", "gradle", "properties",
-    };
-
-    /// <summary>
-    /// 文本类文件用代码视图预览。二进制或过大的文件仍然退回浏览器，
-    /// 避免把乱码或几百 MB 的内容塞进控件。
-    /// </summary>
-    private void UpdateTextPreview(string full)
-    {
-        var extension = System.IO.Path.GetExtension(full).TrimStart('.').ToLowerInvariant();
-        if (extension.Length == 0 || !TextExtensions.Contains(extension))
-        {
-            IsTextPreview = false;
-            PreviewText = string.Empty;
-            return;
-        }
-
-        try
-        {
-            var info = new FileInfo(full);
-            if (!info.Exists || info.Length > 512 * 1024)
-            {
-                IsTextPreview = false;
-                PreviewText = string.Empty;
-                return;
-            }
-
-            PreviewText = File.ReadAllText(full);
-            PreviewLanguage = extension;
-            IsTextPreview = true;
-        }
-        catch (Exception)
-        {
-            IsTextPreview = false;
-            PreviewText = string.Empty;
-        }
+        _previewHost.Close();
+        PreviewFileName = string.Empty;
+        PreviewFilePath = string.Empty;
+        PreviewFileSize = string.Empty;
+        PreviewFileDetail = string.Empty;
     }
 
     [RelayCommand]
-    private async Task CopyDiagramSourceAsync() => await _clipboard.SetTextAsync(DiagramSource);
+    private async Task CopyPreviewSourceAsync()
+    {
+        if (PreviewResult?.Text is { } source && CanCopyPreviewSource)
+            await _clipboard.SetTextAsync(source);
+    }
 
-    /// <summary>下载交给视图：只有视图能拿到已渲染的控件并保存为图片。</summary>
+    public void SetFindQuery(string? query) => FindQuery = query ?? string.Empty;
+
+    [RelayCommand]
+    private void FindNext() => _previewHost.Find(FindQuery, forward: true);
+
+    [RelayCommand]
+    private void FindPrevious() => _previewHost.Find(FindQuery, forward: false);
+
+    [RelayCommand]
+    private void TogglePreviewWordWrap() => _previewHost.ToggleWordWrap();
+
+    [RelayCommand] private void ZoomImageIn() => _previewHost.ImageZoomIn();
+    [RelayCommand] private void ZoomImageOut() => _previewHost.ImageZoomOut();
+    [RelayCommand] private void FitImage() => _previewHost.ImageFit();
+    [RelayCommand] private void OriginalImage() => _previewHost.ImageOriginal();
+    [RelayCommand] private void RotateImageLeft() => _previewHost.ImageRotateLeft();
+    [RelayCommand] private void RotateImageRight() => _previewHost.ImageRotateRight();
+    [RelayCommand] private void ToggleImageCheckerboard() => _previewHost.ImageToggleCheckerboard();
+
+    [RelayCommand]
+    private Task PreviewBackAsync() => _previewHost.GoBackAsync();
+
+    [RelayCommand]
+    private Task PreviewForwardAsync() => _previewHost.GoForwardAsync();
+
+    [RelayCommand]
+    private async Task CopyPreviewPathAsync() => await CopyPathAsync(PreviewFilePath);
+
     [RelayCommand]
     private void DownloadDiagram() => DiagramDownloadRequested?.Invoke(this, EventArgs.Empty);
 
     public void OpenFilePreview(string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return;
-        try
-        {
-            var full = Path.GetFullPath(path);
-            var info = new FileInfo(full);
-            PreviewFileName = info.Name;
-            PreviewFilePath = full;
-            PreviewFileSize = info.Exists ? FormatFileSize(info.Length) : "文件不存在";
-            PreviewFileDetail = info.Exists ? $"修改时间 {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}" : "无法获取文件信息";
-            IsFilePreviewOpen = true;
-            UpdateDiagramPreview(full);
-        }
-        catch (Exception ex)
-        {
-            PreviewFileName = Path.GetFileName(path);
-            PreviewFilePath = path;
-            PreviewFileSize = "未知大小";
-            PreviewFileDetail = ex.Message;
-            IsFilePreviewOpen = true;
-        }
+        PreviewFileName = Path.GetFileName(path);
+        PreviewFilePath = path;
+        PreviewFileSize = "正在读取…";
+        PreviewFileDetail = "加载中";
+        IsFilePreviewOpen = true;
+        _ = LoadPreviewAsync(path);
     }
 
-    private static string FormatFileSize(long bytes)
+    private async Task LoadPreviewAsync(string path)
     {
-        if (bytes < 1024) return $"{bytes} B";
-        if (bytes < 1024 * 1024) return $"{bytes / 1024.0:F1} KB";
-        if (bytes < 1024 * 1024 * 1024) return $"{bytes / (1024.0 * 1024.0):F1} MB";
-        return $"{bytes / (1024.0 * 1024.0 * 1024.0):F2} GB";
+        await _previewHost.OpenAsync(ProjectPath, path);
+        var result = PreviewResult;
+        if (result is null) return;
+        PreviewFilePath = result.Path;
+        PreviewFileName = Path.GetFileName(result.Path);
+        PreviewFileSize = SafeFileReader.FormatSize(result.Size);
+        PreviewFileDetail = result.IsError
+            ? result.Error ?? "无法预览"
+            : string.Join(" · ", new[] { result.DisplayType, result.Encoding, result.IsTruncated ? "已截断" : null }.Where(x => !string.IsNullOrWhiteSpace(x)));
     }
 
     [ObservableProperty]
@@ -325,6 +387,122 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
 
     [ObservableProperty] private WorkspacePanelChangedFileViewModel? _selectedChange;
     public bool HasSelectedChange => SelectedChange is not null;
+
+    /// <summary>
+    /// 变更列表的呈现行：目录头与文件行混排成一条平铺列表。
+    /// 文件行的选中语义不变（SelectedChange 仍是 WorkspacePanelChangedFileViewModel），分组只在显示层。
+    /// </summary>
+    public ObservableCollection<object> ChangeRows { get; } = new();
+
+    private readonly List<WorkspaceChangeGroupViewModel> _groups = new();
+    public IReadOnlyList<WorkspaceChangeGroupViewModel> ChangeGroups => _groups;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasChangeFilter))]
+    private string _changeFilter = string.Empty;
+
+    public bool HasChangeFilter => ChangeFilter.Trim().Length > 0;
+    public bool HasFilteredOut => HasChangeFilter && Changes.Count > 0 && ChangeRows.Count == 0;
+    public bool IsChangeListEmpty => !IsChangesLoading && !HasChangesError && !HasChanges;
+
+    [ObservableProperty] private object? _selectedChangeRow;
+
+    /// <summary>栏宽够时左右分栏，窄栏退回"列表 ↔ 文件"的单栏切换。</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsChangeListVisible))]
+    [NotifyPropertyChangedFor(nameof(IsChangeListNarrow))]
+    private bool _isChangePaneWide;
+
+    /// <summary>宽栏列表固定宽度；窄栏里选中文件后列表让位给 diff。</summary>
+    public bool IsChangeListVisible => IsChangePaneWide || !HasSelectedChange;
+    /// <summary>窄栏才需要"返回列表"入口，宽栏列表一直可见。</summary>
+    public bool IsChangeListNarrow => !IsChangePaneWide;
+    [ObservableProperty] private bool _isDark = true;
+    public string AddedTotalText => "+" + Changes.Sum(file => file.AddedLines ?? 0);
+    public string RemovedTotalText => "−" + Changes.Sum(file => file.RemovedLines ?? 0);
+    public bool HasTotals => Changes.Any(file => file.HasLineCounts);
+
+    /// <summary>
+    /// 列表选中项：文件行转给 SelectedChange，目录头就地折叠且不留选中态。
+    /// </summary>
+    partial void OnSelectedChangeRowChanged(object? value)
+    {
+        if (value is WorkspaceChangeGroupRowViewModel header)
+        {
+            header.Group.IsExpanded = !header.Group.IsExpanded;
+            _suppressRowSync = true;
+            SelectedChangeRow = null;
+            _suppressRowSync = false;
+            return;
+        }
+        if (_suppressRowSync) return;
+        SelectedChange = value as WorkspacePanelChangedFileViewModel;
+    }
+
+    private bool _suppressRowSync;
+
+    partial void OnChangeFilterChanged(string value)
+    {
+        RebuildChangeGroups();
+        OnPropertyChanged(nameof(HasChangeFilter));
+    }
+
+    /// <summary>筛选匹配路径任意片段；分组重算后重建平铺行。</summary>
+    private void RebuildChangeGroups()
+    {
+        _groups.Clear();
+        var filter = ChangeFilter.Trim();
+        var visible = string.IsNullOrEmpty(filter)
+            ? Changes.AsEnumerable()
+            : Changes.Where(file => file.Path.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        foreach (var group in visible.GroupBy(file => file.Folder, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+        {
+            var item = new WorkspaceChangeGroupViewModel(group.Key);
+            foreach (var file in group.OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)) item.Files.Add(file);
+            item.PropertyChanged += (_, args) =>
+            {
+                if (args.PropertyName == nameof(WorkspaceChangeGroupViewModel.IsExpanded)) RebuildChangeRows();
+            };
+            _groups.Add(item);
+        }
+        RebuildChangeRows();
+        OnPropertyChanged(nameof(ChangeGroups));
+        OnPropertyChanged(nameof(HasFilteredOut));
+        OnPropertyChanged(nameof(IsChangeListEmpty));
+    }
+
+    private void ClearChangeRows()
+    {
+        _groups.Clear();
+        ChangeRows.Clear();
+        OnPropertyChanged(nameof(ChangeGroups));
+    }
+
+    /// <summary>目录折叠/展开后只重建平铺行，不重新分组。</summary>
+    private void RebuildChangeRows()
+    {
+        ChangeRows.Clear();
+        foreach (var group in _groups)
+        {
+            ChangeRows.Add(new WorkspaceChangeGroupRowViewModel(group));
+            if (!group.IsExpanded) continue;
+            foreach (var file in group.Files) ChangeRows.Add(file);
+        }
+    }
+
+    /// <summary>
+    /// 由视图注入：语法着色按深浅主题取调色板。
+    /// 颜色是烘进 diff 行里的，主题变了要重新取一次，否则阅读区还停在旧配色。
+    /// </summary>
+    public void SetDarkTheme(bool dark)
+    {
+        if (IsDark == dark) return;
+        IsDark = dark;
+        if (SelectedChange is not null && DiffModel is not null) _ = RefreshSelectedDiffAsync();
+    }
+
+    private bool IsDarkTheme() => IsDark;
 
     [ObservableProperty] private string _currentDirectory = string.Empty;
     [ObservableProperty]
@@ -386,6 +564,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             _changeGeneration++;
             _fileGeneration++;
             Changes.Clear();
+            ClearChangeRows();
             Files.Clear();
             SelectedChange = null;
             SelectedFile = null;
@@ -422,6 +601,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     {
         SelectedChange = null;
         Changes.Clear();
+        ClearChangeRows();
         ChangesRoot = string.Empty;
         ExcludedPaths = 0;
         NotifyChangeRows();
@@ -431,7 +611,15 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     partial void OnSelectedChangeChanged(WorkspacePanelChangedFileViewModel? value)
     {
         CopyFeedback = string.Empty;
+        foreach (var file in Changes) file.IsSelected = ReferenceEquals(file, value);
+        if (!_suppressRowSync)
+        {
+            _suppressRowSync = true;
+            SelectedChangeRow = value;
+            _suppressRowSync = false;
+        }
         OnPropertyChanged(nameof(HasSelectedChange));
+        OnPropertyChanged(nameof(IsChangeListVisible));
         _ = RefreshSelectedDiffAsync();
     }
     partial void OnSelectedFileChanged(WorkspacePanelFileItemViewModel? value)
@@ -509,6 +697,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             if (generation == _changeGeneration && !_disposed)
             {
                 Changes.Clear();
+                ClearChangeRows();
                 SelectedChange = null;
                 ChangesError = $"变更查询失败：{error.Message}";
                 NotifyChangeRows();
@@ -536,6 +725,10 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             foreach (var file in report.Files) Changes.Add(new(file, report.Root));
             SelectedChange = Changes.FirstOrDefault(x => x.Path == selectedPath);
         }
+        RebuildChangeGroups();
+        // 重新分组后行是新对象，选中态要再同步一次。
+        if (SelectedChange is { } current)
+            foreach (var file in Changes) file.IsSelected = ReferenceEquals(file, current);
         NotifyChangeRows();
     }
 
@@ -591,17 +784,48 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     {
         if (directory.Length == 0 || root.Length == 0) throw new IOException("尚未选择项目。");
         if (!IsUnderRoot(directory, root)) throw new IOException("目录超出项目范围。");
+        return ReadDirectoryItems(directory, root, cancellation, 0);
+    }
+
+    private static (IReadOnlyList<WorkspacePanelFileItemViewModel> Items, bool Truncated) ReadDirectoryItems(
+        string directory, string root, CancellationToken cancellation, int depth)
+    {
         var rows = new List<WorkspacePanelFileItemViewModel>();
+        var truncated = false;
         foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
         {
             cancellation.ThrowIfCancellationRequested();
             var isDirectory = (entry.Attributes & FileAttributes.Directory) != 0;
             var isLink = (entry.Attributes & FileAttributes.ReparsePoint) != 0;
-            rows.Add(new(entry.Name, Path.GetRelativePath(root, entry.FullName).Replace('\\', '/'), entry.FullName, isDirectory, isLink));
-            if (rows.Count > DirectoryLimit) break;
+            rows.Add(new(entry.Name, Path.GetRelativePath(root, entry.FullName).Replace('\\', '/'), entry.FullName, isDirectory, isLink, depth));
+            if (rows.Count >= DirectoryLimit)
+            {
+                truncated = true;
+                break;
+            }
         }
-        return (rows.Take(DirectoryLimit).OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray(),
-            rows.Count > DirectoryLimit);
+        return (rows.OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray(), truncated);
+    }
+
+    public async Task ToggleDirectoryAsync(WorkspacePanelFileItemViewModel? item)
+    {
+        if (item is not { IsDirectory: true, IsLink: false } || _disposed) return;
+        if (item.IsExpanded) { item.SetExpanded(false); return; }
+        if (!item.ChildrenLoaded)
+        {
+            item.BeginChildrenLoad();
+            try
+            {
+                var result = await Task.Run(() => ReadDirectoryItems(item.FullPath, ProjectPath, CancellationToken.None, item.Depth + 1));
+                item.SetChildren(result.Items);
+                if (result.Truncated) IsDirectoryTruncated = true;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                item.SetChildren([new WorkspacePanelFileItemViewModel("无法读取", item.RelativePath, item.FullPath, false, false, item.Depth + 1)]);
+            }
+        }
+        item.SetExpanded(true);
     }
 
     [RelayCommand]
@@ -650,6 +874,12 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasChanges));
         OnPropertyChanged(nameof(IsChangesEmpty));
         OnPropertyChanged(nameof(ChangesCountText));
+        OnPropertyChanged(nameof(IsChangeListEmpty));
+        OnPropertyChanged(nameof(HasFilteredOut));
+        OnPropertyChanged(nameof(AddedTotalText));
+        OnPropertyChanged(nameof(RemovedTotalText));
+        OnPropertyChanged(nameof(HasTotals));
+        OnPropertyChanged(nameof(HasSelectedChange));
     }
     private void NotifyFileRows()
     {
@@ -680,5 +910,6 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         _fileCancellation?.Cancel();
         _changeCancellation?.Dispose();
         _fileCancellation?.Dispose();
+        _previewHost.Dispose();
     }
 }

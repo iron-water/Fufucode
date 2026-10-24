@@ -1,0 +1,9 @@
+{
+  "id": "workspace.local-review",
+  "name": "本地审查",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.LocalReview.dll",
+  "packageType": "Fufucode.Plugins.LocalReview.LocalReviewPluginPackage",
+  "category": "Workspace",
+  "capabilities": ["WorkspacePage"]
+}

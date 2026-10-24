@@ -183,7 +183,7 @@
                                                          Payload="{Binding Payload}" Margin="0,4"/>
                               </DataTemplate>
                               <DataTemplate DataType="vm:CodeSegmentViewModel" x:DataType="vm:CodeSegmentViewModel">
-                                <Border Classes="codeCard" Margin="0,4">
+                                <Border Classes="codeCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
                                   <StackPanel>
                                     <!-- 头部条：语言名 + 复制 -->
                                     <!-- UI-1：容器内结构划分用单向 1px 发丝细线（6% 白/黑），不用闭合框。 -->
@@ -200,7 +200,7 @@
                                       </DockPanel>
                                     </Border>
                                     <views:HighlightedCodeView Code="{Binding Code}" Language="{Binding Language}"
-                                                               MaxHeight="{Binding MaxHeight}" Margin="12,8" />
+                                                               IsExpanded="{Binding IsExpanded}" Margin="12,8" />
                                     <Button Classes="subtle" Content="{Binding ExpandLabel}"
                                             Command="{Binding ToggleExpandCommand}"
                                             Click="OnBlockLayoutToggled"
@@ -232,10 +232,11 @@
                                             IsVisible="{Binding IsCollapsed}"/>
                                 </StackPanel>
                               </Button>
-                              <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="10,0,10,10"
-                                         Classes="caption"
-                                         Foreground="{DynamicResource AppTextSecondary}"
-                                         IsVisible="{Binding IsExpanded}"/>
+                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
+                                <TextBlock Text="{Binding Text}" TextWrapping="Wrap" Margin="10,0,10,10"
+                                           Classes="caption"
+                                           Foreground="{DynamicResource AppTextSecondary}"/>
+                              </views:CollapsiblePanel>
                             </StackPanel>
                           </Border>
                         </DataTemplate>
@@ -261,17 +262,11 @@
                               <TextBlock Classes="meta mono" Text="{Binding LatestHint, StringFormat='  └ {0}'}"
                                          TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                          Margin="30,0,12,6" IsVisible="{Binding HasHint}"/>
-                              <ItemsControl ItemsSource="{Binding Tools}" IsVisible="{Binding IsExpanded}"
-                                            Opacity="{Binding IsExpanded, Converter={StaticResource BoolToOpacity}}"
-                                            Margin="0,0,0,6">
-                                <ItemsControl.Transitions>
-                                  <Transitions>
-                                    <DoubleTransition Property="Opacity" Duration="0:0:0.16"/>
-                                  </Transitions>
-                                </ItemsControl.Transitions>
+                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="0,0,0,6">
+                              <ItemsControl ItemsSource="{Binding Tools}">
                                 <ItemsControl.DataTemplates>
                                   <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                                    <Border Classes="toolCard" Margin="10,3">
+                                    <Border Classes="toolCard" Margin="10,3" Loaded="OnTransientBlockLoaded">
                                       <StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,7,12,3">
                                           <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold"
@@ -311,26 +306,28 @@
                                   </DataTemplate>
                                 </ItemsControl.DataTemplates>
                               </ItemsControl>
+                              </views:CollapsiblePanel>
                             </StackPanel>
                           </Border>
                         </DataTemplate>
 
                         <!-- 工具卡片（未分组的单次调用） -->
                         <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                          <Border Classes="toolCard" Margin="0,4">
+                          <Border Classes="toolCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
                             <StackPanel>
                               <!-- 头部行：wrench + 工具名 + 状态徽章 -->
                               <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8,12,4">
                                 <PathIcon Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
                                           VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
                                 <TextBlock Classes="mono" FontSize="12.5" FontWeight="SemiBold" Text="{Binding ToolName}" VerticalAlignment="Center"/>
-                                <Border Classes="badge"
+                                <!-- 状态用小圆点表达，文字进 tooltip；不再用大号胶囊。 -->
+                                <Border Width="9" Height="9" CornerRadius="4.5" VerticalAlignment="Center"
+                                        Classes="statusDot"
                                         Classes.attention="{Binding BadgeIsAttention}"
                                         Classes.success="{Binding BadgeIsSuccess}"
                                         Classes.critical="{Binding BadgeIsCritical}"
-                                        Classes.neutral="{Binding BadgeIsNeutral}">
-                                  <TextBlock Text="{Binding StatusText, FallbackValue='运行中'}"/>
-                                </Border>
+                                        Classes.neutral="{Binding BadgeIsNeutral}"
+                                        ToolTip.Tip="{Binding StatusText, FallbackValue='运行中'}"/>
                                 <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
                                            IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
                                 <Button Classes="iconButton" Width="22" Height="18" Padding="0"
@@ -412,14 +409,9 @@
                   </Border>
                   <!-- 回合结束的变更总结卡（对齐 Codex）：文件数、增删行、查看与撤销。 -->
                   <Panel IsVisible="{DynamicResource UiShowChangeSummary}">
-                    <Border Classes="changeCard" IsVisible="{Binding ChangeCard.HasChanges}" Margin="0,8,0,0"
-                            Opacity="{Binding ChangeCard.HasChanges, Converter={StaticResource BoolToOpacity}}"
+                    <views:CollapsiblePanel IsExpanded="{Binding ChangeCard.HasChanges}" Margin="0,8,0,0">
+                    <Border Classes="changeCard"
                             AutomationProperties.AutomationId="MSG-TURN-CHANGE-CARD">
-                      <Border.Transitions>
-                        <Transitions>
-                          <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
-                        </Transitions>
-                      </Border.Transitions>
                       <StackPanel>
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,10,12,8" ColumnSpacing="10">
                           <Border Grid.Column="0" Classes="changeIcon" Width="28" Height="28" CornerRadius="8">
@@ -449,7 +441,7 @@
                                 <Button Classes="changeFileRow" Click="OnToggleFileDiff"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                         Padding="12,5">
-                                  <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
                                     <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
                                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
                                               IsVisible="{Binding IsExpanded}"/>
@@ -462,24 +454,46 @@
                                                Text="{Binding AdditionsText}" IsVisible="{Binding HasAdditions}"/>
                                     <TextBlock Grid.Column="3" Classes="mono deletions" FontSize="12.5"
                                                Text="{Binding DeletionsText}" IsVisible="{Binding HasDeletions}"/>
+                                    <!-- 直接把这个文件带到变更面板，并切到本次会话口径。 -->
+                                    <Button Grid.Column="4" Classes="iconButton" Width="22" Height="22"
+                                            Click="OnOpenFileInChanges" ToolTip.Tip="在变更面板中查看此文件"
+                                            AutomationProperties.Name="在变更面板中查看此文件">
+                                      <PathIcon Data="{DynamicResource Icon.Open}" Width="11" Height="11"/>
+                                    </Button>
                                   </Grid>
                                 </Button>
-                                <Border Classes="diffWell" Margin="12,0,12,8" IsVisible="{Binding IsExpanded}">
-                                  <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto"
-                                                VerticalScrollBarVisibility="Auto" Padding="10,6">
-                                    <ItemsControl ItemsSource="{Binding DiffLines}">
+                                <!-- 与变更面板同一套行模型：行号、增删底色、语法着色一致。 -->
+                                <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="12,0,12,8">
+                                <Border Classes="diffWell">
+                                  <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled"
+                                                VerticalScrollBarVisibility="Auto" Padding="6,4">
+                                    <ItemsControl ItemsSource="{Binding DiffModel.Rows}">
                                       <ItemsControl.DataTemplates>
-                                        <DataTemplate DataType="vm:DiffLineViewModel" x:DataType="vm:DiffLineViewModel">
-                                          <TextBlock Classes="mono diffLine" FontSize="12" TextWrapping="NoWrap"
-                                                     Classes.added="{Binding IsAdded}"
-                                                     Classes.removed="{Binding IsRemoved}"
-                                                     Classes.note="{Binding IsNote}"
-                                                     Text="{Binding Text}"/>
+                                        <DataTemplate DataType="vm:DiffRowViewModel" x:DataType="vm:DiffRowViewModel">
+                                          <StackPanel>
+                                            <Border Classes="diffRow" Classes.added="{Binding IsAdded}"
+                                                    Classes.removed="{Binding IsRemoved}" IsVisible="{Binding IsBody}">
+                                              <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                                                <TextBlock Grid.Column="0" Classes="mono diffGutter" Text="{Binding OldNumber}"
+                                                           Width="30" TextAlignment="Right"/>
+                                                <TextBlock Grid.Column="1" Classes="mono diffGutter" Text="{Binding NewNumber}"
+                                                           Width="30" TextAlignment="Right"/>
+                                                <TextBlock Grid.Column="2" Classes="mono diffMarker" Text="{Binding Marker}"
+                                                           Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"/>
+                                                <views:DiffLineText Grid.Column="3" Classes="mono diffText" FontSize="12"
+                                                                    VerticalAlignment="Center" Wrap="True"
+                                                                    Runs="{Binding Runs}" IsAddedRow="{Binding IsAdded}"/>
+                                              </Grid>
+                                            </Border>
+                                            <TextBlock Classes="meta" Text="{Binding HeaderText}" Margin="4,2"
+                                                       IsVisible="{Binding IsNote}"/>
+                                          </StackPanel>
                                         </DataTemplate>
                                       </ItemsControl.DataTemplates>
                                     </ItemsControl>
                                   </ScrollViewer>
                                 </Border>
+                                </views:CollapsiblePanel>
                                 <TextBlock Classes="meta" Text="{Binding DiffNote}" IsVisible="{Binding HasNote}"
                                            Margin="24,0,12,8"/>
                               </StackPanel>
@@ -493,17 +507,22 @@
                                    IsVisible="{Binding ChangeCard.HasUndoFeedback}" Margin="12,0,12,8"/>
                       </StackPanel>
                     </Border>
+                    </views:CollapsiblePanel>
                   </Panel>
-                  <views:MessageActionsView IsVisible="{Binding ShowMetaCard}"/>
+                  <views:CollapsiblePanel IsExpanded="{Binding ShowMetaCard}">
+                    <views:MessageActionsView/>
+                  </views:CollapsiblePanel>
                   </StackPanel>
                 </Grid>
               </DataTemplate>
 
-              <!-- 错误 / 提示条目（InfoBar 风格；H1 严重性类保留） -->
+              <!-- 错误 / 提示条目（InfoBar 风格；H1 严重性类保留）
+                   提示卡有明确的退场机制（右上 ×）与进出动画：进入时淡入上移，关闭时淡出后删除。 -->
               <DataTemplate DataType="vm:ErrorEntryViewModel" x:DataType="vm:ErrorEntryViewModel">
                 <Border Classes="errorCard" Classes.neutral="{Binding IsNeutral}"
-                        Classes.info="{Binding IsInfo}" Margin="0,6">
-                  <Grid ColumnDefinitions="Auto,*">
+                        Classes.info="{Binding IsInfo}" Margin="0,6"
+                        AttachedToVisualTree="NoticeCard_Attached">
+                  <Grid ColumnDefinitions="Auto,*,Auto">
                     <PathIcon Grid.Column="0" Width="18" Height="18" Margin="0,1,0,0"
                               Data="{DynamicResource Icon.ErrorCircle}"
                               IsVisible="{Binding IsError}"/>
@@ -520,6 +539,11 @@
                       </StackPanel>
                       <SelectableTextBlock Classes="body" Text="{Binding Message}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                     </StackPanel>
+                    <Button Grid.Column="2" Classes="iconButton toolButton" Width="24" Height="24" Margin="4,-4,-4,0"
+                            VerticalAlignment="Top" Click="NoticeDismiss_Click"
+                            ToolTip.Tip="关闭这条提示" AutomationProperties.Name="关闭提示">
+                      <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/>
+                    </Button>
                   </Grid>
                 </Border>
               </DataTemplate>
@@ -530,9 +554,16 @@
 
         <!-- 回到最新：浮动 pill + 阴影（阴影挂在包裹层，Button 无 BoxShadow）。
              靠右放置，避免压住居中排版的正文。 -->
-        <Border Grid.Column="1" IsVisible="{Binding Timeline.ShowBackToLatest}" CornerRadius="{DynamicResource AppCornerPill}"
+        <Border Grid.Column="1" CornerRadius="{DynamicResource AppCornerPill}"
+                Opacity="{Binding Timeline.ShowBackToLatest, Converter={StaticResource BoolToOpacity}}"
+                IsHitTestVisible="{Binding Timeline.ShowBackToLatest}"
                 BoxShadow="{DynamicResource FluentPillShadow}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,10">
+          <Border.Transitions>
+            <Transitions>
+              <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
+            </Transitions>
+          </Border.Transitions>
         <Button x:Name="BackToLatestButton" Classes="backToLatest"
                 Command="{Binding Timeline.ScrollToLatestSmoothCommand}">
           <StackPanel Orientation="Horizontal" Spacing="6">
@@ -553,8 +584,22 @@
       </Button>
 
       <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
-      <Border x:Name="ComposerCard" Grid.Row="1" Classes="composerCard" MaxWidth="880"
-              CornerRadius="0" BorderThickness="0,1,0,0" Margin="0" HorizontalAlignment="Stretch">
+      <StackPanel x:Name="ComposerHost" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Stretch">
+      <!-- 聚焦光带：位于输入卡上方的淡绿色渐变（不依赖 BoxShadow，渲染更可靠）。 -->
+      <Border x:Name="ComposerGlowBand" Height="9" Margin="0" Opacity="0" IsHitTestVisible="False">
+        <Border.Effect>
+          <BlurEffect Radius="4"/>
+        </Border.Effect>
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+            <GradientStop Offset="0" Color="#1400CC6A"/>
+            <GradientStop Offset="0.55" Color="#0800CC6A"/>
+            <GradientStop Offset="1" Color="#0000CC6A"/>
+          </LinearGradientBrush>
+        </Border.Background>
+      </Border>
+      <Border x:Name="ComposerCard" Classes="composerCard" MaxWidth="880"
+              CornerRadius="0" BorderThickness="0" Margin="0" HorizontalAlignment="Stretch">
         <StackPanel>
           <!-- 会话上下文（项目切换）在底部工具行，与模型/思考/权限同排；
                后端只在顶栏会话岛显示，输入卡内不再有后端徽标。 -->
@@ -676,29 +721,19 @@
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
             <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="6"
                         VerticalAlignment="Center" Margin="6,0,8,0" IsVisible="False">
-              <Button x:Name="SessionProjectChip" Classes="contextChip"
-                      ToolTip.Tip="更改此会话的项目"
+              <Button x:Name="SessionProjectChip" Classes="iconButton" Width="30" Height="30"
+                     
                       AutomationProperties.Name="更改此会话的项目">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"
-                            VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                  <TextBlock x:Name="SessionProjectChipText" Classes="caption" VerticalAlignment="Center"/>
-                  <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                            VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
-                </StackPanel>
+                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14"/>
               </Button>
+              <TextBlock x:Name="SessionProjectChipText" IsVisible="False"/>
             </StackPanel>
             <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
-              <Button Classes="subtle" Width="165" Height="28" Padding="8,0" FontSize="11"
-                      IsEnabled="{Binding Settings.CanChangeModel}" ToolTip.Tip="选择模型">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
-                  <TextBlock Text="{Binding Settings.SelectedModel.Label, FallbackValue='选择模型'}"
-                             FontSize="11" VerticalAlignment="Center"
-                             TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/>
-                  <PathIcon Grid.Column="1" Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                            VerticalAlignment="Center" Classes="meta"/>
-                </Grid>
+              <Button x:Name="ModelButton" Classes="iconButton" Width="30" Height="30"
+                      IsEnabled="{Binding Settings.CanChangeModel}"
+                     >
+                <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened">
                     <Border Width="380" Classes="card" Padding="10">
@@ -747,7 +782,7 @@
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ModelPickerItem">
                                 <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                  <Button Grid.Column="0" Classes="commandFlyoutItem" Padding="8,5"
+                                  <Button Grid.Column="0" Classes="commandFlyoutItem modelChoiceRow" Padding="8,5"
                                           HorizontalContentAlignment="Stretch"
                                           HorizontalAlignment="Stretch"
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ChooseModelCommand}"
@@ -772,43 +807,48 @@
                   </Flyout>
                 </Button.Flyout>
               </Button>
-              <ComboBox ItemsSource="{Binding Settings.ThinkingChoices}" SelectedItem="{Binding Settings.SelectedThinking}" IsEnabled="{Binding Settings.CanChangeModel}" Width="95" Height="28" FontSize="11" ToolTip.Tip="思考等级">
-                <ComboBox.Styles><Style Selector="ComboBoxItem" x:DataType="vm:SettingsPageViewModel+ThinkingChoice"><Setter Property="IsEnabled" Value="{Binding IsSupported}"/></Style></ComboBox.Styles>
-                <ComboBox.ItemTemplate><DataTemplate x:DataType="vm:SettingsPageViewModel+ThinkingChoice"><TextBlock Text="{Binding Label}" FontSize="11"/></DataTemplate></ComboBox.ItemTemplate>
-              </ComboBox>
-            </WrapPanel>
-            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6">
-              <Button Classes="iconButton" Command="{Binding Input.StopCommand}"
-                      ToolTip.Tip="停止当前回合" AutomationProperties.Name="停止">
-                <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
+              <Button x:Name="ThinkingButton" Classes="iconButton" Width="30" Height="30"
+                      IsEnabled="{Binding Settings.CanChangeModel}">
+                <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14"/>
+                <Button.Flyout>
+                  <MenuFlyout Placement="TopEdgeAlignedRight"/>
+                </Button.Flyout>
               </Button>
-              <!-- P2-17：运行中插入（steer）；空闲时隐藏 -->
+            </WrapPanel>
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <!-- 插入（steer）：仅运行中出现 -->
               <Button Classes="subtle" Command="{Binding Input.SteerCommand}"
-                      IsVisible="{Binding Input.IsTurnActive}"
-                      ToolTip.Tip="插入：当前步骤的工具调用结束后、下一次模型调用前送达（/ 扩展命令不可插入）">
+                      IsVisible="{Binding Input.IsTurnActive}" Height="32"
+                      ToolTip.Tip="插入：当前步骤结束后、下一次模型调用前送达">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{DynamicResource Icon.ArrowEnterLeft}" Width="13" Height="13"
                             VerticalAlignment="Center"/>
                   <TextBlock Text="插入" VerticalAlignment="Center"/>
                 </StackPanel>
               </Button>
-              <Button Classes="accent" Command="{Binding Input.SendCommand}"
-                      ToolTip.Tip="{Binding Input.SendButtonToolTip}"
-                      Padding="12,6" CornerRadius="{DynamicResource ControlCornerRadius}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding !Input.IsTurnActive}"/>
-                  <PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding Input.IsTurnActive}"/>
-                  <TextBlock Text="{Binding Input.SendButtonText}" VerticalAlignment="Center"/>
-                </StackPanel>
-              </Button>
+              <!-- 发送/停止共用同一个位置：空闲显示发送，运行中显示停止。 -->
+              <Grid VerticalAlignment="Center">
+                <Button x:Name="StopButton" Classes="iconButton" Width="32" Height="32"
+                        Command="{Binding Input.StopCommand}"
+                        IsVisible="{Binding Input.IsTurnActive}"
+                        AutomationProperties.Name="停止">
+                  <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
+                </Button>
+                <Button x:Name="SendButton" Classes="accent" Height="32" Padding="12,0"
+                        Command="{Binding Input.SendCommand}"
+                        IsVisible="{Binding !Input.IsTurnActive}"
+                        AutomationProperties.Name="发送">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding Input.SendButtonText}" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+              </Grid>
             </StackPanel>
           </Grid>
         </StackPanel>
       </Border>
+      </StackPanel>
 
     </Grid>
   </Grid>

@@ -33,7 +33,7 @@ try
     Check(features.SequenceEqual(new[] { "marketplace", "browser", "terminal", "files", "automation" }),
         "大功能包含插件市场/浏览器/终端/文件管理/自动开发");
     // 性能监控（2026-10-19）在“其他”中加入 performance 条目。
-    Check(other.SequenceEqual(new[] { "notifications", "background", "config", "usage", "performance", "modules", "functions" }),
+    Check(other.SequenceEqual(new[] { "notifications", "background", "config", "performance", "modules", "functions" }),
         "其他包含通知/配置/用量/辅助工具等二级小功能");
     Check(SettingsNavCatalog.DefaultCategoryId == "appearance", "默认选中外观分类");
     Check(SettingsNavCatalog.Find("browser") is { Title: "浏览器", Icon: "Globe" },
@@ -75,21 +75,21 @@ try
     var storeRoot = Path.Combine(root, "store");
     var store = new SettingsNavPreferenceStore(storeRoot);
     Check(store.IsPersistent && store.Current == SettingsNavPreference.Empty, "首次加载为空偏好");
-    store.Save(new SettingsNavPreference { Promoted = ["notifications", "usage"], Demoted = ["browser"] });
+    store.Save(new SettingsNavPreference { Promoted = ["notifications", "performance"], Demoted = ["browser"] });
     var preferenceFile = Path.Combine(storeRoot, SettingsNavPreferenceStore.FileName);
     Check(File.Exists(preferenceFile), "偏好写入 settings-nav.json");
     Check(File.ReadAllText(preferenceFile).Contains("notifications", StringComparison.Ordinal),
         "落盘内容包含升级条目");
     var reloaded = new SettingsNavPreferenceStore(storeRoot);
-    Check(reloaded.Current.Promoted.SequenceEqual(new[] { "notifications", "usage" }) &&
+    Check(reloaded.Current.Promoted.SequenceEqual(new[] { "notifications", "performance" }) &&
           reloaded.Current.Demoted.SequenceEqual(new[] { "browser" }),
         "重新加载恢复升降级偏好");
 
     Check(SettingsNavCatalog.All.Where(d => reloaded.Current.EffectiveTier(d.Id) == SettingsNavTier.Features).Select(i => i.Id)
-              .SequenceEqual(new[] { "marketplace", "terminal", "files", "automation", "notifications", "usage" }),
+              .SequenceEqual(new[] { "marketplace", "terminal", "files", "automation", "notifications", "performance" }),
         "升级的小功能并入大功能组");
     Check(SettingsNavCatalog.All.Where(d => reloaded.Current.EffectiveTier(d.Id) == SettingsNavTier.Other).Select(i => i.Id)
-              .SequenceEqual(new[] { "browser", "background", "config", "performance", "modules", "functions" }),
+              .SequenceEqual(new[] { "browser", "background", "config", "modules", "functions" }),
         "降级的大功能收纳进其他组");
 
     // VM 层：命令写盘后新实例恢复同一层级。
@@ -159,7 +159,7 @@ try
     Check(Matches("代理").SequenceEqual(new[] { "network" }),
         "搜索命中基础类条目");
     Check(Matches("shell").SequenceEqual(new[] { "terminal" }), "搜索命中大功能条目");
-    Check(Matches("用量").SequenceEqual(new[] { "usage" }), "搜索命中其他类小功能");
+    Check(Matches("trace").SequenceEqual(new[] { "performance" }), "搜索命中其他类小功能");
     Check(Matches("不存在的关键词").Length == 0, "无命中时不输出任何条目");
 
     var searchVm = new SettingsPageViewModel();
@@ -220,9 +220,8 @@ try
 
     var editStore = new WorkbenchAppearanceStore(Path.Combine(root, "layout-edit"));
     var editVm = new WorkbenchCustomizationViewModel(editStore);
-    editVm.EditLayout(l => { l.Move("files", DockZone.Right); l.Hidden[DockZone.Bottom] = false; });
-    Check(editStore.Current.Layout?.Find("files") == DockZone.Right &&
-          editStore.Current.Layout?.Hidden[DockZone.Bottom] == false,
+    editVm.EditLayout(l => { l.Move("files", DockZone.Right); });
+    Check(editStore.Current.Layout?.Find("files") == DockZone.Right,
         "设置页布局编辑写入真实 ui.json 状态");
 
     // ================= 4.2 Fluent 暗色三档底色 =================

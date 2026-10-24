@@ -42,6 +42,12 @@ public partial class MainWindow
         }
     }
 
+    Features.Plugins.IPluginWorkspacePage Features.Plugins.IBrowserPageFactory.CreatePage()
+    {
+        var view = CreateBrowserPage();
+        return new Features.Plugins.BrowserPluginPage(view, view.Dispose);
+    }
+
     private Views.BrowserView CreateBrowserPage()
     {
         EnsureBrowserStores();

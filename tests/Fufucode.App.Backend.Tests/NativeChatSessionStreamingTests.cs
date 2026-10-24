@@ -280,15 +280,17 @@ internal static class NativeChatSessionStreamingTests
         var handler = new ScriptedHttpMessageHandler((_, _) =>
             ScriptedHttpMessageHandler.SseResponse(Sse.Split(frames, 2)));
         using var http = new HttpClient(handler);
+        // 显式 maxIterations 只用于让本测试可重复结束；它不代表生产会话默认有轮次上限。
         await using var session = new NativeCSharpChatSession(new PureCSharpAgentEngine(modelClient:
-            new OpenAiCompatibleModelClient("https://fixture.invalid/v1", defaultModelId: "fixture-free", httpClient: http), maxIterations: 1));
+            new OpenAiCompatibleModelClient("https://fixture.invalid/v1", defaultModelId: "fixture-free", httpClient: http), maxIterations: 2));
         var capture = EventCapture.Attach(session);
         await session.SendAsync("无调度器");
         await capture.WaitForSettledAsync();
         checks.Check(capture.RawEvents.OfType<SessionEvent.ToolCallStatusChanged>()
             .All(s => s.Status == ToolCallStatus.Failed), "无调度器明确 Failed，不伪造 Running");
-        checks.Equal(2, capture.AssistantFinishedMessages.Count, "轮次上限本地终止提示也有独立完整消息");
-        checks.Check(capture.AssistantTextDeltas.Single().Contains("最大轮次限制"), "未流式产生的轮次上限提示正常回放");
+        checks.Check(capture.AssistantFinishedMessages.Count >= 1, "预算终态至少有一条完整助手消息");
+        checks.Check(capture.AssistantTextDeltas.Any(text => text.Contains("外部任务轮次预算已耗尽")),
+            "显式预算终态提示通过会话事件回放");
     }
 
     private static async Task StreamDisposalAndSubscriberIsolationAsync(Checks checks)

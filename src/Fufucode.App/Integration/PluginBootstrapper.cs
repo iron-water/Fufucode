@@ -34,19 +34,17 @@ public static class PluginBootstrapper
 
                 var target = Path.Combine(layout.PluginsDirectory, id);
                 var manifest = Path.Combine(target, "manifest.json");
-                if (File.Exists(manifest))
-                {
-                    results.Add((id, true, null));
-                    continue;
-                }
-
                 var source = ResolveSource(id);
                 if (source is null)
                 {
+                    // 已有安装但当前分发载荷缺失：保留现有版本，不把用户插件删掉。
+                    if (File.Exists(manifest)) { results.Add((id, true, null)); continue; }
                     results.Add((id, false, "分发载荷缺失：未找到 plugins-dist/" + id + " 或开发构建输出"));
                     continue;
                 }
 
+                // 随包插件每次启动都从分发载荷同步：旧逻辑看到 manifest 就跳过，
+                // 升级后的新 DLL 永远进不到已有数据根，用户一直看到旧页面。
                 Directory.CreateDirectory(target);
                 CopyTree(source, target);
                 results.Add((id, File.Exists(manifest), File.Exists(manifest) ? null : "复制后 manifest 缺失"));

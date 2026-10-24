@@ -127,10 +127,10 @@ internal static class WorkbenchCustomizationSelfTest
                 "redundant and meaningless actions are gone from the catalog");
             var c = window.CustomizationForTesting;
             // 顶栏中间：用户把功能放这里后，按钮出现在常驻区，且设置里可选
-            c.SetPlacement("usage", UiActionPosition.TopCenter, 1);
+            c.SetPlacement("perf", UiActionPosition.TopCenter, 1);
             await Ready();
             var topCenterPanel = window.FindControl<StackPanel>("CustomTopCenter")!;
-            Check(topCenterPanel.Children.OfType<Button>().Any(b => b.Tag as string == "usage"),
+            Check(topCenterPanel.Children.OfType<Button>().Any(b => b.Tag as string == "perf"),
                 "placing a function in the top center shows its button in the caption");
             Check(WorkbenchActionDefaults.PositionTitle(UiActionPosition.TopCenter) == "顶栏中间" &&
                 Enum.GetValues<UiActionPosition>().Contains(UiActionPosition.TopCenter),
@@ -140,9 +140,9 @@ internal static class WorkbenchCustomizationSelfTest
                 captionFrame.Save(Path.Combine(root, "top-center.png"), PngBitmapEncoderOptions.Default);
                 captionFrame.Dispose();
             }
-            c.SetPlacement("usage", UiActionPosition.MenuRight, 4);
+            c.SetPlacement("perf", UiActionPosition.MenuRight, 4);
             await Ready();
-            Check(!topCenterPanel.Children.OfType<Button>().Any(b => b.Tag as string == "usage"),
+            Check(!topCenterPanel.Children.OfType<Button>().Any(b => b.Tag as string == "perf"),
                 "moving it away clears the top center again");
 
             var priorLayout = window.DockLayoutForTesting.Serialize();

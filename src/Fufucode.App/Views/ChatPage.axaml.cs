@@ -25,6 +25,9 @@ public partial class ChatPage : UserControl
 
     /// <summary>已经播放过进入动画的条目。虚拟化在滚动时会重建容器，不能重复播放。</summary>
     private readonly System.Collections.Generic.HashSet<string> _animatedEntries = new(StringComparer.Ordinal);
+
+    /// <summary>输入区可见性是否已经初始化过；首次应用外观不播动画。</summary>
+    private bool _composerVisibilityInitialized;
     private long _programmaticUntilTicks;
     private long _lastUserInputTicks;
     private MainViewModel? _attachedViewModel;
@@ -70,6 +73,7 @@ public partial class ChatPage : UserControl
                 // 富内容插件只拿到这两个窄回调：提交一段文本、填入输入框。
                 PluginContentBridge.SubmitAsync = text => vm.Input.SubmitExternalAsync(text);
                 PluginContentBridge.InsertDraft = text => vm.Input.DraftText = text;
+                RefreshComposerPluginMenu();
                 RefreshComposerTools();
             }
         };
@@ -94,11 +98,22 @@ public partial class ChatPage : UserControl
         Motion.AnimateIn(control);
     }
 
-    /// <summary>变更卡的"查看变更"：打开工作区的变更面板。变更来源由 WorkspacePanel 自己判断。</summary>
-    private void OnViewChanges(object? sender, RoutedEventArgs e)
+    /// <summary>
+    /// 变更卡的"查看变更"：打开变更面板并切到"本次会话"口径——
+    /// 卡片列的是本回合的写入，工作区口径会把外部改动也混进来。
+    /// </summary>
+    private async void OnViewChanges(object? sender, RoutedEventArgs e)
     {
         if (TopLevel.GetTopLevel(this) is not MainWindow window) return;
-        window.OpenDockPage("changes", DockZone.Right);
+        await window.ShowTurnChangesAsync(null);
+    }
+
+    /// <summary>卡里单个文件：打开变更面板并直接选中它。</summary>
+    private async void OnOpenFileInChanges(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control { DataContext: TurnFileChangeViewModel file }) return;
+        if (TopLevel.GetTopLevel(this) is not MainWindow window) return;
+        await window.ShowTurnChangesAsync(file.Path);
     }
 
     /// <summary>撤销本轮文件改动：回到每个文件在本回合首次写入前的状态。</summary>
@@ -118,8 +133,9 @@ public partial class ChatPage : UserControl
     /// <summary>沉浸式模式下展开被收起的输入区，并把焦点交给输入框。</summary>
     private void OnExpandComposer(object? sender, RoutedEventArgs e)
     {
-        ComposerCard.IsVisible = true;
-        ComposerRevealButton.IsVisible = false;
+        _composerVisibilityInitialized = true;
+        Motion.SetVisible(ComposerCard, true, offsetY: 8);
+        Motion.SetVisible(ComposerRevealButton, false);
         InputBox.Focus();
         if (DataContext is MainViewModel { Timeline.IsAtBottom: true })
             TimelineScroller.ScrollToEnd();
@@ -128,7 +144,8 @@ public partial class ChatPage : UserControl
     /// <summary>展开/收起某个文件的内联 diff。</summary>
     private void OnToggleFileDiff(object? sender, RoutedEventArgs e)
     {
-        if (sender is Control { DataContext: TurnFileChangeViewModel file }) file.ToggleDiff();
+        if (sender is not Control { DataContext: TurnFileChangeViewModel file }) return;
+        file.ToggleDiff(ActualThemeVariant != Avalonia.Styling.ThemeVariant.Light);
     }
 
     /// <summary>复制工具输出原文，便于在别处继续处理。</summary>
@@ -202,6 +219,14 @@ public partial class ChatPage : UserControl
             if (atBottom) ScrollToEnd();
             else TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, offset);
         }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>流式过程中新出现的工具卡：轻微淡入，避免突然插入。</summary>
+    private void OnTransientBlockLoaded(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control control) return;
+        control.Loaded -= OnTransientBlockLoaded;
+        Motion.AnimateIn(control, offsetY: 3, Motion.FastDuration);
     }
 
     private void UpdateComposerToolbar()
@@ -418,6 +443,15 @@ public partial class ChatPage : UserControl
 
         if (DataContext is MainViewModel vm)
         {
+            // RelayCommand.Execute 不检查 CanExecute；空白输入必须在这里拦住，
+            // 否则回车会直接发出一个空消息。
+            var steering = e.KeyModifiers.HasFlag(KeyModifiers.Control) && vm.Input.IsTurnActive;
+            if (steering ? !vm.Input.CanSteer : !vm.Input.CanSend)
+            {
+                e.Handled = true;
+                return;
+            }
+
             // P2-17：Ctrl+Enter —— 运行中插入（steer），空闲等同普通发送（Immediate）；
             // 与普通 Enter 经过同一个 ImeEnterGuard（组合中不会走到这里）。
             if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
@@ -449,6 +483,22 @@ public partial class ChatPage : UserControl
         if (text.Length <= MaxEmbeddedPasteChars) return "粘贴内容：\n" + text;
         return "粘贴内容（已截断）：\n" + text[..MaxEmbeddedPasteChars] +
                $"\n\n[粘贴内容过长，仅内嵌前 {MaxEmbeddedPasteChars:N0} 字符；完整内容已保存到 {path}]";
+    }
+
+    /// <summary>时间线提示卡进入：淡入并轻微上移；滚动重建容器时也只播一次。</summary>
+    private void NoticeCard_Attached(object? sender, VisualTreeAttachmentEventArgs e)
+    {
+        if (sender is Control card) Motion.AnimateIn(card, offsetY: 4, Motion.FastDuration);
+    }
+
+    /// <summary>关闭一条时间线提示：先播放退场动画，动画结束后才从时间线移除。</summary>
+    private void NoticeDismiss_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Control button || button.DataContext is not TimelineEntryViewModel entry) return;
+        var card = button.FindAncestorOfType<Border>();
+        void Remove() => (DataContext as MainViewModel)?.Timeline.Dismiss(entry);
+        if (card is null) { Remove(); return; }
+        Motion.AnimateOut(card, offsetY: 4, Remove);
     }
 
     /// <summary>

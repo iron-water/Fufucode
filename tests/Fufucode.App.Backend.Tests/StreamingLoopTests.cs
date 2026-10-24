@@ -171,11 +171,13 @@ internal static class StreamingLoopTests
 
             var result = await loop.ExecuteLoopAsync(history, new[] { "list_dir" }, null);
 
-            checks.Equal(PureAgentTurnStatus.Completed, result.Status, "达到最大轮次后按安全终止返回 Completed");
-            checks.Equal(3, client.StreamingCalls, "最多只请求 3 轮，不再继续自转");
-            checks.Equal(3, result.ToolResults.Count, "每轮工具结果都被记录");
-            checks.Check(result.Response.Text!.Contains("最大轮次限制"), "终止响应明确说明轮次上限");
-            checks.Equal(PureAgentRole.Assistant, history[^1].Role, "历史末条为终端提示的 Assistant 消息");
+            checks.Equal(PureAgentTurnStatus.Completed, result.Status, "显式轮次预算耗尽后返回可观察终态");
+            checks.Equal(3, client.StreamingCalls, "显式预算允许预算内模型请求并在预算边界收束");
+            checks.Equal(3, result.ToolResults.Count, "显式预算内每轮工具请求均实际执行");
+            checks.Check(result.Truncated, "显式预算耗尽标记为 Truncated");
+            checks.Check(result.Error?.Contains("预算") == true, "预算耗尽返回可解释原因");
+            checks.Check(!result.Response.Text!.Contains("未执行"), "预算耗尽不伪造最后一轮禁工具提示");
+            checks.Equal(PureAgentRole.Assistant, history[^1].Role, "历史末条为预算终态 Assistant 消息");
         }
         finally
         {
@@ -188,7 +190,7 @@ internal static class StreamingLoopTests
     {
         var frames =
             Sse.Frame("{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"partial\"}}]}") +
-            Sse.Frame("{\"error\":{\"message\":\"upstream 500\",\"code\":\"server_error\"}}") +
+            Sse.Frame("{\"error\":{\"message\":\"invalid tool schema\",\"code\":\"invalid_request_error\"}}") +
             Sse.Done;
         var handler = new ScriptedHttpMessageHandler((_, _) =>
             ScriptedHttpMessageHandler.SseResponse(Sse.Split(frames, 6)));
@@ -203,7 +205,7 @@ internal static class StreamingLoopTests
             new ModelStreamCallbacks { OnTextDelta = deltas.Add });
 
         checks.Equal(PureAgentTurnStatus.Failed, result.Status, "流内错误使循环进入 Failed 终态");
-        checks.Check(result.Error?.Contains("upstream 500") == true, "失败结果携带服务端 error.message");
+        checks.Check(result.Error?.Contains("invalid tool schema") == true, "失败结果携带服务端 error.message");
         checks.Equal(0, loop.CompletedModelCalls, "失败的模型请求不计入完成次数");
         checks.Equal(1, deltas.Count, "失败前已派发的分片仍送达回调");
         checks.Equal(0, result.ToolResults.Count, "失败时没有工具结果");

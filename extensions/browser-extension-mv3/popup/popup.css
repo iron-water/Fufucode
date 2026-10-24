@@ -156,6 +156,32 @@ body {
 .error-text {
   font-size: 11px;
   color: #F87171;
+  line-height: 1.4;
+}
+.diagnostics {
+  display: grid;
+  gap: 4px;
+  background: #202024;
+  border: 1px solid #3F3F46;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 10px;
+  color: #D4D4D8;
+  line-height: 1.35;
+}
+.diagnostics > div {
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+.diagnostic-label {
+  color: #71717A;
+  flex: 0 0 52px;
+}
+.diagnostics > div > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .footer {
   margin-top: 14px;
