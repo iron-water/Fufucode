@@ -139,7 +139,6 @@ public partial class MainWindow
     private void SynchronizeAuxiliaryPageVisibility()
     {
         if (_notifications is null) return;
-        _notificationsView.SetCloseAllowed(!_dockLayout.PinnedPages.Contains("notifications"));
         _notifications.IsOpen = _notificationsView.IsEffectivelyVisible;
     }
 
