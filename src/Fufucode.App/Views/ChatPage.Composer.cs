@@ -20,6 +20,7 @@ public partial class ChatPage
     private readonly ComboBox _executionMode = new() { MinWidth = 112, MinHeight = 28, FontSize = 11 };
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
+    private Button? _executionModeButton;
     private bool _previewDraft;
     private void InitializeComposerTools()
     {
@@ -123,7 +124,13 @@ public partial class ChatPage
             catch (Exception error) { ReportActionError("权限模式切换失败：" + error.Message); }
             finally { RefreshComposerTools(); }
         };
-        ComposerModes.Children.Add(_executionMode);
+        // 权限模式：底部只留一个小图标，点开才是选项列表；文字进 tooltip。
+        var modeButton = WorkbenchUi.IconButton("ShieldCheckmark", "权限模式", 30);
+        var modeMenu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+        modeMenu.Opening += (_, _) => BuildExecutionModeMenu(modeMenu);
+        modeButton.Flyout = modeMenu;
+        _executionModeButton = modeButton;
+        ComposerModes.Children.Insert(0, modeButton);
         var menu = new MenuFlyout();
         var preview = new MenuItem { Header = "Markdown 草稿预览" };
         preview.Click += (_, _) => { _previewDraft = !_previewDraft; RefreshComposerTools(); };
@@ -151,6 +158,45 @@ public partial class ChatPage
         }
         AttachContextButton.Flyout = attachments;
     }
+    private void BuildExecutionModeMenu(MenuFlyout menu)
+    {
+        menu.Items.Clear();
+        var labels = _executionMode.ItemsSource as System.Collections.IEnumerable;
+        if (labels is null) return;
+        var index = 0;
+        foreach (var label in labels)
+        {
+            var captured = index++;
+            var text = label?.ToString() ?? string.Empty;
+            var item = new MenuItem
+            {
+                Header = (captured == _executionMode.SelectedIndex ? "✓  " : "    ") + text,
+                IsEnabled = _executionMode.IsEnabled,
+            };
+            item.Click += (_, _) => _executionMode.SelectedIndex = captured;
+            menu.Items.Add(item);
+        }
+    }
+
+    /// <summary>思考等级菜单：图标按钮点开后列出可选档位（不支持的置灰）。</summary>
+    internal void ThinkingFlyout_Opening(object? sender, EventArgs e)
+    {
+        if (sender is not MenuFlyout menu || DataContext is not MainViewModel vm) return;
+        menu.Items.Clear();
+        foreach (var choice in vm.Settings.ThinkingChoices)
+        {
+            var captured = choice;
+            var current = Equals(vm.Settings.SelectedThinking, captured);
+            var item = new MenuItem
+            {
+                Header = (current ? "✓  " : "    ") + captured.Label,
+                IsEnabled = captured.IsSupported,
+            };
+            item.Click += (_, _) => vm.Settings.SelectedThinking = captured;
+            menu.Items.Add(item);
+        }
+    }
+
     /// <summary>剪贴板附件：文件列表、常见图片格式（字节流）。成功时返回 true。</summary>
     private async System.Threading.Tasks.Task<bool> TryPasteAttachmentsAsync()
     {
@@ -246,8 +292,15 @@ public partial class ChatPage
         {
             _executionMode.SelectedIndex = Array.IndexOf(_modes, vm.Input.ExecutionMode);
             _executionMode.IsEnabled = vm.Input.CanChangeExecutionMode;
-            // 后端不支持执行模式（例如 FUMO 原生内核）时整个控件隐藏，不留一个点不动的死下拉。
-            _executionMode.IsVisible = vm.Input.ShowsExecutionMode;
+            // 后端不支持执行模式（例如 FUMO 原生内核）时隐藏入口，不留死按钮。
+            if (_executionModeButton is not null)
+            {
+                _executionModeButton.IsEnabled = vm.Input.CanChangeExecutionMode;
+                _executionModeButton.IsVisible = vm.Input.ShowsExecutionMode;
+                ToolTip.SetTip(_executionModeButton, "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
+            }
+            ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
+            ToolTip.SetTip(ThinkingButton, "思考：" + (vm.Settings.SelectedThinking?.Label ?? "默认"));
         }
         finally { _updatingComposer = false; }
         DraftPreview.IsVisible = _previewDraft;

@@ -30,7 +30,7 @@ public sealed record WorkbenchAppearance
     /// <summary>底色三：悬停、选中与高亮。</summary>
     public string BaseHighlight { get; init; } = "#3A3A3A";
     /// <summary>强调色：只用于模型输出中的 Markdown 强调标记，默认黄色。</summary>
-    public string Emphasis { get; init; } = "#FFD400";
+    public string Emphasis { get; init; } = "#FFE45C";
     /// <summary>三档底色各自只提供三个备选，避免用户把层级关系选反。</summary>
     public static readonly IReadOnlyList<string> BaseBackgroundChoices = ["#1C1C1C", "#161616", "#101010"];
     public static readonly IReadOnlyList<string> BaseBackgroundLabels = ["深灰", "更深", "最深"];
@@ -127,7 +127,7 @@ public sealed record WorkbenchAppearance
             BaseBackground = BaseColor(BaseBackground, BaseBackgroundChoices, "#1C1C1C"),
             BaseBar = BaseColor(BaseBar, BaseBarChoices, "#2C2C2C"),
             BaseHighlight = BaseColor(BaseHighlight, BaseHighlightChoices, "#3A3A3A"),
-            Emphasis = Color(Emphasis, "#FFD400"),
+            Emphasis = Color(Emphasis, "#FFE45C"),
             Surface = Choose(Surface, "fluent", "fluent", "glass", "flat", "classic"),
             FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 11, 24) : 13,
             Density = Choose(Density, "cozy", "compact", "cozy", "airy"),
