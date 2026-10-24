@@ -1,6 +1,7 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:Fufucode.App.Views"
-        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia">
+        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+        xmlns:mdm="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia.Mermaid">
   <!-- 工作台共享组件：停靠容器、页签、分隔条、窗口外框、工具条与空状态。
        只引用 App* 语义键，主题/强调色/风格预设统一经由令牌生效。 -->
   <Style Selector="Button.subtle">
@@ -1376,6 +1377,12 @@
   </Style>
 
   <!-- 表格：去掉全网格竖线，只保留行分隔与表头强调，贴近正文排版而不是电子表格。 -->
+  <!-- LiveMarkdown 的 PanAndZoom 在点击时会递归到栈溢出（Windows 报
+       “无法创建新的堆栈防护页面”）。图表只显示不交互，从样式层统一禁用命中测试，
+       不依赖某个 RichMarkdownView 实例是否已执行过 Loaded 守卫。 -->
+  <Style Selector="mdm|PanAndZoom">
+    <Setter Property="IsHitTestVisible" Value="False"/>
+  </Style>
   <Style Selector="md|MarkdownTableGrid">
     <Setter Property="ColumnSpacing" Value="0"/>
     <Setter Property="RowSpacing" Value="0"/>
