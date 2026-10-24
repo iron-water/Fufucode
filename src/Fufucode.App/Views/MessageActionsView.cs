@@ -79,7 +79,8 @@ public sealed class MessageActionsView : UserControl
         var meta = new StackPanel
         {
             Orientation = Orientation.Horizontal, Spacing = 10,
-            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0),
+            VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0),
+            HorizontalAlignment = HorizontalAlignment.Right,
         };
         meta.Children.Add(_usage);
         meta.Children.Add(_model);
@@ -87,11 +88,12 @@ public sealed class MessageActionsView : UserControl
 
         var row = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"),
+            // 图标在左、元信息（模型/时间）靠右，避免时间戳停在句子中间。
+            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
             Margin = new Thickness(0, 6, 0, 0),
         };
         Grid.SetColumn(_icons, 0);
-        Grid.SetColumn(meta, 1);
+        Grid.SetColumn(meta, 2);
         row.Children.Add(_icons);
         row.Children.Add(meta);
 
