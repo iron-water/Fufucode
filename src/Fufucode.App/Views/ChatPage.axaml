@@ -714,7 +714,7 @@
             </StackPanel>
             <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
-              <Button Classes="iconButton" Width="30" Height="30"
+              <Button x:Name="ModelButton" Classes="iconButton" Width="30" Height="30"
                       IsEnabled="{Binding Settings.CanChangeModel}"
                       ToolTip.Tip="{Binding Settings.SelectedModel.Label, StringFormat='模型：{0}', FallbackValue='选择模型'}">
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
@@ -799,33 +799,35 @@
                 </Button.Flyout>
               </Button>
             </WrapPanel>
-            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6">
-              <Button Classes="iconButton" Command="{Binding Input.StopCommand}"
-                      ToolTip.Tip="停止当前回合" AutomationProperties.Name="停止">
-                <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
-              </Button>
-              <!-- P2-17：运行中插入（steer）；空闲时隐藏 -->
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <!-- 插入（steer）：仅运行中出现 -->
               <Button Classes="subtle" Command="{Binding Input.SteerCommand}"
-                      IsVisible="{Binding Input.IsTurnActive}"
-                      ToolTip.Tip="插入：当前步骤的工具调用结束后、下一次模型调用前送达（/ 扩展命令不可插入）">
+                      IsVisible="{Binding Input.IsTurnActive}" Height="32"
+                      ToolTip.Tip="插入：当前步骤结束后、下一次模型调用前送达">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{DynamicResource Icon.ArrowEnterLeft}" Width="13" Height="13"
                             VerticalAlignment="Center"/>
                   <TextBlock Text="插入" VerticalAlignment="Center"/>
                 </StackPanel>
               </Button>
-              <Button Classes="accent" Command="{Binding Input.SendCommand}"
-                      Padding="12,6" CornerRadius="{DynamicResource ControlCornerRadius}">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding !Input.IsTurnActive}"/>
-                  <PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding Input.IsTurnActive}"/>
-                  <TextBlock Text="{Binding Input.SendButtonText}" VerticalAlignment="Center"/>
-                </StackPanel>
-              </Button>
+              <!-- 发送/停止共用同一个位置：空闲显示发送，运行中显示停止。 -->
+              <Grid VerticalAlignment="Center">
+                <Button x:Name="StopButton" Classes="iconButton" Width="32" Height="32"
+                        Command="{Binding Input.StopCommand}"
+                        IsVisible="{Binding Input.IsTurnActive}"
+                        ToolTip.Tip="停止当前回合" AutomationProperties.Name="停止">
+                  <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
+                </Button>
+                <Button x:Name="SendButton" Classes="accent" Height="32" Padding="12,0"
+                        Command="{Binding Input.SendCommand}"
+                        IsVisible="{Binding !Input.IsTurnActive}"
+                        AutomationProperties.Name="发送">
+                  <StackPanel Orientation="Horizontal" Spacing="6">
+                    <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding Input.SendButtonText}" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </Button>
+              </Grid>
             </StackPanel>
           </Grid>
         </StackPanel>
