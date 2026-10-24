@@ -45,6 +45,12 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
     /// <summary>当前已绑定的会话适配器；未绑定时为 null。</summary>
     public RemoteSessionAdapter? Adapter => _adapter;
 
+    /// <summary>
+    /// 会话适配器被创建或替换时触发（Attach 之后）。协同连接器据此订阅真实增量，
+    /// 不再自己轮询快照；切换会话时同一事件会再次触发。
+    /// </summary>
+    public event Action<RemoteSessionAdapter>? AdapterChanged;
+
     /// <summary>服务端真实监听端口；未启动时为 0。</summary>
     public int Port => Status.Port;
 
@@ -101,6 +107,7 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
             }
             if (_server is not null && _sessionCatalog is not null)
                 _server.Broadcast(new RemoteSessionsUpdate(_sessionCatalog()));
+            AdapterChanged?.Invoke(_adapter);
             return _adapter;
         }
         finally

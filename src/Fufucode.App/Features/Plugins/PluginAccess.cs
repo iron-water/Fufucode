@@ -21,8 +21,11 @@ public static class PluginAccess
     /// <summary>Seep 逆向工程工作台插件 ID。</summary>
     public const string ReverseLabPluginId = SeepReverseLabAssets.PluginId;
 
-    /// <summary>手机远程控制服务插件 ID。</summary>
+    /// <summary>Jiii 连接插件 ID（协同中台的手机侧连接器，沿用原远控插件 ID）。</summary>
     public const string RemoteControlPluginId = "service.remote-control";
+
+    /// <summary>Fufu 连接插件 ID（协同中台的桌宠侧连接器，沿用原桥接插件 ID）。</summary>
+    public const string FufuBridgePluginId = "service.fufu-bridge";
 
     /// <summary>语音朗读服务插件 ID。</summary>
     public const string SpeechPluginId = "service.speech-synthesis";

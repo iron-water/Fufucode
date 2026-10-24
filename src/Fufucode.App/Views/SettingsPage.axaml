@@ -712,15 +712,15 @@
                 </StackPanel>
               </Border>
 
-              <!-- 手机远程控制 (WorkBuddy 局域网控制对标) -->
-              <TextBlock Classes="settingsGroupHeader" Text="手机远程控制" IsVisible="{Binding ShowRemoteCard}"/>
+              <!-- Jiii 连接（协同中台的手机侧连接器） -->
+              <TextBlock Classes="settingsGroupHeader" Text="Jiii 连接" IsVisible="{Binding ShowRemoteCard}"/>
               <Border Classes="settingsPanel" IsVisible="{Binding ShowRemoteCard}">
                 <StackPanel Spacing="10">
                   <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
                     <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Phone}" Width="18" Height="18"
                               VerticalAlignment="Center"/>
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                      <TextBlock Classes="settingsRowTitle" Text="局域网远程控制 (Web PWA)"/>
+                      <TextBlock Classes="settingsRowTitle" Text="局域网连接 Jiii（配对码 + Web 控制台）"/>
                       <TextBlock Classes="settingsRowDesc" Text="{Binding RemoteStatusText}" TextWrapping="Wrap"/>
                     </StackPanel>
                     <Button Grid.Column="2" Classes="subtle" Padding="12,4"

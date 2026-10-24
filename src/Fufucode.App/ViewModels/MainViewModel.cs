@@ -141,7 +141,7 @@ public sealed partial class MainViewModel : ViewModelBase
         var dataRoot = Settings.DataRoot;
         if (!Features.Plugins.PluginAccess.IsPluginActive(dataRoot, Features.Plugins.PluginAccess.RemoteControlPluginId))
         {
-            Timeline.AddNotification("未安装远程控制插件：请在插件市场中安装并启用“手机远程控制服务”。");
+            Timeline.AddNotification("未安装 Jiii 连接插件：请在插件市场中安装并启用“Jiii 连接”。");
             return;
         }
 
@@ -154,14 +154,14 @@ public sealed partial class MainViewModel : ViewModelBase
 
         if (service is null)
         {
-            Timeline.AddNotification("未找到远程控制插件载荷：请在插件市场重新安装。");
+            Timeline.AddNotification("未找到 Jiii 连接插件载荷：请在插件市场重新安装。");
             return;
         }
 
         if (service.IsRunning)
         {
             service.Stop();
-            Timeline.AddNotification("手机远程控制服务已停止");
+            Timeline.AddNotification("Jiii 连接已停止");
         }
         else
         {
@@ -170,11 +170,11 @@ public sealed partial class MainViewModel : ViewModelBase
                 service.Attach(Session, Sidebar.SelectedSession?.Title ?? "当前会话");
                 service.LoadHistory(RemoteHistory());
                 var status = await service.StartAsync(0);
-                Timeline.AddNotification($"手机远程控制已在局域网端口 {status.Port} 启动，PIN 码：{status.Pin}，地址：{status.PairingUrl}");
+                Timeline.AddNotification($"Jiii 连接已在局域网端口 {status.Port} 启动，PIN 码：{status.Pin}，地址：{status.PairingUrl}");
             }
             catch (Exception ex)
             {
-                Timeline.AddNotification("手机远程控制启动失败：" + ex.Message);
+                Timeline.AddNotification("Jiii 连接启动失败：" + ex.Message);
             }
         }
     }

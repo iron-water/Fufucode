@@ -186,14 +186,14 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: true, DefaultEnabled: true),
 
         // ── 后台服务插件 ──
-        new("service.remote-control", "手机远程控制服务", PluginCategory.Service,
-            "提供局域网配对与远程会话管理服务，支持 WorkBuddy 手机客户端通过动态配对码连接操控桌面 Agent。",
-            "1.0.0", "Fufucode Team", ["局域网网络监听", "会话控制与消息收发"],
+        new("service.remote-control", "Jiii 连接", PluginCategory.Service,
+            "作为协同中台的 Jiii 连接器：局域网配对、桌面会话快照、事件与审批；同时保留原有手机远控协议。",
+            "1.1.0", "Fufucode Team", ["局域网网络监听", "会话控制与消息收发"],
             DefaultInstalled: false, DefaultEnabled: false),
 
-        new("service.fufu-bridge", "FUFU 桌宠桥接", PluginCategory.Service,
-            "通过本机命名管道连接桌面宠物 FUFU：上报会话目录与 Agent 状态、转发工具审批，并可经 FUFU 授权向选中会话提交任务。",
-            "1.0.0", "Fufucode Team", ["本机进程间通信", "会话控制与消息收发"],
+        new("service.fufu-bridge", "Fufu 连接", PluginCategory.Service,
+            "作为协同中台的 Fufu 连接器：通过本机命名管道连接桌宠 FUFU，上报会话状态并转发工具审批。",
+            "1.1.0", "Fufucode Team", ["本机进程间通信", "会话控制与消息收发"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("service.speech-synthesis", "语音朗读服务", PluginCategory.Service,

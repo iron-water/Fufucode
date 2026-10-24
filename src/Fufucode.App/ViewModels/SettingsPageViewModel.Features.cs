@@ -95,7 +95,7 @@ public sealed record MarketplaceGroupViewModel(string Title, int Count, int Inst
 
 public sealed partial class SettingsPageViewModel
 {
-    // ════════════════════ 手机远程控制 ════════════════════
+    // ════════════════════ Jiii 连接 ════════════════════
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(RemoteToggleButtonText))]
     private bool _isRemoteRunning;
@@ -118,14 +118,14 @@ public sealed partial class SettingsPageViewModel
         var dataRoot = _context?.DataRoot ?? Program.SelfTestDataRoot;
         if (!Features.Plugins.PluginAccess.IsPluginActive(dataRoot, Features.Plugins.PluginAccess.RemoteControlPluginId))
         {
-            RemoteStatusText = "未安装：请在插件市场中安装“手机远程控制服务”。";
+            RemoteStatusText = "未安装：请在插件市场中安装“Jiii 连接”。";
             return;
         }
 
         var host = PluginPackageManager.ActiveRemoteControlService;
         if (host is null)
         {
-            RemoteStatusText = "远程控制服务未激活";
+            RemoteStatusText = "Jiii 连接未激活";
             return;
         }
 
