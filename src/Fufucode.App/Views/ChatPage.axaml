@@ -794,7 +794,6 @@
                 </StackPanel>
               </Button>
               <Button Classes="accent" Command="{Binding Input.SendCommand}"
-                      ToolTip.Tip="{Binding Input.SendButtonToolTip}"
                       Padding="12,6" CornerRadius="{DynamicResource ControlCornerRadius}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13"
