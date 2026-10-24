@@ -909,3 +909,25 @@ EAD
    - 彻底删除顶栏的冗余标题、副标题，由紧凑的 `[ 概览 | 分析 ]` 分段切换胶囊取代。
    - 彻底删除人工“刷新”按钮与“实时”复选框：全自动静默感知环形缓冲写入与事件，无需用户操作，保证始终实时。
 
+
+## 2026-10-24 性能监控深度接入 Langfuse 架构、Fufu 底层监控与协同网络通路
+
+1. 修复头部重复展示：彻底移除概览页内“上下文窗口”旁冗余的模型徽章与实时点，保留顶栏全局单一指示。
+2. 接入 Langfuse Trace 观测台能力：
+   - Span 树引入 Langfuse Observation 观测类型徽章：`[GEN]`（模型生成）、`[SPAN]`（工具/流程）、`[EVENT]`（事件/卡顿）、`[SCORE]`（自动化评分/异常规则）。
+   - 检查器全面升级为 Langfuse 七维诊断抽屉：
+     - `[ 概览 Overview ]`：快速摘要、起止时刻、Trace 与父调用链关系。
+     - `[ 输入 Prompt ]`：Generation 呈现完整结构化消息卡（System/User/Assistant/Tools），Tool 呈现命令与上下文。
+     - `[ 输出 Output ]`：模型流式思考/回复/工具发起，或命令退出码与 stdout/stderr 头部输出。
+     - `[ 指标 Metrics ]`：Prompt/Completion/Cache Token 细分、Token/s 生成速率、TTFT 耗时、流式帧抖动（maxGap/p95Gap）、预估调用成本。
+     - `[ 评估 Scores ]`：自动化规则评分（TTFT 时延、流式卡顿、工具健壮性评估，PASS/WARN/STALL）。
+     - `[ 属性 Attributes ]`：完整 Metadata 标签键值对与运行时线程环境。
+     - `[ 原始 JSON ]`：符合 Langfuse / OpenInference 标准的 JSON Payload。
+3. 强化 Fufu 桌宠与底层运行时监控：
+   - 核心层新增 `FufuRenderDiagnostics` 零开销静态探针，接入 `PlaceholderPetRenderer` 测量每帧绘制耗时与掉帧。
+   - 时间线扩展为 8 轨并行轴，新增“Fufu 渲染”专用轨道，展示 Live2D/桌宠 FPS、单帧耗时与掉帧刻度。
+4. 预留第三席位：新增 `[ 协同通路 ]` 监控看板：
+   - 顶栏分段切换器升级为 `[ 概览 | 分析 | 协同通路 ]`。
+   - 深度接入 `PluginPackageManager.CompanionCore`，呈现 FUFUCODE（核心总线）、FUFU（桌宠 IPC 管道）、JIII（远程控制 Web 桥）三节点拓扑。
+   - 实时采集 IPC 管道 RTT、事件吞吐、意图幂等时延与丢包率。
+   - 呈现去重实时规范事件与审计流水，并为 JIII 音频流、Live2D 姿态流预留 v2 协议监测插槽。
