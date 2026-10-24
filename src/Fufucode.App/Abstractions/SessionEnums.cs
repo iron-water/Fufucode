@@ -65,6 +65,8 @@ public enum SessionOutcome
     Completed,
     Failed,
     Interrupted,
+    /// <summary>调用方显式预算耗尽；结果可能不完整，不能当作成功完成。</summary>
+    Truncated,
     Unknown,
 }
 

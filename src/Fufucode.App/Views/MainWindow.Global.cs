@@ -19,18 +19,15 @@ public partial class MainWindow
 {
     private readonly AppActionRegistry _actions = new();
     private CommandPaletteViewModel _palette = null!;
-    private readonly UsageDetailsViewModel _usage = new();
     private NotificationPreferencesViewModel _notificationPreferences = null!;
     private NotificationCenterViewModel _notifications = null!;
     private readonly Views.CommandPaletteView _paletteView = new();
-    private readonly Views.UsageDetailsView _usageView = new();
     private readonly Views.NotificationCenterView _notificationsView = new();
     private Control? _overlayReturnFocus;
     private string? _overlayKind;
     internal AppActionRegistry ActionsForTesting => _actions;
     internal Task ExecuteWorkbenchActionAsync(string id) => _actions.ExecuteAsync(id);
     internal CommandPaletteViewModel PaletteForTesting => _palette;
-    internal UsageDetailsViewModel UsageForTesting => _usage;
     internal NotificationCenterViewModel NotificationsForTesting => _notifications;
     internal bool NotificationCenterVisibleForTesting => _notificationsView.IsEffectivelyVisible;
 
@@ -57,14 +54,11 @@ public partial class MainWindow
             _vm?.Settings.SelectCategory(id);
         };
         _paletteView.DataContext = _palette;
-        _usageView.DataContext = _usage;
         _notificationsView.DataContext = _notifications;
         _palette.CloseRequested += () => CloseGlobalOverlay("commands");
-        _usage.CloseRequested += () => CloseDockPage("usage");
         _notifications.CloseRequested += () => CloseDockPage("notifications");
         _workbenchPages.RegisterCore("notifications", "通知", "Alert", _notificationsView);
-        _workbenchPages.RegisterCore("usage", "用量", "Info", _usageView);
-        _notificationsView.Focusable = _usageView.Focusable = true;
+        _notificationsView.Focusable = true;
         _notifications.SessionRequested += async id =>
         {
             if (_host is not null && _host.Current.Session.Id != id) await SwitchSessionAsync(id);
@@ -86,7 +80,7 @@ public partial class MainWindow
         Register("changes", "变更", "工作区", "", "查看工作树或会话直接写入范围", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Changes), WorkAreaUnavailable);
         Register("terminal", "交互终端", "工作区", "Ctrl+J", "独立于 Agent RPC 的项目终端（终端插件提供）",
             () => { if (_terminalPage is null) return Task.CompletedTask; OpenDockPage("terminal", DockZone.Bottom); _terminalPage.Show(); return Task.CompletedTask; },
-            () => _terminalPage is null ? "未安装或未启用交互终端插件" : WorkAreaUnavailable());
+            () => _terminalPage is null ? "未安装或未启用交互终端插件" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         string? TerminalMissing() => _terminalPage is null ? "未安装或未启用交互终端插件" : _terminalPage.HasTabs ? null : "请先打开终端";
         Register("terminal.copy", "复制终端选区", "终端", "", "复制固定输出快照中的选择，退出后仍可用", () => _terminalPage?.CopySelectionAsync() ?? Task.CompletedTask,
             () => _terminalPage?.HasOutputSelection == true ? null : "请先选择终端输出");
@@ -98,14 +92,12 @@ public partial class MainWindow
             () => _terminalPage?.HasRunningTab == true ? null : "没有运行中的终端");
         Register("terminal.new", "新建终端", "终端", "", "在当前项目新增独立终端", () => { _terminalPage?.CreateTerminal(); return Task.CompletedTask; },
             () => _terminalPage is null ? "未安装或未启用交互终端插件" : null);
-        Register("usage", "用量详情", "会话", "", "当前会话、本轮、全部记录口径", () => { OpenDockPage("usage", DockZone.Right); _usage.Open(); _usageView.Focus(); return Task.CompletedTask; }, SessionUnavailable);
         Register("notifications", "通知中心", "全局", "", "完成、失败与待审批归属", () => { OpenNotificationCenterOverlay(); return Task.CompletedTask; });
         Register("browser", "浏览器", "工作区", "", "内置浏览器", () => { OpenDockPage("browser", DockZone.Right); return Task.CompletedTask; },
-            () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable());
+            () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         Register("library", "资料库", "工作区", "", "导入、检索与引用本地资料", () => { OpenDockPage("library", DockZone.Right); return Task.CompletedTask; },
-            () => !_workbenchPages.ContainsKey("library") ? "资料库模块已停用，可在设置中启用" : WorkAreaUnavailable());
+            () => !_workbenchPages.ContainsKey("library") ? "资料库模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         CaptionCommands.Command = _actions.GetCommand("commands");
-        CaptionUsage.Command = _actions.GetCommand("usage");
         CaptionNotifications.Command = _actions.GetCommand("notifications");
         Activated += (_, _) => _notifications.SetWindowFocused(true);
         Deactivated += (_, _) => Dispatcher.UIThread.Post(RefreshNotificationFocus);
@@ -114,7 +106,8 @@ public partial class MainWindow
     }
 
     private void Register(string id, string title, string group, string shortcut, string description,
-        Func<Task> action, Func<string?>? disabled = null) => _actions.Register(new(id, title, group, shortcut, description, action, disabled));
+        Func<Task> action, Func<string?>? disabled = null, bool hideWhenUnavailable = false) =>
+        _actions.Register(new(id, title, group, shortcut, description, action, disabled, false, hideWhenUnavailable));
 
     /// <summary>命令面板的会话结果：只列当前项目内仍在会话列表中的条目。</summary>
     private IReadOnlyList<CommandPaletteItemViewModel> PaletteSessions()
@@ -145,16 +138,12 @@ public partial class MainWindow
         vm.Settings.AttachNotificationPreferences(_notificationPreferences);
         if (_host is { } host)
         {
-            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.usage.begin", "usage context");
-            _usage.AttachRealContext(host.Manager.Layout, host.ProjectPath, host.Current.Session.Id, host.Current.Coordinator);
-            Fufucode.Core.Diagnostics.StartupProbe.Mark("global.usage.end", "usage context ready");
             Fufucode.Core.Diagnostics.StartupProbe.Mark("global.notifications.begin", "notification context");
             _notifications.Attach(host.Current.Session.Id, host.Current.Coordinator.Snapshot.Generation ?? Guid.Empty, vm.Session);
             Fufucode.Core.Diagnostics.StartupProbe.Mark("global.notifications.end", "notification context ready");
         }
         else
         {
-            _usage.AttachMock();
             _notifications.Attach("mock-window", Guid.NewGuid(), vm.Session);
         }
         // Input.SubmissionStarting/SubmissionRejected 在 AttachSession 中随 VM 创建接一次，
@@ -190,7 +179,7 @@ public partial class MainWindow
         if (_overlayKind is null) _overlayReturnFocus = FocusManager?.GetFocusedElement() as Control;
         _palette.IsOpen = false;
         _overlayKind = kind;
-        GlobalOverlayHost.Content = kind switch { "commands" => _paletteView, "usage" => _usageView, _ => (object)_notificationsView };
+        GlobalOverlayHost.Content = kind == "commands" ? _paletteView : _notificationsView;
         GlobalOverlay.IsVisible = true;
         SetBrowserOcclusion(true);
         ResizeGlobalOverlay();
@@ -220,7 +209,31 @@ public partial class MainWindow
         NotificationPrompt.DataContext = _notifications.LatestPrompt;
         // 浮层只在用户选择该渠道时出现；关掉浮层渠道后浮窗仍按原策略提醒。
         if (_notificationDelivery is not null) RefreshNotificationChannel();
-        else NotificationPrompt.IsVisible = _notifications.HasPrompt;
+        else SetNotificationPromptVisible(_notifications.HasPrompt);
+    }
+
+    private DispatcherTimer? _notificationPromptTimer;
+
+    /// <summary>
+    /// 右上提醒的统一出入口：淡入淡出，不需要操作的通知 8 秒后自动消失。
+    /// 待审批提醒不自动消失——它必须由用户明确允许或拒绝。
+    /// </summary>
+    private void SetNotificationPromptVisible(bool visible)
+    {
+        _notificationPromptTimer?.Stop();
+        _notificationPromptTimer = null;
+        Views.Motion.SetVisible(NotificationPrompt, visible, offsetY: 6);
+        if (!visible || _notifications.LatestPrompt is not { RequiresAction: false }) return;
+
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_notificationPromptTimer, timer)) _notificationPromptTimer = null;
+            _notifications.DismissPromptCommand.Execute(null);
+        };
+        _notificationPromptTimer = timer;
+        timer.Start();
     }
     private void NotificationPromptOpen_Click(object? sender, RoutedEventArgs e) => _notifications.ActivateCommand.Execute(_notifications.LatestPrompt);
     private void NotificationPromptDismiss_Click(object? sender, RoutedEventArgs e) => _notifications.DismissPromptCommand.Execute(null);

@@ -276,6 +276,8 @@ public sealed class PersistentSessionManager
         ArgumentException.ThrowIfNullOrWhiteSpace(entryId);
         if (session.Coordinator.Snapshot.Activity != ActivityState.Idle)
             throw new InvalidOperationException("Cannot fork while a run is active.");
+        if (session.Session.Backend == BackendId.NativeCSharp)
+            return await ForkNativeAsync(session, entryId, cancellationToken).ConfigureAwait(false);
         var parent = session.Session;
         if (!BackendCapabilities.For(parent.Backend).ProjectFork)
             throw new NotSupportedException("OMP branching is not part of the verified desktop contract.");
@@ -330,6 +332,57 @@ public sealed class PersistentSessionManager
         }
     }
 
+    /// <summary>
+    /// FUMO 分叉：把父会话截至指定用户条目的历史复制成新会话文件。
+    /// 与 Pi 不同，FUMO 的上下文就是本地 JSON，因此分叉不需要重启进程：
+    /// 新建会话行 → 写入截断后的历史 → 按同一路径重新打开。
+    /// </summary>
+    private async Task<SessionForkResult> ForkNativeAsync(PersistentSession session, string entryId,
+        CancellationToken cancellationToken)
+    {
+        var parent = session.Session;
+        var project = session.Project;
+        var messages = session.Chat is Backend.NativeCSharpChatSession native
+            ? native.GetHistoryMessages()
+            : LoadNativeMessages(NativeSessionFactory.SessionFilePath(_layout, project.Id, parent.Id))?.Messages;
+        if (messages is not { Count: > 0 })
+            throw new InvalidOperationException("会话还没有可分支的消息。");
+        if (!entryId.StartsWith("entry_", StringComparison.Ordinal) ||
+            !int.TryParse(entryId.AsSpan("entry_".Length), out var index) || index < 0 || index >= messages.Count)
+            throw new ArgumentOutOfRangeException(nameof(entryId), "分叉点不在当前会话历史中。");
+        if (messages[index].Role != PureAgentRole.User)
+            throw new InvalidOperationException("只能在用户消息处分叉。");
+
+        // 截断到分叉点之前：用户消息本身作为新会话的第一条输入保留。
+        var branch = messages.Take(index + 1).ToList();
+        var child = _metadata.CreateForkSession(project, parent.Id, entryId);
+        var childFile = NativeSessionFactory.SessionFilePath(_layout, project.Id, child.Id);
+        try
+        {
+            var modelId = session.Chat.CurrentModel;
+            AtomicJsonFile.Write(childFile, writer =>
+            {
+                writer.WriteStartObject();
+                writer.WriteNumber("version", 2);
+                writer.WritePropertyName("messages");
+                JsonSerializer.Serialize(writer, branch);
+                if (modelId is null) writer.WriteNull("modelId");
+                else writer.WriteString("modelId", modelId);
+                writer.WriteEndObject();
+            });
+            _metadata.UpdateSessionFile(child.Id, childFile);
+            _metadata.SetSessionActive(parent.Id, false);
+            var opened = await ResumeAsync(child.Id, cancellationToken).ConfigureAwait(false);
+            return new SessionForkResult(opened, parent.Id, parent.FilePath, true, entryId);
+        }
+        catch
+        {
+            try { if (File.Exists(childFile)) File.Delete(childFile); } catch (IOException) { }
+            _metadata.DeleteSession(child);
+            throw;
+        }
+    }
+
     private static string Sha256(string path)
     {
         using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
@@ -341,8 +394,9 @@ public sealed class PersistentSessionManager
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(parent);
-        if (!BackendCapabilities.For(parent.Session.Backend).ProjectFork)
-            throw new NotSupportedException("OMP project forks are not supported; create a new OMP chat instead.");
+        // FUMO 与 Pi 支持“分叉到另一个项目”；其它协议后端如实拒绝。
+        if (parent.Session.Backend is not (BackendId.NativeCSharp or BackendId.Pi))
+            throw new NotSupportedException("此后端不支持项目分叉；请新建会话。");
         if (parent.Coordinator.Snapshot.Activity != ActivityState.Idle)
             throw new InvalidOperationException("Cannot fork while a run is active.");
         await parent.RefreshHistoryAsync(cancellationToken);
@@ -359,6 +413,17 @@ public sealed class PersistentSessionManager
         var digest = Sha256(source);
         var leaf = parent.History.Cursor ?? throw new InvalidOperationException("The source branch is empty.");
         var child = _metadata.CreateForkSession(project, owned.Id, leaf, Guid.NewGuid().ToString("N"));
+        if (parent.Session.Backend == BackendId.NativeCSharp)
+        {
+            // FUMO 没有外部进程可“--fork”：把源会话文件复制成子会话文件，再按普通会话打开。
+            var target = NativeSessionFactory.SessionFilePath(_layout, project.Id, child.Id);
+            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+            File.Copy(source, target, overwrite: false);
+            _metadata.UpdateSessionFile(child.Id, target);
+            child = child with { FilePath = target };
+            var openedNative = await OpenAsync(project, child, trust, extensions, false, cancellationToken);
+            return new(openedNative, owned.Id, source, true, leaf);
+        }
         // Keep a recoverable metadata row if startup fails. Never remove a created worktree or session file.
         var opened = await OpenAsync(project, child, trust, extensions, false, cancellationToken, source);
         if (Sha256(source) != digest)
@@ -671,14 +736,11 @@ public sealed class PersistentSessionManager
         }
     }
 
-    /// <summary>
-    /// 读取 FUMO 会话文件：支持带版本的信封与旧的裸数组。解析失败时把原文件改名为
-    /// .corrupt-时间戳 保留现场（绝不在下一次回合覆盖掉唯一副本），并按空历史启动。
-    /// </summary>
-    private sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
+    /// <summary>已解析的 FUMO 会话文件（FUFU 等外部宿主复用同一格式与损坏隔离语义）。</summary>
+    public sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
         string? ThinkingLevel, string? ExecutionMode);
 
-    private static NativeSessionFile? LoadNativeMessages(string file)
+    public static NativeSessionFile? LoadNativeMessages(string file)
     {
         try
         {

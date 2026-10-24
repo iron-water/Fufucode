@@ -7,7 +7,8 @@ namespace Fufucode.App.Infrastructure;
 
 /// <summary>All UI entry points use the same action and current capability condition.</summary>
 public sealed record AppActionDefinition(string Id, string Title, string Group, string Shortcut,
-    string Description, Func<Task> Execute, Func<string?>? DisabledReason = null, bool IsDestructive = false);
+    string Description, Func<Task> Execute, Func<string?>? DisabledReason = null, bool IsDestructive = false,
+    bool HideWhenUnavailable = false);
 
 public sealed record AppActionExecutionResult(bool Executed, string? Reason);
 

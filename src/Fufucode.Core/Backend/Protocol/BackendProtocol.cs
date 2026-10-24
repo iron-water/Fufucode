@@ -17,8 +17,8 @@ public sealed record BackendCapabilities(BackendId Id, string Name, string Verif
         BackendId.Codex => new(id, "Codex", "0.163.0", true, true, false),
         BackendId.Dsh => new(id, "DSH", "0.2.0-rc.2", true, true, false),
         BackendId.Claude => new(id, "Claude", "2.1.302", true, true, false),
-        // FUMO：历史持久化在本地 JSON；不使用外部审批桥；尚未实现会话分叉。
-        BackendId.NativeCSharp => new(id, "FUMO", "native", true, false, false),
+        // FUMO：历史持久化在本地 JSON；不使用外部审批桥；分叉在桌面会话层复制历史实现。
+        BackendId.NativeCSharp => new(id, "FUMO", "native", true, false, true),
         _ => throw new ArgumentOutOfRangeException(nameof(id))
     };
 

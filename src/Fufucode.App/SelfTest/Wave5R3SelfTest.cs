@@ -109,11 +109,6 @@ public static class Wave5R3SelfTest
                 Save("commands-" + theme.ToString().ToLowerInvariant() + ".png");
                 window.PaletteForTesting.CloseCommand.Execute(null); await Ready();
                 Check(ReferenceEquals(window.FocusManager?.GetFocusedElement(), input), "关闭命令面板恢复触发焦点 " + theme);
-                await window.ActionsForTesting.ExecuteAsync("usage"); await Ready();
-                Check(window.UsageForTesting.IsMock && window.UsageForTesting.Counters.Any(x => x.IsUnknown), "用量mock保留unknown语义 " + theme);
-                Save("usage-" + theme.ToString().ToLowerInvariant() + ".png");
-                SendKey(Key.Escape, KeyModifiers.None); await Ready();
-                Check(!window.FindControl<Grid>("GlobalOverlay")!.IsVisible, "Esc关闭用量并恢复工作面");
             }
             if (window.TerminalPageForTesting?.CommandInput is { } terminalInput0)
             {

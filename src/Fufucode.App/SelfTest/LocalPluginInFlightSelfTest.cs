@@ -9,7 +9,6 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
 using Fufucode.App.Features.Plugins;
-using Fufucode.App.ViewModels;
 using Fufucode.Core;
 
 namespace Fufucode.App.SelfTest;
@@ -98,14 +97,14 @@ internal static class LocalPluginInFlightSelfTest
         Task<LocalPluginActionResult>? secondApply = null;
         try
         {
-            await ((MainViewModel)window.DataContext!).NavigateCommand.ExecuteAsync(AppPage.Extensions);
-            await window.LocalPluginViewModelForTesting.RefreshCommand.ExecuteAsync(null);
-            window.UpdateLayout();
-            var section = window.ExtensionsPageForTesting.LocalPluginsForTesting;
+            var vm = window.LocalPluginViewModelForTesting;
+            await vm.RefreshCommand.ExecuteAsync(null);
+            using var surface = new LocalPluginTestSurface(vm);
+            surface.Window.UpdateLayout();
+            var section = surface.Section;
             var requests = section.FindControl<ListBox>("InFlightRequestList");
             Check(requests?.ItemCount == 1,
-                "compiled extensions page exposes a request without a receipt for exact-token read-only inspection");
-            var vm = window.LocalPluginViewModelForTesting;
+                "compiled test host exposes a request without a receipt for exact-token read-only inspection");
             Check(vm.SelectedInFlight?.Request == original && !vm.HasReceipts && vm.HasInFlightRequests,
                 "shared page selects the original unfinished request independently of completed receipts");
             var details = section.FindControl<TextBox>("InFlightOriginalDetails")!;
@@ -116,22 +115,22 @@ internal static class LocalPluginInFlightSelfTest
             Check(observation.IsReadOnly && observation.Text == vm.InFlightObservationText &&
                 observation.Text.Contains(original.Token) && observation.Text.Contains("尚无结束回执") && !vm.IsBusy,
                 "compiled shared command displays offline unknown for the exact original request without creating a receipt");
-            var pageHost = window.FindControl<Control>("PageHost")!;
+            var viewport = surface.Viewport;
             foreach (var size in new[] { (1100, 800), (800, 640) })
             {
-                window.Width = size.Item1; window.Height = size.Item2;
-                await Task.Delay(200); window.UpdateLayout(); observation.BringIntoView();
-                await Task.Delay(250); window.UpdateLayout();
-                var top = observation.TranslatePoint(default, window);
-                var bottom = pageHost.TranslatePoint(new Avalonia.Point(0, pageHost.Bounds.Height), window);
-                Check(top is { } t && bottom is { } b && t.Y >= 48 && t.Y + observation.Bounds.Height <= b.Y + 1,
+                surface.Window.Width = size.Item1; surface.Window.Height = size.Item2;
+                await Task.Delay(200); surface.Window.UpdateLayout(); observation.BringIntoView();
+                await Task.Delay(250); surface.Window.UpdateLayout();
+                var top = observation.TranslatePoint(default, surface.Window);
+                var bottom = viewport.TranslatePoint(new Avalonia.Point(0, viewport.Bounds.Height), surface.Window);
+                Check(top is { } t && bottom is { } b && t.Y >= 0 && t.Y + observation.Bounds.Height <= b.Y + 1,
                     $"complete unfinished-request observation remains accessible at {size.Item1}x{size.Item2} after scrolling settles");
                 AvaloniaHeadlessPlatform.ForceRenderTimerTick(); await Task.Delay(100);
-                using var frame = window.CaptureRenderedFrame();
+                using var frame = surface.Window.CaptureRenderedFrame();
                 frame?.Save(Path.Combine(root, $"inflight-{size.Item1}x{size.Item2}.png"), PngBitmapEncoderOptions.Default);
             }
             Check(bytes.AsSpan().SequenceEqual(File.ReadAllBytes(catalogPath)) && host.ApplyCalls == 1,
-                "opening and inspecting the compiled page never releases protection or invokes a second apply");
+                "opening and inspecting the compiled host never releases protection or invokes a second apply");
 
             host.LoadedPaths = [];
             secondApply = service.ApplyVersionAsync(pending.Id, original.VersionId);

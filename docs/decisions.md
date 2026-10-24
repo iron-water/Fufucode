@@ -734,6 +734,94 @@ EAD
 - 浮动窗口单行标题栏在 640×480 与 1280×800 最大化下均完成渲染截图复核；宽 420 起不再裁切。
 - 临时宽度诊断图保存在 tmp/floating-normal.png、tmp/floating-max.png，仅作本轮视觉核对，不随包。
 
+2026-10-22 FUMO 工具 / 压缩 / Subagent 三项实测优化决定：
+1. 工具定义与 Schema 复用：`ProductionToolDispatcher.GetBuiltinToolDefinitions()` 改为静态只读数组；`OpenAiCompatibleModelClient` 缓存内置定义字典，并按 Schema 文本缓存已解析的 `JsonElement`（`ParseToolSchema`，上限 1024 条）。此前每轮请求都重建定义并逐工具 `JsonDocument.Parse`。非法 Schema 由静默回退改为回退 + 一次性 `TraceWarning` 诊断。
+2. 工具暴露按权限裁剪：Plan 模式只声明明确只读的内置工具与 `update_plan`，不再声明写工具、插件工具、MCP、skill、subagent——声明必然被拒绝的工具既浪费输入 Token，也会诱发无效调用。非 Plan 模式行为不变。
+3. 插件工具目录快照：`PluginToolRegistry` 在注册/刷新/注销/能力变更时失效，读取时复用同一份不可变快照（名称用 `HashSet`），`NativeToolComposite` 派发改为集合查找。此前每次读取都加锁、过滤、排序、复制。
+4. `read_file` 整文件读取按行有界：上限 48KiB（必须低于循环层 64KiB 工具结果预算，否则行边界与续读提示会被二次截断），超出时按行截断并给出 `使用 offset: N` 续读指引。此前整篇返回后被循环层从中间硬切。
+5. 上下文压缩保真：摘要提示改为 7 段固定结构（用户目标与硬约束/已完成工作/关键决策/错误与修复/验证状态/待办/关键事实）；原始任务陈述逐字保留（`FindPinnedTask`）；最近窗口同时受 8 条与 120k 字符双约束；转录附带从工具调用提取的文件线索与失败工具计数；结构化计划快照原样保留（摘要模型看不到 `update_plan` 状态）。
+6. Subagent 档位修复：`stronger` 此前对内置代理完全无效——嵌套要求代理定义显式声明 `subagent`，而内置 `explore`/`general` 都没有声明。现改为 stronger + read 模式自动注入嵌套能力（patch 仍禁止嵌套）；结果首行标注档位；轮次耗尽标记 `Truncated` 并提示结论可能不完整；失败结果附带已执行工具轨迹。
+7. `subagent` 契约统一：父会话与嵌套子代理共用 `NativeSubagentContract.Definition`（此前两处 Schema 不一致，`action` 只在插件侧存在）；新增 `context` 参数，把父会话已确认的线索附在任务说明后，减少子代理发现轮次。
+8. 实测证据（`--live-subagent-bench`，同一任务/模型/工作区）：
+   - `devin/swe-2` 事实定位任务：faster 3/3 命中 273s/9 工具；stronger 3/3 命中 163s/8 工具；两档均未触发嵌套。
+   - `auto/glm-5.3-flash` 同任务：faster 3/3 命中 72s/11 工具；stronger 2/3 命中 99s/10 工具（其中 grep 上限一项靠工具描述与测试断言推断，未直读 `Math.Clamp` 行）。
+   - `auto/glm-5.3-flash` 五子系统调查任务：加"3 个以上独立子问题必须并行派发"的硬性指令前后各跑一轮，嵌套派发始终为 0，stronger 未体现优势。
+   - 结论：当前任务规模下 stronger 无稳定收益，不应作为默认；档位保留但明确定位为"大范围可分解调查"才可能有用，且需要更大任务集验证。上游网关 `devin/swe-2` 出现过 ECONNRESET 与证书错误，探针对运输失败重试一次。
+9. 验证：解决方案 47 工程 0 错误（3 条既有 Avalonia XAML 警告）；`Fufucode.App.Backend.Tests` 868 项断言全通过（新增 Plan 工具裁剪、Schema 复用、压缩保真与计划快照、整读续读、stronger 嵌套生效、faster 不声明嵌套、轮次耗尽标注、context 注入等断言）；`Fufucode.Core.Tests` 与 `Fufucode.PerformanceMonitor.Tests` 通过。未验证：更大规模任务集下的档位差异、Dart/Flutter 真实工具链、上游网关稳定性。
+
+2026-10-22（第三轮，移除无效防御默认值）FUMO 限制审计与修正：
+1. 主会话默认不设轮次预算：`NativeAgentLoop`/`PureCSharpAgentEngine`/`NativeCSharpChatSession`/`NativeSessionFactory` 的默认 `maxIterations` 改为 null。交互会话只在模型终态、取消、工具/模型错误时结束；CLI/无人值守可以显式传预算。
+2. 删除错误的“最后一轮禁工具”和“预算提示”策略。显式预算只在预算耗尽后给出可解释的 Truncated 终态，预算内每轮仍可调用工具。
+3. 新增 `SessionOutcome.Truncated`，预算耗尽不再被 NativeCSharpChatSession 伪装为 Completed；CLI 返回非零状态，UI 用 caution/“预算耗尽（未必完成）”显示，协调器映射为 Unknown 而不是成功。
+4. Subagent 内置 explore/general 与未声明 `maxTurns` 的用户代理默认不设轮次预算；显式 frontmatter `maxTurns` 仍可用于实验/无人值守预算。stronger/read 的嵌套与 patch/worktree 隔离保留。
+5. OpenAI 兼容模型客户端新增可选 `requestTimeout`，默认 null，不给交互会话偷偷设置 wall-clock 限制；显式设置时将超时与用户取消区分。工具进程超时、MCP 请求超时、审批超时和进程树清理属于外部资源安全边界，继续保留。
+6. 审计证据：五类参考真正共同支持的是取消与排队分层、可靠 settled/TurnSettled、错误/取消/超时/进程退出分型、压缩保留任务与状态、子代理写入隔离；不支持 FUMO 默认 50/10 轮、Subagent 6/12 轮、maxDepth=1、400k/120k/60k 字符、48/64KiB、统一 120 秒等数值成为产品硬策略。Pi 的 `clear_queue + abort` 和 `agent_settled` 证据保留；Codex/Claude/OMP 对具体轮次/预算证据不足，不再借名包装。
+7. 验证：解决方案 50 工程 0 错误（5 条现有依赖/XAML 警告）；Backend.Tests 888 项断言全通过；Core.Tests、PerformanceMonitor.Tests 通过。
+
+2026-10-22（第二轮，证据驱动重做）FUMO 三线优化：
+1. 工具描述按 Anthropic《Writing effective tools for agents》重写全部 8 个内置工具：每条写清用途、何时用/何时不用、返回形状与边界（如 read_file 说明分页续读、write_file 引导小改动用 edit_file、grep_search 说明空结果是正常结论）。grep/glob 的截断提示改为可操作收窄建议（加 glob、缩 path、提高上限）。
+2. 写盘前守卫（对应 SWE-agent ACI 的 linter）：`write_file`/`edit_file` 写入 `.json` 前尝试解析，非法则拒绝并给出行号；允许注释与尾随逗号，避免误伤 JSONC。 `.cs` 无廉价解析器，不做伪校验。
+3. 子代理单次运行只读缓存 `RunScopedReadCache`：`read_file`/`list_dir`/`grep_search`/`glob_files` 成功结果在同一运行内去重；失败结果不缓存、写工具不缓存、跨运行不共享。此前 `docs/subagents.md` 已声称该能力但代码未实现。
+4. 压缩新增确定性状态台账：已改文件、最近 8 条命令与退出码、失败工具次数，作为独立 Assistant 消息固定保留。台账与原始任务陈述均由代码保证，不依赖摘要模型。`FindPinnedTask` 跳过台账与摘要自身，避免第二次压缩把痕迹当成原始任务。
+5. 重复实验（`--live-bench <url> <model> [key] [workspace] [repeats]`，`auto/glm-5.3-flash`，3 次重复）：
+   - facts 任务：faster 命中中位 2/3（范围 2..3），工具 6，111s；stronger 命中中位 2/3（范围 2..3），工具 7，57s。两档均无嵌套。
+   - survey 任务：faster 三次全部达到轮次上限（truncated=3/3）、命中 0/5、工具中位 20；stronger 三次全部正常收敛、命中稳定 3/5、工具中位 14、耗时中位 268s，且每次触发 5 次嵌套派发（合计 15 次）。
+   - 结论修正上一轮判断：stronger 并非无用，但只在"任务规模超过单代理轮次预算"时才有价值；小任务上它与 faster 等价或更慢。faster 在 survey 类任务上会稳定耗尽轮次，这是 faster 的真实边界。
+   - 压缩约束召回：3/3 次在真实压缩后完整复述 3 条硬约束（禁止第三方库、相对路径、test/ 目录），pinned 与 ledger 均为 true。
+6. 验证：解决方案 47 工程 0 错误 0 警告（既有 Avalonia XAML 警告已消失）；Backend.Tests 877 项断言全通过（新增非法 JSON 守卫、JSONC 不误伤、状态台账、多轮压缩约束保留、只读缓存去重等）；Core.Tests 与 PerformanceMonitor.Tests 通过。未验证：更大任务集与更强模型下的档位差异；上游网关稳定性（devin/swe-2 期间出现过 ECONNRESET）。
+
+2026-10-22（第三轮）轮次预算与检索输出重设计：
+1. 轮次预算感知（`NativeAgentLoop`）：
+   - 计数语义明确为"模型调用次数"；最后一轮不再声明工具，模型只能产出文本。
+   - 已有工具轮后、剩余 2 轮时注入 `[预算提示]`，要求先给结论再决定是否补充检索。
+   - 最后一轮若模型仍请求工具，不执行，并在最终文本追加"工具请求未执行"说明。
+   - `PureAgentTurnResult.Truncated` 显式标记强制收尾，子代理据此标注结论可能不完整（不再靠文本匹配）。
+   - 注入位置修正：预算提示只在已发生工具轮后加入，避免挤占用户原始请求的位置。
+2. 检索输出重设计（对应 `@ff-labs/pi-fff` 的有效部分）：grep 结果按文件分组、命中越多越靠前、组内按行号升序、按文件游标分页（`offset`）。平铺输出的问题是前 N 条可能全来自同一个大文件，真正需要的文件永远排不到。新增 `GrepCollector` 维护命中计数，避免每次判断遍历列表（O(n²)）。
+3. 说明：FFF 本体是 Rust + SIMD + 常驻索引，FUMO 为零依赖纯 C# 内核，不引入外部二进制；可照搬的是输出形状（分组/排序/分页/游标）与"同一次会话内复用索引"的思路，不是它的实现语言。
+4. 实测对比（`auto/glm-5.3-flash`，survey 五子系统任务）：
+   - 修复前 faster：3/3 次全部 `truncated=True`，命中 0/5，输出 36~146 tokens，工具 18~21。
+   - 修复后 faster：2/2 次 `truncated=False`，命中 3/5，输出 1403~1667 tokens，工具 16~19。
+   - 修复后 stronger：2/2 次命中 3~4/5，每次 5 次嵌套派发，耗时 259~337s。
+   - facts 任务：faster 命中 2~3/3，stronger 3/3 且耗时更低（34~51s vs 20~128s）。
+   - 结论：faster 的空输出根因是"预算不可见 + 最后一轮仍在调工具"的设计缺陷，不是模型能力问题；修复后 faster 在 survey 任务上达到与 stronger 相同的命中水平，只是工具调用更多（19 vs 7），符合"轻量、单代理、多轮检索"的定位。
+5. 验证：解决方案 48 工程 0 错误 0 警告；Backend.Tests 886 项断言全通过（新增预算提示、最后一轮禁工具、Truncated 标记、grep 分组/排序/分页断言；更新两处因契约变更而语义变化的旧断言并注明理由）。压缩约束召回 3/3（历史上限与台账均保留）。
+
+2026-10-22（第四轮，SWE-2 长程实测与可靠性修复）：
+1. 评测方法：固定 SGline 夹具（先修复上一轮长任务遗留的 seed_loader 编译错误与边替换断言），隐藏验收测试不进入模型可见范围。任务 A 为 AI 扩图管线（11 项隐藏测试），任务 B 追加应用状态控制器与持久化（共 20 项）。指标：完成度 70%（隐藏测试 50%、既有测试 25%、analyze 15%、种子校验 10%），用时 20%，用量 10%。
+2. 基线事实（`devin/swe-2`）：
+   - 任务 A 第 1 次完成：49 次工具调用、7.1 分钟、111 万 tokens、隐藏 11/11；第 2 次在第 30 次工具调用被网关 `ECONNRESET` 判死。
+   - 任务 B 3 次：2 次在 2.6~2.9 分钟被 `ECONNRESET` 判死；1 次完成：71 次工具调用、10.3 分钟、235 万 tokens（缓存 226 万）、隐藏 20/20、analyze 0 error。
+   - 结论：模型能力足以完成长任务，主要失败源是 Harness 把瞬时断流当成终态。
+3. 修复：
+   - 上下文压缩从“回合开始检查一次 + 400k 字符固定阈值”改为每轮请求前检查；窗口来自 `/v1/models` 的 `context_length`，阈值 85%；窗口未知时只保留 2M 字符物理内存保护；上下文超限错误会触发一次强制压缩并重试。
+   - 模型请求重试：429/5xx/传输层最多 3 次；流式已输出增量时先发 `OnRestart` 丢弃半成品再重放；SSE error 帧中的 ECONNRESET/upstream/connection 等同样按瞬时故障处理；SSE 连续失败后降级为一次性请求。工具在响应完成后才执行，重放不产生副作用。
+   - 恢复历史时修复 tool_call/tool_result 配对：缺失结果补合成结果，孤立结果丢弃。
+   - 长回合每 5 秒节流落盘，进程被强杀最多丢最近几秒的工具结果；回合终态仍完整落盘。
+   - 流式 usage 显式 `include_usage`；网关不认识 `stream_options` 时自动降级；`MessageFinished.CumulativeUsage` 不再为空，CLI 汇总 totalUsage。
+   - CLI 不再把 `PromptHandled` 当作 Completed 覆盖真实终态（此前预算截断会被显示为 handled）。
+   - `run_command` 默认超时 120s→300s（构建/测试常态；上限仍 600s）。
+   - Win32 截图不再要求前台；输入动作仍要求显式 foreground。
+4. 分阶段实测（同一任务 B，`devin/swe-2`）：
+   - 仅加“未输出前重试 + 回合内压缩”：3 次中 2 次仍被 `ECONNRESET` 判死；剩下 1 次成功（13.4 分钟、70 次工具、隐藏 20/20）。
+   - 再加“断流重启 + SSE error 重试 + 非流式降级”：3 次中 2 次成功（13.4 / 9.8 分钟，均隐藏 20/20、analyze 0 error）；失败 1 次是 `HttpClient` 内置 100 秒超时。
+   - 移除内部客户端的 100 秒默认超时后最终批次 3/3 完成：15.77 / 14.43 / 9.97 分钟，70 / 94 / 77 次工具调用，隐藏验收均 20/20，analyze 0 error；billable 86k / 109k / 93k tokens。
+   - 成功运行的真实上下文为 15~19 万字符、约 7~9 万 tokens，未触及 262k 窗口；压缩路径由定向测试与 `--live-bench` 覆盖。
+   - 任务 A 修复后 3/3 完成：9.15 / 10.49 / 15.97 分钟，隐藏验收 11/11、11/11、10/11。唯一失败项是某次实现报告 `committed=false` 却仍替换图快照并递增 `version`，属于实现缺陷而非评测误差。
+   - 完整方法、分阶段数据、失败分类与复现命令见 `docs/records/fumo-long-horizon-2026-10-22.md`。
+5. 验证：Backend.Tests 924 项断言全通过；PerformanceMonitor.Tests 通过；Core.Tests 通过。新增长程定向 36 项断言（回合内压缩与配对、超限恢复、断流重试/重启、非流式降级、SSE error 重试、HttpClient 超时归类、窗口未知不误压缩、恢复配对）。
+
+2026-10-22（第四轮）清理剩余的"想当然"防御性默认值：
+1. `temperature = 0.2` 改为不发送。这是没有依据的"更稳"猜测；推理型模型会直接拒绝非默认 temperature，其它端点也因此偏离自身调优默认值。契约新增 `PureModelRequest.Temperature`（null = 沿用端点默认）。
+2. `read_file` 二进制判定误伤 UTF-16/UTF-8 BOM 文本：UTF-16 天然含 NUL 字节，旧逻辑直接拒绝，而 `write_file`/`edit_file` 明确支持这些编码——读不了却写得了是自相矛盾的。现按 BOM 优先判定为文本。
+3. `grep` 跳过 >5MB 文件时不告知，会把"跳过"变成"未找到"的假阴性。现回报跳过文件数与总字节。
+4. `context_lines` 上限 5 → 20：5 行连一个完整函数体都覆盖不了；上限仍受 `max_matches` 与输出预算约束。
+5. `run_command` 显式超时上限 600s → 3600s：完整构建/测试套件可能远超 10 分钟，600 秒硬顶会误杀正常任务（默认值仍是 300s，未变）。
+6. 工具结果裁剪改为按行边界（48KiB 头 + 16KiB 尾），固定字符偏移会把一行切成两半；无换行时才退回硬切。
+7. 压缩钉住的不再只是"第一条长用户消息"，而是按顺序保留所有用户指令（8k 字符预算）。用户常在后续回合追加硬约束（"不要动 main 分支"），这些恰恰最容易被压缩丢掉；代码只能保证不丢，不能判断哪句重要。
+8. 人工确认超时 60s → 5min：60 秒对"看完大 diff 再决定"太短，超时即拒绝等于在用户思考时静默驳回。
+9. 排除目录补充 `.gradle`/`__pycache__`/`.dart_tool`/`.pytest_cache`/`.mypy_cache`/`.terraform`/`Pods`/`DerivedData`。
+10. 验证：解决方案 50 工程 0 错误 0 警告；Backend.Tests 931 项断言全通过（新增 UTF-16 不误判、大文件跳过告知两项）。未验证：以上默认值在真实长任务中的影响仍需 `--live-bench` 复测。
 ## 2026-10-22 性能监控改为“概览 + 分析”双视图，默认浮窗
 
 1. 概览面向用户：总会话时长、Token、平均轮次、工具调用、Token 构成、模型/工具耗时、最近上下文用量、工具使用、轮次时间线；只使用“模型调用/工具执行/缓存/上下文”等用户词，不出现内部 span 名。
@@ -743,6 +831,70 @@ EAD
 5. 阻塞可见：`ui.stall`/`ui.batch` 事件补成树节点与时间线标记；审批等待单独轨道；模型条首段显示 TTFT；系统轨道绘制 CPU 采样。模型流最大帧间隔、p95 帧间隔、usage、命令、cwd、退出码、输出字节保留在检查器与原始 JSON。
 6. `tool.process` 新增 stdout/stderr 头部（各最多 220 字符，经统一脱敏；关闭命令文本记录时一并遮蔽），完整输出仍在聊天工具卡与既有日志中；不把任意命令输出全文写入性能日志。
 
+
+2026-10-23 电脑操控混合后端、多 Agent 虚拟光标与并发分桶决定：
+1. 后端定位分开：Sky 作为高成功率的可见桌面后端（允许必要时激活目标窗口），CUA Driver 作为严格后台窗口投递后端，Win32 仅保留为显式前台兼容路径。不得把 Sky 的窗口对象或前台激活包装成“独立后台鼠标”。
+2. 混合路由：`route=auto` 时，后台优先 CUA；前台或 `route=visible` 时优先 Sky，再 CUA，最后 Win32。显式 `route=sky|cua|win32` 是固定路由，失败时不静默换栈，真实错误交给上层决定。
+3. 虚拟光标：新增 `IComputerUseCursorRegistry` 与 `ComputerCursorOverlayWindow`。Overlay 透明、置顶、点击穿透、不激活，按 Agent 绘制箭头、颜色与名称；它只表达逻辑位置，不移动系统指针，也不发送任何输入。首个光标出现才创建，全部移除或窗口关闭即销毁；无头自测不创建真实窗口。
+4. 光标同步：工具参数 `agentId` 存在且鼠标动作成功时更新注册表；`screenX/screenY` 提供全局屏幕坐标，缺省回退到窗口相对 `x/y`。这只覆盖已成功执行的动作，不伪造“正在移动”的中间状态。
+5. 并发：后台输入按 `pid:windowId` 分桶，可并行操作不同窗口；前台输入仍全局串行，因为前台激活共享用户桌面焦点；截图锁与输入锁分离。普通桌面上的多个 Overlay 光标不隔离焦点、键盘队列与应用状态；真正完全隔离的并发仍应使用独立 VM / RDP Session。
+6. 验证：解决方案相关工程 0 警告 0 错误；`Fufucode.App.Backend.Tests` 946 项断言通过，新增后台/前台路由优先级、显式 route 固定、后台窗口目标传递、虚拟光标状态同步断言。未验证：真实 cua-driver 后台投递、Sky 宿主桥实机、多显示器/DPI/多 Agent 同时动作的 Overlay 截图。
+
+2026-10-23（第五轮，WriteTex→SGline 分阶段长程实测与档位补课）：
+1. 真实任务：把 writetexx（WriteTex AOT 重建工程）的手写→LaTeX 能力合并进 SGline，拆成模型/编解码、识别服务、仓储/控制器、UI 接线四阶段，同一会话连续执行。阶段 4 自称全绿，但独立复核发现 130 个测试里仍有 2 个自写测试按旧契约失败；定向修复 3.42 分钟后全量 130/130、隐藏 18/18、analyze 0 error。总计 29.98 分钟、121 次工具调用。
+2. 阶段 3 暴露真实回归：空笔画返回兜底文本导致 ok=true，违反“空输入 latex 为空”；隐藏测试已补断言。阶段 4 全量时修复。
+3. 性能日志定位并修复两处 Harness 阻塞：
+   - 系统提示自动加载仓库根 AGENTS.md/CLAUDE.md（限长 32k，标注来源）；此前每阶段都要先花工具轮次找约定。
+   - 提示新增验证纪律：同一改动不重复跑耗时检查、先定向后全量、改共享模块必须重跑既有测试。
+   - 阶段 1 A/B：7.59→4.97 分钟、28→21 次工具、billable 239k→50k、analyze error 1→0（基线 `const` 错误同时修复）。
+4. faster/stronger 补课（8 点取证审计，swe-2）：faster 90.5/136.7 秒、12/27 工具、覆盖 8/8、引用有效 17/19 与 24/25；旧 stronger 585.6 秒、47 工具、覆盖相同、嵌套零触发。废弃“扩大取证+证据矩阵”的 stronger，改为同范围取证 + 程序化引用校验 + 仅在坏引用时派定向校验子代理；修正后 stronger 56.3/94.3 秒、30/28 工具，引用有效 33/36、16/18。结论：stronger 目前是复核档，不是默认；嵌套价值仍未获实证。
+5. 验证：Core/Subagents 单独构建通过；Backend.Tests 长程定向 39 项通过。全量解决方案在记录时被并发 UI 改动（ChatPage.axaml 标签、CollapsiblePanel 类型）阻塞，未宣称全量通过。详见 `docs/records/fumo-writetex-merge-2026-10-23.md`。
+
+2026-10-23（第六轮）归档 Subagent 档位：
+1. 实测结论：同一 8 点取证审计下，旧 stronger（扩大取证+证据矩阵）为 faster 的 4~6 倍耗时，覆盖相同，嵌套零触发；改为“同范围取证 + 引用校验”后成本回到同一量级，但引用有效率未稳定优于单遍模式，且修正列表没有改变最终结论质量。没有可证明的能力增量支撑第二档。
+2. 产品只保留一种子代理行为：删除 `SubagentTier`、`SetTier`、结果档位标记、设置页档位按钮、`AppSettings.SubagentTier` 字段；旧 settings.json 的 `subagentTier` 会被忽略，不阻塞加载。
+3. 默认行为采用原 faster 的早停取向：grep/glob 定位、只读必要片段、证据足够即停、未验证项标注；模式层仍不设轮次/超时/推理强度限制。
+4. 嵌套改为显式能力：只有代理定义声明 `subagent` 且未到 maxDepth 才开放；内置 explore 不声明，避免默认递归与成本失控。
+5. 删除仅供档位对照的 `LiveSubagentProbe`/`LiveOptimizationBench` 探针（它们依赖已删除的档位 API）；档位实测数据保留在 `docs/records/fumo-writetex-merge-2026-10-23.md`。
+6. 验证：Core、Subagents、App 项目分别构建通过；全量测试工程被并发 UI 改动（BackendBadge.BadgeColor）阻塞，未宣称全量通过。
+
+2026-10-23（第七轮）工具层对齐 pi-fff / OMP / 五家 edit 设计：
+1. grep/glob 引入会话级工作区文件索引（并非 Rust/SIMD）：首次枚举后缓存相对路径，写文件、编辑、run_command 后失效，另有 30 秒 TTL；grep/glob 共用，避免每次重复递归。纯字面量 pattern 走 `string.Contains` 快路径，含正则元字符才编译 Regex。保留既有的按文件分组、命中排序、游标分页。未抄 fff 的 SIMD/mmap/frecency/Aho-Corasick 多模式与 Git 加权。
+2. read_file 增加 OMP 风格行选区：`file:N`、`file:A-B`、`file:A+C`、`file:-N`、逗号多段；与 offset/limit 互斥。选区输出带总行数/字符数；单行超过 8 KiB 截断标注；单行超过整读上限不再返回“前 0 行 + offset 1”，而是明确要求分页/命令。
+3. edit_file 增加 `edits[]` 批量（最多 20 条）：所有锚点先对原始文件求值、检测区间重叠，再从后往前应用；任一条失败整体不写盘；单条 old_string/new_string 保持兼容。语义对齐 Pi 的批量编辑，不引入 Codex/DSH 的 patch 文本格式。
+4. 对比结论：Claude Code 是精确唯一 + 先读；Codex 是上下文行 apply_patch、多文件 hunk；DSH 生态用 Codex 兼容 apply_patch 替换原生 edit，强调失败原子与回滚；Pi 是 oldText 精确唯一 + 同调用多条对原文匹配；OMP 的 read 用路径选行 + 50 KiB/3000 行上限 + footer 续读。FUMO 取“精确匹配 + 批量原子 + 行选区”，不引入 patch 格式。
+5. 验证：Core 构建通过；独立 ToolProbe 10/10 通过（行选区、批量编辑、重叠拒绝、失败不写盘、字面量 grep、写后索引失效、glob 索引）。Backend.Tests 仍被并发 UI 的 `BackendBadge.BadgeColor` 改动阻塞，未宣称全量通过。
+
+2026-10-23（语音朗读拆为可选插件 + 设置面板重做）：
+1. 归属：朗读服务只由 `service.speech-synthesis` 插件提供。插件激活时在 `PluginPackageManager.ActiveSpeechService` 登记实现，停用/卸载时撤回。宿主删除原有“运行时反射加载插件 DLL”的旁路（它绕开插件状态机，卸载后仍可用），改为只认登记的服务；多个插件管理器先后激活同一插件时，后来者复用已登记服务，只有创建者负责释放。
+2. 门禁：未安装或已停用时 `speech.start/pause/resume/stop` 以 `hideWhenUnavailable` 整条从菜单消失，消息操作条的喇叭按钮不出现，自动朗读静默跳过。`speech.settings` 始终保留，作为未安装时的说明与插件市场入口——这是唯一仍可达的朗读动作。
+3. 安装状态广播：语音服务没有页面贡献，`PagesChanged` 不会触发。宿主改订阅 `PluginStateNotifier.Changed`，在下一拍（插件激活同步完成后）统一投影到对话页与动作面。
+4. 设置面板按 `docs/design/page-design-principles.md` 重做：`AppDialog` 底色 + 页脚、`SettingsLayout` 行/组构件、三组（播放/声音/播放控制）、`AutoReadReplies` 首次有了真实开关、状态行显示服务上报文本。未安装态只有一段说明与市场入口，不渲染语速/音量控件。尺寸随内容而非固定高。
+5. 通用 `ShowPanelAsync` 一并改走 `AppDialog` + `SkinDialog`：此前裸 `new Window` 丢背景，深色主题下是纯黑窗口（用户截图）。
+6. 载荷：`publish-local.ps1` 与 `package.ps1` 的分发列表补上 `service.speech-synthesis`；插件 csproj 把 `manifest.json` 复制到输出，否则市场安装会因缺真实清单失败。`--speech-probe` 改为加载真实插件载荷，找不到时明确失败而不是拿替身空跑通过。
+7. 验证：解决方案 51 工程 0 错误（5 条既有 Avalonia XAML 警告）；`--selftest --speech-only` 11 项门禁断言 + 4 张亮/暗 × 安装/未安装对话框截图全部通过；`Fufucode.Review.Tests` 新增“激活登记/卸载撤回”两条断言通过。既有失败 `Review.Tests` 2 条（工具注册冲突/注销语义）、`--r05-only` 3 条、`--skins-integration-only` 1 条在干净 HEAD 上同样失败，非本轮引入，未修改。未验证：真实音频听感、真实市场安装后重启进程内的服务登记。
+
+2026-10-23（通知体系统一：时间线提示 / 右上提醒 / 通知中心卡片）：
+1. 用户反馈：侧边聊天里一次粘贴出现两张一样的“提示”卡，提示卡没有关闭方式也没有动效，三处通知各写各的。
+2. 时间线提示：`TimelineViewModel.AddNotification` 对 2 秒内同文提示去重；提示卡右上加关闭按钮（`Timeline.Dismiss`），删除前播放退场动画。
+3. 动效统一走 `Views/Motion`：卡片进入淡入上移、退出淡出；`Motion.Reduced` 在无头自测里为真，断言只检查终态，不受过渡时序影响。
+4. 右上提醒（`NotificationPrompt`）改由 `SetNotificationPromptVisible` 统一出入口：淡入淡出，非待审批提醒 8 秒自动消失，待审批必须由用户处理；卡片补上与通知中心一致的状态字形与配色。
+5. 通知中心条目可逐条移除（`DismissItem`），移除前播放退场动画；概览卡的未读/待处理/全部随之更新。
+6. 未验证：真实桌面上的动画观感与 8 秒自动消失的手感；Windows 系统通知按钮仍受本机组策略禁用，无法实机点验。
+2026-10-23（第八轮）变更面板重做为逐行 diff 审阅视图：
+1. 问题：旧面板把 hunk 拼成制表符分隔文本塞进只读 TextBox，没有行号、增色/删色、语法着色与折叠；"范围说明"折叠块和根路径常驻顶部，右栏被元信息占满。视图局部样式写在 `UserControl.Styles` 里，而 ChangesContent 会被 `TakeDockPages` 摘到停靠区，样式实际不生效，这也是"难看"的直接原因之一。
+2. 结构：Changes 页改为"文件列表 ↔ diff"主从视图，栏宽 ≥620 时左右分栏（列表 224），窄栏仍是单栏切换、窄栏默认折行。文件按目录分组可折叠，行内给单字符状态与真实 ± 行数；顶部只留范围开关、± 合计、刷新与筛选框。
+3. diff 呈现：`DiffQuery.FileAsync` 的 hunk 展开成行模型（新旧行号、增删标记、hunk 头、可点击展开的上下文省略行）。语法着色用 LiveMarkdown 已带入的 TextMateSharp（深/浅各一套调色板，按规则 foreground 取色并以 `Theme.GetColor` 为准，直接索引 GetColorMap 会整体错位一格）；等量替换做词级比对，只强调真正变化的片段。两侧全文由新增的只读 `DiffQuery.SidesAsync` 提供（HEAD blob + 工作区副本，2 MiB 上限），读不到时降级为单色 diff，上下文省略行不可展开。
+4. 令牌：Fluent 基准新增 `AppDiffAddedBackground/Strong/Foreground`、`AppDiffRemovedBackground/Strong/Foreground`、`AppDiffLineNumber`，均为半透明叠加而非新的不透明底色；五套皮肤补 `Strong` 两键并保留各自原有取值。面板样式移入共享 `WorkbenchStyles`，停靠宿主下同样生效。
+5. 未做：并排（split）视图、行内批注、隐藏空白字符、整文件上下文加载；大文件超过 4000 行不着色。
+6. 验证：App 构建 0 警告 0 错误；`--selftest --r2-only`、`--tabs-only`、`--workbench-only`、`--d6-only`、`--changes-shots-only` 全过；Core `--a13-only` 全过；Skins 工程 297 项断言通过。截图证据在 `tmp/changes-shots/`（窄栏列表、窄栏 diff、宽栏 diff、深色 diff），已目视核对行号、色块铺满、语法色与词级强调。未跑全量 `--selftest`（依赖真实 Pi 运行时的段落未在本机执行）。
+
+2026-10-23（第九轮）变更卡与变更面板联动：
+1. 旧联动只有一句 `OpenDockPage("changes")`：不切口径、不选文件、不刷新；卡内内联 diff 还是独立的纯文本渲染（无行号、无底色、无语法色），与面板两套观感。
+2. 现在卡上的"查看变更"统一走 `MainWindow.ShowTurnChangesAsync(path)`：打开面板 → 切到"本次会话"口径 → 刷新 → 按路径选中文件（入参可能是工具给的绝对路径，按项目根归一化后再匹配）。
+3. 卡内每个文件行右侧新增"在变更面板中查看"入口，直接定位该文件；行本身仍是展开内联 diff。
+4. 卡内 diff 改用与面板同一份 `DiffViewModel`（新增 `FromTexts` 按前后文本推演行号）+ `DiffLineText` 渲染，行号、增删底色、语法着色与面板一致；无快照时仍明确提示"没有可用的改动前快照"。
+5. 验证：App 构建 0 警告 0 错误；`--r2-only`、`--tabs-only` 全过（后者新增"卡跳转切会话口径并选中文件"断言）；新增 `FromTexts` 行号/着色断言。未跑全量自测。
 
 ## 2026-10-24 概览重构为 Magpie 上下文矩形树图看板，移除多余横条与边栏
 
@@ -756,3 +908,4 @@ EAD
    - 彻底删除左侧 136px 视图导航边栏与状态栏，全宽留给看板内容，解决停靠区窄屏（320px）下严重挤压的问题。
    - 彻底删除顶栏的冗余标题、副标题，由紧凑的 `[ 概览 | 分析 ]` 分段切换胶囊取代。
    - 彻底删除人工“刷新”按钮与“实时”复选框：全自动静默感知环形缓冲写入与事件，无需用户操作，保证始终实时。
+

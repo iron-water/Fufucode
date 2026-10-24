@@ -22,8 +22,6 @@ public partial class ChatPage
     public sealed record SessionContextInfo(
         string? ProjectId,
         string ProjectName,
-        string BackendName,
-        string BackendColor,
         bool CanChangeProject);
 
     internal Func<SessionContextInfo?>? SessionContextRequested;

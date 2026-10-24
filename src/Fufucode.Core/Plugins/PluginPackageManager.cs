@@ -14,6 +14,15 @@ namespace Fufucode.Core.Plugins;
 public sealed class PluginPackageManager : IAsyncDisposable
 {
     public static IRemoteControlService? ActiveRemoteControlService { get; set; }
+
+    /// <summary>当前激活的 FUFU 桥接服务（service.fufu-bridge 插件注册）。</summary>
+    public static IFufuBridge? ActiveFufuBridge { get; set; }
+
+    /// <summary>
+    /// 当前激活的语音朗读服务（service.speech-synthesis 插件注册）。
+    /// 未安装或已停用时为 null，宿主据此隐藏朗读入口，而不是显示一个不可用的替身。
+    /// </summary>
+    public static ISpeechService? ActiveSpeechService { get; set; }
     // 进程级工厂登记表：键是插件 id，数量受市场目录限制；提供注销入口供测试/卸载清理，
     // 避免宿主生命周期内重复登记留下无法回收的闭包。
     private static readonly ConcurrentDictionary<string, Func<IPluginPackage>> _registeredFactories = new(StringComparer.OrdinalIgnoreCase);
@@ -34,6 +43,7 @@ public sealed class PluginPackageManager : IAsyncDisposable
     }
     private readonly Dictionary<string, (IPluginPackage Package, IPluginToolHandler? Handler, PluginPackageContext Context)> _activePlugins = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PluginPageContribution> _pageContributions = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PluginComposerContribution> _composerContributions = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, AssemblyLoadContext> _loadContexts = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
@@ -44,6 +54,9 @@ public sealed class PluginPackageManager : IAsyncDisposable
 
     /// <summary>已激活插件的页面贡献发生变化（激活、停用、更新）。宿主据此挂载/卸载页面。</summary>
     public event Action? PagesChanged;
+
+    /// <summary>已激活插件的输入栏贡献发生变化（激活、停用、更新）。宿主据此刷新输入栏菜单。</summary>
+    public event Action? ComposerContributionsChanged;
 
     /// <summary>诊断：当前已激活的插件 id。</summary>
     public IReadOnlyCollection<string> GetActivePluginIds()
@@ -58,6 +71,11 @@ public sealed class PluginPackageManager : IAsyncDisposable
     public PluginPageContribution? PageContribution(string pluginId)
     {
         lock (_gate) return _pageContributions.TryGetValue(pluginId, out var page) ? page : null;
+    }
+
+    public bool TryGetComposerContribution(string pluginId, out PluginComposerContribution contribution)
+    {
+        lock (_gate) return _composerContributions.TryGetValue(pluginId, out contribution!);
     }
     private readonly object _gate = new();
     private bool _changing;
@@ -378,6 +396,12 @@ public sealed class PluginPackageManager : IAsyncDisposable
             page = PageDecorator is { } decorator ? decorator(id, package, rawPage) : rawPage;
             var content = package.CreateContentContribution(context);
             if (content is not null) PluginContentRegistry.Register(id, content);
+            var composer = package.CreateComposerContribution(context);
+            if (composer is not null)
+            {
+                _composerContributions[id] = composer;
+                ComposerContributionsChanged?.Invoke();
+            }
             var skin = package.CreateSkinContribution(context);
             if (skin is not null) PluginSkinRegistry.Register(id, skin);
             _activePlugins.Add(id, (package, handler, context));
@@ -399,7 +423,12 @@ public sealed class PluginPackageManager : IAsyncDisposable
         // 先摘掉渲染贡献：即使后续 shutdown 失败，也不能让已停用插件的控件继续被创建。
         PluginContentRegistry.Unregister(id);
         PluginSkinRegistry.Unregister(id);
-        if (!_activePlugins.TryGetValue(id, out var entry)) return;
+        var hadComposer = _composerContributions.Remove(id);
+        if (!_activePlugins.TryGetValue(id, out var entry))
+        {
+            if (hadComposer) ComposerContributionsChanged?.Invoke();
+            return;
+        }
         if (entry.Handler is not null) _toolRegistry.Unregister(entry.Handler);
         // Preserve the entry when shutdown fails so a later stop can retry.
         entry.Package.ShutdownAsync().GetAwaiter().GetResult();
@@ -407,6 +436,7 @@ public sealed class PluginPackageManager : IAsyncDisposable
         var hadPage = _pageContributions.Remove(id);
         if (_loadContexts.Remove(id, out var context)) context.Unload();
         if (hadPage) { PagesChanged?.Invoke(); PageContributionsChanged?.Invoke(); }
+        if (hadComposer) ComposerContributionsChanged?.Invoke();
     }
     private (IPluginPackage Package, AssemblyLoadContext? Context) ResolvePackage(string id, string directory)
     {

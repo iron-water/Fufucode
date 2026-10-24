@@ -27,6 +27,13 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     private readonly string? _workspaceRoot;
     private readonly object _gate = new();
     private readonly object _persistGate = new();
+    private long _lastPersistTimestamp;
+    /// <summary>长回合中途落盘的最小间隔：崩溃/强杀最多丢失最近几秒的工具结果。</summary>
+    private static readonly TimeSpan PersistInterval = TimeSpan.FromSeconds(5);
+
+    // 人工确认的超时。60 秒对"看一眼大 diff 再决定"太短，超时即拒绝会让用户
+    // 在思考时被静默驳回；放宽到 5 分钟，仍保留超时拒绝的安全语义。
+    private static readonly TimeSpan ApprovalTimeout = TimeSpan.FromMinutes(5);
     private readonly List<(string Text, IReadOnlyList<PureImageAttachment>? Images)> _queue = [];
     private readonly List<string> _steerQueue = [];
     private string? _modelId;
@@ -109,14 +116,14 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 arguments = call.ArgumentsJson
             });
             request = new ExtensionUiRequest(Guid.NewGuid(), id, "confirm", payload,
-                DateTimeOffset.UtcNow, TimeSpan.FromSeconds(60));
+                DateTimeOffset.UtcNow, ApprovalTimeout);
             waiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _pendingApprovals[id] = waiter;
             _pendingUi.Add(request);
         }
 
         notify(request);
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(60));
+        using var timeout = new CancellationTokenSource(ApprovalTimeout);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, timeout.Token);
         try
         {
@@ -189,10 +196,10 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public string ThinkingLevel => _thinkingLevel;
     public string? WorkspaceRoot => _workspaceRoot;
 
-    /// <summary>最大轮次限制。长程复杂任务可动态调大。</summary>
-    public int MaxIterations
+    /// <summary>可选的外部轮次预算；默认 null，由模型终态或取消结束。</summary>
+    public int? MaxIterations
     {
-        get => (_engine as PureCSharpAgentEngine)?.MaxIterations ?? 50;
+        get => (_engine as PureCSharpAgentEngine)?.MaxIterations;
         set
         {
             if (_engine is PureCSharpAgentEngine pureEngine)
@@ -239,7 +246,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             {
                 _subagents.ApprovalGate = pureEngine.ApprovalGate;
                 _subagents.ParentMode = () => pureEngine.Mode;
-                _subagents.SetTier(NativeSubagentRegistry.Tier);
                 _subagents.HistoryProvider = () => pureEngine.GetState().History ?? [];
                 _subagents.Progress = progress => Emit(new SessionEvent.SubagentUpdated(
                     progress.JobId, progress.Agent, progress.Kind, progress.Detail));
@@ -251,7 +257,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public NativeCSharpChatSession(
         IPureModelClient modelClient,
         IPureToolDispatcher? toolDispatcher = null,
-        int maxIterations = 50,
+        int? maxIterations = null,
         string? sessionId = null,
         string? modelId = null,
         IPluginSystemPromptProvider? systemPromptProvider = null,
@@ -291,15 +297,29 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     /// 每次请求重新计算可声明工具：内置工具 + 当前门禁放行的插件工具。
     /// 插件停用/卸载后 <see cref="PluginToolRegistry.ActiveToolNames"/> 立即为空，
     /// 下一次请求不再向模型声明这些工具（不留幽灵工具）。
+    /// Plan 模式只声明明确只读的内置工具与 update_plan：声明一个必然被拒绝的写工具，
+    /// 既浪费输入 Token，也会诱发模型反复尝试无效调用。
     /// </summary>
     private IReadOnlyList<string> BuildToolNames()
     {
-        var merged = new List<string>(BuiltInToolNames);
-        if (_skills?.HasModelInvocableSkills == true) merged.Add(SkillRegistry.ToolName);
-        if (_mcp?.HasServers == true) merged.Add(McpGatewayDispatcher.ToolName);
-        if (_subagents is not null) merged.Add(NativeSubagentContract.ToolName);
+        var planOnly = IsPlanMode();
+        var merged = new List<string>(BuiltInToolNames.Length);
+        foreach (var name in BuiltInToolNames)
+        {
+            if (planOnly && !ProductionToolDispatcher.IsPlanSafeTool(name)) continue;
+            merged.Add(name);
+        }
 
-        if (_pluginTools is not { } pluginTools) return merged;
+        if (!planOnly)
+        {
+            if (_skills?.HasModelInvocableSkills == true) merged.Add(SkillRegistry.ToolName);
+            if (_mcp?.HasServers == true) merged.Add(McpGatewayDispatcher.ToolName);
+            if (_subagents is not null) merged.Add(NativeSubagentContract.ToolName);
+        }
+
+        // Plan 模式不声明插件工具：第三方工具无法静态证明只读，调度器必然拒绝，
+        // 声明它们只会制造无效调用。
+        if (planOnly || _pluginTools is not { } pluginTools) return merged;
         foreach (var name in pluginTools.ActiveToolNames)
         {
             if (!merged.Contains(name, StringComparer.Ordinal)) merged.Add(name);
@@ -307,15 +327,29 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         return merged;
     }
 
+    /// <summary>当前会话是否处于只读 Plan 模式（非 FUMO 引擎时按 false 处理）。</summary>
+    private bool IsPlanMode() =>
+        _engine is PureCSharpAgentEngine { Mode: PermissionMode.Plan };
+
     /// <summary>构建完整的工具动作契约清单（内置 + 技能 + 插件工具的 JSON Schema）。</summary>
     private IReadOnlyList<PureToolDefinition> BuildToolDefinitions()
     {
+        var planOnly = IsPlanMode();
         var list = new List<PureToolDefinition>();
-        list.AddRange(ProductionToolDispatcher.GetBuiltinToolDefinitions());
-        if (_mcp?.HasServers == true) list.Add(McpGatewayDispatcher.Definition);
-        if (_subagents is not null) list.Add(NativeSubagentContract.Definition);
-        if (_skills?.HasModelInvocableSkills == true) list.Add(SkillRegistry.Definition);
-        if (_pluginTools is { } pt)
+        foreach (var definition in ProductionToolDispatcher.GetBuiltinToolDefinitions())
+        {
+            if (planOnly && !ProductionToolDispatcher.IsPlanSafeTool(definition.Name)) continue;
+            list.Add(definition);
+        }
+
+        if (!planOnly)
+        {
+            if (_mcp?.HasServers == true) list.Add(McpGatewayDispatcher.Definition);
+            if (_subagents is not null) list.Add(NativeSubagentContract.Definition);
+            if (_skills?.HasModelInvocableSkills == true) list.Add(SkillRegistry.Definition);
+        }
+
+        if (!planOnly && _pluginTools is { } pt)
         {
             foreach (var reg in pt.ActiveRegistrations)
             {
@@ -335,6 +369,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var planSnippet = GetCurrentPlanSnippet();
         var skillsSection = _skills?.BuildPromptSection();
         var systemContent = string.IsNullOrWhiteSpace(fragment) ? basePrompt : $"{basePrompt}\n\n{fragment}";
+        // 项目约定（AGENTS.md / CLAUDE.md）是仓库级事实，五个参考后端都会自动带入；
+        // 让模型用工具先找一遍只是浪费轮次。
+        var projectInstructions = BuildProjectInstructionsSection();
 
         void AppendSection(string? section)
         {
@@ -342,6 +379,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             systemContent = string.IsNullOrWhiteSpace(systemContent) ? section : $"{systemContent}\n\n{section}";
         }
 
+        AppendSection(projectInstructions);
         AppendSection(planSnippet);
         AppendSection(skillsSection);
         AppendSection(_mcp?.BuildPromptSection());
@@ -382,8 +420,44 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         }
         sb.AppendLine("3. 目标是实际完成代码开发与落地，不只给出空泛方案。");
         sb.AppendLine("4. 当遇到环境缺少某 SDK/工具链（如未安装对应语言编译器）时，不要陷入无限探测循环；应依据任务书规范自主完成核心架构设计、源代码编写、种子数据准备与必要单元测试，并在最终回复中如实说明环境限制与未验证项。");
+        sb.AppendLine("5. 验证命令要克制：同一处改动后不要重复运行同一个耗时检查；先跑与改动直接相关的测试，最后再跑一次全量。");
+        sb.AppendLine("6. 修改共享模块后，必须重跑覆盖它的既有测试；不要只验证新增路径，旧行为退化要自己发现。");
 
         return sb.ToString().TrimEnd();
+    }
+
+    /// <summary>
+    /// 自动加载仓库根的 AGENTS.md / CLAUDE.md。项目约定是仓库级事实，
+    /// 每个参考后端都会在系统上下文里直接提供；让模型先花工具轮次去找是纯浪费。
+    /// 只读根目录第一个存在的文件，限长 32k 字符，避免把超大文档塞满窗口。
+    /// </summary>
+    private string? BuildProjectInstructionsSection()
+    {
+        if (string.IsNullOrWhiteSpace(_workspaceRoot)) return null;
+        foreach (var name in new[] { "AGENTS.md", "CLAUDE.md" })
+        {
+            var path = Path.Combine(_workspaceRoot, name);
+            if (!File.Exists(path)) continue;
+            try
+            {
+                var text = File.ReadAllText(path);
+                if (text.Length > 32_000)
+                {
+                    text = text[..24_000] + "\n\n…[项目约定过长，已截断中间部分]…\n\n" +
+                           text[^8_000..];
+                }
+                return $"## 项目约定（自动加载自 {name}）\n{text.Trim()}";
+            }
+            catch (IOException)
+            {
+                return null;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return null;
+            }
+        }
+        return null;
     }
 
     private string? GetCurrentPlanSnippet() => (_engine as PureCSharpAgentEngine)?.CurrentPlanSnippet;
@@ -521,8 +595,17 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                         OnThinkingDelta = recorder.OnThinkingDelta,
                         OnUsage = recorder.OnUsage,
                         OnToolCallChunkIndexed = recorder.OnToolCallChunk,
+                        OnRestart = recorder.OnStreamRestart,
                     },
-                    OnMessageAppended = recorder.OnMessageAppended,
+                    OnMessageAppended = message =>
+                    {
+                        recorder.OnMessageAppended(message);
+                        // 工具轮结束后立即尝试落盘（内部有 5 秒节流）：
+                        // 长回合被强杀时，已完成的工具结果不应整段丢失。
+                        if (message.Role == PureAgentRole.Tool ||
+                            (message.Role == PureAgentRole.Assistant && message.ToolCalls is { Count: > 0 }))
+                            PersistThrottled();
+                    },
                     OnToolStarting = recorder.OnToolStarting,
                     OnToolCompleted = recorder.OnToolCompleted,
                 }, cts.Token).ConfigureAwait(false);
@@ -537,10 +620,18 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 foreach (var toolResult in result.ToolResults)
                     recorder.OnLegacyToolCompleted(toolResult);
             }
-            outcome = result.Status == PureAgentTurnStatus.Failed ? SessionOutcome.Failed : SessionOutcome.Completed;
-            summary = result.Error ?? (outcome == SessionOutcome.Completed ? "已完成" : "模型请求失败。");
+            outcome = result.Status == PureAgentTurnStatus.Failed
+                ? SessionOutcome.Failed
+                : result.Truncated ? SessionOutcome.Truncated : SessionOutcome.Completed;
+            summary = result.Error ?? (outcome switch
+            {
+                SessionOutcome.Completed => "已完成",
+                SessionOutcome.Truncated => "外部任务预算耗尽，结果可能不完整。",
+                _ => "模型请求失败。"
+            });
             turnSpan.Tag("toolCalls", result.ToolResults.Count);
             if (outcome == SessionOutcome.Failed) turnSpan.Fail(result.Error ?? "model_failed");
+            if (outcome == SessionOutcome.Truncated) turnSpan.Tag("truncated", true);
         }
         catch (OperationCanceledException) when (cts.IsCancellationRequested)
         {
@@ -596,6 +687,17 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 Emit(new SessionEvent.QueueChanged(QueuedTexts().Length, QueuedTexts()));
             }
         }
+    }
+
+    /// <summary>长回合中途的节流落盘；不改变回合终态的完整落盘。</summary>
+    private void PersistThrottled()
+    {
+        if (string.IsNullOrEmpty(_persistFilePath)) return;
+        var now = Stopwatch.GetTimestamp();
+        var last = Interlocked.Read(ref _lastPersistTimestamp);
+        if (last != 0 && Stopwatch.GetElapsedTime(last, now) < PersistInterval) return;
+        Interlocked.Exchange(ref _lastPersistTimestamp, now);
+        PersistHistory();
     }
 
     private void PersistHistory()
@@ -737,6 +839,14 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         private readonly Dictionary<string, ToolState> _toolsById = new(StringComparer.Ordinal);
         private UsageInfo? _usage;
         private bool _assistantAppended;
+
+        /// <summary>流被瞬时故障丢弃后重启：关闭半成品消息，下一次增量从新消息开始。</summary>
+        public void OnStreamRestart()
+        {
+            if (_messageId is null) return;
+            OnTextDelta("\n\n[流式连接中断，正在重试…]\n\n");
+            CloseMessage();
+        }
 
         public void OnUsage(PureUsage usage) => _usage = new UsageInfo
         {
@@ -898,7 +1008,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             for (var index = 0; index < _blocks.Count; index++)
                 session.Emit(new SessionEvent.BlockFinished(_messageId, index, _blocks[index]));
             session.Emit(new SessionEvent.MessageFinished(_messageId,
-                new ChatMessage(_messageId, MessageRole.Assistant, session.CurrentModel, _blocks.ToArray(), _usage, true), null));
+                new ChatMessage(_messageId, MessageRole.Assistant, session.CurrentModel, _blocks.ToArray(), _usage, true), _usage));
             _messageId = null;
             _usage = null;
             _blocks.Clear();

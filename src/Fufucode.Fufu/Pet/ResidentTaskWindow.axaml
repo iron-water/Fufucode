@@ -1,0 +1,44 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:pet="clr-namespace:Fufucode.Fufu.Pet"
+        x:Class="Fufucode.Fufu.Pet.ResidentTaskWindow"
+        Title="FUFU 常驻任务"
+        Width="620" Height="460"
+        MinWidth="460" MinHeight="300"
+        ShowInTaskbar="False" Topmost="True"
+        WindowStartupLocation="CenterOwner"
+        Background="#CC1E1E24" TransparencyLevelHint="AcrylicBlur">
+  <Grid RowDefinitions="Auto,*,Auto" Margin="14" RowSpacing="8">
+    <StackPanel Grid.Row="0" Spacing="3">
+      <TextBlock Text="FUFU 常驻任务" FontSize="18" FontWeight="SemiBold" Foreground="#F0F0F0" />
+      <TextBlock Text="当前为观察模式：任务状态来自 Fufucode Bridge 事件，不会自动执行。"
+                 FontSize="11" Foreground="#B8B8C0" TextWrapping="Wrap" />
+    </StackPanel>
+    <ListBox Name="TaskList" Grid.Row="1" Background="#23232B">
+      <ListBox.ItemTemplate>
+        <DataTemplate x:DataType="pet:ResidentTaskRow">
+          <Border Padding="8" Margin="4" Background="#2B2B35" CornerRadius="6">
+            <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" RowSpacing="3">
+              <Border Name="StateBadge" Grid.RowSpan="3" Width="76" Height="24" CornerRadius="5"
+                      VerticalAlignment="Top" HorizontalAlignment="Left" Background="#454552">
+                <TextBlock Text="{Binding State}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="#F0F0F0" FontSize="11" />
+              </Border>
+              <StackPanel Grid.Column="1" Margin="86,0,8,0" Spacing="2">
+                <TextBlock Text="{Binding Title}" Foreground="#F0F0F0" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding SourceText}" Foreground="#9FA4B5" FontSize="10" />
+                <TextBlock Text="{Binding Detail}" Foreground="#C0C0C8" FontSize="11" TextWrapping="Wrap" />
+              </StackPanel>
+              <TextBlock Grid.Column="2" Text="{Binding Updated}" Foreground="#888895" FontSize="10"
+                         VerticalAlignment="Top" />
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+    </ListBox>
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+      <Button Name="RefreshButton" Content="刷新" Padding="12,5" />
+      <Button Name="CloseButton" Content="关闭" Padding="12,5" />
+    </StackPanel>
+  </Grid>
+</Window>

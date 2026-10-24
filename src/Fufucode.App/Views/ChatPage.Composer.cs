@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using System.IO;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
@@ -10,6 +11,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Features.Plugins;
 
 namespace Fufucode.App.Views;
 
@@ -18,6 +20,10 @@ public partial class ChatPage
     private readonly ComboBox _executionMode = new() { MinWidth = 112, MinHeight = 28, FontSize = 11 };
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
+    private Button? _executionModeButton;
+    private readonly System.Collections.Generic.List<(Control Target, Func<string?> Text)> _composerTips = new();
+    private bool _composerTipsWired;
+    private MenuFlyout? _executionModeMenu;
     private bool _previewDraft;
     private void InitializeComposerTools()
     {
@@ -26,6 +32,12 @@ public partial class ChatPage
         { e.DragEffects = e.DataTransfer.TryGetFiles() is not null ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; });
         ComposerCard.AddHandler(DragDrop.DropEvent, async (_, e) =>
         { e.Handled = true; await AttachFilesAsync(e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()).OfType<string>() ?? []); });
+        // 粘贴：剪贴板里有文件或图片时作为附件加入；否则保持默认文本粘贴。
+        InputBox.AddHandler(KeyDownEvent, async (_, e) =>
+        {
+            if (e.Key != Key.V || !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+            if (await TryPasteAttachmentsAsync()) e.Handled = true;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
         _executionMode.ItemsSource = new[] { "人工确认", "自动审批", "完全访问", "规划模式" };
         ToolTip.SetTip(_executionMode, "自动审批允许内置文件编辑，Shell/未知工具仍需确认；规划模式只允许内置读取工具。不是系统沙箱。");
         _executionMode.SelectionChanged += async (_, _) =>
@@ -115,14 +127,48 @@ public partial class ChatPage
             catch (Exception error) { ReportActionError("权限模式切换失败：" + error.Message); }
             finally { RefreshComposerTools(); }
         };
-        ComposerModes.Children.Add(_executionMode);
+        // 权限模式：底部只留一个小图标，点开才是选项列表；文字进 tooltip。
+        var modeButton = WorkbenchUi.IconButton("ShieldCheckmark", "权限模式", 30);
+        var modeMenu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
+        modeButton.Flyout = modeMenu;
+        _executionModeMenu = modeMenu;
+        _executionModeButton = modeButton;
+        ComposerModes.Children.Insert(0, modeButton);
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (_composerTipsWired || TopLevel.GetTopLevel(this) is not MainWindow window) return;
+            _composerTipsWired = true;
+            foreach (var (target, text) in _composerTips) window.RegisterWindowTip(target, text, ComposerCard);
+        };
+        // 提示改为窗口内浮层：显示在图标正上方、离开 0.3 秒消失，
+        // 不用 Popup/ToolTip（会按浅色渲染成白框并造成悬停闪烁）。
+        // 构建时尚未挂到视觉树（GetTopLevel 为空），先记录，挂载后再登记到窗口。
+        void Tip(Control target, Func<string?> text) => _composerTips.Add((target, text));
+        MainViewModel? Vm() => DataContext as MainViewModel;
+        Tip(ComposerMoreButton, () => "附加功能");
+        Tip(AttachContextButton, () => "添加文件、图片、PDF 或链接");
+        Tip(SessionProjectChip, () =>
+            Vm()?.Sidebar.ProjectName is { Length: > 0 } project ? "项目：" + project : "更改此会话的项目");
+        Tip(ModelButton, () => "模型：" + (Vm()?.Settings.SelectedModel.Label ?? "选择模型"));
+        Tip(ThinkingButton, () => "思考：" + (Vm()?.Settings.SelectedThinking?.Label ?? "默认"));
+        Tip(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
+        Tip(SendButton, () => "发送");
+        Tip(StopButton, () => "停止当前回合");
+        InputBox.GotFocus += (_, _) => ComposerGlowBand.Opacity = 1;
+        InputBox.LostFocus += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!ComposerCard.IsKeyboardFocusWithin) ComposerGlowBand.Opacity = 0;
+        });
+
         var menu = new MenuFlyout();
         var preview = new MenuItem { Header = "Markdown 草稿预览" };
         preview.Click += (_, _) => { _previewDraft = !_previewDraft; RefreshComposerTools(); };
         var commands = new MenuItem { Header = "命令与技能" };
         commands.Click += (_, _) => CommandFlyoutButton.Flyout?.ShowAt(ComposerMoreButton);
         var hide = new MenuItem { Header = "隐藏输入区" }; hide.Click += (_, _) => ToggleComposer();
-        menu.Items.Add(preview); menu.Items.Add(commands); menu.Items.Add(hide); ComposerMoreButton.Flyout = menu;
+        menu.Items.Add(preview); menu.Items.Add(commands); menu.Items.Add(hide);
+        ComposerMoreButton.Flyout = menu;
+        RefreshComposerPluginMenu();
         DraftPreview.PointerPressed += (_, e) =>
         {
             if (e.GetCurrentPoint(DraftPreview).Properties.IsLeftButtonPressed) { _previewDraft = false; RefreshComposerTools(); Input.Focus(); }
@@ -141,6 +187,74 @@ public partial class ChatPage
         }
         AttachContextButton.Flyout = attachments;
     }
+    private void BuildExecutionModeMenu(MenuFlyout menu)
+    {
+        menu.Items.Clear();
+        var labels = _executionMode.ItemsSource as System.Collections.IEnumerable;
+        if (labels is null) return;
+        var index = 0;
+        foreach (var label in labels)
+        {
+            var captured = index++;
+            var text = label?.ToString() ?? string.Empty;
+            var item = new MenuItem
+            {
+                Header = (captured == _executionMode.SelectedIndex ? "✓  " : "    ") + text,
+                IsEnabled = _executionMode.IsEnabled,
+            };
+            item.Click += (_, _) => _executionMode.SelectedIndex = captured;
+            menu.Items.Add(item);
+        }
+    }
+
+    /// <summary>思考等级菜单：预构建可选档位（不支持的置灰）。</summary>
+    private void BuildThinkingMenu(MenuFlyout menu, MainViewModel vm)
+    {
+        menu.Items.Clear();
+        foreach (var choice in vm.Settings.ThinkingChoices)
+        {
+            var captured = choice;
+            var current = Equals(vm.Settings.SelectedThinking, captured);
+            var item = new MenuItem
+            {
+                Header = (current ? "✓  " : "    ") + captured.Label,
+                IsEnabled = captured.IsSupported,
+            };
+            item.Click += (_, _) => { vm.Settings.SelectedThinking = captured; RefreshComposerTools(); };
+            menu.Items.Add(item);
+        }
+    }
+
+    /// <summary>剪贴板附件：文件列表、常见图片格式（字节流）。成功时返回 true。</summary>
+    private async System.Threading.Tasks.Task<bool> TryPasteAttachmentsAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return false;
+        try
+        {
+            var transfer = await clipboard.TryGetDataAsync();
+            if (transfer is null) return false;
+            if (await transfer.TryGetFilesAsync() is { Length: > 0 } files)
+            {
+                var paths = files.Select(item => item.TryGetLocalPath()).OfType<string>().ToArray();
+                if (paths.Length > 0) { await AttachFilesAsync(paths); return true; }
+            }
+            // 图片：剪贴板里通常是 PNG 字节流；落成临时文件后按普通附件处理。
+            foreach (var (name, extension) in new[] { ("PNG", ".png"), ("image/png", ".png"), ("image/jpeg", ".jpg"), ("image/bmp", ".bmp") })
+            {
+                var bytes = await transfer.TryGetValueAsync<byte[]>(DataFormat.CreateBytesPlatformFormat(name));
+                if (bytes is { Length: > 0 })
+                {
+                    var path = Path.Combine(Path.GetTempPath(), "fufucode-paste-" + Guid.NewGuid().ToString("N") + extension);
+                    await File.WriteAllBytesAsync(path, bytes);
+                    await AttachFilesAsync(new[] { path });
+                    return true;
+                }
+            }
+        }
+        catch (Exception error) { ReportActionError("粘贴附件失败：" + error.Message); }
+        return false;
+    }
+
     private async System.Threading.Tasks.Task PickAttachmentAsync(string kind)
     {
         if (TopLevel.GetTopLevel(this) is not MainWindow owner) return;
@@ -187,6 +301,15 @@ public partial class ChatPage
             vm.Settings.ModelPickerFilter = box.Text ?? string.Empty;
     }
 
+    internal PluginComposerHost? ComposerPluginHost { get; set; }
+
+    internal void RefreshComposerPluginMenu()
+    {
+        if (ComposerMoreButton.Flyout is not MenuFlyout menu || DataContext is not MainViewModel vm) return;
+        while (menu.Items.Count > 3) menu.Items.RemoveAt(3);
+        ComposerPluginHost?.Populate(menu, vm);
+    }
+
     private void ComposerChanged(object? sender, PropertyChangedEventArgs e) => RefreshComposerTools();
     private void TimelineChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e) => RefreshRuler();
     private void RefreshComposerTools()
@@ -197,8 +320,15 @@ public partial class ChatPage
         {
             _executionMode.SelectedIndex = Array.IndexOf(_modes, vm.Input.ExecutionMode);
             _executionMode.IsEnabled = vm.Input.CanChangeExecutionMode;
-            // 后端不支持执行模式（例如 FUMO 原生内核）时整个控件隐藏，不留一个点不动的死下拉。
-            _executionMode.IsVisible = vm.Input.ShowsExecutionMode;
+            // 后端不支持执行模式（例如 FUMO 原生内核）时隐藏入口，不留死按钮。
+            if (_executionModeButton is not null)
+            {
+                _executionModeButton.IsEnabled = vm.Input.CanChangeExecutionMode;
+                _executionModeButton.IsVisible = vm.Input.ShowsExecutionMode;
+            }
+            ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
+            if (_executionModeMenu is not null) BuildExecutionModeMenu(_executionModeMenu);
+            if (ThinkingButton.Flyout is MenuFlyout thinkingMenu) BuildThinkingMenu(thinkingMenu, vm);
         }
         finally { _updatingComposer = false; }
         DraftPreview.IsVisible = _previewDraft;

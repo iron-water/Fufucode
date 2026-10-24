@@ -8,6 +8,8 @@ using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.Core;
+using Fufucode.Core.Plugins;
+using Fufucode.App.Views;
 
 namespace Fufucode.App;
 
@@ -15,6 +17,9 @@ public partial class MainWindow
 {
     /// <summary>由插件页自动注册的动作：pageId → actionId。纯代码贡献的页面也能进入统一动作面。</summary>
     private readonly Dictionary<string, string> _pluginPageActions = new(StringComparer.Ordinal);
+
+    internal PluginPackageManager? PluginManager => _pluginPageHost?.Manager;
+    internal ChatPage ChatPageForPlugins => _chatPage;
     /// <summary>
     /// 在共享外壳就绪后挂接可选插件页面。终端等页面不再由 App 静态创建：
     /// 插件未安装/未启用时页面不存在，动作会给出真实原因。
@@ -24,12 +29,27 @@ public partial class MainWindow
         var root = Program.SelfTestMode
             ? Program.SelfTestDataRoot ?? System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-selftest-appdata")
             : _options.CreateAppDataLayout().Root;
-        if (Program.SelfTestMode) SelfTest.SelfTestTerminalPlugin.EnsureInstalled(root);
+        if (Program.SelfTestMode)
+        {
+            SelfTest.SelfTestTerminalPlugin.EnsureInstalled(root);
+            SelfTest.SelfTestOptionalPlugins.EnsureInstalled(root);
+        }
 
         // 默认随包插件先把载荷同步到数据根，页面宿主的激活扫描才能找到它。
         PluginBootstrapper.EnsureBundled(new AppDataLayout(root));
         _pluginPageHost = new PluginWorkspacePageHost(root, _workbenchPages,
             () => _options.Mode == AppSessionMode.Mock);
+        _chatPage.ComposerPluginHost = new Features.Plugins.PluginComposerHost(this);
+        _pluginPageHost.ComposerContributionsChanged += _chatPage.RefreshComposerPluginMenu;
+        // 浏览器页面由 workspace.browser 插件贡献；宿主只向插件暴露受控的页面工厂。
+        var priorResolver = _pluginPageHost.Manager.ServiceResolver;
+        _pluginPageHost.Manager.ServiceResolver = type =>
+            type == typeof(IBrowserPageFactory) || type == typeof(ILibraryPageFactory) ||
+            type == typeof(ILocalReviewPageFactory)
+                ? this
+                : type == typeof(Fufucode.Core.Plugins.IComputerUseCursorRegistry)
+                    ? _computerCursors
+                    : priorResolver?.Invoke(type);
         _pluginPageHost.PagesChanged += OnPluginPagesChanged;
         // 性能监控插件页需要宿主服务（页面工厂、设置注册），必须在 InitializeInstalledPlugins 之前接好。
         InitializePerformance(root);
@@ -41,6 +61,10 @@ public partial class MainWindow
             _pluginPageHost.Manager.RequestPageResync();
         }
         _pluginPageHost.Start(_layoutContext);
+        // 语音服务没有页面贡献，页面事件不会通知宿主；改用全局插件状态广播，
+        // 安装/启用/停用/卸载后立即刷新朗读按钮、菜单与设置面板。
+        PluginStateNotifier.Changed += OnPluginStateChanged;
+        SyncSpeechService();
         SyncTerminalPageReference();
         SyncPerformanceSettings();
         PruneDockLayout();
@@ -78,9 +102,19 @@ public partial class MainWindow
             _actions.Register(new AppActionDefinition(actionId, "打开" + title, "工作台", "",
                 "打开插件贡献的工作区页面",
                 () => { OpenDockPage(page.PageId, DockZone.Right); return Task.CompletedTask; },
-                () => _workbenchPages.ContainsKey(page.PageId) ? null : "插件页面当前不可用。"));
+                () => _workbenchPages.ContainsKey(page.PageId) ? null : "插件页面当前不可用。",
+                HideWhenUnavailable: true));
             _pluginPageActions[page.PageId] = actionId;
         }
+    }
+
+    /// <summary>插件状态广播可能来自非 UI 线程（设置页安装、命令行部署），投影前统一切回 UI 线程。</summary>
+    private void OnPluginStateChanged()
+    {
+        if (_closed) return;
+        // 插件的激活/停用由管理器在同一广播里同步执行；排队到下一拍再投影，
+        // 保证读到的是本次变更后的真实服务，而不是变更前的快照。
+        Dispatcher.UIThread.Post(() => { if (!_closed) SyncSpeechService(); });
     }
 
     private void OnPluginPagesChanged()
@@ -92,6 +126,7 @@ public partial class MainWindow
         RenderDockPages();
         SyncPluginPageActions();
         _actions.RefreshCapabilities();
+        _chatPage.RefreshComposerPluginMenu();
         _customization.SetActions(_actions.Actions);
         _customization.NotifyPagesChanged();
         _perfWiring?.OnPluginsSynced();
@@ -101,6 +136,7 @@ public partial class MainWindow
     private void SyncTerminalPageReference()
     {
         var next = _pluginPageHost?.TryGet("terminal", out var page) == true ? page : null;
+        var gained = _terminalPage is null && next is not null;
         if (!ReferenceEquals(next, _terminalPage))
         {
             if (_terminalPage is not null) _terminalPage.StateChanged -= OnPluginPageStateChanged;
@@ -113,6 +149,9 @@ public partial class MainWindow
                     _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers);
             }
         }
+        // 默认不预置终端页签；插件安装/启用后才把它放进底部停靠区。
+        // 只在“从无到有”时打开一次，用户之后手动关闭不再强行弹回。
+        if (gained && _dockLayout.Find("terminal") is null) OpenDockPage("terminal", DockZone.Bottom);
         else _terminalPage?.SetProject(_layoutContext, _options.Mode == AppSessionMode.Mock);
         if (_shortcuts is not null) UpdateShortcutLabels();
         _actions.RefreshCapabilities();

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
@@ -355,6 +356,149 @@ internal static class PureCSharpContractTests
             checks.Check(!noContentRes.Success, "缺少 content 的 write_file 被拒绝");
             checks.Equal("keep-me", await File.ReadAllTextAsync(editTarget), "缺少 content 时原文件未被清空");
 
+            // ════════════════ 写盘前守卫：非法 JSON 不得落盘 ════════════════
+            await File.WriteAllTextAsync(Path.Combine(tempDir, "good.json"), "{\"a\":1}");
+            var badJsonWrite = await dispatcher.DispatchAsync(new PureToolCall("j1", "write_file",
+                "{\"path\":\"good.json\",\"content\":\"{\\\"a\\\": 1,\"}"));
+            checks.Check(!badJsonWrite.Success && badJsonWrite.Content.Contains("不是合法 JSON"),
+                "非法 JSON 被写盘前守卫拒绝");
+            checks.Equal("{\"a\":1}", await File.ReadAllTextAsync(Path.Combine(tempDir, "good.json")),
+                "被拒绝的写入没有破坏原文件");
+
+            var jsoncWrite = await dispatcher.DispatchAsync(new PureToolCall("j2", "write_file",
+                "{\"path\":\"ok.json\",\"content\":\"{\\n  // 注释\\n  \\\"a\\\": 1,\\n}\"}"));
+            checks.Check(jsoncWrite.Success, "允许注释与尾随逗号的 JSONC 不被误伤");
+
+            var badJsonEdit = await dispatcher.DispatchAsync(new PureToolCall("j3", "edit_file",
+                "{\"path\":\"good.json\",\"old_string\":\"1\",\"new_string\":\"}\"}"));
+            checks.Check(!badJsonEdit.Success && badJsonEdit.Content.Contains("不是合法 JSON"),
+                "edit_file 同样受写盘前守卫保护");
+
+            // 整文件读取必须按行边界截断并给出续读指引，而不是整篇塞入后被循环层从中间切断。
+            var longFile = Path.Combine(tempDir, "Long.cs");
+            var longLines = string.Join('\n', Enumerable.Range(1, 12000)
+                .Select(i => $"// line {i} padding padding padding"));
+            await File.WriteAllTextAsync(longFile, longLines);
+            // 工具层的整读上限必须低于循环层的 64KiB 结果预算，否则行边界会被二次截断。
+            checks.Check(new FileInfo(longFile).Length > 64 * 1024, "测试文件同时超过整读上限与循环层预算");
+
+            var longRead = await dispatcher.DispatchAsync(new PureToolCall("r_long", "read_file",
+                "{\"path\":\"Long.cs\"}"));
+            checks.Check(longRead.Success && longRead.Content.Contains("使用 offset:") &&
+                         longRead.Content.Contains("// line 1 ") &&
+                         !longRead.Content.Contains("// line 12000"),
+                "超长文件整读按行截断并给出 offset 续读指引");
+
+            // 行边界与续读提示必须完整穿过循环层的 64KiB 预算。
+            var loopPruned = NativeAgentLoop.PruneForTest(longRead.Content);
+            checks.Check(loopPruned.Contains("使用 offset:"),
+                "续读提示不被循环层 64KiB 二次截断");
+
+            // 单行超过整读上限：不能返回“前 0 行 + offset 1”造成无限重试；
+            // 分页读取时单行也必须截断并标注，保证游标前进且不撑爆上下文。
+            var giantLineFile = Path.Combine(tempDir, "GiantLine.txt");
+            await File.WriteAllTextAsync(giantLineFile, new string('x', 60_000));
+            var giantRead = await dispatcher.DispatchAsync(new PureToolCall("r_giant", "read_file",
+                "{\"path\":\"GiantLine.txt\"}"));
+            checks.Check(!giantRead.Success && giantRead.Content.Contains("offset/limit"),
+                "单行超过整读上限时明确要求分页，而不是返回空页");
+            var giantPaged = await dispatcher.DispatchAsync(new PureToolCall("r_giant_page", "read_file",
+                "{\"path\":\"GiantLine.txt\",\"offset\":1,\"limit\":1}"));
+            checks.Check(giantPaged.Success && giantPaged.Content.Contains("已截断") &&
+                         giantPaged.Content.Length < 10_000,
+                "分页读取超长单行时截断并标注，游标仍可前进");
+
+            var offsetHint = System.Text.RegularExpressions.Regex.Match(longRead.Content, @"使用 offset: (\d+)");
+            checks.Check(offsetHint.Success, "截断提示包含具体的下一段 offset");
+
+            // ════════════════ 行选区（OMP 风格）与批量编辑（Pi 风格） ════════════════
+            var selectFile = Path.Combine(tempDir, "Select.txt");
+            await File.WriteAllTextAsync(selectFile,
+                string.Join('\n', Enumerable.Range(1, 50).Select(i => $"line{i}")));
+            var selected = await dispatcher.DispatchAsync(new PureToolCall("sel1", "read_file",
+                "{\"path\":\"Select.txt:10-12\"}"));
+            checks.Check(selected.Success && selected.Content.Contains("10\tline10") &&
+                         selected.Content.Contains("12\tline12") && !selected.Content.Contains("13\tline13"),
+                "read_file 支持 A-B 行选区且不越界");
+            var lastLines = await dispatcher.DispatchAsync(new PureToolCall("sel2", "read_file",
+                "{\"path\":\"Select.txt:-5\"}"));
+            checks.Check(lastLines.Success && lastLines.Content.Contains("46\tline46") &&
+                         lastLines.Content.Contains("50\tline50"), "read_file 支持 -N 读取末尾");
+            var withContext = await dispatcher.DispatchAsync(new PureToolCall("sel3", "read_file",
+                "{\"path\":\"Select.txt:3+2\"}"));
+            checks.Check(withContext.Success && withContext.Content.Contains("3\tline3") &&
+                         withContext.Content.Contains("5\tline5") && !withContext.Content.Contains("6\tline6"),
+                "read_file 支持 A+C 选区");
+            var ambiguous = await dispatcher.DispatchAsync(new PureToolCall("sel4", "read_file",
+                "{\"path\":\"Select.txt:10-12\",\"offset\":1}"));
+            checks.Check(!ambiguous.Success && ambiguous.Content.Contains("不能与 offset/limit"),
+                "行选区与 offset/limit 同时出现时明确拒绝");
+
+            var batchFile = Path.Combine(tempDir, "Batch.cs");
+            await File.WriteAllTextAsync(batchFile, "alpha\nbeta\ngamma\n");
+            var batchEdit = await dispatcher.DispatchAsync(new PureToolCall("be1", "edit_file",
+                "{\"path\":\"Batch.cs\",\"edits\":[" +
+                "{\"old_string\":\"alpha\",\"new_string\":\"ALPHA\"}," +
+                "{\"old_string\":\"gamma\",\"new_string\":\"GAMMA\"}]}"));
+            var batchText = await File.ReadAllTextAsync(batchFile);
+            checks.Check(batchEdit.Success && batchText.Contains("ALPHA") && batchText.Contains("GAMMA"),
+                "edits 数组一次提交多条编辑");
+
+            await File.WriteAllTextAsync(batchFile, "alpha\nbeta\ngamma\n");
+            var overlap = await dispatcher.DispatchAsync(new PureToolCall("be2", "edit_file",
+                "{\"path\":\"Batch.cs\",\"edits\":[" +
+                "{\"old_string\":\"alpha\\nbeta\",\"new_string\":\"x\"}," +
+                "{\"old_string\":\"beta\",\"new_string\":\"y\"}]}"));
+            checks.Check(!overlap.Success && overlap.Content.Contains("重叠") &&
+                         (await File.ReadAllTextAsync(batchFile)).Contains("alpha\nbeta"),
+                "重叠编辑被拒绝且文件保持原样");
+
+            var atomic = await dispatcher.DispatchAsync(new PureToolCall("be3", "edit_file",
+                "{\"path\":\"Batch.cs\",\"edits\":[" +
+                "{\"old_string\":\"alpha\",\"new_string\":\"ALPHA\"}," +
+                "{\"old_string\":\"missing\",\"new_string\":\"x\"}]}"));
+            checks.Check(!atomic.Success && (await File.ReadAllTextAsync(batchFile)).StartsWith("alpha"),
+                "批量编辑任一条失败时整体不写盘");
+
+            var grepIndexFile = Path.Combine(tempDir, "IndexGrep.txt");
+            await File.WriteAllTextAsync(grepIndexFile, "needle one");
+            var firstGrep = await dispatcher.DispatchAsync(new PureToolCall("gi1", "grep_search",
+                "{\"pattern\":\"NEEDLE\",\"glob\":\"IndexGrep.txt\"}"));
+            checks.Check(firstGrep.Success && firstGrep.Content.Contains("needle one"),
+                "字面量检索大小写不敏感并命中索引文件");
+            await dispatcher.DispatchAsync(new PureToolCall("gi2", "write_file",
+                "{\"path\":\"IndexGrep.txt\",\"content\":\"needle two\"}"));
+            var secondGrep = await dispatcher.DispatchAsync(new PureToolCall("gi3", "grep_search",
+                "{\"pattern\":\"needle\",\"glob\":\"IndexGrep.txt\"}"));
+            checks.Check(secondGrep.Success && secondGrep.Content.Contains("needle two") &&
+                         !secondGrep.Content.Contains("needle one"),
+                "写文件后工作区索引失效，下一次 grep 看到新内容");
+            var nextOffset = int.Parse(offsetHint.Groups[1].Value);
+            var longContinue = await dispatcher.DispatchAsync(new PureToolCall("r_long2", "read_file",
+                $"{{\"path\":\"Long.cs\",\"offset\":{nextOffset},\"limit\":5000}}"));
+            checks.Check(longContinue.Success && longContinue.Content.Contains($"{nextOffset}\t// line {nextOffset} "),
+                "按截断提示的 offset 可以继续读到后续内容");
+            checks.Check(longContinue.Content.Contains($"{nextOffset + 4999}\t// line {nextOffset + 4999} "),
+                "续读窗口覆盖 offset 之后 5000 行，文件深处可继续分页读取");
+
+            // UTF-16 文本天然含 NUL 字节，不能被当成二进制拒绝——write_file/edit_file 都支持它。
+            var utf16Path = Path.Combine(tempDir, "utf16.txt");
+            await File.WriteAllTextAsync(utf16Path, "UTF16 内容", Encoding.Unicode);
+            var utf16Read = await dispatcher.DispatchAsync(new PureToolCall("u16", "read_file",
+                "{\"path\":\"utf16.txt\"}"));
+            checks.Check(utf16Read.Success && utf16Read.Content.Contains("UTF16 内容"),
+                "UTF-16 文本按 BOM 识别为文本，不被误判为二进制");
+
+            // grep 跳过大文件时必须显式告知，否则"未找到"会变成假阴性。
+            var bigDir = Path.Combine(tempDir, "bigscan");
+            Directory.CreateDirectory(bigDir);
+            await File.WriteAllTextAsync(Path.Combine(bigDir, "huge.log"),
+                new string('z', 6 * 1024 * 1024) + "NEEDLE_IN_HUGE");
+            var bigGrep = await dispatcher.DispatchAsync(new PureToolCall("bg1", "grep_search",
+                "{\"pattern\":\"NEEDLE_IN_HUGE\",\"path\":\"bigscan\"}"));
+            checks.Check(bigGrep.Success && bigGrep.Content.Contains("未参与检索"),
+                "跳过大文件时结果明确告知，避免被误读为不存在");
+
             var binPath = Path.Combine(tempDir, "blob.bin");
             await File.WriteAllBytesAsync(binPath, new byte[] { 0, 1, 2, 3, 65 });
             var binRes = await dispatcher.DispatchAsync(new PureToolCall("b1", "read_file", "{\"path\":\"blob.bin\"}"));
@@ -392,7 +536,11 @@ internal static class PureCSharpContractTests
                 "空闲时 Stop 后协调器回到 Idle，而不是停留在 Cancelling");
 
             // ════════════════ 超长上下文确定性压缩 ════════════════
-            var compactEngine = new PureCSharpAgentEngine(dispatcher, new FixedTextClient("压缩后答复"));
+            var compactEngine = new PureCSharpAgentEngine(dispatcher, new FixedTextClient("压缩后答复"))
+            {
+                // 压缩阈值来自模型真实窗口（这里注入 10k tokens），不再依赖写死的 400k 字符。
+                ContextLengthResolver = (_, _) => Task.FromResult<long?>(10_000),
+            };
             var largeHistory = new List<PureAgentMessage>
             {
                 new(PureAgentRole.System, "系统设定")
@@ -459,6 +607,28 @@ internal static class PureCSharpContractTests
             var gitignoreGlob = await dispatcher.DispatchAsync(new PureToolCall("gi2", "glob_files",
                 "{\"pattern\":\"**/*.cs\"}"));
             checks.Check(!gitignoreGlob.Content.Contains("ignored/Skip.cs"), "glob_files 遵循 .gitignore 排除目录");
+
+            // ════════════════ grep 分组 + 相关度排序 + 分页 ════════════════
+            var groupDir = Path.Combine(tempDir, "grouped");
+            Directory.CreateDirectory(groupDir);
+            // dense.cs 命中 4 处、sparse.cs 命中 1 处：按相关度 dense 应排在前面。
+            await File.WriteAllTextAsync(Path.Combine(groupDir, "dense.cs"),
+                "TARGET_MARK\nTARGET_MARK\nTARGET_MARK\nTARGET_MARK\n");
+            await File.WriteAllTextAsync(Path.Combine(groupDir, "sparse.cs"), "TARGET_MARK\n");
+
+            var grouped = await dispatcher.DispatchAsync(new PureToolCall("gg1", "grep_search",
+                "{\"pattern\":\"TARGET_MARK\",\"path\":\"grouped\"}"));
+            checks.Check(grouped.Success && grouped.Content.Contains("## grouped/dense.cs (4 处命中)"),
+                "grep 结果按文件分组并标注命中数");
+            checks.Check(grouped.Content.IndexOf("dense.cs", StringComparison.Ordinal) <
+                         grouped.Content.IndexOf("sparse.cs", StringComparison.Ordinal),
+                "命中更密集的文件排在前面（相关度排序）");
+
+            var pagedGrep = await dispatcher.DispatchAsync(new PureToolCall("gg2", "grep_search",
+                "{\"pattern\":\"TARGET_MARK\",\"path\":\"grouped\",\"offset\":1}"));
+            checks.Check(pagedGrep.Success && !pagedGrep.Content.Contains("dense.cs") &&
+                         pagedGrep.Content.Contains("sparse.cs"),
+                "offset 按文件分页，跳过已看过的文件");
 
             // ════════════════ 插件工具组合路由 ════════════════
             var plugin = new FakePluginDispatcher("browser_click", "clicked");
@@ -764,13 +934,66 @@ internal static class PureCSharpContractTests
                 "subagent 工具缺省 prompt 时列出可用子代理与模式");
             var subagentCall = await subagentDispatcher.DispatchAsync(new PureToolCall("sa2", "subagent",
                 "{\"agent\":\"explore\",\"prompt\":\"查找入口\"}"));
-            checks.Check(subagentCall.Success && subagentCall.Content.Contains("[子代理 explore · read]") &&
+            checks.Check(subagentCall.Success && subagentCall.Content.Contains("[子代理 explore · read") &&
                          subagentCall.Content.Contains("子代理完成"),
                 "subagent 工具调用返回带模式标记的结论");
 
             checks.Check(NativeSubagentContract.Definition.Name == "subagent" &&
                          NativeSubagentContract.Definition.ParametersJsonSchema.Contains("prompt"),
                 "Subagent 插件提供统一 subagent 工具契约");
+
+            // context 预取：父会话已确认的线索必须进入子代理任务，避免子代理从零发现。
+            var contextCapturing = new CapturingTextClient("线索完成");
+            var contextRunner = new SubagentRunner(
+                AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                contextCapturing, new RecordingDispatcher(), "m", tempDir);
+            var contextDispatcher = new SubagentDispatcher(new RecordingDispatcher(), contextRunner);
+            await contextDispatcher.DispatchAsync(new PureToolCall("sa_ctx", "subagent",
+                "{\"agent\":\"explore\",\"prompt\":\"定位入口\",\"context\":\"入口在 src/Program.cs:42\"}"));
+            checks.Check(contextCapturing.Requests[0].Messages[^1].Content.Contains("src/Program.cs:42"),
+                "subagent 的 context 参数被注入子代理任务说明");
+
+            // 单次运行内同一只读调用只应真正下沉到调度器一次。
+            var dedupRecording = new RecordingDispatcher();
+            var dedupRunner = new SubagentRunner(
+                AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                new RepeatingToolCallClient(
+                    new PureToolCall("dup1", "read_file", "{\"path\":\"sample.txt\"}"), rounds: 3, "去重完成"),
+                dedupRecording, "m", tempDir);
+            var dedupResult = await dedupRunner.RunAsync("explore", "重复读同一文件", null,
+                CancellationToken.None);
+            checks.Check(dedupResult.Success && dedupRecording.Calls.Count == 1,
+                "子代理同一运行内重复的只读调用命中缓存，只真正执行一次");
+            checks.Check(dedupResult.ToolCalls >= 3,
+                "重复调用仍然计入子代理的工具调用次数（便于观察去重效果）");
+
+            // ════════════════ 轮次预算：临近上限时提示，最后一轮禁用工具 ════════════════
+            var budgetClient = new RecordingToolCallClient(
+                new PureToolCall("budget1", "read_file", "{\"path\":\"sample.txt\"}"));
+            var budgetDispatcher = new RecordingDispatcher();
+            var budgetLoop = new NativeAgentLoop(budgetClient, budgetDispatcher, maxIterations: 4);
+            var budgetHistory = new List<PureAgentMessage>
+            {
+                new(PureAgentRole.User, "一直读文件直到被切断"),
+            };
+            var budgetResult = await budgetLoop.ExecuteLoopAsync(budgetHistory, new[] { "read_file" }, "m");
+
+            checks.Check(!budgetHistory.Any(m => m.Content.Contains("[预算提示]")),
+                "显式轮次预算不向模型注入伪造的用户预算提示");
+            checks.Check(!budgetClient.LastRequestHadNoTools,
+                "显式预算的最后一轮仍保留工具，不能人为禁止模型完成任务");
+            checks.Check(budgetHistory[^1].Role == PureAgentRole.Assistant &&
+                         budgetHistory[^1].Content.Contains("外部任务轮次预算已耗尽"),
+                "显式预算耗尽时给出可解释的预算终态");
+            checks.Check(budgetDispatcher.Calls.Count == 4,
+                "显式预算允许预算内的每一轮工具调用");
+            checks.Check(budgetResult.Truncated,
+                "显式预算耗尽标记为 Truncated，调用方不会把半成品当完整结论");
+            checks.Equal(budgetHistory[0].Content, "一直读文件直到被切断",
+                "预算提示不挤占用户原始请求的位置");
+            checks.Check(NativeSubagentContract.Definition.ParametersJsonSchema.Contains("context") &&
+                         NativeSubagentContract.Definition.ParametersJsonSchema.Contains("action"),
+                "subagent 契约声明 context 与 action，父/子两层参数一致");
 
             // ════════════════ 权限模式穿透调度链 ════════════════
             await using (var chainMcp = McpManager.Create(Array.Empty<McpServerConfig>(), mcpHome))
@@ -831,11 +1054,31 @@ internal static class PureCSharpContractTests
             {
                 Progress = nestedProgress.Add
             };
-            nestedRunner.SetTier(SubagentTier.Stronger);
             var nestedResult = await nestedRunner.RunAsync("lead", "开始", null, CancellationToken.None);
             checks.Check(nestedResult.Success &&
                          nestedProgress.Count(p => p.Kind == "started") >= 2,
                 "read 子代理在 maxDepth 内可继续派生只读子代理");
+            // 嵌套不再是档位自动能力：只有代理定义显式声明 subagent 才开放。
+            // 内置 explore 默认不声明，保证默认子代理轻量、不会意外递归派发。
+            var builtinNestedCapturing = new CapturingTextClient("内置完成");
+            var builtinNestedRunner = new SubagentRunner(
+                AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                builtinNestedCapturing, new RecordingDispatcher(), "m", tempDir, depth: 0, maxDepth: 1);
+            await builtinNestedRunner.RunAsync("explore", "检查入口", null, CancellationToken.None);
+            checks.Check(!builtinNestedCapturing.Requests[0].ToolNames.Contains("subagent"),
+                "默认 explore 不声明嵌套 subagent，保持轻量");
+
+            // 轮次耗尽必须如实标注，不能把半成品当完整交付。
+            var truncatedCall = new PureToolCall("trunc1", "read_file", "{\"path\":\"sample.txt\"}");
+            var truncatedAgentDir = Path.Combine(tempDir, ".fumo", "agents");
+            await File.WriteAllTextAsync(Path.Combine(truncatedAgentDir, "tiny.md"),
+                "---\nname: tiny\ndescription: 单轮\ntools: read_file\nmaxTurns: 1\n---\n只读。");
+            var tinyRunner = new SubagentRunner(
+                AgentRegistry.Discover(tempDir, Path.Combine(tempDir, "agent-home")),
+                new FixedToolCallClient(truncatedCall, "结论"), new RecordingDispatcher(), "m", tempDir);
+            var tinyResult = await tinyRunner.RunAsync("tiny", "读取", null, CancellationToken.None);
+            checks.Check(tinyResult.Truncated || tinyResult.Content.Contains("最大轮次"),
+                "达到轮次上限的子代理结果被标注为可能不完整");
 
             var capabilityAgentDir = Path.Combine(tempDir, ".fumo", "agents");
             await File.WriteAllTextAsync(Path.Combine(capabilityAgentDir, "plugin-user.md"),
@@ -974,6 +1217,112 @@ internal static class PureCSharpContractTests
                 "思考等级随历史持久化");
             checks.Equal("auto", persistedRoot.GetProperty("executionMode").GetString(),
                 "执行模式随历史持久化");
+
+            // ════════════════ Plan 模式工具裁剪：不向模型声明必然被拒绝的工具 ════════════════
+            var planCapturing = new CapturingTextClient("计划中");
+            var planSession = new NativeCSharpChatSession(
+                new PureCSharpAgentEngine(dispatcher, planCapturing), "plan-tools", "m");
+            var planSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            planSession.Event += (_, e) => { if (e is SessionEvent.TurnSettled) planSettled.TrySetResult(); };
+            await planSession.SetExecutionModeAsync("plan");
+            await planSession.SendAsync("先规划，不要改动");
+            await planSettled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+            var planRequest = planCapturing.Requests[^1];
+            checks.Check(!planRequest.ToolNames.Contains("write_file") &&
+                         !planRequest.ToolNames.Contains("edit_file") &&
+                         !planRequest.ToolNames.Contains("run_command"),
+                "Plan 模式不声明写文件与命令工具");
+            checks.Check(planRequest.ToolNames.Contains("read_file") &&
+                         planRequest.ToolNames.Contains("grep_search") &&
+                         planRequest.ToolNames.Contains("update_plan"),
+                "Plan 模式仍声明只读工具与 update_plan");
+            checks.Check(planRequest.ToolDefinitions?.Any(d => d.Name == "write_file") != true,
+                "Plan 模式的工具 Schema 与工具名同步裁剪");
+            await planSession.DisposeAsync();
+
+            // ════════════════ 工具 Schema 解析复用与非法 Schema 诊断 ════════════════
+            var schemaOne = OpenAiCompatibleModelClient.ParseToolSchema("t1",
+                "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}");
+            var schemaTwo = OpenAiCompatibleModelClient.ParseToolSchema("t1",
+                "{\"type\":\"object\",\"properties\":{\"a\":{\"type\":\"string\"}}}");
+            checks.Equal(schemaOne.GetRawText(), schemaTwo.GetRawText(),
+                "同一 Schema 文本重复解析结果一致（可安全复用）");
+            checks.Check(schemaOne.GetProperty("properties").TryGetProperty("a", out _),
+                "解析后的 Schema 保留参数结构而不是被抹平");
+            var invalidSchema = OpenAiCompatibleModelClient.ParseToolSchema("broken", "{not json");
+            checks.Check(invalidSchema.ValueKind == JsonValueKind.Object &&
+                         invalidSchema.GetProperty("type").GetString() == "object",
+                "非法 Schema 退化为宽松对象，插件工具仍可调度");
+
+            // ════════════════ 压缩：保留原始任务陈述、最近窗口与文件线索 ════════════════
+            var compactCapturing = new CapturingTextClient("## 1. 用户目标与硬约束\n实现图引擎");
+            var planDispatcher = new ProductionToolDispatcher(tempDir);
+            await planDispatcher.DispatchAsync(new PureToolCall("plan_keep", "update_plan",
+                "{\"steps\":[{\"title\":\"实现图引擎\",\"status\":\"in_progress\"},{\"title\":\"运行测试\",\"status\":\"pending\"}]}"));
+            var compactEngine2 = new PureCSharpAgentEngine(planDispatcher, compactCapturing)
+            {
+                ContextLengthResolver = (_, _) => Task.FromResult<long?>(10_000),
+            };
+            var pinnedTask = new PureAgentMessage(PureAgentRole.User,
+                "请在 src/graph 下实现图引擎，必须使用 Dart，禁止引入第三方依赖，并运行全部测试。");
+            var history2 = new List<PureAgentMessage> { new(PureAgentRole.System, "系统设定"), pinnedTask };
+            for (var i = 0; i < 40; i++)
+            {
+                history2.Add(new PureAgentMessage(PureAgentRole.Assistant,
+                    $"读取 src/graph/node_{i}.dart 并确认接口。",
+                    ToolCalls: new[]
+                    {
+                        new PureToolCall($"call_{i}", "read_file", $"{{\"path\":\"src/graph/node_{i}.dart\"}}")
+                    }));
+                history2.Add(new PureAgentMessage(PureAgentRole.Tool, new string('x', 12_000),
+                    ToolCallId: $"call_{i}"));
+            }
+            history2.Add(new PureAgentMessage(PureAgentRole.Assistant, "最近一条助手消息"));
+            compactEngine2.RestoreHistory(history2);
+            await compactEngine2.RunTurnAsync(new PureModelRequest(
+                new[] { new PureAgentMessage(PureAgentRole.User, "继续") }, Array.Empty<string>()));
+
+            var compacted2 = compactEngine2.GetState().History!;
+            checks.Equal(PureAgentRole.System, compacted2[0].Role, "压缩后 System 仍在首位");
+            checks.Check(compacted2.Any(m => ReferenceEquals(m, pinnedTask) || m.Content == pinnedTask.Content),
+                "压缩逐字保留原始任务陈述（用户硬约束不交给摘要改写）");
+            checks.Check(compacted2.Any(m => m.Content.Contains("上下文摘要")),
+                "压缩插入结构化摘要");
+            checks.Check(compacted2.Any(m => m.Content == "最近一条助手消息"),
+                "压缩保留最近消息");
+            checks.Check(compacted2.Any(m => m.Content.Contains("压缩时保留的计划快照") &&
+                                             m.Content.Contains("实现图引擎")),
+                "压缩原样保留结构化计划，模型不会忘记剩余步骤");
+            var summarizeRequest = compactCapturing.Requests[0];
+            checks.Check(summarizeRequest.Messages[0].Content.Contains("## 5. 验证状态") &&
+                         summarizeRequest.Messages[0].Content.Contains("## 7. 关键事实"),
+                "压缩摘要提示要求验证状态与关键事实");
+            checks.Check(summarizeRequest.Messages[^1].Content.Contains("涉及文件") &&
+                         summarizeRequest.Messages[^1].Content.Contains("node_"),
+                "压缩转录附带从工具调用提取的文件线索");
+
+            // 状态台账是确定性事实，不依赖摘要模型，必须作为独立消息保留。
+            checks.Check(compacted2.Any(m => m.Content.Contains("[压缩时保留的状态台账]") &&
+                                             m.Content.Contains("node_")),
+                "压缩生成确定性状态台账（已改文件不依赖摘要模型）");
+
+            // ════════════════ 多轮压缩：原始约束在连续两次压缩后仍可召回 ════════════════
+            var round2Capturing = new CapturingTextClient("## 1. 用户目标与硬约束\n继续实现");
+            var multiCompact = new PureCSharpAgentEngine(dispatcher, round2Capturing);
+            multiCompact.RestoreHistory(compacted2.ToList());
+            for (var i = 0; i < 40; i++)
+            {
+                await multiCompact.RunTurnAsync(new PureModelRequest(
+                    new[] { new PureAgentMessage(PureAgentRole.User, new string('y', 20_000) + i) },
+                    Array.Empty<string>()));
+            }
+
+            var twiceCompacted = multiCompact.GetState().History!;
+            checks.Check(twiceCompacted.Count(m => m.Role == PureAgentRole.System) == 1,
+                "连续多轮压缩后 System 仍只有一条");
+            checks.Check(twiceCompacted.Any(m => m.Content.Contains("禁止引入第三方依赖")),
+                "连续多轮压缩后原始任务硬约束仍逐字保留（约束不随摘要衰减）");
         }
         finally
         {

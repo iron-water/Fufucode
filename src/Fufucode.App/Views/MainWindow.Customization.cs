@@ -130,6 +130,10 @@ public partial class MainWindow
             Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.dock-render", "dock pages rendered from saved layout");
         }
         RequestedThemeVariant = SettingsPageViewModel.ThemeVariantFor(settings.Theme);
+        // Popup（ToolTip/Flyout）是独立顶层，不继承窗口主题；同步到应用级，
+        // 否则深色窗口里的系统提示会按浅色主题渲染成白底黑字。
+        if (Avalonia.Application.Current is { } application)
+            application.RequestedThemeVariant = RequestedThemeVariant;
         // Surface 旧轴下线后：皮肤自己管理材质；Fluent 保留 Mica 基线；
         // LiquidGlass 请求 AcrylicBlur/Blur 让窗后桌面透出（玻璃面折射窗内内容，两者互补）；
         // 其余皮肤不再受 Surface 影响。
@@ -221,6 +225,8 @@ public partial class MainWindow
         {
             var placement = settings.Actions.GetValueOrDefault(action.Id, WorkbenchActionDefaults.Placement(action.Id));
             if (placement.Position == UiActionPosition.Hidden) continue;
+            // 依赖插件/模块的动作：当前不可用时直接不渲染，避免菜单里堆一排灰条目。
+            if (action.HideWhenUnavailable && _actions.GetDisabledReason(action.Id) is not null) continue;
             // 会话岛专用位置：磁贴由 BuildSessionIsland 统一渲染，不进顶栏/菜单。
             // 非 Fluent 皮肤下岛不存在，这些动作折回左侧功能菜单，保证可达。
             var islandSlot = UseSessionIsland(settings);
@@ -416,12 +422,9 @@ public partial class MainWindow
             ? new("未启用", "交互终端由 workspace.terminal 插件提供；安装并启用后可在底部停靠区使用。", "marketplace", null, "前往插件市场")
             : new("已启用", "终端插件已就绪，可在底部停靠区打开项目终端。", null, "terminal", "打开终端"),
         "files" => new("内建", "文件与变更页由工作台内建提供，可在右栏打开并预览。", null, "files", "打开文件与变更"),
-        "automation" => !_workbenchPages.ContainsKey("automation")
-            ? new("已停用", "自动开发模块已在工作台模块中停用；启用后可使用。", "modules", null, "打开工作台模块")
-            : _automationPageHost?.Controller is null
-                ? new("仅页壳", "自动开发页已保留，但插件内容未加载；请在插件市场安装并启用 automation.auto-dev。", "marketplace", null, "前往插件市场")
-                : new("已启用", "自动开发工作台已就绪。", null, "page.automation", "打开自动开发"),
-        "usage" => new("内建", "用量详情在右栏页面展示当前会话、本轮与全部记录口径。", null, "usage", "打开用量"),
+        "automation" => _pluginPageHost?.TryGet("automation", out _) == true
+            ? new("已启用", "自动开发工作台已就绪。", null, "page.automation", "打开自动开发")
+            : new("未安装", "自动开发由 automation.auto-dev 插件提供；安装并启用后才出现。", "marketplace", null, "前往插件市场"),
         _ => new("未知", "宿主尚未提供该功能的运行状态。"),
     };
 

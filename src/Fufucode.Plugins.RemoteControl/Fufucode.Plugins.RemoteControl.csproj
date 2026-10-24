@@ -7,5 +7,6 @@
   <ItemGroup>
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
     <ProjectReference Include="../Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" />
+    <Content Include="../../extensions/browser-extension-mv3/workbench/**" Link="extensions/browser-extension-mv3/workbench/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

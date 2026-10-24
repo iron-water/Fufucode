@@ -23,7 +23,8 @@ using Avalonia.VisualTree;
 
 namespace Fufucode.App;
 
-public partial class MainWindow : Window
+public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
+    Features.Plugins.ILibraryPageFactory, Features.Plugins.ILocalReviewPageFactory
 {
     // M3.1：启动时可由最近项目解析或“选择项目”态补全；运行中切换项目整体替换。
     private AppOptions _options;
@@ -99,6 +100,8 @@ public partial class MainWindow : Window
         InitializeWorkspaceShell();
         Core.Diagnostics.StartupProbe.Mark("window.workspace-shell", "dock/workbench pages registered");
         InitializeCaption();
+        InitializeRowHover();
+        InitializeWindowTips();
         InitializeGlobalWorkspace();
         Core.Diagnostics.StartupProbe.Mark("window.global", "caption and global workspace ready");
         InitializeCustomization();
@@ -198,6 +201,13 @@ public partial class MainWindow : Window
         _vm = vm;
         // 发送交互：乐观气泡与等待提示只依赖 UI 事件，所有后端表现一致。
         vm.Input.SubmissionStarted += vm.Timeline.BeginSubmission;
+        // 第一条用户消息发出时才把会话标记为已成立，列表随即出现该会话。
+        vm.Input.SubmissionStarted += _ =>
+        {
+            if (_host is null) return;
+            SessionPresence.MarkEstablished(_host.Manager.Metadata, _host.Current.Session.Id);
+            Dispatcher.UIThread.Post(() => { RefreshSessionList(); RenderOverview(); });
+        };
         vm.Input.SubmissionFailed += vm.Timeline.FailSubmission;
         vm.NavigateRequested = NavigateWorkspaceAsync;
         vm.Timeline.ScrollToEndRequested += OnScrollToEndRequested;
@@ -373,6 +383,7 @@ public partial class MainWindow : Window
     private async void OnLoaded(object? sender, RoutedEventArgs e)
     {
         ApplyMicaOverrides();
+        AttachComputerCursorOverlay();
         if (_options.Mode == AppSessionMode.Real)
         {
             // M3.1：无显式 --project 时回退到最近一个仍存在的项目；全部缺失则进入“选择项目”态。
@@ -436,7 +447,7 @@ public partial class MainWindow : Window
             }
 
             _host = host;
-            _dialogHost = new ExtensionUiDialogHost(this);
+            _dialogHost = CreateDialogHost(host.ProjectPath);
             AttachRealSession();
             ProjectPreferences.RecordOpened(host.Manager.Metadata, host.ProjectPath);
             HideStartupOverlay();
@@ -444,6 +455,12 @@ public partial class MainWindow : Window
             ScrollToEnd();
             Core.Diagnostics.StartupProbe.Mark("session.ready", "startup overlay hidden, timeline scrolled");
             Program.Startup?.FinishAfterRender();
+            // 由系统通知按钮启动的实例：会话就绪后应答那条审批（找不到对应请求就什么也不做）。
+            if (Program.StartupActivationPayload is { } startPayload)
+            {
+                Program.StartupActivationPayload = null;
+                _ = HandleApprovalPayloadAsync(startPayload);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -578,7 +595,7 @@ public partial class MainWindow : Window
             _options = newOptions;
             await CloseSideChatAsync();
             _host = next;
-            _dialogHost = new ExtensionUiDialogHost(this);
+            _dialogHost = CreateDialogHost(next.ProjectPath);
             await previous.DisposeAsync();
             AttachRealSession();
             ProjectPreferences.RecordOpened(_host.Manager.Metadata, _host.ProjectPath);
@@ -720,6 +737,11 @@ public partial class MainWindow : Window
         remoteService?.ConfigureSessionDirectory(BuildRemoteSessionCatalog, SwitchSessionFromRemoteAsync);
         remoteService?.Attach(host.Chat, host.ProjectPath);
         remoteService?.LoadHistory(host.CurrentTranscript());
+        var fufuBridge = Fufucode.Core.Plugins.PluginPackageManager.ActiveFufuBridge;
+        fufuBridge?.ConfigureSessionDirectory(BuildRemoteSessionCatalog, SwitchSessionFromRemoteAsync,
+            SubmitTaskFromBridgeAsync);
+        fufuBridge?.Attach(host.Chat, host.ProjectPath);
+        fufuBridge?.LoadHistory(host.CurrentTranscript());
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {
             // 换会话/重建：先解除旧接线，避免旧时间线与输入框继续接收扩展事件。
@@ -993,7 +1015,9 @@ public partial class MainWindow : Window
         var currentId = host.Current.Session.Id;
         var currentModel = host.Chat.CurrentModel;
         var archivedProjects = ProjectArchive.LoadSet(host.Manager.Metadata);
-        return host.Sessions.Where(record => record.Id == currentId ||
+        // 还没发过第一条消息的空会话不进入列表（包括当前会话）：会话在第一次发送时才“成立”。
+        return host.Sessions.Where(record => SessionPresence.IsEstablished(host.Manager.Metadata, record))
+            .Where(record => record.Id == currentId ||
                 !SessionArchive.IsArchived(host.Manager.Metadata, record, archivedProjects))
             .OrderByDescending(record => SessionPresentation.Load(host.Manager.Metadata, record.Id).Pinned).Select(record =>
         {
@@ -1128,6 +1152,52 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>FUFU 受控提交：目标会话若不是当前会话先切换，再把文本交给会话输入管线。</summary>
+    private async Task<RemoteCommandResult> SubmitTaskFromBridgeAsync(
+        string sessionId, string text, CancellationToken cancellationToken)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+            return await Dispatcher.UIThread.InvokeAsync(
+                () => SubmitTaskFromBridgeAsync(sessionId, text, cancellationToken));
+        if (_closed || _host is null)
+            return new(false, "电脑端不可用。");
+        if (string.IsNullOrWhiteSpace(text))
+            return new(false, "提交内容为空。");
+        try
+        {
+            if (_host.Current.Session.Id != sessionId)
+            {
+                var switched = await SwitchSessionFromRemoteCoreAsync(sessionId, cancellationToken);
+                if (!switched.Accepted) return switched;
+            }
+            if (_host is null) return new(false, "会话未就绪。");
+            await _host.Chat.SendAsync(text, cancellationToken);
+            return new(true, "已提交。");
+        }
+        catch (Exception error)
+        {
+            return new(false, "提交失败：" + error.GetBaseException().Message);
+        }
+    }
+
+    /// <summary>
+    /// 当前项目里可复用的空会话：同一后端、既没有名字也没有用户消息、未归档，
+    /// 并且不是当前会话。找不到时返回 null，由调用方新建。
+    /// </summary>
+    private SessionRecord? FindReusableEmptySession(BackendId backend)
+    {
+        if (_host is null) return null;
+        var metadata = _host.Manager.Metadata;
+        var archivedProjects = ProjectArchive.LoadSet(metadata);
+        return _host.Sessions.FirstOrDefault(record =>
+            record.Id != _host.Current.Session.Id &&
+            record.Backend == backend &&
+            string.IsNullOrWhiteSpace(record.Name) &&
+            !SessionPresentation.Load(metadata, record.Id).HasUserMessage &&
+            !SessionArchive.IsArchived(metadata, record, archivedProjects) &&
+            !SessionPresence.HasUserMessage(metadata, record));
+    }
+
     /// <summary>切换（或新建）会话：先落当前草稿，换会话后整体重建视图模型。</summary>
     private async Task SwitchSessionAsync(string? sessionId, BackendId? requestedBackend = null)
     {
@@ -1168,7 +1238,12 @@ public partial class MainWindow : Window
                 {
                     if (sessionId is null)
                     {
-                        await _host!.NewSessionAsync(cancellationToken: _bootstrapCts.Token, backend: newBackend);
+                        // 已经有一个还没发消息的空会话时直接复用它，
+                        // 避免归档后每次“新建”都在项目里堆一条空会话。
+                        if (FindReusableEmptySession(newBackend) is { } empty)
+                            await _host!.SwitchToAsync(empty.Id, _bootstrapCts.Token);
+                        else
+                            await _host!.NewSessionAsync(cancellationToken: _bootstrapCts.Token, backend: newBackend);
                     }
                     else
                     {
@@ -1292,10 +1367,8 @@ public partial class MainWindow : Window
 
     private void ShowStartup(string message, bool inProgress)
     {
-        ReturnStartupPlugins();
         StartupText.Text = message;
         StartupProgress.IsVisible = inProgress;
-        StartupLocalPluginsButton.IsVisible = !inProgress;
         // 失败态（非进行中）显示 interrupted 空态插画；进行中保持原标识。
         StartupArt.IsVisible = !inProgress;
         // 进行中态不显示“打开其他项目…”；失败态由各自 catch 分支决定。
@@ -1510,6 +1583,7 @@ public partial class MainWindow : Window
         var archivedProjects = ProjectArchive.LoadSet(metadata);
         var sessions = metadata.ListProjects()
             .SelectMany(project => metadata.ListSessions(project.Id))
+            .Where(record => SessionPresence.IsEstablished(metadata, record))
             .Where(record => !SessionArchive.IsArchived(metadata, record, archivedProjects))
             .Select(record => (Record: record, Presentation: SessionPresentation.Load(metadata, record.Id)))
             .Where(pair => pinned ? pair.Presentation.Pinned : !pair.Presentation.Pinned)
@@ -1600,7 +1674,8 @@ public partial class MainWindow : Window
 
     /// <summary>只有用户主动关窗才隐藏；系统注销/关闭与显式退出仍走真实退出流程。</summary>
     private bool ShouldHideToTray(WindowCloseReason reason) =>
-        !_closed && !_exitRequested && reason == WindowCloseReason.WindowClosing &&
+        !_closed && !_exitRequested &&
+        reason is WindowCloseReason.WindowClosing or WindowCloseReason.Undefined &&
         CloseToTrayEnabled && TrayAvailable;
 
     private void HideToTray()
@@ -1665,7 +1740,8 @@ public partial class MainWindow : Window
         }
         _closed = true;
         Fufucode.Core.Plugins.PluginPackageManager.ActiveRemoteControlService?.Stop();
-        _speech.Dispose();
+        // 语音服务归插件所有：窗口只解除状态广播订阅，进程由插件管理器在停用时释放。
+        Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
         // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
         await ShutdownReverseLabAsync();
         await CloseSideChatAsync();
@@ -1686,10 +1762,9 @@ public partial class MainWindow : Window
         _actions.Changed -= OnShortcutCapabilitiesChanged;
         _shortcuts.Changed -= UpdateShortcutLabels;
         _storageManager.Dispose();
-        _extensionsPage.ReleaseLocalPlugins();
+        _localPluginViewModel?.Dispose();
         _libraryService?.Dispose();
         _palette.Dispose();
-        _usage.Dispose();
         _notifications.Dispose();
         if (_workspaceSession is not null) _workspaceSession.Event -= OnWorkspaceSessionEvent;
         _vm?.WorkspacePanel.Dispose();
@@ -1732,6 +1807,7 @@ public partial class MainWindow : Window
 
     private void OnClosed(object? sender, EventArgs e)
     {
+        DisposeComputerCursorOverlay();
         _bootstrapCts.Dispose();
         if (_backgroundStore is not null)
         {

@@ -16,14 +16,17 @@ public sealed class NativeAgentLoop
 {
     private readonly IPureModelClient _modelClient;
     private readonly IPureToolDispatcher? _toolDispatcher;
-    private int _maxIterations;
+    private int? _maxIterations;
     private readonly bool _streamingEnabled;
 
-    /// <summary>最大轮次限制。长程复杂任务可动态调大。</summary>
-    public int MaxIterations
+    /// <summary>
+    /// 可选的模型调用轮次预算。null 表示由模型终态、取消、超时或外部宿主结束。
+    /// 这是测试/无人值守脚本的显式保险丝，不是交互主会话的默认终止条件。
+    /// </summary>
+    public int? MaxIterations
     {
         get => _maxIterations;
-        set => _maxIterations = value > 0 ? value : 10;
+        set => _maxIterations = value is > 0 ? value : null;
     }
 
     /// <summary>通过增量回调观察模型的文本与工具分片（默认关闭，仅走一次性请求）。</summary>
@@ -35,12 +38,12 @@ public sealed class NativeAgentLoop
     public NativeAgentLoop(
         IPureModelClient modelClient,
         IPureToolDispatcher? toolDispatcher = null,
-        int maxIterations = 10,
+        int? maxIterations = null,
         bool enableStreaming = true)
     {
         _modelClient = modelClient ?? throw new ArgumentNullException(nameof(modelClient));
         _toolDispatcher = toolDispatcher;
-        _maxIterations = maxIterations > 0 ? maxIterations : 10;
+        _maxIterations = maxIterations is > 0 ? maxIterations : null;
         // 只有客户端真正声明支持流式时才启用流式路径，避免对旧的 IPureModelClient 实现在运行时失败。
         _streamingEnabled = enableStreaming && modelClient is IStreamingModelClient;
     }
@@ -76,7 +79,10 @@ public sealed class NativeAgentLoop
         IReadOnlyList<PureToolDefinition>? toolDefinitions = null,
         Func<PureToolCall, CancellationToken, Task<bool>>? approvalGate = null,
         Func<string?>? takeSteering = null,
-        string? reasoningEffort = null)
+        string? reasoningEffort = null,
+        Func<CancellationToken, Task>? prepareRequest = null,
+        Action<PureUsage>? onModelUsage = null,
+        Func<CancellationToken, Task<bool>>? recoverFromContextOverflow = null)
     {
         ArgumentNullException.ThrowIfNull(conversationHistory);
         cancellationToken.ThrowIfCancellationRequested();
@@ -91,16 +97,20 @@ public sealed class NativeAgentLoop
             cancellationToken.ThrowIfCancellationRequested();
             using var iterationSpan = PerfTracer.Step("agent.iteration", "n", PerfTracer.Invariant(iterations));
 
-            if (iterations > _maxIterations)
+            if (_maxIterations is { } budget && iterations > budget)
             {
-                var timeoutResponse = PureModelResponse.FromText($"[Agent Loop 已达到最大轮次限制（{_maxIterations} 轮）并安全终止。]");
-                var timeoutMsg = new PureAgentMessage(PureAgentRole.Assistant, timeoutResponse.Text!);
-                conversationHistory.Add(timeoutMsg);
-                onMessageAppended?.Invoke(timeoutMsg);
-                return new PureAgentTurnResult(PureAgentTurnStatus.Completed, timeoutResponse, allToolResults,
-                    "已达到最大轮次限制", lastUsage);
+                var budgetText = $"[外部任务轮次预算已耗尽（{budget} 轮）。当前执行在工具调用后停止，" +
+                                 "结果可能未完成；请检查已完成的工具结果后继续。]";
+                var budgetResponse = PureModelResponse.FromText(budgetText);
+                var budgetMsg = new PureAgentMessage(PureAgentRole.Assistant, budgetText);
+                conversationHistory.Add(budgetMsg);
+                onMessageAppended?.Invoke(budgetMsg);
+                return new PureAgentTurnResult(PureAgentTurnStatus.Completed, budgetResponse, allToolResults,
+                    "外部任务轮次预算已耗尽", lastUsage, Truncated: true);
             }
 
+            // 交互主会话不注入人为的预算提示，也不在最后一轮禁用工具。
+            // 没有显式预算时只受取消、模型错误、工具超时和模型自身终态控制。
             // Steer：在下一轮模型请求之前注入用户插队消息。
             if (takeSteering?.Invoke() is { Length: > 0 } steering)
             {
@@ -109,10 +119,14 @@ public sealed class NativeAgentLoop
                 onMessageAppended?.Invoke(steerMsg);
             }
 
+            // 每轮请求前给宿主一次准备机会（上下文压缩等）。必须在历史写入之后、
+            // 请求序列化之前执行，且不能改变本轮已经追加的用户/工具消息语义。
+            if (prepareRequest is not null)
+                await prepareRequest(cancellationToken).ConfigureAwait(false);
+
             // 直接引用实时历史列表发送请求；所有变更都发生在 await 之后、请求序列化之前，
             // 因此模型客户端看到的是一致的前缀（回合闸门保证无并发写者）。
-            var request = new PureModelRequest(conversationHistory, toolNames, modelId, toolDefinitions,
-                reasoningEffort);
+            var request = new PureModelRequest(conversationHistory, toolNames, modelId, toolDefinitions, reasoningEffort);
             PureModelResponse response;
             try
             {
@@ -124,12 +138,26 @@ public sealed class NativeAgentLoop
                 }
                 CompletedModelCalls++;
                 lastUsage = response.Usage ?? lastUsage;
+                if (response.Usage is { IsEmpty: false } usage) onModelUsage?.Invoke(usage);
                 iterationSpan.Tag("toolCalls", response.ToolCalls.Count);
             }
             catch (OperationCanceledException)
             {
                 iterationSpan.Cancel();
                 throw;
+            }
+            catch (ModelClientException ex) when (recoverFromContextOverflow is not null &&
+                                                  IsContextOverflow(ex))
+            {
+                // 上下文超限是可恢复错误：压缩一次后重试本轮，而不是把长任务判死。
+                iterationSpan.Tag("contextOverflow", true);
+                if (await recoverFromContextOverflow(cancellationToken).ConfigureAwait(false))
+                    continue;
+                return new PureAgentTurnResult(
+                    PureAgentTurnStatus.Failed,
+                    new PureModelResponse(null, Array.Empty<PureToolCall>()),
+                    allToolResults,
+                    ex.Message);
             }
             catch (Exception ex)
             {
@@ -140,14 +168,20 @@ public sealed class NativeAgentLoop
                     ex.Message);
             }
 
-            // 1. 若无工具调用，说明模型已给出终态回复
+            // 1. 没有工具调用才表示模型给出了终态回复。
+            // 显式预算在本轮仍允许工具调用；下一次迭代会返回预算耗尽状态，
+            // 不把未执行的工具请求伪装成完成。
             if (response.ToolCalls.Count == 0)
             {
-                var finalMsg = new PureAgentMessage(PureAgentRole.Assistant, response.Text ?? "",
+                var finalText = response.Text ?? "";
+                var finalMsg = new PureAgentMessage(PureAgentRole.Assistant, finalText,
                     Usage: response.Usage);
                 conversationHistory.Add(finalMsg);
                 onMessageAppended?.Invoke(finalMsg);
-                return new PureAgentTurnResult(PureAgentTurnStatus.Completed, response, allToolResults,
+                return new PureAgentTurnResult(PureAgentTurnStatus.Completed,
+                    new PureModelResponse(finalText, Array.Empty<PureToolCall>(), response.FinishReason,
+                        response.Usage),
+                    allToolResults,
                     Usage: lastUsage);
             }
 
@@ -297,15 +331,57 @@ public sealed class NativeAgentLoop
         }
     }
 
+    /// <summary>
+    /// 判断模型错误是否为“上下文超限”。不同网关的措辞不一致，因此同时看错误码、
+    /// 错误体与消息，但必须命中上下文/长度语义，不能把所有 400 都当成可压缩恢复。
+    /// </summary>
+    public static bool IsContextOverflow(ModelClientException error)
+    {
+        if (error.Kind is not (ModelClientErrorKind.InvalidRequest or ModelClientErrorKind.Unknown or
+            ModelClientErrorKind.StreamError or ModelClientErrorKind.ServerError)) return false;
+
+        var text = string.Join(' ',
+            error.ErrorCode ?? "", error.ErrorBody ?? "", error.Message ?? "");
+        if (text.Length == 0) return false;
+
+        return text.Contains("context_length", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("context length", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("maximum context", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("context window", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("too many tokens", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("prompt is too long", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("input is too long", StringComparison.OrdinalIgnoreCase) ||
+               text.Contains("上下文长度", StringComparison.Ordinal) ||
+               text.Contains("上下文超", StringComparison.Ordinal) ||
+               text.Contains("超出上下文", StringComparison.Ordinal);
+    }
+
+    /// <summary>测试可见的裁剪入口：验证工具层输出不会被循环层二次截断。</summary>
+    public static string PruneForTest(string content) => PruneToolResult(content);
+
     private static string PruneToolResult(string content)
     {
-        const int maxChars = 64 * 1024;
+        const int headBudget = 48 * 1024;
+        const int tailBudget = 16 * 1024;
+        const int maxChars = headBudget + tailBudget;
         if (string.IsNullOrEmpty(content) || content.Length <= maxChars) return content;
 
-        var head = content.Substring(0, 48 * 1024);
-        var tail = content.Substring(content.Length - 16 * 1024, 16 * 1024);
-        var omitted = content.Length - (64 * 1024);
-        return $"{head}\n\n... [工具输出过长，已截断折叠 {omitted} 字符以节省上下文] ...\n\n{tail}";
+        // 按行边界裁剪：固定字符偏移会把一行/一个 token 切成两半，
+        // 模型看到的是无法解析的残片。只有在没有换行（超长单行）时才退回硬切。
+        var headEnd = content.LastIndexOf('\n', headBudget - 1);
+        if (headEnd < headBudget / 2) headEnd = headBudget;
+
+        var tailSearchFrom = content.Length - tailBudget;
+        var tailStart = content.IndexOf('\n', tailSearchFrom);
+        tailStart = tailStart < 0 ? tailSearchFrom : tailStart + 1;
+
+        if (tailStart <= headEnd) return content[..maxChars];
+
+        var head = content[..headEnd];
+        var tail = content[tailStart..];
+        var omitted = content.Length - head.Length - tail.Length;
+        return $"{head}\n\n... [工具输出过长，已截断折叠 {omitted} 字符以节省上下文；" +
+               $"需要完整内容请用 offset/limit 分段读取] ...\n\n{tail}";
     }
 
     /// <summary>

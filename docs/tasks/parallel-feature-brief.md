@@ -6,12 +6,20 @@
 
 ## 一句话
 
+**默认在 `main` 上改。** 只有功能过大、改动面广或并发冲突明显时才开 feature，
+并且越早并入 `main` 越好；已并入 `main` 的 feature 分支随即作废，不再继续使用。
+
 ## 先选车道
 
-- **小改动、快速修复**：直接在主工作树 `main` 改，收尾运行
+- **小改动、快速修复（默认）**：直接在主工作树 `main` 改并提交，收尾运行
   `pwsh fucode/feature-publish.ps1 -Main`，构建并弹出 `main@commit` 窗口。
-- **大功能、会阻塞别人、需要长期试错**：用独立 feature 工作树，收尾运行
+  不要为一行样式、一个文案、一个小 bug 新建 feature。
+- **大功能、会阻塞别人、需要长期试错**：才用独立 feature 工作树，收尾运行
   `pwsh fucode/feature-publish.ps1`，构建并弹出该 feature 的窗口。
+- **尽早合并**：feature 达到可用状态就尽快 `feature-merge.ps1` 合回 `main`，
+  不长期挂在分支上；`main` 前进后 feature 必须 `git merge main` 再发布。
+- **不复活旧分支**：已经并入 `main` 的 feature 分支视为终结，后续修改一律回
+  `main`（或按新任务另开分支），不得继续在旧工作树里开发。
 - 一个 feature = 一个分支 = 一个工作树 = 一个写入者；同一时间主工作树也只有一个写入者。
 
 用户点头后由主控运行 `fucode/feature-merge.ps1 -Name <id>` 合入 main。feature 必须先

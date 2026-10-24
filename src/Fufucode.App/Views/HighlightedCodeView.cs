@@ -32,6 +32,29 @@ public sealed class HighlightedCodeView : ContentControl
     public static readonly StyledProperty<string> LanguageProperty =
         AvaloniaProperty.Register<HighlightedCodeView, string>(nameof(Language), string.Empty);
 
+    /// <summary>是否完整展开；收起时限制为 <see cref="CollapsedHeight"/> 并允许内部滚动。</summary>
+    public static readonly StyledProperty<bool> IsExpandedProperty =
+        AvaloniaProperty.Register<HighlightedCodeView, bool>(nameof(IsExpanded), true);
+
+    /// <summary>收起状态下的最大高度。</summary>
+    public static readonly StyledProperty<double> CollapsedHeightProperty =
+        AvaloniaProperty.Register<HighlightedCodeView, double>(nameof(CollapsedHeight), 180d);
+
+    private bool _heightAttached;
+    private bool _animatingHeight;
+
+    public bool IsExpanded
+    {
+        get => GetValue(IsExpandedProperty);
+        set => SetValue(IsExpandedProperty, value);
+    }
+
+    public double CollapsedHeight
+    {
+        get => GetValue(CollapsedHeightProperty);
+        set => SetValue(CollapsedHeightProperty, value);
+    }
+
     public string Code
     {
         get => GetValue(CodeProperty);
@@ -49,6 +72,26 @@ public sealed class HighlightedCodeView : ContentControl
     public HighlightedCodeView()
     {
         Content = _block;
+
+        Transitions = new Avalonia.Animation.Transitions
+        {
+            new Avalonia.Animation.DoubleTransition
+            {
+                Property = MaxHeightProperty,
+                Duration = Motion.StandardDuration,
+                Easing = Motion.FluentEasing,
+            },
+        };
+        AttachedToVisualTree += (_, _) =>
+        {
+            _heightAttached = true;
+            ApplyHeight(animate: false);
+        };
+        SizeChanged += (_, _) =>
+        {
+            // 展开且动画结束后才解除限制；动画进行中改 MaxHeight 会把过渡打断。
+            if (_heightAttached && IsExpanded && !_animatingHeight) MaxHeight = double.PositiveInfinity;
+        };
         // 自带标题栏（语言名 + 换行/复制）与聊天页卡片头部重复，挂载后隐藏，
         // 复制与折叠仍由聊天页自己的卡片提供。模板若变更，最多表现为多一条标题栏。
         _block.Loaded += (_, _) => { HideBuiltInHeader(); HookInnerScroll(); };
@@ -72,6 +115,52 @@ public sealed class HighlightedCodeView : ContentControl
         {
             _block.Language = Normalize(change.NewValue as string);
         }
+        else if (change.Property == IsExpandedProperty || change.Property == CollapsedHeightProperty)
+        {
+            ApplyHeight(animate: _heightAttached && !Motion.Reduced);
+        }
+    }
+
+    /// <summary>在收起的预览高度与完整内容高度之间做过渡。</summary>
+    private void ApplyHeight(bool animate)
+    {
+        if (!_heightAttached) return;
+
+        if (!animate)
+        {
+            MaxHeight = IsExpanded ? double.PositiveInfinity : CollapsedHeight;
+            return;
+        }
+
+        _animatingHeight = true;
+        if (IsExpanded)
+        {
+            var target = Math.Max(CollapsedHeight, MeasureContentHeight());
+            MaxHeight = CollapsedHeight;
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => MaxHeight = target,
+                Avalonia.Threading.DispatcherPriority.Background);
+            Avalonia.Threading.DispatcherTimer.RunOnce(
+                () => { _animatingHeight = false; if (IsExpanded) MaxHeight = double.PositiveInfinity; },
+                Motion.StandardDuration + TimeSpan.FromMilliseconds(30));
+            return;
+        }
+
+        var current = Math.Max(Bounds.Height, MeasureContentHeight());
+        MaxHeight = current;
+        Avalonia.Threading.Dispatcher.UIThread.Post(
+            () => MaxHeight = CollapsedHeight,
+            Avalonia.Threading.DispatcherPriority.Background);
+        Avalonia.Threading.DispatcherTimer.RunOnce(
+            () => _animatingHeight = false,
+            Motion.StandardDuration + TimeSpan.FromMilliseconds(30));
+    }
+
+    private double MeasureContentHeight()
+    {
+        var width = Bounds.Width > 0 ? Bounds.Width : double.PositiveInfinity;
+        _block.Measure(new Size(width, double.PositiveInfinity));
+        return Math.Max(0, _block.DesiredSize.Height);
     }
 
     private void HookInnerScroll()

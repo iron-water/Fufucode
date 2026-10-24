@@ -62,7 +62,10 @@
 
 ## 插件化优先（用户2026-10-16明确要求）
 
-- 最新拆分范围：按用户“通通拆出来，除了……”的指令，工作面板组（内嵌浏览器、资料库、代码审查、文件预览、Git变更面板）以及文档提取、系统通知、用量统计、储存诊断、高级界面定制保留内置（原例外中的终端已按用户2026-10-18的新指令拆为可选插件 `workspace.terminal`，见 `docs/decisions.md`）；其余审计候选由M组织真实插件化。此具体范围优先于下文一般性插件化建议，不据旧候选表把例外擅自拆走。文件预览是工作面板默认能力，不作为独立功能页/tab或可选插件；具体修正及证据见 `docs/tasks/plugin-extraction-scope-2026-10-16.md`。
+- 当前拆分：可选页面已插件化——`workspace.browser`、`workspace.terminal`、`workspace.library`、`workspace.local-review`、`automation.auto-dev`。它们默认不安装，只在插件市场安装/启用后贡献页面；未安装时侧边栏、停靠区和动作目录都不显示。
+- 核心工作台（会话管理、文件、变更、侧边聊天）保留为 App 核心页，**不再称为插件**；它们随包提供，不走插件市场，也不因为“插件化”名义在市场里增加条目。
+- “用量”页已移除，相关内容并入性能中心；不再有独立 `usage` 页面、动作或设置分类。
+- 新产品能力新增/重构时先判断能否成为真实插件包；可选实现不得默认塞进 App/Core。
 
 - 产品以小核心与真实插件包组织。新增/重构功能无论大小，先判断能否独立安装、更新、禁用与卸载；不要默认继续塞入App/Core或MainWindow partial。源码可留在同仓，但可选实现及专属依赖不得因此随默认包发布。
 - 插件目录、JSON状态、隐藏入口和功能开关不等于安装架构。安装必须落实真实载荷获取/校验/部署/注册，卸载必须落实运行停止、注销、载荷移除和明确的数据保留策略；资源仍占用时报告待重启或待清理，不假称已卸载。
@@ -88,7 +91,10 @@
 ## 并行 Feature（2026-10-21）
 
 - **执行模型开工前必须读 `docs/tasks/parallel-feature-brief.md`**；主控派工时把该路径写进 prompt，旧工作树没有该文件时把 brief 的核心命令直接附在 prompt 里。
-- `main` 是默认的小功能写入点，也是最终集成点；大功能、会阻塞别人的改动、需要长期试错的改动用 `fucode/feature-worktree.ps1 -Name <id>` 建独立分支/工作树。一个工作树只有一个写入者，主工作树同一时间也只有一个写入者。
+- **小改动直接在 `main` 上做**（一行样式、文案、单个 bug、少量文件）：提交后运行 `feature-publish.ps1 -Main`，不要新建 feature。
+- 只有功能过大、改动面广或与其它会话并发冲突明显时，才用 `fucode/feature-worktree.ps1 -Name <id>` 建独立分支/工作树；feature 一旦可用就**尽早**用 `feature-merge.ps1` 合回 `main`，不长期挂在分支上。
+- **已并入 `main` 的 feature 分支视为终结**：不再在其工作树上开发，后续修改回到 `main`。
+- 一个工作树只有一个写入者，主工作树同一时间也只有一个写入者。
 - 执行模型收尾必须自己运行 `fucode/feature-publish.ps1` 发布，不得让用户代为构建；它检查分支/干净状态、生成 `branch@commit` label、构建到主工作树 `out/review/<分支名>`、核对产物，并**立即启动独立审阅窗口**。同一 feature 重新发布会先停掉上一次由它启动的窗口。用户不需要去审阅板里挑构建。裸 `publish-local.ps1 -ReviewLabel ...` 仅作故障回退，相对 `-OutputRoot` 也以主工作树为基准。不得覆盖 `out/app`、写本地更新指针或停止别人的运行实例。
 - 主工作树的小改动用 `feature-publish.ps1 -Main` 构建并启动 `main@commit` 窗口；它和 feature 窗口走同一套隔离输出、label 和数据根。
 - 用户点头后，用 `fucode/feature-merge.ps1 -Name <id>` 合入：脚本要求 feature 已同步 main、两边工作树干净，只做 fast-forward；不合条件就拒绝，不在 main 留半合并状态。合入后运行 `feature-publish.ps1 -Main` 看集成结果，再决定是否 `feature-worktree.ps1 -Remove`。

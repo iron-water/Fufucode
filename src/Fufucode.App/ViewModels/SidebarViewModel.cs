@@ -72,7 +72,7 @@ public sealed class SessionItemViewModel : ObservableObject
     {
         IsRunning = activity is SessionActivity.Running or SessionActivity.Compacting or
             SessionActivity.Retrying or SessionActivity.Cancelling;
-        IsFailed = !IsRunning && (outcome == SessionOutcome.Failed || connection == SessionConnection.Faulted);
+        IsFailed = !IsRunning && (outcome is SessionOutcome.Failed or SessionOutcome.Truncated || connection == SessionConnection.Faulted);
         OnPropertyChanged(nameof(StatusDescription));
     }
 
@@ -131,10 +131,29 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         Func<string, Task>? NewSessionWithBackendRequested = null);
 
     /// <summary>新建会话时可选的后端；不可用的条目在菜单中禁用。</summary>
-    public sealed record NewSessionBackendOption(string Key, string Label, bool Available);
+    public sealed record NewSessionBackendOption(string Key, string Label, bool Available, bool IsDefault = false);
 
-    /// <summary>新建会话可选后端（默认后端始终在首位）。mock 模式为空。</summary>
-    public IReadOnlyList<NewSessionBackendOption> NewSessionBackends { get; }
+    private IReadOnlyList<NewSessionBackendOption> _newSessionBackends;
+
+    /// <summary>新建会话可选后端（默认后端排在首位并标记）。mock 模式为空。</summary>
+    public IReadOnlyList<NewSessionBackendOption> NewSessionBackends => _newSessionBackends;
+
+    /// <summary>设置里改了默认后端后刷新，按钮上的当前后端立即跟随。</summary>
+    public void SetBackends(IReadOnlyList<NewSessionBackendOption> options)
+    {
+        _newSessionBackends = options;
+        OnPropertyChanged(nameof(NewSessionBackends));
+        OnPropertyChanged(nameof(HasBackendChoice));
+        OnPropertyChanged(nameof(DefaultBackendLabel));
+    }
+
+    /// <summary>有多个可用后端时才显示“选择后端”入口；只有一个时直接新建，避免死按钮。</summary>
+    public bool HasBackendChoice => _newSessionBackends.Count(option => option.Available) > 1;
+
+    /// <summary>当前默认后端的显示名（无选择时为空）。</summary>
+    public string DefaultBackendLabel =>
+        _newSessionBackends.FirstOrDefault(option => option.IsDefault)?.Label ?? string.Empty;
+
 
     private readonly IChatSession _session;
     private readonly TimelineViewModel _timeline;
@@ -157,7 +176,7 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         _callbacks = callbacks;
 
         Sessions = new ObservableCollection<SessionItemViewModel>(sessions ?? MockDemoSessions());
-        NewSessionBackends = callbacks?.NewSessionBackends ?? [];
+        _newSessionBackends = callbacks?.NewSessionBackends ?? [];
         ProjectText = callbacks?.ProjectText ?? string.Empty;
         _currentName = callbacks?.CurrentName ?? string.Empty;
 

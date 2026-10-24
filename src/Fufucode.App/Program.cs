@@ -33,6 +33,9 @@ internal static class Program
     /// <summary>本进程持有的单实例守卫；自测/探针或命名对象不可用时为 null。</summary>
     internal static SingleInstanceGuard? SingleInstance { get; private set; }
 
+    /// <summary>本进程启动时携带的审批协议负载；交给窗口在会话就绪后应答。</summary>
+    internal static string? StartupActivationPayload { get; set; }
+
     // Initialization code. Don't use any Avalonia, third-party APIs or any
     // SynchronizationContext-reliant code before AppMain is called: things aren't initialized
     // yet and stuff might break.
@@ -41,6 +44,7 @@ internal static class Program
     {
         // 尽早解析数据根：自定义 --data-root 时启动记录也落到同一处，而不是全局默认目录。
         var startupOptions = AppOptions.Parse(args);
+        StartupActivationPayload = startupOptions.ActivationPayload;
         // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。
         var isolatedRun = args.Contains("--selftest") || args.Contains("--headless-ui") ||
                           args.Contains("--native-module-selftest") || args.Contains("--parallel-review");
@@ -53,6 +57,8 @@ internal static class Program
             var singleInstance = SingleInstanceGuard.TryAcquire(null, out var guard);
             if (singleInstance == SingleInstanceAcquireResult.AlreadyRunning)
             {
+                // 系统通知按钮以协议激活启动第二个进程：先留下负载，已运行实例取走后再应答审批。
+                if (startupOptions.ActivationPayload is { } payload) Integration.ActivationInbox.Enqueue(payload);
                 SingleInstanceGuard.SignalExisting(null);
                 return;
             }
@@ -80,8 +86,24 @@ internal static class Program
         if (args.Contains("--speech-probe")) Environment.Exit(SelfTest.SpeechAcceptance.RunAsync().GetAwaiter().GetResult());
         if (args.Contains("--windows-toast-probe"))
         {
+            // --approval 追加三个审批按钮：真实渲染验证（点按会走协议链路回到本应用）。
+            var approval = args.Contains("--approval");
+            var probeSession = Guid.NewGuid().ToString();
+            var actions = approval
+                ? new[]
+                {
+                    new Infrastructure.WindowsToastAction("允许",
+                        Integration.ApprovalLink.Create("probe-request", probeSession, Integration.ApprovalDecision.Allow)),
+                    new Infrastructure.WindowsToastAction("始终允许",
+                        Integration.ApprovalLink.Create("probe-request", probeSession, Integration.ApprovalDecision.AlwaysAllow)),
+                    new Infrastructure.WindowsToastAction("拒绝",
+                        Integration.ApprovalLink.Create("probe-request", probeSession, Integration.ApprovalDecision.Deny)),
+                }
+                : null;
             var result = Infrastructure.WindowsToastService.SendAsync(Guid.NewGuid().ToString("N"),
-                "Fufucode 通知验收", "这是一次真实 Windows 系统通知投递测试。").GetAwaiter().GetResult();
+                approval ? "有一项工具待批准" : "Fufucode 通知验收",
+                approval ? "允许执行 run_command？" : "这是一次真实 Windows 系统通知投递测试。",
+                actions: actions).GetAwaiter().GetResult();
             Console.WriteLine(result.Status);
             Environment.Exit(result.Delivered ? 0 : 1);
         }

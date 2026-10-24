@@ -62,6 +62,12 @@ internal static class Program
                 Console.WriteLine($"\n会话层通过：{checks.Passed} 项断言");
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--long-horizon-only")
+            {
+                await LongHorizonTests.RunAsync(checks);
+                Console.WriteLine($"\n长程能力通过：{checks.Passed} 项断言");
+                return 0;
+            }
             BackendContractTests.Run(checks);
             SessionPdfExportTests.Run(checks);
             DefaultBackendTests.Run(checks);
@@ -78,6 +84,7 @@ internal static class Program
             await SseProtocolTests.RunAsync(checks);
             await ModelClientStreamingTests.RunAsync(checks);
             await StreamingLoopTests.RunAsync(checks);
+            await LongHorizonTests.RunAsync(checks);
             await SseCounterexampleTests.RunAsync(checks);
             await NativeChatSessionStreamingTests.RunAsync(checks);
             Console.WriteLine($"\n全部通过：{checks.Passed} 项断言");

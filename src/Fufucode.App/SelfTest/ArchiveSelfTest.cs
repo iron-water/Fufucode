@@ -125,6 +125,18 @@ internal static class ArchiveSelfTest
                 settings.CategoryTitle == "储存" && settings.PageTitle == "已归档" &&
                 settings.Breadcrumb == "储存 › 已归档",
                 "storage archive subpage renders with breadcrumb 储存 › 已归档");
+            // 空会话不成立：没有名字、没有用户消息、没有历史文件的会话不进列表。
+            var blank = store.CreateSession(first, null, BackendId.NativeCSharp);
+            Check(!SessionPresence.IsEstablished(store, blank) && !SessionPresence.HasUserMessage(store, blank),
+                "an untouched new session is not established and stays hidden");
+            SessionPresence.MarkEstablished(store, blank.Id);
+            Check(SessionPresence.IsEstablished(store, store.GetSession(blank.Id)) &&
+                SessionPresence.HasUserMessage(store, store.GetSession(blank.Id)),
+                "marking established (first message sent) makes the session appear");
+            // 有名字的会话视为已成立，避免用户重命名后被隐藏。
+            var named = store.CreateSession(first, "已命名", BackendId.NativeCSharp);
+            Check(SessionPresence.IsEstablished(store, named), "a named session counts as established");
+
             // 独立工作区识别：路径匹配与子目录都算，普通项目不算。
             var scratchLayout = new AppDataLayout(Path.Combine(root, "scratch-data"));
             scratchLayout.EnsureCreated();

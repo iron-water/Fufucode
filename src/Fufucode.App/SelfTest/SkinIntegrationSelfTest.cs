@@ -96,7 +96,7 @@ internal static class SkinIntegrationSelfTest
                 "native control accent color follows Metro instead of directly assigned Fluent palette");
             // Main's 800px responsive layout hides the left region. Test actual input on a visible 224px region.
             window.Width=1100;
-            foreach(var pageId in new[]{"files","changes","browser","library","notifications","usage"}) window.MoveDockPage(pageId,DockZone.Left);
+            foreach(var pageId in new[]{"files","changes","browser","library","notifications"}) window.MoveDockPage(pageId,DockZone.Left);
             await Ready();
             var dock=window.FindControl<DockRegionView>("LeftDock")!;
             var scrolling=dock.TabScrollForTesting;

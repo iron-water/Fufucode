@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
@@ -10,10 +12,17 @@ namespace Fufucode.App.Infrastructure;
 
 internal sealed record WindowsToastResult(bool Delivered, string Status);
 
+/// <summary>系统通知上的一个按钮：点击后以协议激活回本应用，参数即 <see cref="Argument"/>。</summary>
+internal sealed record WindowsToastAction(string Label, string Argument);
+
 internal static class WindowsToastService
 {
     internal const string AppId = "Fufucode.Desktop";
-    internal static string CreateXml(string title, string message, string? link)
+    private const string ProtocolKey = @"Software\Classes\" + Integration.ApprovalLink.Scheme;
+    internal const string ProtocolCommandKey = ProtocolKey + @"\shell\open\command";
+
+    internal static string CreateXml(string title, string message, string? link,
+        IReadOnlyList<WindowsToastAction>? actions = null)
     {
         var toast = new XElement("toast", new XElement("visual",
             new XElement("binding", new XAttribute("template", "ToastGeneric"),
@@ -23,10 +32,44 @@ internal static class WindowsToastService
             toast.Add(new XAttribute("activationType", "protocol"));
             toast.Add(new XAttribute("launch", link));
         }
+        // 按钮只走协议激活：不需要 COM 激活器，适用未打包的桌面应用。
+        var buttons = (actions ?? []).Where(action => !string.IsNullOrWhiteSpace(action.Label)).Take(5).ToArray();
+        if (buttons.Length > 0)
+        {
+            toast.Add(new XElement("actions", buttons.Select(action => new XElement("action",
+                new XAttribute("content", action.Label),
+                new XAttribute("activationType", "protocol"),
+                new XAttribute("arguments", action.Argument)))));
+        }
         return toast.ToString(SaveOptions.DisableFormatting);
     }
 
-    internal static async Task<WindowsToastResult> SendAsync(string key, string title, string message, string? link = null)
+    /// <summary>
+    /// 让审批 scheme（<c>fufucode-approval://</c>）指向当前可执行文件，否则通知按钮会唤醒另一个（可能是旧版）实例。
+    /// 已指向当前程序时不写注册表；写入失败不阻止通知投递。
+    /// </summary>
+    internal static void EnsureProtocolRegistration()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            var executable = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(executable)) return;
+            var expected = $"\"{executable}\" \"%1\"";
+            using (var root = Registry.CurrentUser.CreateSubKey(ProtocolKey))
+                root.SetValue("URL Protocol", string.Empty);
+            using var key = Registry.CurrentUser.CreateSubKey(ProtocolCommandKey);
+            if (key.GetValue(null) as string == expected) return;
+            key.SetValue(null, expected);
+        }
+        catch (Exception)
+        {
+            // 权限/注册表不可用：保留原有注册，按钮可能落到其它实例；不影响应用内通知。
+        }
+    }
+
+    internal static async Task<WindowsToastResult> SendAsync(string key, string title, string message, string? link = null,
+        IReadOnlyList<WindowsToastAction>? actions = null)
     {
         if (!OperatingSystem.IsWindows()) return new(false, "此系统不支持 Windows 通知，已回退应用内提醒");
         try
@@ -66,7 +109,7 @@ internal static class WindowsToastService
             start.Environment["FUFUCODE_TOAST_TAG"] = tag;
             using var process = Process.Start(start) ?? throw new InvalidOperationException("通知进程启动失败");
             var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
-            await process.StandardInput.WriteAsync(CreateXml(title, message, link));
+            await process.StandardInput.WriteAsync(CreateXml(title, message, link, actions));
             process.StandardInput.Close();
             try { await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(15)); }
             catch { if (!process.HasExited) process.Kill(entireProcessTree: true); throw; }

@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>Fufucode</title>
+  <link rel="stylesheet" href="workbench.css">
+</head>
+<body class="workbench-surface">
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">F</span><span class="brand-name">Fufucode</span></div>
+    <div class="topbar-actions">
+      <span class="connection" title="连接状态"><span id="connectionDot" class="dot"></span><span id="connectionText">未连接</span></span>
+      <button id="moreBtn" class="icon-btn" title="连接设置" aria-label="连接设置">⋯</button>
+    </div>
+  </header>
+
+  <main class="shell">
+    <aside class="drawer drawer-sessions" id="sessionsDrawer">
+      <header class="drawer-head"><button class="back-btn" data-close aria-label="返回">‹</button><span>会话</span><button id="refreshSessions" class="icon-btn" title="刷新会话">↻</button></header>
+      <div id="sessionList" class="session-list"><div class="empty">连接后加载会话</div></div>
+    </aside>
+
+    <section class="conversation">
+      <div class="conversation-head">
+        <div class="conversation-title"><h1 id="sessionTitle">Fufucode</h1><div id="sessionMeta">等待连接</div></div>
+        <button id="stopBtn" class="stop-pill hidden">停止</button>
+      </div>
+
+      <div class="page-strip" id="pageStrip" hidden>
+        <span class="page-dot"></span>
+        <div class="page-copy"><span id="pageTitle">当前网页</span><span id="pageUrl">未读取页面</span></div>
+        <button id="quickCollect" class="ghost-btn">引用</button>
+      </div>
+
+      <div id="timeline" class="timeline"></div>
+      <button id="jumpBottom" class="jump-bottom hidden">回到底部</button>
+
+      <div class="composer-wrap">
+        <div id="draftHint" class="draft-hint"></div>
+        <div class="composer">
+          <textarea id="composer" rows="1" placeholder="给 Fufucode 发消息…" aria-label="消息"></textarea>
+          <button id="sendBtn" class="send-btn" title="发送" aria-label="发送">↑</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="drawer drawer-context" id="contextDrawer">
+      <header class="drawer-head"><button class="back-btn" data-close aria-label="返回">‹</button><span>网页</span><button id="refreshContext" class="icon-btn" title="刷新当前页面">↻</button></header>
+      <div id="contextCard" class="page-card"><div class="placeholder">打开一个网页后，这里会显示当前标签页。</div></div>
+      <div class="action-row">
+        <button id="quickRead" class="action-btn">读取页面</button>
+        <button id="quickBrowser" class="action-btn">网页操作</button>
+        <button id="quickShot" class="action-btn">截图</button>
+      </div>
+      <div class="section-head"><span>审批</span><span id="approvalCount" class="count" hidden>0</span></div>
+      <div id="approvalList" class="approval-list"><div class="placeholder">暂无待处理审批</div></div>
+    </aside>
+
+    <aside class="drawer drawer-settings" id="settingsDrawer">
+      <header class="drawer-head"><button class="back-btn" data-close aria-label="返回">‹</button><span>连接设置</span></header>
+      <div class="settings-body">
+        <label class="field">Fufucode 远控地址<input id="hostInput" placeholder="http://127.0.0.1:53124" autocomplete="off"></label>
+        <label class="field">配对 PIN<input id="pinInput" inputmode="numeric" maxlength="4" placeholder="0000" autocomplete="one-time-code"></label>
+        <button id="pairBtn" class="primary-btn wide">连接桌面会话</button>
+        <button id="reconnectBtn" class="secondary-btn wide">重新连接</button>
+        <div id="errorText" class="error" role="alert"></div>
+        <div class="settings-note">远控地址和 PIN 显示在 Fufucode 桌面端的“手机远程控制”面板中。</div>
+      </div>
+    </aside>
+  </main>
+
+  <nav class="action-bar" aria-label="常用功能">
+    <button data-drawer="sessions"><span class="nav-icon">☰</span><span>会话</span></button>
+    <button data-drawer="context"><span class="nav-icon">◫</span><span>网页</span></button>
+    <button data-drawer="context" data-scroll="approvalList"><span class="nav-icon">✓</span><span>审批</span><span id="navApprovalCount" class="nav-badge" hidden>0</span></button>
+    <button data-drawer="settings"><span class="nav-icon">⚙</span><span>设置</span></button>
+  </nav>
+
+  <script src="workbench.js"></script>
+</body>
+</html>

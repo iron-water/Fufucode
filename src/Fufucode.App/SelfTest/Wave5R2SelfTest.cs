@@ -74,16 +74,16 @@ public static class Wave5R2SelfTest
             vm.SetRightPanelOpen(false); vm.SetRightPanelOpen(true);
             Check(ReferenceEquals(chosenTab, vm.WorkspacePanel.SelectedTab) && vm.Input.DraftText == "保留中文草稿", "收起重开保tab与草稿");
 
-            window.OpenDockPage("usage", DockZone.Bottom);
+            window.OpenDockPage("notifications", DockZone.Bottom);
             await Task.Delay(180); window.UpdateLayout();
-            var usagePage = window.PageForTesting("usage");
+            var usagePage = window.PageForTesting("notifications");
             var terminalBounds = window.FindControl<Border>("TerminalBorder")!.Bounds;
             Check(terminalBounds.Height == window.DockLayoutForTesting.BottomHeight && terminalBounds.Height <= window.FindControl<Grid>("WorkspaceShell")!.Bounds.Height - 360,
                 $"底栏高度限幅 actual={terminalBounds.Height} preferred={window.DockLayoutForTesting.BottomHeight} shell={window.FindControl<Grid>("WorkspaceShell")!.Bounds.Height}");
             Save("bottom-open.png");
-            window.CloseDockPageForTesting("usage"); await Task.Delay(80);
-            window.OpenDockPage("usage", DockZone.Bottom); await Task.Delay(80);
-            Check(ReferenceEquals(usagePage, window.PageForTesting("usage")),
+            window.CloseDockPageForTesting("notifications"); await Task.Delay(80);
+            window.OpenDockPage("notifications", DockZone.Bottom); await Task.Delay(80);
+            Check(ReferenceEquals(usagePage, window.PageForTesting("notifications")),
                 "底栏关闭重开保持同一页面实例");
 
             foreach (var width in new[] { 1200d, 800d, 1600d })

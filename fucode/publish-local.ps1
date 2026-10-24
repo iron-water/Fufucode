@@ -26,6 +26,8 @@ param(
     [switch]$NoDeploy,
     [switch]$NoRun,
     [switch]$NoRestore,
+    # 可选：把编译产物放到独立目录，避免与正在运行的审阅窗口争用 bin/obj。
+    [string]$ArtifactsPath,
     # ReadyToRun：预编译 IL 为原生代码，冷启动可省约 1 秒 JIT；发布体积增加约 6 MB。
     [switch]$ReadyToRun,
     # 并行审阅：构建到独立目录，不停止/启动现有应用，不写本地更新指针。
@@ -134,6 +136,9 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 }
 if ([string]::IsNullOrWhiteSpace($version)) { $version = '1.4.0' }
 
+$artifactsSwitch = @()
+if ($ArtifactsPath) { $artifactsSwitch = @('--artifacts-path', $ArtifactsPath) }
+
 # 先发布到暂存目录，避免目标目录被占用时构建本身失败。
 $stagingRoot = Join-Path $outRoot ('.staging-' + $PID)
 $stagingApp = Join-Path $stagingRoot 'app'
@@ -147,6 +152,7 @@ $dotnetArgs = @('publish', (Join-Path $root 'src/Fufucode.App/Fufucode.App.cspro
     '-c', $Configuration, '-r', $RuntimeIdentifier, '--self-contained', 'false',
     '-o', $stagingApp, '--nologo', '-v', 'q')
 if ($NoRestore) { $dotnetArgs += '--no-restore' }
+$dotnetArgs += $artifactsSwitch
 if ($ReadyToRun) { $dotnetArgs += @('-p:PublishReadyToRun=true') }
 Write-Host "Publishing Fufucode.App ($Configuration) -> staging ..."
 & dotnet @dotnetArgs
@@ -157,6 +163,7 @@ $cliArgs = @('publish', (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj')
     '-c', $Configuration, '-r', $RuntimeIdentifier, '--self-contained', 'false',
     '-o', $stagingCli, '--nologo', '-v', 'q')
 if ($NoRestore) { $cliArgs += '--no-restore' }
+$cliArgs += $artifactsSwitch
 if ($ReadyToRun) { $cliArgs += @('-p:PublishReadyToRun=true') }
 & dotnet @cliArgs
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.Cli publish failed.' }
@@ -167,6 +174,7 @@ $pluginOut = Join-Path $stagingApp 'plugins/chat.interactive-ui'
 $pluginArgs = @('publish', (Join-Path $root 'src/Fufucode.Plugins.InteractiveUI/Fufucode.Plugins.InteractiveUI.csproj'),
     '-c', $Configuration, '-o', $pluginOut, '--nologo', '-v', 'q')
 if ($NoRestore) { $pluginArgs += '--no-restore' }
+$pluginArgs += $artifactsSwitch
 & dotnet @pluginArgs
 if ($LASTEXITCODE -ne 0) { throw 'Interactive UI plugin publish failed.' }
 # 插件包只带自己的程序集：宿主已加载的 Core/App/Avalonia 一律剥离。
@@ -182,6 +190,7 @@ $perfOut = Join-Path $stagingApp 'plugins-dist/performance.monitor'
 $perfArgs = @('publish', (Join-Path $root 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj'),
     '-c', $Configuration, '-o', $perfOut, '--nologo', '-v', 'q')
 if ($NoRestore) { $perfArgs += '--no-restore' }
+$perfArgs += $artifactsSwitch
 & dotnet @perfArgs
 if ($LASTEXITCODE -ne 0) { throw 'Performance monitor plugin publish failed.' }
 Get-ChildItem -LiteralPath $perfOut -Filter 'Fufucode.*.dll' |
@@ -190,6 +199,44 @@ Get-ChildItem -LiteralPath $perfOut -Filter 'Fufucode.*.dll' |
 Get-ChildItem -LiteralPath $perfOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 Get-ChildItem -LiteralPath $perfOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 if (Test-Path (Join-Path $perfOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $perfOut 'runtimes') -Recurse -Force }
+
+# 可选内置浏览器插件：放进 plugins-dist，供插件市场安装；默认不播种、不激活。
+Write-Host "Publishing workspace.browser plugin -> staging ..."
+$browserOut = Join-Path $stagingApp 'plugins-dist/workspace.browser'
+$browserArgs = @('publish', (Join-Path $root 'src/Fufucode.Plugins.Browser/Fufucode.Plugins.Browser.csproj'),
+    '-c', $Configuration, '-o', $browserOut, '--nologo', '-v', 'q')
+if ($NoRestore) { $browserArgs += '--no-restore' }
+$browserArgs += $artifactsSwitch
+& dotnet @browserArgs
+if ($LASTEXITCODE -ne 0) { throw 'Browser plugin publish failed.' }
+Get-ChildItem -LiteralPath $browserOut -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.Browser.dll' } |
+    Remove-Item -Force
+Get-ChildItem -LiteralPath $browserOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+Get-ChildItem -LiteralPath $browserOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+if (Test-Path (Join-Path $browserOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $browserOut 'runtimes') -Recurse -Force }
+
+# 可选资料库 / 本地审查 / 草图 / 语音朗读插件：放进 plugins-dist，供插件市场安装；
+# 默认不播种、不激活，未安装时对应入口不出现。
+foreach ($plugin in @(
+    @{ Id='workspace.library'; Project='src/Fufucode.Plugins.Library/Fufucode.Plugins.Library.csproj'; Dll='Fufucode.Plugins.Library.dll' },
+    @{ Id='workspace.local-review'; Project='src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj'; Dll='Fufucode.Plugins.LocalReview.dll' },
+    @{ Id='tool.sketch'; Project='src/Fufucode.Plugins.Sketch/Fufucode.Plugins.Sketch.csproj'; Dll='Fufucode.Plugins.Sketch.dll' },
+    @{ Id='service.speech-synthesis'; Project='src/Fufucode.Plugins.Speech/Fufucode.Plugins.Speech.csproj'; Dll='Fufucode.Plugins.Speech.dll' }
+)) {
+    Write-Host "Publishing $($plugin.Id) plugin -> staging ..."
+    $pluginOut = Join-Path $stagingApp "plugins-dist/$($plugin.Id)"
+    $pluginArgs = @('publish', (Join-Path $root $plugin.Project), '-c', $Configuration, '-o', $pluginOut, '--nologo', '-v', 'q')
+    if ($NoRestore) { $pluginArgs += '--no-restore' }
+$pluginArgs += $artifactsSwitch
+    & dotnet @pluginArgs
+    if ($LASTEXITCODE -ne 0) { throw "$($plugin.Id) plugin publish failed." }
+    Get-ChildItem -LiteralPath $pluginOut -Filter 'Fufucode.*.dll' |
+        Where-Object { $_.Name -ne $plugin.Dll } | Remove-Item -Force
+    Get-ChildItem -LiteralPath $pluginOut -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+    Get-ChildItem -LiteralPath $pluginOut -Filter 'CommunityToolkit*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
+    if (Test-Path (Join-Path $pluginOut 'runtimes')) { Remove-Item -LiteralPath (Join-Path $pluginOut 'runtimes') -Recurse -Force }
+}
 
 # 本地调试只需要自有程序集的 PDB；Skia/HarfBuzz 的原生 PDB 合计约 100 MB，删掉。
 Get-ChildItem -LiteralPath $stagingApp -Recurse -File -Filter *.pdb |

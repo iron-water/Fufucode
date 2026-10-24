@@ -91,7 +91,8 @@
         selector: selector
       }
     }, res => {
-      alert(`已成功拾取元素并发送至 Fufucode！\n选择器：${selector}`);
+      if (res && res.success) alert(`已成功拾取元素并发送至 Fufucode！\n选择器：${selector}`);
+      else alert(`拾取内容发送失败：${res?.error || "扩展未连接"}`);
     });
   }
 

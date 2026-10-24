@@ -15,22 +15,6 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
       <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     </Style>
-    <Style Selector="TextBlock.addedFlag">
-      <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-    </Style>
-    <Style Selector="TextBlock.deletedFlag">
-      <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
-      <Setter Property="FontWeight" Value="SemiBold"/>
-    </Style>
-    <Style Selector="Button.scopeChoice">
-      <Setter Property="BorderThickness" Value="1"/>
-      <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-    </Style>
-    <Style Selector="Button.scopeChoice.selected">
-      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
-      <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
-    </Style>
     <Style Selector="ListBox.workspaceList ListBoxItem">
       <Setter Property="Padding" Value="8,8"/>
       <Setter Property="MinHeight" Value="44"/>
@@ -133,113 +117,237 @@
         </StackPanel>
       </Border>
       </Grid>
-      <!-- 预览态：直接在工作面板内呈现文件内容，显示文件身份（路径、名称、大小）并支持返回列表切换 -->
-      <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,*">
+      <!-- 统一预览宿主：provider 负责分类与加载，面板只显示统一元数据和错误。 -->
+      <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,Auto,*">
         <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
-                Background="{DynamicResource AppCardBackground}" Padding="10,8">
-          <Grid ColumnDefinitions="Auto,*,Auto" VerticalAlignment="Center">
-            <Button Classes="subtle" Content="← 返回列表" Command="{Binding CloseFilePreviewCommand}"
-                    Padding="8,4" VerticalAlignment="Center" AutomationProperties.Name="返回文件列表"/>
-            <StackPanel Grid.Column="1" Margin="10,0" VerticalAlignment="Center" Spacing="2">
+                Background="{DynamicResource AppCardBackground}" Padding="8,6">
+          <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="5" VerticalAlignment="Center">
+            <Button Classes="iconButton" Content="←" Command="{Binding CloseFilePreviewCommand}" ToolTip.Tip="返回文件列表"
+                    AutomationProperties.Name="返回文件列表"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+              <Button Classes="iconButton" Content="‹" Command="{Binding PreviewBackCommand}" IsEnabled="{Binding CanPreviewBack}" ToolTip.Tip="预览后退"/>
+              <Button Classes="iconButton" Content="›" Command="{Binding PreviewForwardCommand}" IsEnabled="{Binding CanPreviewForward}" ToolTip.Tip="预览前进"/>
+            </StackPanel>
+            <StackPanel Grid.Column="2" Margin="6,0" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="bodyStrong" Text="{Binding PreviewFileName}" TextTrimming="CharacterEllipsis"/>
               <TextBlock Classes="caption mono" Text="{Binding PreviewFilePath}" TextTrimming="CharacterEllipsis"
                          Foreground="{DynamicResource AppTextSecondary}" ToolTip.Tip="{Binding PreviewFilePath}"/>
             </StackPanel>
-            <StackPanel Grid.Column="2" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
+            <StackPanel Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="caption mono" Text="{Binding PreviewFileSize}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
               <TextBlock Classes="caption" Text="{Binding PreviewFileDetail}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
             </StackPanel>
           </Grid>
         </Border>
-        <Grid Grid.Row="1">
-          <!-- BrowserView 自带 DataContext，可见性必须显式绑定到面板 VM。 -->
-          <views:BrowserView x:Name="PreviewBrowser"
-                            IsVisible="{Binding $parent[views:WorkspacePanelView].((vm:WorkspacePanelViewModel)DataContext).IsBrowserPreviewVisible}"/>
-          <!-- Mermaid 文件直接渲染成图表，不交给浏览器显示源码。 -->
-          <Grid IsVisible="{Binding IsDiagramPreview}" RowDefinitions="Auto,*">
-            <Border Grid.Row="0" Padding="10,6" BorderBrush="{DynamicResource AppDividerSubtle}"
-                    BorderThickness="0,0,0,1">
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                <TextBlock Classes="caption" Text="Mermaid 图表" VerticalAlignment="Center"
-                           Foreground="{DynamicResource AppTextSecondary}"/>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
-                  <Button Classes="subtle" Content="复制代码" Padding="8,3"
-                          Command="{Binding CopyDiagramSourceCommand}" ToolTip.Tip="复制 .mermaid 源文本"/>
-                  <Button Classes="subtle" Content="下载 PNG" Padding="8,3"
-                          Click="OnDownloadDiagram" ToolTip.Tip="把当前渲染结果保存为图片"/>
-                </StackPanel>
-              </Grid>
-            </Border>
-            <ScrollViewer Grid.Row="1" Padding="10" HorizontalScrollBarVisibility="Disabled">
-              <views:RichMarkdownView x:Name="DiagramPreview" Markdown="{Binding DiagramMarkdown}"
-                                      FontSize="13"/>
-            </ScrollViewer>
-            <TextBlock Grid.Row="1" Classes="caption" Text="{Binding DiagramError}"
-                       IsVisible="{Binding HasDiagramError}" Foreground="{DynamicResource AppCriticalForeground}"
-                       Margin="12" TextWrapping="Wrap"/>
-          </Grid>
-          <!-- 文本/代码文件：原生代码视图，保留语法高亮，不显示浏览器外壳。 -->
-          <ScrollViewer IsVisible="{Binding IsTextPreview}" Padding="10"
-                        HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
-            <views:HighlightedCodeView Code="{Binding PreviewText}" Language="{Binding PreviewLanguage}"/>
-          </ScrollViewer>
-        </Grid>
+        <Border Grid.Row="1" BorderBrush="{DynamicResource AppDividerSubtle}" BorderThickness="0,0,0,1" Padding="8,4">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="caption" Text="{Binding PreviewResult.DisplayType}" VerticalAlignment="Center"/>
+            <TextBlock Classes="caption mono" Text="{Binding PreviewResult.Format}" VerticalAlignment="Center"/>
+            <TextBox x:Name="PreviewFindBox" Width="150" PlaceholderText="查找文本" Padding="6,2"
+                     IsVisible="{Binding IsTextPreviewToolbar}" TextChanged="PreviewFindBox_TextChanged"
+                     AutomationProperties.Name="预览内查找"/>
+            <Button Classes="subtle" Content="上一个" Padding="7,2" Command="{Binding FindPreviousCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <Button Classes="subtle" Content="下一个" Padding="7,2" Command="{Binding FindNextCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <TextBlock Classes="caption" Text="{Binding FindStatus}" VerticalAlignment="Center"
+                       IsVisible="{Binding IsTextPreviewToolbar}"/>
+            <Button Classes="subtle" Content="换行" Padding="7,2" Command="{Binding TogglePreviewWordWrapCommand}"
+                    IsVisible="{Binding IsTextPreviewToolbar}" ToolTip.Tip="切换文本换行"/>
+            <Button Classes="subtle" Content="缩小" Padding="7,2" Command="{Binding ZoomImageOutCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="放大" Padding="7,2" Command="{Binding ZoomImageInCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="适配" Padding="7,2" Command="{Binding FitImageCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="原始尺寸" Padding="7,2" Command="{Binding OriginalImageCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="↶" Padding="7,2" Command="{Binding RotateImageLeftCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向左旋转"/>
+            <Button Classes="subtle" Content="↷" Padding="7,2" Command="{Binding RotateImageRightCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向右旋转"/>
+            <Button Classes="subtle" Content="棋盘" Padding="7,2" Command="{Binding ToggleImageCheckerboardCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="复制路径" Padding="7,2" Command="{Binding CopyPreviewPathCommand}"/>
+            <Button Classes="subtle" Content="复制源码" Padding="7,2" Command="{Binding CopyPreviewSourceCommand}" IsVisible="{Binding CanCopyPreviewSource}"/>
+            <Button Classes="subtle" Content="系统打开" Padding="7,2" Click="OpenPreviewInSystem_Click"/>
+          </StackPanel>
+        </Border>
+        <ContentControl x:Name="PreviewHost" Grid.Row="2" Content="{Binding PreviewHost}"/>
       </Grid>
     </Grid>
 
-    <Grid x:Name="ChangesContent" Grid.Row="2" IsVisible="{Binding IsChangesSelected}" RowDefinitions="Auto,*,*">
-      <StackPanel Grid.Row="0" Spacing="8" Margin="12,0,12,12">
-        <Grid ColumnDefinitions="*,Auto,Auto">
-          <TextBlock Classes="bodyStrong" Text="变更范围" VerticalAlignment="Center"/>
-          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新变更"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
-          <TextBlock Grid.Column="2" Classes="caption" Text="{Binding ChangesCountText}" VerticalAlignment="Center"/>
-        </Grid>
-        <Grid ColumnDefinitions="*,*" ColumnSpacing="6">
-          <Button Classes="subtle scopeChoice" Classes.selected="{Binding IsWorkspaceScope}" Content="工作区" Command="{Binding WorkspaceScopeCommand}"
-                  HorizontalAlignment="Stretch" Background="{DynamicResource AppCardBackground}"/>
-          <Button Grid.Column="1" Classes="subtle scopeChoice" Classes.selected="{Binding IsSessionScope}" Content="会话写入" Command="{Binding SessionScopeCommand}"
-                  HorizontalAlignment="Stretch" Background="{DynamicResource AppCardBackground}"/>
-        </Grid>
-        <Expander Header="范围说明" IsExpanded="False">
-          <TextBlock Classes="caption" Text="{Binding ScopeDescription}" TextWrapping="Wrap"/>
-        </Expander>
-        <TextBlock Classes="caption mono" Text="{Binding ChangesRoot}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding ChangesRoot}"/>
-        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsChangesLoading}" Height="3"/>
-        <TextBlock Classes="caption" Text="{Binding ChangesError}" IsVisible="{Binding HasChangesError}" TextWrapping="Wrap"/>
-        <TextBlock Classes="caption" Text="此范围暂无文件" IsVisible="{Binding IsChangesEmpty}" Margin="0,8"/>
-        <TextBlock Classes="caption" Text="{Binding ExcludedPathsText}" IsVisible="{Binding HasExcludedPaths}" TextWrapping="Wrap"/>
-      </StackPanel>
-      <ListBox x:Name="ChangesList" Grid.Row="1" Classes="workspaceList" ItemsSource="{Binding Changes}" SelectedItem="{Binding SelectedChange}"
-               BorderThickness="0" Background="Transparent" Margin="4,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:WorkspacePanelChangedFileViewModel">
-            <StackPanel Spacing="5" ToolTip.Tip="{Binding FullPath}">
-              <TextBlock Classes="body mono" Text="{Binding Path}" TextTrimming="CharacterEllipsis"/>
-              <TextBlock Classes="caption mono" Text="{Binding OldPath}" IsVisible="{Binding HasOldPath}" TextTrimming="CharacterEllipsis"/>
-              <StackPanel Orientation="Horizontal" Spacing="10">
-                <TextBlock Classes="caption addedFlag" Text="+ new" IsVisible="{Binding IsNew}"/>
-                <TextBlock Classes="caption deletedFlag" Text="− deleted" IsVisible="{Binding IsDeleted}"/>
-                <TextBlock Classes="caption" Text="binary" IsVisible="{Binding IsBinary}"/>
-              </StackPanel>
-              <TextBlock Classes="caption" Text="{Binding UnknownFlags}" IsVisible="{Binding HasUnknownFlags}" TextWrapping="Wrap"/>
-              <TextBlock Classes="caption" Text="{Binding StateText}" TextTrimming="CharacterEllipsis"/>
-            </StackPanel>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <Border Grid.Row="2" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,10">
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+    <!-- 变更：文件树 + 逐行 diff。窄栏里上下切换（点文件进 diff，返回看列表），
+         不把 diff 硬塞进小框里受限滚动。 -->
+    <Grid x:Name="ChangesContent" Grid.Row="2" IsVisible="{Binding IsChangesSelected}" RowDefinitions="Auto,Auto,*">
+      <!-- 范围与汇总：一行说明当前口径，右侧是真实 ± 行数 -->
+      <Border Grid.Row="0" Padding="12,0,8,8">
         <StackPanel Spacing="8">
-          <TextBlock Classes="caption mono" Text="{Binding SelectedChange.FullPath}" IsVisible="{Binding HasSelectedChange}" TextWrapping="Wrap"/>
-          <Button Classes="subtle" Content="复制完整路径" Command="{Binding CopyChangePathCommand}" IsEnabled="{Binding HasSelectedChange}" HorizontalAlignment="Left" Padding="8,4"/>
-          <Button Classes="subtle" Content="打开当前文件" Click="PreviewSelectedChange_Click" IsEnabled="{Binding HasSelectedChange}" HorizontalAlignment="Left"/>
-          <TextBlock Classes="caption" Text="{Binding DiffStatus}" TextWrapping="Wrap"/>
-          <TextBox Text="{Binding DiffText, Mode=OneWay}" IsReadOnly="True" AcceptsReturn="True" FontFamily="Consolas, Microsoft YaHei" FontSize="11" MinHeight="80" MaxHeight="220" IsVisible="{Binding HasDiff}" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto" AutomationProperties.Name="逐行差异"/>
-          <TextBlock Classes="caption" Text="{Binding ChangesUpdatedText}"/>
-          <TextBlock Classes="caption" Text="{Binding CopyFeedback}" TextWrapping="Wrap"/>
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+            <Border Classes="scopeSwitch">
+              <StackPanel Orientation="Horizontal">
+                <Button Classes="scopeChip" Classes.selected="{Binding IsWorkspaceScope}" Content="工作区"
+                        Command="{Binding WorkspaceScopeCommand}" ToolTip.Tip="整个 Git 工作树的当前状态，包含用户与外部程序改动"
+                        AutomationProperties.Name="工作区范围"/>
+                <Button Classes="scopeChip" Classes.selected="{Binding IsSessionScope}" Content="本次会话"
+                        Command="{Binding SessionScopeCommand}" ToolTip.Tip="当前分支已确认成功的 write/edit 路径；不包含终端命令的全部副作用"
+                        AutomationProperties.Name="会话写入范围"/>
+              </StackPanel>
+            </Border>
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Classes="mono diffStatAdded" Text="{Binding AddedTotalText}" IsVisible="{Binding HasTotals}"
+                         ToolTip.Tip="新增行数合计"/>
+              <TextBlock Classes="mono diffStatRemoved" Text="{Binding RemovedTotalText}" IsVisible="{Binding HasTotals}"
+                         ToolTip.Tip="删除行数合计"/>
+              <Button Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="重新读取变更"
+                      AutomationProperties.Name="刷新变更">
+                <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
+              </Button>
+            </StackPanel>
+          </Grid>
+          <TextBlock Classes="caption mono" Text="{Binding ChangesRoot}" TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding ChangesRoot}" IsVisible="{Binding HasChanges}"/>
+          <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsChangesLoading}" Height="2"/>
+          <TextBlock Classes="caption" Text="{Binding ChangesError}" IsVisible="{Binding HasChangesError}" TextWrapping="Wrap"/>
+          <TextBlock Classes="caption" Text="{Binding ExcludedPathsText}" IsVisible="{Binding HasExcludedPaths}" TextWrapping="Wrap"/>
         </StackPanel>
-        </ScrollViewer>
       </Border>
+
+      <!-- 搜索：只在有文件时出现，空态不留一个无用输入框 -->
+      <TextBox Grid.Row="1" x:Name="ChangeSearch" Margin="12,0,12,8" Text="{Binding ChangeFilter}"
+               PlaceholderText="筛选文件" IsVisible="{Binding HasChanges}"
+               AutomationProperties.Name="筛选变更文件"/>
+
+      <Grid Grid.Row="2" x:Name="ChangeBody" ColumnDefinitions="*,0,0">
+        <StackPanel Grid.ColumnSpan="3" IsVisible="{Binding IsChangeListEmpty}" Margin="16,24" Spacing="6">
+          <TextBlock Classes="body" Text="没有变更" IsVisible="{Binding !HasChangesError}"/>
+          <TextBlock Classes="caption" Text="工作区干净，或本次会话还没有写入文件。" TextWrapping="Wrap"/>
+        </StackPanel>
+        <TextBlock Grid.ColumnSpan="3" Classes="caption" Text="没有匹配的文件" Margin="16,16"
+                   IsVisible="{Binding HasFilteredOut}"/>
+
+        <!-- 文件列表态 -->
+        <Grid Grid.Column="0" x:Name="ChangeFilesPane" RowDefinitions="*,Auto" IsVisible="{Binding IsChangeListVisible}">
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <!-- ChangesList 是所有文件行（含空目录头）的平铺列表：选中态仍按文件，
+                 分组只是显示层的层级，这样键盘上下键与既有选中契约都保持一致。 -->
+            <ListBox x:Name="ChangesList" Classes="changesList" ItemsSource="{Binding ChangeRows}"
+                     SelectedItem="{Binding SelectedChangeRow}"
+                     Background="Transparent" BorderThickness="0" Margin="4,0,4,4" MinHeight="80"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     AutomationProperties.Name="变更文件列表">
+              <ListBox.DataTemplates>
+                <DataTemplate DataType="vm:WorkspaceChangeGroupRowViewModel" x:DataType="vm:WorkspaceChangeGroupRowViewModel">
+                  <Button Classes="groupRow" Click="ToggleGroup_Click" HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Stretch" Padding="6,3" Background="Transparent"
+                          ToolTip.Tip="折叠或展开此目录">
+                    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronDown}" Width="9" Height="9"
+                                VerticalAlignment="Center" IsVisible="{Binding IsExpanded}"
+                                Foreground="{DynamicResource AppTextDim}"/>
+                      <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronRight}" Width="9" Height="9"
+                                VerticalAlignment="Center" IsVisible="{Binding IsCollapsed}"
+                                Foreground="{DynamicResource AppTextDim}"/>
+                      <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding Header}"
+                                 TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                      <TextBlock Grid.Column="2" Classes="caption" Text="{Binding CountText}"
+                                 VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+                    </Grid>
+                  </Button>
+                </DataTemplate>
+                <DataTemplate DataType="vm:WorkspacePanelChangedFileViewModel" x:DataType="vm:WorkspacePanelChangedFileViewModel">
+                  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6" Margin="16,0,0,0"
+                        Height="26" ToolTip.Tip="{Binding Path}">
+                    <TextBlock Grid.Column="0" Classes="mono statusMark" Text="{Binding StatusMark}"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="1" Classes="mono fileName" Text="{Binding Name}"
+                               TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="2" Classes="mono additions" FontSize="12"
+                               Text="{Binding AddedText}" IsVisible="{Binding HasAdded}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="3" Classes="mono deletions" FontSize="12"
+                               Text="{Binding RemovedText}" IsVisible="{Binding HasRemoved}" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="4" Classes="caption" Text="二进制" IsVisible="{Binding IsBinary}"
+                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+                  </Grid>
+                </DataTemplate>
+              </ListBox.DataTemplates>
+            </ListBox>
+          </ScrollViewer>
+          <TextBlock Grid.Row="1" Classes="caption" Text="{Binding ChangesUpdatedText}" Margin="12,4,12,8"/>
+        </Grid>
+
+        <!-- 差异态：文件头 + 逐行渲染 -->
+        <Border Grid.Column="1" IsVisible="{Binding IsChangeListVisible}" Width="1" Margin="0,0,0,0"
+                Background="{DynamicResource AppDividerSubtle}" IsHitTestVisible="False"/>
+        <Grid Grid.Column="0" Grid.ColumnSpan="3" x:Name="ChangeDiffPane" RowDefinitions="Auto,*"
+              IsVisible="{Binding HasSelectedChange}">
+          <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerSubtle}"
+                  Background="{DynamicResource AppCardBackground}" Padding="8,6">
+            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+              <Button Classes="iconButton" Click="CloseDiff_Click" ToolTip.Tip="返回文件列表"
+                      IsVisible="{Binding IsChangeListNarrow}" AutomationProperties.Name="返回变更列表">
+                <PathIcon Data="{DynamicResource Icon.ArrowLeft}" Width="14" Height="14"/>
+              </Button>
+              <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                <TextBlock Classes="mono" FontSize="12.5" Text="{Binding SelectedChange.Name}"
+                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedChange.FullPath}"/>
+                <TextBlock Classes="caption mono" Text="{Binding SelectedChange.Folder}" TextTrimming="CharacterEllipsis"
+                           IsVisible="{Binding SelectedChange.HasFolder}" Foreground="{DynamicResource AppTextDim}"/>
+              </StackPanel>
+              <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <TextBlock Classes="mono additions" FontSize="12" Text="{Binding SelectedChange.AddedText}"
+                           IsVisible="{Binding SelectedChange.HasAdded}"/>
+                <TextBlock Classes="mono deletions" FontSize="12" Text="{Binding SelectedChange.RemovedText}"
+                           IsVisible="{Binding SelectedChange.HasRemoved}"/>
+                <Button Classes="subtle" Content="打开当前文件" Padding="8,3" FontSize="12"
+                        Click="PreviewSelectedChange_Click" ToolTip.Tip="在工作视图里打开这个文件"/>
+                <Button Classes="iconButton" Click="ChangeDiffMenu_Click" ToolTip.Tip="更多差异操作"
+                        AutomationProperties.Name="差异操作">
+                  <PathIcon Data="{DynamicResource Icon.More}" Width="14" Height="14"/>
+                </Button>
+              </StackPanel>
+            </Grid>
+          </Border>
+
+          <ProgressBar Grid.Row="1" IsIndeterminate="True" IsVisible="{Binding IsDiffLoading}" Height="2" VerticalAlignment="Top"/>
+          <TextBlock Grid.Row="1" Classes="caption" Text="{Binding DiffStatus}" Margin="12,16" TextWrapping="Wrap"
+                     IsVisible="{Binding HasDiffStatus}"/>
+
+          <ScrollViewer Grid.Row="1" x:Name="DiffScroll" IsVisible="{Binding HasDiffModel}"
+                        HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+            <ItemsControl x:Name="DiffRowsHost" ItemsSource="{Binding DiffModel.Rows}" Margin="0,4,0,8">
+              <ItemsControl.DataTemplates>
+                <DataTemplate DataType="vm:DiffRowViewModel" x:DataType="vm:DiffRowViewModel">
+                  <!-- 行宽取滚动视口：底色整行铺满，而不是只铺到文字末尾。 -->
+                  <StackPanel>
+                    <Border Classes="diffHunkHeader" IsVisible="{Binding IsHeader}" MinWidth="{Binding MinWidth}">
+                      <TextBlock Classes="mono" FontSize="11" Text="{Binding HeaderText}"
+                                 Foreground="{DynamicResource AppTextDim}" TextWrapping="NoWrap"/>
+                    </Border>
+                    <Button Classes="diffGap" IsVisible="{Binding IsGap}" Click="ExpandGap_Click" MinWidth="{Binding MinWidth}"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
+                      <TextBlock Classes="mono" FontSize="11" Text="{Binding GapText}"
+                                 Foreground="{DynamicResource AppAccentText}" Margin="8,1"/>
+                    </Button>
+                    <Border Classes="diffRow" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"
+                            Classes.emphasis="{Binding HasEmphasis}" IsVisible="{Binding IsBody}" MinWidth="{Binding MinWidth}">
+                      <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                        <TextBlock Grid.Column="0" Classes="mono diffGutter" Text="{Binding OldNumber}"
+                                   Width="{Binding $parent[ItemsControl].((vm:WorkspacePanelViewModel)DataContext).DiffModel.NumberColumnWidth}"
+                                   TextAlignment="Right"/>
+                        <TextBlock Grid.Column="1" Classes="mono diffGutter" Text="{Binding NewNumber}"
+                                   Width="{Binding $parent[ItemsControl].((vm:WorkspacePanelViewModel)DataContext).DiffModel.NumberColumnWidth}"
+                                   TextAlignment="Right"/>
+                        <TextBlock Grid.Column="2" Classes="mono diffMarker" Text="{Binding Marker}"
+                                   Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"/>
+                        <views:DiffLineText Grid.Column="3" Classes="mono diffText" FontSize="12"
+                                            VerticalAlignment="Center"
+                                            Runs="{Binding Runs}" IsAddedRow="{Binding IsAdded}"
+                                            Wrap="{Binding Wrap}"/>
+                      </Grid>
+                    </Border>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.DataTemplates>
+            </ItemsControl>
+          </ScrollViewer>
+          <TextBlock Grid.Row="1" Classes="caption" Text="{Binding DiffNote}" Margin="12,0,12,8"
+                     VerticalAlignment="Bottom" IsVisible="{Binding HasDiffNote}" TextWrapping="Wrap"/>
+        </Grid>
+      </Grid>
     </Grid>
   </Grid>
 </UserControl>

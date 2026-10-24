@@ -60,7 +60,7 @@ internal static class WorkbenchDemoSelfTest
             Check(registry["browser"].ModuleId == "builtin.browser", "Modules: activation restores a stable module identity");
         }
         var invalidModules = WorkbenchModulePreferences.Restore("{broken", out var invalidDiagnostic);
-        Check(invalidModules.BrowserEnabled && invalidDiagnostic is not null, "Modules: malformed preferences degrade without blocking core");
+        Check(!invalidModules.BrowserEnabled && invalidDiagnostic is not null, "Modules: malformed preferences degrade without blocking core");
         WorkbenchModulePreferences.Restore("{\"Version\":99}", out var unknownDiagnostic);
         Check(unknownDiagnostic is not null, "Modules: unsupported preference version is diagnosed");
         var state = new WorkbenchLayoutState();
@@ -198,9 +198,9 @@ internal static class WorkbenchDemoSelfTest
                 "Optional pages: opening local review survives appearance layout synchronization");
             Check(reviewVm.ProjectPath == vm.WorkspacePanel.ProjectPath && !reviewVm.HasExecutor,
                 "Local review integration: mock shell shares project context without inventing a model executor");
-            Check(vm.Settings.BuiltInModules.Any(module => module.Id == "builtin.local-review") &&
+            Check(!vm.Settings.BuiltInModules.Any(module => module.Id == "builtin.local-review") &&
                 window.ActionsForTesting.Actions.Any(action => action.Id == "page.local-review"),
-                "Local review integration: settings and action registry expose the real optional page");
+                "Local review integration: plugin page is exposed through the shared action registry, not a duplicate settings module");
             window.LocalReviewModuleForTesting.IsEnabled = false;
             Check(!window.PageAvailableForTesting("local-review") && reviewVm.IsDisposed,
                 "Local review integration: disabling releases its model and cancels only its own review");
@@ -225,6 +225,8 @@ internal static class WorkbenchDemoSelfTest
                     "Moving files retains the live control: " + zone);
             }
             window.MoveDockPage("files", DockZone.Left);
+            // 浏览器页默认不启用；本段验证启用/停用生命周期，先显式启用。
+            window.BrowserModuleForTesting.IsEnabled = true; await Ready();
             var browserPage = (Views.BrowserView)window.PageForTesting("browser");
             browserPage.ViewModel.AddressText = "browser address draft";
             window.MoveDockPage("browser", DockZone.Bottom); await Ready();
@@ -236,10 +238,10 @@ internal static class WorkbenchDemoSelfTest
             Check(window.ActionsForTesting.GetDisabledReason("browser")?.Contains("已停用") == true &&
                 window.GetVisualDescendants().OfType<Views.DockRegionView>().All(dock => dock.Catalog.All(item => item.Id != "browser")),
                 "Modules: page menus and command palette agree on disabled browser");
-            Check(vm.Input.DraftText == centralDraft && window.DockLayoutForTesting.Find("browser") == DockZone.Bottom,
-                "Modules: disabling preserves central draft and dormant placement");
+            Check(vm.Input.DraftText == centralDraft && window.DockLayoutForTesting.Find("browser") is null,
+                "Modules: disabling preserves central draft and removes the plugin page from layout");
             window.OpenDockPage("browser", DockZone.Left);
-            Check(window.DockLayoutForTesting.Find("browser") == DockZone.Bottom, "Modules: disabled page cannot be opened through direct entry");
+            Check(window.DockLayoutForTesting.Find("browser") is null, "Modules: disabled plugin page cannot be opened through direct entry");
             window.BrowserModuleForTesting.IsEnabled = true; await Ready();
             var reactivated = (Views.BrowserView)window.PageForTesting("browser");
             Check(!ReferenceEquals(browserPage, reactivated) && !reactivated.HostForTesting.IsDisposedForTesting &&
@@ -268,8 +270,8 @@ internal static class WorkbenchDemoSelfTest
                 "L08: invalid drop leaves layout unchanged");
             window.UpdateDockDropTarget(null);
             window.ResetDockLayout(); await Ready();
-            Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") == DockZone.Right && !window.DockLayoutForTesting.Hidden[DockZone.Bottom],
-                "L16: reset restores default positions and hidden regions");
+            Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") is null && window.DockLayoutForTesting.Hidden[DockZone.Bottom],
+                "L16: reset restores default positions without optional browser/terminal pages");
             // L17: 关空右侧页签后 Hidden 仍可能被用户切回 false，空区不可见（不收起规则）形成死区；
             // 打开操作必须回填默认页签，否则右栏永远打不开（真实缺陷：关空后「右区」按钮失效）。
             window.CloseDockPageForTesting("changes");
@@ -349,7 +351,7 @@ internal static class WorkbenchDemoSelfTest
             window.Width = 1440;
             window.Height = 900;
             Application.Current.RequestedThemeVariant = ThemeVariant.Light;
-            foreach (var id in known.Where(id => id != "overview"))
+            foreach (var id in known.Where(id => id != "overview" && window.PageAvailableForTesting(id)))
             {
                 window.MoveDockPage(id, DockZone.Right); await Ready();
                 var control = window.PageForTesting(id);

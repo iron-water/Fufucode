@@ -1,0 +1,9 @@
+{
+  "id": "sandbox.nvx",
+  "name": "NVX 微虚拟机沙箱",
+  "version": "0.1.0",
+  "entryAssembly": "Fufucode.Plugins.Nvx.dll",
+  "packageType": "Fufucode.Plugins.Nvx.NvxSandboxPluginPackage",
+  "category": "AgentCapability",
+  "capabilities": ["SandboxExecution"]
+}

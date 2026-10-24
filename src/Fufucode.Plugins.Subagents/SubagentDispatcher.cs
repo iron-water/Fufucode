@@ -13,22 +13,11 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
 {
     public const string ToolName = "subagent";
 
-    public static PureToolDefinition Definition { get; } = new(
-        ToolName,
-        "运行子代理。read 模式只读、快速，适合搜索与审查；patch 模式在临时 worktree 中修改，" +
-        "返回 unified diff 候选补丁（不直接交付父工作区）。省略 agent 时按 mode 选择内置代理。",
-        """
-        {
-            "type": "object",
-            "properties": {
-                "agent": { "type": "string", "description": "子代理名称；read 默认 explore，patch 默认 general" },
-                "prompt": { "type": "string", "description": "任务说明；省略时列出可用子代理" },
-                "mode": { "type": "string", "enum": ["read", "patch"], "description": "覆盖代理模式" },
-                "model": { "type": "string", "description": "可选模型 id" },
-                "fork": { "type": "boolean", "description": "是否继承父会话最近历史" }
-            }
-        }
-        """);
+    /// <summary>
+    /// 复用 Core 的唯一 Schema：父会话与嵌套子代理必须声明同一套参数，
+    /// 否则模型在两层拿到的 `context`、`action` 能力不一致。
+    /// </summary>
+    public static PureToolDefinition Definition => NativeSubagentContract.Definition;
 
     private readonly IPureToolDispatcher _inner;
     private readonly SubagentRunner _runner;
@@ -95,6 +84,10 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
                 $"子代理 '{definition.Name}' 是 {definition.Mode.ToString().ToLowerInvariant()} 模式；" +
                 $"请省略 mode 或使用对应模式的代理。");
 
+        var context = String(root, "context");
+        if (!string.IsNullOrWhiteSpace(context))
+            prompt = $"{prompt}\n\n## 已知线索（父会话提供，已验证可直接使用）\n{context}";
+
         try
         {
             var result = await runner.RunAsync(definition.Name, prompt, String(root, "model"),
@@ -117,6 +110,16 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
         if (!result.Success)
         {
             var failed = new StringBuilder($"子代理 {result.AgentName} 失败：{result.Error}");
+            // 失败也要交回已经收集到的证据，否则父会话只能原样重试。
+            if (result.ToolTrace is { Count: > 0 } failedTrace)
+            {
+                failed.AppendLine();
+                failed.AppendLine("已执行工具：");
+                foreach (var item in failedTrace.Take(12))
+                    failed.Append("- ").Append(item.Success ? "[成功] " : "[失败] ")
+                        .Append(item.Tool).Append(' ')
+                        .AppendLine(TruncateInline(item.ArgumentsJson, 160));
+            }
             if (result.Mode == SubagentMode.Patch)
             {
                 failed.AppendLine();
@@ -131,6 +134,8 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
             .Append("（工具调用 ").Append(result.ToolCalls).Append(" 次");
         if (result.DurationMs is { } duration) builder.Append("，").Append(duration).Append(" ms");
         builder.AppendLine("）");
+        if (result.Truncated)
+            builder.AppendLine("[注意：子代理达到轮次上限，结论可能不完整；需要时请拆分任务或改用更具体的提示重试。]");
         builder.AppendLine(result.Content);
 
         if (result.Mode == SubagentMode.Patch)
@@ -168,6 +173,9 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
         text = text.TrimEnd();
         return text.Length <= 64 * 1024 ? text : text[..65_536] + "\n... [子代理输出已截断]";
     }
+
+    private static string TruncateInline(string value, int length) =>
+        value.Length <= length ? value : value[..length] + "…";
 
     private static string? String(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String

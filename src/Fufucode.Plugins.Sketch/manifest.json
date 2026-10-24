@@ -1,0 +1,9 @@
+{
+  "id": "tool.sketch",
+  "name": "草图绘制",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Sketch.dll",
+  "packageType": "Fufucode.Plugins.Sketch.SketchPluginPackage",
+  "category": "ToolExtension",
+  "capabilities": ["ComposerTool", "ImageAttachment"]
+}
