@@ -427,9 +427,9 @@
   <!-- 页面标题：Windows 设置的面包屑用 20px，父级次级色、当前页主色 -->
   <!-- 模型选择器关键字胶囊：标签按钮 + 右侧关闭键，二者共用同一底色。 -->
   <Style Selector="Border.keywordChip">
-    <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
-    <Setter Property="CornerRadius" Value="12"/>
-    <Setter Property="Height" Value="24"/>
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Height" Value="26"/>
     <Setter Property="Padding" Value="0"/>
   </Style>
   <Style Selector="Button.keywordChipLabel">
@@ -437,7 +437,8 @@
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="9,0,4,0"/>
     <Setter Property="MinHeight" Value="0"/>
-    <Setter Property="Height" Value="24"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="Cursor" Value="Hand"/>
   </Style>
@@ -449,7 +450,8 @@
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Padding" Value="2,0,6,0"/>
     <Setter Property="MinHeight" Value="0"/>
-    <Setter Property="Height" Value="24"/>
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
     <Setter Property="Cursor" Value="Hand"/>
   </Style>
@@ -910,6 +912,17 @@
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
   <Style Selector="Button.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <!-- 模型选择行：中间灰横条，悬停升高亮；与其它列表行同一套层级。 -->
+  <Style Selector="Button.modelChoiceRow">
+    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Margin" Value="0,1"/>
+    <Setter Property="Padding" Value="8,5"/>
+  </Style>
+  <Style Selector="Button.modelChoiceRow:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
   <!-- 启动卡：深色背景上的一张中间灰卡，图标 + 品牌名 + 主操作。 -->

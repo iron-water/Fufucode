@@ -1,5 +1,6 @@
 using Avalonia;
 using System;
+using System.IO;
 using System.ComponentModel;
 using System.Linq;
 using Avalonia.Controls;
@@ -27,6 +28,12 @@ public partial class ChatPage
         { e.DragEffects = e.DataTransfer.TryGetFiles() is not null ? DragDropEffects.Copy : DragDropEffects.None; e.Handled = true; });
         ComposerCard.AddHandler(DragDrop.DropEvent, async (_, e) =>
         { e.Handled = true; await AttachFilesAsync(e.DataTransfer.TryGetFiles()?.Select(f => f.TryGetLocalPath()).OfType<string>() ?? []); });
+        // 粘贴：剪贴板里有文件或图片时作为附件加入；否则保持默认文本粘贴。
+        InputBox.AddHandler(KeyDownEvent, async (_, e) =>
+        {
+            if (e.Key != Key.V || !e.KeyModifiers.HasFlag(KeyModifiers.Control)) return;
+            if (await TryPasteAttachmentsAsync()) e.Handled = true;
+        }, RoutingStrategies.Tunnel, handledEventsToo: true);
         _executionMode.ItemsSource = new[] { "人工确认", "自动审批", "完全访问", "规划模式" };
         ToolTip.SetTip(_executionMode, "自动审批允许内置文件编辑，Shell/未知工具仍需确认；规划模式只允许内置读取工具。不是系统沙箱。");
         _executionMode.SelectionChanged += async (_, _) =>
@@ -144,6 +151,36 @@ public partial class ChatPage
         }
         AttachContextButton.Flyout = attachments;
     }
+    /// <summary>剪贴板附件：文件列表、常见图片格式（字节流）。成功时返回 true。</summary>
+    private async System.Threading.Tasks.Task<bool> TryPasteAttachmentsAsync()
+    {
+        if (TopLevel.GetTopLevel(this)?.Clipboard is not { } clipboard) return false;
+        try
+        {
+            var transfer = await clipboard.TryGetDataAsync();
+            if (transfer is null) return false;
+            if (await transfer.TryGetFilesAsync() is { Length: > 0 } files)
+            {
+                var paths = files.Select(item => item.TryGetLocalPath()).OfType<string>().ToArray();
+                if (paths.Length > 0) { await AttachFilesAsync(paths); return true; }
+            }
+            // 图片：剪贴板里通常是 PNG 字节流；落成临时文件后按普通附件处理。
+            foreach (var (name, extension) in new[] { ("PNG", ".png"), ("image/png", ".png"), ("image/jpeg", ".jpg"), ("image/bmp", ".bmp") })
+            {
+                var bytes = await transfer.TryGetValueAsync<byte[]>(DataFormat.CreateBytesPlatformFormat(name));
+                if (bytes is { Length: > 0 })
+                {
+                    var path = Path.Combine(Path.GetTempPath(), "fufucode-paste-" + Guid.NewGuid().ToString("N") + extension);
+                    await File.WriteAllBytesAsync(path, bytes);
+                    await AttachFilesAsync(new[] { path });
+                    return true;
+                }
+            }
+        }
+        catch (Exception error) { ReportActionError("粘贴附件失败：" + error.Message); }
+        return false;
+    }
+
     private async System.Threading.Tasks.Task PickAttachmentAsync(string kind)
     {
         if (TopLevel.GetTopLevel(this) is not MainWindow owner) return;

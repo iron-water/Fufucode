@@ -14,7 +14,7 @@ public partial class MainWindow
 
     private static readonly string[] RowClasses =
     [
-        "settingsRow", "overviewSession", "dockTabRow", "navFill", "changeFileRow", "overviewProject",
+        "settingsRow", "overviewSession", "dockTabRow", "navFill", "changeFileRow", "overviewProject", "modelChoiceRow",
     ];
 
     private void InitializeRowHover()
