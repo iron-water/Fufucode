@@ -394,25 +394,29 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding HasFiles}" Margin="0,2,0,0">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
-                        <Button Classes="referenceChip" Click="OnOpenMessageFile" Margin="0,0,6,6"
-                                ToolTip.Tip="{Binding Path}">
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
-                                      VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                            <TextBlock Classes="mono" FontSize="12" Text="{Binding DisplayName}"/>
-                            <TextBlock Classes="meta" Text="{Binding Folder}" VerticalAlignment="Center"
-                                       MaxWidth="200" TextTrimming="CharacterEllipsis"/>
-                          </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                  <StackPanel IsVisible="{Binding HasFiles}" Margin="0,4,0,0" Spacing="4">
+                    <Button Classes="subtle" HorizontalAlignment="Left" Padding="8,4"
+                            Content="{Binding RelatedFilesToggleText}" Click="OnToggleRelatedFiles"
+                            ToolTip.Tip="消息中提到的文件路径；不代表模型已经读取"/>
+                    <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
+                      <ItemsControl ItemsSource="{Binding Files}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
+                            <Button Classes="referenceChip" Click="OnOpenMessageFile" Margin="0,0,6,6"
+                                    IsEnabled="{Binding Exists}" ToolTip.Tip="{Binding Path}">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                                <TextBlock Classes="mono" FontSize="12" Text="{Binding DisplayName}"/>
+                                <TextBlock Classes="meta" Text="{Binding StatusText}" VerticalAlignment="Center"
+                                           MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                              </StackPanel>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </views:CollapsiblePanel>
+                  </StackPanel>
                   <!-- 变更卡已逐文件列出产物时不再重复；没有产物时整块不出现。 -->
                   <Border IsVisible="{Binding ShowArtifactBlock}" Classes="turnSummary">
                     <StackPanel IsVisible="{DynamicResource UiShowArtifactSummary}" Spacing="4">

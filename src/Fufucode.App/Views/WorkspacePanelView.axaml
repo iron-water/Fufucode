@@ -15,10 +15,62 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
       <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     </Style>
-    <Style Selector="ListBox.workspaceList ListBoxItem">
-      <Setter Property="Padding" Value="8,8"/>
+    <!-- Files 列表遵循设置页的三层层次：页底 → 目录二级面板 → 选中/悬停反馈。 -->
+    <Style Selector="ListBox.workspaceList > ListBoxItem">
+      <Setter Property="Padding" Value="0"/>
+      <Setter Property="Margin" Value="2,1"/>
       <Setter Property="MinHeight" Value="44"/>
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+      <Setter Property="Transitions">
+        <Transitions>
+          <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        </Transitions>
+      </Setter>
+    </Style>
+    <Style Selector="ListBox.workspaceList > ListBoxItem:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <Style Selector="ListBox.workspaceList > ListBoxItem:selected">
+      <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+      <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+      <Setter Property="BorderThickness" Value="3,0,0,0"/>
+    </Style>
+    <Style Selector="Button.fileRow">
+      <Setter Property="Background" Value="Transparent"/>
+      <Setter Property="BorderThickness" Value="0"/>
+      <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+      <Setter Property="Padding" Value="10,8"/>
+      <Setter Property="HorizontalAlignment" Value="Stretch"/>
+      <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+      <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.fileRow.folder">
+      <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    </Style>
+    <Style Selector="Button.fileRow:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
+    <Style Selector="Button.fileRow.folder:pointerover">
+      <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+    </Style>
+    <Style Selector="ListBox.workspaceList > ListBoxItem:selected Button.fileRow.folder">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.fileRow:pressed">
+      <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
+    </Style>
+    <!-- Fluent Button 模板的 ContentPresenter 默认会再画一层底色；这里让行容器统一掌控高亮。 -->
+    <Style Selector="Button.fileRow /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.fileRow:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
+    </Style>
+    <Style Selector="Button.fileRow:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="Transparent"/>
     </Style>
   </UserControl.Styles>
   <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource AppMicaPageBackground}">
@@ -91,14 +143,16 @@
                BorderThickness="0" Background="Transparent" Margin="4,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
-            <Button Classes="subtle" Click="BrowseFile_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                    ToolTip.Tip="{Binding FullPath}" Padding="0" Background="Transparent">
-              <Grid ColumnDefinitions="20,*" ColumnSpacing="6">
-                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding IsDirectory}"/>
-                <PathIcon Data="{DynamicResource Icon.Document}" Width="14" Height="14" VerticalAlignment="Center" IsVisible="{Binding !IsDirectory}"/>
+            <Button Classes="fileRow" Classes.folder="{Binding IsDirectory}" Click="BrowseFile_Click"
+                    ToolTip.Tip="{Binding FullPath}">
+              <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
+                <PathIcon Data="{DynamicResource Icon.Folder}" Width="15" Height="15" VerticalAlignment="Center"
+                          Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
+                <PathIcon Data="{DynamicResource Icon.Document}" Width="14" Height="14" VerticalAlignment="Center"
+                          Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
                 <StackPanel Grid.Column="1" Spacing="2">
                   <TextBlock Classes="body" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Classes="caption" Text="{Binding Detail}"/>
+                  <TextBlock Classes="caption" Text="{Binding Detail}" Foreground="{DynamicResource AppTextSecondary}"/>
                 </StackPanel>
               </Grid>
             </Button>

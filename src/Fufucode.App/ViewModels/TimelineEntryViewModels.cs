@@ -275,6 +275,18 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     public System.Collections.ObjectModel.ObservableCollection<MessageFileViewModel> Files { get; } = new();
     public bool HasLinks => Links.Count > 0;
     public bool HasFiles => Files.Count > 0;
+    private bool _relatedFilesExpanded;
+    public bool RelatedFilesExpanded
+    {
+        get => _relatedFilesExpanded;
+        set
+        {
+            if (!SetProperty(ref _relatedFilesExpanded, value)) return;
+            OnPropertyChanged(nameof(RelatedFilesToggleText));
+        }
+    }
+    public string RelatedFilesToggleText => RelatedFilesExpanded ? "收起相关文件" : $"相关文件 · {Files.Count}";
+    public void ToggleRelatedFiles() => RelatedFilesExpanded = !RelatedFilesExpanded;
 
     private string _changeSummary = "", _artifactSummary = "";
     public string ChangeSummary { get => _changeSummary; set { if (SetProperty(ref _changeSummary, value)) OnPropertyChanged(nameof(HasChangeSummary)); } }
@@ -527,8 +539,19 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
             foreach (var segment in text.Segments.OfType<PlainSegmentViewModel>())
                 MessageReferenceExtractor.Extract(segment.Text, Links, Files);
         }
+        if (this is AssistantMessageViewModel assistant && assistant.ProjectRootForReferences is { } root)
+            assistant.ResolveReferencedFiles(root);
         OnPropertyChanged(nameof(HasLinks));
         OnPropertyChanged(nameof(HasFiles));
+    }
+
+    public string? ProjectRootForReferences { get; private set; }
+
+    public void ResolveReferencedFiles(string? projectRoot)
+    {
+        ProjectRootForReferences = projectRoot;
+        foreach (var file in Files) file.Resolve(projectRoot);
+        OnPropertyChanged(nameof(Files));
     }
 
     public void FinalizeTurn(SessionOutcome outcome, TimeSpan elapsed)

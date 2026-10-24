@@ -27,6 +27,16 @@ public static class WorkspacePanelSelfTest
             var directory = Directory.CreateDirectory(Path.Combine(root, "folder"));
             var filePath = Path.Combine(directory.FullName, "可读文件.txt");
             File.WriteAllText(filePath, "fixture");
+            var reference = new MessageFileViewModel("folder/可读文件.txt");
+            reference.Resolve(root);
+            Check(reference.Exists && reference.ResolvedPath == filePath, "相关文件相对路径解析到项目内真实文件");
+            var outsideReference = new MessageFileViewModel("../outside.txt");
+            outsideReference.Resolve(root);
+            Check(!outsideReference.Exists && outsideReference.ResolvedPath is null, "相关文件越界路径保持不可预览");
+            var assistant = new AssistantMessageViewModel(clipboard: new RecordingClipboardService());
+            Check(!assistant.RelatedFilesExpanded, "相关文件窄条默认收起");
+            assistant.ToggleRelatedFiles();
+            Check(assistant.RelatedFilesExpanded, "相关文件窄条可展开");
             var clipboard = new RecordingClipboardService();
             using var vm = new WorkspacePanelViewModel(clipboard);
             vm.AttachMock(root);
