@@ -1023,14 +1023,7 @@
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12"/>
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09"/>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.12"/>
-      </Transitions>
-    </Setter>
+    <!-- 不做任何背景/形变过渡：悬停与离开都是瞬时切换，杜绝残留帧。 -->
   </Style>
   <Style Selector="Button.islandTile:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
@@ -1040,6 +1033,13 @@
   <Style Selector="Button.islandTile /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.islandTile:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.islandTile:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
   <Style Selector="Button.islandTile:pressed">
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
