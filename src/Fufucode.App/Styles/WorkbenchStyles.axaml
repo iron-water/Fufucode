@@ -1075,7 +1075,7 @@
   </Style>
   <!-- 模型选择行：中间灰横条，悬停升高亮；与其它列表行同一套层级。 -->
   <Style Selector="Button.modelChoiceRow">
-    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Margin" Value="0,1"/>

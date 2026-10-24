@@ -21,6 +21,7 @@ public partial class ChatPage
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
     private Button? _executionModeButton;
+    private MenuFlyout? _executionModeMenu;
     private bool _previewDraft;
     private void InitializeComposerTools()
     {
@@ -127,8 +128,8 @@ public partial class ChatPage
         // 权限模式：底部只留一个小图标，点开才是选项列表；文字进 tooltip。
         var modeButton = WorkbenchUi.IconButton("ShieldCheckmark", "权限模式", 30);
         var modeMenu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
-        modeMenu.Opening += (_, _) => BuildExecutionModeMenu(modeMenu);
         modeButton.Flyout = modeMenu;
+        _executionModeMenu = modeMenu;
         _executionModeButton = modeButton;
         ComposerModes.Children.Insert(0, modeButton);
         // 输入区底部图标统一用上方浮层提示（离开 0.3s 消失）。
@@ -189,10 +190,9 @@ public partial class ChatPage
         }
     }
 
-    /// <summary>思考等级菜单：图标按钮点开后列出可选档位（不支持的置灰）。</summary>
-    internal void ThinkingFlyout_Opening(object? sender, EventArgs e)
+    /// <summary>思考等级菜单：预构建可选档位（不支持的置灰）。</summary>
+    private void BuildThinkingMenu(MenuFlyout menu, MainViewModel vm)
     {
-        if (sender is not MenuFlyout menu || DataContext is not MainViewModel vm) return;
         menu.Items.Clear();
         foreach (var choice in vm.Settings.ThinkingChoices)
         {
@@ -203,7 +203,7 @@ public partial class ChatPage
                 Header = (current ? "✓  " : "    ") + captured.Label,
                 IsEnabled = captured.IsSupported,
             };
-            item.Click += (_, _) => vm.Settings.SelectedThinking = captured;
+            item.Click += (_, _) => { vm.Settings.SelectedThinking = captured; RefreshComposerTools(); };
             menu.Items.Add(item);
         }
     }
@@ -310,6 +310,8 @@ public partial class ChatPage
                 _executionModeButton.IsVisible = vm.Input.ShowsExecutionMode;
             }
             ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
+            if (_executionModeMenu is not null) BuildExecutionModeMenu(_executionModeMenu);
+            if (ThinkingButton.Flyout is MenuFlyout thinkingMenu) BuildThinkingMenu(thinkingMenu, vm);
         }
         finally { _updatingComposer = false; }
         DraftPreview.IsVisible = _previewDraft;

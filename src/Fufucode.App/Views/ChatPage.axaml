@@ -720,7 +720,7 @@
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened">
-                    <Border Width="380" Classes="card" Padding="10" Background="{DynamicResource AppBaseDeep}">
+                    <Border Width="380" Classes="card" Padding="10">
                       <StackPanel Spacing="8">
                         <TextBox x:Name="ModelPickerSearchBox"
                                  Text="{Binding Settings.ModelPickerFilter, UpdateSourceTrigger=PropertyChanged}"
@@ -795,7 +795,7 @@
                       IsEnabled="{Binding Settings.CanChangeModel}">
                 <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14"/>
                 <Button.Flyout>
-                  <MenuFlyout Placement="TopEdgeAlignedRight" Opening="ThinkingFlyout_Opening"/>
+                  <MenuFlyout Placement="TopEdgeAlignedRight"/>
                 </Button.Flyout>
               </Button>
             </WrapPanel>
