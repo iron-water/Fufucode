@@ -52,6 +52,8 @@ public partial class ChatPage
         // 只靠 MaxWidth 约束：Stretch + MaxWidth 时 Avalonia 会自动居中；
         // 显式 Center 会让父容器按内容自适应，把输入卡压成窄条。
         ComposerCard.MaxWidth = settings.ReadWidth;
+        // 显式宽度：某些父容器会按内容自适应，仅靠 MaxWidth 会把输入卡压成窄条。
+        ComposerCard.Width = double.IsInfinity(settings.ReadWidth) ? double.NaN : settings.ReadWidth;
         ComposerCard.HorizontalAlignment = HorizontalAlignment.Stretch;
         if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
             ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
