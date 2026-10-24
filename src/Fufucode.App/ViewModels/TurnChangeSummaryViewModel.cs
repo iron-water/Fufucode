@@ -11,23 +11,6 @@ using Fufucode.Core.Backend;
 namespace Fufucode.App.ViewModels;
 
 /// <summary>单个文件的改动量。写入按新增行统计；编辑按替换前后的行数分别统计。</summary>
-/// <summary>内联 diff 的一行，带语义标记供 XAML 上色。</summary>
-public sealed class DiffLineViewModel
-{
-    public DiffLineViewModel(DiffLine line)
-    {
-        Text = (line.Kind == '+' ? "+ " : line.Kind == '-' ? "- " : "  ") + line.Text;
-        IsAdded = line.Kind == '+';
-        IsRemoved = line.Kind == '-';
-        IsNote = line.Kind == '…';
-    }
-
-    public string Text { get; }
-    public bool IsAdded { get; }
-    public bool IsRemoved { get; }
-    public bool IsNote { get; }
-}
-
 public sealed partial class TurnFileChangeViewModel : ViewModelBase
 {
     private readonly List<string> _toolCallIds = new();
@@ -64,8 +47,12 @@ public sealed partial class TurnFileChangeViewModel : ViewModelBase
         if (!string.IsNullOrEmpty(toolCallId)) _toolCallIds.Add(toolCallId);
     }
 
-    /// <summary>展开后展示的内联 diff；只在展开时计算一次。</summary>
-    public ObservableCollection<DiffLineViewModel> DiffLines { get; } = new();
+    /// <summary>
+    /// 展开后展示的内联 diff。与变更面板共用同一份行模型与渲染控件，
+    /// 这样卡里的行号、增删底色、语法着色和面板里看到的是同一套。
+    /// </summary>
+    [ObservableProperty]
+    private DiffViewModel? _diffModel;
 
     [ObservableProperty]
     private bool _isExpanded;
@@ -85,19 +72,18 @@ public sealed partial class TurnFileChangeViewModel : ViewModelBase
 
     partial void OnDiffNoteChanged(string value) => OnPropertyChanged(nameof(HasNote));
 
-    /// <summary>用第一次改动前的备份与当前磁盘内容做对比。</summary>
-    public void ToggleDiff()
+    /// <summary>用第一次改动前的备份与当前磁盘内容做对比；着色需要知道当前深浅主题。</summary>
+    public void ToggleDiff(bool dark)
     {
         if (IsExpanded) { IsExpanded = false; return; }
 
-        if (DiffLines.Count == 0) LoadDiff();
-        if (DiffLines.Count == 0) return;
+        if (DiffModel is null) LoadDiff(dark);
+        if (DiffModel is null || !HasDiff) return;
         IsExpanded = true;
     }
 
-    private void LoadDiff()
+    private void LoadDiff(bool dark)
     {
-        DiffLines.Clear();
         // 同一文件可能被多次修改：用最早一次调用拿到"本轮之前"的原始内容。
         var first = _toolCallIds.FirstOrDefault();
         if (first is null)
@@ -112,18 +98,10 @@ public sealed partial class TurnFileChangeViewModel : ViewModelBase
             return;
         }
 
-        var lines = LineDiff.Compute(before, after);
-        var added = 0;
-        var removed = 0;
-        foreach (var line in lines)
-        {
-            DiffLines.Add(new DiffLineViewModel(line));
-            if (line.Kind == '+') added++;
-            else if (line.Kind == '-') removed++;
-        }
-
-        HasDiff = DiffLines.Count > 0;
-        if (HasDiff && added == 0 && removed == 0) DiffNote = "内容无变化";
+        var model = DiffViewModel.FromTexts(before, after, System.IO.Path.GetExtension(Path).TrimStart('.'), dark);
+        DiffModel = model;
+        HasDiff = model.Rows.Any(row => row.IsBody);
+        if (!HasDiff) DiffNote = "内容无变化";
     }
 }
 
