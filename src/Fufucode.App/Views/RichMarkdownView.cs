@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
@@ -49,9 +47,6 @@ public sealed class RichMarkdownView : ContentControl
             _attached = true;
             RenderCurrent();
         };
-        // 设置页改强调色 / 切换明暗主题会替换窗口资源，粗体颜色要跟着重刷。
-        ResourcesChanged += (_, _) => ScheduleDiagramGuard();
-        ActualThemeVariantChanged += (_, _) => ScheduleDiagramGuard();
     }
 
     /// <summary>Markdown 源文本；赋值即交给渲染器做增量更新。</summary>
@@ -136,61 +131,9 @@ public sealed class RichMarkdownView : ContentControl
         }
     }
 
-    /// <summary>
-    /// 强调色：渲染器只把粗体做成字重，不带上色；这里按 AppEmphasis 给粗体上色，
-    /// 否则“强调色”设置对消息里的粗体完全不生效。
-    /// </summary>
-    private void ApplyEmphasis()
-    {
-        var brush = ResolveEmphasisBrush();
-        if (brush is null) return;
-        foreach (var block in this.GetVisualDescendants().OfType<TextBlock>())
-        {
-            if (block.Inlines is { } inlines) Paint(inlines, brush);
-        }
-
-        static void Paint(InlineCollection inlines, IBrush brush)
-        {
-            foreach (var inline in inlines)
-            {
-                switch (inline)
-                {
-                    case Bold bold:
-                        bold.Foreground = brush;
-                        Paint(bold.Inlines, brush);
-                        break;
-                    case Italic italic:
-                        Paint(italic.Inlines, brush);
-                        break;
-                    case Span span:
-                        Paint(span.Inlines, brush);
-                        break;
-                    case Run run when run.FontWeight >= FontWeight.SemiBold:
-                        run.Foreground = brush;
-                        break;
-                }
-            }
-        }
-    }
-
-    private IBrush? ResolveEmphasisBrush()
-    {
-        if (this.TryGetResource("AppEmphasis", ActualThemeVariant, out var value) && value is IBrush brush)
-            return brush;
-        var app = Application.Current;
-        return app is not null && app.TryGetResource("AppEmphasis", app.ActualThemeVariant, out var appValue) &&
-               appValue is IBrush appBrush
-            ? appBrush
-            : null;
-    }
-
-    /// <summary>渲染器增量更新后统一收尾：图表守卫 + 粗体强调色。提示词/设置换肤后也要重刷一次。</summary>
     private void ScheduleDiagramGuard() =>
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            ApplyDiagramGuard();
-            ApplyEmphasis();
-        }, Avalonia.Threading.DispatcherPriority.Loaded);
+        Avalonia.Threading.Dispatcher.UIThread.Post(ApplyDiagramGuard,
+            Avalonia.Threading.DispatcherPriority.Loaded);
 
     /// <summary>把当前 Markdown 交给渲染器。属性可能在构造完成前被赋值，因此要能安全地延后渲染。</summary>
     private void RenderCurrent()
