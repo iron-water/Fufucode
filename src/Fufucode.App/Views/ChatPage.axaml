@@ -271,13 +271,14 @@
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,7,12,3">
                                           <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold"
                                                      Text="{Binding ToolName}" VerticalAlignment="Center"/>
-                                          <Border Classes="badge"
+                                          <!-- 状态点：小圆点 + 悬停显示状态文字，不再用大号胶囊。 -->
+                                          <Border Width="9" Height="9" CornerRadius="4.5" VerticalAlignment="Center"
+                                                  Classes="statusDot"
                                                   Classes.attention="{Binding BadgeIsAttention}"
                                                   Classes.success="{Binding BadgeIsSuccess}"
                                                   Classes.critical="{Binding BadgeIsCritical}"
-                                                  Classes.neutral="{Binding BadgeIsNeutral}">
-                                            <TextBlock Text="{Binding StatusText, FallbackValue='运行中'}"/>
-                                          </Border>
+                                                  Classes.neutral="{Binding BadgeIsNeutral}"
+                                                  ToolTip.Tip="{Binding StatusText, FallbackValue='运行中'}"/>
                                           <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
                                                      IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
                                           <Button Classes="iconButton" Width="22" Height="18" Padding="0"

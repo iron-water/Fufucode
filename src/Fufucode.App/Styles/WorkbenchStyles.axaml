@@ -1271,29 +1271,32 @@
   </Style>
   <!-- 工具状态点：小圆点 + 鲜艳语义色。 -->
   <Style Selector="Border.statusDot">
-    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Background" Value="#94A3B8"/>
   </Style>
   <Style Selector="Border.statusDot.success">
-    <Setter Property="Background" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+    <Setter Property="Background" Value="#22C55E"/>
   </Style>
   <Style Selector="Border.statusDot.critical">
-    <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+    <Setter Property="Background" Value="#EF4444"/>
   </Style>
   <Style Selector="Border.statusDot.attention">
-    <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+    <Setter Property="Background" Value="#F59E0B"/>
   </Style>
   <Style Selector="Border.statusDot.neutral">
-    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
-  </Style>
-  <!-- 工具卡本身也是横条：悬停升高亮。 -->
-  <Style Selector="Border.toolCard.pointerHover">
-    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+    <Setter Property="Background" Value="#94A3B8"/>
   </Style>
   <Style Selector="Border.toolCard">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppBaseHighlight}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBorder}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+  </Style>
+  <!-- 悬停必须排在基础样式之后，否则基础背景会把高亮覆盖掉。 -->
+  <Style Selector="Border.toolCard.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
+  </Style>
+  <Style Selector="Border.toolCard:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
   </Style>
 
   <!-- 左侧轮次刻度：常态低存在感，悬停或固定时高亮。 -->

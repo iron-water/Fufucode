@@ -207,8 +207,15 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     public string? StatusText
     {
         get => _statusText;
-        set => SetProperty(ref _statusText, value);
+        set
+        {
+            if (!SetProperty(ref _statusText, value)) return;
+            OnPropertyChanged(nameof(HasStatusText));
+        }
     }
+
+    /// <summary>状态点旁边是否要显示文字；空状态不占位。</summary>
+    public bool HasStatusText => !string.IsNullOrWhiteSpace(StatusText);
 
     public ToolCallStatus Status
     {
