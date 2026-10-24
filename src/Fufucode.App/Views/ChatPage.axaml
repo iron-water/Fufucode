@@ -441,7 +441,7 @@
                                 <Button Classes="changeFileRow" Click="OnToggleFileDiff"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                         Padding="12,5">
-                                  <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="6">
+                                  <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
                                     <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
                                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
                                               IsVisible="{Binding IsExpanded}"/>
@@ -454,19 +454,39 @@
                                                Text="{Binding AdditionsText}" IsVisible="{Binding HasAdditions}"/>
                                     <TextBlock Grid.Column="3" Classes="mono deletions" FontSize="12.5"
                                                Text="{Binding DeletionsText}" IsVisible="{Binding HasDeletions}"/>
+                                    <!-- 直接把这个文件带到变更面板，并切到本次会话口径。 -->
+                                    <Button Grid.Column="4" Classes="iconButton" Width="22" Height="22"
+                                            Click="OnOpenFileInChanges" ToolTip.Tip="在变更面板中查看此文件"
+                                            AutomationProperties.Name="在变更面板中查看此文件">
+                                      <PathIcon Data="{DynamicResource Icon.Open}" Width="11" Height="11"/>
+                                    </Button>
                                   </Grid>
                                 </Button>
+                                <!-- 与变更面板同一套行模型：行号、增删底色、语法着色一致。 -->
                                 <Border Classes="diffWell" Margin="12,0,12,8" IsVisible="{Binding IsExpanded}">
-                                  <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Auto"
-                                                VerticalScrollBarVisibility="Auto" Padding="10,6">
-                                    <ItemsControl ItemsSource="{Binding DiffLines}">
+                                  <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled"
+                                                VerticalScrollBarVisibility="Auto" Padding="6,4">
+                                    <ItemsControl ItemsSource="{Binding DiffModel.Rows}">
                                       <ItemsControl.DataTemplates>
-                                        <DataTemplate DataType="vm:DiffLineViewModel" x:DataType="vm:DiffLineViewModel">
-                                          <TextBlock Classes="mono diffLine" FontSize="12" TextWrapping="NoWrap"
-                                                     Classes.added="{Binding IsAdded}"
-                                                     Classes.removed="{Binding IsRemoved}"
-                                                     Classes.note="{Binding IsNote}"
-                                                     Text="{Binding Text}"/>
+                                        <DataTemplate DataType="vm:DiffRowViewModel" x:DataType="vm:DiffRowViewModel">
+                                          <StackPanel>
+                                            <Border Classes="diffRow" Classes.added="{Binding IsAdded}"
+                                                    Classes.removed="{Binding IsRemoved}" IsVisible="{Binding IsBody}">
+                                              <Grid ColumnDefinitions="Auto,Auto,Auto,*">
+                                                <TextBlock Grid.Column="0" Classes="mono diffGutter" Text="{Binding OldNumber}"
+                                                           Width="30" TextAlignment="Right"/>
+                                                <TextBlock Grid.Column="1" Classes="mono diffGutter" Text="{Binding NewNumber}"
+                                                           Width="30" TextAlignment="Right"/>
+                                                <TextBlock Grid.Column="2" Classes="mono diffMarker" Text="{Binding Marker}"
+                                                           Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"/>
+                                                <views:DiffLineText Grid.Column="3" Classes="mono diffText" FontSize="12"
+                                                                    VerticalAlignment="Center" Wrap="True"
+                                                                    Runs="{Binding Runs}" IsAddedRow="{Binding IsAdded}"/>
+                                              </Grid>
+                                            </Border>
+                                            <TextBlock Classes="meta" Text="{Binding HeaderText}" Margin="4,2"
+                                                       IsVisible="{Binding IsNote}"/>
+                                          </StackPanel>
                                         </DataTemplate>
                                       </ItemsControl.DataTemplates>
                                     </ItemsControl>
