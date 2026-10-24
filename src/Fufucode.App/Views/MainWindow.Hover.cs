@@ -45,10 +45,6 @@ public partial class MainWindow
     {
         for (var cursor = source; cursor is not null; cursor = cursor.GetVisualParent())
         {
-            // 任意图标/文字按钮也走同一兜底：规避部分控件 :pointerover 不稳定的问题。
-            if (cursor is Button button && !button.Classes.Contains("accent")
-                && !button.Classes.Contains("danger") && !button.Classes.Contains("accentSwatch"))
-                return button;
             if (cursor is Control control)
                 foreach (var name in RowClasses)
                     if (control.Classes.Contains(name)) return control;

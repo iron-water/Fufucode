@@ -1058,12 +1058,6 @@
   <Style Selector="Grid.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
-  <Style Selector="Button.iconButton.pointerHover">
-    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
-  </Style>
-  <Style Selector="Button.subtle.pointerHover">
-    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
-  </Style>
   <!-- 窗口内图标提示：与卡片同一套栏层配色。 -->
   <Style Selector="Border#TipBox">
     <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
@@ -1087,9 +1081,6 @@
         <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
       </Transitions>
     </Setter>
-  </Style>
-  <Style Selector="Button.pointerHover">
-    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
   <!-- 模型选择行：中间灰横条，悬停升高亮；与其它列表行同一套层级。 -->
   <Style Selector="Button.modelChoiceRow">
