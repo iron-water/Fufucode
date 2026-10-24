@@ -693,7 +693,8 @@
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
-        <Setter Property="Padding" Value="12,10,12,8"/>
+        <!-- 底部工具行整体下移：上方留白多一点、下方少一点。 -->
+        <Setter Property="Padding" Value="12,12,12,6"/>
         <!-- 输入卡悬浮于页面之上：轻阴影 + 聚焦时 accent 描边，与"卡比底色高一线"一致。 -->
         <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
         <Setter Property="Transitions">
