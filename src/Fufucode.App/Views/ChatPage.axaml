@@ -584,14 +584,14 @@
       <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
       <StackPanel x:Name="ComposerHost" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Stretch">
       <!-- 聚焦光带：位于输入卡上方的淡绿色渐变（不依赖 BoxShadow，渲染更可靠）。 -->
-      <Border x:Name="ComposerGlowBand" Height="16" Margin="32,0,32,0" Opacity="0" IsHitTestVisible="False">
+      <Border x:Name="ComposerGlowBand" Height="12" Margin="48,0,48,0" Opacity="0" IsHitTestVisible="False">
         <Border.Effect>
-          <BlurEffect Radius="8"/>
+          <BlurEffect Radius="6"/>
         </Border.Effect>
         <Border.Background>
           <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
-            <GradientStop Offset="0" Color="#2E00CC6A"/>
-            <GradientStop Offset="0.6" Color="#1000CC6A"/>
+            <GradientStop Offset="0" Color="#2200CC6A"/>
+            <GradientStop Offset="0.6" Color="#0C00CC6A"/>
             <GradientStop Offset="1" Color="#0000CC6A"/>
           </LinearGradientBrush>
         </Border.Background>

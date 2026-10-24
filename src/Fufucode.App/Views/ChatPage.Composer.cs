@@ -304,7 +304,10 @@ public partial class ChatPage
             ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
             if (_executionModeMenu is not null) BuildExecutionModeMenu(_executionModeMenu);
             if (_executionModeButton is not null)
+            {
                 ToolTip.SetTip(_executionModeButton, "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
+                ToolTip.SetPlacement(_executionModeButton, PlacementMode.Top);
+            }
             if (ThinkingButton.Flyout is MenuFlyout thinkingMenu) BuildThinkingMenu(thinkingMenu, vm);
         }
         finally { _updatingComposer = false; }
