@@ -70,7 +70,7 @@ public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
     /// 切换底层会话但保持远控服务、配对令牌与审批订阅不变。调用方随后仍可调用
     /// <see cref="LoadHistory"/> 补齐当前会话历史；旧会话的条目与审批不会泄漏到新快照。
     /// </summary>
-    public void Rebind(IChatSession session, string title)
+    public void Rebind(IChatSession session, string title, IRemoteToolApprovalGate? approvals = null)
     {
         ArgumentNullException.ThrowIfNull(session);
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
@@ -89,8 +89,8 @@ public sealed class RemoteSessionAdapter : IRemoteSessionBridge, IDisposable
             _canSend = false;
             _canStop = false;
             _queuedCount = 0;
-            var nextApprovals = session is Fufucode.Core.IExtensionUiSession ui
-                ? (IRemoteToolApprovalGate)new SessionApprovalGate(ui) : new InMemoryToolApprovalGate();
+            var nextApprovals = approvals ?? (session is Fufucode.Core.IExtensionUiSession ui
+                ? (IRemoteToolApprovalGate)new SessionApprovalGate(ui) : new InMemoryToolApprovalGate());
             _approvals.Replace(nextApprovals);
             _session.Event += OnSessionEvent;
             RefreshStatusLocked();

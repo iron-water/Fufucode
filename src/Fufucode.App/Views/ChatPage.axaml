@@ -675,7 +675,10 @@
             <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" ToolTip.Tip="移除引用" AutomationProperties.Name="移除引用"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
           </Grid>
           <WrapPanel x:Name="AttachedFiles"/>
-          <ScrollViewer x:Name="DraftPreview" IsVisible="False" MaxHeight="180" Margin="0,4,0,8"><SelectableTextBlock x:Name="DraftPreviewText" TextWrapping="Wrap" Classes="body"/></ScrollViewer>
+          <!-- 草稿预览走完整富文本渲染：表格、LaTeX、图片与代码高亮都可用。 -->
+          <ScrollViewer x:Name="DraftPreview" IsVisible="False" MaxHeight="200" Margin="0,4,0,8">
+            <views:RichMarkdownView x:Name="DraftPreviewText" FontSize="14"/>
+          </ScrollViewer>
           <TextBox x:Name="InputBox" Classes="composerInput"
                    Text="{Binding Input.DraftText}"
                    AcceptsReturn="True" TextWrapping="Wrap"

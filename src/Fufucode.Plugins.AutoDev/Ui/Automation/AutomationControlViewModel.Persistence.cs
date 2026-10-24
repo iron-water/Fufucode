@@ -28,7 +28,7 @@ public sealed partial class AutomationControlViewModel
     [ObservableProperty] private string _savedDraftPreview = "";
     public AutomationControlViewModel(string? persistenceDataRoot = null, IAutomationPersistenceFileIo? persistenceIo = null)
     {
-        _dataRoot = persistenceDataRoot ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode");
+        _dataRoot = persistenceDataRoot ?? Fufucode.Core.AppDataLayout.DefaultRoot();
         _draftStore = new(_dataRoot, fileIo: persistenceIo); _requestJournal = new(_dataRoot, fileIo: persistenceIo);
     }
 

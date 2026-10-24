@@ -2,6 +2,8 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Fufucode.App.Abstractions;
+using Fufucode.Core;
+using Fufucode.Core.Approvals;
 using Fufucode.Core.Plugins;
 using Fufucode.Core.RemoteControl;
 
@@ -97,13 +99,15 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
         try
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            // 审批统一走共享 gate：与 FUFU、桌面共用同一个最终决定。
+            var approvals = CreateApprovals(session);
             if (_adapter is null)
             {
-                _adapter = new RemoteSessionAdapter(session, title);
+                _adapter = new RemoteSessionAdapter(session, title, approvals);
             }
             else
             {
-                _adapter.Rebind(session, title);
+                _adapter.Rebind(session, title, approvals);
             }
             if (_server is not null && _sessionCatalog is not null)
                 _server.Broadcast(new RemoteSessionsUpdate(_sessionCatalog()));
@@ -177,6 +181,15 @@ public sealed class RemoteControlHost : IAsyncDisposable, IDisposable, IRemoteCo
         _adapter?.LoadHistory(messages);
 
     string? IRemoteControlService.PairingQrSvg => PairingQrSvg;
+
+    /// <summary>
+    /// 为真实会话选择审批入口：可参与审批的会话走共享 gate，
+    /// 其余会话保持原有内存闸门（它们不会产生真实审批请求）。
+    /// </summary>
+    private static IRemoteToolApprovalGate CreateApprovals(IChatSession session) =>
+        session is IExtensionUiSession ui
+            ? new SharedGateApprovalAdapter(SharedApprovalRegistry.For(ui))
+            : new InMemoryToolApprovalGate();
 
     /// <summary>登记一个待手机审批的工具调用（宿主在执行前调用）。</summary>
     public RemoteApprovalRequest? RequestApproval(string toolCallId, string toolName, string argsJson,

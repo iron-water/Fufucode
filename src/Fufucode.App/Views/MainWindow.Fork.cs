@@ -16,8 +16,8 @@ public partial class MainWindow
     {
         if (IdleReal() is { } reason) throw new InvalidOperationException(reason);
         var host = _host!;
-        var destination = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Fufucode", "worktrees", Guid.NewGuid().ToString("N"));
+        var destination = Path.Combine(Fufucode.Core.AppDataLayout.DefaultRoot(),
+            "worktrees", Guid.NewGuid().ToString("N"));
         _switching = true;
         _actions.RefreshCapabilities();
         try

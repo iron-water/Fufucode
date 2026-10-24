@@ -16,6 +16,7 @@ internal static class Program
         {
             await RemoteControlTests.RunAllAsync(Check);
             await RemoteAuditTests.RunAsync(Check);
+            await SharedApprovalTests.RunAsync(Check);
             Console.WriteLine($"\n全部通过：{_passed} 项断言");
             return 0;
         }

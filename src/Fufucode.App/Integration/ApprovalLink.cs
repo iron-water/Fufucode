@@ -25,10 +25,11 @@ internal sealed record ApprovalAction(string RequestId, string SessionId, Approv
 internal static class ApprovalLink
 {
     /// <summary>
-    /// 审批按钮专用 scheme：与安装器注册的会话链接 <c>fufucode:</c> 分开，
+    /// 审批按钮专用 scheme：与安装器注册的会话链接分开，
     /// 免得启动一个审阅构建就改写用户会话链接的处理器；本 scheme 由应用启动时自注册。
+    /// 测试渠道构建用 <c>fufucode-test-approval:</c>，见 <see cref="ProductLinks"/>。
     /// </summary>
-    internal const string Scheme = "fufucode-approval";
+    internal static string Scheme => ProductLinks.ApprovalScheme;
     private const string Host = "approval";
 
     /// <summary>能构造就返回链接，否则返回 null（mock/自测会话没有真实 Guid，不能生成按钮）。</summary>

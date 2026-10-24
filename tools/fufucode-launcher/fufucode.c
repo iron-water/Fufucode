@@ -21,6 +21,49 @@ static int get_install_dir(char* out, size_t outSize) {
     return 1;
 }
 
+/*
+ * 数据根隔离：安装根目录下的 data-root.txt（若存在）指名本安装的独立数据根。
+ * 实验性测试包用它把会话/设置写到 %LOCALAPPDATA%\FufucodeTest，与正式安装并存；
+ * 正式包不带该文件，这里不设置任何环境变量，行为与历史一致。
+ * 显式设置了 FUFUCODE_DATA_ROOT 的用户优先，不被覆盖。
+ */
+static void apply_package_data_root(const char* installDir) {
+    char marker[MAX_PATH];
+    if (snprintf(marker, sizeof(marker), "%s\\data-root.txt", installDir) <= 0) return;
+    FILE* file = fopen(marker, "rb");
+    if (!file) return;
+
+    char value[MAX_PATH];
+    size_t read = fread(value, 1, sizeof(value) - 1, file);
+    fclose(file);
+    value[read] = '\0';
+
+    /* 去掉 BOM、首尾空白与换行。 */
+    char* start = value;
+    if ((unsigned char)start[0] == 0xEF && (unsigned char)start[1] == 0xBB && (unsigned char)start[2] == 0xBF) start += 3;
+    while (*start == ' ' || *start == '\t' || *start == '\r' || *start == '\n') start++;
+    char* end = start + strlen(start);
+    while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r' || end[-1] == '\n')) end--;
+    *end = '\0';
+    if (*start == '\0') return;
+
+    char current[MAX_PATH];
+    DWORD currentLen = GetEnvironmentVariableA("FUFUCODE_DATA_ROOT", current, (DWORD)sizeof(current));
+    if (currentLen > 0) return;
+
+    /* 允许相对名字：相对于 %LOCALAPPDATA%。 */
+    char expanded[MAX_PATH];
+    if (start[1] != ':' && start[0] != '\\') {
+        char localAppData[MAX_PATH];
+        DWORD n = GetEnvironmentVariableA("LOCALAPPDATA", localAppData, (DWORD)sizeof(localAppData));
+        if (n == 0 || n >= sizeof(localAppData)) return;
+        if (snprintf(expanded, sizeof(expanded), "%s\\%s", localAppData, start) <= 0) return;
+    } else {
+        if (snprintf(expanded, sizeof(expanded), "%s", start) <= 0) return;
+    }
+    SetEnvironmentVariableA("FUFUCODE_DATA_ROOT", expanded);
+}
+
 /* 从完整命令行里剥掉 argv[0]，只留参数尾巴。 */
 static const char* cmdline_tail(const char* cmd) {
     if (!cmd) return "";
@@ -88,6 +131,8 @@ int WINAPI WinMain(HINSTANCE hInst, HINSTANCE hPrev, LPSTR lpCmdLine, int nShow)
         MessageBoxA(NULL, "Cannot resolve install directory.", "Fufucode", MB_ICONERROR);
         return 1;
     }
+
+    apply_package_data_root(installDir);
 
     const char* args = cmdline_tail(GetCommandLineA());
 

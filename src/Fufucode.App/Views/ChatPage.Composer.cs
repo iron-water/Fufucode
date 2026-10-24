@@ -24,7 +24,11 @@ public partial class ChatPage
     private readonly System.Collections.Generic.List<(Control Target, Func<string?> Text)> _composerTips = new();
     private bool _composerTipsWired;
     private MenuFlyout? _executionModeMenu;
-    private bool _previewDraft;
+    /// <summary>边写边渲染：预览与编辑器同时显示，随每次输入更新。</summary>
+    private bool _livePreview;
+
+    /// <summary>「更多」菜单里属于输入栏自己的固定项数量；插件项只追加在它们之后。</summary>
+    private int _composerBaseMenuItemCount;
     private void InitializeComposerTools()
     {
         DragDrop.SetAllowDrop(ComposerCard, true);
@@ -161,17 +165,21 @@ public partial class ChatPage
         });
 
         var menu = new MenuFlyout();
-        var preview = new MenuItem { Header = "Markdown 草稿预览" };
-        preview.Click += (_, _) => { _previewDraft = !_previewDraft; RefreshComposerTools(); };
+        var live = new MenuItem { Header = "Markdown 即时预览" };
+        live.Click += (_, _) => { _livePreview = !_livePreview; RefreshComposerTools(); };
         var commands = new MenuItem { Header = "命令与技能" };
         commands.Click += (_, _) => CommandFlyoutButton.Flyout?.ShowAt(ComposerMoreButton);
         var hide = new MenuItem { Header = "隐藏输入区" }; hide.Click += (_, _) => ToggleComposer();
-        menu.Items.Add(preview); menu.Items.Add(commands); menu.Items.Add(hide);
+        menu.Items.Add(live); menu.Items.Add(commands); menu.Items.Add(hide);
+        // 记住固定项数量，插件项必须追加在它们之后，不能靠硬编码下标裁剪。
+        _composerBaseMenuItemCount = menu.Items.Count;
         ComposerMoreButton.Flyout = menu;
         RefreshComposerPluginMenu();
         DraftPreview.PointerPressed += (_, e) =>
         {
-            if (e.GetCurrentPoint(DraftPreview).Properties.IsLeftButtonPressed) { _previewDraft = false; RefreshComposerTools(); Input.Focus(); }
+            if (!e.GetCurrentPoint(DraftPreview).Properties.IsLeftButtonPressed) return;
+            // 即时预览只是展示，点一下把焦点交还输入框。
+            Input.Focus();
         };
         var attachments = new MenuFlyout();
         foreach (var (title, kind) in new[] { ("文件", "file"), ("图片", "image"), ("PDF", "pdf"), ("链接", "link") })
@@ -306,7 +314,7 @@ public partial class ChatPage
     internal void RefreshComposerPluginMenu()
     {
         if (ComposerMoreButton.Flyout is not MenuFlyout menu || DataContext is not MainViewModel vm) return;
-        while (menu.Items.Count > 3) menu.Items.RemoveAt(3);
+        while (menu.Items.Count > _composerBaseMenuItemCount) menu.Items.RemoveAt(_composerBaseMenuItemCount);
         ComposerPluginHost?.Populate(menu, vm);
     }
 
@@ -331,9 +339,12 @@ public partial class ChatPage
             if (ThinkingButton.Flyout is MenuFlyout thinkingMenu) BuildThinkingMenu(thinkingMenu, vm);
         }
         finally { _updatingComposer = false; }
-        DraftPreview.IsVisible = _previewDraft;
-        Input.IsVisible = !_previewDraft;
-        MarkdownTextBlock.SetMarkdown(DraftPreviewText, vm.Input.DraftText);
+        // 即时预览只在有内容时占位，空草稿不挤占输入区；编辑器始终可用。
+        DraftPreview.IsVisible = _livePreview && vm.Input.DraftText.Trim().Length > 0;
+        Input.IsVisible = true;
+        // 完整富文本：表格、LaTeX、图片、代码高亮；草稿里相对图片按当前项目根解析。
+        DraftPreviewText.Markdown = vm.Input.DraftText;
+        DraftPreviewText.ImageBasePath = vm.ProjectRootPath;
         AttachedFiles.Children.Clear();
         foreach (var file in vm.Input.Attachments)
         {

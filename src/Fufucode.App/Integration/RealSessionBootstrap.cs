@@ -22,8 +22,8 @@ public static class RealSessionBootstrap
         var root = FindRuntimeRoot() ?? AppContext.BaseDirectory;
         // 运行时可放在三处：显式参数、仓库/应用自带 runtime/、按需安装的用户运行时。
         var managedRoot = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Fufucode", "runtime", "pi");
+            Fufucode.Core.AppDataLayout.DefaultRoot(),
+            "runtime", "pi");
         var cliRelative = Path.Combine("node_modules", "@earendil-works", "pi-coding-agent",
             "dist", "bundle", "cli.js");
 

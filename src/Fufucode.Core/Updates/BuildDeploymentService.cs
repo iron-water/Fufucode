@@ -248,8 +248,7 @@ public sealed class BuildDeploymentService
         if (!string.IsNullOrWhiteSpace(overrideDir) && Directory.Exists(overrideDir))
             yield return Path.GetFullPath(overrideDir);
 
-        var userLocal = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode", "updates", "local");
+        var userLocal = Path.Combine(AppDataLayout.DefaultRoot(), "updates", "local");
         if (Directory.Exists(userLocal)) yield return userLocal;
 
         var directory = new DirectoryInfo(AppContext.BaseDirectory);

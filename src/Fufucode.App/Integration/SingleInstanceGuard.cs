@@ -30,6 +30,28 @@ internal sealed class SingleInstanceGuard : IDisposable
 {
     private const string DefaultBaseName = @"Local\Fufucode.SingleInstance.v1";
 
+    /// <summary>
+    /// 当前数据根对应的单实例名。实验性测试安装包使用独立数据根
+    /// （<c>%LOCALAPPDATA%\FufucodeTest</c>），因此也必须拥有独立的单实例对象：
+    /// 两个安装同时运行是合法场景，不能被对方的 Mutex 当成"已有实例"而提前退出。
+    /// 正式构建的数据根是默认值，名字与历史保持不变。
+    /// </summary>
+    private static string BaseName
+    {
+        get
+        {
+            var root = Fufucode.Core.AppDataLayout.DefaultRoot();
+            var defaultRoot = System.IO.Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode");
+            if (string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase)) return DefaultBaseName;
+            // string.GetHashCode 在 .NET 每次进程启动都随机化，两个进程会算出不同的名字；
+            // 这里必须用稳定摘要，两个进程才能互相看见同一个命名对象。
+            var digest = System.Security.Cryptography.SHA256.HashData(
+                System.Text.Encoding.UTF8.GetBytes(root.ToUpperInvariant()));
+            return DefaultBaseName + "." + Convert.ToHexString(digest, 0, 4).ToLowerInvariant();
+        }
+    }
+
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activation;
     private readonly EventWaitHandle _shutdown;

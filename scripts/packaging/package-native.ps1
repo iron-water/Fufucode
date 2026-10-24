@@ -13,7 +13,7 @@ PKG-1 原生安装包渠道（零 Node / 零 Pi 运行时的极简 Setup 构建�
 抛 FileNotFoundException，因此把两侧打进同一包会重新引入 Node 硬门槛。
 #>
 param(
-    [string]$AppVersion = '1.4.0',
+    [Parameter(Mandatory = $true)][string]$AppVersion,
     [string]$OutName,
     # 打包目标平台。默认 Windows x64；同一源码可用 win-x64 / linux-x64 / osx-arm64 等
     # 分别产出独立安装包，不把其他平台的载荷塞进单一发布。
@@ -71,6 +71,22 @@ Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Fufucode.*.dll' |
 Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Avalonia*.dll' -ErrorAction SilentlyContinue | Remove-Item -Force
 if (Test-Path (Join-Path $interactiveUiDir 'runtimes')) { Remove-Item -LiteralPath (Join-Path $interactiveUiDir 'runtimes') -Recurse -Force }
 if ($LASTEXITCODE -ne 0) { throw "Fufucode.App publish failed." }
+
+# 默认随包的性能监控插件：PluginBootstrapper 只从 <程序目录>/plugins-dist/<id> 播种。
+# 历史缺陷：本脚本只在第 7 段把它作为"可选 zip"发布到 out/plugins-dist，
+# 从不放进包内，于是目录里标着"默认安装"、装机后却永远缺载荷。这里补上随包副本。
+$performanceDir = Join-Path $appDir 'plugins-dist/performance.monitor'
+New-Item -ItemType Directory -Force (Split-Path $performanceDir) | Out-Null
+dotnet publish (Join-Path $root 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj') `
+    -c Release -o $performanceDir
+if ($LASTEXITCODE -ne 0) { throw 'Performance monitor plugin publish failed.' }
+Get-ChildItem -LiteralPath $performanceDir -Filter 'Fufucode.*.dll' |
+    Where-Object { $_.Name -ne 'Fufucode.Plugins.PerformanceMonitor.dll' } |
+    Remove-Item -Force
+foreach ($pattern in @('Avalonia*.dll', 'CommunityToolkit*.dll', '*.pdb')) {
+    Get-ChildItem -LiteralPath $performanceDir -Filter $pattern -ErrorAction SilentlyContinue | Remove-Item -Force
+}
+if (Test-Path (Join-Path $performanceDir 'runtimes')) { Remove-Item -LiteralPath (Join-Path $performanceDir 'runtimes') -Recurse -Force }
 
 # 只并入 CLI 入口相关文件；共享框架程序集以 App 的裁剪结果为准。
 foreach ($name in @('Fufucode.Cli.exe', 'Fufucode.Cli.dll', 'Fufucode.Cli.deps.json',
@@ -130,17 +146,14 @@ if ($RuntimeIdentifier -like 'win-*') {
 
     # 部署根目录 GUI 启动器 Fufucode.exe：无参起 App、有参转发 Cli，带图标和版本信息。
     # 开始菜单/桌面快捷方式都指向它，替代 Fufucode.cmd 的黑框体验。
-    $launcherDir = Join-Path $root 'tools/fufucode-launcher'
-    $launcherExe = Join-Path $launcherDir 'fufucode.exe'
-    $launcherSrc = Join-Path $launcherDir 'fufucode.c'
-    $launcherRc  = Join-Path $launcherDir 'fufucode.rc'
-    $launcherRes = Join-Path $launcherDir 'fufucode_res.o'
-    if (-not (Test-Path -LiteralPath $launcherExe) -and (Get-Command gcc -ErrorAction SilentlyContinue) -and (Get-Command windres -ErrorAction SilentlyContinue)) {
-        & windres $launcherRc -o $launcherRes
-        & gcc -O2 -s -mwindows $launcherSrc $launcherRes -o $launcherExe
-    }
-    if (Test-Path -LiteralPath $launcherExe) {
-        Copy-Item -LiteralPath $launcherExe -Destination (Join-Path $packageRoot 'Fufucode.exe') -Force
+    # 每次打包都重编，版本资源才能跟 -AppVersion 一致（仓库里的 fufucode.exe 是旧产物）。
+    $launcherExe = Join-Path $packageRoot 'Fufucode.exe'
+    if ((Get-Command gcc -ErrorAction SilentlyContinue) -and (Get-Command windres -ErrorAction SilentlyContinue)) {
+        & (Join-Path $PSScriptRoot 'build-launcher.ps1') -Destination $launcherExe -AppVersion $AppVersion
+        if ($LASTEXITCODE -ne 0) { throw 'Fufucode launcher build failed.' }
+    } elseif (Test-Path -LiteralPath (Join-Path $root 'tools/fufucode-launcher/fufucode.exe')) {
+        Copy-Item -LiteralPath (Join-Path $root 'tools/fufucode-launcher/fufucode.exe') -Destination $launcherExe -Force
+        Write-Warning "Launcher rebuilt from the committed binary; its version resource may not match $AppVersion."
     } else {
         Write-Warning "Fufucode.exe launcher not available; shortcuts will keep using Fufucode.cmd."
     }
@@ -197,7 +210,9 @@ foreach ($name in $forbidden) {
     }
 }
 
-# 验证：默认核心 App 包中严禁静态包含未安装插件的实现程序集（真实物理剥离）
+# 验证：默认核心 App 包中严禁静态包含未安装插件的实现程序集（真实物理剥离）。
+# performance.monitor 与 chat.interactive-ui 是唯一两个默认随包插件，不在此列：
+# 它们在 app/plugins-dist 与 app/plugins 下作为独立载荷存在，不是 App 的静态依赖。
 $forbiddenPluginDlls = @(
     # 后端插件：宿主不再静态依赖，插件载荷由 plugins-dist 下发。
     'Fufucode.Pi.dll',
@@ -218,12 +233,18 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.Terminal.dll',
     'Fufucode.Plugins.Browser.dll',
     'Fufucode.Plugins.Library.dll',
-    'Fufucode.Plugins.LocalReview.dll',
-    'Fufucode.Plugins.PerformanceMonitor.dll'
+    'Fufucode.Plugins.LocalReview.dll'
 )
 foreach ($dll in $forbiddenPluginDlls) {
     if (Test-Path -LiteralPath (Join-Path $packageRoot "app/$dll")) {
         throw "Default app package must not contain uninstalled plugin assembly '$dll'."
+    }
+}
+# 默认插件必须有真实载荷，否则"默认安装"是假的。
+foreach ($required in @('app/plugins/chat.interactive-ui/manifest.json',
+        'app/plugins-dist/performance.monitor/manifest.json')) {
+    if (-not (Test-Path -LiteralPath (Join-Path $packageRoot $required))) {
+        throw "Package is missing the bundled plugin payload '$required'."
     }
 }
 

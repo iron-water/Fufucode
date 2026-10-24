@@ -1,6 +1,7 @@
 using System.Text.Json.Nodes;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
+using Fufucode.Core.Approvals;
 using Fufucode.Core.Plugins;
 using Fufucode.Core.RemoteControl;
 
@@ -18,6 +19,7 @@ public sealed class FufuBridgeHost : IFufuBridge
     private readonly SemaphoreSlim _writer = new(1, 1);
     private IChatSession? _session;
     private string _title = "当前会话";
+    private FufuApprovalBridge? _approvals;
     private Func<RemoteSessionCatalog>? _catalog;
     private Func<string, CancellationToken, Task<RemoteCommandResult>>? _switchSession;
     private Func<string, string, CancellationToken, Task<RemoteCommandResult>>? _submitTask;
@@ -45,21 +47,28 @@ public sealed class FufuBridgeHost : IFufuBridge
         lock (_gate)
         {
             if (_session is not null) _session.Event -= OnSessionEvent;
-            if (_session is IExtensionUiSession oldUi)
-            {
-                oldUi.ExtensionUiRequestReceived -= OnApprovalRequested;
-                oldUi.ExtensionUiRequestClosed -= OnApprovalClosed;
-            }
+            DetachApprovalsLocked();
             _session = session;
             _title = sessionTitle;
             _session.Event += OnSessionEvent;
             if (session is IExtensionUiSession ui)
             {
-                ui.ExtensionUiRequestReceived += OnApprovalRequested;
-                ui.ExtensionUiRequestClosed += OnApprovalClosed;
+                // 审批统一走共享 gate：与 Jiii 连接、桌面共用同一个决定。
+                _approvals = new FufuApprovalBridge(SharedApprovalRegistry.For(ui));
+                _approvals.Requested += OnApprovalRequested;
+                _approvals.Resolved += OnApprovalResolved;
             }
         }
         _ = SendSnapshotAsync();
+    }
+
+    private void DetachApprovalsLocked()
+    {
+        if (_approvals is null) return;
+        _approvals.Requested -= OnApprovalRequested;
+        _approvals.Resolved -= OnApprovalResolved;
+        _approvals.Dispose();
+        _approvals = null;
     }
 
     public void ConfigureSessionDirectory(
@@ -144,22 +153,23 @@ public sealed class FufuBridgeHost : IFufuBridge
             _ = SendSnapshotAsync();
     }
 
-    private void OnApprovalRequested(ExtensionUiRequest request)
+    private void OnApprovalRequested(SharedApprovalRequest request)
     {
-        var message = request.Payload.TryGetProperty("message", out var m) ? m.GetString() : request.Method;
         _ = SendAsync(new JsonObject
         {
+            // 线协议沿用 requestId 字段，值改为 gate 的 ApprovalId（generation:id），
+            // 保证 FUFU 回传时能定位到唯一请求。
             ["kind"] = FufuBridgeProtocol.KindApproval,
-            ["requestId"] = request.Id, ["sessionId"] = CurrentSessionId(),
-            ["tool"] = request.Payload.TryGetProperty("toolName", out var t) ? t.GetString() : request.Method,
-            ["message"] = message,
+            ["requestId"] = request.ApprovalId, ["sessionId"] = CurrentSessionId(),
+            ["tool"] = request.ToolName,
+            ["message"] = request.Summary,
         });
     }
 
-    private void OnApprovalClosed(ExtensionUiRequest request) =>
+    private void OnApprovalResolved(SharedApprovalResolution resolution) =>
         _ = SendAsync(new JsonObject
         {
-            ["kind"] = FufuBridgeProtocol.KindApprovalClosed, ["requestId"] = request.Id,
+            ["kind"] = FufuBridgeProtocol.KindApprovalClosed, ["requestId"] = resolution.ApprovalId,
         });
 
     private string CurrentSessionId()
@@ -259,12 +269,24 @@ public sealed class FufuBridgeHost : IFufuBridge
             {
                 var requestId = message["requestId"]?.GetValue<string>();
                 var approved = message["approved"]?.GetValue<bool>() == true;
-                if (session is IExtensionUiSession ui && !string.IsNullOrWhiteSpace(requestId))
+                if (string.IsNullOrWhiteSpace(requestId)) return;
+
+                FufuApprovalBridge? approvals;
+                lock (_gate) approvals = _approvals;
+                if (approvals is null)
                 {
-                    var pending = ui.PendingExtensionUiRequests.FirstOrDefault(r => r.Id == requestId);
-                    if (pending is not null)
-                        await ui.RespondToExtensionUiAsync(pending,
-                            PiExtensionUiResponse.Confirm(approved), _shutdown.Token).ConfigureAwait(false);
+                    await SendErrorAsync("approve.unsupported", "当前会话没有可用的审批入口").ConfigureAwait(false);
+                    return;
+                }
+
+                // 与 Jiii 连接竞争同一个决定；后到者会收到 already-resolved。
+                var resolution = await approvals
+                    .ResolveAsync(requestId, approved, _shutdown.Token)
+                    .ConfigureAwait(false);
+                if (!resolution.Accepted)
+                {
+                    await SendErrorAsync("approve.rejected",
+                        resolution.Message ?? "审批不存在或已由其它入口处理").ConfigureAwait(false);
                 }
                 return;
             }
@@ -303,11 +325,7 @@ public sealed class FufuBridgeHost : IFufuBridge
         lock (_gate)
         {
             if (_session is not null) _session.Event -= OnSessionEvent;
-            if (_session is IExtensionUiSession ui)
-            {
-                ui.ExtensionUiRequestReceived -= OnApprovalRequested;
-                ui.ExtensionUiRequestClosed -= OnApprovalClosed;
-            }
+            DetachApprovalsLocked();
             _session = null;
             _client?.Dispose(); _client = null;
         }

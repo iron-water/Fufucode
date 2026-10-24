@@ -6,10 +6,25 @@ namespace Fufucode.Core;
 /// <summary>Product-owned paths. Tests may supply an isolated root.</summary>
 public sealed class AppDataLayout
 {
+    /// <summary>
+    /// 数据根目录的环境变量覆盖。实验性测试安装包用它指向自己的数据根
+    /// （<c>%LOCALAPPDATA%\FufucodeTest</c>），从而与正式安装的会话/设置互不覆盖。
+    /// 显式传入 <c>root</c> 时优先于环境变量。
+    /// </summary>
+    public const string RootEnvironmentVariable = "FUFUCODE_DATA_ROOT";
+
     public AppDataLayout(string? root = null)
     {
-        Root = Path.GetFullPath(root ?? Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode"));
+        Root = Path.GetFullPath(root ?? DefaultRoot());
+    }
+
+    /// <summary>未显式指定时的数据根：环境变量覆盖 → <c>%LOCALAPPDATA%\Fufucode</c>。</summary>
+    public static string DefaultRoot()
+    {
+        var overridden = Environment.GetEnvironmentVariable(RootEnvironmentVariable);
+        return string.IsNullOrWhiteSpace(overridden)
+            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode")
+            : overridden;
     }
 
     public string Root { get; }

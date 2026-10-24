@@ -18,8 +18,9 @@ internal sealed record WindowsToastAction(string Label, string Argument);
 internal static class WindowsToastService
 {
     internal const string AppId = "Fufucode.Desktop";
-    private const string ProtocolKey = @"Software\Classes\" + Integration.ApprovalLink.Scheme;
-    internal const string ProtocolCommandKey = ProtocolKey + @"\shell\open\command";
+    // 协议名随渠道变化，不能是编译期常量（正式 fufucode-approval / 测试 fufucode-test-approval）。
+    private static string ProtocolKey => @"Software\Classes\" + Integration.ApprovalLink.Scheme;
+    internal static string ProtocolCommandKey => ProtocolKey + @"\shell\open\command";
 
     internal static string CreateXml(string title, string message, string? link,
         IReadOnlyList<WindowsToastAction>? actions = null)

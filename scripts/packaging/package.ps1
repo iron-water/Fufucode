@@ -26,7 +26,8 @@ foreach ($component in @('App', 'Cli')) {
     $project = Join-Path $root "src/Fufucode.$component/Fufucode.$component.csproj"
     $destination = Join-Path $packageRoot $component.ToLowerInvariant()
     Write-Host "Publishing Fufucode.$component self-contained win-x64..."
-    dotnet publish $project -c Release -r win-x64 --self-contained true -o $destination
+    # 版本号必须下传，否则程序集恒为 1.0.0，与安装器/更新清单不一致。
+    dotnet publish $project -c Release -r win-x64 --self-contained true "-p:Version=$AppVersion" -o $destination
     if ($LASTEXITCODE -ne 0) { throw "Fufucode.$component publish failed." }
 }
 # 默认随包分发的对话增强插件。

@@ -18,8 +18,7 @@ public static class PinnedTurnsStore
     private static Dictionary<string, List<string>>? _cache;
 
     private static string FilePath => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Fufucode", "pinned-turns.json");
+        Fufucode.Core.AppDataLayout.DefaultRoot(), "pinned-turns.json");
 
     /// <summary>读取某会话的固定轮次 id；文件损坏或不存在时返回空集合，不影响对话。</summary>
     public static IReadOnlySet<string> Load(string sessionId)

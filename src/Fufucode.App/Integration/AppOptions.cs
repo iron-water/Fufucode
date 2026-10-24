@@ -61,7 +61,7 @@ public sealed record AppOptions(
                 activation = args[i];
                 continue;
             }
-            if (args[i].StartsWith("fufucode:", System.StringComparison.OrdinalIgnoreCase))
+            if (args[i].StartsWith(ProductLinks.SessionScheme + ":", System.StringComparison.OrdinalIgnoreCase))
             {
                 if (!SessionDeepLink.TryParse(args[i], out session, out project))
                     throw new System.ArgumentException("无效的 Fufucode 会话链接");

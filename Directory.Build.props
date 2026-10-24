@@ -1,0 +1,11 @@
+<Project>
+  <!--
+    仓库级默认属性。只对本品源码树生效：`reference/` 是第三方只读克隆，不参与本仓库构建，
+    不能被这里的 Version 覆盖。
+  -->
+  <PropertyGroup>
+    <_FufucodeReferencePrefix>$(MSBuildThisFileDirectory)reference/</_FufucodeReferencePrefix>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)build/Version.props"
+          Condition="!$([System.String]::Copy('$(MSBuildProjectFullPath)').StartsWith('$(_FufucodeReferencePrefix)'))" />
+</Project>

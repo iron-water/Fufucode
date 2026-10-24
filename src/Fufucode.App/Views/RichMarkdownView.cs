@@ -9,6 +9,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using LiveMarkdown.Avalonia;
+using Markdig;
 
 namespace Fufucode.App.Views;
 
@@ -228,6 +229,8 @@ public sealed class RichMarkdownView : ContentControl
 
             MarkdownRenderer.ConfigurePipeline += pipeline =>
             {
+                // 裸 URL 也渲染成可点链接；表格/任务列表/删除线等由默认管道提供。
+                pipeline.UseAutoLinks();
                 pipeline.UseMermaid();
                 // \( \) 与 \[ \] 也支持；$ 与 $$ 由默认解析器提供。
                 pipeline.UseExtendedMathematics();

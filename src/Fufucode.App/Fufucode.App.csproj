@@ -48,6 +48,15 @@
   <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <TrimmerRootAssembly Include="System.Console" />
     <TrimmerRootAssembly Include="System.IO.Pipes" />
+    <TrimmerRootAssembly Include="System.Runtime" />
+  </ItemGroup>
+
+  <!--
+    共享裁剪运行时（App 的裁剪结果同时服务 CLI）：保留 CLI 需要、App 不可达的框架成员。
+    实现体位于 System.Private.CoreLib，只 root 程序集不够，必须按类型保留，详见该文件注释。
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <TrimmerRootDescriptor Include="ILLink.Descriptors.xml" />
   </ItemGroup>
 
   <ItemGroup>

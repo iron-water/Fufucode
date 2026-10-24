@@ -1,0 +1,19 @@
+<Project>
+  <!--
+    产品程序集版本的单一默认值。
+
+    打包脚本用 `dotnet publish -p:Version=<AppVersion>` 覆盖它：命令行全局属性优先于任何
+    属性文件，因此 `-AppVersion 0.1.0` 产出的 exe 元数据（FileVersion / ProductVersion /
+    InformationalVersion）与 build-info.json、安装器 AppVersion 完全一致。
+    SDK 会把 `<Version>` 派生为 AssemblyVersion（数字段）、FileVersion 与 InformationalVersion
+    （后者再追加 `+<提交哈希>`，BuildInfo.ResolveCurrent 依赖这个约定）。
+
+    历史问题：未设 Version 时程序集恒为 1.0.0，而安装器/更新清单写的是 1.4.x，
+    用户看到的 exe 版本与"当前构建"版本对不上。
+  -->
+  <PropertyGroup>
+    <Version Condition="'$(Version)' == ''">1.4.0</Version>
+    <!-- 测试/预发布版本（1.4.0-test.1）也必须是合法 SemVer；本仓库统一用 -test.N 后缀。 -->
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+</Project>

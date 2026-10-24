@@ -42,7 +42,7 @@ public sealed class AutomationWorkspaceMarker
     public AutomationWorkspaceMarker(string dataRoot)
     {
         var directory = string.IsNullOrWhiteSpace(dataRoot)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode")
+            ? Fufucode.Core.AppDataLayout.DefaultRoot()
             : dataRoot;
         Directory.CreateDirectory(directory);
         _path = Path.Combine(directory, FileName);
