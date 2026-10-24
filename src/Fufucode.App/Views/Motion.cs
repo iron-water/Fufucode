@@ -75,6 +75,50 @@ internal static class Motion
     /// <summary>底部卡进入：淡入，位移更小。</summary>
     public static void AnimateFooter(Control control) => AnimateIn(control, offsetY: 4, FooterDuration);
 
+    /// <summary>
+    /// 把一个数值从当前值缓动到目标值（16ms 一帧），用于不能直接上过渡的属性，
+    /// 例如 Grid 列宽。返回的对象可用于中途取消。
+    /// </summary>
+    public static IDisposable AnimateValue(double from, double to, TimeSpan duration,
+        Action<double> apply, Action? completed = null)
+    {
+        if (Reduced || Math.Abs(to - from) < 0.01)
+        {
+            apply(to);
+            completed?.Invoke();
+            return new ActionDisposable(() => { });
+        }
+
+        var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        timer.Tick += (_, _) =>
+        {
+            var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - startedAt) * 1000.0
+                          / System.Diagnostics.Stopwatch.Frequency;
+            var progress = Math.Clamp(elapsed / duration.TotalMilliseconds, 0, 1);
+            // 与其它过渡一致的快出慢入。
+            var eased = 1 - Math.Pow(1 - progress, 3);
+            apply(from + (to - from) * eased);
+            if (progress < 1) return;
+            timer.Stop();
+            apply(to);
+            completed?.Invoke();
+        };
+        timer.Start();
+        return new ActionDisposable(() => timer.Stop());
+    }
+
+    private sealed class ActionDisposable(Action dispose) : IDisposable
+    {
+        private bool _disposed;
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+            dispose();
+        }
+    }
+
     /// <summary>淡出并轻微下移，结束后可选地隐藏元素。</summary>
     public static void AnimateOut(Control control, double offsetY = 4, Action? onCompleted = null)
     {
