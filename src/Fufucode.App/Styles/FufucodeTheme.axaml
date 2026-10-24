@@ -346,11 +346,20 @@
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Template">
             <ControlTemplate>
-                <Border Background="Transparent" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}">
-                    <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" Padding="0"/>
+                <!-- 只保留底色（悬停为二级色填充），不再画 1px 边框，避免窗口按钮出现方框。 -->
+                <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                        BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                    <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}" HorizontalContentAlignment="Center" VerticalContentAlignment="Center" Padding="0"/>
                 </Border>
             </ControlTemplate>
         </Setter>
+    </Style>
+    <!-- 顶栏是一级底：悬停用二级色填充，按压用高亮色，与其它图标按钮同一套层级规则。 -->
+    <Style Selector="Button.captionButton:pointerover">
+        <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    </Style>
+    <Style Selector="Button.captionButton:pressed">
+        <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
     </Style>
     <Style Selector="Button.captionButton:focus-visible">
         <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
