@@ -67,7 +67,14 @@ public sealed class MessageActionsView : UserControl
         _model = new TextBlock { Classes = { "meta" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
         _time = new TextBlock { Classes = { "meta", "tabularNumeric" }, VerticalAlignment = VerticalAlignment.Center };
 
-        _icons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
+        // 命中区：整条栏 + 图标容器都用透明背景铺满，指针经过间隙时仍算“在栏内”，
+        // 避免显隐按单个图标判定造成的一闪一闪。
+        Background = Brushes.Transparent;
+        _icons = new StackPanel
+        {
+            Orientation = Orientation.Horizontal, Spacing = 2,
+            VerticalAlignment = VerticalAlignment.Center, Background = Brushes.Transparent,
+        };
         _icons.Children.Add(_copy);
         _icons.Children.Add(_speak);
         _icons.Children.Add(_quote);
