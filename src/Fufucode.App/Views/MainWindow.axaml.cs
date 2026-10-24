@@ -101,6 +101,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         Core.Diagnostics.StartupProbe.Mark("window.workspace-shell", "dock/workbench pages registered");
         InitializeCaption();
         InitializeRowHover();
+        InitializeWindowTips();
         InitializeGlobalWorkspace();
         Core.Diagnostics.StartupProbe.Mark("window.global", "caption and global workspace ready");
         InitializeCustomization();

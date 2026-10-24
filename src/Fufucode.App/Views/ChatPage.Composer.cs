@@ -21,6 +21,8 @@ public partial class ChatPage
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
     private Button? _executionModeButton;
+    private readonly System.Collections.Generic.List<(Control Target, Func<string?> Text)> _composerTips = new();
+    private bool _composerTipsWired;
     private MenuFlyout? _executionModeMenu;
     private bool _previewDraft;
     private void InitializeComposerTools()
@@ -132,8 +134,31 @@ public partial class ChatPage
         _executionModeMenu = modeMenu;
         _executionModeButton = modeButton;
         ComposerModes.Children.Insert(0, modeButton);
-        // 系统 ToolTip 已随应用主题同步为深色，并统一显示在上方；
-        // 不再使用自定义 Popup（会与悬停状态互相触发，造成高亮闪烁）。
+        AttachedToVisualTree += (_, _) =>
+        {
+            if (_composerTipsWired || TopLevel.GetTopLevel(this) is not MainWindow window) return;
+            _composerTipsWired = true;
+            foreach (var (target, text) in _composerTips) window.RegisterWindowTip(target, text, ComposerCard);
+        };
+        // 提示改为窗口内浮层：显示在图标正上方、离开 0.3 秒消失，
+        // 不用 Popup/ToolTip（会按浅色渲染成白框并造成悬停闪烁）。
+        // 构建时尚未挂到视觉树（GetTopLevel 为空），先记录，挂载后再登记到窗口。
+        void Tip(Control target, Func<string?> text) => _composerTips.Add((target, text));
+        MainViewModel? Vm() => DataContext as MainViewModel;
+        Tip(ComposerMoreButton, () => "附加功能");
+        Tip(AttachContextButton, () => "添加文件、图片、PDF 或链接");
+        Tip(SessionProjectChip, () =>
+            Vm()?.Sidebar.ProjectName is { Length: > 0 } project ? "项目：" + project : "更改此会话的项目");
+        Tip(ModelButton, () => "模型：" + (Vm()?.Settings.SelectedModel.Label ?? "选择模型"));
+        Tip(ThinkingButton, () => "思考：" + (Vm()?.Settings.SelectedThinking?.Label ?? "默认"));
+        Tip(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
+        Tip(SendButton, () => "发送");
+        Tip(StopButton, () => "停止当前回合");
+        InputBox.GotFocus += (_, _) => ComposerGlowBand.Opacity = 1;
+        InputBox.LostFocus += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            if (!ComposerCard.IsKeyboardFocusWithin) ComposerGlowBand.Opacity = 0;
+        });
 
         var menu = new MenuFlyout();
         var preview = new MenuItem { Header = "Markdown 草稿预览" };
@@ -303,11 +328,6 @@ public partial class ChatPage
             }
             ThinkingButton.IsEnabled = vm.Settings.CanChangeModel;
             if (_executionModeMenu is not null) BuildExecutionModeMenu(_executionModeMenu);
-            if (_executionModeButton is not null)
-            {
-                ToolTip.SetTip(_executionModeButton, "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
-                ToolTip.SetPlacement(_executionModeButton, PlacementMode.Top);
-            }
             if (ThinkingButton.Flyout is MenuFlyout thinkingMenu) BuildThinkingMenu(thinkingMenu, vm);
         }
         finally { _updatingComposer = false; }
