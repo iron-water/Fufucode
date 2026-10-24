@@ -59,16 +59,22 @@ New-Item -ItemType Directory -Force $cliDir | Out-Null
 # 版本号显式下传，保证程序集元数据、build-info.json、安装器与 feed.json 完全一致。
 $versionProps = @("--property:Version=$AppVersion")
 
+# 测试渠道不裁剪。实测（2026-10-24）：裁剪后的共享运行时会让随包插件在激活期失效
+# ——performance.monitor 在未裁剪构建里正常加载，裁剪构建里则静默不激活，且 CLI 会因
+# DefaultInterpolatedStringHandler 的泛型重载被裁掉而 MethodNotFound。
+# 实验性构建的目标是"行为正确、可验证"，不是体积；代价是载荷从约 25 MB 涨到约 130 MB。
+$trimProps = @('--property:PublishTrimmed=false', '--property:PublishReadyToRun=true')
+
 $cliStaging = Join-Path $packageRoot '.cli-staging'
 New-Item -ItemType Directory -Force $cliStaging | Out-Null
-Write-Host "Publishing Fufucode.Cli $RuntimeIdentifier (self-contained=$selfContained, version=$AppVersion)..."
+Write-Host "Publishing Fufucode.Cli $RuntimeIdentifier (self-contained=$selfContained, version=$AppVersion, trimmed=false)..."
 dotnet publish (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj') -c Release -r $RuntimeIdentifier `
-    --self-contained $selfContained @versionProps -o $cliStaging
+    --self-contained $selfContained @versionProps @trimProps -o $cliStaging
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.Cli publish failed.' }
 
 Write-Host "Publishing Fufucode.App into shared app layout..."
 dotnet publish (Join-Path $root 'src/Fufucode.App/Fufucode.App.csproj') -c Release -r $RuntimeIdentifier `
-    --self-contained $selfContained @versionProps -o $appDir
+    --self-contained $selfContained @versionProps @trimProps -o $appDir
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.App publish failed.' }
 
 # 默认随包插件：chat.interactive-ui 落在 app/plugins（宿主首次启动播种）。
@@ -122,17 +128,14 @@ try {
     if (Test-Path -LiteralPath $cliProbeData) { Remove-Item -LiteralPath $cliProbeData -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-# 平台守卫：自包含版依赖裁剪器移除其它平台后端，失败即拒绝出包。
+# 平台守卫：测试渠道不裁剪，非 Windows 的 Avalonia 后端会原样出现在载荷里，按 RID 手工移除，
+# 免得 Windows 包带上 X11/FreeDesktop/macOS 后端。
 $nonWindowsBackends = @('Avalonia.X11.dll', 'Avalonia.FreeDesktop.dll', 'Avalonia.FreeDesktop.AtSpi.dll',
     'Avalonia.Native.dll', 'Tmds.DBus.Protocol.dll')
 if ($RuntimeIdentifier -like 'win-*') {
     foreach ($unused in $nonWindowsBackends) {
         $target = Join-Path $appDir $unused
-        if ($FrameworkDependent) {
-            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
-        } elseif (Test-Path -LiteralPath $target) {
-            throw "Trimming did not remove non-Windows backend '$unused'; refusing to package an untrimmed payload."
-        }
+        if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
     }
 }
 
