@@ -22,8 +22,6 @@ internal sealed class PerfOverviewView : UserControl
 
     // 头部用量指标
     private readonly TextBlock _title = new() { Text = "上下文窗口", FontSize = 18, FontWeight = FontWeight.SemiBold };
-    private readonly Border _modelBadge = new();
-    private readonly TextBlock _modelText = new() { FontSize = 10 };
     private readonly TextBlock _usedTokensText = new() { FontSize = 28, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _usedTokensSub = new() { FontSize = 11 };
     private readonly TextBlock _cacheHitText = new() { FontSize = 28, FontWeight = FontWeight.SemiBold };
@@ -51,7 +49,6 @@ internal sealed class PerfOverviewView : UserControl
     public PerfOverviewView()
     {
         _title.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
-        _modelText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
         _usedTokensText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
         _usedTokensSub.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
         _cacheHitText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
@@ -60,24 +57,11 @@ internal sealed class PerfOverviewView : UserControl
         _roundsCountText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
         _requestsCountText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
 
-        // 模型徽章
-        _modelBadge.CornerRadius = new CornerRadius(999);
-        _modelBadge.Padding = new Thickness(8, 2);
-        _modelBadge.VerticalAlignment = VerticalAlignment.Center;
-        _modelBadge.Child = _modelText;
-        _modelBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
-
-        var liveDot = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(Color.Parse("#4ADE80")), VerticalAlignment = VerticalAlignment.Center };
-        var liveText = new TextBlock { Text = "实时", FontSize = 10, VerticalAlignment = VerticalAlignment.Center };
-        liveText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        var liveBadge = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center, Children = { liveDot, liveText } };
-
-        var headRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 10 };
-        headRow.Children.Add(_title);
-        Grid.SetColumn(_modelBadge, 2);
-        headRow.Children.Add(_modelBadge);
-        Grid.SetColumn(liveBadge, 3);
-        headRow.Children.Add(liveBadge);
+        var headRow = new Border
+        {
+            Margin = new Thickness(0, 2, 0, 2),
+            Child = _title,
+        };
 
         // 指标双列卡片
         var metricsGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 12 };
@@ -205,8 +189,6 @@ internal sealed class PerfOverviewView : UserControl
     {
         _snapshot = snapshot;
         var breakdown = snapshot.ContextBreakdown;
-
-        _modelText.Text = string.IsNullOrWhiteSpace(breakdown.ModelName) ? "默认模型" : breakdown.ModelName;
 
         if (breakdown.TotalTokens > 0)
         {

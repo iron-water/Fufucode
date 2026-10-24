@@ -40,7 +40,7 @@ internal sealed class PerfTimelineView : Control
     public PerfTimelineView()
     {
         ClipToBounds = true;
-        Height = RulerHeight + TrackHeight * 7 + Padding * 2;
+        Height = RulerHeight + TrackHeight * 8 + Padding * 2;
         this.Bind(TextBrushProperty, new DynamicResourceExtension("AppTextSecondary"));
         this.Bind(MutedBrushProperty, new DynamicResourceExtension("AppTextDim"));
         this.Bind(GridBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
@@ -103,19 +103,20 @@ internal sealed class PerfTimelineView : Control
         var plotRight = width - Padding;
         var plotWidth = Math.Max(1, plotRight - plotLeft);
         var top = Padding + RulerHeight;
-        var bottom = top + TrackHeight * 7;
+        var bottom = top + TrackHeight * 8;
 
         DrawRuler(context, start, total, plotLeft, plotWidth);
-        using (context.PushClip(new Rect(plotLeft, top, plotWidth, TrackHeight * 7)))
+        using (context.PushClip(new Rect(plotLeft, top, plotWidth, TrackHeight * 8)))
         {
-            DrawTrackBackground(context, top, plotLeft, plotWidth, 7);
+            DrawTrackBackground(context, top, plotLeft, plotWidth, 8);
             DrawUiTrack(context, _turn, start, total, plotLeft, plotWidth, top);
             DrawEventTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight);
-            DrawModelTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 2);
-            DrawToolTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 3);
-            DrawApprovalTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 4);
-            DrawPersistTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 5);
-            DrawSystemTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 6);
+            DrawFufuTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 2);
+            DrawModelTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 3);
+            DrawToolTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 4);
+            DrawApprovalTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 5);
+            DrawPersistTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 6);
+            DrawSystemTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 7);
         }
 
         DrawTrackLabels(context, top);
@@ -148,9 +149,28 @@ internal sealed class PerfTimelineView : Control
 
     private void DrawTrackLabels(DrawingContext context, double top)
     {
-        var labels = new[] { "UI 线程", "事件", "模型请求", "工具", "审批", "持久化", "系统" };
+        var labels = new[] { "UI 线程", "事件泵", "Fufu 渲染", "模型生成", "工具执行", "审批阻塞", "持久化", "宿主系统" };
         for (var index = 0; index < labels.Length; index++)
             DrawText(context, labels[index], Padding, top + index * TrackHeight + 7, 10, TextBrush);
+    }
+
+    private void DrawFufuTrack(DrawingContext context, PerfTurnInfo turn, long start, long total, double left, double width, double top)
+    {
+        var fufuSpans = turn.Spans.Where(s => s.Name.StartsWith("fufu.", StringComparison.OrdinalIgnoreCase)).ToList();
+        foreach (var span in fufuSpans)
+            DrawSpan(context, span, start, total, left, width, top, PerfPalette.ApprovalBrush);
+
+        var fps = Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.CurrentFps;
+        var frameMs = Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.LastFrameTimeMs;
+        var dropped = Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.DroppedFrames;
+        var label = fps > 0 ? $"Live2D {fps:0.0} FPS · {frameMs:0.1} ms" : "桌宠与渲染待机中";
+        DrawText(context, label, left + 4, top + 7, 9, MutedBrush, clipped: true);
+
+        if (dropped > 0)
+        {
+            var pen = new Pen(PerfPalette.ErrorBrush, 1.5);
+            context.DrawLine(pen, new Point(left + width - 12, top + 4), new Point(left + width - 12, top + TrackHeight - 4));
+        }
     }
 
     private void DrawUiTrack(DrawingContext context, PerfTurnInfo turn, long start, long total, double left, double width, double top)

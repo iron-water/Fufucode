@@ -82,6 +82,7 @@ internal sealed class PlaceholderPetRenderer : ICharacterRenderer
 
         public override void Render(DrawingContext context)
         {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             base.Render(context);
             var bounds = Bounds;
             var (body, belly, cheek) = Palette.GetValueOrDefault(_state, Palette[PetState.Idle]);
@@ -219,6 +220,8 @@ internal sealed class PlaceholderPetRenderer : ICharacterRenderer
                     break;
                 }
             }
+
+            Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.ReportFrame(sw.Elapsed.TotalMilliseconds);
         }
     }
 }
