@@ -17,12 +17,69 @@ public sealed record FileDiff(string Path, string? OldPath, bool? IsBinary, bool
     public string? NewMode { get; init; }
 }
 
+/// <summary>
+/// Both text sides of one file at view time: HEAD (null when untracked) and the current worktree copy.
+/// Read-only; the diff view needs it for syntax highlighting and for expanding collapsed context,
+/// neither of which a unified diff alone can supply.
+/// </summary>
+public sealed record DiffSides(string Path, string? OldText, string? NewText, bool Truncated, string? Error)
+{
+    public bool HasEitherSide => OldText is not null || NewText is not null;
+}
+
 public static class DiffQuery
 {
     public const int DefaultContextLines = 3;
     public const int MaximumContextLines = 64;
     /// <summary>A diff is a view, not a document: keep the payload bounded so a large file cannot stall the caller.</summary>
     public const int MaximumDiffLines = 20000;
+    /// <summary>Both sides are read for highlighting; refuse anything past this instead of loading it into the UI.</summary>
+    public const int MaximumSideBytes = 2 * 1024 * 1024;
+
+    /// <summary>
+    /// Reads both sides of one file: HEAD content (null when the file is untracked or has no HEAD)
+    /// and the current worktree content (null when the file was deleted). Never writes to the repository.
+    /// </summary>
+    public static async Task<DiffSides> SidesAsync(string projectPath, string relativePath,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
+        var project = AppDataLayout.NormalizeProjectPath(projectPath);
+        try
+        {
+            var top = await GitAsync(project, ["rev-parse", "--show-toplevel"], cancellationToken);
+            if (top.Code != 0) return new(relativePath, null, null, false, "not-a-git-worktree");
+            var root = Path.GetFullPath(top.Output.Trim());
+            var full = Resolve(project, relativePath, out var display);
+            if (full is null) return new(display, null, null, false, "path-escapes-project");
+            if (HasReparsePoint(full, project)) return new(display, null, null, false, "reparse-point-refused");
+
+            string? newText = null;
+            var truncated = false;
+            if (File.Exists(full))
+            {
+                var info = new FileInfo(full);
+                if (info.Length > MaximumSideBytes) truncated = true;
+                else newText = await File.ReadAllTextAsync(full, Encoding.UTF8, cancellationToken);
+            }
+
+            string? oldText = null;
+            var head = await GitAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken);
+            if (head.Code == 0)
+            {
+                var relative = Path.GetRelativePath(root, full).Replace('\\', '/');
+                var show = await GitAsync(root, ["show", "HEAD:" + relative], cancellationToken);
+                // Binary or oversized blobs come back empty/failed by design; the view then falls back to plain text.
+                if (show.Code == 0 && show.Output.Length <= MaximumSideBytes) oldText = show.Output;
+            }
+            return new(display, oldText, truncated ? null : newText, truncated, null);
+        }
+        catch (System.ComponentModel.Win32Exception) { return new(relativePath, null, null, false, "git-unavailable"); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            return new(relativePath, null, null, false, "unreadable");
+        }
+    }
 
     public static async Task<FileDiff> FileAsync(string projectPath, string relativePath,
         int contextLines = DefaultContextLines, int maximumLines = MaximumDiffLines,
