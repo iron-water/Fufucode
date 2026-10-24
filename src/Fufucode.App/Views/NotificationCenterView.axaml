@@ -40,10 +40,9 @@
   </UserControl.Styles>
   <Border Classes="overlayPanel">
     <Grid RowDefinitions="Auto,Auto,*,Auto">
-      <Grid ColumnDefinitions="*,Auto" Margin="16,12,12,8">
+      <!-- 关闭由停靠区的页签 × 负责：页内不再放第二个关闭按钮。 -->
+      <Grid Margin="16,12,12,8">
         <TextBlock Classes="sectionTitle" Text="通知" VerticalAlignment="Center"/>
-        <Button Grid.Column="1" x:Name="ClosePageButton" Classes="iconButton" Content="×" Width="32" Height="32"
-                Command="{Binding CloseCommand}" AutomationProperties.Name="关闭通知中心"/>
       </Grid>
       <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,8">
         <StackPanel Orientation="Horizontal" Spacing="6" Margin="16,0,16,0" AutomationProperties.Name="通知过滤">
