@@ -133,6 +133,19 @@ public partial class ChatPage
         _executionModeButton = modeButton;
         ComposerModes.Children.Insert(0, modeButton);
         // 输入区底部图标统一用上方浮层提示（离开 0.3s 消失）。
+        // 聚焦辉光：直接给卡片赋 BoxShadows，绕过伪类与样式优先级。
+        void SetComposerGlow(bool on)
+        {
+            // 光带用 Opacity 过渡，BoxShadow 在当前渲染路径下不可见。
+            ComposerGlowBand.Opacity = on ? 1 : 0;
+        }
+        InputBox.GotFocus += (_, _) => SetComposerGlow(true);
+        InputBox.LostFocus += (_, _) =>
+        {
+            if (!ComposerCard.IsKeyboardFocusWithin) SetComposerGlow(false);
+        };
+        ComposerCard.BorderThickness = new Thickness(0);
+
         MainViewModel? Vm() => DataContext as MainViewModel;
         HoverTip.Attach(ComposerMoreButton, () => "附加功能");
         HoverTip.Attach(AttachContextButton, () => "添加文件、图片、PDF 或链接");

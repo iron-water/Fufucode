@@ -582,8 +582,22 @@
       </Button>
 
       <!-- 输入区：浮动卡片（与时间线同列宽）。x:Name 供窗口层计算抽屉避让带（D-R4-1）。 -->
-      <Border x:Name="ComposerCard" Grid.Row="1" Classes="composerCard" MaxWidth="880"
-              CornerRadius="0" BorderThickness="0,1,0,0" Margin="0" HorizontalAlignment="Stretch">
+      <StackPanel x:Name="ComposerHost" Grid.Row="1" VerticalAlignment="Bottom" HorizontalAlignment="Stretch">
+      <!-- 聚焦光带：位于输入卡上方的淡绿色渐变（不依赖 BoxShadow，渲染更可靠）。 -->
+      <Border x:Name="ComposerGlowBand" Height="24" Opacity="0" IsHitTestVisible="False">
+        <Border.Effect>
+          <BlurEffect Radius="12"/>
+        </Border.Effect>
+        <Border.Background>
+          <LinearGradientBrush StartPoint="0%,100%" EndPoint="0%,0%">
+            <GradientStop Offset="0" Color="#4D00CC6A"/>
+            <GradientStop Offset="0.5" Color="#1A00CC6A"/>
+            <GradientStop Offset="1" Color="#0000CC6A"/>
+          </LinearGradientBrush>
+        </Border.Background>
+      </Border>
+      <Border x:Name="ComposerCard" Classes="composerCard" MaxWidth="880"
+              CornerRadius="0" BorderThickness="0" Margin="0" HorizontalAlignment="Stretch">
         <StackPanel>
           <!-- 会话上下文（项目切换）在底部工具行，与模型/思考/权限同排；
                后端只在顶栏会话岛显示，输入卡内不再有后端徽标。 -->
@@ -832,6 +846,7 @@
           </Grid>
         </StackPanel>
       </Border>
+      </StackPanel>
 
     </Grid>
   </Grid>
