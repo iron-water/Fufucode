@@ -1131,6 +1131,21 @@
   <Style Selector="StackPanel#ComposerHost:focus-within Border#ComposerGlowBand">
     <Setter Property="Opacity" Value="1"/>
   </Style>
+  <!-- 透明遮罩按钮（岛/抽屉/全局浮层）：不允许任何 hover/pressed 底色，
+       否则指针落上去会把整个窗口刷成高亮色，表现为“离开图标时闪一下”。 -->
+  <Style Selector="Button#IslandScrim, Button#RightDrawerScrim, Grid#GlobalOverlay > Button">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Button#IslandScrim:pointerover, Button#RightDrawerScrim:pointerover, Grid#GlobalOverlay > Button:pointerover">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button#IslandScrim:pressed, Button#RightDrawerScrim:pressed, Grid#GlobalOverlay > Button:pressed">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button#IslandScrim:pointerover /template/ Border, Button#RightDrawerScrim:pointerover /template/ Border, Grid#GlobalOverlay > Button:pointerover /template/ Border">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
   <!-- 输入区聚焦光带：淡入淡出。 -->
   <Style Selector="Border#ComposerGlowBand">
     <Setter Property="Transitions">
