@@ -239,7 +239,6 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.Subagents.dll',
     'Fufucode.Plugins.ComputerUse.dll',
     'Fufucode.Plugins.Speech.dll',
-    'Fufucode.Plugins.RemoteControl.dll',
     'Fufucode.Plugins.CronSchedules.dll',
     'Fufucode.Plugins.AeroSkin.dll',
     'Fufucode.Plugins.SkinMetro.dll',
