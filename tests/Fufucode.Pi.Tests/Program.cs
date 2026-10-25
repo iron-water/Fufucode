@@ -6,7 +6,7 @@ var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin/Debug/net10.0/Fufucode.
 var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet/dotnet.exe");
 PiRpcOptions fakeOptions(int maxBytes = 8 * 1024 * 1024) => new(dotnet, [fake], root, MaxRecordBytes: maxBytes);
 if (args.Contains("--shutdown-only"))
-    return await PiShutdownTests.RunAsync(root, Path.Combine(root, "runtime/node/node.exe")) == 0 ? 0 : 1;
+    return await PiShutdownTests.RunAsync(root, Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe")) == 0 ? 0 : 1;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); Console.WriteLine($"PASS {name}"); }
 
 await using (var client = await PiRpcClient.StartAsync(fakeOptions()))
@@ -74,7 +74,7 @@ await using (var client = await PiRpcClient.StartAsync(fakeOptions(1024)))
     catch (RpcException error) { Check(error.InnerException is not null, "record size limit is explicit"); }
 }
 
-var node = Path.Combine(root, "runtime/node/node.exe");
+var node = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe");
 var unobserved = 0;
 void OnUnobserved(object? sender, UnobservedTaskExceptionEventArgs error) => Interlocked.Increment(ref unobserved);
 TaskScheduler.UnobservedTaskException += OnUnobserved;
@@ -96,7 +96,7 @@ try
 }
 finally { TaskScheduler.UnobservedTaskException -= OnUnobserved; }
 
-var cli = Path.Combine(root, "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
+var cli = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 var work = Path.Combine(root, "tmp", "real-pi-smoke-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(work);
 var agentDir = Path.Combine(work, "agent");

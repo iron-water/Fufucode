@@ -1,8 +1,9 @@
 **/bin/
 **/obj/
-# 本地运行时载荷（Node/Pi）；仅 runtime/**/LICENSE* 与 package*.json 以 provenance 形式跟踪。
-runtime/
+# 依赖树（含各插件 runtime/ 下 npm ci 生成的 node_modules）。
 node_modules/
+# Pi 插件的本地载荷（可选 node.exe）；npm ci 生成物不入库。
+src/Fufucode.Plugins.Pi/runtime/node.exe
 *.user
 /logs/
 /tmp/

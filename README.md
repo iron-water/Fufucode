@@ -11,8 +11,7 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog | yes |
 | `src/Fufucode.App` | Avalonia UI shell | yes |
 | `src/Fufucode.Cli` | Headless CLI | yes |
-| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, remote control, cron, auto-dev, skins) | yes |
-| `src/Fufucode.Pi` / `src/Fufucode.Claude` | Protocol adapters carried by their backend plugins | yes |
+| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, cron, auto-dev, skins). Each backend plugin carries its own protocol adapter — no backend is built into the default package. | yes |
 | `tools/` | Native launcher and CLI forwarder | yes |
 | `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
 | `tests/` | Executable verification suites | yes |
@@ -22,7 +21,6 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `labs/` | Historical packaging experiments and logs | yes |
 | `out/` | Generated build/package output; not a source of truth | ignored |
 | `output/` | Generated screenshot output; use `out/evidence` instead | ignored |
-| `runtime/` | Local Node/Pi payload for optional backends; not shipped by default | ignored (provenance only) |
 | `reference/` | Third-party read-only references | ignored |
 | `tmp/` | Test artifacts; safe to clean | ignored |
 

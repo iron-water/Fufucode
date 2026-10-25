@@ -1,4 +1,4 @@
-import { SessionManager } from '../../runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js';
+import { SessionManager } from '../../src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js';
 
 const [project, directory, id] = process.argv.slice(2);
 const session = SessionManager.create(project, directory, { id });

@@ -1,4 +1,4 @@
-import { SessionManager } from '../../runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js';
+import { SessionManager } from '../../src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/core/session-manager.js';
 import { spawn } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -15,7 +15,7 @@ const ba=branched.appendMessage({role:'assistant',content:[{type:'text',text:'Or
 const branchBefore=branched.getSessionFile();branched.branch(bu);
 const sibling=branched.appendMessage({role:'user',content:[{type:'text',text:'Sibling child'}],timestamp:Date.now()});
 console.log(JSON.stringify({sdkBranch:{sameFile:branchBefore===branched.getSessionFile(),root:bu,oldChild:ba,newChild:sibling,leafId:branched.getLeafId(),tree:branched.getTree()}}));
-const node=resolve('runtime/node/node.exe'),cli=resolve('runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/cli.js');
+const node=resolve('src/Fufucode.Plugins.Pi/runtime/node.exe'),cli=resolve('src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/cli.js');
 const child=spawn(node,[cli,'--mode','rpc','--session',source,'--session-dir',sessions,'--no-extensions','--no-skills','--no-prompt-templates','--no-themes'],{cwd:root,env:{...process.env,PI_CODING_AGENT_DIR:resolve(root,'agent')},windowsHide:true,stdio:['pipe','pipe','pipe']});
 const pending=new Map(),transcript=[];let seq=0;
 child.stderr.on('data',d=>transcript.push({stderr:d.toString()}));
