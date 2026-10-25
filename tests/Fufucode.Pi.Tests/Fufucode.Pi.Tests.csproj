@@ -6,6 +6,12 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <!--
+      测试直接使用 Fufucode.Core 的类型（AppDataLayout 等）。
+      插件工程把 Core 标成 PrivateAssets=all（宿主提供，不得随插件分发），
+      传递引用因此到不了测试；这里显式引用一次，测试才能编译。
+    -->
+    <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
     <ProjectReference Include="../../src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj" />
   </ItemGroup>
 </Project>

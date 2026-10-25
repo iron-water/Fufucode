@@ -25,7 +25,7 @@ internal static class SessionSwitchTests
         binding.Append(new SessionTimelineEntry(SessionTimelineRole.Assistant, "你好，我是 Pi。"));
 
         var view = switcher.Describe(binding);
-        checks.Equal("#8B5CF6", view.Badge.BadgeColor, "初始会话展示 NativeCSharp 紫色徽标");
+        checks.Equal("fumo", view.Badge.BackendId, "初始会话展示 NativeCSharp 徽标");
         checks.Check(view.IsAvailable, "初始会话展示运行时可用");
 
         var engine = switcher.Switch(binding, EngineId.Omp);
@@ -37,7 +37,7 @@ internal static class SessionSwitchTests
         checks.Equal("你好，我是 Pi。", binding.Timeline[1].Text, "切换后助手消息保留");
 
         var switched = switcher.Describe(binding);
-        checks.Equal("#D97706", switched.Badge.BadgeColor, "切换后会话展示 OMP 橙色徽标");
+        checks.Equal("omp", switched.Badge.BackendId, "切换后会话展示 OMP 徽标");
         checks.Equal("omp", switched.BackendId, "切换后视图持久化标识为 omp");
 
         var partial = new BackendRegistry(new IBackendEngine[]
@@ -55,7 +55,7 @@ internal static class SessionSwitchTests
 
         switcher.Switch(binding, EngineId.Dsh);
         checks.Equal(EngineId.Dsh, binding.Engine, "成功切换到 DSH 更新绑定");
-        checks.Equal("#0891B2", switcher.Describe(binding).Badge.BadgeColor, "切换后展示 DSH 青色徽标");
+        checks.Equal("dsh", switcher.Describe(binding).Badge.BackendId, "切换后展示 DSH 徽标");
         checks.Equal(2, binding.Timeline.Count, "多次切换后时间线仍保留");
     }
 
