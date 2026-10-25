@@ -6,7 +6,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Fufucode.Claude/Fufucode.Claude.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Claude/Fufucode.Plugins.Claude.csproj" />
     <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
   </ItemGroup>
 </Project>

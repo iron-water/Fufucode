@@ -13,11 +13,6 @@ namespace Fufucode.Core.Plugins;
 /// <summary>校验载荷后安装并激活；失败恢复旧版本，状态和加载错误不伪装为成功。</summary>
 public sealed class PluginPackageManager : IAsyncDisposable
 {
-    public static IRemoteControlService? ActiveRemoteControlService { get; set; }
-
-    /// <summary>当前激活的 FUFU 桥接服务（service.fufu-bridge 插件注册）。</summary>
-    public static IFufuBridge? ActiveFufuBridge { get; set; }
-
     /// <summary>
     /// 当前激活的语音朗读服务（service.speech-synthesis 插件注册）。
     /// 未安装或已停用时为 null，宿主据此隐藏朗读入口，而不是显示一个不可用的替身。

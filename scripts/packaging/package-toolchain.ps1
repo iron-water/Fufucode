@@ -37,7 +37,8 @@ $layouts = @{
     'bun'      = @{ Root = (Join-Path $env:USERPROFILE '.bun\bin'); Exe = 'bun.exe'; Smoke = @('--version') }
     'python'   = @{ Root = $null; Exe = 'python.exe'; Smoke = @('--version') }
     'git-bash' = @{ Root = (Join-Path $env:ProgramFiles 'Git'); Exe = 'bin\bash.exe'; Smoke = @('--version') }
-    'pi'       = @{ Root = (Join-Path $root 'runtime\pi'); Exe = 'node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js'; Smoke = @('--version') }
+    # Pi 的运行时配方归插件所有：先 npm ci --prefix src/Fufucode.Plugins.Pi/runtime 生成 node_modules。
+    'pi'       = @{ Root = (Join-Path $root 'src\Fufucode.Plugins.Pi\runtime'); Exe = 'node_modules\@earendil-works\pi-coding-agent\dist\bundle\cli.js'; Smoke = @('--version') }
 }
 $layout = $layouts[$Id]
 if ([string]::IsNullOrWhiteSpace($Source)) {

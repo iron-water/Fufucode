@@ -63,8 +63,7 @@ public partial class MainWindow
         }
         if (_host is { } host && !string.Equals(host.Current.Session.Id, action.SessionId, StringComparison.Ordinal))
         {
-            var switched = await SwitchSessionFromRemoteAsync(action.SessionId, default);
-            if (!switched.Accepted) return false;
+            await SwitchSessionAsync(action.SessionId);
         }
 
         if (_dialogHost is { } main && await main.RespondByIdAsync(action.RequestId, action.Decision)) return true;

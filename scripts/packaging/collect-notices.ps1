@@ -10,7 +10,7 @@ if (-not $AssetsFiles) {
     $AssetsFiles = @('src/Fufucode.App/obj/project.assets.json', 'src/Fufucode.Cli/obj/project.assets.json') |
         ForEach-Object { Join-Path $repo $_ }
 }
-if (-not $PiNodeModules) { $PiNodeModules = Join-Path $repo 'runtime/pi/node_modules' }
+if (-not $PiNodeModules) { $PiNodeModules = Join-Path $repo 'src/Fufucode.Plugins.Pi/runtime/node_modules' }
 $destinationPath = [IO.Path]::GetFullPath($Destination)
 $packages = @{}
 $excluded = [Collections.Generic.List[string]]::new()

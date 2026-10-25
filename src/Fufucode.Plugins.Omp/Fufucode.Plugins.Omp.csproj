@@ -5,11 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
   <!--
-    OMP 是外部 CLI 进程契约，RPC 线路与 Pi 相同。插件携带 Fufucode.Pi.dll 作为
+    OMP 是外部 CLI 进程契约，RPC 线路与 Pi 相同。插件携带 Fufucode.Plugins.Pi.dll 作为
     RPC 客户端载荷；omp.exe 本身由用户安装或由运行时分发包提供。
   -->
   <ItemGroup>
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Fufucode.Pi/Fufucode.Pi.csproj" />
+    <ProjectReference Include="../Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj" />
   </ItemGroup>
 </Project>

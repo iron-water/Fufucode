@@ -48,7 +48,6 @@
         </Grid>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- 会话后端由顶栏会话岛展示（图标 + 名称），这里不再重复徽标。 -->
-          <Button Classes="iconButton" Width="30" Height="30" Command="{Binding ToggleRemoteControlCommand}" ToolTip.Tip="手机远程控制 (WorkBuddy 对标)"><PathIcon Data="{DynamicResource Icon.Phone}" Width="15" Height="15"/></Button>
           <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" ToolTip.Tip="会话操作"><PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16"/></Button>
           <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click" ToolTip.Tip="查找本会话"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
           <Button x:Name="SessionDetailsButton" Classes="iconButton" Width="32" Height="32"

@@ -14,7 +14,7 @@
     <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
     <!-- 无头页面绑定测试需要真实 Avalonia 控件与编译绑定；沿用 App.Library.Tests 的做法引用 App。 -->
     <ProjectReference Include="../../src/Fufucode.App/Fufucode.App.csproj" />
-    <ProjectReference Include="../../src/Fufucode.Pi/Fufucode.Pi.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj" />
   </ItemGroup>
   <!-- Fufucode.App 通过 Microsoft.Web.WebView2 把 WPF/WinForms 宿主程序集传递到本测试工程，
        与 net10.0 引用程序集的 WindowsBase 产生 MSB3277 版本冲突。本测试不使用这两个宿主程序集，

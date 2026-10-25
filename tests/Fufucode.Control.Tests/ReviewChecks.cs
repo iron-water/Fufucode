@@ -112,7 +112,7 @@ internal static class ReviewChecks
         var script = Path.Combine(root, "review-context.cjs");
         File.WriteAllText(script, "const {buildControlDecision}=require(process.argv[2]);const fs=require('fs');console.log(JSON.stringify(buildControlDecision(JSON.parse(fs.readFileSync(process.argv[3],'utf8')))));");
         var node = new ProcessStartInfo("node") { RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false, CreateNoWindow = true };
-        foreach (var arg in new[] { script, Path.GetFullPath("docs/frontend-prototype/automation/control-commands.js"), itemFile }) node.ArgumentList.Add(arg);
+        foreach (var arg in new[] { script, Path.GetFullPath("tests/Fufucode.Control.Tests/fixtures/control-commands.js"), itemFile }) node.ArgumentList.Add(arg);
         using var js = Process.Start(node)!; var jsOutput = js.StandardOutput.ReadToEndAsync(); var jsError = js.StandardError.ReadToEndAsync(); await js.WaitForExitAsync();
         var jsText = await jsOutput; var jsDetail = await jsError; if (js.ExitCode != 0) throw new Exception(jsDetail);
         using var template = JsonDocument.Parse(jsText);

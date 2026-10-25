@@ -358,7 +358,7 @@ public static class SelfTestRunner
         // H3 扩展页截图（tmp/h3-shots/）：夹具快照 light/dark + 命令 Flyout
         await RunOnHeadlessUiThreadAsync(TestH3ShotsAsync);
 
-        // 真实 Pi 集成段：仅 --realpi 显式启用（需要 runtime/node 与 runtime/pi）
+        // 真实 Pi 集成段：仅 --realpi 显式启用（需要 src/Fufucode.Plugins.Pi/runtime/node.exe 与 node_modules）
         if (args.Contains("--realpi"))
         {
             await RunOnHeadlessUiThreadAsync(TestRealPiIntegrationAsync);

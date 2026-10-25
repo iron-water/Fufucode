@@ -31,8 +31,8 @@ internal static class D1BackendTests
         var scratch = Path.Combine(root, "tmp", "d1-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
         Console.WriteLine("EVIDENCE " + scratch);
-        var node = Environment.GetEnvironmentVariable("D1_PI_NODE") ?? Path.Combine(root, "runtime/node/node.exe");
-        var cli = Environment.GetEnvironmentVariable("D1_PI_CLI") ?? Path.Combine(root, "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
+        var node = Environment.GetEnvironmentVariable("D1_PI_NODE") ?? Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe");
+        var cli = Environment.GetEnvironmentVariable("D1_PI_CLI") ?? Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
         var omp = Environment.GetEnvironmentVariable("D1_OMP_EXE") ?? Path.Combine(root, "runtime/omp/omp.exe");
         var layout = new AppDataLayout(Path.Combine(scratch, "data"));
         var metadata = new DesktopMetadataStore(layout);

@@ -6,8 +6,8 @@ using Fufucode.Pi;
 var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin/Debug/net10.0/Fufucode.FakePi.dll");
 var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet/dotnet.exe");
-var node = Path.Combine(root, "runtime/node/node.exe");
-var cli = Path.Combine(root, "runtime/pi/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
+var node = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe");
+var cli = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
 if (args.Contains("--d1-only")) { await D1BackendTests.RunAsync(root); return; }
 if (args.Contains("--claude-only")) { await ClaudeBackendIntegrationTests.RunAsync(root); return; }
 if (args.Contains("--codex-dsh-only")) { await CodexDshIntegrationTests.RunAsync(root); return; }

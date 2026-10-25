@@ -1,8 +1,0 @@
-{
-  "id": "service.remote-control",
-  "name": "手机远程控制服务",
-  "version": "1.0.0",
-  "entryAssembly": "Fufucode.Plugins.RemoteControl.dll",
-  "packageType": "Fufucode.Plugins.RemoteControl.RemoteControlPluginPackage",
-  "category": "Service"
-}

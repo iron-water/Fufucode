@@ -22,6 +22,9 @@ public sealed record BackendCapabilities(BackendId Id, string Name, string Verif
         _ => throw new ArgumentOutOfRangeException(nameof(id))
     };
 
+    /// <summary>会话历史落盘格式：Pi 用 JSONL（逐行追加），其余后端用 JSON。</summary>
+    public string SessionFileExtension => Id == BackendId.Pi ? ".jsonl" : ".json";
+
     public static string StorageId(BackendId id) => id switch
     {
         BackendId.Pi => "pi",

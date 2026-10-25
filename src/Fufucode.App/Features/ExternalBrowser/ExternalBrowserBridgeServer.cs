@@ -37,7 +37,7 @@ public sealed record ExternalBrowserPageReference(string Title, string Url, stri
 
 /// <summary>
 /// 设备自带浏览器（Chrome/Edge）控制桥：本地回环 HTTP 服务 + 扩展长轮询。
-/// 与手机远控服务完全独立，不依赖 service.remote-control 插件。
+/// 与外部浏览器进程独立运行，不依赖任何可选插件。
 /// </summary>
 public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncDisposable
 {

@@ -31,10 +31,10 @@ public static class SessionDeletion
         string? quarantine = null;
         if (session.FilePath is { } file)
         {
-            // Pi 使用 .jsonl；FUMO 与协议适配插件使用 .json。两者都必须位于本会话目录内。
+            // 落盘格式由后端能力表声明（Pi=jsonl，其余=json）；无论哪种都必须位于本会话目录内。
             var extension = Path.GetExtension(file);
-            var supported = extension.Equals(".jsonl", StringComparison.OrdinalIgnoreCase) ||
-                (session.Backend != BackendId.Pi && extension.Equals(".json", StringComparison.OrdinalIgnoreCase));
+            var supported = extension.Equals(BackendCapabilities.For(session.Backend).SessionFileExtension,
+                StringComparison.OrdinalIgnoreCase);
             if (!AppDataLayout.IsUnderDirectory(file, directory) || !supported)
                 throw new InvalidOperationException("Stored session path is outside its project or has an unsupported extension.");
             CheckNoLinks(file, layout.Root);

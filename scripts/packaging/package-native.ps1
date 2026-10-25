@@ -200,14 +200,13 @@ foreach ($name in $forbidden) {
 # 验证：默认核心 App 包中严禁静态包含未安装插件的实现程序集（真实物理剥离）
 $forbiddenPluginDlls = @(
     # 后端插件：宿主不再静态依赖，插件载荷由 plugins-dist 下发。
-    'Fufucode.Pi.dll',
+    'Fufucode.Plugins.Pi.dll',
     'Fufucode.Plugins.Pi.dll',
     # 可选功能插件。
     'Fufucode.Plugins.BrowserUse.dll',
     'Fufucode.Plugins.Subagents.dll',
     'Fufucode.Plugins.ComputerUse.dll',
     'Fufucode.Plugins.Speech.dll',
-    'Fufucode.Plugins.RemoteControl.dll',
     'Fufucode.Plugins.CronSchedules.dll',
     'Fufucode.Plugins.AeroSkin.dll',
     'Fufucode.Plugins.SkinMetro.dll',
@@ -355,7 +354,6 @@ $plugins = @(
     @{ Id = 'agent.browser-use'; Project = 'src/Fufucode.Plugins.BrowserUse/Fufucode.Plugins.BrowserUse.csproj' },
     @{ Id = 'agent.computer-use'; Project = 'src/Fufucode.Plugins.ComputerUse/Fufucode.Plugins.ComputerUse.csproj' },
     @{ Id = 'service.speech-synthesis'; Project = 'src/Fufucode.Plugins.Speech/Fufucode.Plugins.Speech.csproj' },
-    @{ Id = 'service.remote-control'; Project = 'src/Fufucode.Plugins.RemoteControl/Fufucode.Plugins.RemoteControl.csproj' },
     @{ Id = 'automation.cron'; Project = 'src/Fufucode.Plugins.CronSchedules/Fufucode.Plugins.CronSchedules.csproj' },
     @{ Id = 'skin.aero'; Project = 'src/Fufucode.Plugins.AeroSkin/Fufucode.Plugins.AeroSkin.csproj' },
     @{ Id = 'skin.metro'; Project = 'src/Fufucode.Plugins.SkinMetro/Fufucode.Plugins.SkinMetro.csproj' },

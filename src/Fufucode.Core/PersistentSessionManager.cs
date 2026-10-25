@@ -394,8 +394,8 @@ public sealed class PersistentSessionManager
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(parent);
-        // FUMO 与 Pi 支持“分叉到另一个项目”；其它协议后端如实拒绝。
-        if (parent.Session.Backend is not (BackendId.NativeCSharp or BackendId.Pi))
+        // 是否支持“分叉到另一个项目”由能力表声明，不在调用点写死后端名单。
+        if (!BackendCapabilities.For(parent.Session.Backend).ProjectFork)
             throw new NotSupportedException("此后端不支持项目分叉；请新建会话。");
         if (parent.Coordinator.Snapshot.Activity != ActivityState.Idle)
             throw new InvalidOperationException("Cannot fork while a run is active.");
@@ -460,43 +460,47 @@ public sealed class PersistentSessionManager
         if (session.Backend is BackendId.Claude or BackendId.Codex or BackendId.Dsh)
             return await OpenProtocolPluginAsync(project, session, sessionDirectory, lease, createNew, cancellationToken)
                 .ConfigureAwait(false);
+        // 走到这里的只可能是 Pi / OMP；新后端若未登记启动路径，显式失败而不是落到默认分支。
+        if (!RpcLaunchProfile.IsBuiltInRpcBackend(session.Backend))
+            throw new InvalidOperationException($"后端 '{session.Backend}' 没有内置 RPC 启动路径。");
         ChatSessionCoordinator? coordinator = null;
         DiagnosticLog? diagnosticLog = null;
         try
         {
             diagnosticLog = new DiagnosticLog(_layout);
             var settings = _settings.Current;
-            if (session.Backend == BackendId.Pi) InstallEndpoint(settings.Endpoint);
-            else InstallOmpEndpoint(settings.Endpoint);
-            // An explicit override prevents saved/global Pi settings from deciding project trust.
+            // An explicit override prevents saved settings from deciding project trust.
             // Extension discovery remains under separate plugin management; explicit -e still loads the bridge.
             var trustFlag = trust.Decision == ProjectTrustDecision.Trust ? "--approve" : "--no-approve";
-            var args = session.Backend == BackendId.Pi ?
-                new List<string> { _cliPath, "--mode", "rpc", trustFlag, "--no-extensions", "--session-dir", sessionDirectory } :
-                new List<string> { "--mode", "rpc", "--no-title", "--no-extensions", "--no-skills", "--no-rules", "--no-lsp",
-                    "--approval-mode", "yolo", "--session-dir", sessionDirectory };
-            if (session.Backend == BackendId.Omp && settings.SelectedModel is { } ompModel)
-                args.AddRange(["--model", ompModel]);
+            // 启动差异集中在 RpcLaunchProfile：Pi 与 OMP 是两条平级画像，没有“否则就是 OMP”的兜底分支。
+            var profile = RpcLaunchProfile.For(session.Backend, sessionDirectory, trustFlag,
+                _nodePath, _cliPath, _ompExecutablePath, _layout.LegacyPiAgentDirectory,
+                Path.Combine(_layout.Root, "omp-agent"));
+            if (profile.InstallsPiStyleEndpoint) InstallEndpoint(settings.Endpoint);
+            else InstallOmpEndpoint(settings.Endpoint);
+            var args = new List<string>(profile.BaseArguments);
+            if (profile.ModelFlag is { } modelFlag && settings.SelectedModel is { } selectedModel)
+                args.AddRange([modelFlag, selectedModel]);
             if (_approvalBridgePath is not null) args.AddRange(["--extension", _approvalBridgePath]);
-            foreach (var path in userExtensions)
-            {
-                if (_approvalBridgePath is not null && path.Equals(_approvalBridgePath,
-                    OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) continue;
-                args.AddRange(["--extension", path]);
-            }
-            if (createNew && session.Backend == BackendId.Pi && session.Name is { Length: > 0 } name) args.AddRange(["--name", name]);
+            if (profile.AcceptsUserExtensions)
+                foreach (var path in userExtensions)
+                {
+                    if (_approvalBridgePath is not null && path.Equals(_approvalBridgePath,
+                        OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)) continue;
+                    args.AddRange(["--extension", path]);
+                }
+            if (createNew && profile.AcceptsNameFlag && session.Name is { Length: > 0 } name) args.AddRange(["--name", name]);
             if (forkSource is not null)
                 args.AddRange(["--fork", forkSource, "--session-id", session.Id]);
             else if (session.FilePath is { } file)
             {
-                if (!File.Exists(file)) throw new FileNotFoundException("Pi session file is missing.", file);
-                args.AddRange([session.Backend == BackendId.Pi ? "--session" : "--resume", file]);
+                if (!File.Exists(file)) throw new FileNotFoundException("Session file is missing.", file);
+                args.AddRange([profile.ResumeFlag, file]);
             }
-            else if (session.Backend == BackendId.Pi) args.AddRange(["--session-id", session.Id]);
+            else if (profile.SessionIdFlag is { } sessionIdFlag) args.AddRange([sessionIdFlag, session.Id]);
             else if (!createNew && session.BackendSessionId is not null)
-                throw new FileNotFoundException("The OMP session file was not persisted; refusing to start a replacement conversation.");
-            var environment = new Dictionary<string, string> { ["PI_CODING_AGENT_DIR"] =
-                session.Backend == BackendId.Pi ? _layout.LegacyPiAgentDirectory : Path.Combine(_layout.Root, "omp-agent") };
+                throw new FileNotFoundException("The backend session file was not persisted; refusing to start a replacement conversation.");
+            var environment = new Dictionary<string, string> { [RpcLaunchProfile.AgentDirectoryVariable] = profile.AgentDirectory };
             if (settings.Endpoint is { } endpoint)
             {
                 var key = await _credentials.ResolveAsync(endpoint.ApiKeyEnvironmentVariable, cancellationToken);
@@ -510,11 +514,10 @@ public sealed class PersistentSessionManager
                 environment["HTTPS_PROXY"] = proxy;
             }
             var rpcOptions = new RpcSessionOptions(RequireApprovalBridge: _requireApprovalBridge, DiagnosticSink: diagnosticLog);
-            var spec = new BackendProcessSpec(session.Backend == BackendId.Pi ? _nodePath : _ompExecutablePath!, args,
-                project.Path, environment, session.Backend);
+            var spec = new BackendProcessSpec(profile.Executable, args, project.Path, environment, session.Backend);
             var factory = (_clientFactoryFactory ?? BackendPluginLoader.CreateRpcFactory)(spec)
                 ?? throw new InvalidOperationException(
-                    $"后端 '{session.Backend}' 的插件未安装或无法加载（缺少 Fufucode.Pi.dll）；" +
+                    $"后端 '{session.Backend}' 的插件未安装或无法加载（缺少 Fufucode.Plugins.Pi.dll）；" +
                     "请安装对应后端插件，或改用默认的 FUMO 原生内核。");
             coordinator = new ChatSessionCoordinator(factory, session.Backend, rpcOptions);
             try { await coordinator.StartAsync(cancellationToken); }
@@ -531,16 +534,20 @@ public sealed class PersistentSessionManager
             var state = await coordinator.QueryStateAsync(cancellationToken);
             var data = RequireData(state, "get_state");
             if (createNew) data = await ApplyModelPreferenceAsync(coordinator, settings, data, cancellationToken);
-            var piId = RequiredString(data, "sessionId");
-            var piFile = Path.GetFullPath(RequiredString(data, "sessionFile"));
-            if ((session.Backend == BackendId.Pi ? piId != session.Id : session.BackendSessionId is not null && piId != session.BackendSessionId) ||
-                !AppDataLayout.IsUnderDirectory(piFile, sessionDirectory) ||
-                (session.FilePath is not null && !Path.GetFullPath(session.FilePath).Equals(piFile,
+            var backendSessionId = RequiredString(data, "sessionId");
+            var backendSessionFile = Path.GetFullPath(RequiredString(data, "sessionFile"));
+            // 身份比对由画像声明：Pi 上报的就是受管会话 ID，OMP 上报的是它自己的会话 ID。
+            var identityMismatch = profile.UsesManagedSessionId
+                ? !string.Equals(backendSessionId, session.Id, StringComparison.Ordinal)
+                : session.BackendSessionId is not null && !string.Equals(backendSessionId, session.BackendSessionId, StringComparison.Ordinal);
+            if (identityMismatch ||
+                !AppDataLayout.IsUnderDirectory(backendSessionFile, sessionDirectory) ||
+                (session.FilePath is not null && !Path.GetFullPath(session.FilePath).Equals(backendSessionFile,
                     OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal)))
-                throw new RpcException("Pi opened a different session than requested.");
-            _metadata.BindBackendSession(session.Id, piId);
-            session = session with { BackendSessionId = piId };
-            if (File.Exists(piFile)) _metadata.UpdateSessionFile(session.Id, piFile);
+                throw new RpcException("The backend opened a different session than requested.");
+            _metadata.BindBackendSession(session.Id, backendSessionId);
+            session = session with { BackendSessionId = backendSessionId };
+            if (File.Exists(backendSessionFile)) _metadata.UpdateSessionFile(session.Id, backendSessionFile);
             var response = await coordinator.QueryEntriesAsync(cancellationToken: cancellationToken);
             var history = new SessionHistory();
             history.ApplyEntriesResponse(RequireData(response, "get_entries"), replace: true);
@@ -550,13 +557,14 @@ public sealed class PersistentSessionManager
                 lastMessage is { Role: "assistant", StopReason: "aborted" };
             coordinator.RestoreHistory(history, interrupted);
             _metadata.SetSessionActive(session.Id, false);
-            if (createNew && session.Backend == BackendId.Omp && session.Name is { Length: > 0 } ompName)
+            // 没有 --name 参数的后端（OMP）在启动后补一次改名，与 Pi 的 --name 语义一致。
+            if (createNew && !profile.AcceptsNameFlag && session.Name is { Length: > 0 } pendingName)
             {
-                var rename = await coordinator.SetSessionNameAsync(ompName, cancellationToken);
-                if (!rename.Success) throw new RpcException($"OMP refused session name: {rename.Error}");
-                if (File.Exists(piFile)) _metadata.UpdateSessionFile(session.Id, piFile);
+                var rename = await coordinator.SetSessionNameAsync(pendingName, cancellationToken);
+                if (!rename.Success) throw new RpcException($"The backend refused session name: {rename.Error}");
+                if (File.Exists(backendSessionFile)) _metadata.UpdateSessionFile(session.Id, backendSessionFile);
             }
-            return new PersistentSession(session, project, coordinator, history, _metadata, lease, piFile,
+            return new PersistentSession(session, project, coordinator, history, _metadata, lease, backendSessionFile,
                 PiChatSessionAdapter.AttachConnected(coordinator, data), diagnosticLog);
         }
         catch
@@ -736,7 +744,7 @@ public sealed class PersistentSessionManager
         }
     }
 
-    /// <summary>已解析的 FUMO 会话文件（FUFU 等外部宿主复用同一格式与损坏隔离语义）。</summary>
+    /// <summary>已解析的 FUMO 会话文件（外部宿主复用同一格式与损坏隔离语义）。</summary>
     public sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
         string? ThinkingLevel, string? ExecutionMode);
 

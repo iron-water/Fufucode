@@ -566,7 +566,7 @@ public static class Program
             if (File.Exists(candidateNode) && File.Exists(candidateCli))
                 return (Path.GetFullPath(candidateNode), Path.GetFullPath(candidateCli));
         }
-        // 显式参数 > 统一运行时目录（系统 Node/Pi 或 runtime/pi）。
+        // 显式参数 > 统一运行时目录（系统 Node/Pi 或插件自带的 runtime/）。
         var detection = Fufucode.Core.Runtimes.ToolchainCatalog.Detect(layout, "pi");
         string? node = options.PiNodePath ?? detection.ManagedPath ?? detection.SystemPath;
         string? cli = options.PiCliPath ?? detection.ScriptPath;

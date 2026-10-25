@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Fufucode.Pi/Fufucode.Pi.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj" />
   </ItemGroup>
 </Project>

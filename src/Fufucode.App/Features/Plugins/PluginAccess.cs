@@ -21,9 +21,6 @@ public static class PluginAccess
     /// <summary>Seep 逆向工程工作台插件 ID。</summary>
     public const string ReverseLabPluginId = SeepReverseLabAssets.PluginId;
 
-    /// <summary>手机远程控制服务插件 ID。</summary>
-    public const string RemoteControlPluginId = "service.remote-control";
-
     /// <summary>语音朗读服务插件 ID。</summary>
     public const string SpeechPluginId = "service.speech-synthesis";
 
