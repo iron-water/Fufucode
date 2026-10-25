@@ -69,18 +69,41 @@ internal static class UpdateDiscoveryTests
             var blocked = deployment.Deploy(releaseSource, target);
             checks.Check(!blocked.Success, "发布渠道构建被拒绝通过本地部署覆盖");
 
-            // 5. 更新只对发布构建启用。
+            // 5. 更新只对发布构建启用（正式 github 与实验性 test 两个渠道都算发布构建）。
             checks.Check(!UpdateService.IsReleaseBuild(new BuildInfo("1.4.0", now, "local")),
                 "本地构建不启用更新通道");
             checks.Check(!UpdateService.IsReleaseBuild(new BuildInfo("1.4.0", now, "github")),
                 "发布渠道但缺少仓库坐标时不启用更新");
             checks.Check(UpdateService.IsReleaseBuild(new BuildInfo("1.4.0", now, "github", "owner/repo")),
                 "发布渠道且含仓库坐标时启用更新");
+            checks.Check(UpdateService.IsReleaseBuild(new BuildInfo("0.1.0-test.1", now, "test", "owner/repo")),
+                "测试渠道且含仓库坐标时启用更新");
+            checks.Check(!UpdateService.IsReleaseBuild(new BuildInfo("0.1.0-test.1", now, "test")),
+                "测试渠道但缺少仓库坐标时不启用更新");
+
+            // 5b. 测试渠道与正式渠道互斥：测试构建不能被本地部署覆盖，正式构建也不认 test 标记。
+            var testChannel = new BuildInfo("0.1.0-test.1", now, "test", "owner/repo", "abc1234");
+            checks.Check(testChannel.IsTestChannel && testChannel.IsReleaseChannel && !testChannel.IsLocalChannel,
+                "测试渠道是发布构建的一种，不是本地构建");
+            checks.Check(new BuildInfo("1.4.0", now, "github", "owner/repo").IsGitHubRelease &&
+                         !new BuildInfo("1.4.0", now, "github", "owner/repo").IsTestChannel,
+                "正式渠道不被误判为测试渠道");
 
             // 6. 版本比较只服务于更新通道。
             checks.Equal(0, UpdateVersion.Compare("1.4.0", "1.4.0"), "相同版本比较为 0");
             checks.Check(UpdateVersion.Compare("1.10.0", "1.9.9") > 0, "数字段按数值比较而非字典序");
-            checks.Check(UpdateVersion.Compare("1.4.0-dev", "1.4.0") == 0, "预发布后缀不影响数值比较");
+
+            // 6b. 预发布后缀按 SemVer 排序：测试渠道只差 -test.N，忽略后缀就永远发现不到更新。
+            checks.Check(UpdateVersion.Compare("1.4.0-dev", "1.4.0") < 0, "预发布版本低于同号正式版");
+            checks.Check(UpdateVersion.Compare("0.1.0-test.2", "0.1.0-test.1") > 0, "同前缀的测试序列号按数值递增");
+            checks.Check(UpdateVersion.Compare("0.1.0-test.10", "0.1.0-test.9") > 0, "测试序列号按数值而非字典序比较");
+            checks.Check(UpdateVersion.Compare("0.2.0-test.1", "0.1.0-test.9") > 0, "主版本优先于预发布后缀");
+            checks.Check(UpdateVersion.IsValid("0.1.0-test.1") && !UpdateVersion.IsValid("test") &&
+                         !UpdateVersion.IsValid("") && !UpdateVersion.IsValid(null),
+                "版本校验拒绝非版本号的 tag");
+            checks.Equal("0.1.0-test.3",
+                UpdateVersion.Max(new[] { "0.1.0-test.1", "0.1.0-test.3", "0.1.0-test.2", "bogus" }),
+                "Max 忽略非版本号并取最高者");
 
             // 7. build-info.json 往返与 informational version 拆分。
             var read = BuildInfo.Read(source);

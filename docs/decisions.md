@@ -931,3 +931,39 @@ EAD
    - 深度接入 `PluginPackageManager.CompanionCore`，呈现 FUFUCODE（核心总线）、FUFU（桌宠 IPC 管道）、JIII（远程控制 Web 桥）三节点拓扑。
    - 实时采集 IPC 管道 RTT、事件吞吐、意图幂等时延与丢包率。
    - 呈现去重实时规范事件与审计流水，并为 JIII 音频流、Live2D 姿态流预留 v2 协议监测插槽。
+
+## 2026-10-24 实验性测试发布渠道（TEST-1）与发布链路三处修复
+
+用户决定：先做一个只含 Windows 桌面端的实验性 release，未来一段时间 Release 里暂时只有测试渠道产物。
+新增 `scripts/packaging/package-test.ps1` + `Fufucode-Test.iss` + `.github/workflows/test-release.yml`。
+
+1. **渠道身份**（可与正式版并存，互不覆盖）：产物 `Fufucode-Test-Setup.exe` / `FufucodeTest.zip`；
+   载荷 `out/build-test`；独立 AppId、安装目录 `%LocalAppData%\Programs\Fufucode Test`、
+   数据根 `%LocalAppData%\FufucodeTest`、协议 `fufucode-test:` / `fufucode-test-approval:`、单实例锁。
+   `build-info.json` 的 `channel` 为 `test`（新增 `BuildInfo.TestChannel`）。
+2. **渠道语义**：`IsReleaseChannel` 现在同时覆盖 `github` 与 `test`（两者都走 GitHub 更新、都拒绝本地部署覆盖），
+   新增 `IsGitHubRelease` / `IsTestChannel` 区分。协议名由 `ProductLinks` 按渠道推导，安装器与程序各自独立得出同一值。
+3. **数据根隔离**：安装根目录的 `data-root.txt` 由 C 启动器读取并注入 `FUFUCODE_DATA_ROOT`；
+   `AppDataLayout.DefaultRoot()` 统一它，浏览器数据、置顶轮次、变更备份、工具链、协作看板等原先写死
+   `%LOCALAPPDATA%\Fufucode` 的路径都改走这里（显式路径参数的调用不受影响）。
+4. **更新发现**：`UpdateService.CheckAsync` 新增 `includePreReleases`。测试渠道读 `/releases` 列表并只取
+   `prerelease=true` 的条目中版本号最高者——测试版本是 `0.1.0-test.N` 预发布，`/releases/latest` 永远看不到它，
+   而把正式版当更新装进测试安装会破坏安装身份。
+5. **版本号单一来源**：新增 `Directory.Build.props` + `build/Version.props`（默认 1.4.0，`reference/` 下不生效）；
+   打包脚本用 `-p:Version=<AppVersion>` 覆盖，程序集元数据、`build-info.json`、安装器、`feed.json` 四处同源。
+   旧行为是程序集恒为 1.0.0 而安装器写 1.4.x。
+6. **启动器版本资源**：`tools/fufucode-launcher/fufucode.rc` 不再写死 1.4.6，改为可选包含
+   `version-overrides.h`（`scripts/packaging/build-launcher.ps1` 生成并用 `-I` 传入；`windres -D` 无法传带引号字符串）。
+   两个渠道每次打包都重编启动器。
+7. **随包插件载荷缺陷**：`performance.monitor` 在目录里声明默认安装+默认启用，但两个打包脚本都只把它发布成
+   `out/plugins-dist/*.zip` 可选包，从不放进 `app/plugins-dist/`，装配启动器播种不到它，装机后"默认安装"是假的。
+   两个脚本现在都补上 `app/plugins-dist/performance.monitor`，并在打包期断言两个默认插件的 manifest 存在。
+8. **测试渠道不裁剪**：实测裁剪后的共享运行时会破坏随包插件激活，且每次表现不同（
+   `Utf8JsonWriter.Reset(Stream)`、`ContextMenu.add_Opening`、`InlineArray11<T>` 三处依次炸）。
+   根因是插件程序集按**未裁剪**的框架编译，加载进裁剪后的进程后必然撞上 App 可达图之外的成员；
+   逐个 `TrimmerRootAssembly` 只能不断追新、无法收敛，所以没有在正式渠道里堆 root。
+   测试渠道以 `PublishTrimmed=false` 发布（约 154 MB），实测 `Tabs: perf` 全通、自测失败项与未裁剪
+   开发构建完全一致（零回归）。正式渠道的裁剪构建仍不能可靠承载可选插件，已在
+   `Fufucode.App.csproj` 记下该已知冲突（另新增 `TrimmerRootAssembly System.Runtime` 与
+   `ILLink.Descriptors.xml`，修掉 CLI 在共享裁剪运行时上的 `DefaultInterpolatedStringHandler` 缺失）。
+9. **自测**：`ApprovalNotificationSelfTest` 改为按 `ApprovalLink.Scheme` 拼断言，不再写死正式渠道协议名。

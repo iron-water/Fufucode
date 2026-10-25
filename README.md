@@ -110,8 +110,9 @@ fufucode plugins install backend.claude --from backend.claude-1.0.0.zip
 ## Packaging
 
 ```bash
-pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0                     # self-contained
-pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0 -FrameworkDependent # needs .NET 10
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0                     # release channel, self-contained
+pwsh scripts/packaging/package-native.ps1 -AppVersion 1.4.0 -FrameworkDependent # release, needs .NET 10
+pwsh scripts/packaging/package-test.ps1   -AppVersion 0.1.0-test.1             # experimental test channel
 pwsh scripts/packaging/package-toolchain.ps1 -Id pi
 ```
 
@@ -119,6 +120,14 @@ pwsh scripts/packaging/package-toolchain.ps1 -Id pi
 |---|---:|---:|---|
 | `Fufucode-Native-Setup.exe` | 19.45 MB | 62.18 MB | nothing |
 | `Fufucode-Native-Slim-Setup.exe` | 12.2 MB | 37.60 MB | .NET 10 Runtime |
+| `Fufucode-Test-Setup.exe` | ~50 MB | ~154 MB | nothing |
+
+The test channel is a side-by-side experimental build: its own AppId, install directory
+(`%LocalAppData%\Programs\Fufucode Test`), data root (`%LocalAppData%\FufucodeTest`), URL schemes
+(`fufucode-test:`) and single-instance lock, so it can run next to the release build. It consumes
+GitHub Releases marked pre-release, which the release channel never sees. It is **not trimmed**
+(untrimmed payload loads optional plugins reliably; trimming has been observed to break plugin
+activation). `.github/workflows/test-release.yml` builds it from a `v*-test.*` tag.
 
 `plugins-dist/` and `runtimes/` are separate download assets. Build output is not committed.
 
