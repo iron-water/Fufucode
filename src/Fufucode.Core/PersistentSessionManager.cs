@@ -736,7 +736,7 @@ public sealed class PersistentSessionManager
         }
     }
 
-    /// <summary>已解析的 FUMO 会话文件（FUFU 等外部宿主复用同一格式与损坏隔离语义）。</summary>
+    /// <summary>已解析的 FUMO 会话文件（外部宿主复用同一格式与损坏隔离语义）。</summary>
     public sealed record NativeSessionFile(List<PureAgentMessage> Messages, string? ModelId,
         string? ThinkingLevel, string? ExecutionMode);
 

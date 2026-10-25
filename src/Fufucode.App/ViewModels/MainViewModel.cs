@@ -38,8 +38,6 @@ public sealed partial class MainViewModel : ViewModelBase
         Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.sidebar", "SidebarViewModel");
         Extensions = new ExtensionsPageViewModel();
         Settings = new SettingsPageViewModel();
-        Settings.RemoteSession = () => (Session, Sidebar.SelectedSession?.Title ?? "当前会话");
-        Settings.RemoteHistory = () => RemoteHistory();
         WorkspacePanel = new WorkspacePanelViewModel(clipboard);
         Fufucode.Core.Diagnostics.StartupProbe.Mark("vm.rest", "extensions/settings/workspace");
 
@@ -50,7 +48,6 @@ public sealed partial class MainViewModel : ViewModelBase
 
     /// <summary>当前会话：mock 为脚本化演示；真实实现由当前后端（默认 FUMO 原生内核）提供。</summary>
     public IChatSession Session { get; }
-    public Func<IReadOnlyList<ChatMessage>> RemoteHistory { get; set; } = () => [];
 
     /// <summary>侧栏副标题：如实标注数据来源，mock 不得冒充真实连接。</summary>
     public string ModeText => Session is MockChatSession ? "mock 数据演示 · 未连接真实后端" :
@@ -135,65 +132,4 @@ public sealed partial class MainViewModel : ViewModelBase
     [ObservableProperty] private string _currentBackendId = "fumo";
     [ObservableProperty] private string _currentBackendName = "FUMO";
 
-    [RelayCommand]
-    public async Task ToggleRemoteControlAsync()
-    {
-        var dataRoot = Settings.DataRoot;
-        if (!Features.Plugins.PluginAccess.IsPluginActive(dataRoot, Features.Plugins.PluginAccess.RemoteControlPluginId))
-        {
-            Timeline.AddNotification("未安装远程控制插件：请在插件市场中安装并启用“手机远程控制服务”。");
-            return;
-        }
-
-        var service = PluginPackageManager.ActiveRemoteControlService;
-        if (service is null)
-        {
-            EnsureRemoteControlPluginLoaded(dataRoot);
-            service = PluginPackageManager.ActiveRemoteControlService;
-        }
-
-        if (service is null)
-        {
-            Timeline.AddNotification("未找到远程控制插件载荷：请在插件市场重新安装。");
-            return;
-        }
-
-        if (service.IsRunning)
-        {
-            service.Stop();
-            Timeline.AddNotification("手机远程控制服务已停止");
-        }
-        else
-        {
-            try
-            {
-                service.Attach(Session, Sidebar.SelectedSession?.Title ?? "当前会话");
-                service.LoadHistory(RemoteHistory());
-                var status = await service.StartAsync(0);
-                Timeline.AddNotification($"手机远程控制已在局域网端口 {status.Port} 启动，PIN 码：{status.Pin}，地址：{status.PairingUrl}");
-            }
-            catch (Exception ex)
-            {
-                Timeline.AddNotification("手机远程控制启动失败：" + ex.Message);
-            }
-        }
-    }
-
-    private static void EnsureRemoteControlPluginLoaded(string? dataRoot)
-    {
-        var layout = new AppDataLayout(dataRoot);
-        var dir = layout.PluginDirectory(Features.Plugins.PluginAccess.RemoteControlPluginId);
-        var dll = System.IO.Path.Combine(dir, "Fufucode.Plugins.RemoteControl.dll");
-        if (System.IO.File.Exists(dll))
-        {
-            try
-            {
-                var asm = System.Runtime.Loader.AssemblyLoadContext.Default.LoadFromAssemblyPath(dll);
-                var type = asm.GetType("Fufucode.Plugins.RemoteControl.RemoteControlPluginPackage");
-                if (type is not null && Activator.CreateInstance(type) is IPluginPackage pkg)
-                    pkg.InitializeAsync(new PluginPackageContext(Features.Plugins.PluginAccess.RemoteControlPluginId, dir, null)).GetAwaiter().GetResult();
-            }
-            catch { }
-        }
-    }
 }

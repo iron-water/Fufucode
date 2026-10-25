@@ -712,56 +712,6 @@
                 </StackPanel>
               </Border>
 
-              <!-- 手机远程控制 (WorkBuddy 局域网控制对标) -->
-              <TextBlock Classes="settingsGroupHeader" Text="手机远程控制" IsVisible="{Binding ShowRemoteCard}"/>
-              <Border Classes="settingsPanel" IsVisible="{Binding ShowRemoteCard}">
-                <StackPanel Spacing="10">
-                  <Grid Classes="settingsControlRow" ColumnDefinitions="Auto,*,Auto" ColumnSpacing="14">
-                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Phone}" Width="18" Height="18"
-                              VerticalAlignment="Center"/>
-                    <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
-                      <TextBlock Classes="settingsRowTitle" Text="局域网远程控制 (Web PWA)"/>
-                      <TextBlock Classes="settingsRowDesc" Text="{Binding RemoteStatusText}" TextWrapping="Wrap"/>
-                    </StackPanel>
-                    <Button Grid.Column="2" Classes="subtle" Padding="12,4"
-                            Content="{Binding RemoteToggleButtonText}"
-                            Command="{Binding ToggleRemoteControlCommand}"/>
-                  </Grid>
-
-                  <Border Classes="settingsPanel subtle" Margin="0,4,0,0"
-                          IsVisible="{Binding IsRemoteRunning}">
-                    <StackPanel Spacing="8">
-                      <Grid ColumnDefinitions="*,Auto">
-                        <StackPanel Spacing="4">
-                          <TextBlock Classes="caption bodyStrong" Text="手机访问地址（局域网浏览器打开即可）："/>
-                          <SelectableTextBlock Classes="meta mono" Text="{Binding RemotePairingUrl}"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                          <Border Background="{DynamicResource AppAccent}" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="10,4">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                              <TextBlock Text="4位配对PIN:" Foreground="White"/>
-                              <TextBlock Text="{Binding RemotePin}" FontWeight="SemiBold" Foreground="White"/>
-                            </StackPanel>
-                          </Border>
-                          <Button Classes="subtle" Content="扫码配对" Command="{Binding ToggleRemoteQrCommand}"/>
-                        </StackPanel>
-                      </Grid>
-
-                      <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="1" CornerRadius="{DynamicResource ControlCornerRadius}"
-                              Padding="12" Background="White" HorizontalAlignment="Center" IsVisible="{Binding ShowRemoteQr}">
-                        <StackPanel Spacing="8" HorizontalAlignment="Center">
-                          <TextBlock Classes="caption" Foreground="Black" Text="用手机相机或浏览器扫码免输地址：" HorizontalAlignment="Center"/>
-                          <!-- QR 卡固定白底（扫码可读性），内部文字用固定深色，不走主题 token。 -->
-                          <SelectableTextBlock Classes="meta mono" Foreground="Black" Opacity="0.8"
-                                               Text="{Binding RemotePairingUrl}" HorizontalAlignment="Center"/>
-                          <TextBlock Text="在手机网页输入上面的 4 位 PIN 码即可完成安全配对" Classes="caption"
-                                     Foreground="Black" Opacity="0.6" HorizontalAlignment="Center"/>
-                        </StackPanel>
-                      </Border>
-                    </StackPanel>
-                  </Border>
-                </StackPanel>
-              </Border>
             </StackPanel>
 
             <!-- ═══ 通知 ═══ -->

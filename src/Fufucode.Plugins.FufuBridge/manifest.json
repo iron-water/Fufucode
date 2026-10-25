@@ -1,8 +1,0 @@
-{
-  "id": "service.fufu-bridge",
-  "name": "FUFU 桌宠桥接",
-  "version": "1.0.0",
-  "entryAssembly": "Fufucode.Plugins.FufuBridge.dll",
-  "packageType": "Fufucode.Plugins.FufuBridge.FufuBridgePackage",
-  "category": "Service"
-}

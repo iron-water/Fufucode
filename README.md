@@ -16,7 +16,6 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `tools/` | Native launcher and CLI forwarder | yes |
 | `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
 | `tests/` | Executable verification suites | yes |
-| `android/` | WorkBuddy-style mobile client | yes |
 | `assets/` | Product visual assets | yes |
 | `extensions/` | Optional extension payloads | yes |
 | `TestApp/` | Legacy initial Avalonia scaffold; not a product entry; build output ignored | source only |
@@ -98,9 +97,7 @@ Closing the window exits Fufucode by default. Enable **Settings → Other → Ba
 
 ## Status
 
-Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
-plication code has no licence file yet.
-
+Actively developed. FUMO is the default kernel; backend plugins are installed on demand. The plugin marketplace is implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the ap
 ## Links
 
 https://linux.do/
