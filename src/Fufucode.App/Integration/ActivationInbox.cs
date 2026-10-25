@@ -8,16 +8,16 @@ namespace Fufucode.App.Integration;
 /// 第二个进程 → 已运行实例的激活负载投递箱。
 ///
 /// 系统通知按钮以协议激活方式启动本程序；单实例守卫只会唤醒已有窗口，不会携带参数。
-/// 因此第二个进程先把链接落到用户级目录，再发激活信号；首个实例收到信号后取走并处理。
-/// 目录固定在 %LOCALAPPDATA%\Fufucode\activation：协议激活没有 --data-root，
-/// 只有固定位置才能让任意构建的实例都取到同一份负载。
+/// 因此第二个进程先把链接落到数据根下的固定目录，再发激活信号；首个实例收到信号后取走并处理。
+/// 目录跟随数据根（<c>%LOCALAPPDATA%\Fufucode\activation</c>，测试安装为
+/// <c>%LOCALAPPDATA%\FufucodeTest\activation</c>）：协议激活没有 --data-root，
+/// 只有固定位置才能让任意构建的实例都取到同一份负载；测试安装的协议处理器也指向自己的数据根。
 /// </summary>
 internal static class ActivationInbox
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(30);
 
-    private static string Root => Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode", "activation");
+    private static string Root => Path.Combine(Fufucode.Core.AppDataLayout.DefaultRoot(), "activation");
 
     internal static void Enqueue(string payload)
     {

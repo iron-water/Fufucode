@@ -29,6 +29,15 @@
     TrimMode=partial 只裁可裁剪的框架程序集，不裁 App/Core/插件自身的反射与 JSON 路径；
     Avalonia 平台后端按可达性自动分流（Windows 包不会保留 X11/macOS 后端）。
     开发用 Debug 发布与框架依赖发布不受影响。
+
+    已知冲突（2026-10-24 实测，尚未修复）：插件程序集是按**未裁剪**的框架编译的，
+    加载进裁剪后的进程后，凡 App 可达图里没有的框架成员都会在插件里炸掉。实测三处：
+      - Utf8JsonWriter.Reset(Stream)（System.Text.Json）→ 性能监控插件初始化失败
+      - ContextMenu.add_Opening（Avalonia.Controls）→ workspace.terminal 激活失败
+      - InlineArray11<T>（System.Runtime）→ 插件内 Regex 源生成代码 TypeLoadException
+    逐个加 TrimmerRootAssembly 只能不断追新、无法收敛，因此没有在本文件里堆 root。
+    未裁剪构建（scripts/packaging/package-test.ps1 使用 PublishTrimmed=false）以上全部通过。
+    恢复裁剪前先解决这个结构问题；在此之前不要声称裁剪构建能承载可选插件。
   -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <PublishTrimmed>true</PublishTrimmed>
@@ -48,6 +57,15 @@
   <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
     <TrimmerRootAssembly Include="System.Console" />
     <TrimmerRootAssembly Include="System.IO.Pipes" />
+    <TrimmerRootAssembly Include="System.Runtime" />
+  </ItemGroup>
+
+  <!--
+    共享裁剪运行时（App 的裁剪结果同时服务 CLI）：保留 CLI 需要、App 不可达的框架成员。
+    实现体位于 System.Private.CoreLib，只 root 程序集不够，必须按类型保留，详见该文件注释。
+  -->
+  <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
+    <TrimmerRootDescriptor Include="ILLink.Descriptors.xml" />
   </ItemGroup>
 
   <ItemGroup>

@@ -167,17 +167,19 @@ public partial class ChatPage : UserControl
         if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher) _ = launcher.LaunchUriAsync(uri);
     }
 
-    /// <summary>引用 chip：文件在侧栏预览；相对路径按当前项目根解析。</summary>
+    private void OnToggleRelatedFiles(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: AssistantMessageViewModel message })
+            message.ToggleRelatedFiles();
+    }
+
+    /// <summary>相关文件在当前项目内时打开统一预览；不存在或越界条目保持禁用并显示状态。</summary>
     private void OnOpenMessageFile(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Control { DataContext: MessageFileViewModel file }) return;
-        if (DataContext is not MainViewModel vm) return;
+        if (sender is not Control { DataContext: MessageFileViewModel file } || !file.Exists) return;
+        if (DataContext is not MainViewModel vm || string.IsNullOrWhiteSpace(file.ResolvedPath)) return;
 
-        var path = file.Path;
-        if (!Path.IsPathRooted(path) && !string.IsNullOrWhiteSpace(vm.ProjectRootPath))
-            path = Path.Combine(vm.ProjectRootPath, path);
-
-        vm.WorkspacePanel.OpenFilePreview(path);
+        vm.WorkspacePanel.OpenFilePreview(file.ResolvedPath);
         if (TopLevel.GetTopLevel(this) is MainWindow window) window.OpenDockPage("files", DockZone.Right);
     }
 
@@ -219,6 +221,25 @@ public partial class ChatPage : UserControl
             if (atBottom) ScrollToEnd();
             else TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, offset);
         }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>点工具卡展开/收起明细；点复制等按钮时不触发。</summary>
+    private void OnToolCardPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
+    {
+        if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
+        if (sender is not Control { DataContext: ToolCallBlockViewModel tool }) return;
+
+        // 按钮、可选文本、滚动区域内的点击有自己的行为，不切换卡片。
+        if (e.Source is Visual source)
+        {
+            foreach (var ancestor in source.GetVisualAncestors().Prepend(source))
+            {
+                if (ancestor is Button or SelectableTextBlock or ScrollViewer or TextBox) return;
+            }
+        }
+
+        tool.ToggleExpanded();
+        e.Handled = true;
     }
 
     /// <summary>流式过程中新出现的工具卡：轻微淡入，避免突然插入。</summary>

@@ -39,6 +39,22 @@ internal sealed class PerfSpanTreeRow
         };
     public string Chevron => Node.Children.Count == 0 ? string.Empty : Node.IsExpanded ? "▾" : "▸";
     public double Indent => Node.Depth * 12;
+
+    public string LangfuseKind => Span.Name switch
+    {
+        var n when n.StartsWith("model.", StringComparison.Ordinal) => "GEN",
+        var n when n.Contains("stall") || n.Contains("approval") || n.StartsWith("event") => "EVENT",
+        var n when n.StartsWith("anomaly") || n.Contains("error") => "SCORE",
+        _ => "SPAN",
+    };
+
+    public IBrush KindBrush => LangfuseKind switch
+    {
+        "GEN" => PerfPalette.ModelBrush,
+        "EVENT" => PerfPalette.ApprovalBrush,
+        "SCORE" => PerfPalette.ErrorBrush,
+        _ => PerfPalette.ToolBrush,
+    };
 }
 
 /// <summary>把一次 trace 展开成可按层级折叠的 Span 行；过滤时保留命中节点及其祖先。</summary>
@@ -213,7 +229,7 @@ internal sealed class PerfSpanTreeView : UserControl
         Content = new Border
         {
             Padding = new Thickness(12, 12, 12, 12),
-            CornerRadius = new CornerRadius(14),
+            CornerRadius = new CornerRadius(6),
             Child = _rows,
         };
         if (Content is Border border)
@@ -349,16 +365,33 @@ internal sealed class PerfSpanTreeView : UserControl
         };
         grid.Children.Add(chevron);
 
-        var nameCell = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 6 };
+        var nameCell = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*"), ColumnSpacing = 5 };
+        var kindBadge = new Border
+        {
+            Padding = new Thickness(4, 1),
+            CornerRadius = new CornerRadius(3),
+            VerticalAlignment = VerticalAlignment.Center,
+            Child = new TextBlock
+            {
+                Text = row.LangfuseKind,
+                FontSize = 8,
+                FontWeight = FontWeight.SemiBold,
+                Foreground = row.KindBrush,
+            },
+        };
+        kindBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+        nameCell.Children.Add(kindBadge);
+
         var name = new TextBlock
         {
             Text = row.Name,
             FontSize = 11,
-            MaxWidth = 150,
+            MaxWidth = 130,
             TextTrimming = TextTrimming.CharacterEllipsis,
             VerticalAlignment = VerticalAlignment.Center,
         };
         name.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
+        Grid.SetColumn(name, 1);
         nameCell.Children.Add(name);
         if (row.Detail.Length > 0)
         {
@@ -370,7 +403,7 @@ internal sealed class PerfSpanTreeView : UserControl
                 VerticalAlignment = VerticalAlignment.Center,
             };
             detail.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-            Grid.SetColumn(detail, 1);
+            Grid.SetColumn(detail, 2);
             nameCell.Children.Add(detail);
         }
         Grid.SetColumn(nameCell, 1);

@@ -56,7 +56,8 @@ public sealed partial class SettingsPageViewModel
         CurrentBuildText = $"{_build.Version} · {_build.BuildId}";
         if (IsReleaseBuild)
         {
-            UpdateChannelText = $"发布渠道（{_build.GitHubRepository}）";
+            var channelLabel = _build.IsTestChannel ? "实验性测试渠道" : "发布渠道";
+            UpdateChannelText = $"{channelLabel}（{_build.GitHubRepository}）";
             UpdateActionText = CanApplyUpdate ? "安装并重启" : "检查更新";
             UpdateStatusText = "尚未检查更新。";
         }
@@ -163,7 +164,10 @@ public sealed partial class SettingsPageViewModel
                 return;
             }
 
-            var result = await service.CheckAsync(CurrentBuild.Version, repository);
+            // 测试渠道的版本带 -test.N 预发布后缀，GitHub 的 /releases/latest 永远看不到它们，
+            // 必须走完整 Release 列表并按版本号取最高者。
+            var result = await service.CheckAsync(CurrentBuild.Version, repository,
+                includePreReleases: CurrentBuild.IsTestChannel);
             UpdateStatusText = result.Message;
             if (result.Status == UpdateCheckStatus.UpdateAvailable && result.Manifest is not null)
             {

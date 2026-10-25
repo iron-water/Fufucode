@@ -21,9 +21,7 @@ public static class FileChangeJournal
     /// <summary>备份保留时长：只服务最近几轮撤销，过期自动清理。</summary>
     private static readonly TimeSpan Retention = TimeSpan.FromDays(2);
 
-    public static string Root { get; } = System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "Fufucode", "turn-backups");
+    public static string Root { get; } = System.IO.Path.Combine(AppDataLayout.DefaultRoot(), "turn-backups");
 
     /// <summary>写入前记录原样内容。文件不存在时也记录一条，撤销时按"删除新文件"处理。</summary>
     public static void Capture(string toolCallId, string absolutePath)

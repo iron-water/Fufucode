@@ -171,6 +171,8 @@ public partial class MainWindow
         Resources["AppAccentText"] = new SolidColorBrush(textFill);
         Resources["AppAccentForeground"] = new SolidColorBrush(contrast);
         Resources["AppAccentSubtle"] = new SolidColorBrush(Color.FromArgb(30, accent.R, accent.G, accent.B));
+        // 卡片描边用强调色线：比中性描边更容易区分卡与卡，又不抢正文。
+        Resources["AppAccentBorder"] = new SolidColorBrush(Color.FromArgb(170, accent.R, accent.G, accent.B));
         Resources["UiUserName"] = settings.UserName; Resources["UiAssistantName"] = settings.AssistantName;
         Resources["UiShowUserNames"] = settings.ShowUserNames; Resources["UiShowAssistantNames"] = settings.ShowAssistantNames;
         Resources["UiShowAvatars"] = settings.ShowAvatars; Resources["UiShowMessageTimes"] = settings.ShowMessageTimes;

@@ -198,7 +198,7 @@ internal static class WorkbenchCustomizationSelfTest
             vm.Input.DraftText = "# Preview\n**bold**";
             var more = (MenuFlyout)chat.FindControl<Button>("ComposerMoreButton")!.Flyout!;
             ((MenuItem)more.Items[0]!).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            Check(chat.FindControl<ScrollViewer>("DraftPreview")!.IsVisible && !chat.Input.IsVisible && chat.FindControl<SelectableTextBlock>("DraftPreviewText")!.Inlines!.Count > 0, "Markdown draft preview replaces the editor and uses the existing renderer");
+            Check(chat.FindControl<ScrollViewer>("DraftPreview")!.IsVisible && chat.Input.IsVisible && chat.FindControl<Views.RichMarkdownView>("DraftPreviewText")!.Markdown.Length > 0, "live markdown preview renders alongside the editor");
             c.Change(s => s with { Composer = "hidden", ShowStatusBar = false }); await Ready();
             Check(!chat.FindControl<Border>("ComposerCard")!.IsVisible && !window.FindControl<Border>("CustomStatusBar")!.IsVisible, "composer and status bar can be hidden independently");
             await window.ActionsForTesting.ExecuteAsync("composer.toggle");

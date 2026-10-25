@@ -32,14 +32,17 @@ internal static class ApprovalNotificationSelfTest
                   parsed.SessionId == session && parsed.Decision == decision &&
                   parsed.ProjectPath == Path.GetFullPath(root), "round-trip " + decision);
         }
-        Check(!ApprovalLink.TryParse("fufucode://approval/req-1?session=" + session + "&decision=maybe", out _) &&
-              !ApprovalLink.TryParse("fufucode://approval/../x?session=" + session + "&decision=allow", out _) &&
-              !ApprovalLink.TryParse("fufucode://approval/req-1?session=not-a-guid&decision=allow", out _) &&
-              !ApprovalLink.TryParse("fufucode://approval/req-1?session=" + session + "&decision=allow&extra=1", out _) &&
+        // scheme 随渠道变化（正式 fufucode-approval / 测试 fufucode-test-approval），断言按当前渠道拼。
+        var approvalPrefix = ApprovalLink.Scheme + "://approval/";
+        Check(!ApprovalLink.TryParse(approvalPrefix + "req-1?session=" + session + "&decision=maybe", out _) &&
+              !ApprovalLink.TryParse(approvalPrefix + "../x?session=" + session + "&decision=allow", out _) &&
+              !ApprovalLink.TryParse(approvalPrefix + "req-1?session=not-a-guid&decision=allow", out _) &&
+              !ApprovalLink.TryParse(approvalPrefix + "req-1?session=" + session + "&decision=allow&extra=1", out _) &&
               !ApprovalLink.TryParse("https://approval/req-1", out _),
             "malformed or spoofed approval links are rejected");
         Check(!ApprovalLink.TryParse(ApprovalLink.Create("req-1", session, ApprovalDecision.Allow)
-              .Replace("fufucode-approval://approval/", "fufucode://session/"), out _), "an approval link is not mistaken for a session link");
+              .Replace(approvalPrefix, ProductLinks.SessionScheme + "://session/"), out _),
+            "an approval link is not mistaken for a session link");
 
         // 2) “始终允许”规则：按项目 + 工具名落盘，其它项目/其它工具不受影响。
         ApprovalPolicy.Configure(root);

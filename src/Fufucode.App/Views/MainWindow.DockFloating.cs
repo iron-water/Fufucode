@@ -142,7 +142,11 @@ public partial class MainWindow
             var dockActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4,
                 Margin = new Thickness(4, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
             dockActions.Children.Add(dockBack); dockActions.Children.Add(options);
-            var captionActions = new StackPanel { Orientation = Orientation.Horizontal };
+            var captionActions = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
             var minimize = new CaptionAssetButton { Kind = "minimize" };
             var maximize = new CaptionAssetButton { Kind = "maximize" };
             var close = new CaptionAssetButton { Kind = "close" };
@@ -154,11 +158,12 @@ public partial class MainWindow
             Avalonia.Automation.AutomationProperties.SetName(maximize, "最大化或还原辅助栏");
             Avalonia.Automation.AutomationProperties.SetName(close, "隐藏辅助栏");
             captionActions.Children.Add(minimize); captionActions.Children.Add(maximize); captionActions.Children.Add(close);
-            var captionGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Height = 32 };
+            // 与主窗一致：窗口按钮在标题行内垂直居中（32px 按钮 + 40px 行高，上下各 4px）。
+            var captionGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), Height = 40 };
             captionGrid.Children.Add(titleDrag);
             Grid.SetColumn(dockActions, 1); captionGrid.Children.Add(dockActions);
             Grid.SetColumn(captionActions, 2); captionGrid.Children.Add(captionActions);
-            var captionBar = new Border { Child = captionGrid, Height = 32 }; captionBar.Classes.Add("chromeBar");
+            var captionBar = new Border { Child = captionGrid, Height = 40 }; captionBar.Classes.Add("chromeBar");
             var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
             root.Children.Add(captionBar);
             Grid.SetRow(dock, 1); root.Children.Add(dock); window.Content = root;

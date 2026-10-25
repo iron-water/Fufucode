@@ -127,3 +127,11 @@ turn (model, executionMode, promptChars, queueMs, outcome)
   - 顶部替换为极简 `[ 概览 | 分析 ]` 分段切换按钮 + 模型徽章 + 实时绿点。
   - 移除人工刷新与实时开关，改为后台自动防抖刷新（1s 节拍感知更新）。
 - 验证：解决方案 45 项目 0 错误 0 警告；`Fufucode.PerformanceMonitor.Tests` 8 组测试全过（新增上下文分解与 Treemap 数据断言）。
+
+## 2026-10-24 Langfuse 深度接入、Fufu 渲染监控与协同通路看板交付
+
+- 顶栏切换胶囊升级为三段：`[ 概览 | 分析 | 协同通路 ]`。
+- 修复了概览页模型徽章与顶栏重复的问题。
+- 深度整合 Langfuse Trace 观测台：Span 树 Observation 徽章 + 七维检查器（输入、输出、指标、评估、属性、原始）。
+- 新增 `FufuRenderDiagnostics` 探针与时间线第 8 轨“Fufu 渲染”，持续监测 Live2D 动画帧耗时与掉帧。
+- 交付 `PerfCompanionNetworkView` 协同网络看板，直连 `CompanionCore` 审计流并为 FUFUCODE ↔ FUFU ↔ JIII 预留 v2 扩展插槽。

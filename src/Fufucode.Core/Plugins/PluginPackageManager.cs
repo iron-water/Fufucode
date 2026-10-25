@@ -14,6 +14,12 @@ namespace Fufucode.Core.Plugins;
 public sealed class PluginPackageManager : IAsyncDisposable
 {
     /// <summary>
+    /// 协同核心（唯一路由/去重/审计点）。作为宿主服务常驻，不依赖任何连接插件是否启用。
+    /// 两个连接插件在激活时注册自己；未注册时核心只是空转，不影响既有功能。
+    /// </summary>
+    public static CompanionCore CompanionCore { get; } = new();
+
+    /// <summary>
     /// 当前激活的语音朗读服务（service.speech-synthesis 插件注册）。
     /// 未安装或已停用时为 null，宿主据此隐藏朗读入口，而不是显示一个不可用的替身。
     /// </summary>

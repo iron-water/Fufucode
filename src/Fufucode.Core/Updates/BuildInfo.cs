@@ -39,8 +39,29 @@ public sealed record BuildInfo(
 {
     public const string FileName = "build-info.json";
 
-    public bool IsReleaseChannel => string.Equals(Channel, "github", StringComparison.OrdinalIgnoreCase);
+    /// <summary>正式发布渠道标记值（package-native.ps1 / package.ps1 写入）。</summary>
+    public const string ReleaseChannel = "github";
 
+    /// <summary>
+    /// 实验性测试渠道标记值（package-test.ps1 写入）。
+    /// 与正式渠道同为"面向用户的发布构建"：走 GitHub 更新、拒绝被本地部署覆盖；
+    /// 区别只在安装身份（独立 AppId/安装目录/数据根）与设置页文案。
+    /// </summary>
+    public const string TestChannel = "test";
+
+    /// <summary>是否为正式发布渠道。</summary>
+    public bool IsGitHubRelease => string.Equals(Channel, ReleaseChannel, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>是否为实验性测试渠道构建。</summary>
+    public bool IsTestChannel => string.Equals(Channel, TestChannel, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 是否属于发布渠道：正式与测试渠道都是。发布构建走 GitHub 更新，
+    /// 且不能被本地部署覆盖（两条路径互不回退）。
+    /// </summary>
+    public bool IsReleaseChannel => IsGitHubRelease || IsTestChannel;
+
+    /// <summary>是否为本地开发构建（可用"部署本机最新构建"）。</summary>
     public bool IsLocalChannel => !IsReleaseChannel;
 
     /// <summary>

@@ -15,12 +15,13 @@ internal static class BrowserUserDataLayout
 
     /// <summary>
     /// 解析 UserDataFolder。<paramref name="overrideRoot"/> 非空（自测隔离）时在其下建子目录，
-    /// 否则使用 <c>%LocalAppData%\Fufucode\webview</c>。
+    /// 否则使用当前数据根下的 <c>webview</c>（默认 <c>%LocalAppData%\Fufucode\webview</c>，
+    /// 实验性测试安装为 <c>%LocalAppData%\FufucodeTest\webview</c>）。
     /// </summary>
     public static string Resolve(string? overrideRoot)
     {
         var root = string.IsNullOrWhiteSpace(overrideRoot)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), AppFolderName)
+            ? Fufucode.Core.AppDataLayout.DefaultRoot()
             : Path.GetFullPath(overrideRoot);
         var folder = Path.GetFullPath(Path.Combine(root, FolderName));
         var prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(root)) + Path.DirectorySeparatorChar;

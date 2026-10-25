@@ -934,6 +934,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                     tool.Id = call.Id;
                     tool.Name = call.Name;
                     tool.Arguments.Clear().Append(call.ArgumentsJson);
+                    // 兜底起点：即使派发回调没到，也能算出真实耗时（派发时 OnToolStarting 仍会补写）。
+                    tool.StartedTicks ??= Stopwatch.GetTimestamp();
                     _toolsById[call.Id] = tool;
                     _blocks[tool.ContentIndex] = tool.Block;
                 }

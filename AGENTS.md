@@ -118,3 +118,12 @@
 - 不虚构 RPC 命令、协议能力或模型行为；以 `docs/runtime-baseline.md` 的实测记录为准。
 - 测试不得靠放宽断言制造通过。
 - GitHub 查询优先使用已认证的 `gh` CLI，仅在不可用时退回匿名请求。
+
+## 发布渠道（2026-10-24）
+
+- 两个渠道并存：正式 `package-native.ps1`（channel=`github`）与实验性 `package-test.ps1`（channel=`test`）。两者都是"发布构建"：走 GitHub 更新、拒绝被本地部署覆盖；`IsGitHubRelease`/`IsTestChannel` 区分具体身份。
+- 测试渠道安装身份完全独立：`out/build-test`、`Fufucode-Test-Setup.exe`、独立 AppId/安装目录、数据根 `%LOCALAPPDATA%\FufucodeTest`（由安装根 `data-root.txt` 经 C 启动器注入 `FUFUCODE_DATA_ROOT`）、协议 `fufucode-test:`。不得让任一渠道抢走另一渠道的协议或单实例锁。
+- 测试渠道只认 prerelease：tag 形如 `v0.1.0-test.1`，由 `.github/workflows/test-release.yml` 出包并创建 prerelease。正式渠道读 `/releases/latest`，永远看不到这些版本。
+- 版本号单一来源：`build/Version.props`（默认值）+ 打包脚本 `-p:Version=<AppVersion>`。程序集、`build-info.json`、安装器、`feed.json` 必须同源；不要在任何脚本里另写版本常量（启动器资源由 `build-launcher.ps1` 注入）。
+- 测试渠道不裁剪（`PublishTrimmed=false`）：插件按未裁剪框架编译，在裁剪进程里会撞上 App 可达图之外的框架成员（实测 `Utf8JsonWriter.Reset`、`ContextMenu.add_Opening`、`InlineArray11<T>`）。这是结构冲突，不要靠逐个加 `TrimmerRootAssembly` 掩盖；裁剪构建目前不能宣称可靠承载可选插件。
+- 默认随包插件只有 `chat.interactive-ui`（`app/plugins/`）与 `performance.monitor`（`app/plugins-dist/`）。打包脚本必须在载荷里放好两者并断言 manifest 存在，否则"默认安装"是假状态。

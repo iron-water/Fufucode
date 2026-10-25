@@ -909,3 +909,61 @@ EAD
    - 彻底删除顶栏的冗余标题、副标题，由紧凑的 `[ 概览 | 分析 ]` 分段切换胶囊取代。
    - 彻底删除人工“刷新”按钮与“实时”复选框：全自动静默感知环形缓冲写入与事件，无需用户操作，保证始终实时。
 
+
+## 2026-10-24 性能监控深度接入 Langfuse 架构、Fufu 底层监控与协同网络通路
+
+1. 修复头部重复展示：彻底移除概览页内“上下文窗口”旁冗余的模型徽章与实时点，保留顶栏全局单一指示。
+2. 接入 Langfuse Trace 观测台能力：
+   - Span 树引入 Langfuse Observation 观测类型徽章：`[GEN]`（模型生成）、`[SPAN]`（工具/流程）、`[EVENT]`（事件/卡顿）、`[SCORE]`（自动化评分/异常规则）。
+   - 检查器全面升级为 Langfuse 七维诊断抽屉：
+     - `[ 概览 Overview ]`：快速摘要、起止时刻、Trace 与父调用链关系。
+     - `[ 输入 Prompt ]`：Generation 呈现完整结构化消息卡（System/User/Assistant/Tools），Tool 呈现命令与上下文。
+     - `[ 输出 Output ]`：模型流式思考/回复/工具发起，或命令退出码与 stdout/stderr 头部输出。
+     - `[ 指标 Metrics ]`：Prompt/Completion/Cache Token 细分、Token/s 生成速率、TTFT 耗时、流式帧抖动（maxGap/p95Gap）、预估调用成本。
+     - `[ 评估 Scores ]`：自动化规则评分（TTFT 时延、流式卡顿、工具健壮性评估，PASS/WARN/STALL）。
+     - `[ 属性 Attributes ]`：完整 Metadata 标签键值对与运行时线程环境。
+     - `[ 原始 JSON ]`：符合 Langfuse / OpenInference 标准的 JSON Payload。
+3. 强化 Fufu 桌宠与底层运行时监控：
+   - 核心层新增 `FufuRenderDiagnostics` 零开销静态探针，接入 `PlaceholderPetRenderer` 测量每帧绘制耗时与掉帧。
+   - 时间线扩展为 8 轨并行轴，新增“Fufu 渲染”专用轨道，展示 Live2D/桌宠 FPS、单帧耗时与掉帧刻度。
+4. 预留第三席位：新增 `[ 协同通路 ]` 监控看板：
+   - 顶栏分段切换器升级为 `[ 概览 | 分析 | 协同通路 ]`。
+   - 深度接入 `PluginPackageManager.CompanionCore`，呈现 FUFUCODE（核心总线）、FUFU（桌宠 IPC 管道）、JIII（远程控制 Web 桥）三节点拓扑。
+   - 实时采集 IPC 管道 RTT、事件吞吐、意图幂等时延与丢包率。
+   - 呈现去重实时规范事件与审计流水，并为 JIII 音频流、Live2D 姿态流预留 v2 协议监测插槽。
+
+## 2026-10-24 实验性测试发布渠道（TEST-1）与发布链路三处修复
+
+用户决定：先做一个只含 Windows 桌面端的实验性 release，未来一段时间 Release 里暂时只有测试渠道产物。
+新增 `scripts/packaging/package-test.ps1` + `Fufucode-Test.iss` + `.github/workflows/test-release.yml`。
+
+1. **渠道身份**（可与正式版并存，互不覆盖）：产物 `Fufucode-Test-Setup.exe` / `FufucodeTest.zip`；
+   载荷 `out/build-test`；独立 AppId、安装目录 `%LocalAppData%\Programs\Fufucode Test`、
+   数据根 `%LocalAppData%\FufucodeTest`、协议 `fufucode-test:` / `fufucode-test-approval:`、单实例锁。
+   `build-info.json` 的 `channel` 为 `test`（新增 `BuildInfo.TestChannel`）。
+2. **渠道语义**：`IsReleaseChannel` 现在同时覆盖 `github` 与 `test`（两者都走 GitHub 更新、都拒绝本地部署覆盖），
+   新增 `IsGitHubRelease` / `IsTestChannel` 区分。协议名由 `ProductLinks` 按渠道推导，安装器与程序各自独立得出同一值。
+3. **数据根隔离**：安装根目录的 `data-root.txt` 由 C 启动器读取并注入 `FUFUCODE_DATA_ROOT`；
+   `AppDataLayout.DefaultRoot()` 统一它，浏览器数据、置顶轮次、变更备份、工具链、协作看板等原先写死
+   `%LOCALAPPDATA%\Fufucode` 的路径都改走这里（显式路径参数的调用不受影响）。
+4. **更新发现**：`UpdateService.CheckAsync` 新增 `includePreReleases`。测试渠道读 `/releases` 列表并只取
+   `prerelease=true` 的条目中版本号最高者——测试版本是 `0.1.0-test.N` 预发布，`/releases/latest` 永远看不到它，
+   而把正式版当更新装进测试安装会破坏安装身份。
+5. **版本号单一来源**：新增 `Directory.Build.props` + `build/Version.props`（默认 1.4.0，`reference/` 下不生效）；
+   打包脚本用 `-p:Version=<AppVersion>` 覆盖，程序集元数据、`build-info.json`、安装器、`feed.json` 四处同源。
+   旧行为是程序集恒为 1.0.0 而安装器写 1.4.x。
+6. **启动器版本资源**：`tools/fufucode-launcher/fufucode.rc` 不再写死 1.4.6，改为可选包含
+   `version-overrides.h`（`scripts/packaging/build-launcher.ps1` 生成并用 `-I` 传入；`windres -D` 无法传带引号字符串）。
+   两个渠道每次打包都重编启动器。
+7. **随包插件载荷缺陷**：`performance.monitor` 在目录里声明默认安装+默认启用，但两个打包脚本都只把它发布成
+   `out/plugins-dist/*.zip` 可选包，从不放进 `app/plugins-dist/`，装配启动器播种不到它，装机后"默认安装"是假的。
+   两个脚本现在都补上 `app/plugins-dist/performance.monitor`，并在打包期断言两个默认插件的 manifest 存在。
+8. **测试渠道不裁剪**：实测裁剪后的共享运行时会破坏随包插件激活，且每次表现不同（
+   `Utf8JsonWriter.Reset(Stream)`、`ContextMenu.add_Opening`、`InlineArray11<T>` 三处依次炸）。
+   根因是插件程序集按**未裁剪**的框架编译，加载进裁剪后的进程后必然撞上 App 可达图之外的成员；
+   逐个 `TrimmerRootAssembly` 只能不断追新、无法收敛，所以没有在正式渠道里堆 root。
+   测试渠道以 `PublishTrimmed=false` 发布（约 154 MB），实测 `Tabs: perf` 全通、自测失败项与未裁剪
+   开发构建完全一致（零回归）。正式渠道的裁剪构建仍不能可靠承载可选插件，已在
+   `Fufucode.App.csproj` 记下该已知冲突（另新增 `TrimmerRootAssembly System.Runtime` 与
+   `ILLink.Descriptors.xml`，修掉 CLI 在共享裁剪运行时上的 `DefaultInterpolatedStringHandler` 缺失）。
+9. **自测**：`ApprovalNotificationSelfTest` 改为按 `ApprovalLink.Scheme` 拼断言，不再写死正式渠道协议名。

@@ -209,8 +209,8 @@ public static class ToolchainCatalog
                 "微软 NVX/OpenVMM 微虚拟机沙箱。Windows 使用 WHP，载荷安装后才可启动。",
                 ["nvx-rs", "openvmm"],
                 [
-                    Path.Combine(localAppData, "Fufucode", "runtime", "nvx", "bin", "nvx-rs.exe"),
-                    Path.Combine(localAppData, "Fufucode", "runtime", "nvx", "bin", "openvmm.exe"),
+                    Path.Combine(AppDataLayout.DefaultRoot(), "runtime", "nvx", "bin", "nvx-rs.exe"),
+                    Path.Combine(AppDataLayout.DefaultRoot(), "runtime", "nvx", "bin", "openvmm.exe"),
                 ],
                 Path.Combine("bin", "nvx-rs.exe"),
                 [".", "bin"], []),

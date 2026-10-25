@@ -50,9 +50,11 @@ internal static class WorkbenchTabsSelfTest
                 // they must not exist, and the test should not treat their absence as a failure.
                 if (!window.PageAvailableForTesting(id))
                 {
-                    Check(id is "terminal" or "browser" or "automation" &&
+                    Check(id is "terminal" or "browser" or "automation" or "perf" &&
                           (id != "terminal" || window.TerminalPageForTesting is null),
                         id + " is absent because its optional module/plugin is not installed");
+                    // 性能监控是默认随包插件：它的缺席说明载荷或激活失败，把真实原因带进日志。
+                    if (id == "perf") fail("perf plugin diagnostics: " + window.PerfDiagnosticLine);
                     continue;
                 }
                 window.MoveDockPage(id, DockZone.Left); await Ready();

@@ -6,6 +6,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
+using Fufucode.App.Views;
 
 namespace Fufucode.App.Features.FilePreview;
 
@@ -44,6 +45,7 @@ public sealed class ImagePreviewControl : UserControl
         };
         Content = _surface;
         AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, RoutingStrategies.Bubble);
+        PointerPressed += OnImagePressed;
         AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Bubble);
         AddHandler(PointerMovedEvent, OnPointerMoved, RoutingStrategies.Bubble);
         AddHandler(PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Bubble);
@@ -54,6 +56,15 @@ public sealed class ImagePreviewControl : UserControl
     public bool IsCheckerboard { get; private set; }
     public bool IsFitMode { get; private set; } = true;
     public PixelSize OriginalSize => _bitmap.PixelSize;
+
+    private void OnImagePressed(object? sender, PointerPressedEventArgs args)
+    {
+        if (args.ClickCount == 2)
+        {
+            ImageLightbox.Show(this, _bitmap);
+            args.Handled = true;
+        }
+    }
 
     public void ZoomBy(double factor)
     {

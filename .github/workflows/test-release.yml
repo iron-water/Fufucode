@@ -1,0 +1,145 @@
+name: Test release
+
+# 实验性测试渠道发布：从 tag 出包并创建 prerelease。
+#
+# 只有标记为 prerelease 的 Release 会被测试渠道安装包发现（UpdateService 走 /releases 列表
+# 并过滤 prerelease）；正式渠道读 /releases/latest，不会看到这里的任何版本。
+#
+# 用法：
+#   git tag v0.1.0-test.1 && git push origin v0.1.0-test.1
+#   或在 Actions 页手动触发并填版本号。
+on:
+  push:
+    tags:
+      - 'v*-test.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号（不带 v 前缀），例如 0.1.0-test.1'
+        required: true
+        type: string
+      framework_dependent:
+        description: '同时产出框架依赖瘦身包（需要目标机装 .NET 10 Runtime）'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: test-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          $version = if ('${{ github.event_name }}' -eq 'workflow_dispatch') { '${{ inputs.version }}' } else { '${{ github.ref_name }}' }
+          $version = $version -replace '^[vV]', ''
+          if ($version -notmatch '^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Invalid version '$version' (expected 0.1.0-test.1)."
+          }
+          "value=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Building $version"
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          $iscc = Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 6\ISCC.exe'
+          if (-not (Test-Path $iscc)) { throw "ISCC not found at $iscc" }
+          Write-Host "ISCC: $iscc"
+
+      # 启动器与 CLI 转发器是 C 源码 + rc 资源，需要 gcc 与 windres。
+      # 用 choco 装 mingw，避免依赖镜像上 msys2 的具体布局。
+      - name: Set up MinGW toolchain
+        shell: pwsh
+        run: |
+          choco install mingw --no-progress -y
+          $candidates = @(
+            'C:\ProgramData\chocolatey\bin',
+            'C:\ProgramData\mingw64\mingw64\bin',
+            'C:\tools\mingw64\bin'
+          ) | Where-Object { Test-Path (Join-Path $_ 'gcc.exe') }
+          if (-not $candidates) { throw 'gcc.exe not found after installing mingw.' }
+          $bin = $candidates[0]
+          "C:\ProgramData\chocolatey\bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          $bin | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+          & (Join-Path $bin 'gcc.exe') --version | Select-Object -First 1
+          & (Join-Path $bin 'windres.exe') --version | Select-Object -First 1
+
+      - name: Package test build
+        shell: pwsh
+        env:
+          # 测试渠道的发布标记：channel=test + 仓库坐标，安装后设置页才走 GitHub 更新。
+          FUFUCODE_GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          pwsh -NoProfile -File scripts/packaging/package-test.ps1 -AppVersion '${{ steps.version.outputs.value }}'
+
+      - name: Package test build (framework dependent)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.framework_dependent }}
+        shell: pwsh
+        env:
+          FUFUCODE_GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          pwsh -NoProfile -File scripts/packaging/package-test.ps1 `
+            -AppVersion '${{ steps.version.outputs.value }}' -FrameworkDependent
+
+      # UpdateService 优先读取名为 feed.json 的资产；本地脚本写成 feed-test.json，
+      # 以免与正式渠道的 feed.json 冲突，上传前改名。
+      - name: Collect release assets
+        shell: pwsh
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          New-Item -ItemType Directory -Force out/release | Out-Null
+          Copy-Item out/Fufucode-Test-Setup.exe out/release/
+          Copy-Item out/FufucodeTest.zip out/release/
+          Copy-Item out/FufucodeTest-Symbols.zip out/release/
+          Copy-Item out/feed-test.json out/release/feed.json
+          if (Test-Path out/Fufucode-Test-Slim-Setup.exe) { Copy-Item out/Fufucode-Test-Slim-Setup.exe out/release/ }
+          if (Test-Path out/FufucodeTest-Slim.zip) { Copy-Item out/FufucodeTest-Slim.zip out/release/ }
+          Get-ChildItem out/release | ForEach-Object { "{0}  {1:N2} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fufucode-test-${{ steps.version.outputs.value }}
+          path: out/release/*
+          retention-days: 14
+
+      - name: Create pre-release
+        if: github.event_name != 'workflow_dispatch' || inputs.version != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = '${{ steps.version.outputs.value }}'
+          $tag = "v$version"
+          $notes = @"
+          Windows 桌面端实验性测试构建 v$version。
+
+          与正式版并存安装，互不覆盖：
+          - 安装目录 ``%LocalAppData%\Programs\Fufucode Test``
+          - 用户数据 ``%LocalAppData%\FufucodeTest``
+          - 协议 ``fufucode-test:`` / ``fufucode-test-approval:``
+          - 独立单实例锁，可与正式版同时运行
+
+          安装包未签名，更新完整性由 SHA-256 校验。
+          "@
+          gh release create $tag out/release/* `
+            --repo '${{ github.repository }}' `
+            --title "Fufucode Test $version" `
+            --notes $notes `
+            --prerelease

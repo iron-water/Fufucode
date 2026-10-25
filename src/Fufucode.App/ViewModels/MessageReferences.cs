@@ -23,7 +23,7 @@ public sealed class MessageLinkViewModel
     public bool ShowDomain { get; }
 }
 
-/// <summary>消息里出现的文件路径，点击在侧栏预览。</summary>
+/// <summary>消息里出现的相关文件路径；它表示消息提到的路径，不等同于模型已读取的证据。</summary>
 public sealed class MessageFileViewModel
 {
     public MessageFileViewModel(string path)
@@ -37,6 +37,30 @@ public sealed class MessageFileViewModel
     public string Path { get; }
     public string DisplayName { get; }
     public string Folder { get; }
+    public string? ResolvedPath { get; private set; }
+    public bool Exists { get; private set; }
+    public string StatusText => Exists ? "可预览" : "未在当前项目找到";
+    public string SourceText => System.IO.Path.IsPathRooted(Path) ? "绝对路径" : "项目相对路径";
+
+    public void Resolve(string? projectRoot)
+    {
+        ResolvedPath = null;
+        Exists = false;
+        if (string.IsNullOrWhiteSpace(projectRoot)) return;
+        try
+        {
+            var candidate = System.IO.Path.IsPathRooted(Path)
+                ? System.IO.Path.GetFullPath(Path)
+                : System.IO.Path.GetFullPath(System.IO.Path.Combine(projectRoot, Path));
+            var root = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(projectRoot));
+            var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+            if (!candidate.Equals(root, comparison) && !candidate.StartsWith(root + System.IO.Path.DirectorySeparatorChar, comparison)) return;
+            ResolvedPath = candidate;
+            Exists = File.Exists(candidate);
+        }
+        catch (ArgumentException) { }
+        catch (NotSupportedException) { }
+    }
 }
 
 /// <summary>

@@ -265,18 +265,16 @@
                               <ItemsControl ItemsSource="{Binding Tools}">
                                 <ItemsControl.DataTemplates>
                                   <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                                    <Border Classes="toolCard" Margin="10,3" Loaded="OnTransientBlockLoaded">
+                                    <Border Classes="toolCard" Margin="10,3" Loaded="OnTransientBlockLoaded"
+                                            PointerReleased="OnToolCardPointerReleased"
+                                            Classes.success="{Binding BadgeIsSuccess}"
+                                            Classes.failed="{Binding BadgeIsCritical}"
+                                            Classes.running="{Binding IsRunning}">
                                       <StackPanel>
                                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,7,12,3">
                                           <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold"
                                                      Text="{Binding ToolName}" VerticalAlignment="Center"/>
-                                          <Border Classes="badge"
-                                                  Classes.attention="{Binding BadgeIsAttention}"
-                                                  Classes.success="{Binding BadgeIsSuccess}"
-                                                  Classes.critical="{Binding BadgeIsCritical}"
-                                                  Classes.neutral="{Binding BadgeIsNeutral}">
-                                            <TextBlock Text="{Binding StatusText, FallbackValue='运行中'}"/>
-                                          </Border>
+                                          <!-- 状态决定卡片描边色：成功绿、失败红、其它黄。 -->
                                           <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
                                                      IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
                                           <Button Classes="iconButton" Width="22" Height="18" Padding="0"
@@ -285,7 +283,15 @@
                                             <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
                                                       Foreground="{DynamicResource AppTextDim}"/>
                                           </Button>
+                                          <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
+                                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                                    IsVisible="{Binding IsExpanded}"/>
+                                          <PathIcon Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
+                                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                                    IsVisible="{Binding IsCollapsed}"/>
                                         </StackPanel>
+                                        <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
+                                        <StackPanel>
                                         <TextBlock Classes="caption mono" Text="{Binding InputJson}"
                                                    TextWrapping="Wrap" MaxLines="3" Margin="12,0,12,4"
                                                    Foreground="{DynamicResource AppTextDim}"/>
@@ -300,6 +306,8 @@
                                                                   Output="{Binding Output}"/>
                                           </ScrollViewer>
                                         </Border>
+                                        </StackPanel>
+                                        </views:CollapsiblePanel>
                                       </StackPanel>
                                     </Border>
                                   </DataTemplate>
@@ -312,21 +320,17 @@
 
                         <!-- 工具卡片（未分组的单次调用） -->
                         <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                          <Border Classes="toolCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
+                          <Border Classes="toolCard" Margin="0,4" Loaded="OnTransientBlockLoaded"
+                                  PointerReleased="OnToolCardPointerReleased"
+                                  Classes.success="{Binding BadgeIsSuccess}"
+                                  Classes.failed="{Binding BadgeIsCritical}"
+                                  Classes.running="{Binding IsRunning}">
                             <StackPanel>
-                              <!-- 头部行：wrench + 工具名 + 状态徽章 -->
+                              <!-- 头部行：wrench + 工具名 + 耗时 + 展开箭头 -->
                               <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8,12,4">
                                 <PathIcon Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
                                           VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
                                 <TextBlock Classes="mono" FontSize="12.5" FontWeight="SemiBold" Text="{Binding ToolName}" VerticalAlignment="Center"/>
-                                <!-- 状态用小圆点表达，文字进 tooltip；不再用大号胶囊。 -->
-                                <Border Width="9" Height="9" CornerRadius="4.5" VerticalAlignment="Center"
-                                        Classes="statusDot"
-                                        Classes.attention="{Binding BadgeIsAttention}"
-                                        Classes.success="{Binding BadgeIsSuccess}"
-                                        Classes.critical="{Binding BadgeIsCritical}"
-                                        Classes.neutral="{Binding BadgeIsNeutral}"
-                                        ToolTip.Tip="{Binding StatusText, FallbackValue='运行中'}"/>
                                 <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
                                            IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
                                 <Button Classes="iconButton" Width="22" Height="18" Padding="0"
@@ -335,14 +339,21 @@
                                   <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
                                             Foreground="{DynamicResource AppTextDim}"/>
                                 </Button>
+                                <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                          IsVisible="{Binding IsExpanded}"/>
+                                <PathIcon Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                          IsVisible="{Binding IsCollapsed}"/>
                               </StackPanel>
+                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
+                              <StackPanel>
                               <TextBlock Classes="caption mono" Text="{Binding InputJson}"
                                          TextWrapping="Wrap" MaxLines="3" Margin="12,0,12,6"
                                          Foreground="{DynamicResource AppTextDim}"/>
-                              <!-- UI-1 单闭合边框原则：toolCard 已闭合，内部输出区降级为无框轻质填充。 -->
                               <views:ToolImageView SourceText="{Binding ImageOutputSource}"
                                                            IsVisible="{Binding HasImageOutput}" Margin="12,0,12,8"/>
-                                        <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
+                              <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto"
                                               MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
@@ -353,6 +364,8 @@
                                       Command="{Binding ToggleOutputCommand}"
                                       IsVisible="{Binding CanCollapseOutput}"
                                       Margin="6,0,6,6" HorizontalAlignment="Left"/>
+                              </StackPanel>
+                              </views:CollapsiblePanel>
                             </StackPanel>
                           </Border>
                         </DataTemplate>
@@ -380,25 +393,29 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <ItemsControl ItemsSource="{Binding Files}" IsVisible="{Binding HasFiles}" Margin="0,2,0,0">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate><WrapPanel Orientation="Horizontal"/></ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
-                        <Button Classes="referenceChip" Click="OnOpenMessageFile" Margin="0,0,6,6"
-                                ToolTip.Tip="{Binding Path}">
-                          <StackPanel Orientation="Horizontal" Spacing="6">
-                            <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
-                                      VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                            <TextBlock Classes="mono" FontSize="12" Text="{Binding DisplayName}"/>
-                            <TextBlock Classes="meta" Text="{Binding Folder}" VerticalAlignment="Center"
-                                       MaxWidth="200" TextTrimming="CharacterEllipsis"/>
-                          </StackPanel>
-                        </Button>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
+                  <StackPanel IsVisible="{Binding HasFiles}" Margin="0,4,0,0" Spacing="4">
+                    <Button Classes="subtle" HorizontalAlignment="Left" Padding="8,4"
+                            Content="{Binding RelatedFilesToggleText}" Click="OnToggleRelatedFiles"
+                            ToolTip.Tip="消息中提到的文件路径；不代表模型已经读取"/>
+                    <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
+                      <ItemsControl ItemsSource="{Binding Files}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
+                            <Button Classes="referenceChip" Click="OnOpenMessageFile" Margin="0,0,6,6"
+                                    IsEnabled="{Binding Exists}" ToolTip.Tip="{Binding Path}">
+                              <StackPanel Orientation="Horizontal" Spacing="6">
+                                <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
+                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                                <TextBlock Classes="mono" FontSize="12" Text="{Binding DisplayName}"/>
+                                <TextBlock Classes="meta" Text="{Binding StatusText}" VerticalAlignment="Center"
+                                           MaxWidth="150" TextTrimming="CharacterEllipsis"/>
+                              </StackPanel>
+                            </Button>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </views:CollapsiblePanel>
+                  </StackPanel>
                   <!-- 变更卡已逐文件列出产物时不再重复；没有产物时整块不出现。 -->
                   <Border IsVisible="{Binding ShowArtifactBlock}" Classes="turnSummary">
                     <StackPanel IsVisible="{DynamicResource UiShowArtifactSummary}" Spacing="4">
@@ -661,7 +678,10 @@
             <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" ToolTip.Tip="移除引用" AutomationProperties.Name="移除引用"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
           </Grid>
           <WrapPanel x:Name="AttachedFiles"/>
-          <ScrollViewer x:Name="DraftPreview" IsVisible="False" MaxHeight="180" Margin="0,4,0,8"><SelectableTextBlock x:Name="DraftPreviewText" TextWrapping="Wrap" Classes="body"/></ScrollViewer>
+          <!-- 草稿预览走完整富文本渲染：表格、LaTeX、图片与代码高亮都可用。 -->
+          <ScrollViewer x:Name="DraftPreview" IsVisible="False" MaxHeight="200" Margin="0,4,0,8">
+            <views:RichMarkdownView x:Name="DraftPreviewText" FontSize="14"/>
+          </ScrollViewer>
           <TextBox x:Name="InputBox" Classes="composerInput"
                    Text="{Binding Input.DraftText}"
                    AcceptsReturn="True" TextWrapping="Wrap"
@@ -718,18 +738,18 @@
             </Button>
             <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="添加文件、图片、PDF 或链接"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
-            <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="6"
-                        VerticalAlignment="Center" Margin="6,0,8,0" IsVisible="False">
-              <Button x:Name="SessionProjectChip" Classes="iconButton" Width="30" Height="30"
+            <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="4"
+                        VerticalAlignment="Center" IsVisible="False">
+              <Button x:Name="SessionProjectChip" Classes="iconButton" Width="32" Height="32"
                      
                       AutomationProperties.Name="更改此会话的项目">
                 <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14"/>
               </Button>
               <TextBlock x:Name="SessionProjectChipText" IsVisible="False"/>
             </StackPanel>
-            <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Margin="0,0,8,0">
+            <WrapPanel x:Name="ComposerModes" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
               <!-- 模型选择器：宽度固定，不随模型名长度变化；点开后可搜索、可按供应商跳转。 -->
-              <Button x:Name="ModelButton" Classes="iconButton" Width="30" Height="30"
+              <Button x:Name="ModelButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}"
                      >
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
@@ -806,7 +826,7 @@
                   </Flyout>
                 </Button.Flyout>
               </Button>
-              <Button x:Name="ThinkingButton" Classes="iconButton" Width="30" Height="30"
+              <Button x:Name="ThinkingButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}">
                 <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14"/>
                 <Button.Flyout>
@@ -814,7 +834,7 @@
                 </Button.Flyout>
               </Button>
             </WrapPanel>
-            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+            <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
               <!-- 插入（steer）：仅运行中出现 -->
               <Button Classes="subtle" Command="{Binding Input.SteerCommand}"
                       IsVisible="{Binding Input.IsTurnActive}" Height="32"

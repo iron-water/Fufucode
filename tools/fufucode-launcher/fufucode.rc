@@ -1,15 +1,42 @@
 #include <windows.h>
 
-#define VER_FILEVERSION             1,4,6,0
-#define VER_FILEVERSION_STR         "1.4.6.0\0"
-#define VER_PRODUCTVERSION          1,4,6,0
-#define VER_PRODUCTVERSION_STR      "1.4.6\0"
+/*
+ * 版本号与产品名由打包脚本注入：脚本在临时目录生成 version-overrides.h 并用 -I 传入，
+ * 覆盖下面的默认值。这里不能用 windres -D 传带引号的字符串（windres 的参数解析会把
+ * 内层引号吃掉，导致 rc 语法错误）。
+ * 历史问题：这里曾写死 1.4.6，与安装器/更新清单的版本脱节。
+ */
+#if defined(__has_include)
+#  if __has_include("version-overrides.h")
+#    include "version-overrides.h"
+#  endif
+#endif
+
+#ifndef VER_FILEVERSION_CSV
+#define VER_FILEVERSION_CSV         1,4,0,0
+#endif
+#ifndef VER_FILEVERSION_STR
+#define VER_FILEVERSION_STR         "1.4.0.0\0"
+#endif
+#ifndef VER_PRODUCTVERSION_CSV
+#define VER_PRODUCTVERSION_CSV      1,4,0,0
+#endif
+#ifndef VER_PRODUCTVERSION_STR
+#define VER_PRODUCTVERSION_STR      "1.4.0\0"
+#endif
+/* 实验性测试渠道传 "Fufucode Test"；正式渠道传 "Fufucode"。 */
+#ifndef VER_PRODUCT_NAME
+#define VER_PRODUCT_NAME            "Fufucode\0"
+#endif
+#ifndef VER_INTERNAL_NAME
+#define VER_INTERNAL_NAME           "Fufucode.exe\0"
+#endif
 
 IDI_ICON1 ICON DISCARDABLE "../../assets/icon/fufucode.ico"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION     VER_FILEVERSION
-PRODUCTVERSION  VER_PRODUCTVERSION
+FILEVERSION     VER_FILEVERSION_CSV
+PRODUCTVERSION  VER_PRODUCTVERSION_CSV
 FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
 FILEFLAGS       0
 FILEOS          VOS_NT_WINDOWS32
@@ -21,12 +48,12 @@ BEGIN
         BLOCK "000004B0"
         BEGIN
             VALUE "CompanyName",      "Fufucode\0"
-            VALUE "FileDescription",  "Fufucode\0"
+            VALUE "FileDescription",  VER_PRODUCT_NAME
             VALUE "FileVersion",      VER_FILEVERSION_STR
-            VALUE "InternalName",     "Fufucode\0"
+            VALUE "InternalName",     VER_INTERNAL_NAME
             VALUE "LegalCopyright",   "Fufucode contributors\0"
-            VALUE "OriginalFilename", "Fufucode.exe\0"
-            VALUE "ProductName",      "Fufucode\0"
+            VALUE "OriginalFilename", VER_INTERNAL_NAME
+            VALUE "ProductName",      VER_PRODUCT_NAME
             VALUE "ProductVersion",   VER_PRODUCTVERSION_STR
         END
     END

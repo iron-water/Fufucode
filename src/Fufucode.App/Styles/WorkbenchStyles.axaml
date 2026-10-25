@@ -1,6 +1,7 @@
 <Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:Fufucode.App.Views"
-        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia">
+        xmlns:md="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia"
+        xmlns:mdm="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia.Mermaid">
   <!-- 工作台共享组件：停靠容器、页签、分隔条、窗口外框、工具条与空状态。
        只引用 App* 语义键，主题/强调色/风格预设统一经由令牌生效。 -->
   <Style Selector="Button.subtle">
@@ -1023,14 +1024,7 @@
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="Cursor" Value="Hand"/>
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12"/>
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.12"/>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.09"/>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.12"/>
-      </Transitions>
-    </Setter>
+    <!-- 不做任何背景/形变过渡：悬停与离开都是瞬时切换，杜绝残留帧。 -->
   </Style>
   <Style Selector="Button.islandTile:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
@@ -1040,6 +1034,13 @@
   <Style Selector="Button.islandTile /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.islandTile:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.islandTile:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
   <Style Selector="Button.islandTile:pressed">
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
@@ -1130,6 +1131,26 @@
   <!-- 输入区聚焦光带：宿主内获得焦点时点亮。 -->
   <Style Selector="StackPanel#ComposerHost:focus-within Border#ComposerGlowBand">
     <Setter Property="Opacity" Value="1"/>
+  </Style>
+  <!-- 输入区工具行：所有图标按钮用同一个 4px 右间距，隐藏控件不占位，
+       避免“左侧三枚 / 右侧三枚”间距不一致。 -->
+  <Style Selector="Grid#ComposerToolbar Button.iconButton">
+    <Setter Property="Margin" Value="0,0,4,0"/>
+  </Style>
+  <!-- 透明遮罩按钮（岛/抽屉/全局浮层）：不允许任何 hover/pressed 底色，
+       否则指针落上去会把整个窗口刷成高亮色，表现为“离开图标时闪一下”。 -->
+  <Style Selector="Button#IslandScrim, Button#RightDrawerScrim, Grid#GlobalOverlay > Button">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+  <Style Selector="Button#IslandScrim:pointerover, Button#RightDrawerScrim:pointerover, Grid#GlobalOverlay > Button:pointerover">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button#IslandScrim:pressed, Button#RightDrawerScrim:pressed, Grid#GlobalOverlay > Button:pressed">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button#IslandScrim:pointerover /template/ Border, Button#RightDrawerScrim:pointerover /template/ Border, Grid#GlobalOverlay > Button:pointerover /template/ Border">
+    <Setter Property="Background" Value="Transparent"/>
   </Style>
   <!-- 输入区聚焦光带：淡入淡出。 -->
   <Style Selector="Border#ComposerGlowBand">
@@ -1251,29 +1272,42 @@
   </Style>
   <!-- 工具状态点：小圆点 + 鲜艳语义色。 -->
   <Style Selector="Border.statusDot">
-    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="Background" Value="#94A3B8"/>
   </Style>
   <Style Selector="Border.statusDot.success">
-    <Setter Property="Background" Value="{DynamicResource SystemFillColorSuccessBrush}"/>
+    <Setter Property="Background" Value="#22C55E"/>
   </Style>
   <Style Selector="Border.statusDot.critical">
-    <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBrush}"/>
+    <Setter Property="Background" Value="#EF4444"/>
   </Style>
   <Style Selector="Border.statusDot.attention">
-    <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBrush}"/>
+    <Setter Property="Background" Value="#F59E0B"/>
   </Style>
   <Style Selector="Border.statusDot.neutral">
-    <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
-  </Style>
-  <!-- 工具卡本身也是横条：悬停升高亮。 -->
-  <Style Selector="Border.toolCard.pointerHover">
-    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+    <Setter Property="Background" Value="#94A3B8"/>
   </Style>
   <Style Selector="Border.toolCard">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppBaseHighlight}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccentBorder}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+  </Style>
+  <!-- 卡片描边按状态着色：成功绿、失败红、其它（运行/待定）黄。 -->
+  <Style Selector="Border.toolCard.success">
+    <Setter Property="BorderBrush" Value="#22C55E"/>
+  </Style>
+  <Style Selector="Border.toolCard.failed">
+    <Setter Property="BorderBrush" Value="#EF4444"/>
+  </Style>
+  <Style Selector="Border.toolCard.running">
+    <Setter Property="BorderBrush" Value="#F59E0B"/>
+  </Style>
+  <!-- 悬停必须排在基础样式之后，否则基础背景会把高亮覆盖掉。 -->
+  <Style Selector="Border.toolCard.pointerHover">
+    <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
+  </Style>
+  <Style Selector="Border.toolCard:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
   </Style>
 
   <!-- 左侧轮次刻度：常态低存在感，悬停或固定时高亮。 -->
@@ -1343,6 +1377,12 @@
   </Style>
 
   <!-- 表格：去掉全网格竖线，只保留行分隔与表头强调，贴近正文排版而不是电子表格。 -->
+  <!-- LiveMarkdown 的 PanAndZoom 在点击时会递归到栈溢出（Windows 报
+       “无法创建新的堆栈防护页面”）。图表只显示不交互，从样式层统一禁用命中测试，
+       不依赖某个 RichMarkdownView 实例是否已执行过 Loaded 守卫。 -->
+  <Style Selector="mdm|PanAndZoom">
+    <Setter Property="IsHitTestVisible" Value="False"/>
+  </Style>
   <Style Selector="md|MarkdownTableGrid">
     <Setter Property="ColumnSpacing" Value="0"/>
     <Setter Property="RowSpacing" Value="0"/>

@@ -75,7 +75,7 @@
           <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}" ToolTip.Tip="设置"><PathIcon Data="{DynamicResource Icon.Settings}" Width="16" Height="16"/></Button>
         </StackPanel>
         <ScrollViewer Grid.Column="2" MaxWidth="420" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopRight" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0"/></ScrollViewer>
-        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Top">
+        <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
           <views:CaptionAssetButton x:Name="CaptionMinimize" Kind="minimize" Click="CaptionMinimize_Click" ToolTip.Tip="最小化"/>
           <views:CaptionAssetButton x:Name="CaptionMaximize" Kind="maximize" Click="CaptionMaximize_Click" ToolTip.Tip="最大化"/>
           <views:CaptionAssetButton x:Name="CaptionClose" Kind="close" Click="CaptionClose_Click" ToolTip.Tip="关闭"/>

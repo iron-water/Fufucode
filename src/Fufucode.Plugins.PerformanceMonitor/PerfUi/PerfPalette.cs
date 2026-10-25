@@ -17,29 +17,35 @@ internal static class PerfPalette
     public static readonly Color System = Color.Parse("#60A5FA");
     public static readonly Color Neutral = Color.Parse("#8A8A8E");
 
-    // 上下文分解专用的 6 类语义色（对应 Magpie / Claude 上下文窗口）
-    public static readonly Color CtxSystemPrompt = Color.Parse("#A78BFA");
-    public static readonly Color CtxTools = Color.Parse("#38BDF8");
-    public static readonly Color CtxMemory = Color.Parse("#FBBF24");
-    public static readonly Color CtxFiles = Color.Parse("#34D399");
-    public static readonly Color CtxToolResults = Color.Parse("#FB7185");
-    public static readonly Color CtxConversation = Color.Parse("#818CF8");
+    // 上下文分解专用的 7 类语义色（严格对齐 yetone/magpie context.css 调色板）
+    public static readonly Color CtxSystemPrompt = Color.Parse("#C4B5FD"); // --k-system (--c6)
+    public static readonly Color CtxTools = Color.Parse("#7DD3FC");        // --k-tools (--c2)
+    public static readonly Color CtxSkills = Color.Parse("#94A3B8");       // --k-skills (--c7)
+    public static readonly Color CtxMemory = Color.Parse("#FCD34D");       // --k-memory (--c4)
+    public static readonly Color CtxFiles = Color.Parse("#6EE7B7");        // --k-files (--c3)
+    public static readonly Color CtxToolResults = Color.Parse("#F9A8D4");   // --k-results (--c5)
+    public static readonly Color CtxConversation = Color.Parse("#A5B4FC");  // --k-chat (--c1)
+    public static readonly Color CtxFree = Color.FromArgb(18, 255, 255, 255); // --k-free
 
     public static readonly IBrush CtxSystemPromptBrush = new SolidColorBrush(CtxSystemPrompt);
     public static readonly IBrush CtxToolsBrush = new SolidColorBrush(CtxTools);
+    public static readonly IBrush CtxSkillsBrush = new SolidColorBrush(CtxSkills);
     public static readonly IBrush CtxMemoryBrush = new SolidColorBrush(CtxMemory);
     public static readonly IBrush CtxFilesBrush = new SolidColorBrush(CtxFiles);
     public static readonly IBrush CtxToolResultsBrush = new SolidColorBrush(CtxToolResults);
     public static readonly IBrush CtxConversationBrush = new SolidColorBrush(CtxConversation);
+    public static readonly IBrush CtxFreeBrush = new SolidColorBrush(CtxFree);
 
     public static Color ContextCategoryColor(string category) => category switch
     {
         "system" or "系统提示词" => CtxSystemPrompt,
         "tools" or "工具" => CtxTools,
+        "skills" or "技能" => CtxSkills,
         "memory" or "记忆" => CtxMemory,
         "files" or "文件" => CtxFiles,
-        "toolResults" or "工具结果" => CtxToolResults,
-        "conversation" or "会话内容" => CtxConversation,
+        "results" or "toolResults" or "工具结果" => CtxToolResults,
+        "chat" or "conversation" or "会话内容" => CtxConversation,
+        "free" or "剩余空间" => CtxFree,
         _ => Neutral,
     };
 

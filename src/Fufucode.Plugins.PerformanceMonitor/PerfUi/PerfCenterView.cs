@@ -20,11 +20,13 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     private readonly PerfRecorder _recorder;
     private readonly PerfOverviewView _overview = new();
     private readonly PerfAnalysisView _analysis = new();
+    private readonly PerfCompanionNetworkView _companionView = new();
     private readonly ContentControl _content = new();
 
     // 顶部超紧凑切换按钮
     private readonly Button _btnOverview = new();
     private readonly Button _btnAnalysis = new();
+    private readonly Button _btnCompanion = new();
     private readonly Border _modelBadge = new();
     private readonly TextBlock _modelText = new() { FontSize = 10 };
 
@@ -32,7 +34,7 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     private PerfSnapshot? _snapshot;
     private long _lastTotal = -1;
     private int _refreshing;
-    private int _activeViewIndex; // 0 = 概览, 1 = 分析
+    private int _activeViewIndex; // 0 = 概览, 1 = 分析, 2 = 协同通路
     private bool _disposed;
 
     public PerfCenterView(PerfRecorder recorder)
@@ -48,24 +50,27 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         // 分段按钮
         SetupSegmentButton(_btnOverview, "概览", 0);
         SetupSegmentButton(_btnAnalysis, "分析", 1);
+        SetupSegmentButton(_btnCompanion, "协同通路", 2);
 
         var switcherPill = new Border
         {
-            CornerRadius = new CornerRadius(8),
+            CornerRadius = new CornerRadius(6),
             Padding = new Thickness(2),
             VerticalAlignment = VerticalAlignment.Center,
             Child = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 Spacing = 2,
-                Children = { _btnOverview, _btnAnalysis },
+                Children = { _btnOverview, _btnAnalysis, _btnCompanion },
             },
         };
         switcherPill.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+        switcherPill.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
+        switcherPill.BorderThickness = new Thickness(1);
 
         // 状态指示：模型徽章 + 实时绿点
         _modelText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        _modelBadge.CornerRadius = new CornerRadius(999);
+        _modelBadge.CornerRadius = new CornerRadius(4);
         _modelBadge.Padding = new Thickness(8, 2);
         _modelBadge.VerticalAlignment = VerticalAlignment.Center;
         _modelBadge.Child = _modelText;
@@ -134,6 +139,7 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         _timer.Tick += async (_, _) =>
         {
             if (_disposed || !IsEffectivelyVisible) return;
+            if (_activeViewIndex == 2) _companionView.UpdateData();
             if (_recorder.Ring.TotalWritten == _lastTotal) return;
             await RefreshAsync(force: false);
         };
@@ -144,20 +150,57 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     private void SetupSegmentButton(Button button, string label, int index)
     {
         button.Content = label;
-        button.FontSize = 11;
-        button.Padding = new Thickness(14, 4);
+        button.FontSize = 12;
+        button.Padding = new Thickness(12, 3);
         button.BorderThickness = new Thickness(0);
-        button.CornerRadius = new CornerRadius(6);
+        button.CornerRadius = new CornerRadius(4);
         button.Click += (_, _) => SwitchView(index);
     }
 
     private void SwitchView(int index)
     {
         _activeViewIndex = index;
-        _content.Content = index == 0 ? _overview : _analysis;
+        Control targetView = index switch
+        {
+            1 => _analysis,
+            2 => _companionView,
+            _ => _overview,
+        };
+        _content.Content = targetView;
+        if (index == 2) _companionView.UpdateData();
 
         UpdateSegmentButtonStyle(_btnOverview, index == 0);
         UpdateSegmentButtonStyle(_btnAnalysis, index == 1);
+        UpdateSegmentButtonStyle(_btnCompanion, index == 2);
+
+        AnimateViewTransition(targetView);
+    }
+
+    private static void AnimateViewTransition(Control control)
+    {
+        control.Opacity = 0;
+        var translate = new TranslateTransform(0, 4);
+        control.RenderTransform = translate;
+        control.Transitions = new Avalonia.Animation.Transitions
+        {
+            new Avalonia.Animation.DoubleTransition
+            {
+                Property = Visual.OpacityProperty,
+                Duration = TimeSpan.FromMilliseconds(150),
+                Easing = new Avalonia.Animation.Easings.ExponentialEaseOut(),
+            },
+            new Avalonia.Animation.DoubleTransition
+            {
+                Property = TranslateTransform.YProperty,
+                Duration = TimeSpan.FromMilliseconds(150),
+                Easing = new Avalonia.Animation.Easings.ExponentialEaseOut(),
+            },
+        };
+        Dispatcher.UIThread.Post(() =>
+        {
+            control.Opacity = 1;
+            translate.Y = 0;
+        }, DispatcherPriority.Render);
     }
 
     private static void UpdateSegmentButtonStyle(Button button, bool active)

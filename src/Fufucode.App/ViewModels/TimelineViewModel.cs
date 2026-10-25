@@ -38,6 +38,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private UserMessageViewModel? _pendingUser;
     private CancellationTokenSource? _submissionCts;
     private bool _disposed;
+    private string? _projectRoot;
     // 最近一条界面级提示的原文与时间：用于合并瞬间重复的同文提示。
     private string? _lastNoticeText;
     private DateTimeOffset _lastNoticeAt;
@@ -52,6 +53,13 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     }
 
     public ObservableCollection<TimelineEntryViewModel> Entries { get; } = new();
+
+    public void ResolveReferencedFiles(string? projectRoot)
+    {
+        _projectRoot = projectRoot;
+        foreach (var entry in Entries.OfType<AssistantMessageViewModel>())
+            entry.ResolveReferencedFiles(projectRoot);
+    }
 
     /// <summary>时间线为空（用于对话页空态插画）。</summary>
     public bool IsEmpty => Entries.Count == 0;
@@ -300,6 +308,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             }
 
             vm.Timestamp = entry.Timestamp;
+            if (vm is AssistantMessageViewModel assistant) assistant.ResolveReferencedFiles(_projectRoot);
             _byId[entry.Id] = vm;
             if (entry.Kind != TimelineEntryKind.AssistantMessage) Entries.Add(vm);
         }

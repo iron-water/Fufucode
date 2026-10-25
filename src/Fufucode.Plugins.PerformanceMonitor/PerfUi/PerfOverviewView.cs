@@ -9,6 +9,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.Threading;
 
 namespace Fufucode.Plugins.PerformanceMonitor;
 
@@ -22,8 +23,6 @@ internal sealed class PerfOverviewView : UserControl
 
     // 头部用量指标
     private readonly TextBlock _title = new() { Text = "上下文窗口", FontSize = 18, FontWeight = FontWeight.SemiBold };
-    private readonly Border _modelBadge = new();
-    private readonly TextBlock _modelText = new() { FontSize = 10 };
     private readonly TextBlock _usedTokensText = new() { FontSize = 28, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _usedTokensSub = new() { FontSize = 11 };
     private readonly TextBlock _cacheHitText = new() { FontSize = 28, FontWeight = FontWeight.SemiBold };
@@ -51,7 +50,6 @@ internal sealed class PerfOverviewView : UserControl
     public PerfOverviewView()
     {
         _title.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
-        _modelText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
         _usedTokensText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
         _usedTokensSub.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
         _cacheHitText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
@@ -60,24 +58,11 @@ internal sealed class PerfOverviewView : UserControl
         _roundsCountText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
         _requestsCountText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
 
-        // 模型徽章
-        _modelBadge.CornerRadius = new CornerRadius(999);
-        _modelBadge.Padding = new Thickness(8, 2);
-        _modelBadge.VerticalAlignment = VerticalAlignment.Center;
-        _modelBadge.Child = _modelText;
-        _modelBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
-
-        var liveDot = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(Color.Parse("#4ADE80")), VerticalAlignment = VerticalAlignment.Center };
-        var liveText = new TextBlock { Text = "实时", FontSize = 10, VerticalAlignment = VerticalAlignment.Center };
-        liveText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        var liveBadge = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, VerticalAlignment = VerticalAlignment.Center, Children = { liveDot, liveText } };
-
-        var headRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 10 };
-        headRow.Children.Add(_title);
-        Grid.SetColumn(_modelBadge, 2);
-        headRow.Children.Add(_modelBadge);
-        Grid.SetColumn(liveBadge, 3);
-        headRow.Children.Add(liveBadge);
+        var headRow = new Border
+        {
+            Margin = new Thickness(0, 2, 0, 2),
+            Child = _title,
+        };
 
         // 指标双列卡片
         var metricsGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*"), ColumnSpacing = 12 };
@@ -99,25 +84,53 @@ internal sealed class PerfOverviewView : UserControl
 
         var metricsCard = new Border
         {
-            Padding = new Thickness(16, 14, 16, 14),
-            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
             Child = metricsGrid,
         };
         BindCard(metricsCard);
 
-        // 树图卡片
-        var treemapInner = new StackPanel { Spacing = 10, Children = { _treemap, _legendPanel } };
+        // 树图卡片（带 Magpie 风格的 Map 树图 / Grid 400格网格双视图切换）
+        var lookToggle = new Button
+        {
+            Content = "◫ 树图 (Map)",
+            FontSize = 11,
+            Padding = new Thickness(8, 3),
+            CornerRadius = new CornerRadius(4),
+        };
+        lookToggle.Bind(Button.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        lookToggle.Bind(Button.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
+        lookToggle.Click += (_, _) =>
+        {
+            if (_treemap.LookMode == "map")
+            {
+                _treemap.LookMode = "grid";
+                lookToggle.Content = "▦ 网格 (Waffle)";
+            }
+            else
+            {
+                _treemap.LookMode = "map";
+                lookToggle.Content = "◫ 树图 (Map)";
+            }
+        };
+
+        var treemapHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        treemapHeader.Children.Add(Text("构成分布", 14, "AppTextPrimary", FontWeight.SemiBold));
+        Grid.SetColumn(lookToggle, 1);
+        treemapHeader.Children.Add(lookToggle);
+
+        var treemapInner = new StackPanel { Spacing = 10, Children = { treemapHeader, _treemap, _legendPanel } };
         var treemapCard = new Border
         {
-            Padding = new Thickness(16, 14, 16, 14),
-            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
             Child = treemapInner,
         };
         BindCard(treemapCard);
 
         // 内容细分卡片
         var contentHead = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(0, 0, 0, 8) };
-        var contentTitle = Text("内容", 13, "AppTextPrimary", FontWeight.SemiBold);
+        var contentTitle = Text("内容", 14, "AppTextPrimary", FontWeight.SemiBold);
         contentHead.Children.Add(contentTitle);
 
         var pillsScroll = new ScrollViewer
@@ -128,7 +141,7 @@ internal sealed class PerfOverviewView : UserControl
             Margin = new Thickness(0, 0, 0, 10),
         };
 
-        _toggleShowAll.FontSize = 10.5;
+        _toggleShowAll.FontSize = 11;
         _toggleShowAll.Padding = new Thickness(8, 4);
         _toggleShowAll.Background = Brushes.Transparent;
         _toggleShowAll.BorderThickness = new Thickness(0);
@@ -144,8 +157,8 @@ internal sealed class PerfOverviewView : UserControl
         var contentBody = new StackPanel { Spacing = 6, Children = { contentHead, pillsScroll, _contentItemsHost, _toggleShowAll } };
         var contentCard = new Border
         {
-            Padding = new Thickness(16, 14, 16, 14),
-            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 12, 16, 12),
+            CornerRadius = new CornerRadius(6),
             Child = contentBody,
         };
         BindCard(contentCard);
@@ -157,7 +170,7 @@ internal sealed class PerfOverviewView : UserControl
         footerTopRow.Children.Add(_roundsCountText);
 
         var footerBottomRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 12, Margin = new Thickness(0, 6, 0, 0) };
-        var sessionLabel = Text("本会话", 11.5, "AppTextPrimary", FontWeight.SemiBold);
+        var sessionLabel = Text("本会话", 12, "AppTextPrimary", FontWeight.SemiBold);
         footerBottomRow.Children.Add(sessionLabel);
         Grid.SetColumn(_sparkline, 1);
         footerBottomRow.Children.Add(_sparkline);
@@ -166,8 +179,8 @@ internal sealed class PerfOverviewView : UserControl
 
         var footerCard = new Border
         {
-            Padding = new Thickness(16, 12, 16, 12),
-            CornerRadius = new CornerRadius(14),
+            Padding = new Thickness(16, 10, 16, 10),
+            CornerRadius = new CornerRadius(6),
             Child = new StackPanel { Spacing = 4, Children = { footerTopRow, footerBottomRow } },
         };
         BindCard(footerCard);
@@ -206,8 +219,6 @@ internal sealed class PerfOverviewView : UserControl
         _snapshot = snapshot;
         var breakdown = snapshot.ContextBreakdown;
 
-        _modelText.Text = string.IsNullOrWhiteSpace(breakdown.ModelName) ? "默认模型" : breakdown.ModelName;
-
         if (breakdown.TotalTokens > 0)
         {
             _usedTokensText.Text = $"{PerfPalette.FormatTokens(breakdown.TotalTokens)} token";
@@ -230,8 +241,8 @@ internal sealed class PerfOverviewView : UserControl
             _cacheHitSub.Text = "供应商回答后可见";
         }
 
-        // 渲染树图
-        _treemap.SetData(breakdown.Categories, breakdown.TotalTokens);
+        // 渲染树图（传窗口容量以准确绘制网格与剩余空间）
+        _treemap.SetData(breakdown.Categories, breakdown.TotalTokens, breakdown.CapacityTokens);
 
         // 渲染图例
         RenderLegend(breakdown);
@@ -255,14 +266,14 @@ internal sealed class PerfOverviewView : UserControl
             var item = new Border
             {
                 Padding = new Thickness(6, 3),
-                CornerRadius = new CornerRadius(6),
+                CornerRadius = new CornerRadius(4),
                 Margin = new Thickness(0, 0, 8, 4),
                 Cursor = new Cursor(StandardCursorType.Hand),
             };
             item.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
 
             var dot = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(cat.Color), VerticalAlignment = VerticalAlignment.Center };
-            var text = Text($"{cat.Name} {PerfPalette.FormatTokens(cat.TotalTokens)}", 10.5, "AppTextSecondary");
+            var text = Text($"{cat.Name} {PerfPalette.FormatTokens(cat.TotalTokens)}", 11, "AppTextSecondary");
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, Children = { dot, text } };
             item.Child = row;
 
@@ -297,9 +308,9 @@ internal sealed class PerfOverviewView : UserControl
             var btn = new Button
             {
                 Content = label,
-                FontSize = 10.5,
+                FontSize = 11,
                 Padding = new Thickness(10, 4),
-                CornerRadius = new CornerRadius(999),
+                CornerRadius = new CornerRadius(4),
                 Background = active ? new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)) : Brushes.Transparent,
                 BorderThickness = new Thickness(active ? 1 : 0),
             };
@@ -376,6 +387,8 @@ internal sealed class PerfOverviewView : UserControl
             VerticalAlignment = VerticalAlignment.Center,
         };
         row.Children.Add(dot);
+        row.PointerEntered += (_, _) => _treemap.SetFocus(item.CategoryKey, item);
+        row.PointerExited += (_, _) => _treemap.SetFocus(null, null);
 
         var nameText = new TextBlock
         {
@@ -407,20 +420,33 @@ internal sealed class PerfOverviewView : UserControl
             row.Children.Add(tagBadge);
         }
 
-        // 相对条
+        // 相对条（带平滑滑动展开动效）
+        var barFill = new Border
+        {
+            Height = 4,
+            CornerRadius = new CornerRadius(2),
+            Background = new SolidColorBrush(item.Color),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Width = 0,
+            Transitions = new Avalonia.Animation.Transitions
+            {
+                new Avalonia.Animation.DoubleTransition
+                {
+                    Property = WidthProperty,
+                    Duration = TimeSpan.FromMilliseconds(420),
+                    Easing = new Avalonia.Animation.Easings.ExponentialEaseOut(),
+                }
+            }
+        };
+        var targetWidth = Math.Max(2, 90d * item.Tokens / maxTokens);
+        Dispatcher.UIThread.Post(() => barFill.Width = targetWidth, DispatcherPriority.Loaded);
+
         var barTrack = new Border
         {
             Height = 4,
             CornerRadius = new CornerRadius(2),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = new Border
-            {
-                Width = Math.Max(2, 90d * item.Tokens / maxTokens),
-                Height = 4,
-                CornerRadius = new CornerRadius(2),
-                Background = new SolidColorBrush(item.Color),
-                HorizontalAlignment = HorizontalAlignment.Left,
-            },
+            Child = barFill,
         };
         barTrack.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppDividerSubtle"));
         Grid.SetColumn(barTrack, 3);
@@ -476,10 +502,13 @@ internal sealed class PerfOverviewView : UserControl
     }
 }
 
-/// <summary>底部本会话 Token 趋势折线图</summary>
+/// <summary>底部本会话 Token 趋势折线图（带平滑展开与终点绽放动效）</summary>
 internal sealed class PerfSessionSparkline : Control
 {
     private IReadOnlyList<double> _points = [];
+    private double _animProgress = 1.0;
+    private long _animStartTicks;
+    private DispatcherTimer? _animTimer;
 
     public static readonly StyledProperty<IBrush?> LineBrushProperty =
         AvaloniaProperty.Register<PerfSessionSparkline, IBrush?>(nameof(LineBrush));
@@ -496,7 +525,31 @@ internal sealed class PerfSessionSparkline : Control
     public void SetData(IReadOnlyList<double> points)
     {
         _points = points;
-        InvalidateVisual();
+        StartAnimation();
+    }
+
+    private void StartAnimation()
+    {
+        _animTimer?.Stop();
+        _animProgress = 0.0;
+        _animStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        _animTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
+        _animTimer.Tick += (_, _) =>
+        {
+            var elapsedMs = (System.Diagnostics.Stopwatch.GetTimestamp() - _animStartTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            var t = Math.Clamp(elapsedMs / 350.0, 0, 1);
+            _animProgress = 1.0 - Math.Pow(1.0 - t, 3);
+            InvalidateVisual();
+
+            if (t >= 1.0)
+            {
+                _animProgress = 1.0;
+                _animTimer.Stop();
+                _animTimer = null;
+            }
+        };
+        _animTimer.Start();
     }
 
     public override void Render(DrawingContext context)
@@ -533,11 +586,19 @@ internal sealed class PerfSessionSparkline : Control
                 else ctx.LineTo(new Point(x, y));
             }
         }
-        context.DrawGeometry(null, pen, geometry);
 
-        // 终点高亮实心圆点
-        var lastX = width - 4;
-        var lastY = height - 4 - ((_points[^1] - min) / range * (height - 8));
-        context.DrawEllipse(brush, null, new Point(lastX, lastY), 3.5, 3.5);
+        using (context.PushClip(new Rect(0, 0, Math.Max(1, width * _animProgress), height)))
+        {
+            context.DrawGeometry(null, pen, geometry);
+        }
+
+        // 终点高亮实心圆点，随动画平滑绽放
+        if (_animProgress >= 0.6)
+        {
+            var dotScale = Math.Clamp((_animProgress - 0.6) / 0.4, 0, 1);
+            var lastX = width - 4;
+            var lastY = height - 4 - ((_points[^1] - min) / range * (height - 8));
+            context.DrawEllipse(brush, null, new Point(lastX, lastY), 3.5 * dotScale, 3.5 * dotScale);
+        }
     }
 }
