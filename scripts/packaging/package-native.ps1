@@ -54,16 +54,16 @@ New-Item -ItemType Directory -Force $cliDir | Out-Null
 $cliStaging = Join-Path $packageRoot '.cli-staging'
 New-Item -ItemType Directory -Force $cliStaging | Out-Null
 Write-Host "Publishing Fufucode.Cli $RuntimeIdentifier (self-contained=$selfContained)..."
-dotnet publish (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained -o $cliStaging
+dotnet publish (Join-Path $root 'src/Fufucode.Cli/Fufucode.Cli.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained "-p:Version=$AppVersion" -o $cliStaging
 if ($LASTEXITCODE -ne 0) { throw "Fufucode.Cli publish failed." }
 
 Write-Host "Publishing Fufucode.App into shared app layout (self-contained=$selfContained)..."
-dotnet publish (Join-Path $root 'src/Fufucode.App/Fufucode.App.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained -o $appDir
+dotnet publish (Join-Path $root 'src/Fufucode.App/Fufucode.App.csproj') -c Release -r $RuntimeIdentifier --self-contained $selfContained "-p:Version=$AppVersion" -o $appDir
 if ($LASTEXITCODE -ne 0) { throw 'Fufucode.App publish failed.' }
 
 # 默认随包分发的对话增强插件：宿主首次启动从 app/plugins/<id> 播种到数据目录。
 $interactiveUiDir = Join-Path $appDir 'plugins/chat.interactive-ui'
-dotnet publish (Join-Path $root 'src/Fufucode.Plugins.InteractiveUI/Fufucode.Plugins.InteractiveUI.csproj') -c Release -o $interactiveUiDir
+dotnet publish (Join-Path $root 'src/Fufucode.Plugins.InteractiveUI/Fufucode.Plugins.InteractiveUI.csproj') -c Release "-p:Version=$AppVersion" -o $interactiveUiDir
 if ($LASTEXITCODE -ne 0) { throw 'Interactive UI plugin publish failed.' }
 Get-ChildItem -LiteralPath $interactiveUiDir -Filter 'Fufucode.*.dll' |
     Where-Object { $_.Name -ne 'Fufucode.Plugins.InteractiveUI.dll' } |
@@ -78,7 +78,7 @@ if ($LASTEXITCODE -ne 0) { throw "Fufucode.App publish failed." }
 $performanceDir = Join-Path $appDir 'plugins-dist/performance.monitor'
 New-Item -ItemType Directory -Force (Split-Path $performanceDir) | Out-Null
 dotnet publish (Join-Path $root 'src/Fufucode.Plugins.PerformanceMonitor/Fufucode.Plugins.PerformanceMonitor.csproj') `
-    -c Release -o $performanceDir
+    -c Release "-p:Version=$AppVersion" -o $performanceDir
 if ($LASTEXITCODE -ne 0) { throw 'Performance monitor plugin publish failed.' }
 Get-ChildItem -LiteralPath $performanceDir -Filter 'Fufucode.*.dll' |
     Where-Object { $_.Name -ne 'Fufucode.Plugins.PerformanceMonitor.dll' } |
@@ -113,19 +113,14 @@ try {
     if (Test-Path -LiteralPath $cliProbeData) { Remove-Item -LiteralPath $cliProbeData -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
-# 平台守卫：
-# - 自包含版依赖裁剪器移除其它平台后端；失败则拒绝打包。
-# - 框架依赖版不裁剪，按 RID 手工移除其它平台托管后端。
+# 平台守卫：不裁剪后，非 Windows 的 Avalonia 平台后端会原样留在载荷里，
+# 按 RID 手工移除，Windows 包不带 X11 / Linux / macOS 后端。
 $nonWindowsBackends = @('Avalonia.X11.dll', 'Avalonia.FreeDesktop.dll', 'Avalonia.FreeDesktop.AtSpi.dll',
     'Avalonia.Native.dll', 'Tmds.DBus.Protocol.dll')
 if ($RuntimeIdentifier -like 'win-*') {
     foreach ($unused in $nonWindowsBackends) {
         $target = Join-Path $appDir $unused
-        if ($FrameworkDependent) {
-            if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
-        } elseif (Test-Path -LiteralPath $target) {
-            throw "Trimming did not remove non-Windows backend '$unused'; refusing to package an untrimmed payload."
-        }
+        if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Force }
     }
 }
 
@@ -416,7 +411,7 @@ foreach ($p in $plugins) {
     $proj = Join-Path $root $p.Project
     $targetDir = Join-Path $distRoot $pluginId
     Write-Host "Publishing independent plugin '$pluginId' to plugins-dist (lean package)..."
-    dotnet publish $proj -c Release -o $targetDir
+    dotnet publish $proj -c Release "-p:Version=$AppVersion" -o $targetDir
     if ($LASTEXITCODE -ne 0) { throw "Plugin $pluginId publish failed." }
 
     # 1. 物理剥离宿主已有的程序集

@@ -5,16 +5,11 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-  <!-- 与 App 共用一个发布目录时，CLI 发布不得把未裁剪的框架程序集覆盖回去。 -->
-  <PropertyGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
-    <PublishTrimmed>true</PublishTrimmed>
-    <TrimMode>partial</TrimMode>
-    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
-  </PropertyGroup>
-  <!-- 与 App 共用裁剪运行时；两个入口都必须保留 Console 取消事件类型。 -->
-  <ItemGroup Condition="'$(Configuration)' == 'Release' and '$(SelfContained)' == 'true' and '$(RuntimeIdentifier)' != ''">
-    <TrimmerRootAssembly Include="System.Console" />
-  </ItemGroup>
+  <!--
+    与 App 同步：自包含 Release 不裁剪（2026-10-25 决定，理由见 Fufucode.App.csproj 注释）。
+    不裁剪后 App 与 CLI 各自发布的框架程序集是同一条完整运行时，共用发布目录不再需要
+    "固定 root 防覆盖"的特殊约定。
+  -->
   <ItemGroup>
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
   </ItemGroup>

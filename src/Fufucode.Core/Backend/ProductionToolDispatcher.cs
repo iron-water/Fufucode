@@ -51,8 +51,11 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
     // 会话级工作区文件索引（对 fff 的可移植借鉴）：避免每次 grep 都重新递归目录。
     // 文件写/编辑/命令执行后失效；另有 30 秒 TTL 兜底外部改动。
+    // TTL 内再用根目录 mtime 复核：外部进程在根目录新建/删除文件或子目录会改变它，
+    // 只花一次 stat 就能让这些改动立刻可见（深层改动仍由 TTL 兜底）。
     private List<string>? _workspaceFiles;
     private DateTime _workspaceFilesAt;
+    private DateTime _workspaceRootStamp;
     private readonly object _workspaceFilesGate = new();
 
     /// <summary>读取根 .gitignore 与 .git/info/exclude（按修改时间缓存）；无文件时为空匹配器。</summary>
@@ -93,14 +96,16 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
     /// <summary>
     /// 返回工作区内参与检索的相对路径（正斜杠）。索引在写/编辑/命令后失效，
-    /// 并带 30 秒 TTL，兼顾同会话重复 grep 与外部改动。
+    /// 并带 30 秒 TTL 兼顾同会话重复 grep；TTL 内额外比对根目录 mtime，
+    /// 外部进程在根目录新建/删除条目时立刻重建。
     /// </summary>
     private IReadOnlyList<string> WorkspaceFiles(CancellationToken ct)
     {
         lock (_workspaceFilesGate)
         {
             if (_workspaceFiles is not null &&
-                (DateTime.UtcNow - _workspaceFilesAt).TotalSeconds < 30)
+                (DateTime.UtcNow - _workspaceFilesAt).TotalSeconds < 30 &&
+                WorkspaceRootStamp() == _workspaceRootStamp)
                 return _workspaceFiles;
 
             var ignore = IgnoreMatcher();
@@ -137,8 +142,17 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             files.Sort(StringComparer.Ordinal);
             _workspaceFiles = files;
             _workspaceFilesAt = DateTime.UtcNow;
+            // 索引建立时记录根目录时间戳：扫描期间发生的新建会被下一次 stat 发现并触发重建。
+            _workspaceRootStamp = WorkspaceRootStamp();
             return _workspaceFiles;
         }
+    }
+
+    /// <summary>根目录 mtime；读取失败视为"已变化"（返回 MinValue 只在索引时间戳也为 MinValue 时相等）。</summary>
+    private DateTime WorkspaceRootStamp()
+    {
+        try { return Directory.GetLastWriteTimeUtc(_workspaceRoot); }
+        catch { return DateTime.MinValue; }
     }
 
     /// <summary>轻量 .gitignore 匹配：支持注释、取反、目录规则、前导 /、*、**、?。</summary>
@@ -446,7 +460,13 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     break;
                 }
                 emitted++;
-                sb.Append(lineNo).Append('\t').AppendLine(line);
+                // 分页同样必须截断超长单行：整读分支会指引模型"改用 offset/limit 分页"，
+                // 若分页原样吐出 60K 字符的单行，等于把整读要防的上下文爆炸换了条路放行。
+                // 截断口径与行选区分支一致（MaxPagedLineChars + 明确标注），行号游标照常前进。
+                var text = line.Length > MaxPagedLineChars
+                    ? line[..MaxPagedLineChars] + $" …[本行共 {line.Length} 字符，已截断]"
+                    : line;
+                sb.Append(lineNo).Append('\t').AppendLine(text);
             }
         }
 
@@ -1059,7 +1079,15 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         {
             await Task.Run(() =>
             {
-                SearchIndexedFiles(targetDir, lineMatcher, globRegex, collector, contextLines, ct);
+                var indexed = SearchIndexedFiles(targetDir, lineMatcher, globRegex, collector, contextLines, ct);
+                if (!indexed)
+                {
+                    // 索引在 30 秒 TTL 内可能不含外部创建/经 run_command 生成的大文件；
+                    // 该子树在索引里一条都没有时回退到磁盘真实枚举，
+                    // 否则"跳过大文件"的提示会被漏掉，未找到就成了假阴性。
+                    SearchDirectoryRecursive(targetDir, regex, globRegex, collector, contextLines,
+                        IgnoreMatcher(), ct);
+                }
             }, ct).ConfigureAwait(false);
         }
         catch (RegexMatchTimeoutException)
@@ -1183,19 +1211,27 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         return line => line.Contains(literal, comparison);
     }
 
-    private void SearchIndexedFiles(string targetDir, Func<string, bool> matches, Regex? globRegex,
+    /// <summary>
+    /// 按 30 秒 TTL 的工作区索引检索。返回 false 表示目标子树在索引里**完全没有条目**
+    /// （目录是索引建立之后才出现/写入的，比如 run_command 或外部进程刚生成的文件）：
+    /// 此时索引给不出可信的"跳过了哪些大文件"，调用方必须回退磁盘真实枚举，
+    /// 否则"未找到匹配项"是假阴性。前缀判定在 glob 过滤之前，避免 glob 无命中被误判为目录缺失。
+    /// </summary>
+    private bool SearchIndexedFiles(string targetDir, Func<string, bool> matches, Regex? globRegex,
         GrepCollector results, int contextLines, CancellationToken ct)
     {
         var prefix = Relative(targetDir).TrimEnd('/');
         if (prefix == ".") prefix = string.Empty;
         var prefixWithSeparator = prefix.Length == 0 ? string.Empty : prefix + "/";
+        var inScope = 0;
 
         foreach (var relative in WorkspaceFiles(ct))
         {
             ct.ThrowIfCancellationRequested();
-            if (results.IsFull) return;
+            if (results.IsFull) return inScope > 0;
             if (prefixWithSeparator.Length > 0 &&
                 !relative.StartsWith(prefixWithSeparator, StringComparison.Ordinal)) continue;
+            inScope++;
 
             var fileName = Path.GetFileName(relative);
             if (globRegex is not null &&
@@ -1224,7 +1260,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                             if (c == i) results.AddMatch(relative, c + 1, lines[c].TrimEnd());
                             else results.AddContext(relative, c + 1, lines[c].TrimEnd());
                         }
-                        if (results.IsFull) return;
+                        if (results.IsFull) return true;
                         i = end;
                     }
                 }
@@ -1236,7 +1272,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                         lineNum++;
                         if (!matches(line)) continue;
                         results.AddMatch(relative, lineNum, line.TrimEnd());
-                        if (results.IsFull) return;
+                        if (results.IsFull) return true;
                     }
                 }
             }
@@ -1246,6 +1282,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 // 单个文件读取失败（权限/占用/编码）时跳过，不中止整个搜索。
             }
         }
+
+        return inScope > 0;
     }
 
     private void SearchDirectoryRecursive(string currentDir, Regex regex, Regex? globRegex,
