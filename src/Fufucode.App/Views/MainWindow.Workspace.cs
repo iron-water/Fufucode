@@ -566,6 +566,13 @@ public partial class MainWindow
     internal void ToggleDockForTesting(DockZone zone) => ToggleDock(zone);
     private void ToggleDock(DockZone zone)
     {
+        // 设置页占满工作区，三区被强制隐藏；在这里只翻 Hidden 不会产生任何可见变化，
+        // 用户看到的就是“点了没反应”。先把工作区切回来，再执行真正的开关。
+        if (_vm?.IsSettingsPage == true)
+        {
+            _ = ToggleDockFromSettingsAsync(zone);
+            return;
+        }
         _animateNextLayout = true;
         if (zone == DockZone.Left && Bounds.Width < 1100)
         {
@@ -597,6 +604,18 @@ public partial class MainWindow
         if (isOpen) _dockLayout.Hidden[zone] = true;
         else { EnsureDockHasPages(zone); _dockLayout.Hidden[zone] = false; }
         RenderDockPages(); SaveWorkspaceDimensions();
+    }
+
+    /// <summary>在设置页点停靠区开关：先回到对话工作区，并直接打开该区域的页签。
+    /// 设置页会把三区强制隐藏，此时按可见性翻转只会关掉逻辑上的开态，用户看到的仍是“没反应”。</summary>
+    private async Task ToggleDockFromSettingsAsync(DockZone zone)
+    {
+        if (_vm?.NavigateCommand is { } navigate) await navigate.ExecuteAsync(AppPage.Chat);
+        _animateNextLayout = true;
+        EnsureDockHasPages(zone);
+        _dockLayout.Hidden[zone] = false;
+        RenderDockPages();
+        SaveWorkspaceDimensions();
     }
 
     /// <summary>区域的页签被逐一关空后，开关只能翻转 Hidden、面板仍不可见（空区不收起规则），
