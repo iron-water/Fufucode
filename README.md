@@ -100,3 +100,7 @@ Closing the window exits Fufucode by default. Enable **Settings → Other → Ba
 
 Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
 plication code has no licence file yet.
+
+## Links
+
+https://linux.do/
