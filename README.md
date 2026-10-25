@@ -118,7 +118,7 @@ pwsh scripts/packaging/package-toolchain.ps1 -Id pi
 
 | Installer | Download | Installed | Requires |
 |---|---:|---:|---|
-| `Fufucode-Native-Setup.exe` | 19.45 MB | 62.18 MB | nothing |
+| `Fufucode-Native-Setup.exe` | 50.5 MB | 154 MB | nothing |
 | `Fufucode-Native-Slim-Setup.exe` | 12.2 MB | 37.60 MB | .NET 10 Runtime |
 | `Fufucode-Test-Setup.exe` | ~50 MB | ~154 MB | nothing |
 
