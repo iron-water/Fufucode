@@ -1,5 +1,0 @@
-<Solution>
-  <Project Path="Live2D.Core/Live2D.Core.csproj" />
-  <Project Path="ProbeNative/ProbeNative.csproj" />
-  <Project Path="ProbeWebView2/ProbeWebView2.csproj" />
-</Solution>
