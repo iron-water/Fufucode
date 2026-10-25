@@ -6,11 +6,10 @@
   </PropertyGroup>
   <!--
     后端插件：Core 不引用本工程。宿主已提供的程序集用 PrivateAssets 避免随插件重复分发；
-    Fufucode.Claude（stream-json 适配器）是本插件的专属载荷，必须随插件发布。
+    stream-json 适配器内联在 Adapter/ 下，与其它四个后端插件结构一致。
   -->
   <ItemGroup>
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" PrivateAssets="all" />
     <ProjectReference Include="../Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" PrivateAssets="all" />
-    <ProjectReference Include="../Fufucode.Claude/Fufucode.Claude.csproj" />
   </ItemGroup>
 </Project>

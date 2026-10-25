@@ -10,14 +10,14 @@ namespace Fufucode.Core;
 
 /// <summary>
 /// 后端插件加载器：默认包不引用任何外部后端程序集。
-/// 只有当 Pi 后端插件（Fufucode.Pi.dll）实际存在于插件目录或应用目录时，
+/// 只有当 Pi 后端插件（Fufucode.Plugins.Pi.dll）实际存在于插件目录或应用目录时，
 /// 才动态加载它并把 <see cref="BackendProcessSpec"/> 翻译成 RPC 客户端工厂。
 /// 缺失时返回 null，调用方据此判定该后端不可用——不伪造可用性。
 /// </summary>
 public static class BackendPluginLoader
 {
     /// <summary>Pi 后端插件程序集文件名。</summary>
-    public const string PiAssemblyName = "Fufucode.Pi.dll";
+    public const string PiAssemblyName = "Fufucode.Plugins.Pi.dll";
 
     private static readonly object Gate = new();
     private static readonly Dictionary<BackendId, IBackendSessionFactory> SessionFactories = new();
@@ -191,7 +191,7 @@ public static class BackendPluginLoader
                 // 已在默认加载上下文时直接返回现有程序集（不能重复 LoadFromAssemblyPath）。
                 foreach (var loaded in AssemblyLoadContext.Default.Assemblies)
                 {
-                    if (string.Equals(loaded.GetName().Name, "Fufucode.Pi", StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(loaded.GetName().Name, "Fufucode.Plugins.Pi", StringComparison.OrdinalIgnoreCase))
                         return _piAssembly = loaded;
                 }
 

@@ -9,7 +9,7 @@
     <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
     <ProjectReference Include="../../src/Fufucode.Cli/Fufucode.Cli.csproj" />
     <ProjectReference Include="../../src/Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" />
-    <ProjectReference Include="../../src/Fufucode.Pi/Fufucode.Pi.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Pi/Fufucode.Plugins.Pi.csproj" />
     <!-- 后端会话适配已迁出 Core；测试直接加载插件工厂。 -->
     <ProjectReference Include="../../src/Fufucode.Plugins.Claude/Fufucode.Plugins.Claude.csproj" />
     <ProjectReference Include="../../src/Fufucode.Plugins.Codex/Fufucode.Plugins.Codex.csproj" />

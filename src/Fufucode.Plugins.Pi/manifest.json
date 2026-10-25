@@ -2,7 +2,7 @@
   "id": "backend.pi",
   "name": "Pi 后端",
   "version": "1.0.0",
-  "entryAssembly": "Fufucode.Pi.dll",
+  "entryAssembly": "Fufucode.Plugins.Pi.dll",
   "packageType": "Fufucode.Plugins.Pi.PiBackendPluginPackage",
   "category": "Backend",
   "description": "Pi RPC 后端插件；FUMO 原生内核为默认后端，本插件按需安装。",

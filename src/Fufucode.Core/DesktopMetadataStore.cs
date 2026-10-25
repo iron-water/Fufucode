@@ -6,7 +6,7 @@ namespace Fufucode.Core;
 public sealed record ProjectRecord(string Id, string Path);
 public sealed record SessionRecord(string Id, string ProjectId, string? FilePath, string? Name,
     bool WasActive, DateTimeOffset LastOpened, string? ParentSessionId = null, string? ForkEntryId = null,
-    DateTimeOffset? ForkedAt = null, BackendId Backend = BackendId.Pi, string? BackendSessionId = null)
+    DateTimeOffset? ForkedAt = null, BackendId Backend = BackendId.NativeCSharp, string? BackendSessionId = null)
 {
     /// <summary>True when this row was created by forking another managed session.</summary>
     public bool IsFork => ParentSessionId is not null;
@@ -179,7 +179,7 @@ public sealed class DesktopMetadataStore
         return reader.Read() ? new ProjectRecord(reader.GetString(0), reader.GetString(1)) : null;
     }
 
-    public SessionRecord CreateSession(ProjectRecord project, string? name = null, BackendId backend = BackendId.Pi)
+    public SessionRecord CreateSession(ProjectRecord project, string? name = null, BackendId backend = BackendId.NativeCSharp)
     {
         var id = Guid.NewGuid().ToString("N");
         var opened = DateTimeOffset.UtcNow;

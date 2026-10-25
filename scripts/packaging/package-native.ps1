@@ -200,7 +200,7 @@ foreach ($name in $forbidden) {
 # 验证：默认核心 App 包中严禁静态包含未安装插件的实现程序集（真实物理剥离）
 $forbiddenPluginDlls = @(
     # 后端插件：宿主不再静态依赖，插件载荷由 plugins-dist 下发。
-    'Fufucode.Pi.dll',
+    'Fufucode.Plugins.Pi.dll',
     'Fufucode.Plugins.Pi.dll',
     # 可选功能插件。
     'Fufucode.Plugins.BrowserUse.dll',

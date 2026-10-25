@@ -83,9 +83,10 @@ public static class ProjectExtensionService
             manager.UserExtensionPaths = active;
             var trust = manager.GetProjectTrustStatus(projectPath);
             if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
+            // 会话后端跟随全局默认（缺省 FUMO），不再写死某个二等插件。
             // Core will reject explicitly selected local extensions when the project is denied.
             await using (var session = sessionId is null
-                ? await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: BackendId.Pi)
+                ? await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: manager.PreferredBackend)
                 : await manager.ResumeAsync(sessionId, cancellationToken))
             {
                 if (!session.Coordinator.CanSendPrompt)
