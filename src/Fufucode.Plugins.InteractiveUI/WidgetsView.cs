@@ -21,7 +21,7 @@ namespace Fufucode.Plugins.InteractiveUI;
 /// 解析失败的行走降级显示，不影响同一块里的其它组件。
 /// 组件状态只存在于本地；点动作按钮时把当前选择汇总成一段文本交给宿主提交或填入输入框。
 /// </summary>
-public sealed class WidgetsView : Border
+public sealed partial class WidgetsView : Border
 {
     private readonly PluginContentContext _context;
     private readonly StackPanel _rows = new() { Spacing = 10 };
@@ -94,6 +94,10 @@ public sealed class WidgetsView : Border
             case "rating": AddRating(element, label); break;
             case "progress": AddProgress(element, label); break;
             case "actions": AddActions(element); break;
+#if ENHANCED_PREVIEW
+            case "chart": AddChart(element, label); break;
+            case "table": AddTable(element, label); break;
+#endif
             default: AddError($"{type}", "不支持的组件类型"); break;
         }
     }

@@ -21,3 +21,10 @@ out/
 .workbuddy/
 output/
 .playwright-mcp/
+
+# 本地构建开关（不提交）
+local.dev.props
+
+# 本地可选实现（不上传远端）
+# 约定：任何以 .local.cs 结尾的文件都由本地维护，仓库保持纯净
+**/*.local.cs

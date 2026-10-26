@@ -35,6 +35,13 @@ public partial class App : Application
         Fufucode.Core.Diagnostics.StartupProbe.Mark("app.xaml", "Avalonia XAML load begins");
         AvaloniaXamlLoader.Load(this);
         Fufucode.Core.Diagnostics.StartupProbe.Mark("app.xaml", "Avalonia XAML loaded");
+
+#if DEV_TOOLING && DEBUG
+        // DevTools 连接桥：运行后按 F12 连接到 AvaloniaUI Developer Tools。
+        // 仅在 local.dev.props 开启 EnableDevTooling 且 Debug 时编译；
+        // 纯净构建与 Release 均不包含该调用。
+        this.AttachDeveloperTools();
+#endif
     }
 
     public override void OnFrameworkInitializationCompleted()

@@ -88,6 +88,46 @@
     <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" />
   </ItemGroup>
 
+  <!--
+    扩展组件集 —— 受 EnableEnhancedPreview 控制。
+    未启用时本段不生效，构建保持最小依赖。
+  -->
+  <PropertyGroup Condition="'$(EnableEnhancedPreview)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENHANCED_PREVIEW</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Label="EnhancedComponents"
+            Condition="'$(EnableEnhancedPreview)' == 'true'">
+    <PackageReference Include="Avalonia.Controls.Charts" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.TreeDataGrid" Version="12.3.2" />
+    <PackageReference Include="Avalonia.Controls.Documents" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.Documents.Serialization.Docx" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.Documents.Serialization.Html" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.Documents.Serialization.Pdf" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.Documents.Serialization.Rtf" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.Documents.Serialization.Xaml" Version="12.3.1" />
+    <!-- 已移除：Markdown/ColorCode/TextMate（LiveMarkdown.Avalonia 2.4.3 含 Math/Mermaid/Svg，功能更强） -->
+    <!-- 已移除：WebView（已用 Microsoft.Web.WebView2；跨平台立项时必需，当前 Windows 单平台） -->
+    <!-- 已移除：VirtualKeyboard（桌面无触屏） -->
+    <PackageReference Include="Avalonia.Controls.RichTextEditor" Version="12.3.1" />
+    <PackageReference Include="Avalonia.Controls.PdfViewer" Version="12.0.1" />
+    <PackageReference Include="Avalonia.Controls.MediaPlayer" Version="12.0.6" />
+  </ItemGroup>
+
+  <!--
+    开发期辅助（热重载 + DevTools 桥）—— 受 EnableDevTooling 控制，且仅 Debug。
+    Release 与纯净构建均不包含，产物 runtimeconfig 里也不会有 Diagnostic 配置项。
+  -->
+  <PropertyGroup Condition="'$(EnableDevTooling)' == 'true' and '$(Configuration)' == 'Debug'">
+    <DefineConstants>$(DefineConstants);DEV_TOOLING</DefineConstants>
+    <AvaloniaHotReloadEnableFileWatcher>true</AvaloniaHotReloadEnableFileWatcher>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableDevTooling)' == 'true' and '$(Configuration)' == 'Debug'">
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport.HotReload" Version="1.0.1" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
+  </ItemGroup>
+
   <ItemGroup>
     <!-- 契约由独立类库 Abstractions/Fufucode.App.Abstractions.csproj 编译，本工程只引用不重复编译 -->
     <Compile Remove="Abstractions\**\*.cs" />
@@ -112,3 +152,5 @@
   </Target>
 
 </Project>
+
+

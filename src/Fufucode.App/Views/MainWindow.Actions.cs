@@ -80,6 +80,9 @@ public partial class MainWindow
         Action("session.export", "导出为 Markdown", "会话", ExportSessionAsync, Ready);
         Action("session.export.metadata", "导出元数据", "会话", ExportSessionMetadataAsync, Ready);
         Action("session.export.pdf", "导出为 PDF", "会话", ExportSessionPdfAsync, Ready);
+#if ENHANCED_PREVIEW
+        Action("session.export.docx", "导出为 Word", "会话", ExportSessionDocxAsync, Ready);
+#endif
         Action("session.fork.worktree", "在新工作树中创建分支", "会话", ForkIntoWorktreeAsync,
             () => IdleReal() ?? (_host?.Current.Session.FilePath is null ? "会话尚未落盘" : null));
         Action("copy.id", "复制会话 ID", "会话", () => CopyAsync(CurrentSessionId ?? "mock-window"), Ready);
@@ -271,7 +274,37 @@ public partial class MainWindow
         }
         return text.ToString();
     }
-    /// <summary>导出为 PDF：A4 排版，保留标题、元信息、逐条消息与代码块；中文字体走系统雅黑。</summary>
+    /// <summary>收集导出所需的标题、元信息与消息；PDF / DOCX 共用。</summary>
+    private (string Title, List<(string Label, string Value)> Metadata, List<SessionPdfMessage> Messages) CollectSessionExport()
+    {
+        var messages = new List<SessionPdfMessage>();
+        if (_vm is not null)
+        {
+            foreach (var entry in _vm.Timeline.Entries)
+            {
+                var content = Views.MessageActionsView.MessageText(entry);
+                if (content.Length == 0) continue;
+                var isUser = entry is UserMessageViewModel;
+                messages.Add(new SessionPdfMessage(
+                    isUser ? _customization.Current.UserName : _customization.Current.AssistantName,
+                    content,
+                    isUser));
+            }
+        }
+
+        var title = _vm?.Sidebar.SelectedSession?.Title;
+        var metadata = new List<(string Label, string Value)>
+        {
+            ("会话", string.IsNullOrWhiteSpace(title) ? "未命名会话" : title!),
+            ("会话 ID", CurrentSessionId ?? "mock-window"),
+            ("项目", _host?.ProjectPath ?? Environment.CurrentDirectory),
+            ("模型", _vm?.StatusBar.ModelText ?? string.Empty),
+            ("导出时间", DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss")),
+        };
+        return (string.IsNullOrWhiteSpace(title) ? "Fufucode 会话" : title!, metadata, messages);
+    }
+
+    /// <summary>导出为 PDF：扩展轨走流动文档引擎，纯净轨沿用 SkiaSharp 排版。</summary>
     private async Task ExportSessionPdfAsync()
     {
         if (_vm is null) return;
@@ -279,32 +312,31 @@ public partial class MainWindow
         { Title = "导出为 PDF", SuggestedFileName = "fufucode-session.pdf", DefaultExtension = "pdf" });
         if (file is null) return;
 
-        var messages = new List<SessionPdfMessage>();
-        foreach (var entry in _vm.Timeline.Entries)
-        {
-            var content = Views.MessageActionsView.MessageText(entry);
-            if (content.Length == 0) continue;
-            var isUser = entry is UserMessageViewModel;
-            messages.Add(new SessionPdfMessage(
-                isUser ? _customization.Current.UserName : _customization.Current.AssistantName,
-                content,
-                isUser));
-        }
-
-        var title = _vm.Sidebar.SelectedSession?.Title;
-        var metadata = new List<(string Label, string Value)>
-        {
-            ("会话", string.IsNullOrWhiteSpace(title) ? "未命名会话" : title!),
-            ("会话 ID", CurrentSessionId ?? "mock-window"),
-            ("项目", _host?.ProjectPath ?? Environment.CurrentDirectory),
-            ("模型", _vm.StatusBar.ModelText),
-            ("导出时间", DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss")),
-        };
-
+        var (title, metadata, messages) = CollectSessionExport();
         using var stream = await file.OpenWriteAsync();
         stream.SetLength(0);
-        SessionPdfExporter.Write(stream, string.IsNullOrWhiteSpace(title) ? "Fufucode 会话" : title!, metadata, messages);
+#if ENHANCED_PREVIEW
+        EnhancedSessionExport.WritePdf(stream, title, metadata, messages);
+#else
+        SessionPdfExporter.Write(stream, title, metadata, messages);
+#endif
     }
+
+#if ENHANCED_PREVIEW
+    /// <summary>导出为 Word：仅扩展轨提供；纯净轨没有该菜单项。</summary>
+    private async Task ExportSessionDocxAsync()
+    {
+        if (_vm is null) return;
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        { Title = "导出为 Word", SuggestedFileName = "fufucode-session.docx", DefaultExtension = "docx" });
+        if (file is null) return;
+
+        var (title, metadata, messages) = CollectSessionExport();
+        using var stream = await file.OpenWriteAsync();
+        stream.SetLength(0);
+        EnhancedSessionExport.WriteDocx(stream, title, metadata, messages);
+    }
+#endif
 
     private async Task ExportSessionAsync()
     {

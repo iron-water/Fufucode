@@ -30,8 +30,23 @@ public sealed class FilePreviewRegistry : IDisposable
     public static FilePreviewRegistry CreateDefault()
     {
         var plugins = new FilePreviewPluginRegistry();
+
+#if ENHANCED_PREVIEW
+        // 扩展实现：PDF 渲染 + DOCX/RTF 富文档 + 音视频播放
+        plugins.Register(new PdfViewerPreviewPlugin());
+        plugins.Register(new DocxPreviewPlugin());
+        plugins.Register(new MediaPlayerPreviewPlugin());
+        string[] coveredIds = ["document.pdf", "document.office", "media.player"];
+#else
+        // 纯净轨：PDF 文本提取；Office 仍为 Unsupported 降级
         plugins.Register(new PdfPreviewPlugin());
-        foreach (var plugin in BuiltInComplexPreviewPlugins.CreateUnavailable().Where(plugin => plugin.Descriptor.Id != "document.pdf")) plugins.Register(plugin);
+        string[] coveredIds = ["document.pdf"];
+#endif
+
+        foreach (var plugin in BuiltInComplexPreviewPlugins.CreateUnavailable()
+                     .Where(plugin => !coveredIds.Contains(plugin.Descriptor.Id)))
+            plugins.Register(plugin);
+
         return new([
             new MermaidFilePreviewProvider(),
             new MarkdownFilePreviewProvider(),

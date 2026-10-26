@@ -46,6 +46,83 @@ Local development build and deploy:
 pwsh fucode/publish-local.ps1
 ```
 
+### Optional local extensions
+
+A clean checkout builds with no extra packages and no local configuration. A few
+development-only enhancements (diagnostic tooling, richer file previews) are maintained
+outside version control and compiled out by default.
+
+They are gated behind two compile symbols:
+
+| Symbol | Enables | Scope |
+| --- | --- | --- |
+| `ENHANCED_PREVIEW` | Extended component set (file preview, later chat widgets) | Any configuration |
+| `DEV_TOOLING` | Developer Tools bridge + XAML hot reload | Debug only |
+
+Both are always off unless a local configuration file exists, so you will see them in the
+source but they never affect a clean clone:
+
+```csharp
+#if ENHANCED_PREVIEW
+    plugins.Register(new PdfViewerPreviewPlugin());
+#else
+    plugins.Register(new PdfPreviewPlugin());   // fallback, always present
+#endif
+```
+
+To enable them on your own machine, copy the template and set the corresponding flag in a
+user-level `Directory.Build.props`:
+
+```bash
+cp local.dev.props.example local.dev.props
+```
+
+Local-only implementation files use the `.local.cs` suffix and are gitignored. To switch
+between the two tracks explicitly:
+
+```bash
+pwsh scripts/switch-track.ps1 -Status
+pwsh scripts/switch-track.ps1 -Track min     # simulate a clean clone
+pwsh scripts/switch-track.ps1 -Track auto    # back to automatic
+```
+
+Re-run `dotnet restore` after switching. Full details: [docs/dual-track-workflow.md](docs/dual-track-workflow.md).
+
+### Debugging tools
+
+Development builds wire up two tools. Both are Debug-only — neither ships to users.
+
+| Tool | How to start | Reach for it when |
+| --- | --- | --- |
+| XAML hot reload | `dotnet watch run` | Iterating on `.axaml` — layout, styles, templates, resources. Edits apply on save; live state (typed text, selection, scroll position, view models, event wiring) survives. |
+| Avalonia Developer Tools | press **F12** inside the running app | The UI renders or behaves unexpectedly and the reason is not obvious from the markup. Gives the live visual tree, editable properties, the origin of each effective style, and actual layout bounds. |
+
+#### How to use them while working
+
+These are the fast feedback loop, not an optional extra. Building without ever launching
+the app is not sufficient verification for UI work.
+
+- **Changing XAML** — run `dotnet watch run`, edit, save, observe. Do not rebuild the whole
+  solution to verify a spacing or colour tweak.
+- **A control is missing, mispositioned, or clipped** — press F12 and read the live tree for
+  real bounds and visibility, instead of re-deriving it from markup.
+- **A style or resource does not take effect** — the properties panel names which style or
+  resource currently supplies the value.
+- **A binding shows `null` or a stale value** — inspect the value on the live instance first;
+  the view model is often correct and the binding path is wrong.
+- **Something looks right in code but wrong on screen** — verify against the live tree before
+  concluding the code is correct.
+
+If Developer Tools is not installed on the machine, hot reload still works and remains the
+default loop.
+
+### Contribution rule
+
+When adding code that depends on a locally maintained extension, keep it in a file ending
+with `.local.cs` and wrap it in `#if ENHANCED_PREVIEW`. The calling site must always
+provide a working `#else` fallback. Nothing else is required — `.local.cs` files never
+reach the remote.
+
 ## Parallel feature review
 
 Several models can work at once without sharing a worktree or overwriting `out/app`:

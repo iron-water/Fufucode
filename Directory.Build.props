@@ -8,4 +8,20 @@
   </PropertyGroup>
   <Import Project="$(MSBuildThisFileDirectory)build/Version.props"
           Condition="!$([System.String]::Copy('$(MSBuildProjectFullPath)').StartsWith('$(_FufucodeReferencePrefix)'))" />
+  <!-- 本机用户级配置（可选；文件不存在时自动跳过，不影响其他环境构建） -->
+  <Import Project="$(USERPROFILE)\Directory.Build.props"
+          Condition="Exists('$(USERPROFILE)\Directory.Build.props')" />
+  <!-- 本地开发开关（可选覆盖，不提交） -->
+  <Import Project="$(MSBuildThisFileDirectory)local.dev.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)local.dev.props')" />
+
+  <!--
+    功能开关。默认关闭；由本机用户级配置的 LocalPreviewFeatures 或
+    local.dev.props 显式开启。接入方只需检查这两个属性。
+  -->
+  <PropertyGroup>
+    <EnableEnhancedPreview Condition="'$(EnableEnhancedPreview)' == '' and '$(LocalPreviewFeatures)' == 'true'">true</EnableEnhancedPreview>
+    <EnableEnhancedPreview Condition="'$(EnableEnhancedPreview)' == ''">false</EnableEnhancedPreview>
+    <EnableDevTooling Condition="'$(EnableDevTooling)' == ''">$(EnableEnhancedPreview)</EnableDevTooling>
+  </PropertyGroup>
 </Project>

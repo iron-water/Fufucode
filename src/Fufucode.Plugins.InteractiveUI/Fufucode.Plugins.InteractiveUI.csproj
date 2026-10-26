@@ -14,6 +14,22 @@
     <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- 扩展组件（chart / table）只在完整特性轨道参与编译；纯净轨不引用、不产出。 -->
+  <PropertyGroup Condition="'$(EnableEnhancedPreview)' == 'true'">
+    <DefineConstants>$(DefineConstants);ENHANCED_PREVIEW</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(EnableEnhancedPreview)' == 'true'">
+    <PackageReference Include="Avalonia.Controls.Charts" Version="12.3.1">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="Avalonia.Controls.TreeDataGrid" Version="12.3.2">
+      <Private>false</Private>
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
   <ItemGroup>
     <!-- 宿主已加载的程序集不复制进插件包。 -->
     <PackageReference Include="Avalonia" Version="12.1.3">
