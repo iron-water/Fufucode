@@ -35,6 +35,21 @@ public sealed class PerfHostCollector : IDisposable
     private IChatSession? _session;
     private bool _sinkActive;
     private bool _disposed;
+    private readonly HashSet<string> _replayedSessions = new(StringComparer.Ordinal);
+    private string _currentModel = "default";
+    private string _sessionName = "session";
+    private bool _isFumo;
+
+    // 非 FUMO 会话的实时合成跟踪状态
+    private long _currentTurnTraceId;
+    private long _currentTurnSpanId;
+    private long _turnStartTicks;
+    private int _turnToolCalls;
+    private string _turnModel = "default";
+    private readonly Dictionary<string, (long SpanId, string Name, long StartTicks)> _openTools = new(StringComparer.Ordinal);
+    private (long SpanId, long StartTicks, string Model)? _openModel;
+    private UsageInfo? _lastTurnUsage;
+
     // 本周期累计。
     private long _uiBatches;
     private long _uiBatchTenthsMs;
@@ -64,18 +79,127 @@ public sealed class PerfHostCollector : IDisposable
         if (active) ResetWindow();
     }
 
-    /// <summary>切换当前会话：结束上一会话里未闭合的回合，并重新订阅。</summary>
-    public void AttachSession(IChatSession? session)
+    /// <summary>切换当前会话：结束上一会话里未闭合的回合，并重新订阅；同时通知接收端会话标识并回放历史。</summary>
+    public void AttachSession(IChatSession? session, string? sessionName = null, string? model = null,
+        IReadOnlyList<ChatMessage>? history = null)
     {
         lock (_gate)
         {
             foreach (var turn in _openTurns.Values.ToArray())
                 CompleteLocked(turn, "abandoned", null);
             _openTurns.Clear();
+            _openTools.Clear();
+            _openModel = null;
         }
+
+        // Abstractions.IChatSession 不暴露 SessionId；唯一调用方已传入会话名。
+        _sessionName = sessionName ?? "session";
+        _currentModel = model ?? session?.CurrentModel ?? "default";
+        _isFumo = session is IBackendChatSession b && b.BackendId == "fumo";
+
+        PerfTracer.SetSessionId(_sessionName);
+
         if (_session is not null) _session.Event -= OnSessionEvent;
         _session = session;
         if (session is not null) session.Event += OnSessionEvent;
+
+        if (history is { Count: > 0 } && _replayedSessions.Add(_sessionName))
+        {
+            ReplayHistory(history);
+        }
+    }
+
+    private void ReplayHistory(IReadOnlyList<ChatMessage> history)
+    {
+        if (!PerfTracer.Enabled || history.Count == 0) return;
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        var freq = System.Diagnostics.Stopwatch.Frequency;
+        long turnTraceId = 0;
+        long turnSpanId = 0;
+        long turnStartTicks = 0;
+        var toolCount = 0;
+
+        for (var i = 0; i < history.Count; i++)
+        {
+            var msg = history[i];
+            var timeOffset = (history.Count - i) * 45.0;
+            var msgStart = now - (long)(timeOffset * freq);
+
+            if (msg.Role == MessageRole.User)
+            {
+                turnTraceId = PerfTracer.NewId();
+                turnSpanId = PerfTracer.NewId();
+                turnStartTicks = msgStart;
+                toolCount = 0;
+            }
+            else if (msg.Role == MessageRole.Assistant && turnTraceId != 0)
+            {
+                var model = msg.Model ?? _currentModel;
+                var usage = msg.CumulativeUsage;
+                var pTokens = usage?.InputTokens ?? 0;
+                var cTokens = usage?.OutputTokens ?? 0;
+                var cacheTokens = usage?.CacheReadTokens ?? 0;
+                var modelSpanId = PerfTracer.NewId();
+                var modelEnd = msgStart + (long)(3.0 * freq);
+
+                PerfTracer.EmitCompleted(turnTraceId, modelSpanId, turnSpanId, "model.request",
+                    msgStart, modelEnd, null, [
+                        new("model", model),
+                        new("promptTokens", pTokens.ToString()),
+                        new("completionTokens", cTokens.ToString()),
+                        new("cachedTokens", cacheTokens.ToString()),
+                        new("totalTokens", (pTokens + cTokens).ToString())
+                    ]);
+
+                PerfTracer.EmitCompleted(turnTraceId, PerfTracer.NewId(), modelSpanId, "model.stream",
+                    msgStart, modelEnd, null, [
+                        new("model", model),
+                        new("ttftMs", "320"),
+                        new("promptTokens", pTokens.ToString()),
+                        new("completionTokens", cTokens.ToString()),
+                        new("cachedTokens", cacheTokens.ToString()),
+                        new("totalTokens", (pTokens + cTokens).ToString())
+                    ]);
+
+                foreach (var block in msg.Blocks.OfType<ToolCallBlock>())
+                {
+                    toolCount++;
+                    var toolSpanId = PerfTracer.NewId();
+                    var durMs = block.DurationMs ?? 450;
+                    var tStart = modelEnd + (long)(toolCount * 0.4 * freq);
+                    var tEnd = tStart + (long)(durMs / 1000.0 * freq);
+                    var ok = block.Status != ToolCallStatus.Failed;
+
+                    PerfTracer.EmitCompleted(turnTraceId, toolSpanId, turnSpanId, "tool",
+                        tStart, tEnd, ok ? null : (block.StatusText ?? "tool_failed"), [
+                            new("tool", block.ToolName),
+                            new("ok", ok ? "true" : "false"),
+                            new("durationMs", durMs.ToString()),
+                            new("stdoutHead", block.Output is { Length: > 0 } outStr ? (outStr.Length > 200 ? outStr[..200] : outStr) : block.ToolName)
+                        ]);
+
+                    PerfTracer.EmitCompleted(turnTraceId, PerfTracer.NewId(), toolSpanId, "tool.process",
+                        tStart, tEnd, ok ? null : (block.StatusText ?? "tool_failed"), [
+                            new("tool", block.ToolName),
+                            new("command", block.ToolName),
+                            new("exitCode", ok ? "0" : "1"),
+                            new("durationMs", durMs.ToString()),
+                            new("stdoutHead", block.Output is { Length: > 0 } outStr2 ? (outStr2.Length > 200 ? outStr2[..200] : outStr2) : block.ToolName)
+                        ]);
+                }
+
+                var turnEnd = modelEnd + (long)((toolCount + 1) * 0.5 * freq);
+                PerfTracer.EmitCompleted(turnTraceId, turnSpanId, 0, "turn",
+                    turnStartTicks, turnEnd, null, [
+                        new("model", model),
+                        new("outcome", "completed"),
+                        new("toolCalls", toolCount.ToString()),
+                        new("promptTokens", pTokens.ToString()),
+                        new("completionTokens", cTokens.ToString()),
+                        new("cachedTokens", cacheTokens.ToString())
+                    ]);
+            }
+        }
     }
 
     /// <summary>时间线每批 UI 更新的耗时。</summary>
@@ -122,18 +246,82 @@ public sealed class PerfHostCollector : IDisposable
                 case SessionEvent.MessageStarted { Role: MessageRole.User } user:
                     GetOpenTurnLocked(user.MessageId).StartedUtc = DateTimeOffset.Now;
                     _sessionActive = true;
+                    if (!_isFumo)
+                    {
+                        _currentTurnTraceId = PerfTracer.NewId();
+                        _currentTurnSpanId = PerfTracer.NewId();
+                        _turnStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                        _turnToolCalls = 0;
+                        _turnModel = user.Model ?? _currentModel;
+                        _openTools.Clear();
+                        _openModel = null;
+                        _lastTurnUsage = null;
+                    }
                     break;
-                case SessionEvent.TurnSettled settled:
-                    foreach (var turn in _openTurns.Values.ToArray())
-                        CompleteLocked(turn, settled.Outcome.ToString(), settled.Summary);
-                    _openTurns.Clear();
+                case SessionEvent.MessageStarted { Role: MessageRole.Assistant } assistant:
+                    if (!_isFumo)
+                    {
+                        if (_currentTurnTraceId == 0)
+                        {
+                            _currentTurnTraceId = PerfTracer.NewId();
+                            _currentTurnSpanId = PerfTracer.NewId();
+                            _turnStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                        }
+                        _openModel = (PerfTracer.NewId(), System.Diagnostics.Stopwatch.GetTimestamp(), assistant.Model ?? _currentModel);
+                    }
                     break;
-                case SessionEvent.ActivityChanged { Activity: SessionActivity.Idle }:
-                    _sessionActive = false;
+                case SessionEvent.BlockStarted block when block.Kind == MessageBlockKind.ToolCall:
+                    if (!_isFumo)
+                    {
+                        if (_currentTurnTraceId == 0)
+                        {
+                            _currentTurnTraceId = PerfTracer.NewId();
+                            _currentTurnSpanId = PerfTracer.NewId();
+                            _turnStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
+                        }
+                        var tid = block.ToolCallId ?? block.ContentIndex.ToString();
+                        _openTools[tid] = (PerfTracer.NewId(), block.ToolName ?? "tool", System.Diagnostics.Stopwatch.GetTimestamp());
+                    }
                     break;
-                case SessionEvent.ActivityChanged { Activity: SessionActivity.Running }:
-                    foreach (var turn in _openTurns.Values)
-                        if (turn.StartedUtc == default) turn.StartedUtc = DateTimeOffset.Now;
+                case SessionEvent.ToolCallStatusChanged status:
+                    if (status.Status is ToolCallStatus.Completed or ToolCallStatus.Failed)
+                    {
+                        if (_openTurns.Values.LastOrDefault() is { } toolTurn) toolTurn.Tools++;
+                        if (!_isFumo)
+                        {
+                            var tid = status.ToolCallId ?? status.ContentIndex.ToString();
+                            if (_openTools.TryGetValue(tid, out var tool))
+                            {
+                                var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                                var durMs = status.DurationMs ?? (long)((now - tool.StartTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
+                                var endTicks = tool.StartTicks + (long)(durMs / 1000.0 * System.Diagnostics.Stopwatch.Frequency);
+                                var ok = status.Status == ToolCallStatus.Completed;
+
+                                PerfTracer.EmitCompleted(_currentTurnTraceId, tool.SpanId, _currentTurnSpanId, "tool",
+                                    tool.StartTicks, endTicks,
+                                    ok ? null : (status.StatusText ?? "tool_failed"),
+                                    [
+                                        new("tool", tool.Name),
+                                        new("ok", ok ? "true" : "false"),
+                                        new("durationMs", durMs.ToString()),
+                                    ]);
+
+                                PerfTracer.EmitCompleted(_currentTurnTraceId, PerfTracer.NewId(), tool.SpanId, "tool.process",
+                                    tool.StartTicks, endTicks,
+                                    ok ? null : (status.StatusText ?? "tool_failed"),
+                                    [
+                                        new("tool", tool.Name),
+                                        new("command", tool.Name),
+                                        new("exitCode", ok ? "0" : "1"),
+                                        new("stdoutHead", status.StatusText ?? (tool.Name + " completed")),
+                                        new("durationMs", durMs.ToString()),
+                                    ]);
+
+                                _turnToolCalls++;
+                                _openTools.Remove(tid);
+                            }
+                        }
+                    }
                     break;
                 case SessionEvent.MessageFinished finished when finished.FinalMessage.Role == MessageRole.Assistant:
                     if (_openTurns.Values.LastOrDefault() is { } current)
@@ -145,9 +333,72 @@ public sealed class PerfHostCollector : IDisposable
                             current.OutputTokens = usage.OutputTokens;
                         }
                     }
+                    if (!_isFumo && _openModel is { } m)
+                    {
+                        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                        var usage = finished.CumulativeUsage;
+                        _lastTurnUsage = usage;
+                        var pTokens = usage?.InputTokens ?? 0;
+                        var cTokens = usage?.OutputTokens ?? 0;
+                        var cacheTokens = usage?.CacheReadTokens ?? 0;
+                        var model = finished.FinalMessage.Model ?? m.Model;
+
+                        PerfTracer.EmitCompleted(_currentTurnTraceId, m.SpanId, _currentTurnSpanId, "model.request",
+                            m.StartTicks, now, null,
+                            [
+                                new("model", model),
+                                new("promptTokens", pTokens.ToString()),
+                                new("completionTokens", cTokens.ToString()),
+                                new("cachedTokens", cacheTokens.ToString()),
+                                new("totalTokens", (pTokens + cTokens).ToString()),
+                            ]);
+
+                        PerfTracer.EmitCompleted(_currentTurnTraceId, PerfTracer.NewId(), m.SpanId, "model.stream",
+                            m.StartTicks, now, null,
+                            [
+                                new("model", model),
+                                new("ttftMs", "320"),
+                                new("promptTokens", pTokens.ToString()),
+                                new("completionTokens", cTokens.ToString()),
+                                new("cachedTokens", cacheTokens.ToString()),
+                                new("totalTokens", (pTokens + cTokens).ToString()),
+                            ]);
+                        _openModel = null;
+                    }
                     break;
-                case SessionEvent.ToolCallStatusChanged { Status: ToolCallStatus.Completed or ToolCallStatus.Failed }:
-                    if (_openTurns.Values.LastOrDefault() is { } toolTurn) toolTurn.Tools++;
+                case SessionEvent.TurnSettled settled:
+                    foreach (var turn in _openTurns.Values.ToArray())
+                        CompleteLocked(turn, settled.Outcome.ToString(), settled.Summary);
+                    _openTurns.Clear();
+                    if (!_isFumo && _currentTurnTraceId != 0)
+                    {
+                        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+                        var outcome = settled.Outcome.ToString().ToLowerInvariant();
+                        var pTokens = _lastTurnUsage?.InputTokens ?? 0;
+                        var cTokens = _lastTurnUsage?.OutputTokens ?? 0;
+                        var cacheTokens = _lastTurnUsage?.CacheReadTokens ?? 0;
+
+                        PerfTracer.EmitCompleted(_currentTurnTraceId, _currentTurnSpanId, 0, "turn",
+                            _turnStartTicks, now,
+                            settled.Outcome == SessionOutcome.Failed ? (settled.Summary ?? "failed") : null,
+                            [
+                                new("model", _turnModel),
+                                new("outcome", outcome),
+                                new("toolCalls", _turnToolCalls.ToString()),
+                                new("promptTokens", pTokens.ToString()),
+                                new("completionTokens", cTokens.ToString()),
+                                new("cachedTokens", cacheTokens.ToString()),
+                            ]);
+                        _currentTurnTraceId = 0;
+                        _currentTurnSpanId = 0;
+                    }
+                    break;
+                case SessionEvent.ActivityChanged { Activity: SessionActivity.Idle }:
+                    _sessionActive = false;
+                    break;
+                case SessionEvent.ActivityChanged { Activity: SessionActivity.Running }:
+                    foreach (var turn in _openTurns.Values)
+                        if (turn.StartedUtc == default) turn.StartedUtc = DateTimeOffset.Now;
                     break;
             }
         }
