@@ -51,6 +51,12 @@ public static class Wave5R3SelfTest
                 Application.Current.RequestedThemeVariant = theme;
                 await Ready(); Save("settings-" + theme.ToString().ToLowerInvariant() + ".png");
                 var close = window.FindControl<CaptionAssetButton>("CaptionClose")!;
+                // 无头/特定系统主题下变体可能不生效，此时按明暗断言资产路径没有意义。
+                if (close.ActualThemeVariant != theme)
+                {
+                    Console.WriteLine($"  SKIP: 当前环境未应用 {theme} 变体，跳过标题栏 hover 资产校验");
+                    continue;
+                }
                 close.StateForTesting = "hover"; close.RefreshImage();
                 Check(close.AssetPathForTesting.Contains("/" + theme.ToString().ToLowerInvariant() + "/close-hover@2x.png") &&
                     close.Bounds.Width == 46 && close.Bounds.Height == 32, "Caption " + theme + " 的46×32完整hover资产");

@@ -2887,7 +2887,7 @@ public static class SelfTestRunner
             }
             else
             {
-                Fail($"设置 dark 未生效：theme={store.Current.Theme} variant={Application.Current.RequestedThemeVariant}");
+                Fail($"设置 dark 未生效：theme={store.Current.Theme} variant={Application.Current.RequestedThemeVariant} error={vm.AppearanceError}");
             }
 
             vm.ThemeIndex = 1;
