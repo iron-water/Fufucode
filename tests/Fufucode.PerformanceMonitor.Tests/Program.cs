@@ -14,6 +14,7 @@ var tests = new (string Id, Action Run)[]
     ("recorder", RecorderTests.Run),
     ("plugin", PluginTests.Run),
     ("snapshot", SnapshotTests.Run),
+    ("host", HostCollectorTests.Run),
     ("native", NativePipelineTests.Run),
 };
 

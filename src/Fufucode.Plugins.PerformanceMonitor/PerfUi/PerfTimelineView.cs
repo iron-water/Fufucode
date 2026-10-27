@@ -119,8 +119,8 @@ internal sealed class PerfTimelineView : Control
             DrawSystemTrack(context, _turn, start, total, plotLeft, plotWidth, top + TrackHeight * 7);
         }
 
+        // 回合标题与耗时已由卡片头部显示，画布内不再重复。
         DrawTrackLabels(context, top);
-        DrawText(context, $"{_turn.Title} · {PerfPalette.FormatMs(_turn.DurationMs)}", Padding, 2, 10, MutedBrush);
     }
 
     private void DrawRuler(DrawingContext context, long start, long total, double left, double width)
@@ -160,10 +160,16 @@ internal sealed class PerfTimelineView : Control
         foreach (var span in fufuSpans)
             DrawSpan(context, span, start, total, left, width, top, PerfPalette.ApprovalBrush);
 
-        var fps = Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.CurrentFps;
-        var frameMs = Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.LastFrameTimeMs;
-        var dropped = Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.DroppedFrames;
-        var label = fps > 0 ? $"Live2D {fps:0.0} FPS · {frameMs:0.1} ms" : "桌宠与渲染待机中";
+        // 实时渲染指标属于当前进程；历史回合不应冒用当前 FPS 与累计掉帧。
+        var hasRender = turn.Outcome == "running" &&
+                        Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.HasSamples &&
+                        Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.IsFresh(TimeSpan.FromSeconds(5));
+        var dropped = hasRender ? Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.DroppedFrames : 0;
+        // 探针在 FUFU 进程内；本进程无样本时标记未采集，不把默认帧率当成实测值。
+        var label = hasRender
+            ? $"Live2D {Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.CurrentFps:0.0} FPS · " +
+              $"{Fufucode.Core.Diagnostics.Perf.FufuRenderDiagnostics.LastFrameTimeMs:0.1} ms"
+            : "渲染帧率未采集";
         DrawText(context, label, left + 4, top + 7, 9, MutedBrush, clipped: true);
 
         if (dropped > 0)
@@ -215,8 +221,11 @@ internal sealed class PerfTimelineView : Control
             if (ttft <= 0) continue;
             var ttftWidth = Math.Min(bar.Width, bar.Width * ttft / Math.Max(1, span.DurationMs));
             if (ttftWidth <= 0.5) continue;
-            context.DrawRectangle(new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)), null,
-                new Rect(bar.X, bar.Y, ttftWidth, bar.Height), 3, 3);
+            // 用主题文本色画首字分界，不写死白色，亮色皮肤下同样可见。
+            var markerPen = new Pen(TextBrush ?? Brushes.White, 1);
+            using (context.PushOpacity(0.45))
+                context.DrawLine(markerPen, new Point(bar.X + ttftWidth, bar.Y + 2),
+                    new Point(bar.X + ttftWidth, bar.Y + bar.Height - 2));
         }
     }
 
@@ -227,7 +236,7 @@ internal sealed class PerfTimelineView : Control
             var rect = DrawSpan(context, span, start, total, left, width, top, PerfPalette.ToolBrush);
             if (rect is not { } bar || bar.Width < 44) continue;
             var name = PerfPalette.ToolDisplayName(span.Tag("tool"));
-            DrawText(context, name, bar.X + 4, top + 7, 8.5, Brushes.Black, clipped: true);
+            DrawText(context, name, bar.X + 4, top + 7, 10, Brushes.Black, clipped: true);
         }
     }
 

@@ -25,7 +25,7 @@ public static class PerfTracer
     /// <summary>当前接收端；未启用时为 null。</summary>
     public static IPerfSink? Sink => Volatile.Read(ref s_sink);
 
-    public static bool Enabled => Sink is not null;
+    public static bool Enabled => Sink is not null && Mode != PerfMode.Off;
 
     /// <summary>把数值转成不变区域字符串（span 起始 tag 只有字符串形式）。</summary>
     public static string Invariant(long value) => value.ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -50,6 +50,23 @@ public static class PerfTracer
         return true;
     }
 
+    /// <summary>
+    /// 依据 yetone/magpie tokensOf 算法估算文本 Token 数：
+    /// ASCII 约 4 字符 1 个 token，其它（如中文字符）约 1 字符 1 个 token。
+    /// </summary>
+    public static int TokensOf(string? s)
+    {
+        if (string.IsNullOrEmpty(s)) return 0;
+        var ascii = 0;
+        var other = 0;
+        foreach (var c in s)
+        {
+            if (c < 128) ascii++;
+            else other++;
+        }
+        return (ascii + 3) / 4 + other;
+    }
+
     /// <summary>通知性能接收端当前会话标识（项目名或会话标题）。</summary>
     public static void SetSessionId(string? sessionId)
     {
@@ -60,8 +77,9 @@ public static class PerfTracer
     public static PerfSpan Step(string name, string? tagKey = null, string? tagValue = null)
     {
         var sink = Sink;
-        if (sink is null) return default;
-        return PerfSpan.Start(sink, Mode, name, tagKey, tagValue);
+        var mode = Mode;
+        if (sink is null || mode == PerfMode.Off) return default;
+        return PerfSpan.Start(sink, mode, name, tagKey, tagValue);
     }
 
     /// <summary>记录游离事件；未启用时无操作。</summary>
@@ -147,7 +165,16 @@ public struct PerfSpan : IDisposable
             _started = true,
         };
         if (tagKey is not null) span.Tag(tagKey, tagValue);
-        if (mode == PerfMode.Detailed) Safe(sink, () => sink.OnSpanStart(start));
+        if (sink is IPerfLiveSink live)
+        {
+            // 实时视图需要初始 tag（例如工具名），不能只拿到空快照。
+            var initial = span._tags?.ToArray();
+            Safe(sink, () => live.OnSpanProgress(start, initial));
+        }
+        else if (mode == PerfMode.Detailed)
+        {
+            Safe(sink, () => sink.OnSpanStart(start));
+        }
         return span;
     }
 
@@ -168,6 +195,14 @@ public struct PerfSpan : IDisposable
     public void Tag(string key, long value) => Tag(key, value.ToString(System.Globalization.CultureInfo.InvariantCulture));
 
     public void Tag(string key, bool value) => Tag(key, value ? "true" : "false");
+
+    /// <summary>将当前 tag 快照交给实时视图，不结束 span。</summary>
+    public void PublishProgress()
+    {
+        if (!_started || _finished || _sink is not IPerfLiveSink live) return;
+        try { live.OnSpanProgress(_start, _tags?.ToArray()); }
+        catch (Exception error) { Trace.TraceWarning("Perf sink failed: {0}", error.Message); }
+    }
 
     /// <summary>把 span 标记为失败；多次调用保留第一个错误。</summary>
     public void Fail(string? error)

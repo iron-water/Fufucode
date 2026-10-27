@@ -8,7 +8,7 @@ namespace Fufucode.Plugins.PerformanceMonitor;
 /// 所有方法都从调用线程（模型流、工具、UI）同步调用，因此只做 O(1)/O(tags) 的工作，
 /// 落盘交给 <see cref="PerfJsonlWriter"/> 的后台任务。
 /// </summary>
-public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
+public sealed class PerfRecorder : IPerfSink, IPerfModeProvider, IPerfLiveSink, IPerfSessionSink, IPerfDataSource, IDisposable
 {
     private readonly object _settingsGate = new();
     private PerfSettings _settings;
@@ -25,6 +25,10 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
     private const int MaxHostSamples = 2_400;
     private long _spanCount;
     private string? _currentSessionId;
+    private PerfSessionContext? _sessionContext;
+    private readonly object _liveGate = new();
+    private readonly Dictionary<long, SpanRecord> _activeSpans = [];
+    private const int MaxActiveSpans = 4_096;
 
     public PerfRecorder(PerfSettings settings, string dataRoot)
     {
@@ -59,6 +63,52 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
     public void SetCurrentSession(string? sessionId) => Volatile.Write(ref _currentSessionId, sessionId);
 
     public string? CurrentSessionId => Volatile.Read(ref _currentSessionId);
+
+    public PerfSessionContext? SessionContext => Volatile.Read(ref _sessionContext);
+
+    // ── IPerfDataSource（跨加载上下文的只读视图） ──
+    long IPerfDataSource.TotalSpansWritten => _ring.TotalWritten;
+
+    IReadOnlyList<PerfSpanData> IPerfDataSource.SnapshotSpans() => ToData(_ring.Snapshot());
+
+    IReadOnlyList<PerfSpanData> IPerfDataSource.ActiveSpans() => ToData(ActiveSpans());
+
+    IReadOnlyList<PerfEventData> IPerfDataSource.RecentEvents(int limit) =>
+        RecentEvents(limit).Select(item => new PerfEventData(item.TimestampTicks, item.TimestampUtc,
+            item.Kind, item.Name, item.Value, item.Detail)).ToArray();
+
+    private static IReadOnlyList<PerfSpanData> ToData(IReadOnlyList<SpanRecord> source)
+    {
+        var result = new List<PerfSpanData>(source.Count);
+        foreach (var item in source)
+        {
+            result.Add(new PerfSpanData(item.TraceId, item.SpanId, item.ParentSpanId, item.Name,
+                item.StartTicks, item.EndTicks, item.EndUtc, item.Status, item.Error, item.Tags, item.SessionId));
+        }
+        return result;
+    }
+
+    public void OnSessionContext(PerfSessionContext context)
+    {
+        SetCurrentSession(context.SessionId);
+        Volatile.Write(ref _sessionContext, context);
+    }
+
+    /// <summary>进行中的 span 数量；供 UI 判断是否需要继续刷新而不必分配快照。</summary>
+    public int ActiveSpanCount { get { lock (_liveGate) return _activeSpans.Count; } }
+
+    public IReadOnlyList<SpanRecord> ActiveSpans()
+    {
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        var utc = DateTimeOffset.UtcNow;
+        lock (_liveGate)
+            return _activeSpans.Values.Select(span => new SpanRecord
+            {
+                TraceId = span.TraceId, SpanId = span.SpanId, ParentSpanId = span.ParentSpanId,
+                Name = span.Name, StartTicks = span.StartTicks, EndTicks = now, EndUtc = utc,
+                Status = "Running", Tags = span.Tags, SessionId = span.SessionId,
+            }).ToArray();
+    }
 
     /// <summary>宿主最近的进程/UI 样本，按时间顺序返回尾部 limit 条。</summary>
     public IReadOnlyList<PerfHostSample> HostSamples(int limit = 1_200)
@@ -112,23 +162,43 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
             _writer?.Dispose();
             _writer = normalized.RetentionDays > 0 ? new PerfJsonlWriter(_dataRoot, normalized.SegmentMb) : null;
         }
+        if (normalized.ModeValue == PerfMode.Off)
+            lock (_liveGate) _activeSpans.Clear();
         normalized.Save(_dataRoot);
         _aggregator.Clear();
         _writer?.Prune(DateTime.UtcNow.AddDays(-normalized.RetentionDays));
     }
 
-    public void OnSpanStart(in PerfSpanStart start)
+    public void OnSpanStart(in PerfSpanStart start) => OnSpanProgress(start, null);
+
+    public void OnSpanProgress(in PerfSpanStart start, IReadOnlyList<KeyValuePair<string, string>>? tags)
     {
-        // 详细模式目前不单独记录开始事件：结束记录已包含开始时间戳，足以还原瀑布图。
+        if (Mode == PerfMode.Off) return;
+        var sanitized = SanitizeTags(tags);
+        lock (_liveGate)
+        {
+            if (_activeSpans.Count >= MaxActiveSpans && !_activeSpans.ContainsKey(start.SpanId)) return;
+            var parent = _activeSpans.GetValueOrDefault(start.ParentSpanId);
+            _activeSpans[start.SpanId] = new SpanRecord
+            {
+                TraceId = start.TraceId, SpanId = start.SpanId, ParentSpanId = start.ParentSpanId,
+                Name = start.Name, StartTicks = start.TimestampTicks, EndTicks = start.TimestampTicks,
+                EndUtc = DateTimeOffset.UtcNow, Status = "Running", Tags = sanitized,
+                SessionId = sanitized.FirstOrDefault(tag => tag.Key == "sessionId").Value
+                    ?? parent?.SessionId ?? _currentSessionId,
+            };
+        }
     }
 
     public void OnSpanEnd(in PerfSpanEnd end)
     {
-        // 关闭模式：只保留计数，不记录、不聚合、不写盘。
+        SpanRecord? active;
+        lock (_liveGate) _activeSpans.Remove(end.SpanId, out active);
         if (Mode == PerfMode.Off) return;
         Interlocked.Increment(ref _spanCount);
-        var now = end.EndTimestampTicks > 0 ? end.EndTimestampTicks : System.Diagnostics.Stopwatch.GetTimestamp();
-        var endUtc = DateTimeOffset.UtcNow;
+        var received = System.Diagnostics.Stopwatch.GetTimestamp();
+        var now = end.EndTimestampTicks > 0 ? end.EndTimestampTicks : received;
+        var endUtc = DateTimeOffset.UtcNow - System.Diagnostics.Stopwatch.GetElapsedTime(now, received);
         var tags = SanitizeTags(end.Tags);
         var record = new SpanRecord
         {
@@ -147,7 +217,8 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
             },
             Error = end.Error is null ? null : Redactor.Text(end.Error),
             Tags = tags,
-            SessionId = _currentSessionId,
+            SessionId = tags.FirstOrDefault(tag => tag.Key == "sessionId").Value
+                ?? active?.SessionId ?? _currentSessionId,
         };
         _ring.Add(record);
         _writer?.Enqueue(record);
@@ -158,10 +229,8 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
 
     public void OnEvent(in PerfEvent value)
     {
-        if (value.Name == "session.attach" && !string.IsNullOrWhiteSpace(value.Detail))
-        {
-            SetCurrentSession(value.Detail);
-        }
+        if (value.Name == "session.attach") SetCurrentSession(value.Detail);
+        if (Mode == PerfMode.Off) return;
         var detail = value.Detail is null ? null : Redactor.Text(value.Detail);
         var record = new PerfEventRecord(value.TimestampTicks, DateTimeOffset.UtcNow,
             value.Kind switch

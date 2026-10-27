@@ -154,9 +154,10 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
 
         span.Tag("toolCalls", toolCalls.Count);
         span.Tag("textChars", text?.Length ?? 0);
-        if (root.TryGetProperty("usage", out var usageRoot) && usageRoot.ValueKind == JsonValueKind.Object)
-            RecordUsage(span, ChatCompletionSseParser.ReadUsage(usageRoot));
-        return new PureModelResponse(text, toolCalls);
+        var usage = root.TryGetProperty("usage", out var usageRoot) && usageRoot.ValueKind == JsonValueKind.Object
+            ? ChatCompletionSseParser.ReadUsage(usageRoot) : null;
+        RecordUsage(span, usage);
+        return new PureModelResponse(text, toolCalls, Usage: usage);
     }
 
     private static void RecordUsage(PerfSpan span, PureUsage? usage)
@@ -202,9 +203,12 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             var tracked = TrackDeliveries(callbacks, () => delivered = true);
             try
             {
+                var requestStarted = PerfTracer.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
                 using var response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
                 http.Tag("status", (long)response.StatusCode);
-                return await ReadStreamAsync(response, tracked, cancellationToken).ConfigureAwait(false);
+                if (requestStarted != 0)
+                    http.Tag("ttfbMs", (long)System.Diagnostics.Stopwatch.GetElapsedTime(requestStarted).TotalMilliseconds);
+                return await ReadStreamAsync(response, tracked, cancellationToken, requestStarted).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -298,7 +302,7 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
 
     /// <summary>读取 SSE 流：逐帧解析，并在启用埋点时统计帧数、TTFT 与帧间隔。</summary>
     private async Task<StreamedCompletion> ReadStreamAsync(HttpResponseMessage response,
-        ModelStreamCallbacks? callbacks, CancellationToken cancellationToken)
+        ModelStreamCallbacks? callbacks, CancellationToken cancellationToken, long requestStarted)
     {
         using var streamSpan = PerfTracer.Step("model.stream");
 
@@ -308,6 +312,7 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         var frameCount = 0;
         long maxGapMs = 0;
         long firstDataMs = -1;
+        long firstContentMs = -1;
         var gaps = gapWatch is null ? null : new BoundedGapHistogram();
 
         var stream = await response.Content.ReadAsStreamAsync(cancellationToken).ConfigureAwait(false);
@@ -339,6 +344,9 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
                     }
 
                     parser.TryApply(sse, callbacks);
+                    if (requestStarted != 0 && firstContentMs < 0 && parser.Completion.Primary is { } primary &&
+                        (primary.TextDeltaCount > 0 || primary.ThinkingDeltaCount > 0 || primary.ToolCallChunkCount > 0))
+                        firstContentMs = (long)System.Diagnostics.Stopwatch.GetElapsedTime(requestStarted).TotalMilliseconds;
                 }
             }
         }
@@ -361,7 +369,8 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         if (gapWatch is not null)
         {
             streamSpan.Tag("frames", frameCount);
-            streamSpan.Tag("ttftMs", firstDataMs < 0 ? 0 : firstDataMs);
+            if (firstContentMs >= 0) streamSpan.Tag("ttftMs", firstContentMs);
+            if (firstDataMs >= 0) streamSpan.Tag("firstFrameMs", firstDataMs);
             streamSpan.Tag("maxGapMs", maxGapMs);
             if (gaps is { Count: > 0 }) streamSpan.Tag("p95GapMs", gaps.Percentile(95));
         }

@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Avalonia.Media;
+using Fufucode.Core.Diagnostics;
 using Fufucode.Core.Diagnostics.Perf;
 
 namespace Fufucode.Plugins.PerformanceMonitor;
@@ -15,6 +16,7 @@ internal sealed class PerfSnapshot
     public IReadOnlyList<PerfToolUsage> Tools { get; init; } = [];
     public PerfContextInfo Context { get; init; } = new();
     public PerfContextBreakdown ContextBreakdown { get; init; } = new();
+    public string SessionLabel { get; init; } = "当前会话";
 
     public long TotalModelMs { get; init; }
     public long TotalToolMs { get; init; }
@@ -40,8 +42,19 @@ internal sealed class PerfSnapshot
     }
 
     public static PerfSnapshot Build(IReadOnlyList<SpanRecord> spans,
-        IReadOnlyList<PerfEventRecord> events, IReadOnlyList<PerfHostSample> samples)
+        IReadOnlyList<PerfEventRecord> events, IReadOnlyList<PerfHostSample> samples,
+        PerfSessionContext? session = null)
     {
+        var startupTraces = spans.Where(span => span.Name == "startup").Select(span => span.TraceId).ToHashSet();
+        // 只有整体上确实有人在写会话标识时才按会话过滤；否则说明标识链路尚未接通，
+        // 此时显示未标记数据好过把整页过滤成空。不同会话的数据仍然不会混在一起。
+        if (session?.SessionId is { Length: > 0 } sessionId &&
+            spans.Any(span => !string.IsNullOrEmpty(span.SessionId)))
+        {
+            spans = spans.Where(span => string.Equals(span.SessionId, sessionId, StringComparison.Ordinal) ||
+                                        startupTraces.Contains(span.TraceId)).ToArray();
+        }
+        var usageSpans = UsageSpans(spans);
         var turns = new List<PerfTurnInfo>();
         PerfTurnInfo? startup = null;
         var syntheticId = long.MinValue + 1;
@@ -59,9 +72,12 @@ internal sealed class PerfSnapshot
                 ?? ordered.FirstOrDefault(span => span.ParentSpanId == 0)
                 ?? ordered[0];
 
-            var startUtc = root.EndUtc - TimeSpan.FromMilliseconds(root.DurationMs);
-            var durationMs = Math.Max(0, root.DurationMs);
-            var endUtc = startUtc + TimeSpan.FromMilliseconds(durationMs);
+            var firstTicks = ordered.Min(span => span.StartTicks);
+            var lastTicks = ordered.Max(span => span.EndTicks);
+            var last = ordered.MaxBy(span => span.EndTicks)!;
+            var endUtc = last.EndUtc;
+            var durationMs = Math.Max(0, (lastTicks - firstTicks) * 1000d / Stopwatch.Frequency);
+            var startUtc = endUtc - TimeSpan.FromMilliseconds(durationMs);
             var turnEvents = events
                 .Where(item => item.TimestampUtc >= startUtc.AddMilliseconds(-50) &&
                                item.TimestampUtc <= endUtc.AddMilliseconds(50))
@@ -71,18 +87,17 @@ internal sealed class PerfSnapshot
             var eventSpans = new List<SpanRecord>();
             foreach (var item in turnEvents)
             {
+                // 只把真正的阻塞与异常补成树节点；ui.batch 是聚合计数，放进树里只会制造噪声。
                 var name = item.Kind switch
                 {
                     "ui.stall" => "ui.stall",
-                    "ui.batch" => "ui.batch",
                     "error.unhandled" => "error.unhandled",
                     _ => null,
                 };
                 if (name is null) continue;
-                if (name == "ui.batch" && item.Value <= 0) continue;
                 var duration = name == "error.unhandled" ? 0 : Math.Max(0, item.Value);
-                var startTicks = item.TimestampTicks;
-                var endTicks = startTicks + (long)(duration * Stopwatch.Frequency / 1000d);
+                var endTicks = item.TimestampTicks;
+                var startTicks = endTicks - (long)(duration * Stopwatch.Frequency / 1000d);
                 eventSpans.Add(new SpanRecord
                 {
                     TraceId = group.Key,
@@ -117,7 +132,7 @@ internal sealed class PerfSnapshot
             var prompt = 0L;
             var completion = 0L;
             var cached = 0L;
-            foreach (var span in all)
+            foreach (var span in usageSpans.Where(span => span.TraceId == group.Key))
             {
                 prompt += span.LongTag("promptTokens") ?? 0;
                 completion += span.LongTag("completionTokens") ?? 0;
@@ -154,7 +169,8 @@ internal sealed class PerfSnapshot
                 PromptTokens = prompt,
                 CompletionTokens = completion,
                 CachedTokens = cached,
-                Outcome = isTurn ? (root.Tag("outcome") ?? (root.Status == "Error" ? "error" : "ok")) : "running",
+                Outcome = root.Status == "Running" || !isTurn ? "running" :
+                    root.Tag("outcome") ?? (root.Status == "Error" ? "error" : "ok"),
                 Title = isStartup ? "启动" : (root.Tag("model") ?? (isTurn ? "回合" : "进行中回合")),
                 TimeLabel = startUtc.ToLocalTime().ToString("HH:mm:ss"),
             };
@@ -163,7 +179,8 @@ internal sealed class PerfSnapshot
             {
                 if (startup is null || info.StartUtc > startup.StartUtc) startup = info;
             }
-            else
+            else if (ordered.Any(span => span.Name == "turn" || span.Name.StartsWith("model.", StringComparison.Ordinal)
+                                                   || span.Name.StartsWith("tool", StringComparison.Ordinal)))
             {
                 turns.Add(info);
             }
@@ -178,12 +195,17 @@ internal sealed class PerfSnapshot
         }
 
         var allSpans = spans;
-        var latestUsage = spans
-            .Where(span => span.LongTag("promptTokens") is > 0)
+        var latestUsage = usageSpans
+            .Where(span => span.LongTag("promptTokens") is >= 0)
             .OrderBy(span => span.EndTicks)
             .LastOrDefault();
         var context = latestUsage is null
-            ? new PerfContextInfo()
+            ? new PerfContextInfo
+            {
+                PromptTokens = session?.PromptTokens ?? 0,
+                CompletionTokens = session?.CompletionTokens ?? 0,
+                CachedTokens = session?.CachedTokens ?? 0,
+            }
             : new PerfContextInfo
             {
                 PromptTokens = latestUsage.LongTag("promptTokens") ?? 0,
@@ -217,7 +239,7 @@ internal sealed class PerfSnapshot
         var promptTotal = 0L;
         var completionTotal = 0L;
         var cachedTotal = 0L;
-        foreach (var span in spans)
+        foreach (var span in usageSpans)
         {
             promptTotal += span.LongTag("promptTokens") ?? 0;
             completionTotal += span.LongTag("completionTokens") ?? 0;
@@ -229,7 +251,7 @@ internal sealed class PerfSnapshot
         var end = spans.Count > 0 ? spans.Max(span => span.EndUtc) : start;
         if (start == DateTimeOffset.MinValue) start = end;
 
-        var breakdown = BuildBreakdown(spans, turns, context, promptTotal, cachedTotal);
+        var breakdown = BuildBreakdown(spans, turns, context, session, latestUsage);
 
         return new PerfSnapshot
         {
@@ -241,6 +263,7 @@ internal sealed class PerfSnapshot
             Tools = tools,
             Context = context,
             ContextBreakdown = breakdown,
+            SessionLabel = session?.SessionName ?? session?.SessionId ?? "当前会话",
             TotalModelMs = (long)turns.Sum(turn => turn.ModelMs),
             TotalToolMs = (long)turns.Sum(turn => turn.ToolMs),
             TotalApprovalMs = (long)turns.Sum(turn => turn.ApprovalMs),
@@ -257,247 +280,102 @@ internal sealed class PerfSnapshot
         };
     }
 
+    private static IReadOnlyList<SpanRecord> UsageSpans(IReadOnlyList<SpanRecord> spans)
+    {
+        // 环形缓冲与实时视图理论上不会重复，但同 id 仍以最后一条为准，避免构建快照时抛异常。
+        var byId = spans.GroupBy(span => span.SpanId).ToDictionary(group => group.Key, group => group.Last());
+        var candidates = spans.Where(span => span.Name.StartsWith("model.", StringComparison.Ordinal) &&
+            (span.LongTag("promptTokens") is not null || span.LongTag("completionTokens") is not null)).ToArray();
+        var covered = new HashSet<long>();
+        foreach (var span in candidates)
+        {
+            var parent = span.ParentSpanId;
+            var seen = new HashSet<long>();
+            while (parent != 0 && seen.Add(parent) && byId.TryGetValue(parent, out var ancestor))
+            {
+                covered.Add(parent);
+                parent = ancestor.ParentSpanId;
+            }
+        }
+        return candidates.Where(span => !covered.Contains(span.SpanId)).ToArray();
+    }
+
     private static PerfContextBreakdown BuildBreakdown(
         IReadOnlyList<SpanRecord> spans,
         IReadOnlyList<PerfTurnInfo> turns,
         PerfContextInfo context,
-        long promptTotal,
-        long cachedTotal)
+        PerfSessionContext? session,
+        SpanRecord? latestUsage)
     {
-        var modelName = turns.LastOrDefault()?.Root?.Tag("model")
-            ?? spans.LastOrDefault(s => s.Tag("model") != null)?.Tag("model")
-            ?? "glm-5.3-flash";
-
-        var toolSpans = spans.Where(s => s.Name == "tool" || s.Name == "tool.process").ToList();
-        var totalContext = context.PromptTokens > 0 ? context.PromptTokens : (promptTotal > 0 ? promptTotal : 0);
-        if (totalContext == 0)
+        var modelName = session?.Model
+            ?? turns.LastOrDefault()?.Root?.Tag("model")
+            ?? spans.LastOrDefault(span => !string.IsNullOrWhiteSpace(span.Tag("model")))?.Tag("model")
+            ?? "模型未知";
+        var estimate = spans.Where(span => span.Name == "context.snapshot").MaxBy(span => span.StartTicks);
+        var parts = estimate is null ? session?.Parts ?? [] : new PerfContextPart[]
         {
-            totalContext = spans.LastOrDefault(s => s.LongTag("promptTokens") is > 0)?.LongTag("promptTokens") ?? 0;
-        }
-        if (totalContext == 0 && toolSpans.Count > 0)
+            new("system", "系统提示词", estimate.LongTag("systemTokens") ?? 0),
+            new("tools", "工具定义", estimate.LongTag("toolTokens") ?? 0),
+            new("chat", "会话文本", estimate.LongTag("chatTokens") ?? 0),
+            new("results", "工具结果", estimate.LongTag("resultTokens") ?? 0),
+        };
+        var capacity = spans.Where(span => span.Name == "context.window")
+            .MaxBy(span => span.StartTicks)?.LongTag("tokens");
+        var estimatedTotal = parts.Sum(part => part.Tokens);
+        var awaitingUsage = estimate is not null && (latestUsage is null || estimate.StartTicks > latestUsage.StartTicks);
+        var measured = !awaitingUsage && context.PromptTokens > 0 ? context.PromptTokens : 0;
+        var total = measured > 0 ? measured : estimatedTotal;
+        // 分类只有文本估算依据。缺少类别数据的精确 usage 保持“未分类”，不按比例捏造。
+        var items = new List<PerfContextItem>();
+        if (estimatedTotal > 0)
         {
-            totalContext = Math.Max(2400, toolSpans.Sum(s => (s.LongTag("stdoutBytes") ?? s.LongTag("outputChars") ?? 600) / 3));
-        }
-
-        var cached = context.CachedTokens > 0 ? context.CachedTokens : cachedTotal;
-        var uncached = Math.Max(0, totalContext - cached);
-        var hitRate = totalContext > 0 ? Math.Clamp(cached / (double)totalContext, 0, 1) : 0;
-
-        if (totalContext == 0 && spans.Count == 0)
-        {
-            return new PerfContextBreakdown
+            foreach (var part in parts.Where(part => part.Tokens > 0))
             {
-                TotalTokens = 0,
-                ModelName = modelName,
-            };
-        }
-
-        var rawItems = new List<PerfContextItem>();
-
-        // 1. 系统提示词 (System Prompt)
-        var buildSpan = spans.LastOrDefault(s => s.Name == "context.build");
-        var sysChars = buildSpan?.LongTag("sysChars");
-        var sysTokens = sysChars is > 0 ? (long)(sysChars.Value / 3.5) : (totalContext > 0 ? Math.Max(300, (long)(totalContext * 0.12)) : 3200);
-        rawItems.Add(new PerfContextItem
-        {
-            Name = "系统提示词",
-            CategoryKey = "system",
-            CategoryName = "系统提示词",
-            Tokens = sysTokens,
-            Tag = "system",
-            Color = PerfPalette.CtxSystemPrompt,
-        });
-
-        // 2. 工具定义 (Tools)
-        var toolGroups = toolSpans.GroupBy(s => s.Tag("tool") ?? "tool").ToList();
-        var toolDefTokens = 0L;
-        foreach (var group in toolGroups.Take(8))
-        {
-            var tName = PerfPalette.ToolDisplayName(group.Key);
-            var tTokens = Math.Max(120, group.Count() * 180);
-            toolDefTokens += tTokens;
-            rawItems.Add(new PerfContextItem
-            {
-                Name = tName,
-                CategoryKey = "tools",
-                CategoryName = "工具",
-                Tokens = tTokens,
-                Tag = group.Key.StartsWith("mcp", StringComparison.OrdinalIgnoreCase) ? "MCP" : "工具",
-                Color = PerfPalette.CtxTools,
-            });
-        }
-        if (toolDefTokens == 0)
-        {
-            rawItems.Add(new PerfContextItem
-            {
-                Name = "工具契约定义",
-                CategoryKey = "tools",
-                CategoryName = "工具",
-                Tokens = totalContext > 0 ? Math.Max(400, (long)(totalContext * 0.15)) : 2400,
-                Tag = "工具",
-                Color = PerfPalette.CtxTools,
-            });
-        }
-
-        // 3. 记忆 / 规则 (Memory)
-        var planSpans = spans.Where(s => s.Name.Contains("plan") || s.Tag("tool") == "update_plan").ToList();
-        if (planSpans.Count > 0 || totalContext > 10_000)
-        {
-            rawItems.Add(new PerfContextItem
-            {
-                Name = "规划与约束记忆",
-                CategoryKey = "memory",
-                CategoryName = "记忆",
-                Tokens = totalContext > 0 ? Math.Max(200, (long)(totalContext * 0.05)) : 1500,
-                Tag = "memory",
-                Color = PerfPalette.CtxMemory,
-            });
-        }
-
-        // 4. 文件 (Files)
-        var readSpans = toolSpans.Where(s => s.Tag("tool") is "read_file" or "read" or "read_multiple_files").ToList();
-        if (readSpans.Count > 0)
-        {
-            var fileGroups = readSpans.GroupBy(s => s.Tag("file") ?? s.Tag("command") ?? s.Tag("cwd") ?? "文件").ToList();
-            foreach (var fg in fileGroups.Take(6))
-            {
-                var fName = System.IO.Path.GetFileName(fg.Key);
-                if (string.IsNullOrWhiteSpace(fName)) fName = fg.Key;
-                var fTokens = Math.Max(80, fg.Sum(s => (s.LongTag("outputChars") ?? 1500) / 3));
-                rawItems.Add(new PerfContextItem
+                var color = part.Key switch
                 {
-                    Name = fName,
-                    CategoryKey = "files",
-                    CategoryName = "文件",
-                    Tokens = fTokens,
-                    Tag = "read",
-                    Color = PerfPalette.CtxFiles,
-                });
-            }
-        }
-        else if (totalContext > 20_000)
-        {
-            rawItems.Add(new PerfContextItem
-            {
-                Name = "工作区参考文件",
-                CategoryKey = "files",
-                CategoryName = "文件",
-                Tokens = (long)(totalContext * 0.25),
-                Tag = "read",
-                Color = PerfPalette.CtxFiles,
-            });
-        }
-
-        // 5. 工具结果 (Tool Results)
-        var cmdSpans = spans.Where(s => s.Name == "tool.process" || (s.Name == "tool" && s.Tag("tool") is "run_command" or "bash")).ToList();
-        if (cmdSpans.Count > 0)
-        {
-            var cmdTokens = Math.Max(200, cmdSpans.Sum(s => (s.LongTag("stdoutBytes") ?? 2000) / 3));
-            rawItems.Add(new PerfContextItem
-            {
-                Name = "Bash",
-                CategoryKey = "toolResults",
-                CategoryName = "工具结果",
-                Tokens = cmdTokens,
-                Tag = $"×{cmdSpans.Count} result",
-                Color = PerfPalette.CtxToolResults,
-            });
-        }
-        var grepSpans = toolSpans.Where(s => s.Tag("tool") is "grep" or "grep_search" or "glob_files" or "list_dir").ToList();
-        if (grepSpans.Count > 0)
-        {
-            var grepTokens = Math.Max(150, grepSpans.Sum(s => (s.LongTag("outputChars") ?? 1200) / 3));
-            rawItems.Add(new PerfContextItem
-            {
-                Name = "Grep / 搜索",
-                CategoryKey = "toolResults",
-                CategoryName = "工具结果",
-                Tokens = grepTokens,
-                Tag = $"×{grepSpans.Count} result",
-                Color = PerfPalette.CtxToolResults,
-            });
-        }
-
-        // 6. 会话内容 (Conversation)
-        if (turns.Count > 0)
-        {
-            for (var i = 0; i < turns.Count; i++)
-            {
-                var t = turns[i];
-                var turnTokens = Math.Max(100, t.PromptTokens > 0 ? t.PromptTokens / Math.Max(1, turns.Count) : (long)(t.DurationMs * 0.8));
-                rawItems.Add(new PerfContextItem
-                {
-                    Name = $"第 {i + 1} 轮",
-                    CategoryKey = "conversation",
-                    CategoryName = "会话内容",
-                    Tokens = turnTokens,
-                    Tag = "会话内容",
-                    Color = PerfPalette.CtxConversation,
-                });
-            }
-        }
-        else if (totalContext > 0)
-        {
-            rawItems.Add(new PerfContextItem
-            {
-                Name = "当前会话消息",
-                CategoryKey = "conversation",
-                CategoryName = "会话内容",
-                Tokens = Math.Max(200, (long)(totalContext * 0.2)),
-                Tag = "会话内容",
-                Color = PerfPalette.CtxConversation,
-            });
-        }
-
-        var rawSum = rawItems.Sum(i => i.Tokens);
-        if (totalContext > 0 && rawSum > 0)
-        {
-            var ratio = totalContext / (double)rawSum;
-            foreach (var item in rawItems)
-            {
-                item.Tokens = Math.Max(1, (long)Math.Round(item.Tokens * ratio));
-                item.Percent = item.Tokens / (double)totalContext;
-            }
-        }
-        else
-        {
-            totalContext = rawSum;
-            foreach (var item in rawItems)
-            {
-                item.Percent = rawSum > 0 ? item.Tokens / (double)rawSum : 0;
-            }
-        }
-
-        rawItems.Sort((a, b) => b.Tokens.CompareTo(a.Tokens));
-
-        var categories = rawItems
-            .GroupBy(i => i.CategoryKey)
-            .Select(g =>
-            {
-                var catItems = g.ToList();
-                var catSum = catItems.Sum(i => i.Tokens);
-                return new PerfContextCategory
-                {
-                    Key = g.Key,
-                    Name = catItems[0].CategoryName,
-                    Color = catItems[0].Color,
-                    Items = catItems,
-                    TotalTokens = catSum,
-                    Percent = totalContext > 0 ? catSum / (double)totalContext : 0,
+                    "system" => PerfPalette.CtxSystemPrompt,
+                    "tools" => PerfPalette.CtxTools,
+                    "results" => PerfPalette.CtxToolResults,
+                    _ => PerfPalette.CtxConversation,
                 };
-            })
-            .OrderByDescending(c => c.TotalTokens)
-            .ToList();
-
+                items.Add(new PerfContextItem
+                {
+                    Name = part.Name, CategoryKey = part.Key, CategoryName = part.Name,
+                    Tokens = part.Tokens, Tag = "文本估算", Color = color,
+                    Percent = part.Tokens / (double)estimatedTotal,
+                });
+            }
+        }
+        else if (total > 0)
+        {
+            items.Add(new PerfContextItem
+            {
+                Name = "未分类上下文", CategoryKey = "unknown", CategoryName = "未分类",
+                Tokens = total, Percent = 1, Tag = "模型用量", Color = PerfPalette.CtxSkills,
+            });
+        }
+        items.Sort((a, b) => b.Tokens.CompareTo(a.Tokens));
+        var categories = items.GroupBy(item => item.CategoryKey).Select(group => new PerfContextCategory
+        {
+            Key = group.Key, Name = group.First().CategoryName, Color = group.First().Color,
+            Items = group.ToArray(), TotalTokens = group.Sum(item => item.Tokens),
+            Percent = group.Sum(item => item.Percent),
+        }).ToArray();
+        var cached = awaitingUsage ? 0 : Math.Min(context.CachedTokens, total);
         return new PerfContextBreakdown
         {
-            TotalTokens = totalContext,
+            TotalTokens = total,
+            CapacityTokens = capacity,
+            EstimatedTokens = estimatedTotal,
+            CategoriesAreEstimated = estimatedTotal > 0,
+            IsEstimated = measured == 0,
+            IsPartial = estimate is null && session?.IsPartial == true,
             CachedTokens = cached,
-            UncachedTokens = uncached,
-            CacheHitRate = hitRate,
+            UncachedTokens = Math.Max(0, total - cached),
+            CacheHitRate = total > 0 ? cached / (double)total : 0,
             ModelName = modelName,
             Categories = categories,
-            AllItems = rawItems,
+            AllItems = items,
         };
     }
 }
@@ -527,6 +405,10 @@ internal sealed class PerfContextBreakdown
 {
     public long TotalTokens { get; init; }
     public long? CapacityTokens { get; init; }
+    public long EstimatedTokens { get; init; }
+    public bool IsEstimated { get; init; }
+    public bool CategoriesAreEstimated { get; init; }
+    public bool IsPartial { get; init; }
     public long CachedTokens { get; init; }
     public long UncachedTokens { get; init; }
     public double CacheHitRate { get; init; }

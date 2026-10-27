@@ -49,12 +49,15 @@ internal static class JsonlTests
                 writer.Enqueue(new PerfEventRecord(Stopwatch.GetTimestamp(), DateTimeOffset.UtcNow, "ui.stall",
                     "dispatcher.background", 350, "blocked"));
                 writer.Flush(TimeSpan.FromSeconds(5));
+                writer.Enqueue(AggregatorTests.Record("after-export", 1));
+                writer.Flush(TimeSpan.FromSeconds(5));
+                Check(writer.Written == 52, "flush preserves writer for continued live capture");
             }
 
             var files = Directory.GetFiles(root, "perf-*.jsonl");
             Check(files.Length == 1, "one segment written");
             var lines = File.ReadAllLines(files[0]);
-            Check(lines.Length == 51, "all records flushed");
+            Check(lines.Length == 52, "all records flushed including continued capture");
             Check(lines.Any(line => line.Contains("\"type\":\"span\"")) &&
                   lines.Any(line => line.Contains("\"type\":\"event\"")), "span and event records distinguishable");
             Check(!string.Join('\n', lines).Contains("abcdef1234567890"), "jsonl content is redacted");
@@ -80,6 +83,20 @@ internal static class RecorderTests
         {
             var settings = new PerfSettings { Mode = "standard", CaptureCommandText = true, RetentionDays = 0 };
             var recorder = new PerfRecorder(settings, Path.Combine(root, "perf"));
+            PerfTracer.Attach(recorder, recorder);
+            try
+            {
+                using (var live = PerfTracer.Step("turn", "model", "dynamic-model"))
+                {
+                    live.PublishProgress();
+                    var active = recorder.ActiveSpans().Single();
+                    Check(active.Status == "Running" && active.Tag("model") == "dynamic-model", "standard mode exposes active spans");
+                    Check(recorder.Ring.Count == 0, "active span is not a completed sample");
+                }
+                Check(recorder.ActiveSpans().Count == 0 && recorder.Ring.Count == 1, "ended span leaves active view exactly once");
+                recorder.Clear();
+            }
+            finally { PerfTracer.Detach(recorder); }
             var record = AggregatorTests.Record("tool.process", 250, "Ok", ("tool", "run_command"),
                 ("command", "echo sk-abcdef1234567890abcd"), ("exitCode", "0"));
             recorder.OnSpanEnd(ToEnd(record));

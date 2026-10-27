@@ -46,6 +46,10 @@ internal sealed class PerfOverviewView : UserControl
     private PerfSnapshot? _snapshot;
     private string _activeCategoryFilter = "all";
     private bool _showAllItems;
+    // 周期刷新只在内容真正变化时重建控件：否则每秒重建会打断进度条与折线的过渡动画。
+    private string _legendSignature = string.Empty;
+    private string _pillsSignature = string.Empty;
+    private string _contentSignature = string.Empty;
 
     public PerfOverviewView()
     {
@@ -222,23 +226,30 @@ internal sealed class PerfOverviewView : UserControl
         if (breakdown.TotalTokens > 0)
         {
             _usedTokensText.Text = $"{PerfPalette.FormatTokens(breakdown.TotalTokens)} token";
-            _usedTokensSub.Text = breakdown.CapacityTokens is { } cap
-                ? $"{PerfPalette.FormatTokens(breakdown.TotalTokens)} / {PerfPalette.FormatTokens(cap)} · {PerfPalette.FormatPercent((double)breakdown.TotalTokens / cap)}"
-                : "模型的窗口大小未知";
+            var capacity = breakdown.CapacityTokens;
+            _usedTokensSub.Text = capacity is { } cap && cap > 0
+                ? $"窗口 {PerfPalette.FormatTokens(cap)} · 占用 {PerfPalette.FormatPercent((double)breakdown.TotalTokens / cap)}"
+                : breakdown.IsEstimated
+                    ? breakdown.IsPartial
+                        ? "按可见会话文本估算 · 不含系统与工具定义"
+                        : "按本次请求文本估算 · 窗口大小未知"
+                    : breakdown.CategoriesAreEstimated
+                        ? "窗口大小未知 · 构成按请求文本估算"
+                        : "模型的窗口大小未知";
 
             _cacheHitText.Text = breakdown.CachedTokens > 0
-                ? $"{PerfPalette.FormatPercent(breakdown.CacheHitRate)} 命中"
-                : "—— 命中";
+                ? PerfPalette.FormatPercent(breakdown.CacheHitRate)
+                : "—";
             _cacheHitSub.Text = breakdown.CachedTokens > 0
                 ? $"{PerfPalette.FormatTokens(breakdown.CachedTokens)} 缓存输入 · {PerfPalette.FormatTokens(breakdown.UncachedTokens)} 未命中"
-                : "供应商回答后可见";
+                : "供应商未回报缓存用量";
         }
         else
         {
             _usedTokensText.Text = "0 token";
-            _usedTokensSub.Text = "模型的窗口大小未知";
-            _cacheHitText.Text = "—— 命中";
-            _cacheHitSub.Text = "供应商回答后可见";
+            _usedTokensSub.Text = "运行一个回合后自动采集";
+            _cacheHitText.Text = "—";
+            _cacheHitSub.Text = "供应商未回报缓存用量";
         }
 
         // 渲染树图（传窗口容量以准确绘制网格与剩余空间）
@@ -259,6 +270,9 @@ internal sealed class PerfOverviewView : UserControl
 
     private void RenderLegend(PerfContextBreakdown breakdown)
     {
+        var signature = string.Join('|', breakdown.Categories.Select(cat => $"{cat.Key}:{cat.TotalTokens}"));
+        if (signature == _legendSignature && _legendPanel.Children.Count > 0) return;
+        _legendSignature = signature;
         _legendPanel.Children.Clear();
         foreach (var cat in breakdown.Categories)
         {
@@ -290,16 +304,21 @@ internal sealed class PerfOverviewView : UserControl
 
     private void RenderPills()
     {
+        var categories = _snapshot?.ContextBreakdown.Categories;
+        var signature = _activeCategoryFilter + "|" +
+                        string.Join('|', categories?.Select(cat => cat.Key) ?? []);
+        if (signature == _pillsSignature) return;
+        _pillsSignature = signature;
         _contentPills.Children.Clear();
+        // key 必须与 PerfSnapshot.BuildBreakdown 生成的类别 key 完全一致。
         var filterOptions = new (string Key, string Label)[]
         {
             ("all", "全部"),
             ("system", "系统提示词"),
-            ("tools", "工具"),
-            ("memory", "记忆"),
-            ("files", "文件"),
-            ("toolResults", "工具结果"),
-            ("conversation", "会话内容"),
+            ("tools", "工具定义"),
+            ("chat", "会话文本"),
+            ("results", "工具结果"),
+            ("unknown", "未分类"),
         };
 
         foreach (var (key, label) in filterOptions)
@@ -329,10 +348,12 @@ internal sealed class PerfOverviewView : UserControl
 
     private void RenderContentList()
     {
-        _contentItemsHost.Children.Clear();
+        // 清理必须发生在签名比较之后：否则数据未变时会把已渲染的行清空再提前返回。
         var breakdown = _snapshot?.ContextBreakdown;
         if (breakdown is null || breakdown.AllItems.Count == 0)
         {
+            _contentSignature = string.Empty;
+            _contentItemsHost.Children.Clear();
             _contentItemsHost.Children.Add(Text("暂无内容项记录", 11, "AppTextDim"));
             _toggleShowAll.IsVisible = false;
             return;
@@ -344,6 +365,8 @@ internal sealed class PerfOverviewView : UserControl
 
         if (filtered.Count == 0)
         {
+            _contentSignature = string.Empty;
+            _contentItemsHost.Children.Clear();
             _contentItemsHost.Children.Add(Text("该类别下暂无条目", 11, "AppTextDim"));
             _toggleShowAll.IsVisible = false;
             return;
@@ -351,6 +374,11 @@ internal sealed class PerfOverviewView : UserControl
 
         var maxTokens = Math.Max(1, filtered.Max(i => i.Tokens));
         var showCount = _showAllItems ? filtered.Count : Math.Min(8, filtered.Count);
+        var signature = _activeCategoryFilter + "|" + _showAllItems + "|" +
+                        string.Join('|', filtered.Take(showCount).Select(item => $"{item.Name}:{item.Tokens}"));
+        if (signature == _contentSignature) return;
+        _contentSignature = signature;
+        _contentItemsHost.Children.Clear();
 
         for (var i = 0; i < showCount; i++)
         {
@@ -467,11 +495,20 @@ internal sealed class PerfOverviewView : UserControl
         return row;
     }
 
+    /// <summary>页面释放时停止所有绘制动画。</summary>
+    public void StopAnimations()
+    {
+        _treemap.StopAnimation();
+        _sparkline.StopAnimation();
+    }
+
     private void RenderFooter(PerfSnapshot snapshot)
     {
-        var sessionName = _snapshot?.AllSpans.FirstOrDefault()?.SessionId ?? "sgline";
+        var sessionName = snapshot.SessionLabel;
         var traceId = snapshot.LatestTurn?.TraceId ?? 0;
-        _breadcrumbText.Text = $"Fufucode > {sessionName} > #{traceId:x}";
+        _breadcrumbText.Text = traceId == 0
+            ? $"Fufucode > {sessionName}"
+            : $"Fufucode > {sessionName} > #{traceId:x}";
         _roundsCountText.Text = $"{snapshot.TurnCount} 轮";
         _requestsCountText.Text = $"{snapshot.ModelCalls} 个请求";
 
@@ -524,8 +561,16 @@ internal sealed class PerfSessionSparkline : Control
 
     public void SetData(IReadOnlyList<double> points)
     {
+        // 周期刷新会重复送入同一组点：数据未变时保持当前画面，避免每秒重放绘制动画。
+        if (_points.Count == points.Count && _points.SequenceEqual(points)) return;
         _points = points;
         StartAnimation();
+    }
+
+    public void StopAnimation()
+    {
+        _animTimer?.Stop();
+        _animTimer = null;
     }
 
     private void StartAnimation()

@@ -35,20 +35,25 @@ public sealed class PerfHostCollector : IDisposable
     private IChatSession? _session;
     private bool _sinkActive;
     private bool _disposed;
-    private readonly HashSet<string> _replayedSessions = new(StringComparer.Ordinal);
-    private string _currentModel = "default";
-    private string _sessionName = "session";
+    private string? _currentModel;
+    private string? _sessionName;
+    private string? _sessionId;
+    private string? _backend;
     private bool _isFumo;
+    private IPerfSink? _publishedSink;
+    private readonly Dictionary<string, MessageEstimate> _messageEstimates = new(StringComparer.Ordinal);
+    private UsageInfo? _latestUsage;
+    private bool _contextDirty;
 
-    // 非 FUMO 会话的实时合成跟踪状态
+    // 外部后端只有会话事件可观察，耗时边界明确标为 host-events。
     private long _currentTurnTraceId;
     private long _currentTurnSpanId;
     private long _turnStartTicks;
-    private int _turnToolCalls;
-    private string _turnModel = "default";
-    private readonly Dictionary<string, (long SpanId, string Name, long StartTicks)> _openTools = new(StringComparer.Ordinal);
-    private (long SpanId, long StartTicks, string Model)? _openModel;
-    private UsageInfo? _lastTurnUsage;
+    private readonly Dictionary<string, OpenTool> _openTools = new(StringComparer.Ordinal);
+    private OpenModel? _openModel;
+    private readonly Dictionary<string, long> _modelByMessage = new(StringComparer.Ordinal);
+    private readonly HashSet<string> _usageMessages = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> _toolNames = new(StringComparer.Ordinal);
 
     // 本周期累计。
     private long _uiBatches;
@@ -76,130 +81,72 @@ public sealed class PerfHostCollector : IDisposable
     {
         if (_disposed) return;
         _sinkActive = active;
-        if (active) ResetWindow();
+        if (active)
+        {
+            ResetWindow();
+            lock (_gate) PublishContextLocked(force: true);
+        }
     }
 
     /// <summary>切换当前会话：结束上一会话里未闭合的回合，并重新订阅；同时通知接收端会话标识并回放历史。</summary>
     public void AttachSession(IChatSession? session, string? sessionName = null, string? model = null,
-        IReadOnlyList<ChatMessage>? history = null)
+        IReadOnlyList<ChatMessage>? history = null, string? sessionId = null)
     {
         lock (_gate)
         {
-            foreach (var turn in _openTurns.Values.ToArray())
-                CompleteLocked(turn, "abandoned", null);
-            _openTurns.Clear();
-            _openTools.Clear();
-            _openModel = null;
-        }
-
-        // Abstractions.IChatSession 不暴露 SessionId；唯一调用方已传入会话名。
-        _sessionName = sessionName ?? "session";
-        _currentModel = model ?? session?.CurrentModel ?? "default";
-        _isFumo = session is IBackendChatSession b && b.BackendId == "fumo";
-
-        PerfTracer.SetSessionId(_sessionName);
-
-        if (_session is not null) _session.Event -= OnSessionEvent;
-        _session = session;
-        if (session is not null) session.Event += OnSessionEvent;
-
-        if (history is { Count: > 0 } && _replayedSessions.Add(_sessionName))
-        {
-            ReplayHistory(history);
+            if (_session is not null) _session.Event -= OnSessionEvent;
+            if (!ReferenceEquals(_session, session))
+            {
+                foreach (var turn in _openTurns.Values.ToArray()) CompleteLocked(turn, "abandoned", null);
+                FinishExternalTurnLocked(SessionOutcome.Interrupted, "会话已切换");
+                _openTurns.Clear();
+                _messageEstimates.Clear();
+                _toolNames.Clear();
+                _latestUsage = null;
+                _sessionId = sessionId ?? (session is null ? null : Guid.NewGuid().ToString("N"));
+            }
+            _session = session;
+            _sessionName = sessionName;
+            _currentModel = session?.CurrentModel ?? model;
+            _backend = (session as IBackendChatSession)?.BackendId;
+            _isFumo = _backend == "fumo";
+            _sessionActive = session is { Activity: not SessionActivity.Idle };
+            if (history is not null)
+                foreach (var message in history) RememberMessageLocked(message);
+            _contextDirty = true;
+            PublishContextLocked(force: true);
+            if (session is not null) session.Event += OnSessionEvent;
         }
     }
 
-    private void ReplayHistory(IReadOnlyList<ChatMessage> history)
+    private void RememberMessageLocked(ChatMessage message)
     {
-        if (!PerfTracer.Enabled || history.Count == 0) return;
-        var now = System.Diagnostics.Stopwatch.GetTimestamp();
-        var freq = System.Diagnostics.Stopwatch.Frequency;
-        long turnTraceId = 0;
-        long turnSpanId = 0;
-        long turnStartTicks = 0;
-        var toolCount = 0;
+        var estimate = new MessageEstimate();
+        foreach (var (block, index) in message.Blocks.Select((block, index) => (block, index)))
+            estimate.SetBlock(index, block);
+        _messageEstimates[message.Id] = estimate;
+        if (message.Role == MessageRole.Assistant && message.CumulativeUsage is { IsUnknown: false } usage)
+            _latestUsage = usage;
+        _contextDirty = true;
+    }
 
-        for (var i = 0; i < history.Count; i++)
+    private void PublishContextLocked(bool force = false)
+    {
+        var sink = PerfTracer.Sink;
+        if (sink is not IPerfSessionSink sessionSink) return;
+        if (!force && !_contextDirty && ReferenceEquals(sink, _publishedSink)) return;
+        _publishedSink = sink;
+        long chat = 0, results = 0;
+        foreach (var message in _messageEstimates.Values)
         {
-            var msg = history[i];
-            var timeOffset = (history.Count - i) * 45.0;
-            var msgStart = now - (long)(timeOffset * freq);
-
-            if (msg.Role == MessageRole.User)
-            {
-                turnTraceId = PerfTracer.NewId();
-                turnSpanId = PerfTracer.NewId();
-                turnStartTicks = msgStart;
-                toolCount = 0;
-            }
-            else if (msg.Role == MessageRole.Assistant && turnTraceId != 0)
-            {
-                var model = msg.Model ?? _currentModel;
-                var usage = msg.CumulativeUsage;
-                var pTokens = usage?.InputTokens ?? 0;
-                var cTokens = usage?.OutputTokens ?? 0;
-                var cacheTokens = usage?.CacheReadTokens ?? 0;
-                var modelSpanId = PerfTracer.NewId();
-                var modelEnd = msgStart + (long)(3.0 * freq);
-
-                PerfTracer.EmitCompleted(turnTraceId, modelSpanId, turnSpanId, "model.request",
-                    msgStart, modelEnd, null, [
-                        new("model", model),
-                        new("promptTokens", pTokens.ToString()),
-                        new("completionTokens", cTokens.ToString()),
-                        new("cachedTokens", cacheTokens.ToString()),
-                        new("totalTokens", (pTokens + cTokens).ToString())
-                    ]);
-
-                PerfTracer.EmitCompleted(turnTraceId, PerfTracer.NewId(), modelSpanId, "model.stream",
-                    msgStart, modelEnd, null, [
-                        new("model", model),
-                        new("ttftMs", "320"),
-                        new("promptTokens", pTokens.ToString()),
-                        new("completionTokens", cTokens.ToString()),
-                        new("cachedTokens", cacheTokens.ToString()),
-                        new("totalTokens", (pTokens + cTokens).ToString())
-                    ]);
-
-                foreach (var block in msg.Blocks.OfType<ToolCallBlock>())
-                {
-                    toolCount++;
-                    var toolSpanId = PerfTracer.NewId();
-                    var durMs = block.DurationMs ?? 450;
-                    var tStart = modelEnd + (long)(toolCount * 0.4 * freq);
-                    var tEnd = tStart + (long)(durMs / 1000.0 * freq);
-                    var ok = block.Status != ToolCallStatus.Failed;
-
-                    PerfTracer.EmitCompleted(turnTraceId, toolSpanId, turnSpanId, "tool",
-                        tStart, tEnd, ok ? null : (block.StatusText ?? "tool_failed"), [
-                            new("tool", block.ToolName),
-                            new("ok", ok ? "true" : "false"),
-                            new("durationMs", durMs.ToString()),
-                            new("stdoutHead", block.Output is { Length: > 0 } outStr ? (outStr.Length > 200 ? outStr[..200] : outStr) : block.ToolName)
-                        ]);
-
-                    PerfTracer.EmitCompleted(turnTraceId, PerfTracer.NewId(), toolSpanId, "tool.process",
-                        tStart, tEnd, ok ? null : (block.StatusText ?? "tool_failed"), [
-                            new("tool", block.ToolName),
-                            new("command", block.ToolName),
-                            new("exitCode", ok ? "0" : "1"),
-                            new("durationMs", durMs.ToString()),
-                            new("stdoutHead", block.Output is { Length: > 0 } outStr2 ? (outStr2.Length > 200 ? outStr2[..200] : outStr2) : block.ToolName)
-                        ]);
-                }
-
-                var turnEnd = modelEnd + (long)((toolCount + 1) * 0.5 * freq);
-                PerfTracer.EmitCompleted(turnTraceId, turnSpanId, 0, "turn",
-                    turnStartTicks, turnEnd, null, [
-                        new("model", model),
-                        new("outcome", "completed"),
-                        new("toolCalls", toolCount.ToString()),
-                        new("promptTokens", pTokens.ToString()),
-                        new("completionTokens", cTokens.ToString()),
-                        new("cachedTokens", cacheTokens.ToString())
-                    ]);
-            }
+            chat += message.ChatTokens;
+            results += message.ResultTokens;
         }
+        sessionSink.OnSessionContext(new PerfSessionContext(_sessionId, _sessionName,
+            _session?.CurrentModel ?? _currentModel, _backend, System.Diagnostics.Stopwatch.GetTimestamp(),
+            [new("chat", "会话文本", chat), new("results", "工具结果", results)],
+            _latestUsage?.InputTokens, _latestUsage?.OutputTokens, _latestUsage?.CacheReadTokens));
+        _contextDirty = false;
     }
 
     /// <summary>时间线每批 UI 更新的耗时。</summary>
@@ -241,169 +188,214 @@ public sealed class PerfHostCollector : IDisposable
     {
         lock (_gate)
         {
+            if (sender is not null && !ReferenceEquals(sender, _session)) return;
+            var now = System.Diagnostics.Stopwatch.GetTimestamp();
             switch (e)
             {
-                case SessionEvent.MessageStarted { Role: MessageRole.User } user:
-                    GetOpenTurnLocked(user.MessageId).StartedUtc = DateTimeOffset.Now;
-                    _sessionActive = true;
-                    if (!_isFumo)
+                case SessionEvent.MessageStarted started:
+                    _messageEstimates.TryAdd(started.MessageId, new MessageEstimate());
+                    _currentModel = started.Model ?? _session?.CurrentModel ?? _currentModel;
+                    if (started.Role == MessageRole.User)
                     {
-                        _currentTurnTraceId = PerfTracer.NewId();
-                        _currentTurnSpanId = PerfTracer.NewId();
-                        _turnStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
-                        _turnToolCalls = 0;
-                        _turnModel = user.Model ?? _currentModel;
-                        _openTools.Clear();
-                        _openModel = null;
-                        _lastTurnUsage = null;
+                        GetOpenTurnLocked(started.MessageId).StartedUtc = DateTimeOffset.UtcNow;
+                        _sessionActive = true;
+                        if (!_isFumo) EnsureExternalTurnLocked(now);
+                        PublishContextLocked(force: true);
+                    }
+                    else if (!_isFumo && PerfTracer.Enabled)
+                    {
+                        EnsureExternalTurnLocked(now);
+                        if (_openModel is { } previous) FinishModelLocked(previous, now);
+                        _openModel = new OpenModel(PerfTracer.NewId(), now, started.MessageId);
+                        _modelByMessage[started.MessageId] = _openModel.SpanId;
+                        StartLiveSpan("model.request", _openModel.SpanId, _currentTurnSpanId, now);
                     }
                     break;
-                case SessionEvent.MessageStarted { Role: MessageRole.Assistant } assistant:
-                    if (!_isFumo)
-                    {
-                        if (_currentTurnTraceId == 0)
-                        {
-                            _currentTurnTraceId = PerfTracer.NewId();
-                            _currentTurnSpanId = PerfTracer.NewId();
-                            _turnStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
-                        }
-                        _openModel = (PerfTracer.NewId(), System.Diagnostics.Stopwatch.GetTimestamp(), assistant.Model ?? _currentModel);
-                    }
+                case SessionEvent.TextAppended text:
+                    AppendEstimateLocked(text.MessageId, text.ContentIndex, text.Delta);
+                    break;
+                case SessionEvent.ThinkingAppended thinking:
+                    AppendEstimateLocked(thinking.MessageId, thinking.ContentIndex, thinking.Delta);
+                    break;
+                case SessionEvent.ToolCallAppended call:
+                    AppendEstimateLocked(call.MessageId, call.ContentIndex, call.JsonFragment);
                     break;
                 case SessionEvent.BlockStarted block when block.Kind == MessageBlockKind.ToolCall:
-                    if (!_isFumo)
+                    // 工具名只在 BlockStarted/ToolCallBlock 上可靠；按调用 id 记住，供 Running/Completed 使用。
+                    if (!string.IsNullOrEmpty(block.ToolCallId))
+                        _toolNames[block.ToolCallId] = block.ToolName ?? string.Empty;
+                    break;
+                case SessionEvent.BlockFinished block:
+                    if (block.FinalBlock is ToolCallBlock startedTool && !string.IsNullOrEmpty(startedTool.ToolCallId))
+                        _toolNames[startedTool.ToolCallId] = startedTool.ToolName;
+                    if (_messageEstimates.TryGetValue(block.MessageId, out var estimate))
                     {
-                        if (_currentTurnTraceId == 0)
-                        {
-                            _currentTurnTraceId = PerfTracer.NewId();
-                            _currentTurnSpanId = PerfTracer.NewId();
-                            _turnStartTicks = System.Diagnostics.Stopwatch.GetTimestamp();
-                        }
-                        var tid = block.ToolCallId ?? block.ContentIndex.ToString();
-                        _openTools[tid] = (PerfTracer.NewId(), block.ToolName ?? "tool", System.Diagnostics.Stopwatch.GetTimestamp());
+                        estimate.SetBlock(block.ContentIndex, block.FinalBlock);
+                        _contextDirty = true;
                     }
+                    if (!_isFumo && block.FinalBlock is ToolCallBlock tool)
+                        ObserveToolLocked(block.MessageId, tool, now);
                     break;
                 case SessionEvent.ToolCallStatusChanged status:
-                    if (status.Status is ToolCallStatus.Completed or ToolCallStatus.Failed)
+                    if (status.Status == ToolCallStatus.Running && !_isFumo)
                     {
-                        if (_openTurns.Values.LastOrDefault() is { } toolTurn) toolTurn.Tools++;
-                        if (!_isFumo)
-                        {
-                            var tid = status.ToolCallId ?? status.ContentIndex.ToString();
-                            if (_openTools.TryGetValue(tid, out var tool))
-                            {
-                                var now = System.Diagnostics.Stopwatch.GetTimestamp();
-                                var durMs = status.DurationMs ?? (long)((now - tool.StartTicks) * 1000.0 / System.Diagnostics.Stopwatch.Frequency);
-                                var endTicks = tool.StartTicks + (long)(durMs / 1000.0 * System.Diagnostics.Stopwatch.Frequency);
-                                var ok = status.Status == ToolCallStatus.Completed;
-
-                                PerfTracer.EmitCompleted(_currentTurnTraceId, tool.SpanId, _currentTurnSpanId, "tool",
-                                    tool.StartTicks, endTicks,
-                                    ok ? null : (status.StatusText ?? "tool_failed"),
-                                    [
-                                        new("tool", tool.Name),
-                                        new("ok", ok ? "true" : "false"),
-                                        new("durationMs", durMs.ToString()),
-                                    ]);
-
-                                PerfTracer.EmitCompleted(_currentTurnTraceId, PerfTracer.NewId(), tool.SpanId, "tool.process",
-                                    tool.StartTicks, endTicks,
-                                    ok ? null : (status.StatusText ?? "tool_failed"),
-                                    [
-                                        new("tool", tool.Name),
-                                        new("command", tool.Name),
-                                        new("exitCode", ok ? "0" : "1"),
-                                        new("stdoutHead", status.StatusText ?? (tool.Name + " completed")),
-                                        new("durationMs", durMs.ToString()),
-                                    ]);
-
-                                _turnToolCalls++;
-                                _openTools.Remove(tid);
-                            }
-                        }
+                        var name = _toolNames.GetValueOrDefault(status.ToolCallId)
+                                   ?? _messageEstimates.GetValueOrDefault(status.MessageId)?.ToolName(status.ContentIndex);
+                        StartToolLocked(status.MessageId, status.ToolCallId, name, now);
+                    }
+                    else if (status.Status is ToolCallStatus.Completed or ToolCallStatus.Failed or ToolCallStatus.Cancelled)
+                    {
+                        if (!_isFumo) FinishToolLocked(status.ToolCallId, status.Status,
+                            status.StatusText, status.DurationMs, now);
                     }
                     break;
-                case SessionEvent.MessageFinished finished when finished.FinalMessage.Role == MessageRole.Assistant:
-                    if (_openTurns.Values.LastOrDefault() is { } current)
+                case SessionEvent.MessageFinished finished:
+                    RememberMessageLocked(finished.FinalMessage with
                     {
-                        current.AssistantMessages++;
-                        if (finished.CumulativeUsage is { } usage)
+                        CumulativeUsage = finished.CumulativeUsage ?? finished.FinalMessage.CumulativeUsage,
+                    });
+                    if (finished.FinalMessage.Role == MessageRole.User)
+                    {
+                        if (_openTurns.TryGetValue(finished.MessageId, out var userTurn))
+                            userTurn.UserChars = finished.FinalMessage.Blocks.OfType<TextBlock>().Sum(block => block.Text.Length);
+                    }
+                    else
+                    {
+                        if (_openTurns.Values.LastOrDefault() is { } turn)
                         {
-                            current.InputTokens = usage.InputTokens;
-                            current.OutputTokens = usage.OutputTokens;
+                            turn.AssistantMessages++;
+                            turn.InputTokens = _latestUsage?.InputTokens;
+                            turn.OutputTokens = _latestUsage?.OutputTokens;
+                        }
+                        if (!_isFumo && PerfTracer.Enabled)
+                        {
+                            if (_openModel is { } model && model.MessageId == finished.MessageId)
+                                FinishModelLocked(model, now);
+                            PublishUsageLocked(finished.MessageId, finished.CumulativeUsage ?? finished.FinalMessage.CumulativeUsage, now);
                         }
                     }
-                    if (!_isFumo && _openModel is { } m)
-                    {
-                        var now = System.Diagnostics.Stopwatch.GetTimestamp();
-                        var usage = finished.CumulativeUsage;
-                        _lastTurnUsage = usage;
-                        var pTokens = usage?.InputTokens ?? 0;
-                        var cTokens = usage?.OutputTokens ?? 0;
-                        var cacheTokens = usage?.CacheReadTokens ?? 0;
-                        var model = finished.FinalMessage.Model ?? m.Model;
-
-                        PerfTracer.EmitCompleted(_currentTurnTraceId, m.SpanId, _currentTurnSpanId, "model.request",
-                            m.StartTicks, now, null,
-                            [
-                                new("model", model),
-                                new("promptTokens", pTokens.ToString()),
-                                new("completionTokens", cTokens.ToString()),
-                                new("cachedTokens", cacheTokens.ToString()),
-                                new("totalTokens", (pTokens + cTokens).ToString()),
-                            ]);
-
-                        PerfTracer.EmitCompleted(_currentTurnTraceId, PerfTracer.NewId(), m.SpanId, "model.stream",
-                            m.StartTicks, now, null,
-                            [
-                                new("model", model),
-                                new("ttftMs", "320"),
-                                new("promptTokens", pTokens.ToString()),
-                                new("completionTokens", cTokens.ToString()),
-                                new("cachedTokens", cacheTokens.ToString()),
-                                new("totalTokens", (pTokens + cTokens).ToString()),
-                            ]);
-                        _openModel = null;
-                    }
+                    PublishContextLocked(force: true);
                     break;
                 case SessionEvent.TurnSettled settled:
-                    foreach (var turn in _openTurns.Values.ToArray())
-                        CompleteLocked(turn, settled.Outcome.ToString(), settled.Summary);
+                    foreach (var turn in _openTurns.Values.ToArray()) CompleteLocked(turn, settled.Outcome.ToString(), settled.Summary);
                     _openTurns.Clear();
-                    if (!_isFumo && _currentTurnTraceId != 0)
-                    {
-                        var now = System.Diagnostics.Stopwatch.GetTimestamp();
-                        var outcome = settled.Outcome.ToString().ToLowerInvariant();
-                        var pTokens = _lastTurnUsage?.InputTokens ?? 0;
-                        var cTokens = _lastTurnUsage?.OutputTokens ?? 0;
-                        var cacheTokens = _lastTurnUsage?.CacheReadTokens ?? 0;
-
-                        PerfTracer.EmitCompleted(_currentTurnTraceId, _currentTurnSpanId, 0, "turn",
-                            _turnStartTicks, now,
-                            settled.Outcome == SessionOutcome.Failed ? (settled.Summary ?? "failed") : null,
-                            [
-                                new("model", _turnModel),
-                                new("outcome", outcome),
-                                new("toolCalls", _turnToolCalls.ToString()),
-                                new("promptTokens", pTokens.ToString()),
-                                new("completionTokens", cTokens.ToString()),
-                                new("cachedTokens", cacheTokens.ToString()),
-                            ]);
-                        _currentTurnTraceId = 0;
-                        _currentTurnSpanId = 0;
-                    }
-                    break;
-                case SessionEvent.ActivityChanged { Activity: SessionActivity.Idle }:
+                    if (!_isFumo) FinishExternalTurnLocked(settled.Outcome, settled.Summary);
                     _sessionActive = false;
+                    PublishContextLocked(force: true);
                     break;
-                case SessionEvent.ActivityChanged { Activity: SessionActivity.Running }:
-                    foreach (var turn in _openTurns.Values)
-                        if (turn.StartedUtc == default) turn.StartedUtc = DateTimeOffset.Now;
+                case SessionEvent.ActivityChanged activity:
+                    _sessionActive = activity.Activity != SessionActivity.Idle;
                     break;
             }
+            if (_openTurns.Values.LastOrDefault() is { } current) current.Events++;
         }
         Interlocked.Increment(ref _events);
-        if (_openTurns.Count > 0) _openTurns.Values.Last().Events++;
+    }
+
+    private void AppendEstimateLocked(string messageId, int index, string delta)
+    {
+        if (!_messageEstimates.TryGetValue(messageId, out var estimate)) return;
+        estimate.Append(index, delta);
+        _contextDirty = true;
+    }
+
+    private void EnsureExternalTurnLocked(long now)
+    {
+        if (_currentTurnTraceId != 0 || !PerfTracer.Enabled) return;
+        _currentTurnTraceId = PerfTracer.NewId();
+        _currentTurnSpanId = PerfTracer.NewId();
+        _turnStartTicks = now;
+        StartLiveSpan("turn", _currentTurnSpanId, 0, now);
+    }
+
+    private List<KeyValuePair<string, string>> SessionTags() =>
+    [
+        new("model", _session?.CurrentModel ?? _currentModel ?? string.Empty),
+        new("backend", _backend ?? string.Empty),
+        new("sessionId", _sessionId ?? string.Empty),
+        new("source", "host-events"),
+    ];
+
+    private void StartLiveSpan(string name, long id, long parent, long started)
+    {
+        if (PerfTracer.Sink is IPerfLiveSink live)
+            live.OnSpanProgress(new PerfSpanStart(_currentTurnTraceId, id, parent, name, started), SessionTags());
+    }
+
+    private void FinishModelLocked(OpenModel model, long now)
+    {
+        PerfTracer.EmitCompleted(_currentTurnTraceId, model.SpanId, _currentTurnSpanId, "model.request",
+            model.StartTicks, now, tags: SessionTags());
+        _openModel = null;
+    }
+
+    private void PublishUsageLocked(string messageId, UsageInfo? usage, long now)
+    {
+        if (usage is null || usage.IsUnknown || !_usageMessages.Add(messageId)) return;
+        EnsureExternalTurnLocked(now);
+        if (_currentTurnTraceId == 0) return;
+        var tags = SessionTags();
+        if (usage.InputTokens is { } input) tags.Add(new("promptTokens", PerfTracer.Invariant(input)));
+        if (usage.OutputTokens is { } output) tags.Add(new("completionTokens", PerfTracer.Invariant(output)));
+        if (usage.CacheReadTokens is { } cached) tags.Add(new("cachedTokens", PerfTracer.Invariant(cached)));
+        tags.Add(new("usageSource", "message"));
+        PerfTracer.EmitCompleted(_currentTurnTraceId, PerfTracer.NewId(),
+            _modelByMessage.GetValueOrDefault(messageId, _currentTurnSpanId), "model.usage", now, now, tags: tags);
+    }
+
+    private void ObserveToolLocked(string messageId, ToolCallBlock tool, long now)
+    {
+        if (tool.Status == ToolCallStatus.Running) StartToolLocked(messageId, tool.ToolCallId, tool.ToolName, now);
+        else if (tool.Status is ToolCallStatus.Completed or ToolCallStatus.Failed or ToolCallStatus.Cancelled)
+            FinishToolLocked(tool.ToolCallId, tool.Status, tool.StatusText, tool.DurationMs, now);
+    }
+
+    private void StartToolLocked(string messageId, string toolId, string? name, long now)
+    {
+        if (!PerfTracer.Enabled || _openTools.ContainsKey(toolId)) return;
+        EnsureExternalTurnLocked(now);
+        if (_openModel is { } model && model.MessageId == messageId) FinishModelLocked(model, now);
+        name ??= _toolNames.GetValueOrDefault(toolId);
+        var tool = new OpenTool(PerfTracer.NewId(), name, now);
+        _openTools.Add(toolId, tool);
+        var tags = SessionTags();
+        tags.Add(new("tool", name ?? string.Empty));
+        if (PerfTracer.Sink is IPerfLiveSink live)
+            live.OnSpanProgress(new PerfSpanStart(_currentTurnTraceId, tool.SpanId, _currentTurnSpanId, "tool", now), tags);
+    }
+
+    private void FinishToolLocked(string toolId, ToolCallStatus status, string? detail, long? durationMs, long now)
+    {
+        if (!_openTools.Remove(toolId, out var tool)) return;
+        if (_openTurns.Values.LastOrDefault() is { } turn) turn.Tools++;
+        var tags = SessionTags();
+        tags.Add(new("tool", tool.Name ?? string.Empty));
+        tags.Add(new("ok", status == ToolCallStatus.Completed ? "true" : "false"));
+        if (durationMs is { } duration) tags.Add(new("backendDurationMs", PerfTracer.Invariant(duration)));
+        var start = new PerfSpanStart(_currentTurnTraceId, tool.SpanId, _currentTurnSpanId, "tool", tool.StartTicks);
+        PerfTracer.Sink?.OnSpanEnd(new PerfSpanEnd(start,
+            status == ToolCallStatus.Cancelled ? PerfSpanStatus.Cancelled :
+            status == ToolCallStatus.Failed ? PerfSpanStatus.Error : PerfSpanStatus.Ok,
+            status == ToolCallStatus.Failed ? detail : null, tags, now));
+    }
+
+    private void FinishExternalTurnLocked(SessionOutcome outcome, string? detail)
+    {
+        if (_currentTurnTraceId == 0) return;
+        var now = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (_openModel is { } model) FinishModelLocked(model, now);
+        foreach (var id in _openTools.Keys.ToArray()) FinishToolLocked(id, ToolCallStatus.Cancelled, null, null, now);
+        var tags = SessionTags();
+        tags.Add(new("outcome", outcome.ToString()));
+        PerfTracer.Sink?.OnSpanEnd(new PerfSpanEnd(
+            new PerfSpanStart(_currentTurnTraceId, _currentTurnSpanId, 0, "turn", _turnStartTicks),
+            outcome == SessionOutcome.Interrupted ? PerfSpanStatus.Cancelled :
+            outcome == SessionOutcome.Failed ? PerfSpanStatus.Error : PerfSpanStatus.Ok,
+            outcome == SessionOutcome.Failed ? detail : null, tags, now));
+        _currentTurnTraceId = _currentTurnSpanId = 0;
+        _modelByMessage.Clear();
+        _usageMessages.Clear();
+        _toolNames.Clear();
     }
 
     private OpenTurn GetOpenTurnLocked(string messageId)
@@ -447,7 +439,11 @@ public sealed class PerfHostCollector : IDisposable
         if (_disposed) return;
         try
         {
-            if (_sinkActive) ReportHostMetrics();
+            if (_sinkActive)
+            {
+                lock (_gate) PublishContextLocked();
+                ReportHostMetrics();
+            }
             FlushTurns();
             if (_sinkActive && Interlocked.CompareExchange(ref _pumping, 1, 0) == 0) _ = ProbeUiAsync();
         }
@@ -588,11 +584,59 @@ public sealed class PerfHostCollector : IDisposable
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 
+    private sealed record OpenTool(long SpanId, string? Name, long StartTicks);
+    private sealed record OpenModel(long SpanId, long StartTicks, string MessageId);
+
+    private sealed class MessageEstimate
+    {
+        private readonly Dictionary<int, TextEstimate> _blocks = [];
+        public long ChatTokens => _blocks.Values.Sum(block => block.Tokens);
+        public long ResultTokens => _blocks.Values.Sum(block => block.ResultTokens);
+
+        public void Append(int index, string text)
+        {
+            if (!_blocks.TryGetValue(index, out var block)) _blocks[index] = block = new TextEstimate();
+            block.Append(text);
+        }
+
+        public void SetBlock(int index, MessageBlock value)
+        {
+            var block = new TextEstimate();
+            switch (value)
+            {
+                case TextBlock text: block.Append(text.Text); break;
+                case ThinkingBlock thinking: block.Append(thinking.Text); break;
+                case ToolCallBlock tool:
+                    block.Append(tool.InputJson);
+                    block.ToolName = tool.ToolName;
+                    block.ResultTokens = PerfTracer.TokensOf(tool.Output);
+                    break;
+            }
+            _blocks[index] = block;
+        }
+
+        public string? ToolName(int index) => _blocks.GetValueOrDefault(index)?.ToolName;
+    }
+
+    private sealed class TextEstimate
+    {
+        private long _ascii;
+        private long _other;
+        public long Tokens => (_ascii + 3) / 4 + _other;
+        public long ResultTokens { get; set; }
+        public string? ToolName { get; set; }
+        public void Append(string text)
+        {
+            foreach (var character in text)
+                if (character < 128) _ascii++; else _other++;
+        }
+    }
+
     private sealed class OpenTurn(string userMessageId)
     {
         public string UserMessageId { get; } = userMessageId;
         public DateTimeOffset StartedUtc { get; set; }
-        public int UserChars { get; } = userMessageId.Length;
+        public int UserChars { get; set; }
         public int AssistantMessages { get; set; }
         public int Events { get; set; }
         public int Tools { get; set; }

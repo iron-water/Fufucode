@@ -26,6 +26,7 @@ internal sealed class PerfCompanionNetworkView : UserControl
 
     // 拓扑节点指标
     private readonly TextBlock _hostEventsText = new() { FontSize = 22, FontWeight = FontWeight.SemiBold };
+    private readonly TextBlock _hostStateText = new() { FontSize = 12, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _fufuStateText = new() { FontSize = 12, FontWeight = FontWeight.SemiBold };
     private readonly TextBlock _fufuMetricsText = new() { FontSize = 10.5 };
     private readonly TextBlock _fufuRenderText = new() { FontSize = 10.5 };
@@ -44,10 +45,8 @@ internal sealed class PerfCompanionNetworkView : UserControl
     public PerfCompanionNetworkView()
     {
         _hostEventsText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
-        _fufuStateText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
         _fufuMetricsText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
         _fufuRenderText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        _jiiiStateText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
         _jiiiMetricsText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
 
         _pipeRttText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
@@ -75,16 +74,16 @@ internal sealed class PerfCompanionNetworkView : UserControl
         var topologyGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*"), ColumnSpacing = 12 };
 
         // 1. FUFUCODE 宿主核心
-        var hostCard = MakeNodeCard("FUFUCODE 核心", "Canonical Bus", "运行中", PerfPalette.Tool,
+        var hostCard = MakeNodeCard("FUFUCODE 核心", "Canonical Bus", _hostStateText, "读取中", PerfPalette.Tool,
         [
-            ("总线吞吐", (Control)_hostEventsText),
+            ("事件计数", (Control)_hostEventsText),
             ("路由职责", (Control)Text("去重 / 幂等 / 扇出", 11, "AppTextSecondary")),
-            ("总线延迟", (Control)Text("< 0.2 ms", 11, "AppTextDim")),
+            ("总线时延", (Control)Text("未采集", 11, "AppTextDim")),
         ]);
         topologyGrid.Children.Add(hostCard);
 
         // 2. FUFU 桌宠连接
-        var fufuCard = MakeNodeCard("FUFU 桌宠", "service.fufu-bridge", "待连接", PerfPalette.Model,
+        var fufuCard = MakeNodeCard("FUFU 桌宠", "service.fufu-bridge", _fufuStateText, "读取中", PerfPalette.Model,
         [
             ("IPC 管道", (Control)Text(@"\\.\pipe\fufu", 10.5, "AppTextSecondary")),
             ("传输状态", (Control)_fufuMetricsText),
@@ -94,7 +93,7 @@ internal sealed class PerfCompanionNetworkView : UserControl
         topologyGrid.Children.Add(fufuCard);
 
         // 3. JIII 远程协同
-        var jiiiCard = MakeNodeCard("JIII 远程协同", "service.remote-control", "已就绪", PerfPalette.Approval,
+        var jiiiCard = MakeNodeCard("JIII 远程协同", "service.remote-control", _jiiiStateText, "读取中", PerfPalette.Approval,
         [
             ("传输通道", (Control)Text("WebSocket / Web 桥", 10.5, "AppTextSecondary")),
             ("远控状态", (Control)_jiiiMetricsText),
@@ -105,21 +104,21 @@ internal sealed class PerfCompanionNetworkView : UserControl
 
         // 性能指标网格
         var kpiGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), ColumnSpacing = 10 };
-        kpiGrid.Children.Add(KpiBlock("管道 IPC 时延", _pipeRttText, "微秒级管道往返"));
-        var kpi2 = KpiBlock("事件吞吐", _throughputText, "规范事实与通知");
+        kpiGrid.Children.Add(KpiBlock("协同事件总数", _throughputText, "规范事实与通知累计"));
+        var kpi2 = KpiBlock("活跃连接器", _pipeRttText, "已连接 / 已注册");
         Grid.SetColumn(kpi2, 1);
         kpiGrid.Children.Add(kpi2);
-        var kpi3 = KpiBlock("意图幂等校验", _idempotencyLatencyText, "全局幂等防重复");
+        var kpi3 = KpiBlock("最近审计", _idempotencyLatencyText, "去重后的意图流水");
         Grid.SetColumn(kpi3, 2);
         kpiGrid.Children.Add(kpi3);
-        var kpi4 = KpiBlock("异常与丢包率", _lossRateText, "通道健全度 100%");
+        var kpi4 = KpiBlock("待接入指标", _lossRateText, "RTT / 幂等时延 / 丢包需对端上报");
         Grid.SetColumn(kpi4, 3);
         kpiGrid.Children.Add(kpi4);
 
         // 实时规范事件与审计流水
         var auditHead = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Margin = new Thickness(0, 0, 0, 8) };
         auditHead.Children.Add(Text("实时规范事件与意图流水", 13, "AppTextPrimary", FontWeight.SemiBold));
-        var auditHint = Text("最近 50 条去重审计", 10, "AppTextDim");
+        var auditHint = Text("最近 30 条去重审计", 10, "AppTextDim");
         Grid.SetColumn(auditHint, 2);
         auditHead.Children.Add(auditHint);
 
@@ -162,11 +161,15 @@ internal sealed class PerfCompanionNetworkView : UserControl
             var jiiiStatus = statuses.FirstOrDefault(s => string.Equals(s.ConnectorId, "service.remote-control", StringComparison.OrdinalIgnoreCase));
 
             var totalEvents = statuses.Sum(s => s.ReceivedEvents + s.SentEvents);
+            var running = statuses.Count(s => s.State == CompanionConnectorState.Running);
             _hostEventsText.Text = $"{totalEvents} 条";
+            _hostStateText.Text = statuses.Count == 0
+                ? "无连接器"
+                : running > 0 ? $"{running} 个运行中" : "全部离线";
 
             if (fufuStatus is not null)
             {
-                _fufuStateText.Text = fufuStatus.State.ToString();
+                _fufuStateText.Text = StateText(fufuStatus.State);
                 _fufuMetricsText.Text = $"收 {fufuStatus.ReceivedEvents} · 发 {fufuStatus.SentEvents}";
             }
             else
@@ -175,16 +178,15 @@ internal sealed class PerfCompanionNetworkView : UserControl
                 _fufuMetricsText.Text = "管道尚未连接";
             }
 
-            var fps = FufuRenderDiagnostics.CurrentFps;
-            var frameMs = FufuRenderDiagnostics.LastFrameTimeMs;
-            var dropped = FufuRenderDiagnostics.DroppedFrames;
-            _fufuRenderText.Text = fps > 0
-                ? $"渲染 {fps:0.0} FPS · 单帧 {frameMs:0.1}ms · 掉帧 {dropped}"
-                : "桌宠渲染就绪";
+            // 渲染探针运行在 FUFU 进程内；本进程拿不到样本时明确显示未采集，不拿默认值冒充。
+            _fufuRenderText.Text = FufuRenderDiagnostics.HasSamples &&
+                                   FufuRenderDiagnostics.IsFresh(TimeSpan.FromSeconds(5))
+                ? $"渲染 {FufuRenderDiagnostics.CurrentFps:0.0} FPS · 单帧 {FufuRenderDiagnostics.LastFrameTimeMs:0.1}ms · 掉帧 {FufuRenderDiagnostics.DroppedFrames}"
+                : "渲染帧率未采集";
 
             if (jiiiStatus is not null)
             {
-                _jiiiStateText.Text = jiiiStatus.State.ToString();
+                _jiiiStateText.Text = StateText(jiiiStatus.State);
                 _jiiiMetricsText.Text = $"收 {jiiiStatus.ReceivedEvents} · 发 {jiiiStatus.SentEvents}";
             }
             else
@@ -193,10 +195,11 @@ internal sealed class PerfCompanionNetworkView : UserControl
                 _jiiiMetricsText.Text = "远控等待配对";
             }
 
-            _pipeRttText.Text = fufuStatus?.State == CompanionConnectorState.Running ? "0.6 ms" : "—";
+            // 只有连接状态、事件计数与审计流水是真实来源；时延/幂等/丢包尚无对端上报。
+            _pipeRttText.Text = $"{running}/{statuses.Count}";
             _throughputText.Text = $"{totalEvents} evt";
-            _idempotencyLatencyText.Text = "< 0.1 ms";
-            _lossRateText.Text = "0.0%";
+            _idempotencyLatencyText.Text = $"{audits.Count} 条";
+            _lossRateText.Text = "未接入";
 
             // 渲染审计记录
             _auditRowsHost.Children.Clear();
@@ -218,6 +221,15 @@ internal sealed class PerfCompanionNetworkView : UserControl
             System.Diagnostics.Trace.TraceWarning("Companion network view update failed: {0}", ex.Message);
         }
     }
+
+    private static string StateText(CompanionConnectorState state) => state switch
+    {
+        CompanionConnectorState.Running => "运行中",
+        CompanionConnectorState.Starting => "连接中",
+        CompanionConnectorState.Degraded => "降级",
+        CompanionConnectorState.Faulted => "故障",
+        _ => "已停止",
+    };
 
     private static Control BuildAuditRow(CanonicalAuditEntry entry)
     {
@@ -245,7 +257,7 @@ internal sealed class PerfCompanionNetworkView : UserControl
             Padding = new Thickness(6, 1.5),
             CornerRadius = new CornerRadius(4),
             VerticalAlignment = VerticalAlignment.Center,
-            Child = Text(entry.ReferenceId ?? "ok", 9, "AppSuccessForeground"),
+            Child = Text(entry.ReferenceId ?? "—", 9, "AppTextDim"),
         };
         statusChip.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
         Grid.SetColumn(statusChip, 3);
@@ -254,7 +266,8 @@ internal sealed class PerfCompanionNetworkView : UserControl
         return row;
     }
 
-    private static Border MakeNodeCard(string title, string subtitle, string initialStatus, Color tone, (string Label, Control Value)[] rows)
+    private static Border MakeNodeCard(string title, string subtitle, TextBlock statusText, string initialStatus,
+        Color tone, (string Label, Control Value)[] rows)
     {
         var body = new StackPanel { Spacing = 8 };
         var head = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
@@ -262,8 +275,11 @@ internal sealed class PerfCompanionNetworkView : UserControl
         head.Children.Add(titleStack);
 
         var dot = new Ellipse { Width = 6, Height = 6, Fill = new SolidColorBrush(tone), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 5, 0) };
-        var stText = Text(initialStatus, 10, "AppTextSecondary", null, false);
-        var badge = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Children = { dot, stText } };
+        statusText.Text = initialStatus;
+        statusText.FontSize = 10;
+        statusText.VerticalAlignment = VerticalAlignment.Center;
+        statusText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextSecondary"));
+        var badge = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Children = { dot, statusText } };
         Grid.SetColumn(badge, 1);
         head.Children.Add(badge);
         body.Children.Add(head);

@@ -214,6 +214,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         if (session is Mock.MockChatSession)
         {
             vm.Extensions.AttachMock();
+            _perfWiring?.AttachSession(session, "预览会话", session.CurrentModel);
         }
 
         vm.Extensions.SetStartupFailure(_lastStartupFailure);
@@ -729,7 +730,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         vm.Input.DraftText = host.LoadDraft() ?? string.Empty;
         WireDraftPersistence(vm);
 
-        _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, host.CurrentTranscript());
+        _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, host.CurrentTranscript(), current.Id);
         _dialogHost!.Attach(host.Chat);
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {

@@ -561,6 +561,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         turnSpan.Tag("promptChars", text.Length);
         turnSpan.Tag("images", images?.Count ?? 0);
         turnSpan.Tag("backend", "fumo");
+        turnSpan.Tag("sessionId", SessionId);
+        turnSpan.PublishProgress();
         if (queuedAt is { } start) turnSpan.Tag("queueMs", (long)Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         var recorder = new RoundRecorder(this);
         var outcome = SessionOutcome.Failed;
@@ -583,6 +585,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                     _thinkingLevel == "off" ? null : _thinkingLevel);
                 buildSpan.Tag("messages", messages.Count);
                 buildSpan.Tag("toolDefinitions", toolDefinitions.Count);
+
             }
             PureAgentTurnResult result;
             if (_engine is IObservablePureCSharpAgentEngine observable)

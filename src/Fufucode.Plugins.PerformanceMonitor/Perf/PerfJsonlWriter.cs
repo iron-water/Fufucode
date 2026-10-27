@@ -18,11 +18,8 @@ public sealed class PerfJsonlWriter : IDisposable
         Indented = false,
     };
 
-    private readonly Channel<SpanRecord> _spans = Channel.CreateBounded<SpanRecord>(
-        new BoundedChannelOptions(Capacity) { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest });
-    private readonly Channel<PerfEventRecord> _events = Channel.CreateBounded<PerfEventRecord>(
-        new BoundedChannelOptions(Capacity) { SingleReader = true, FullMode = BoundedChannelFullMode.DropOldest });
-    private readonly ChannelWriter<object> _loop;
+    private readonly Channel<object> _queue;
+    private int _disposed;
     private readonly Task _writerTask;
     private readonly string _rootDirectory;
     private readonly long _segmentBytes;
@@ -35,12 +32,16 @@ public sealed class PerfJsonlWriter : IDisposable
     {
         _rootDirectory = directory;
         _segmentBytes = segmentMb * 1024L * 1024L;
-        var merged = Channel.CreateUnbounded<object>(new UnboundedChannelOptions { SingleReader = true });
-        _loop = merged.Writer;
-        // 两个有界输入汇入一个无界调度通道：调度通道本身不会积压（只搬运已完成入队的记录）。
-        _ = PumpAsync(_spans.Reader, merged.Writer);
-        _ = PumpAsync(_events.Reader, merged.Writer);
-        _writerTask = WriteLoopAsync(merged.Reader);
+        _queue = Channel.CreateBounded<object>(new BoundedChannelOptions(Capacity)
+        {
+            SingleReader = true,
+            FullMode = BoundedChannelFullMode.DropOldest,
+        }, dropped =>
+        {
+            Interlocked.Increment(ref _dropped);
+            if (dropped is TaskCompletionSource barrier) barrier.TrySetResult();
+        });
+        _writerTask = WriteLoopAsync(_queue.Reader);
     }
 
     public string Directory => _rootDirectory;
@@ -49,23 +50,17 @@ public sealed class PerfJsonlWriter : IDisposable
 
     public long Written => Interlocked.Read(ref _written);
 
-    public void Enqueue(SpanRecord record) { if (!_spans.Writer.TryWrite(record)) Interlocked.Increment(ref _dropped); }
+    public void Enqueue(SpanRecord record) { if (!_queue.Writer.TryWrite(record)) Interlocked.Increment(ref _dropped); }
 
-    public void Enqueue(PerfEventRecord record) { if (!_events.Writer.TryWrite(record)) Interlocked.Increment(ref _dropped); }
+    public void Enqueue(PerfEventRecord record) { if (!_queue.Writer.TryWrite(record)) Interlocked.Increment(ref _dropped); }
 
-    /// <summary>等待后台写出；超时后放弃（进程退出路径使用）。</summary>
+    /// <summary>等待此前记录写出，保持通道可用；导出后仍继续采集。</summary>
     public void Flush(TimeSpan timeout)
     {
-        _spans.Writer.TryComplete();
-        _events.Writer.TryComplete();
-        try { _writerTask.Wait(timeout); }
+        var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!_queue.Writer.TryWrite(barrier)) return;
+        try { barrier.Task.Wait(timeout); }
         catch (AggregateException) { }
-        lock (_fileGate)
-        {
-            _stream?.Flush();
-            _stream?.Dispose();
-            _stream = null;
-        }
     }
 
     /// <summary>把早于保留期的分片文件删除；文件仍被占用则保留到下次。</summary>
@@ -89,23 +84,15 @@ public sealed class PerfJsonlWriter : IDisposable
 
     public void Dispose()
     {
-        Flush(TimeSpan.FromSeconds(3));
-        _loop.TryComplete();
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _queue.Writer.TryComplete();
+        try { _writerTask.Wait(TimeSpan.FromSeconds(3)); }
+        catch (AggregateException) { }
     }
 
     private string CurrentFile()
     {
         lock (_fileGate) return _currentPath ?? string.Empty;
-    }
-
-    private async Task PumpAsync<T>(ChannelReader<T> reader, ChannelWriter<object> target)
-    {
-        try
-        {
-            await foreach (var item in reader.ReadAllAsync())
-                if (item is not null) target.TryWrite(item);
-        }
-        catch (ChannelClosedException) { }
     }
 
     private async Task WriteLoopAsync(ChannelReader<object> reader)
@@ -116,6 +103,12 @@ public sealed class PerfJsonlWriter : IDisposable
             using var writer = new Utf8JsonWriter(stream, WriterOptions);
             await foreach (var item in reader.ReadAllAsync())
             {
+                if (item is TaskCompletionSource barrier)
+                {
+                    _stream?.Flush();
+                    barrier.TrySetResult();
+                    continue;
+                }
                 stream.SetLength(0);
                 writer.Reset(stream);
                 switch (item)
@@ -138,6 +131,18 @@ public sealed class PerfJsonlWriter : IDisposable
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             // 磁盘不可写时停止落盘，内存数据仍可用；不把异常抛回模型/UI 线程。
+            _queue.Writer.TryComplete();
+        }
+        finally
+        {
+            _queue.Writer.TryComplete();
+            while (reader.TryRead(out var pending))
+                if (pending is TaskCompletionSource barrier) barrier.TrySetResult();
+            lock (_fileGate)
+            {
+                _stream?.Dispose();
+                _stream = null;
+            }
         }
     }
 

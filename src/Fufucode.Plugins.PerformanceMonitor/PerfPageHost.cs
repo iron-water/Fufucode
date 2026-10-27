@@ -143,6 +143,16 @@ public sealed class PerfPageHost : IPerfPageHost, IPerfPageViewSource, IPerfAnom
                     string? line;
                     while ((line = reader.ReadLine()) is not null) writer.WriteLine(Redactor.Text(line));
                 }
+                // 页面实际消费的宿主样本也必须在诊断包里，否则导出的“概览/时间线”无法复现。
+                foreach (var file in Directory.EnumerateFiles(_dataRoot, "host-*.jsonl"))
+                {
+                    var entry = archive.CreateEntry("host/" + Path.GetFileName(file));
+                    using var output = entry.Open();
+                    using var reader = new StreamReader(file, Encoding.UTF8);
+                    using var writer = new StreamWriter(output, new UTF8Encoding(false));
+                    string? line;
+                    while ((line = reader.ReadLine()) is not null) writer.WriteLine(Redactor.Text(line));
+                }
                 foreach (var file in Directory.EnumerateFiles(_dataRoot, "turns-*.jsonl"))
                 {
                     var entry = archive.CreateEntry("turns/" + Path.GetFileName(file));

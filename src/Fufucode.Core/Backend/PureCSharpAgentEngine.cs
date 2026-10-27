@@ -308,6 +308,11 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         if (_compactionDeferred) return;
 
         var limit = await ResolveContextTokensAsync(modelId, cancellationToken).ConfigureAwait(false);
+        if (limit is > 0)
+        {
+            // 真实窗口来自模型目录解析；只上报已知值，未知时保持无标签。
+            using var windowSpan = PerfTracer.Step("context.window", "tokens", PerfTracer.Invariant(limit.Value));
+        }
         var chars = TotalChars(_history);
         bool needed;
         if (limit is > 0)

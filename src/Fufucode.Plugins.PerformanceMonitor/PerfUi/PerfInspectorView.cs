@@ -114,9 +114,17 @@ internal sealed class PerfInspectorView : UserControl
         _meta.Text = $"trace {span.TraceId:x} · span {span.SpanId:x}";
         _statusChip.IsVisible = true;
         var error = span.Status == "Error";
-        _statusText.Text = span.Status switch { "Error" => "错误", "Cancelled" => "取消", _ => "成功" };
+        var running = span.Status == "Running";
+        _statusText.Text = span.Status switch
+        {
+            "Error" => "错误",
+            "Cancelled" => "取消",
+            "Running" => "进行中",
+            _ => "成功",
+        };
         _statusText.Bind(TextBlock.ForegroundProperty,
-            new DynamicResourceExtension(error ? "AppCriticalForeground" : "AppSuccessForeground"));
+            new DynamicResourceExtension(error ? "AppCriticalForeground"
+                : running ? "AppAccentText" : "AppSuccessForeground"));
         RenderTab();
     }
 
@@ -193,12 +201,16 @@ internal sealed class PerfInspectorView : UserControl
         var panel = new WrapPanel();
         AddField(panel, "观测类型", ResolveLangfuseKind(span.Name));
         AddField(panel, "开始时刻", FormatStart(span));
-        AddField(panel, "结束时刻", span.EndUtc.ToLocalTime().ToString("HH:mm:ss.fff"));
-        AddField(panel, "执行耗时", PerfPalette.FormatMs(span.DurationMs));
+        AddField(panel, "结束时刻", span.Status == "Running"
+            ? "进行中"
+            : span.EndUtc.ToLocalTime().ToString("HH:mm:ss.fff"));
+        AddField(panel, "执行耗时", span.Status == "Running"
+            ? $"{PerfPalette.FormatMs(span.DurationMs)}（实时）"
+            : PerfPalette.FormatMs(span.DurationMs));
         AddField(panel, "类别归属", span.Category);
         AddField(panel, "执行状态", span.Status);
         AddField(panel, "父 Span ID", span.ParentSpanId == 0 ? "根调用 (root)" : span.ParentSpanId.ToString("x"));
-        AddField(panel, "工作线程", span.Tag("thread") ?? "thread-pool");
+        AddField(panel, "工作线程", span.Tag("thread"));
         AddField(panel, "工具名称", PerfPalette.ToolDisplayName(span.Tag("tool")));
         AddField(panel, "命令简述", span.Tag("command"));
         AddField(panel, "工作目录", span.Tag("cwd"));
@@ -223,10 +235,11 @@ internal sealed class PerfInspectorView : UserControl
         var isModel = span.Name.StartsWith("model.", StringComparison.Ordinal);
         if (isModel)
         {
-            panel.Children.Add(MessageCard("System 提示词规范", "系统环境规范、工具协议、规划约束与技能定义已在 context.build 注入", PerfPalette.CtxSystemPrompt));
             if (span.Tag("tools") is { } tools)
                 panel.Children.Add(MessageCard("Tool Definitions", $"向端点声明了 {tools} 个工具协议结构", PerfPalette.CtxTools));
-            panel.Children.Add(MessageCard("User / Conversation", "多轮历史对话消息与当前轮次提示词输入", PerfPalette.CtxConversation));
+            if (span.LongTag("historyMessages") is { } history)
+                panel.Children.Add(MessageCard("Conversation", $"随请求发送 {history} 条历史消息", PerfPalette.CtxConversation));
+            panel.Children.Add(Muted("Prompt 正文不写入 span；同回合 context.snapshot 提供按角色的 Token 估算。"));
         }
         else if (span.Name == "tool.process" || span.Name == "tool")
         {
@@ -239,9 +252,23 @@ internal sealed class PerfInspectorView : UserControl
         }
         else if (span.Name == "context.build")
         {
-            panel.Children.Add(MessageCard("系统规范字符数", $"{span.Tag("sysChars") ?? "—"} 字符", PerfPalette.CtxSystemPrompt));
-            panel.Children.Add(MessageCard("工具契约字符数", $"{span.Tag("toolDefChars") ?? "—"} 字符", PerfPalette.CtxTools));
-            panel.Children.Add(MessageCard("用户输入字符数", $"{span.Tag("userChars") ?? "—"} 字符", PerfPalette.CtxConversation));
+            if (span.Tag("messages") is { } messages)
+                panel.Children.Add(MessageCard("消息条数", $"{messages} 条", PerfPalette.CtxConversation));
+            if (span.Tag("toolDefinitions") is { } definitions)
+                panel.Children.Add(MessageCard("工具契约数", $"{definitions} 个", PerfPalette.CtxTools));
+            panel.Children.Add(Muted("本轮请求的 Token 估算记录在同回合 context.snapshot。"));
+        }
+        else if (span.Name == "context.snapshot")
+        {
+            if (span.LongTag("systemTokens") is { } system)
+                panel.Children.Add(MessageCard("系统提示词估算", $"{PerfPalette.FormatTokens(system)} token", PerfPalette.CtxSystemPrompt));
+            if (span.LongTag("toolTokens") is { } tools)
+                panel.Children.Add(MessageCard("工具定义估算", $"{PerfPalette.FormatTokens(tools)} token", PerfPalette.CtxTools));
+            if (span.LongTag("chatTokens") is { } chat)
+                panel.Children.Add(MessageCard("会话文本估算", $"{PerfPalette.FormatTokens(chat)} token", PerfPalette.CtxConversation));
+            if (span.LongTag("resultTokens") is { } results)
+                panel.Children.Add(MessageCard("工具结果估算", $"{PerfPalette.FormatTokens(results)} token", PerfPalette.CtxToolResults));
+            panel.Children.Add(Muted("这些数值按实际请求文本估算，不等同于供应商回报的 usage。"));
         }
         else
         {
@@ -257,9 +284,9 @@ internal sealed class PerfInspectorView : UserControl
 
         if (span.Name.StartsWith("model.", StringComparison.Ordinal))
         {
-            var frames = span.Tag("frames") ?? "0";
+            var frames = span.Tag("frames") ?? "—";
             var textChars = span.Tag("textChars") ?? "—";
-            panel.Children.Add(MessageCard("Model Output", $"模型流式生成完成 · 收到 {frames} 帧 · 文本 {textChars} 字符", PerfPalette.Model));
+            panel.Children.Add(MessageCard("Model Output", $"收到 {frames} 帧 · 文本 {textChars} 字符", PerfPalette.Model));
             if (span.Tag("toolCalls") is { } toolCalls && toolCalls != "0")
                 panel.Children.Add(MessageCard("Tool Calls", $"模型请求发起了 {toolCalls} 次工具调用", PerfPalette.Tool));
         }
@@ -267,8 +294,11 @@ internal sealed class PerfInspectorView : UserControl
         {
             var stdout = span.Tag("stdoutHead");
             var stderr = span.Tag("stderrHead");
-            var exitCode = span.Tag("exitCode") ?? "0";
-            panel.Children.Add(MessageCard("Exit Code 退出码", exitCode, exitCode == "0" ? PerfPalette.Tool : PerfPalette.Error));
+            var exitCode = span.Tag("exitCode");
+            if (exitCode is not null)
+                panel.Children.Add(MessageCard("Exit Code 退出码", exitCode, exitCode == "0" ? PerfPalette.Tool : PerfPalette.Error));
+            else
+                panel.Children.Add(Muted("该工具未提供退出码（非进程类工具）。"));
             if (!string.IsNullOrEmpty(stdout))
                 panel.Children.Add(OutputBlock($"STDOUT (头部，总长 {span.Tag("stdoutBytes") ?? "—"} 字节)", stdout));
             if (!string.IsNullOrEmpty(stderr))
@@ -298,12 +328,10 @@ internal sealed class PerfInspectorView : UserControl
         var tokensPerSec = completion > 0 && durationSec > 0 ? completion / durationSec : 0;
         var ttft = span.LongTag("ttftMs") ?? 0;
 
-        // 粗算预估费用 ($3/1M in, $15/1M out)
-        var cost = (prompt * 0.000003) + (completion * 0.000015);
-
-        grid.Children.Add(MetricCard("总 Token", PerfPalette.FormatTokens(total), 0, 0));
+        // 没有价格来源，不做任何费用猜测；只展示后端真实回报的用量。
+        grid.Children.Add(MetricCard("总 Token", total > 0 ? PerfPalette.FormatTokens(total) : "—", 0, 0));
         grid.Children.Add(MetricCard("生成速率", tokensPerSec > 0 ? $"{tokensPerSec:0.0} tok/s" : "—", 1, 0));
-        grid.Children.Add(MetricCard("预估费用", cost > 0 ? $"${cost:0.0000}" : "—", 2, 0));
+        grid.Children.Add(MetricCard("缓存命中 Token", span.LongTag("cachedTokens") is { } hit ? PerfPalette.FormatTokens(hit) : "—", 2, 0));
 
         grid.Children.Add(MetricCard("首字延迟 TTFT", ttft > 0 ? $"{ttft} ms" : "—", 0, 1));
         grid.Children.Add(MetricCard("缓存命中率", prompt > 0 ? PerfPalette.FormatPercent(cached / (double)prompt) : "—", 1, 1));
@@ -318,17 +346,32 @@ internal sealed class PerfInspectorView : UserControl
         var panel = new StackPanel { Spacing = 8 };
         panel.Children.Add(Title("Langfuse 自动化评估与规则评分 (Scores / Evaluations)"));
 
-        var ttft = span.LongTag("ttftMs") ?? 0;
-        var maxGap = span.LongTag("maxGapMs") ?? 0;
+        var ttft = span.LongTag("ttftMs");
+        var maxGap = span.LongTag("maxGapMs");
+        var any = false;
 
-        panel.Children.Add(ScoreRow("TTFT 响应时延评估", ttft <= 1500 ? "PASS" : "WARN",
-            ttft > 0 ? $"{ttft} ms (基准阈值 1500 ms)" : "非流式模型请求", ttft <= 1500 ? PerfPalette.Tool : PerfPalette.Approval));
-
-        panel.Children.Add(ScoreRow("流式抖动与卡顿评估", maxGap <= 1000 ? "PASS" : "STALL",
-            maxGap > 0 ? $"最大帧间隔 {maxGap} ms (卡顿阈值 1000 ms)" : "未检测到帧抖动", maxGap <= 1000 ? PerfPalette.Tool : PerfPalette.Error));
-
-        panel.Children.Add(ScoreRow("工具执行健壮性评估", span.Status == "Error" ? "FAIL" : "PASS",
-            span.Error ?? "正常执行完毕", span.Status == "Error" ? PerfPalette.Error : PerfPalette.Tool));
+        if (ttft is { } ttftValue)
+        {
+            any = true;
+            panel.Children.Add(ScoreRow("TTFT 响应时延评估", ttftValue <= 1500 ? "PASS" : "WARN",
+                $"{ttftValue} ms (基准阈值 1500 ms)", ttftValue <= 1500 ? PerfPalette.Tool : PerfPalette.Approval));
+        }
+        if (maxGap is { } gapValue)
+        {
+            any = true;
+            panel.Children.Add(ScoreRow("流式抖动与卡顿评估", gapValue <= 1000 ? "PASS" : "STALL",
+                $"最大帧间隔 {gapValue} ms (卡顿阈值 1000 ms)", gapValue <= 1000 ? PerfPalette.Tool : PerfPalette.Error));
+        }
+        if (span.Name.StartsWith("tool", StringComparison.Ordinal))
+        {
+            any = true;
+            var running = span.Status == "Running";
+            panel.Children.Add(ScoreRow("工具执行健壮性评估",
+                span.Status == "Error" ? "FAIL" : running ? "RUNNING" : "PASS",
+                span.Error ?? (running ? "工具仍在执行" : "正常执行完毕"),
+                span.Status == "Error" ? PerfPalette.Error : running ? PerfPalette.Model : PerfPalette.Tool));
+        }
+        if (!any) panel.Children.Add(Muted("该 span 没有可评估的指标数据。"));
 
         return panel;
     }

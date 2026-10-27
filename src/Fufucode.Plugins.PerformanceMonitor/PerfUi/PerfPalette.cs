@@ -44,7 +44,8 @@ internal static class PerfPalette
         "memory" or "记忆" => CtxMemory,
         "files" or "文件" => CtxFiles,
         "results" or "toolResults" or "工具结果" => CtxToolResults,
-        "chat" or "conversation" or "会话内容" => CtxConversation,
+        "chat" or "conversation" or "会话内容" or "会话文本" => CtxConversation,
+        "unknown" or "未分类" => CtxSkills,
         "free" or "剩余空间" => CtxFree,
         _ => Neutral,
     };

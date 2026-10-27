@@ -10,10 +10,11 @@ public sealed class PerfDockPage : IDisposable
 {
     private readonly PerfCenterView _view;
 
-    public PerfDockPage(PerfRecorder recorder, string dataRoot)
+    public PerfDockPage(PerfRecorder recorder, string dataRoot, Fufucode.Core.Diagnostics.IPerfDataSource? remote = null)
     {
         DataRoot = dataRoot;
-        _view = new PerfCenterView(recorder);
+        // 非接收端实例通过 remote 读取真正采集数据；两者都没有时才退回本地空记录器。
+        _view = new PerfCenterView(new PerfSource(recorder, remote));
     }
 
     public Control Content => _view;

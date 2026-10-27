@@ -19,13 +19,17 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
     public const string PageId = "perf";
 
     private PerfRecorder? _recorder;
+    /// <summary>本实例是否真正持有进程级接收端；只有持有者提供页面与设置。</summary>
+    private bool _ownsSink;
     private object? _page;
     private PerfPageHost? _host;
     private IPerfHostBridge? _bridge;
     private string? _dataRoot;
     /// <summary>共享计数：两个管理器各自从默认加载上下文创建包实例，计数必须跨实例共享。</summary>
     private static int s_instances;
-    private static object? s_page;
+    /// <summary>进程内唯一的页面与宿主；两个管理器共用同一实例，避免一份被释放、另一份仍在显示。</summary>
+    private static PerfDockPage? s_sharedPage;
+    private static Avalonia.Controls.Control? s_sharedContent;
     private static int s_pageOwners;
 
 
@@ -44,8 +48,6 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
         _bridge = ResolveBridge(context);
         var settings = PerfSettings.Load(_dataRoot);
         var recorder = new PerfRecorder(settings, Path.Combine(_dataRoot, "perf"));
-        // 宿主样本（回合耗时、进程指标）即时追加落盘，并在内存留一份给概览/时间线；不依赖页面是否打开。
-        PerfHostSamples.Subscribe(new HostSampleSink(Path.Combine(_dataRoot, "perf"), recorder));
         // 同一进程里可能有两个插件管理器（页面宿主与工具宿主）各加载一份本程序集：
         // 第一个接收端获胜，其余按程序集身份判定为同一插件而沿用，只有真正不同的实现才失败。
         if (PerfOwnership.TryInstall(recorder, recorder) is { } failure)
@@ -55,8 +57,15 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
         }
         // 本实例也已激活（无论是否拥有接收端），供 Shutdown 计数。
         Interlocked.Increment(ref s_instances);
-        if (PerfTracer.Sink is PerfRecorder owner) _recorder = owner;
-        else _recorder = recorder;
+        // 注意：接收端可能来自另一个 AssemblyLoadContext，其 PerfRecorder 与本实例的类型
+        // 不是同一 Type（即使 DLL 路径相同）。因此只按“本实例是否成功安装”判断所有权，
+        // 不能用 `is PerfRecorder` 判断；否则会拿到一个永远收不到数据的本地记录器。
+        _ownsSink = ReferenceEquals(PerfTracer.Sink, recorder);
+        if (!_ownsSink) recorder.Dispose();
+        _recorder = recorder;
+        // 只有接收端持有者可以订阅宿主样本：非持有者覆盖订阅会让持有者停止接收。
+        if (_ownsSink) PerfHostSamples.Subscribe(new HostSampleSink(Path.Combine(_dataRoot, "perf"), recorder));
+        // 不在这里创建页面：插件初始化可能运行在非 UI 线程的管理器上，Avalonia 控件必须延迟到页面请求时创建。
         return Task.CompletedTask;
     }
 
@@ -65,10 +74,22 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
         // 两个管理器共享同一个包实例时，等最后一个停用再移除接收端。
         if (Interlocked.Decrement(ref s_instances) > 0) return Task.CompletedTask;
         Interlocked.Exchange(ref s_instances, 0);
+        if (!_ownsSink)
+        {
+            // 非持有者不能拆除别人安装的接收端、宿主样本订阅或页面。
+            _page = null;
+            _host = null;
+            _bridge = null;
+            return Task.CompletedTask;
+        }
         PerfHostSamples.Subscribe(null);
         var recorder = _recorder;
         _recorder = null;
-        (_page as IDisposable)?.Dispose();
+        // 页面只在最后一个插件实例停用时释放；中途停掉某个管理器不能停掉仍在显示的控件。
+        s_sharedPage?.Dispose();
+        s_sharedPage = null;
+        s_sharedContent = null;
+        Interlocked.Exchange(ref s_pageOwners, 0);
         _page = null;
         _host = null;
         _bridge = null;
@@ -85,15 +106,31 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
         var recorder = _recorder;
         var bridge = _bridge;
         if (recorder is null || string.IsNullOrEmpty(_dataRoot) || bridge is null) return null;
-        var page = _page as PerfDockPage;
-        if (page is null) _page = page = new PerfDockPage(recorder, _dataRoot);
-        _host ??= new PerfPageHost(recorder, _dataRoot, () => page.Content);
+
+        if (!_ownsSink)
+        {
+            // 接收端在另一个加载上下文里：复用它的页面与设置宿主（都通过 Core 契约跨上下文），
+            // 绝不能拿本地这个收不到数据的记录器再建一份页面。
+            PerfDockPage? fallback = null;
+            // 接收端由另一个加载上下文持有，但共享的 Core 契约可以跨上下文读取它的数据。
+            var remote = PerfTracer.Sink as IPerfDataSource;
+            return new PluginPageContribution(
+                PageId: PageId,
+                Title: "性能",
+                IconKey: "Speedometer",
+                ModuleId: PluginId,
+                CreateView: () => bridge.CreatePageView() ??
+                                 (fallback ??= new PerfDockPage(recorder, _dataRoot, remote)).Content,
+                DetachView: _ => (fallback as IDisposable)?.Dispose());
+        }
+
+        // 持有接收端的实例独占页面、设置宿主与导出能力。
+        s_sharedPage ??= new PerfDockPage(recorder, _dataRoot);
+        s_sharedContent ??= s_sharedPage.Content;
+        _page = s_sharedPage;
+        _host ??= new PerfPageHost(recorder, _dataRoot, () => s_sharedContent!);
         bridge.RegisterSettings(_host);
-        var content = page.Content;
-        // 多个插件管理器（页面宿主 + 浏览器工具宿主）会各自激活本插件并各建一份页面；
-        // 只保留一个共享页面实例，否则同一控件会被挂到两处。
-        if (s_page is Avalonia.Controls.Control shared) content = shared;
-        else s_page = content;
+        var content = s_sharedContent;
         Interlocked.Increment(ref s_pageOwners);
         return new PluginPageContribution(
             PageId: PageId,
@@ -104,12 +141,9 @@ public sealed class PerformanceMonitorPluginPackage : IPluginPackage, IPerfPlugi
             CreateView: () => bridge.CreatePageView() ?? content,
             DetachView: _ =>
             {
-                // 只在最后一个拥有者释放时停掉页面计时器；多个管理器可能同时持有本贡献。
-                if (Interlocked.Decrement(ref s_pageOwners) <= 0)
-                {
+                // 页面生命周期由最后一个插件实例的 ShutdownAsync 统一结束，这里只归还引用计数。
+                if (Interlocked.Decrement(ref s_pageOwners) < 0)
                     Interlocked.Exchange(ref s_pageOwners, 0);
-                    (_page as IDisposable)?.Dispose();
-                }
             });
     }
 

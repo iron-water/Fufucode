@@ -127,14 +127,22 @@ public sealed class NativeAgentLoop
             // 直接引用实时历史列表发送请求；所有变更都发生在 await 之后、请求序列化之前，
             // 因此模型客户端看到的是一致的前缀（回合闸门保证无并发写者）。
             var request = new PureModelRequest(conversationHistory, toolNames, modelId, toolDefinitions, reasoningEffort);
+            PerfContextEstimate.Record(request);
             PureModelResponse response;
             try
             {
                 using (var modelSpan = PerfTracer.Step("model.request", "tools", PerfTracer.Invariant(toolNames.Count)))
                 {
+                    modelSpan.Tag("model", modelId);
                     modelSpan.Tag("streaming", _streamingEnabled);
                     modelSpan.Tag("historyMessages", conversationHistory.Count);
-                    response = await RequestModelAsync(request, streamCallbacks, cancellationToken).ConfigureAwait(false);
+                    modelSpan.PublishProgress();
+                    try
+                    {
+                        response = await RequestModelAsync(request, streamCallbacks, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException) { modelSpan.Cancel(); throw; }
+                    catch (Exception error) { modelSpan.Fail(error.GetType().Name); throw; }
                 }
                 CompletedModelCalls++;
                 lastUsage = response.Usage ?? lastUsage;

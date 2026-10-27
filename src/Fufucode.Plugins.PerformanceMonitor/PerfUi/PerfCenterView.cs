@@ -3,7 +3,6 @@ using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Shapes;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
@@ -12,12 +11,12 @@ using Avalonia.Threading;
 namespace Fufucode.Plugins.PerformanceMonitor;
 
 /// <summary>
-/// 性能中心主控件：顶部仅保留 [ 概览 | 分析 ] 切换分段按钮与模型指示；
-/// 无多余边栏与刷新/实时按钮，数据全自动后台感知与实时刷新。
+/// 性能中心主控件：顶部仅保留 [ 概览 | 分析 | 协同通路 ] 分段按钮；
+/// 无多余边栏、模型徽章与刷新/实时控件，数据全自动感知并持续刷新。
 /// </summary>
 internal sealed class PerfCenterView : UserControl, IDisposable
 {
-    private readonly PerfRecorder _recorder;
+    private readonly PerfSource _source;
     private readonly PerfOverviewView _overview = new();
     private readonly PerfAnalysisView _analysis = new();
     private readonly PerfCompanionNetworkView _companionView = new();
@@ -27,8 +26,6 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     private readonly Button _btnOverview = new();
     private readonly Button _btnAnalysis = new();
     private readonly Button _btnCompanion = new();
-    private readonly Border _modelBadge = new();
-    private readonly TextBlock _modelText = new() { FontSize = 10 };
 
     private readonly DispatcherTimer _timer;
     private PerfSnapshot? _snapshot;
@@ -37,9 +34,21 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     private int _activeViewIndex; // 0 = 概览, 1 = 分析, 2 = 协同通路
     private bool _disposed;
 
-    public PerfCenterView(PerfRecorder recorder)
+    /// <summary>无头/自测诊断：数据链路各段的实际计数，不参与产品界面。</summary>
+    public string Diagnostic =>
+        $"spans={_source.SnapshotSpans().Count}; total={_source.TotalWritten}; active={_source.ActiveSpanCount}; " +
+        $"lastTotal={_lastTotal}; session={_source.SessionContext?.SessionId ?? "-"}; " +
+        $"snapshot={_snapshot?.AllSpans.Count ?? -1}; turns={_snapshot?.TurnCount ?? -1}; " +
+        $"sink={Fufucode.Core.Diagnostics.PerfTracer.Sink?.GetType().Name ?? "-"}; " +
+        $"sameType={Fufucode.Core.Diagnostics.PerfTracer.Sink is PerfRecorder}; " +
+        $"timer={_timer.IsEnabled}; disposed={_disposed}";
+
+    /// <summary>无头验证用：切换到指定视图（0 概览 / 1 分析 / 2 协同通路）。</summary>
+    public void ShowViewForTesting(int index) => SwitchView(index);
+
+    public PerfCenterView(PerfSource source)
     {
-        _recorder = recorder;
+        _source = source;
 
         _overview.TurnSelected += traceId =>
         {
@@ -68,53 +77,14 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         switcherPill.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
         switcherPill.BorderThickness = new Thickness(1);
 
-        // 状态指示：模型徽章 + 实时绿点
-        _modelText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        _modelBadge.CornerRadius = new CornerRadius(4);
-        _modelBadge.Padding = new Thickness(8, 2);
-        _modelBadge.VerticalAlignment = VerticalAlignment.Center;
-        _modelBadge.Child = _modelText;
-        _modelBadge.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppSubtleBackground"));
-
-        var liveDot = new Ellipse
-        {
-            Width = 6,
-            Height = 6,
-            Fill = new SolidColorBrush(Color.Parse("#4ADE80")),
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        var liveText = new TextBlock
-        {
-            Text = "实时",
-            FontSize = 10,
-            VerticalAlignment = VerticalAlignment.Center,
-        };
-        liveText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
-        var liveBadge = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 5,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { liveDot, liveText },
-        };
-
-        var rightStatus = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 8,
-            VerticalAlignment = VerticalAlignment.Center,
-            Children = { _modelBadge, liveBadge },
-        };
-
+        // 顶栏只保留分段切换：模型与实时状态由概览/分析页自身呈现，不重复占一行。
         var topBar = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"),
+            ColumnDefinitions = new ColumnDefinitions("Auto,*"),
             Height = 36,
             Margin = new Thickness(12, 4, 12, 4),
         };
         topBar.Children.Add(switcherPill);
-        Grid.SetColumn(rightStatus, 2);
-        topBar.Children.Add(rightStatus);
 
         var topBorder = new Border
         {
@@ -138,10 +108,11 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000) };
         _timer.Tick += async (_, _) =>
         {
-            if (_disposed || !IsEffectivelyVisible) return;
-            if (_activeViewIndex == 2) _companionView.UpdateData();
-            if (_recorder.Ring.TotalWritten == _lastTotal) return;
-            await RefreshAsync(force: false);
+            if (_disposed) return;
+            // 隐藏/浮动窗口也可能接收数据：按数据变化刷新，不因不可见而永久停在空快照。
+            var changed = _source.TotalWritten != _lastTotal || _source.ActiveSpanCount > 0;
+            if (_activeViewIndex == 2 && (changed || IsEffectivelyVisible)) _companionView.UpdateData();
+            if (changed) await RefreshAsync(force: false);
         };
         _timer.Start();
         _ = RefreshAsync(force: true);
@@ -231,12 +202,20 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         if (_disposed || Interlocked.Exchange(ref _refreshing, 1) != 0) return;
         try
         {
-            var total = _recorder.Ring.TotalWritten;
-            if (!force && total == _lastTotal) return;
-            var spans = _recorder.Ring.Snapshot();
-            var events = _recorder.RecentEvents(4_000);
-            var samples = _recorder.HostSamples(1_200);
-            var snapshot = await Task.Run(() => PerfSnapshot.Build(spans, events, samples)).ConfigureAwait(false);
+            var total = _source.TotalWritten;
+            // 回合进行中还没有 span 结束：只要仍有活动 span，就必须继续刷新并显示实时耗时。
+            var activeCount = _source.ActiveSpanCount;
+            if (!force && total == _lastTotal && activeCount == 0) return;
+            var spans = _source.SnapshotSpans();
+            if (activeCount > 0)
+            {
+                var completed = spans.Select(span => span.SpanId).ToHashSet();
+                spans.AddRange(_source.ActiveSpans().Where(span => !completed.Contains(span.SpanId)));
+            }
+            var events = _source.RecentEvents(4_000);
+            var samples = _source.HostSamples(1_200);
+            var context = _source.SessionContext;
+            var snapshot = await Task.Run(() => PerfSnapshot.Build(spans, events, samples, context)).ConfigureAwait(false);
             if (_disposed) return;
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
@@ -260,11 +239,6 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     {
         _overview.Render(snapshot);
         _analysis.SetSnapshot(snapshot);
-
-        var modelName = snapshot.ContextBreakdown.ModelName;
-        _modelText.Text = string.IsNullOrWhiteSpace(modelName)
-            ? (_recorder.CurrentSessionId ?? "当前会话")
-            : modelName;
     }
 
     public void Dispose()
@@ -272,5 +246,6 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         if (_disposed) return;
         _disposed = true;
         _timer.Stop();
+        _overview.StopAnimations();
     }
 }

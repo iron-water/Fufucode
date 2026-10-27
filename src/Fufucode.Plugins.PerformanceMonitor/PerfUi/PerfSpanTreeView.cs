@@ -25,16 +25,24 @@ internal sealed class PerfSpanTreeRow
     public SpanRecord Span => Node.Span;
     public string Name => Node.DisplayName;
     public string Detail => Node.Detail;
-    public string Duration => PerfPalette.FormatMs(Span.DurationMs);
+    // 用量标记是零时长事件，显示 0.0 ms 会像一次瞬时调用。
+    public string Duration => Span.Name == "model.usage" ? "用量" : PerfPalette.FormatMs(Span.DurationMs);
     public string Status => Span.Name.Contains("stall", StringComparison.OrdinalIgnoreCase)
         ? "warn"
-        : Span.Status switch { "Error" => "err", "Cancelled" => "cancel", _ => "ok" };
+        : Span.Status switch
+        {
+            "Error" => "err",
+            "Cancelled" => "cancel",
+            "Running" => "run",
+            _ => "ok",
+        };
     public IBrush StatusBrush => Span.Name.Contains("stall", StringComparison.OrdinalIgnoreCase)
         ? PerfPalette.ApprovalBrush
         : Span.Status switch
         {
             "Error" => PerfPalette.ErrorBrush,
             "Cancelled" => PerfPalette.NeutralBrush,
+            "Running" => PerfPalette.ModelBrush,
             _ => PerfPalette.ToolBrush,
         };
     public string Chevron => Node.Children.Count == 0 ? string.Empty : Node.IsExpanded ? "▾" : "▸";
@@ -189,6 +197,7 @@ internal sealed class PerfSpanTreeView : UserControl
     private PerfTurnInfo? _turn;
     private List<PerfSpanTreeRow> _visible = [];
     private long _selectedSpanId;
+    private long _lastScrolledSpanId;
     private bool _rebuilding;
 
     public PerfSpanTreeView()
@@ -253,7 +262,11 @@ internal sealed class PerfSpanTreeView : UserControl
     {
         var changed = _turn?.TraceId != turn.TraceId;
         _turn = turn;
-        if (changed) _selectedSpanId = 0;
+        if (changed)
+        {
+            _selectedSpanId = 0;
+            _lastScrolledSpanId = 0;
+        }
         RebuildRows();
     }
 
@@ -261,19 +274,27 @@ internal sealed class PerfSpanTreeView : UserControl
     {
         _selectedSpanId = spanId;
         if (_turn is null) return;
-        var node = FindNode(spanId);
-        if (node is not null)
-        {
-            for (var parent = node.Parent; parent is not null; parent = parent.Parent)
-                _overrides[parent.Span.SpanId] = true;
-            RebuildRows(raiseEvent);
-        }
+        // 只构建一次树：查找节点与渲染行共用同一份结果。
+        var roots = BuildRoots();
+        var node = FindNode(roots, spanId);
+        if (node is null) return;
+        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+            _overrides[parent.Span.SpanId] = true;
+        _lastScrolledSpanId = 0;
+        RenderRows(roots, raiseEvent);
     }
 
-    private PerfSpanNode? FindNode(long spanId)
+    private List<PerfSpanNode> BuildRoots()
     {
-        if (_turn is null) return null;
-        var roots = PerfTreeBuilder.Build(_turn, null);
+        var filter = string.IsNullOrWhiteSpace(_search.Text) ? null : new Func<SpanRecord, bool>(Matches);
+        // 用旧树保留用户的展开/折叠选择；搜索时强制展开命中路径。
+        var roots = PerfTreeBuilder.Build(_turn!, filter);
+        ApplyOverrides(roots);
+        return roots;
+    }
+
+    private static PerfSpanNode? FindNode(IReadOnlyList<PerfSpanNode> roots, long spanId)
+    {
         var stack = new Stack<PerfSpanNode>(roots);
         while (stack.Count > 0)
         {
@@ -287,10 +308,12 @@ internal sealed class PerfSpanTreeView : UserControl
     private void RebuildRows(bool raiseEvent = false)
     {
         if (_turn is null) return;
-        var filter = string.IsNullOrWhiteSpace(_search.Text) ? null : new Func<SpanRecord, bool>(Matches);
-        // 用旧树保留用户的展开/折叠选择；搜索时强制展开命中路径。
-        var roots = PerfTreeBuilder.Build(_turn, filter);
-        ApplyOverrides(roots);
+        RenderRows(BuildRoots(), raiseEvent);
+    }
+
+    private void RenderRows(IReadOnlyList<PerfSpanNode> roots, bool raiseEvent)
+    {
+        if (_turn is null) return;
         var rows = new List<PerfSpanTreeRow>();
         foreach (var root in roots) Flatten(root, rows);
         _visible = rows;
@@ -299,7 +322,12 @@ internal sealed class PerfSpanTreeView : UserControl
         _list.ItemsSource = rows;
         var selected = rows.FirstOrDefault(row => row.Span.SpanId == _selectedSpanId);
         _list.SelectedItem = selected;
-        if (selected is not null) _list.ScrollIntoView(selected);
+        // 周期刷新会反复重建行；只有选择真正变化时才滚动，避免每秒把用户滚回选中行。
+        if (selected is not null && selected.Span.SpanId != _lastScrolledSpanId)
+        {
+            _list.ScrollIntoView(selected);
+            _lastScrolledSpanId = selected.Span.SpanId;
+        }
         _rebuilding = false;
         _count.Text = $"{rows.Count:N0} / {_turn.Spans.Count:N0}";
         if (raiseEvent && selected is not null) SpanSelected?.Invoke(selected.Span);

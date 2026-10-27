@@ -109,8 +109,11 @@ internal sealed class PerfAnalysisView : UserControl
             .OrderBy(turn => turn.StartUtc)
             .ToArray();
         _strip.SetData(turns, _selectedTraceId);
+        var startupText = snapshot.Startup is { } startupInfo
+            ? PerfPalette.FormatMs(startupInfo.DurationMs)
+            : "—";
         _overviewMeta.Text =
-            $"启动 {PerfPalette.FormatMs(snapshot.Startup?.DurationMs ?? 0)} · {snapshot.TurnCount} 轮 · " +
+            $"启动 {startupText} · {snapshot.TurnCount} 轮 · " +
             $"{snapshot.AllSpans.Count:N0} span · {snapshot.StallCount} 次阻塞";
         _empty.IsVisible = snapshot.AllSpans.Count == 0 || turns.Length == 0;
         _split.IsVisible = snapshot.AllSpans.Count > 0 && turns.Length > 0;

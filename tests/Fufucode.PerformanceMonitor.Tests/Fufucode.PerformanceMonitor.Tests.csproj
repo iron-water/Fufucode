@@ -9,6 +9,9 @@
     <RootNamespace>Fufucode.PerformanceMonitor.Tests</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/Fufucode.App/Features/Performance/PerfHostCollector.cs" Link="PerfHostCollector.cs" />
+  </ItemGroup>
+  <ItemGroup>
     <!-- 插件页面类引用 Avalonia；无界面测试只需要程序集可解析，不启动 UI。 -->
     <PackageReference Include="Avalonia" Version="12.1.3" />
   </ItemGroup>

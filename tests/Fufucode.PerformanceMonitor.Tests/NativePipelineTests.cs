@@ -66,6 +66,12 @@ internal static class NativePipelineTests
             TestUtil.Check(children.Contains("context.build"), "context build hangs under the turn");
             TestUtil.Check(children.Contains("engine.turn"), "engine turn hangs under the chat turn");
 
+            var estimates = spans.Where(s => s.Name == "context.snapshot").OrderBy(s => s.StartTicks).ToArray();
+            TestUtil.Check(estimates.Length == 2, "context estimate recorded before each real request");
+            TestUtil.Check(estimates[0].LongTag("systemTokens") > 0 && estimates[0].LongTag("toolTokens") > 0,
+                "context estimates actual system and tool definitions");
+            TestUtil.Check(estimates[1].LongTag("resultTokens") > 0,
+                "second request estimate includes appended tool results");
             var requests = spans.Where(s => s.Name == "model.request").ToArray();
             TestUtil.Check(requests.Length == 2, "two model requests recorded");
             var streams = spans.Where(s => s.Name == "model.stream").ToArray();

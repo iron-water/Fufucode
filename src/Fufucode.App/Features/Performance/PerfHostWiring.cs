@@ -82,8 +82,8 @@ internal sealed class PerfHostWiring : IDisposable
 
     public void AttachSession(Fufucode.App.Abstractions.IChatSession? session,
         string? sessionName = null, string? model = null,
-        IReadOnlyList<Fufucode.App.Abstractions.ChatMessage>? history = null)
-        => Collector.AttachSession(session, sessionName, model, history);
+        IReadOnlyList<Fufucode.App.Abstractions.ChatMessage>? history = null, string? sessionId = null)
+        => Collector.AttachSession(session, sessionName, model, history, sessionId);
 
     /// <summary>插件启停后：同步接收端状态；插件刚启用时补发启动阶段的里程碑。</summary>
     public void OnPluginsSynced()

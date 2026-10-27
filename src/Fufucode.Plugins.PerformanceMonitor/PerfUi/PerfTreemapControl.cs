@@ -29,7 +29,9 @@ internal sealed class PerfTreemapControl : Control
     private readonly List<(Rect Rect, PerfContextItem? Item, string? CategoryKey)> _hits = [];
     private IReadOnlyList<PerfContextCategory> _categories = [];
     private long _totalTokens;
-    private long _windowCapacity = 200_000;
+    // 窗口容量只在模型目录给出真实值时才存在；未知时不再假造 200k。
+    private long? _windowCapacity;
+    private string _dataSignature = string.Empty;
 
     // 视图模式：map（树图）或 grid（400格网格）
     private string _lookMode = "map";
@@ -49,6 +51,8 @@ internal sealed class PerfTreemapControl : Control
         AvaloniaProperty.Register<PerfTreemapControl, IBrush?>(nameof(MutedBrush));
     public static readonly StyledProperty<IBrush?> CardBackgroundBrushProperty =
         AvaloniaProperty.Register<PerfTreemapControl, IBrush?>(nameof(CardBackgroundBrush));
+    public static readonly StyledProperty<IBrush?> TextBrushProperty =
+        AvaloniaProperty.Register<PerfTreemapControl, IBrush?>(nameof(TextBrush));
 
     public PerfTreemapControl()
     {
@@ -56,6 +60,7 @@ internal sealed class PerfTreemapControl : Control
         Height = 220;
         this.Bind(MutedBrushProperty, new DynamicResourceExtension("AppTextDim"));
         this.Bind(CardBackgroundBrushProperty, new DynamicResourceExtension("AppCardBackground"));
+        this.Bind(TextBrushProperty, new DynamicResourceExtension("AppTextPrimary"));
 
         PointerPressed += OnPointerPressed;
         PointerMoved += OnPointerMoved;
@@ -76,6 +81,7 @@ internal sealed class PerfTreemapControl : Control
 
     public IBrush? MutedBrush { get => GetValue(MutedBrushProperty); set => SetValue(MutedBrushProperty, value); }
     public IBrush? CardBackgroundBrush { get => GetValue(CardBackgroundBrushProperty); set => SetValue(CardBackgroundBrushProperty, value); }
+    public IBrush? TextBrush { get => GetValue(TextBrushProperty); set => SetValue(TextBrushProperty, value); }
 
     public event Action<string?>? CategoryClicked;
 
@@ -90,9 +96,24 @@ internal sealed class PerfTreemapControl : Control
     {
         _categories = categories;
         _totalTokens = totalTokens;
-        _windowCapacity = windowCapacity is > 0 ? windowCapacity.Value : Math.Max(200_000, totalTokens);
-
+        _windowCapacity = windowCapacity is > 0 ? windowCapacity : null;
+        // 周期刷新会重复送入同一份数据：只有构成真正变化时才重放开场动画。
+        var signature = totalTokens + "|" + _windowCapacity + "|" +
+                        string.Join('|', categories.Select(category =>
+                            $"{category.Key}:{category.TotalTokens}:" +
+                            string.Join(',', category.Items.Select(item => $"{item.Name}={item.Tokens}"))));
+        if (signature == _dataSignature) return;
+        _dataSignature = signature;
+        // 命中索引对应上一帧的布局，数据变化后必须失效，否则 tooltip 会指向别的格子。
+        _hoveredIndex = -1;
         StartBloomAnimation();
+    }
+
+    /// <summary>页面释放时停掉动画定时器，避免控件离开视觉树后仍在跑。</summary>
+    public void StopAnimation()
+    {
+        _animTimer?.Stop();
+        _animTimer = null;
     }
 
     private void StartBloomAnimation()
@@ -134,7 +155,7 @@ internal sealed class PerfTreemapControl : Control
         {
             // 空状态：虚线框 + 提示
             var borderPen = new Pen(MutedBrush ?? Brushes.Gray, 1, new DashStyle([4, 4], 0));
-            context.DrawRectangle(CardBackgroundBrush, borderPen, fullRect, 10, 10);
+            context.DrawRectangle(CardBackgroundBrush, borderPen, fullRect, 6, 6);
             var emptyText = new FormattedText("暂无上下文数据 · 开始会话后生成上下文窗口构成分布",
                 CultureInfo.CurrentCulture, FlowDirection.LeftToRight, RegularFace, 11,
                 MutedBrush ?? Brushes.Gray);
@@ -164,13 +185,14 @@ internal sealed class PerfTreemapControl : Control
 
     private void RenderTreemapMap(DrawingContext context, double width, double height)
     {
-        var scale = Math.Max(_windowCapacity, _totalTokens);
+        var capacity = _windowCapacity;
+        var scale = capacity is { } known ? Math.Max(known, _totalTokens) : _totalTokens;
         var across = width >= height;
         var longSide = across ? width : height;
 
         // 对齐 yetone/magpie: share^0.35 温和幂律曲线，使 8% 的占用在画面上仍占 ~41% 面积以供清晰阅读
         double usedLen = longSide;
-        if (_totalTokens < scale)
+        if (capacity is not null && _totalTokens < scale)
         {
             var ratio = (double)_totalTokens / scale;
             usedLen = Math.Min(longSide, Math.Max(longSide * Math.Pow(ratio, 0.35), Math.Min(longSide, 48)));
@@ -189,13 +211,13 @@ internal sealed class PerfTreemapControl : Control
             DrawCategoryTiles(context, cat, catRect);
         });
 
-        // 剩余未用空间（Free Space）：带虚线描边与淡淡底色
-        if (_totalTokens < scale)
+        // 剩余未用空间只在窗口容量已知时存在；未知容量时整块面积就是全部已用内容。
+        if (capacity is { } cap && _totalTokens < scale)
         {
             var freeRect = across
                 ? new Rect(usedLen, 0, width - usedLen, height)
                 : new Rect(0, usedLen, width, height - usedLen);
-            DrawFreeTile(context, freeRect.Deflate(2), scale - _totalTokens);
+            DrawFreeTile(context, freeRect.Deflate(2), cap - _totalTokens);
         }
     }
 
@@ -229,16 +251,22 @@ internal sealed class PerfTreemapControl : Control
             SplitRect(inset, itemWeights, (itemObj, itemRect) =>
             {
                 var item = (PerfContextItem)itemObj;
-                DrawTile(context, item.Name, $"{PerfPalette.FormatTokens(item.Tokens)} · {item.CategoryName}",
-                    item.Color, itemRect, item, category.Key);
+                // 类别名已作为标题时，副标题用来源标签，避免同一句话重复两遍。
+                var detail = item.Name == category.Name
+                    ? $"{PerfPalette.FormatTokens(item.Tokens)} · {item.Tag ?? item.CategoryName}"
+                    : $"{PerfPalette.FormatTokens(item.Tokens)} · {item.CategoryName}";
+                DrawTile(context, item.Name, detail, item.Color, itemRect, item, category.Key);
             });
         }
         else
         {
-            var sub = category.Items.Count > 0 ? category.Items[0].Name : category.Name;
-            var detail = $"{PerfPalette.FormatTokens(category.TotalTokens)} · {category.Name}";
-            DrawTile(context, sub, detail, category.Color, inset,
-                category.Items.Count > 0 ? category.Items[0] : null, category.Key);
+            var first = category.Items.Count > 0 ? category.Items[0] : null;
+            var sub = first?.Name ?? category.Name;
+            // 标题与类别同名时，副标题改显示来源标签，避免重复同一句话。
+            var detail = sub == category.Name
+                ? $"{PerfPalette.FormatTokens(category.TotalTokens)} · {first?.Tag ?? category.Name}"
+                : $"{PerfPalette.FormatTokens(category.TotalTokens)} · {category.Name}";
+            DrawTile(context, sub, detail, category.Color, inset, first, category.Key);
         }
     }
 
@@ -254,7 +282,9 @@ internal sealed class PerfTreemapControl : Control
         // 对焦判定：当外部指定了 FocusCategory 或 FocusItem 时，未对焦者变暗至 0.16
         var isFocused = (_focusCategory is null && _focusItem is null)
             || (_focusCategory == categoryKey)
-            || (_focusItem is not null && item is not null && ReferenceEquals(_focusItem, item));
+            || (_focusItem is not null && item is not null &&
+                string.Equals(_focusItem.Name, item.Name, StringComparison.Ordinal) &&
+                string.Equals(_focusItem.CategoryKey, item.CategoryKey, StringComparison.Ordinal));
 
         var opacity = isFocused ? _animProgress : 0.16 * _animProgress;
 
@@ -266,9 +296,9 @@ internal sealed class PerfTreemapControl : Control
         var animHeight = tile.Height * scale;
         var drawTile = new Rect(cx - animWidth / 2, cy - animHeight / 2, animWidth, animHeight);
 
-        // Fluent 克制用色：半透明浅底 + 细发丝边框，悬停时轻微提升对比度而非高饱和度发光
-        var fillAlpha = (byte)(isHovered ? 45 : 20);
-        var strokeAlpha = (byte)(isHovered ? 170 : 55);
+        // Fluent 克制用色：类别色半透明底 + 发丝边框；亮度足以区分类别，仍保持低饱和。
+        var fillAlpha = (byte)(isHovered ? 84 : 46);
+        var strokeAlpha = (byte)(isHovered ? 190 : 96);
         var strokeWidth = isHovered ? 1.2 : 1.0;
 
         var fillBrush = new SolidColorBrush(Color.FromArgb(fillAlpha, color.R, color.G, color.B));
@@ -284,14 +314,16 @@ internal sealed class PerfTreemapControl : Control
                 using (context.PushClip(drawTile.Deflate(4)))
                 {
                     var titleText = new FormattedText(title, CultureInfo.CurrentCulture,
-                        FlowDirection.LeftToRight, BoldFace, 12, Brushes.White);
+                        FlowDirection.LeftToRight, BoldFace, 12, TextBrush ?? Brushes.White);
                     context.DrawText(titleText, new Point(drawTile.X + 6, drawTile.Y + 5));
 
-                    var subColor = isHovered ? Color.FromArgb(240, color.R, color.G, color.B) : Color.FromArgb(180, color.R, color.G, color.B);
-                    var subBrush = new SolidColorBrush(subColor);
-                    var subText = new FormattedText(subtitle, CultureInfo.CurrentCulture,
-                        FlowDirection.LeftToRight, RegularFace, 10.5, subBrush);
-                    context.DrawText(subText, new Point(drawTile.X + 6, drawTile.Y + 22));
+                    // 说明文字使用弱化文本色而非类别色：颜色只承担类别标识，不承载文字。
+                    using (context.PushOpacity(0.72))
+                    {
+                        var subText = new FormattedText(subtitle, CultureInfo.CurrentCulture,
+                            FlowDirection.LeftToRight, RegularFace, 10.5, TextBrush ?? Brushes.White);
+                        context.DrawText(subText, new Point(drawTile.X + 6, drawTile.Y + 22));
+                    }
                 }
             }
             else if (tile.Width >= 30 && tile.Height >= 16)
@@ -299,7 +331,7 @@ internal sealed class PerfTreemapControl : Control
                 using (context.PushClip(drawTile.Deflate(2)))
                 {
                     var compactText = new FormattedText(title, CultureInfo.CurrentCulture,
-                        FlowDirection.LeftToRight, RegularFace, 9.5, Brushes.White);
+                        FlowDirection.LeftToRight, RegularFace, 9.5, TextBrush ?? Brushes.White);
                     context.DrawText(compactText, new Point(drawTile.X + 3, drawTile.Y + (drawTile.Height - compactText.Height) / 2));
                 }
             }
@@ -346,7 +378,9 @@ internal sealed class PerfTreemapControl : Control
             // 对焦判断
             var isFocused = (_focusCategory is null && _focusItem is null)
                 || (_focusCategory == kind)
-                || (_focusItem is not null && item is not null && ReferenceEquals(_focusItem, item));
+                || (_focusItem is not null && item is not null &&
+                    string.Equals(_focusItem.Name, item.Name, StringComparison.Ordinal) &&
+                    string.Equals(_focusItem.CategoryKey, item.CategoryKey, StringComparison.Ordinal));
 
             // 波浪级联动效：按列级联展开
             var colProgress = Math.Clamp((_animProgress * 1.5) - (col / (double)cols * 0.5), 0, 1);
@@ -380,8 +414,11 @@ internal sealed class PerfTreemapControl : Control
 
     private List<(string? Kind, PerfContextItem? Item)> ComputeWaffleCells()
     {
-        var scale = Math.Max(_windowCapacity, _totalTokens);
-        var usedCells = Math.Min(GridCells, (int)Math.Round((double)_totalTokens / scale * GridCells));
+        var scale = _windowCapacity is { } capacity ? Math.Max(capacity, _totalTokens) : _totalTokens;
+        // 容量未知时无法区分“未用空间”，整张网格只表达已用内容的相对构成。
+        var usedCells = _windowCapacity is null
+            ? GridCells
+            : Math.Min(GridCells, (int)Math.Round((double)_totalTokens / scale * GridCells));
 
         var parts = _categories.Where(c => c.TotalTokens > 0).ToList();
         var sum = parts.Sum(c => c.TotalTokens);
@@ -392,15 +429,15 @@ internal sealed class PerfTreemapControl : Control
 
         // 最大余数算法（Hamilton-Hare Method）精准分配 400 个格子
         var wants = parts.Select(p => ((double)p.TotalTokens / sum) * usedCells).ToList();
-        var gots = wants.Select(w => Math.Max(1, (int)Math.Floor(w))).ToList();
+        // 先取下界再由最大余数补齐；不为小类别强制 1 格，否则极低占用会被画成满格。
+        var gots = wants.Select(w => (int)Math.Floor(w)).ToList();
         var left = usedCells - gots.Sum();
 
         var remainders = wants.Select((w, i) => (Rem: w - Math.Floor(w), Index: i)).OrderByDescending(x => x.Rem).ToList();
         for (var j = 0; left > 0 && j < remainders.Count; j++, left--)
             gots[remainders[j].Index]++;
-
-        for (var j = gots.Count - 1; left < 0 && j >= 0; j--)
-            while (left < 0 && gots[j] > 1) { gots[j]--; left++; }
+        // 极少数端点误差（余数总和仍小于 usedCells）时补给占比最大的类别，保证格数守恒。
+        for (var j = 0; left > 0; j = (j + 1) % gots.Count) { gots[j]++; left--; }
 
         var result = new List<(string? Kind, PerfContextItem? Item)>(GridCells);
         for (var pi = 0; pi < parts.Count; pi++)
@@ -435,12 +472,15 @@ internal sealed class PerfTreemapControl : Control
         var item = hit.Item;
         var isFree = hit.CategoryKey == "free";
         var title = isFree ? "剩余未用空间" : (item?.Name ?? hit.CategoryKey ?? "未知");
-        var tokens = isFree ? Math.Max(0, _windowCapacity - _totalTokens) : (item?.Tokens ?? 0);
-        var percent = _windowCapacity > 0 ? (double)tokens / _windowCapacity : 0;
-        var info = $"{PerfPalette.FormatTokens(tokens)} token · {PerfPalette.FormatPercent(percent)}";
+        var tokens = isFree ? Math.Max(0, (_windowCapacity ?? _totalTokens) - _totalTokens) : (item?.Tokens ?? 0);
+        var denominator = _windowCapacity ?? _totalTokens;
+        var percent = denominator > 0 ? (double)tokens / denominator : 0;
+        var info = _windowCapacity is null
+            ? $"{PerfPalette.FormatTokens(tokens)} token · 占已用 {PerfPalette.FormatPercent(percent)}"
+            : $"{PerfPalette.FormatTokens(tokens)} token · 占窗口 {PerfPalette.FormatPercent(percent)}";
 
-        var formattedTitle = new FormattedText(title, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, BoldFace, 12, Brushes.White);
-        var formattedInfo = new FormattedText(info, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, RegularFace, 11, new SolidColorBrush(Color.Parse("#A0AEC0")));
+        var formattedTitle = new FormattedText(title, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, BoldFace, 12, TextBrush ?? Brushes.White);
+        var formattedInfo = new FormattedText(info, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, RegularFace, 11, MutedBrush ?? Brushes.Gray);
 
         var padW = 20;
         var tipW = Math.Max(formattedTitle.Width, formattedInfo.Width) + padW;
@@ -450,10 +490,11 @@ internal sealed class PerfTreemapControl : Control
         var tipY = _mousePos.Y + 16 + tipH > Bounds.Height ? Math.Max(6, _mousePos.Y - tipH - 8) : _mousePos.Y + 16;
         var tipRect = new Rect(tipX, tipY, tipW, tipH);
 
-        // Fluent 浮层底色：AppBaseBar + 1px 发丝边框
-        var bgBrush = new SolidColorBrush(Color.FromArgb(245, 44, 44, 44));
-        var strokePen = new Pen(new SolidColorBrush(Color.FromArgb(45, 255, 255, 255)), 1);
-        context.DrawRectangle(bgBrush, strokePen, tipRect, 6, 6);
+        // 浮层沿用卡片底色与发丝边框，不写死暗色值，亮色皮肤下同样可读。
+        var bgBrush = CardBackgroundBrush ?? new SolidColorBrush(Color.FromRgb(44, 44, 44));
+        var strokeColor = MutedBrush is ISolidColorBrush solid ? solid.Color : Color.FromRgb(148, 163, 184);
+        var strokePen = new Pen(new SolidColorBrush(Color.FromArgb(70, strokeColor.R, strokeColor.G, strokeColor.B)), 1);
+        context.DrawRectangle(bgBrush, strokePen, tipRect, 8, 8);
 
         context.DrawText(formattedTitle, new Point(tipX + 10, tipY + 6));
         context.DrawText(formattedInfo, new Point(tipX + 10, tipY + 22));

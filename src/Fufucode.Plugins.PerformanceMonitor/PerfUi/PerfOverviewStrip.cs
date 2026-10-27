@@ -70,12 +70,21 @@ internal sealed class PerfOverviewStrip : Control
         {
             var x = (turn.StartUtc - start).TotalMilliseconds / total * width;
             var w = Math.Max(3, turn.DurationMs / total * width);
-            var rect = new Rect(x, Top + 4, w - 1.5, BarHeight - 8);
-            var color = turn.IsStartup ? PerfPalette.Ui
-                : turn.Errors > 0 ? PerfPalette.Error
-                : turn.DurationMs > 0 && turn.ToolMs / turn.DurationMs > 0.15 ? PerfPalette.Tool
-                : PerfPalette.Model;
-            context.DrawRectangle(new SolidColorBrush(color), null, rect, 3, 3);
+            var rect = new Rect(x, Top + 4, Math.Max(2, w - 1.5), BarHeight - 8);
+            // 回合底轨 + 真实模型/工具片段：单轮时也能看出时间花在哪，而不是一条纯色条。
+            context.DrawRectangle(GridBrush ?? Brushes.Gray, null, rect, 3, 3);
+            var failed = turn.Outcome is "error" or "failed" or "Error" or "Failed";
+            var turnStart = turn.Spans.Count > 0 ? turn.Spans.Min(span => span.StartTicks) : 0;
+            var turnTicks = turn.Spans.Count > 0
+                ? Math.Max(1, turn.Spans.Max(span => span.EndTicks) - turnStart)
+                : 1;
+            DrawSpans(context, turn.ModelSpans, turnStart, turnTicks, rect, PerfPalette.ModelBrush, 4, 6);
+            DrawSpans(context, turn.ToolSpans, turnStart, turnTicks, rect, PerfPalette.ToolBrush, 14, 6);
+            if (failed)
+                context.DrawRectangle(PerfPalette.ErrorBrush, null,
+                    new Rect(rect.X, rect.Bottom - 3, rect.Width, 2), 1, 1);
+            if (turn.Spans.Count == 0)
+                context.DrawRectangle(new SolidColorBrush(PerfPalette.Ui), null, rect.Deflate(1), 2, 2);
             if (turn.TraceId == _selectedTraceId)
                 context.DrawRectangle(null, new Pen(AccentBrush ?? Brushes.White, 1.2), rect.Inflate(1), 3, 3);
             _segments.Add((new Rect(x - 2, Top, Math.Max(4, w + 3), BarHeight), turn));
@@ -90,6 +99,21 @@ internal sealed class PerfOverviewStrip : Control
                 MutedBrush ?? Brushes.Gray);
             var tx = Math.Clamp(width * fraction - text.Width / 2, 0, Math.Max(0, width - text.Width));
             context.DrawText(text, new Point(tx, Top + BarHeight + 5));
+        }
+    }
+
+    private static void DrawSpans(DrawingContext context, IReadOnlyList<SpanRecord> spans, long turnStart,
+        long turnTicks, Rect rect, IBrush brush, double topOffset, double height)
+    {
+        foreach (var span in spans)
+        {
+            var offset = (span.StartTicks - turnStart) / (double)turnTicks;
+            var width = Math.Max(1.5, (span.EndTicks - span.StartTicks) / (double)turnTicks * rect.Width);
+            var x = rect.X + Math.Clamp(offset, 0, 0.98) * rect.Width;
+            var clipped = Math.Min(width, rect.Right - x);
+            if (clipped <= 0.5) continue;
+            context.DrawRectangle(brush, null,
+                new Rect(x, rect.Y + topOffset, clipped, height), 2, 2);
         }
     }
 

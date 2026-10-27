@@ -69,10 +69,33 @@ internal static class SnapshotTests
         var bd = snapshot.ContextBreakdown;
         Check(bd.TotalTokens == 1000, "context breakdown total tokens matches prompt");
         Check(bd.CachedTokens == 700, "context breakdown cached tokens");
-        Check(bd.Categories.Count >= 2, "context breakdown categories populated");
-        Check(bd.AllItems.Count >= 2, "context breakdown items populated");
-        Check(bd.AllItems.Sum(i => i.Tokens) == 1000, "breakdown items sum up to total context tokens");
-        Check(bd.Categories.Any(c => c.Key == "system" || c.Key == "tools" || c.Key == "toolResults"), "breakdown categories present");
+        Check(bd.Categories.Count == 1 && bd.Categories[0].Key == "unknown",
+            "usage without category evidence remains unclassified");
+        Check(bd.AllItems.Sum(i => i.Tokens) == 1000, "unclassified amount preserves reported usage");
+
+        var empty = PerfSnapshot.Build([], [], []);
+        Check(empty.ContextBreakdown.TotalTokens == 0 && empty.ContextBreakdown.AllItems.Count == 0,
+            "empty monitor invents no categories or token amounts");
+        Check(empty.ContextBreakdown.ModelName == "模型未知", "unknown model has neutral label");
+        var build = Span("context.snapshot", 50, 10, parent: turn.SpanId,
+            tags: [("estimatedPromptTokens", "1800"), ("systemTokens", "500"), ("chatTokens", "1000"), ("toolTokens", "300")]);
+        var estimated = PerfSnapshot.Build([turn, build, model, stream], [], []);
+        Check(estimated.TotalTokens == 1200, "context estimate does not inflate reported token usage");
+        Check(estimated.ContextBreakdown.TotalTokens == 1000 && estimated.ContextBreakdown.EstimatedTokens == 1800,
+            "measured prompt and category estimates stay distinct");
+        Check(estimated.ContextBreakdown.AllItems.Sum(item => item.Tokens) == 1800,
+            "classification is not rescaled to fabricate precise values");
+        var duplicate = Span("model.request", 100, 3200, parent: turn.SpanId,
+            tags: [("promptTokens", "1000"), ("completionTokens", "200")]);
+        var duplicateChild = Span("model.stream", 200, 2600, parent: duplicate.SpanId,
+            tags: [("promptTokens", "1000"), ("completionTokens", "200")]);
+        var repeated = PerfSnapshot.Build([turn, duplicate, duplicateChild, build], [], []);
+        Check(repeated.TotalTokens == 1200, "ancestor usage cannot double count its child");
+        var active = Span("turn", 0, 5000, status: "Running");
+        var running = PerfSnapshot.Build([active, Span("context.snapshot", 10, 1, parent: active.SpanId,
+            tags: [("systemTokens", "8"), ("chatTokens", "12")])], [], []);
+        Check(running.LatestTurn?.Outcome == "running" && running.ContextBreakdown.TotalTokens == 20,
+            "running turn uses actual request text estimate before first response");
 
         var turnInfo = snapshot.Turns[0];
         Check(turnInfo.EventSpans.Count == 1 && turnInfo.EventSpans[0].Name == "ui.stall", "stall becomes a tree node");
