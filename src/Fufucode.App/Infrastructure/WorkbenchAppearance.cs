@@ -29,8 +29,8 @@ public sealed record WorkbenchAppearance
     public string BaseBar { get; init; } = "#2C2C2C";
     /// <summary>底色三：悬停、选中与高亮。</summary>
     public string BaseHighlight { get; init; } = "#3A3A3A";
-    /// <summary>强调色：只用于模型输出中的 Markdown 强调标记，默认黄色。</summary>
-    public string Emphasis { get; init; } = "#FFEE58";
+    /// <summary>强调色：只用于模型输出中的 Markdown 强调标记，默认 Anthropic 橙（Claude clay）。</summary>
+    public string Emphasis { get; init; } = "#D97757";
     /// <summary>三档底色各自只提供三个备选，避免用户把层级关系选反。</summary>
     public static readonly IReadOnlyList<string> BaseBackgroundChoices = ["#1C1C1C", "#161616", "#101010"];
     public static readonly IReadOnlyList<string> BaseBackgroundLabels = ["深灰", "更深", "最深"];
@@ -129,9 +129,9 @@ public sealed record WorkbenchAppearance
             BaseHighlight = BaseColor(BaseHighlight, BaseHighlightChoices, "#3A3A3A"),
             Emphasis = Emphasis.Trim().ToUpperInvariant() switch
             {
-                // 旧默认值太深，统一迁移到更浅的默认；用户自定义值保持不变。
-                "#FFD400" or "#FFEB8A" or "#FFF3B0" or "#FFFFE0" or "#9A6700" or "#FFE45C" => "#FFEE58",
-                _ => Color(Emphasis, "#FFEE58"),
+                // 旧默认（黄色系）统一迁移到当前默认橙；用户自定义的其它值保持不变。
+                "#FFD400" or "#FFEB8A" or "#FFF3B0" or "#FFFFE0" or "#9A6700" or "#FFE45C" or "#FFEE58" => "#D97757",
+                _ => Color(Emphasis, "#D97757"),
             },
             Surface = Choose(Surface, "fluent", "fluent", "glass", "flat", "classic"),
             FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 11, 24) : 13,

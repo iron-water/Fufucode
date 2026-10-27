@@ -227,8 +227,10 @@ try
     // ================= 4.2 Fluent 暗色三档底色 =================
     var appearance = new WorkbenchAppearance();
     Check(appearance.BaseBackground == "#1C1C1C" && appearance.BaseBar == "#2C2C2C" &&
-          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#FFEE58",
+          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#D97757",
         "Fluent 暗色默认三档底色与模型输出强调色");
+    Check(new WorkbenchAppearance { Emphasis = "#FFEE58" }.Normalize().Emphasis == "#D97757",
+        "旧黄色强调色迁移到默认橙");
     Check(WorkbenchAppearance.BaseBackgroundChoices.Count == 3 &&
           WorkbenchAppearance.BaseBarChoices.Count == 3 &&
           WorkbenchAppearance.BaseHighlightChoices.Count == 3,

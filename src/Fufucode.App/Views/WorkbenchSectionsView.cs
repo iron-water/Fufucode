@@ -818,7 +818,7 @@ public sealed class WorkbenchSectionsView : UserControl
     private Control EmphasisPickerRow(WorkbenchCustomizationViewModel vm) =>
         ColorPickerRow(vm,
             "强调色",
-            "只用于模型输出中的 Markdown 粗体/标记，默认黄色；格式 #RRGGBB",
+            "只用于模型输出中的 Markdown 粗体/标记，默认橙色（#D97757）；格式 #RRGGBB",
             s => s.Emphasis,
             (s, value) => s with { Emphasis = value });
 
