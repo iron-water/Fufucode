@@ -138,6 +138,7 @@ public partial class ChatPage
         if (cardHeight > 0)
         {
             var slide = (1 - _composerProgress) * fullHeight;
+            ComposerBlurBand.TargetCornerRadius = ComposerCard.CornerRadius.TopLeft;
             ComposerBlurBand.Height = cardHeight + ring * 2;
             ComposerBlurBand.Margin = new Thickness(
                 cardLeft - ring, 0, -ring,

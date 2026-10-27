@@ -56,6 +56,17 @@ public sealed class BackdropBlurBand : Control
         set => SetValue(RingThicknessProperty, value);
     }
 
+    /// <summary>目标卡片的圆角半径；遮罩沿这个圆角描一圈，而不是矩形。</summary>
+    public static readonly StyledProperty<double> TargetCornerRadiusProperty =
+        AvaloniaProperty.Register<BackdropBlurBand, double>(nameof(TargetCornerRadius), 12d,
+            validate: value => double.IsFinite(value) && value >= 0);
+
+    public double TargetCornerRadius
+    {
+        get => GetValue(TargetCornerRadiusProperty);
+        set => SetValue(TargetCornerRadiusProperty, value);
+    }
+
     public BackdropBlurBand()
     {
         IsHitTestVisible = false;
@@ -80,7 +91,7 @@ public sealed class BackdropBlurBand : Control
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        _visual?.SendHandlerMessage(new BlurState(default, default, 0, 0, 16, false));
+        _visual?.SendHandlerMessage(new BlurState(default, default, 0, 0, 16, 12, 0, 0, false));
         SetActive(false);
         foreach (var ancestor in _ancestors) ancestor.PropertyChanged -= AncestorChanged;
         _ancestors.Clear();
@@ -95,7 +106,7 @@ public sealed class BackdropBlurBand : Control
         base.OnPropertyChanged(change);
         if (change.Property == BoundsProperty || change.Property == BlurRadiusProperty ||
             change.Property == StrengthProperty || change.Property == IsVisibleProperty ||
-            change.Property == RingThicknessProperty)
+            change.Property == RingThicknessProperty || change.Property == TargetCornerRadiusProperty)
             UpdateVisual();
     }
 
@@ -123,8 +134,11 @@ public sealed class BackdropBlurBand : Control
             TopLevel.GetTopLevel(this) is not Window { WindowState: WindowState.Minimized } &&
             Bounds.Width > 0 && Bounds.Height > 0 && BlurRadius > 0 && Strength > 0;
         _visual.Visible = active;
+        var ring = (float)RingThickness;
         _visual.SendHandlerMessage(new BlurState(sample, output, (float)BlurRadius,
-            (float)Strength, (float)RingThickness, active));
+            (float)Strength, ring, (float)TargetCornerRadius,
+            (float)Math.Max(0, output.Width - ring * 2), (float)Math.Max(0, output.Height - ring * 2),
+            active));
         SetActive(active);
     }
 
@@ -136,11 +150,34 @@ public sealed class BackdropBlurBand : Control
     }
 
     private readonly record struct BlurState(Rect Sample, Rect Output, float Radius, float Strength,
-        float Ring, bool Active);
+        float Ring, float Corner, float CardWidth, float CardHeight, bool Active);
 
     private sealed class BlurHandler : CompositionCustomVisualHandler
     {
+        /// <summary>圆角矩形距离场：贴边全强度，向外 Ring 像素按平方衰减。</summary>
+        private const string MaskSksl = """
+            uniform float2 uSize;
+            uniform float2 uCard;
+            uniform float uRadius;
+            uniform float uRing;
+            uniform half uAlpha;
+
+            half4 main(float2 p) {
+                float2 c = uSize * 0.5;
+                float2 h = max(uCard * 0.5, float2(0.0));
+                float r = min(uRadius, min(h.x, h.y));
+                float2 q = abs(p - c) - (h - float2(r, r));
+                float d = length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
+                float t = clamp(d / max(uRing, 0.001), 0.0, 1.0);
+                float a = (1.0 - t) * (1.0 - t);
+                return half4(0.0, 0.0, 0.0, a * uAlpha);
+            }
+            """;
+
         private BlurState _state;
+        private SKRuntimeEffect? _maskEffect;
+        private SKShader? _maskShader;
+        private (float W, float H, float R, float Ring, float Alpha) _maskKey;
 
         public override void OnMessage(object message)
         {
@@ -163,39 +200,27 @@ public sealed class BackdropBlurBand : Control
                 (float)output.Right, (float)output.Bottom);
             using var blur = SKImageFilter.CreateBlur(_state.Radius, _state.Radius, SKShaderTileMode.Clamp);
 
-            // 环形遮罩：四边各一条由内向外衰减的线性渐变，合并成围绕目标的软边光晕。
-            // 目标内部（被不透明卡片覆盖）保持全强度，向外在 Ring 像素内衰减到 0。
-            var alpha = (byte)(255 * Math.Clamp(_state.Strength, 0f, 1f));
-            var solid = new SKColor(0, 0, 0, alpha);
-            // 近似平方衰减：前段掉得快，贴边仍满强度。用户要求比旧纵向带更快衰减。
-            var quarter = new SKColor(0, 0, 0, (byte)(alpha * 0.36));
-            var tail = new SKColor(0, 0, 0, (byte)(alpha * 0.09));
-            float[] ramp = [0f, 0.4f, 0.7f, 1f];
+            // 沿卡片圆角描一圈的距离场遮罩。
+            // 之前用四条矩形渐变，交叉处会叠出十字、圆角处切成直角——必须用 SDF。
             var ring = Math.Max(1f, _state.Ring);
-            var innerLeft = rect.Left + ring;
-            var innerTop = rect.Top + ring;
-            var innerRight = Math.Max(innerLeft, rect.Right - ring);
-            var innerBottom = Math.Max(innerTop, rect.Bottom - ring);
-
-            using var topShader = SKShader.CreateLinearGradient(
-                new SKPoint(0, rect.Top), new SKPoint(0, innerTop),
-                [SKColors.Transparent, tail, quarter, solid], ramp, SKShaderTileMode.Decal);
-            using var bottomShader = SKShader.CreateLinearGradient(
-                new SKPoint(0, innerBottom), new SKPoint(0, rect.Bottom),
-                [solid, quarter, tail, SKColors.Transparent], ramp, SKShaderTileMode.Decal);
-            using var leftShader = SKShader.CreateLinearGradient(
-                new SKPoint(rect.Left, 0), new SKPoint(innerLeft, 0),
-                [SKColors.Transparent, tail, quarter, solid], ramp, SKShaderTileMode.Decal);
-            using var rightShader = SKShader.CreateLinearGradient(
-                new SKPoint(innerRight, 0), new SKPoint(rect.Right, 0),
-                [solid, quarter, tail, SKColors.Transparent], ramp, SKShaderTileMode.Decal);
-
-            using var topFilter = SKImageFilter.CreateShader(topShader);
-            using var bottomFilter = SKImageFilter.CreateShader(bottomShader);
-            using var leftFilter = SKImageFilter.CreateShader(leftShader);
-            using var rightFilter = SKImageFilter.CreateShader(rightShader);
-            using var mask = SKImageFilter.CreateMerge(
-                [topFilter, bottomFilter, leftFilter, rightFilter]);
+            var alpha = Math.Clamp(_state.Strength, 0f, 1f);
+            var key = (rect.Width, rect.Height, _state.Corner, ring, alpha);
+            if (_maskShader is null || _maskKey != key)
+            {
+                _maskEffect ??= SKRuntimeEffect.CreateShader(MaskSksl, out _);
+                if (_maskEffect is null) return;
+                using var uniforms = new SKRuntimeEffectUniforms(_maskEffect);
+                uniforms["uSize"] = new[] { rect.Width, rect.Height };
+                uniforms["uCard"] = new[] { _state.CardWidth, _state.CardHeight };
+                uniforms["uRadius"] = _state.Corner;
+                uniforms["uRing"] = ring;
+                uniforms["uAlpha"] = alpha;
+                _maskShader?.Dispose();
+                _maskShader = _maskEffect.ToShader(uniforms);
+                _maskKey = key;
+            }
+            if (_maskShader is null) return;
+            using var mask = SKImageFilter.CreateShader(_maskShader);
             using var blurred = SKImageFilter.CreateBlendMode(SKBlendMode.DstIn, blur, mask);
             using var original = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOut, mask, null);
             using var transition = SKImageFilter.CreateArithmetic(0, 1, 1, 0, true, original, blurred);
