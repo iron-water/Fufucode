@@ -140,9 +140,9 @@ public partial class ChatPage
             var slide = (1 - _composerProgress) * fullHeight;
             ComposerBlurBand.TargetCornerRadius = ComposerCard.CornerRadius.TopLeft;
             ComposerBlurBand.Height = cardHeight + ring * 2;
+            // 下缘允许负外边距：卡片底部离父级只有 16px，光晕要再往下探 ring 才会四周等宽。
             ComposerBlurBand.Margin = new Thickness(
-                cardLeft - ring, 0, -ring,
-                Math.Max(0, cardBottom - ring) + slide);
+                cardLeft - ring, 0, -ring, cardBottom - ring + slide);
             ComposerBlurBand.Opacity = _composerProgress;
         }
         BackToLatestHost.Margin = new Thickness(0, 0, 20, clearance + 10);

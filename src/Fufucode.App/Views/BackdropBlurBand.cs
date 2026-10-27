@@ -169,8 +169,9 @@ public sealed class BackdropBlurBand : Control
                 float2 q = abs(p - c) - (h - float2(r, r));
                 float d = length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - r;
                 float t = clamp(d / max(uRing, 0.001), 0.0, 1.0);
-                float a = (1.0 - t) * (1.0 - t);
-                return half4(0.0, 0.0, 0.0, a * uAlpha);
+                float a = (1.0 - t) * (1.0 - t) * uAlpha;
+                // 预乘白色：遮罩只当 alpha 用，不能是黑色，否则会把黑叠到背景上。
+                return half4(a, a, a, a);
             }
             """;
 
@@ -221,15 +222,22 @@ public sealed class BackdropBlurBand : Control
             }
             if (_maskShader is null) return;
             using var mask = SKImageFilter.CreateShader(_maskShader);
+            // 只把「按遮罩淡出的模糊」这一层，SrcOver 叠回原背景：
+            // 遮罩为 0 处完全透明 → 背景原样保留，不会出现灰带或黑块。
             using var blurred = SKImageFilter.CreateBlendMode(SKBlendMode.DstIn, blur, mask);
-            using var original = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOut, mask, null);
-            using var transition = SKImageFilter.CreateArithmetic(0, 1, 1, 0, true, original, blurred);
-            using var replace = new SKPaint { BlendMode = SKBlendMode.Src };
+            using var transition = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOver, blurred, null);
+            using var replace = new SKPaint { BlendMode = SKBlendMode.SrcOver };
 
             var saveCount = canvas.Save();
             try
             {
-                canvas.ClipRect(rect);
+                // 外边界用圆角矩形裁剪硬性保证贴合卡片圆角；
+                // 只靠距离场遮罩时，边缘仍会按控件矩形收口。
+                var outerRadius = (float)(_state.Corner + ring);
+                using (var outer = new SKRoundRect(rect, outerRadius))
+                {
+                    canvas.ClipRoundRect(outer, SKClipOperation.Intersect, antialias: true);
+                }
                 // 在时间线的透明绘制层内，将清晰内容渐变替换为模糊内容；
                 // 保留真实 alpha，不添加底色，也不把模糊文字叠到清晰文字上。
                 canvas.SaveLayer(new SKCanvasSaveLayerRec
