@@ -729,7 +729,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         vm.Input.DraftText = host.LoadDraft() ?? string.Empty;
         WireDraftPersistence(vm);
 
-        _perfWiring?.AttachSession(host.Chat);
+        _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, host.CurrentTranscript());
         _dialogHost!.Attach(host.Chat);
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {

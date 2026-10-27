@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System;
 using Fufucode.App.Features.Plugins;
 using Fufucode.Core.Diagnostics;
@@ -79,7 +80,10 @@ internal sealed class PerfHostWiring : IDisposable
 
     private PluginPackageManager? _manager;
 
-    public void AttachSession(Fufucode.App.Abstractions.IChatSession? session) => Collector.AttachSession(session);
+    public void AttachSession(Fufucode.App.Abstractions.IChatSession? session,
+        string? sessionName = null, string? model = null,
+        IReadOnlyList<Fufucode.App.Abstractions.ChatMessage>? history = null)
+        => Collector.AttachSession(session, sessionName, model, history);
 
     /// <summary>插件启停后：同步接收端状态；插件刚启用时补发启动阶段的里程碑。</summary>
     public void OnPluginsSynced()

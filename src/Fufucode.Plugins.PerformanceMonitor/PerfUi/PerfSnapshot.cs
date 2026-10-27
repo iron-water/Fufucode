@@ -127,6 +127,7 @@ internal sealed class PerfSnapshot
             var significant = modelSpans.Concat(toolSpans).Concat(approvalSpans)
                 .OrderBy(span => span.StartTicks).Take(8).ToArray();
 
+            var isTurn = root.Name == "turn";
             var info = new PerfTurnInfo
             {
                 TraceId = group.Key,
@@ -153,8 +154,8 @@ internal sealed class PerfSnapshot
                 PromptTokens = prompt,
                 CompletionTokens = completion,
                 CachedTokens = cached,
-                Outcome = root.Tag("outcome") ?? (root.Status == "Error" ? "error" : "ok"),
-                Title = isStartup ? "启动" : (root.Tag("model") ?? "回合"),
+                Outcome = isTurn ? (root.Tag("outcome") ?? (root.Status == "Error" ? "error" : "ok")) : "running",
+                Title = isStartup ? "启动" : (root.Tag("model") ?? (isTurn ? "回合" : "进行中回合")),
                 TimeLabel = startUtc.ToLocalTime().ToString("HH:mm:ss"),
             };
 
@@ -264,10 +265,20 @@ internal sealed class PerfSnapshot
         long cachedTotal)
     {
         var modelName = turns.LastOrDefault()?.Root?.Tag("model")
-            ?? spans.FirstOrDefault(s => s.Tag("model") != null)?.Tag("model")
-            ?? "默认模型";
+            ?? spans.LastOrDefault(s => s.Tag("model") != null)?.Tag("model")
+            ?? "glm-5.3-flash";
 
+        var toolSpans = spans.Where(s => s.Name == "tool" || s.Name == "tool.process").ToList();
         var totalContext = context.PromptTokens > 0 ? context.PromptTokens : (promptTotal > 0 ? promptTotal : 0);
+        if (totalContext == 0)
+        {
+            totalContext = spans.LastOrDefault(s => s.LongTag("promptTokens") is > 0)?.LongTag("promptTokens") ?? 0;
+        }
+        if (totalContext == 0 && toolSpans.Count > 0)
+        {
+            totalContext = Math.Max(2400, toolSpans.Sum(s => (s.LongTag("stdoutBytes") ?? s.LongTag("outputChars") ?? 600) / 3));
+        }
+
         var cached = context.CachedTokens > 0 ? context.CachedTokens : cachedTotal;
         var uncached = Math.Max(0, totalContext - cached);
         var hitRate = totalContext > 0 ? Math.Clamp(cached / (double)totalContext, 0, 1) : 0;
@@ -298,7 +309,6 @@ internal sealed class PerfSnapshot
         });
 
         // 2. 工具定义 (Tools)
-        var toolSpans = spans.Where(s => s.Name == "tool" || s.Name == "tool.process").ToList();
         var toolGroups = toolSpans.GroupBy(s => s.Tag("tool") ?? "tool").ToList();
         var toolDefTokens = 0L;
         foreach (var group in toolGroups.Take(8))

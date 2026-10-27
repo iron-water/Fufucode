@@ -158,6 +158,10 @@ public sealed class PerfRecorder : IPerfSink, IPerfModeProvider
 
     public void OnEvent(in PerfEvent value)
     {
+        if (value.Name == "session.attach" && !string.IsNullOrWhiteSpace(value.Detail))
+        {
+            SetCurrentSession(value.Detail);
+        }
         var detail = value.Detail is null ? null : Redactor.Text(value.Detail);
         var record = new PerfEventRecord(value.TimestampTicks, DateTimeOffset.UtcNow,
             value.Kind switch

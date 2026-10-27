@@ -50,6 +50,12 @@ public static class PerfTracer
         return true;
     }
 
+    /// <summary>通知性能接收端当前会话标识（项目名或会话标题）。</summary>
+    public static void SetSessionId(string? sessionId)
+    {
+        Record(PerfEventKind.SessionEvent, "session.attach", 0, sessionId);
+    }
+
     /// <summary>开始一个 span；未启用时返回默认值（Dispose 无操作）。</summary>
     public static PerfSpan Step(string name, string? tagKey = null, string? tagValue = null)
     {
