@@ -123,7 +123,7 @@
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <PathIcon Data="{DynamicResource Icon.Warning}" Width="15" Height="15" VerticalAlignment="Top"/>
                 <TextBlock Classes="body" TextWrapping="Wrap"
-                           Text="{Binding SettingsLoadError, StringFormat='settings.json 上次加载失败（{0}），已用默认值继续'}"/>
+                           Text="{Binding SettingsLoadError, StringFormat='settings.json 上次加载失败（{0}），已用最近一次可用配置继续'}"/>
               </StackPanel>
             </Border>
 

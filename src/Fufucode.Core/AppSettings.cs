@@ -75,7 +75,17 @@ internal partial class AppSettingsJsonContext : JsonSerializerContext;
 /// <summary>Atomic JSON settings with a change event. Invalid files are preserved for diagnosis.</summary>
 public sealed class AppSettingsStore
 {
+    /// <summary>
+    /// 最近一次成功读取的设置快照。settings.json 被占用或损坏时用它兜底，
+    /// 避免把“这次没读到”当成“用户没配置端点”，让整轮会话都拿不到模型端点。
+    /// </summary>
+    private const string LastGoodFileName = "settings.last-good.json";
+
+    /// <summary>settings.json 可能被扫描器/备份/其它进程短暂独占：读失败先重试，不要立刻退回默认值。</summary>
+    private const int ReadAttempts = 4;
+
     private readonly string _path;
+    private readonly string _lastGoodPath;
     private readonly object _gate = new();
     private AppSettings _current;
     private bool _newerVersion;
@@ -84,42 +94,126 @@ public sealed class AppSettingsStore
     {
         layout.EnsureCreated();
         _path = Path.Combine(layout.Root, "settings.json");
+        _lastGoodPath = Path.Combine(layout.Root, LastGoodFileName);
         _current = Load();
     }
 
     public event Action<AppSettings>? Changed;
     public string? LastLoadError { get; private set; }
+
+    /// <summary>本次加载是否退回了上次成功读取的快照（主文件读不到时）；正常读取为 false。</summary>
+    public bool UsedLastGood { get; private set; }
     public AppSettings Current { get { lock (_gate) return _current; } }
 
     private AppSettings Load()
     {
+        LastLoadError = null;
+        UsedLastGood = false;
         if (!File.Exists(_path)) return new AppSettings();
         try
         {
-            var json = File.ReadAllText(_path);
-            using var document = JsonDocument.Parse(json);
-            if (document.RootElement.ValueKind != JsonValueKind.Object) throw new JsonException("Settings root must be an object.");
-            var version = document.RootElement.TryGetProperty("version", out var value) ? value.GetInt32() : 0;
-            if (version > 1)
-            {
-                _newerVersion = true;
-                throw new InvalidOperationException("Settings were written by a newer app version.");
-            }
-            if (version == 0)
-            {
-                // Migrate the early flat model/thinking names without rewriting the file until the next edit.
-                var root = document.RootElement;
-                return Validate(new AppSettings(SelectedModel: ReadString(root, "model"),
-                    ThinkingLevel: ReadString(root, "thinking"), Theme: ReadString(root, "theme") ?? "system"));
-            }
-            return Validate(JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings)
-                ?? throw new JsonException("Settings are empty."));
+            var settings = Parse(ReadJson(), trackNewerVersion: true);
+            WriteLastGood(settings);
+            return settings;
         }
-        catch (Exception error) when (error is JsonException or IOException or InvalidOperationException or ArgumentException)
+        catch (Exception error) when (error is JsonException or IOException or InvalidOperationException or ArgumentException or UnauthorizedAccessException)
         {
             LastLoadError = error.GetType().Name;
+            if (ReadLastGood() is { } lastGood)
+            {
+                UsedLastGood = true;
+                return lastGood;
+            }
             return new AppSettings();
         }
+    }
+
+    /// <summary>读取主文件；只对占用这类瞬时失败重试，内容错误直接抛出。</summary>
+    private string ReadJson()
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try { return File.ReadAllText(_path); }
+            catch (Exception error) when (attempt < ReadAttempts &&
+                                          error is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(40 * attempt);
+            }
+        }
+    }
+
+    private AppSettings Parse(string json, bool trackNewerVersion)
+    {
+        using var document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind != JsonValueKind.Object) throw new JsonException("Settings root must be an object.");
+        var version = document.RootElement.TryGetProperty("version", out var value) ? value.GetInt32() : 0;
+        if (version > 1)
+        {
+            if (trackNewerVersion) _newerVersion = true;
+            throw new InvalidOperationException("Settings were written by a newer app version.");
+        }
+        if (version == 0)
+        {
+            // Migrate the early flat model/thinking names without rewriting the file until the next edit.
+            var root = document.RootElement;
+            return Validate(new AppSettings(SelectedModel: ReadString(root, "model"),
+                ThinkingLevel: ReadString(root, "thinking"), Theme: ReadString(root, "theme") ?? "system"));
+        }
+        return Validate(JsonSerializer.Deserialize(json, AppSettingsJsonContext.Default.AppSettings)
+            ?? throw new JsonException("Settings are empty."));
+    }
+
+    /// <summary>上次成功读取的快照；不存在或同样读不到时返回 null（不影响主文件的诊断记录）。</summary>
+    private AppSettings? ReadLastGood()
+    {
+        try
+        {
+            if (!File.Exists(_lastGoodPath)) return null;
+            return Parse(File.ReadAllText(_lastGoodPath), trackNewerVersion: false);
+        }
+        catch (Exception error) when (error is JsonException or IOException or InvalidOperationException or ArgumentException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private void WriteLastGood(AppSettings settings)
+    {
+        var temp = _lastGoodPath + ".tmp-" + Guid.NewGuid().ToString("N");
+        try
+        {
+            File.WriteAllText(temp, JsonSerializer.Serialize(settings, AppSettingsJsonContext.Default.AppSettings));
+            File.Move(temp, _lastGoodPath, overwrite: true);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            // 快照只是兜底：写不进磁盘不影响本次读取。
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
+    }
+
+    /// <summary>
+    /// 读取失败过的设置重读一次：主文件恢复可读时用它替换当前内存快照。
+    /// 已经正常读取、或仍然读不到时什么都不做。返回是否恢复。
+    /// </summary>
+    public bool ReloadIfFailed()
+    {
+        AppSettings next;
+        bool changed;
+        lock (_gate)
+        {
+            if (LastLoadError is null) return false;
+            next = Load();
+            if (LastLoadError is not null) return false;
+            changed = next != _current;
+            _current = next;
+        }
+        if (changed) Changed?.Invoke(next);
+        return true;
     }
 
     private static string? ReadString(JsonElement root, string name) =>
@@ -145,6 +239,9 @@ public sealed class AppSettingsStore
             finally { if (File.Exists(temp)) File.Delete(temp); }
             _current = next;
             LastLoadError = null;
+            UsedLastGood = false;
+            // 每次成功落盘都刷新兜底快照，下一次读取失败时才能拿回真实配置。
+            WriteLastGood(next);
         }
         Changed?.Invoke(next);
         return next;

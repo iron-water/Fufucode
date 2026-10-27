@@ -15,7 +15,8 @@ internal static class SettingsAndDiagnosticsTests
         Console.WriteLine("PASS " + name);
     }
 
-    public static async Task RunAsync(string root, string fake, string dotnet)
+    /// <summary>设置存储的独立回归（不启动任何后端），也供 --settings-only 单跑。</summary>
+    public static async Task<AppDataLayout> RunSettingsAsync(string root)
     {
         var layout = new AppDataLayout(Path.Combine(root, "tmp", "m6-core-tests", Guid.NewGuid().ToString("N")));
         var store = new AppSettingsStore(layout);
@@ -60,24 +61,54 @@ internal static class SettingsAndDiagnosticsTests
                     "R-008 permanent read-only failure preserves disk and memory and removes temporary files");
             }
             finally { File.SetAttributes(path, File.GetAttributes(path) & ~FileAttributes.ReadOnly); }
+            // 读文件时的独占占用：短暂占用应由重试恢复，长时间占用应退回上次成功读取的快照。
+            using (var lockFile = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var pendingLoad = Task.Run(() => new AppSettingsStore(layout));
+                await Task.Delay(80);
+                lockFile.Dispose();
+                var recovered = await pendingLoad;
+                Check(recovered.LastLoadError is null && !recovered.UsedLastGood &&
+                    recovered.Current.Endpoint?.ProviderName == "fixture" && recovered.Current.Theme == "light",
+                    "R-009 transient settings read contention retries instead of dropping the endpoint");
+            }
+            AppSettingsStore lockedLoad;
+            using (var lockFile = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.None))
+                lockedLoad = new AppSettingsStore(layout);
+            Check(lockedLoad.LastLoadError is not null && lockedLoad.UsedLastGood &&
+                lockedLoad.Current.Endpoint?.ProviderName == "fixture" && lockedLoad.Current.Theme == "light",
+                "R-009 settings unreadable at startup fall back to the last good snapshot, not defaults");
+            Check(lockedLoad.ReloadIfFailed() && !lockedLoad.UsedLastGood && lockedLoad.LastLoadError is null,
+                "R-009 settings reload after contention recovers without restarting");
         }
         File.WriteAllText(path, """{"model":"legacy","thinking":"high","theme":"light"}""");
         Check(new AppSettingsStore(layout).Current is { SelectedModel: "legacy", ThinkingLevel: "high", Theme: "light" },
             "M6 version-zero settings migrate in memory");
+        // 让磁盘与兜底快照都回到带端点的状态，验证主文件损坏时端点不会丢。
+        loaded.Update(s => s with { Theme = "light" });
         File.WriteAllText(path, "{broken-json");
         var corrupt = new AppSettingsStore(layout);
-        Check(corrupt.LastLoadError is not null && corrupt.Current == new AppSettings() &&
-            File.ReadAllText(path) == "{broken-json", "M6 corrupt settings fall back without destroying source");
-        corrupt.Update(s => s with { Theme = "light" });
+        Check(corrupt.LastLoadError is not null && corrupt.UsedLastGood &&
+            corrupt.Current.Endpoint?.ProviderName == "fixture" && corrupt.Current.Theme == "light" &&
+            File.ReadAllText(path) == "{broken-json",
+            "M6 corrupt settings fall back to the last good snapshot without destroying source");
+        corrupt.Update(s => s with { Theme = "dark" });
+        var repaired = new AppSettingsStore(layout);
         Check(Directory.GetFiles(layout.Root, "settings.json.before-repair-*.bak").Length == 1 &&
-            new AppSettingsStore(layout).Current.Theme == "light",
-            "M6 repairing corrupt settings keeps a source backup");
+            repaired.Current.Theme == "dark" && repaired.Current.Endpoint?.ProviderName == "fixture",
+            "M6 repairing corrupt settings keeps a source backup and the endpoint");
         File.WriteAllText(path, """{"version":99,"theme":"dark"}""");
         var newer = new AppSettingsStore(layout);
         try { newer.Update(s => s with { Theme = "light" }); throw new Exception("newer settings overwrite was allowed"); }
         catch (InvalidOperationException) { }
         Check(File.ReadAllText(path).Contains("\"version\":99", StringComparison.Ordinal),
             "M6 newer settings version cannot be overwritten");
+        return layout;
+    }
+
+    public static async Task RunAsync(string root, string fake, string dotnet)
+    {
+        var layout = await RunSettingsAsync(root);
 
         var sessionLayout = new AppDataLayout(Path.Combine(root, "tmp", "m6-session-settings", Guid.NewGuid().ToString("N")));
         var projectPath = Path.Combine(sessionLayout.Root, "project");

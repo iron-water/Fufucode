@@ -608,6 +608,10 @@ public sealed class PersistentSessionManager
         {
             Diagnostics.StartupProbe.Mark("native.open.begin", "OpenNativeAsync");
             var file = NativeSessionFactory.SessionFilePath(_layout, project.Id, session.Id);
+            // 启动时 settings.json 可能被扫描器/备份短暂占用，当时读到的是默认值；
+            // 打开会话时再读一次，避免一次读取失败就永久变成“未配置模型端点”。
+            if (_settings.LastLoadError is not null && _settings.ReloadIfFailed())
+                Diagnostics.StartupProbe.Mark("native.settings.reloaded", "settings.json readable again");
             var endpoint = _settings.Current.Endpoint;
             Diagnostics.StartupProbe.Mark("native.credentials.begin", "resolve api key");
             var apiKey = endpoint is null
