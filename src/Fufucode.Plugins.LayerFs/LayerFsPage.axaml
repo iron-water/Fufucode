@@ -1,0 +1,102 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Fufucode.Plugins.LayerFs.LayerFsPage"
+             Background="{DynamicResource AppMicaPageBackground}"
+             AutomationProperties.Name="LayerFS 工作区">
+  <Grid RowDefinitions="Auto,*,Auto">
+    <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+      <Grid ColumnDefinitions="*,Auto,Auto" Margin="12,8,10,8" ColumnSpacing="4">
+        <TextBlock Classes="bodyStrong" Text="LayerFS" VerticalAlignment="Center"/>
+        <Button x:Name="RefreshButton" Grid.Column="1" Classes="iconButton" ToolTip.Tip="刷新项目与工作区"
+                AutomationProperties.Name="刷新项目">
+          <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
+        </Button>
+        <Button x:Name="ConnectionButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="连接设置"
+                AutomationProperties.Name="连接设置">
+          <PathIcon Data="{DynamicResource Icon.Settings}" Width="14" Height="14"/>
+        </Button>
+      </Grid>
+    </Border>
+    <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled">
+      <StackPanel Margin="12,8,12,12" Spacing="8">
+        <ComboBox x:Name="Projects" HorizontalAlignment="Stretch" PlaceholderText="选择 LayerFS 项目"
+                  AutomationProperties.Name="LayerFS 项目"/>
+        <TextBlock x:Name="EmptyHint" Classes="caption" Text="还没有项目。从“导入项目”创建独立副本。" TextWrapping="Wrap"/>
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Classes="bodyStrong" Text="分支" VerticalAlignment="Center"/>
+          <Button x:Name="StateButton" Grid.Column="1" Classes="subtle" Content="刷新状态" Padding="8,3"/>
+        </Grid>
+        <ListBox x:Name="Branches" Background="Transparent" BorderThickness="0"
+                 MaxHeight="200" AutomationProperties.Name="LayerFS 分支"/>
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+          <TextBox x:Name="BranchName" PlaceholderText="新分支名" AutomationProperties.Name="新分支名"/>
+          <Button x:Name="ForkButton" Grid.Column="1" Classes="subtle" Content="创建分支" Padding="8,3"/>
+        </Grid>
+        <Expander x:Name="HistorySection" Header="提交历史" HorizontalAlignment="Stretch">
+          <StackPanel Spacing="6">
+            <Button x:Name="CommitsButton" Classes="subtle" Content="刷新提交" HorizontalAlignment="Left" Padding="8,3"/>
+            <ListBox x:Name="Commits" Background="Transparent" BorderThickness="0" MaxHeight="240"
+                     AutomationProperties.Name="LayerFS 提交历史"/>
+            <TextBlock x:Name="HistoryHint" Classes="caption" Text="选择分支以查看提交。" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Expander>
+        <Expander Header="沙箱工作区" IsExpanded="True" HorizontalAlignment="Stretch">
+          <StackPanel Spacing="8">
+            <ComboBox x:Name="Sandboxes" HorizontalAlignment="Stretch" PlaceholderText="选择沙箱"
+                      AutomationProperties.Name="LayerFS 沙箱"/>
+            <WrapPanel>
+              <Button x:Name="CreateSandboxButton" Classes="subtle" Content="创建沙箱" Margin="0,0,6,4"/>
+              <Button x:Name="MountButton" Classes="subtle" Content="挂载分支" Margin="0,0,0,4"/>
+            </WrapPanel>
+            <ComboBox x:Name="Workspaces" HorizontalAlignment="Stretch" PlaceholderText="选择挂载的工作区"
+                      AutomationProperties.Name="LayerFS 挂载工作区"/>
+            <TextBox x:Name="Command" PlaceholderText="在工作区执行命令" AcceptsReturn="True" TextWrapping="Wrap"
+                     AutomationProperties.Name="工作区命令"/>
+            <Button x:Name="ExecButton" Classes="subtle" Content="执行命令" HorizontalAlignment="Left"/>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6">
+              <TextBox x:Name="Message" PlaceholderText="检查点说明" AutomationProperties.Name="检查点说明"/>
+              <Button x:Name="CommitButton" Grid.Column="1" Classes="subtle" Content="保存检查点"/>
+            </Grid>
+            <WrapPanel>
+              <Button x:Name="UnmountButton" Classes="subtle" Content="卸载工作区" Margin="0,0,6,4"/>
+              <Button x:Name="CloseSandboxButton" Classes="subtle" Content="关闭空沙箱" Margin="0,0,0,4"/>
+            </WrapPanel>
+          </StackPanel>
+        </Expander>
+        <Expander Header="导入项目" HorizontalAlignment="Stretch">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="将源目录导入为独立副本，包含 .git 和忽略文件。" TextWrapping="Wrap"/>
+            <TextBox x:Name="Source" PlaceholderText="源项目目录" AutomationProperties.Name="源项目目录"/>
+            <TextBox x:Name="ProjectName" PlaceholderText="新项目名，例如 my-project" AutomationProperties.Name="新项目名"/>
+            <Button x:Name="InitButton" Classes="subtle" Content="导入项目" HorizontalAlignment="Left"/>
+          </StackPanel>
+        </Expander>
+        <Expander x:Name="ConnectionSection" Header="连接设置" HorizontalAlignment="Stretch">
+          <StackPanel Spacing="8">
+            <TextBlock Classes="caption" Text="WSL 发行版"/>
+            <TextBox x:Name="Distribution" AutomationProperties.Name="WSL 发行版"/>
+            <TextBlock Classes="caption" Text="WSL 用户"/>
+            <TextBox x:Name="LinuxUser" AutomationProperties.Name="WSL 用户"/>
+            <TextBlock Classes="caption" Text="Linux Node 路径"/>
+            <TextBox x:Name="Node" AutomationProperties.Name="Linux Node 路径"/>
+            <TextBlock Classes="caption" Text="Linux 配置文件"/>
+            <TextBox x:Name="Config" AutomationProperties.Name="Linux 配置文件"/>
+            <WrapPanel>
+              <Button x:Name="SaveConnectionButton" Classes="subtle" Content="保存连接" Margin="0,0,6,4"/>
+              <Button x:Name="CheckButton" Classes="subtle" Content="检查环境" Margin="0,0,0,4"/>
+            </WrapPanel>
+            <TextBlock x:Name="EnvironmentText" Classes="caption" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Expander>
+        <Expander Header="操作输出" HorizontalAlignment="Stretch" IsExpanded="True">
+          <TextBox x:Name="Output" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap"
+                   FontFamily="{DynamicResource AppMonoFont}" MaxHeight="240" AutomationProperties.Name="LayerFS 操作输出"/>
+        </Expander>
+        <TextBlock Classes="caption" Text="Disposable 存储不保证崩溃或断电后的持久性，请保留源项目。卸载插件保留 WSL 数据。" TextWrapping="Wrap"/>
+      </StackPanel>
+    </ScrollViewer>
+    <Border Grid.Row="2" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,8">
+      <TextBlock x:Name="Status" Classes="caption" Text="选择项目或导入独立副本。" TextWrapping="Wrap"/>
+    </Border>
+  </Grid>
+</UserControl>

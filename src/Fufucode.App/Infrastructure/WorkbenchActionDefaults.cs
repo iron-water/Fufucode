@@ -42,7 +42,7 @@ public static class WorkbenchActionDefaults
     /// <summary>菜单二级分组：同一父名下的动作收进一个子菜单；null 表示直接平铺。</summary>
     public static string? SubMenu(string id) => id switch
     {
-        "chat" or "files" or "changes" or "browser" or "terminal" or "extensions" => "工作区页面",
+        "chat" or "files" or "changes" or "browser" or "terminal" or "extensions" or "page.layerfs" => "工作区页面",
         "copy.id" or "copy.task" or "copy.project" or "copy.log" or "copy.deeplink" or "copy.markdown" or "copy.workdir" => "复制",
         "session.export" or "session.export.markdown" or "session.export.metadata" or "session.export.pdf" => "导出",
         "session.fork" or "session.fork.worktree" => "分叉",
@@ -84,6 +84,7 @@ public static class WorkbenchActionDefaults
         "browser.copy-address" => "Copy", "browser.open-external" => "Open", "browser.devtools" => "Wrench",
         "browser.focus-address" => "Edit", "browser.toggle-full-view" => "FullScreenMaximize",
         "page.local-review" => "ShieldCheckmark", "page.automation" => "Automation", "library" => "Folder",
+        "page.layerfs" => "Branch",
         "commands" or "session.search" => "Search", "settings" => "Settings",
         "toggle.left" => "PanelLeft", "toggle.right" => "PanelRight", "toggle.bottom" => "PanelBottom",
         "terminal" => "Terminal", "terminal.copy" => "Copy", "terminal.paste" => "ClipboardPaste",

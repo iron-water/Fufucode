@@ -5,6 +5,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <IsPackable>false</IsPackable>
+    <!-- 页面只由插件包用显式目录构造；XAML 编译器的“运行时 URI 加载需公共无参构造”提示不适用。 -->
+    <NoWarn>$(NoWarn);7714</NoWarn>
   </PropertyGroup>
   <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
     <ItemGroup>

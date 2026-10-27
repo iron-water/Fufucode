@@ -14,7 +14,7 @@ public sealed class LayerFsPluginPackage : IPluginPackage
     {
         LayerFsPage? current = null;
         var root = context.DataRoot ?? Path.GetDirectoryName(Path.GetDirectoryName(context.PackageDirectory))!;
-        return new PluginPageView("layerfs", "LayerFS", "Folder", Id, () =>
+        return new PluginPageView("layerfs", "LayerFS", "Branch", Id, () =>
         {
             current = new LayerFsPage(context.PackageDirectory, root);
             _pages.Add(current);

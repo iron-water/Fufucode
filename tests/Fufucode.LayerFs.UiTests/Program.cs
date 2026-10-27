@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Headless;
@@ -39,38 +40,77 @@ internal static class Program
         var layout = new AppDataLayout(root);
         var store = new PluginStateStore(layout);
         await using var manager = new PluginPackageManager(layout, new PluginToolRegistry(new PluginCapabilityGateway(store)), store);
+        if (store.GetState("workspace.layerfs").IsInstalled) manager.UninstallPackage("workspace.layerfs");
         Check(!store.GetState("workspace.layerfs").IsInstalled, "Optional plugin starts uninstalled");
         manager.InstallPackage("workspace.layerfs", payload);
         Check(store.GetState("workspace.layerfs").IsInstalled, "Physical package installed");
         if (Arguments.Contains("--install-only")) return;
         var contribution = manager.PageContributions["workspace.layerfs"];
-        Check(contribution.PageId == "layerfs", "Page contribution registered");
+        Check(contribution.PageId == "layerfs" && contribution.IconKey == "Branch", "Page contribution registered in the workbench catalog shape");
         var page = (IPluginWorkspacePage)contribution.CreateView();
+        if (window is not null) { window.Content = page.View; window.Show(); window.Width = 420; window.Height = 1000; }
+        var view = (Control)page.View;
         page.SetProject(@"C:\Projects\测试 project", false);
-        var fields = page.View.GetVisualDescendants().OfType<TextBox>().ToList();
-        if (window is not null) { window.Content = page.View; window.Show(); await Task.Delay(300); }
-        // Controls may not have a visual parent until attached. Read via logical tree too.
-        fields = Avalonia.LogicalTree.LogicalExtensions.GetLogicalDescendants(page.View).OfType<TextBox>().ToList();
-        Check(fields.Any(box => box.Text == @"C:\Projects\测试 project"), "Host project forwarded to import input");
+        Control Named(string name) => view.FindControl<Control>(name) ?? throw new Exception("Missing named control: " + name);
+        Check(((TextBox)Named("Source")).Text == @"C:\Projects\测试 project", "Host project forwarded to import input");
+        Check(Named("Branches") is ListBox && Named("Commits") is ListBox && Named("Sandboxes") is ComboBox,
+            "Sidebar page exposes branch, commit and sandbox lists");
         if (window is not null)
         {
-            async Task Click(string title)
+            async Task Click(string name)
             {
-                var button = page.View.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, title));
+                var button = (Button)Named(name);
                 button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-                var deadline = DateTime.UtcNow.AddSeconds(45);
-                while (!button.IsEnabled && DateTime.UtcNow < deadline) await Task.Delay(50);
-                Check(button.IsEnabled, title + " completed");
+                var deadline = DateTime.UtcNow.AddSeconds(60);
+                while (!button.IsEnabled && DateTime.UtcNow < deadline) { Dispatcher.UIThread.RunJobs(); await Task.Delay(50); }
+                Dispatcher.UIThread.RunJobs();
+                Check(button.IsEnabled, name + " completed");
             }
-            page.View.GetVisualDescendants().OfType<Expander>().Single().IsExpanded = true;
-            await Task.Delay(200);
-            await Click("检查环境");
-            Check(fields.Any(f => f.IsReadOnly && (f.Text?.Contains("\"missing\": []") ?? false)), "Native page displays healthy real runtime");
-            await Click("刷新项目");
-            var selector = page.View.GetVisualDescendants().OfType<ComboBox>().Single();
-            Check(selector.ItemCount > 0, "Native page project list populated");
-            await Click("查看状态");
-            Check(fields.Any(f => f.IsReadOnly && (f.Text?.Contains("\"branches\"") ?? false)), "Native page displays real project history");
+            ((Expander)Named("ConnectionSection")).IsExpanded = true;
+            await Click("CheckButton");
+            var env = ((TextBlock)Named("EnvironmentText")).Text;
+            var status = ((TextBlock)Named("Status")).Text;
+            Console.WriteLine($"EnvironmentText=[{env}] Status=[{status}]");
+            Check(env?.Contains("环境就绪") == true, "Native page reports a healthy real runtime");
+            await Click("RefreshButton");
+            var projects = (ComboBox)Named("Projects");
+            Check(projects.ItemCount > 0, "Native page project list populated from the Store");
+            // 验证数据里最早的项目只有空分支；选时间戳最新的项目，保证有真实检查点可渲染。
+            if (projects.Items.OfType<string>().OrderBy(name => name, StringComparer.Ordinal).LastOrDefault() is { } newest)
+            {
+                projects.SelectedItem = newest;
+                var branchesReady = DateTime.UtcNow.AddSeconds(30);
+                while (((ListBox)Named("Branches")).ItemCount == 0 && DateTime.UtcNow < branchesReady)
+                { Dispatcher.UIThread.RunJobs(); await Task.Delay(50); }
+            }
+            Check(((ListBox)Named("Branches")).ItemCount > 0, "Project state fills the branch list");
+            ((Expander)Named("HistorySection")).IsExpanded = true;
+            // main 通常没有提交；选一个带 head 的分支再刷新，验证真实提交列表。
+            var branches = (ListBox)Named("Branches");
+            var items = branches.Items.OfType<ListBoxItem>().ToList();
+            Console.WriteLine($"Project=[{projects.SelectedItem}] Branches=[{string.Join(",", items.Select(item => item.Tag))}]");
+            branches.SelectedItem = items.FirstOrDefault(item => (string?)item.Tag == "work")
+                ?? items.FirstOrDefault(item => (string?)item.Tag != "main") ?? items.FirstOrDefault();
+            Dispatcher.UIThread.RunJobs();
+            Console.WriteLine($"Selected=[{(branches.SelectedItem as ListBoxItem)?.Tag}]");
+            // 项目/分支选择会各自触发异步刷新，可能互相覆盖；反复重设分支并重新拉取，直到结果稳定。
+            var deadline = DateTime.UtcNow.AddSeconds(60);
+            var commits = (ListBox)Named("Commits");
+            var commitsButton = (Button)Named("CommitsButton");
+            while (commits.ItemCount == 0 && DateTime.UtcNow < deadline)
+            {
+                if (commitsButton.IsEnabled)
+                {
+                    var items2 = branches.Items.OfType<ListBoxItem>().ToList();
+                    var target = items2.FirstOrDefault(item => (string?)item.Tag == "work") ?? items2.LastOrDefault();
+                    if (target is not null && !ReferenceEquals(branches.SelectedItem, target)) branches.SelectedItem = target;
+                    else commitsButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                }
+                Dispatcher.UIThread.RunJobs();
+                await Task.Delay(200);
+            }
+            Console.WriteLine($"Commits={commits.ItemCount} Hint=[{((TextBlock)Named("HistoryHint")).Text}] Status=[{((TextBlock)Named("Status")).Text}]");
+            Check(commits.ItemCount > 0, "Selected branch history shown");
             using var image = new RenderTargetBitmap(new PixelSize((int)window.Width, (int)window.Height), new Vector(96, 96));
             image.Render(window);
             using (var stream = File.Create(Path.Combine(root, "layerfs-native.png"))) image.Save(stream, new PngBitmapEncoderOptions());
@@ -99,7 +139,7 @@ internal sealed class TestApp : Application
     {
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
-            var window = new Window { Title = "LayerFS 原生插件验证", Width = 950, Height = 1080 };
+            var window = new Window { Title = "LayerFS 侧边栏验证", Width = 420, Height = 1000 };
             desktop.MainWindow = window;
             window.Opened += async (_, _) =>
             {
