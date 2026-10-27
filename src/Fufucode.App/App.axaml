@@ -10,6 +10,7 @@
             <infra:BoolToOpacityConverter x:Key="BoolToOpacity" />
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://LiveMarkdown.Avalonia/Defaults.axaml" />
+                <ResourceInclude Source="avares://Fufucode.App/Styles/LiveMarkdownTheme.axaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

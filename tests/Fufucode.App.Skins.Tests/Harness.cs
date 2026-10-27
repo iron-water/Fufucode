@@ -26,7 +26,11 @@ internal sealed class TestApp : Application
     {
         // 与真实 App 一致：启动时确定具体变体（真机取自设置）；工装固定 Light 作为基线。
         RequestedThemeVariant = ThemeVariant.Light;
+        // 与真实 App 一致：LiveMarkdown 默认配色 + 本应用的浅色覆盖。
+        Resources.MergedDictionaries.Add((IResourceDictionary)Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(new Uri("avares://LiveMarkdown.Avalonia/Defaults.axaml")));
+        Resources.MergedDictionaries.Add((IResourceDictionary)Avalonia.Markup.Xaml.AvaloniaXamlLoader.Load(new Uri("avares://Fufucode.App/Styles/LiveMarkdownTheme.axaml")));
         Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
+        Styles.Add(new StyleInclude(new Uri("avares://LiveMarkdown.Avalonia/")) { Source = new Uri("avares://LiveMarkdown.Avalonia/Styles.axaml") });
         Styles.Add(new StyleInclude(new Uri("avares://Fufucode.App/"))
         {
             Source = new Uri("avares://Fufucode.App/Styles/FufucodeTheme.axaml"),

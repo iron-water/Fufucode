@@ -1,0 +1,20 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <!-- LiveMarkdown 自带 Defaults.axaml 按深色页面设计：代码块、行内代码和引用块共用
+         SecondaryCardBackgroundColor（#99000000），代码文字为白色。浅色主题在此重定义，
+         避免出现整块深色底；深色主题显式保留原值，防止两套值互相泄漏。 -->
+    <ResourceDictionary.ThemeDictionaries>
+        <ResourceDictionary x:Key="Light">
+            <Color x:Key="SecondaryCardBackgroundColor">#0F000000</Color>
+            <Color x:Key="BorderColor">#1A000000</Color>
+            <Color x:Key="ForegroundColor">#E4000000</Color>
+            <Color x:Key="CodeInlineColor">#9A6700</Color>
+        </ResourceDictionary>
+        <ResourceDictionary x:Key="Dark">
+            <Color x:Key="SecondaryCardBackgroundColor">#99000000</Color>
+            <Color x:Key="BorderColor">#3DFFFFFF</Color>
+            <Color x:Key="ForegroundColor">#FFFFFFFF</Color>
+            <Color x:Key="CodeInlineColor">#FFD7BA7D</Color>
+        </ResourceDictionary>
+    </ResourceDictionary.ThemeDictionaries>
+</ResourceDictionary>

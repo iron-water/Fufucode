@@ -108,18 +108,37 @@ Check(SkinCatalog.All.Count == 6, "安装皮肤插件后目录恢复六套皮肤
         Check(AutomationProperties.GetHelpText(help) == copy.HelpText, $"{copy.Label} 长说明同时供屏幕阅读器读取");
     }
 
-    // ---------- 1c. 代码块语法主题跟随明暗（浅色页面不应出现深色补丁） ----------
+    // ---------- 1c. 浅色 Markdown 配色：代码块/行内代码不得沿用深色默认值 ----------
     var markdownWindow = new Window { Width = 800, Height = 600, RequestedThemeVariant = ThemeVariant.Light };
-    var markdownSource = """
+    var markdown = """
 ```c
 int x;
 ```
 """;
-    var markdownView = new Fufucode.App.Views.RichMarkdownView { Markdown = markdownSource };
+    var markdownView = new Fufucode.App.Views.RichMarkdownView { Markdown = markdown };
     markdownWindow.Content = markdownView;
     markdownWindow.Show();
-    Harness.PumpTicks();
-    Harness.Pump(() => markdownView.GetVisualDescendants().OfType<CodeBlock>().Any());
+    Harness.PumpTicks(20);
+
+    static string Res(Fufucode.App.Views.RichMarkdownView view, string key, ThemeVariant variant) =>
+        view.TryFindResource(key, variant, out var value) ? value?.ToString() ?? "null" : "missing";
+
+    static string AppRes(string key, ThemeVariant variant) =>
+        Application.Current is { } app && app.TryFindResource(key, variant, out var value) ? value?.ToString() ?? "null" : "missing";
+    Check(AppRes("CardBackgroundColor", ThemeVariant.Light) != "missing",
+        $"应用级资源可读取 LiveMarkdown 默认键（实际 {AppRes("CardBackgroundColor", ThemeVariant.Light)}）");
+    Check(AppRes("SecondaryCardBackgroundColor", ThemeVariant.Light) == "#0f000000",
+        $"应用级代码底色为浅色（实际 {AppRes("SecondaryCardBackgroundColor", ThemeVariant.Light)}）");
+    var lightSecondary = Res(markdownView, "SecondaryCardBackgroundColor", ThemeVariant.Light);
+    Check(lightSecondary == "#0f000000",
+        $"浅色主题代码块/行内代码底色为浅灰（实际 {lightSecondary}）");
+    var lightForeground = Res(markdownView, "ForegroundColor", ThemeVariant.Light);
+    Check(lightForeground == "#e4000000", $"浅色主题代码文字为深色（实际 {lightForeground}）");
+    Check(Res(markdownView, "CodeInlineColor", ThemeVariant.Light) == "#ff9a6700",
+        "浅色主题行内代码文字使用浅色强调色");
+    Check(Res(markdownView, "SecondaryCardBackgroundColor", ThemeVariant.Dark) == "#99000000",
+        "深色主题保留 LiveMarkdown 原有代码底色");
+
     var codeBlock = markdownView.GetVisualDescendants().OfType<CodeBlock>().FirstOrDefault();
     Check(codeBlock?.ColorTheme == ThemeName.LightPlus, "浅色主题代码块使用 LightPlus（不再是深色补丁）");
     markdownWindow.RequestedThemeVariant = ThemeVariant.Dark;
