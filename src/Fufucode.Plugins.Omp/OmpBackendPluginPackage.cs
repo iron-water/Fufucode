@@ -1,12 +1,16 @@
+using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Fufucode.Core;
-using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
+using Fufucode.Pi;
 
 namespace Fufucode.Plugins.Omp;
 
 /// <summary>
 /// OMP 后端插件入口。OMP 的 RPC 线路与 Pi 相同，插件携带 Fufucode.Plugins.Pi.dll；
-/// 初始化时登记目录，Core 的 BackendPluginLoader 即可为 BackendId.Omp 创建客户端工厂。
+/// 与 Pi/Claude/Codex/DSH 同一套注册约定：初始化时登记 RPC 工厂，停用时注销。
 /// </summary>
 public sealed class OmpBackendPluginPackage : IPluginPackage
 {
@@ -23,13 +27,13 @@ public sealed class OmpBackendPluginPackage : IPluginPackage
     public Task InitializeAsync(PluginPackageContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        BackendPluginLoader.RegisterPluginDirectory(context.PackageDirectory);
+        BackendPluginLoader.RegisterRpcClientFactory(BackendId.Omp, spec => new PiRpcClientFactory(spec));
         return Task.CompletedTask;
     }
 
     public Task ShutdownAsync(CancellationToken cancellationToken = default)
     {
-        BackendPluginLoader.ResetCache();
+        BackendPluginLoader.UnregisterRpcClientFactory(BackendId.Omp);
         return Task.CompletedTask;
     }
 }

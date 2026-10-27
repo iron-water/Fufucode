@@ -517,8 +517,8 @@ public sealed class PersistentSessionManager
             var spec = new BackendProcessSpec(profile.Executable, args, project.Path, environment, session.Backend);
             var factory = (_clientFactoryFactory ?? BackendPluginLoader.CreateRpcFactory)(spec)
                 ?? throw new InvalidOperationException(
-                    $"后端 '{session.Backend}' 的插件未安装或无法加载（缺少 Fufucode.Plugins.Pi.dll）；" +
-                    "请安装对应后端插件，或改用默认的 FUMO 原生内核。");
+                    $"后端 '{session.Backend}' 的插件未安装、未启用或未登记工厂；" +
+                    "请从插件市场安装对应后端插件，或改用默认的 FUMO 原生内核。");
             coordinator = new ChatSessionCoordinator(factory, session.Backend, rpcOptions);
             try { await coordinator.StartAsync(cancellationToken); }
             catch (Exception error)

@@ -4,6 +4,8 @@ using Fufucode.Core;
 using Fufucode.Pi;
 
 var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
+// 本测试直接构造 PersistentSessionManager，不经过插件管理；按生产同一条约定显式登记后端工厂。
+BackendPluginLoader.RegisterRpcClientFactory(BackendId.Pi, spec => new PiRpcClientFactory(spec));
 var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin/Debug/net10.0/Fufucode.FakePi.dll");
 var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet/dotnet.exe");
 var node = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe");

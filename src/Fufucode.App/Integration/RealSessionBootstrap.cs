@@ -19,40 +19,32 @@ public static class RealSessionBootstrap
     /// </summary>
     public static (string Node, string Cli) ResolveRuntime(AppOptions options, bool required = true)
     {
+        ArgumentNullException.ThrowIfNull(options);
         var root = FindRuntimeRoot() ?? AppContext.BaseDirectory;
-        // 运行时可放在三处：显式参数、仓库/应用自带 runtime/、按需安装的用户运行时。
-        var managedRoot = Path.Combine(
-            Fufucode.Core.AppDataLayout.DefaultRoot(),
-            "runtime", "pi");
-        var cliRelative = Path.Combine("node_modules", "@earendil-works", "pi-coding-agent",
-            "dist", "bundle", "cli.js");
+        // 与 OMP/Claude/Codex/DSH 同一条解析路径：显式参数 → 仓库/应用自带 runtime/ →
+        // 统一工具链表（用户自带运行时优先于系统安装）。路径候选不再在这里另写一份。
+        var status = Fufucode.Core.Runtimes.ToolchainCatalog.Detect(
+            options.CreateAppDataLayout(), Fufucode.Core.BackendCapabilities.StorageId(Fufucode.Core.BackendId.Pi));
 
-        var node = options.PiNodePath ??
-                   (root is null ? null : Path.Combine(root, "runtime", "node", "node.exe")) ??
-                   (File.Exists(Path.Combine(managedRoot, "node.exe"))
-                       ? Path.Combine(managedRoot, "node.exe") : null);
-        if (node is null || !File.Exists(node))
-        {
-            node = FindNodeInSystem() ?? node;
-        }
-        var cli = options.PiCliPath ??
-                  (root is null ? null : Path.Combine(root, "runtime", "pi", cliRelative)) ??
-                  (File.Exists(Path.Combine(managedRoot, cliRelative))
-                      ? Path.Combine(managedRoot, cliRelative) : null);
-        if (cli is null || !File.Exists(cli))
-        {
-            cli = FindPiCliInSystem() ?? cli;
-        }
+        var node = FirstExisting(
+            options.PiNodePath,
+            Path.Combine(root, "runtime", "node", "node.exe"),
+            status.ManagedPath,
+            status.SystemPath);
+        var cli = FirstExisting(
+            options.PiCliPath,
+            Path.Combine(root, "runtime", "pi", Fufucode.Core.Runtimes.ToolchainCatalog.PiScriptRelative),
+            status.ScriptPath);
 
         var missing = new List<string>();
         if (node is null || !File.Exists(node))
         {
-            missing.Add($"Node 运行时（期望 {node ?? "<仓库>/runtime/node/node.exe 或 %LOCALAPPDATA%/Fufucode/runtime/pi/node.exe"}）");
+            missing.Add($"Node 运行时（期望 {node ?? "仓库/应用 runtime/node/node.exe，或 fufucode runtime install node"}）");
         }
 
         if (cli is null || !File.Exists(cli))
         {
-            missing.Add($"Pi CLI（期望 {cli ?? "<仓库>/runtime/pi 或 %LOCALAPPDATA%/Fufucode/runtime/pi 下的 node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js"}）");
+            missing.Add($"Pi CLI（期望 {cli ?? $"仓库/应用 runtime/pi 或用户运行时下的 {Fufucode.Core.Runtimes.ToolchainCatalog.PiScriptRelative}"}）");
         }
 
         if (required && missing.Count > 0)
@@ -64,6 +56,16 @@ public static class RealSessionBootstrap
 
         return (node is not null ? Path.GetFullPath(node) : string.Empty,
                 cli is not null ? Path.GetFullPath(cli) : string.Empty);
+    }
+
+    // 候选按优先级排列：取第一个真实存在的；都不存在时返回第一个非空值，供诊断文案指出"期望在哪"。
+    private static string? FirstExisting(params string?[] candidates)
+    {
+        foreach (var candidate in candidates)
+        {
+            if (!string.IsNullOrEmpty(candidate) && File.Exists(candidate)) return candidate;
+        }
+        return Array.Find(candidates, candidate => !string.IsNullOrEmpty(candidate));
     }
 
     // 五个后端同一解析顺序：显式参数 > 仓库 runtime/<id> > 系统安装/用户运行时（统一表）。
@@ -95,72 +97,8 @@ public static class RealSessionBootstrap
     public static string? ResolveDshRuntime(AppOptions options) =>
         ResolveFromCatalog(options, Fufucode.Core.BackendId.Dsh, options.DshExecutablePath);
 
-    private static string? FindNodeInSystem()
-    {
-        var standardPaths = new[]
-        {
-            @"C:\Program Files\nodejs\node.exe",
-            @"C:\Program Files (x86)\nodejs\node.exe",
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", "node", "node.exe"),
-        };
-        foreach (var p in standardPaths)
-        {
-            if (File.Exists(p)) return p;
-        }
 
-        var pathEnv = Environment.GetEnvironmentVariable("PATH");
-        if (pathEnv is not null)
-        {
-            foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var candidate = Path.Combine(dir.Trim(), "node.exe");
-                if (File.Exists(candidate)) return candidate;
-            }
-        }
-        return null;
-    }
 
-    private static string? FindPiCliInSystem()
-    {
-        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
-        var standardPaths = new[]
-        {
-            Path.Combine(appData, "npm", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js"),
-            Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".npm-global", "node_modules", "@earendil-works", "pi-coding-agent", "dist", "bundle", "cli.js"),
-        };
-        foreach (var p in standardPaths)
-        {
-            if (File.Exists(p)) return p;
-        }
-        return null;
-    }
-
-    private static string? FindOmpInSystem()
-    {
-        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var standardPaths = new[]
-        {
-            Path.Combine(localAppData, "Tern", "omp", "bin", "omp.exe"),
-            Path.Combine(userProfile, ".bun", "bin", "omp.exe"),
-            Path.Combine(userProfile, "go", "bin", "omp.exe"),
-        };
-        foreach (var p in standardPaths)
-        {
-            if (File.Exists(p)) return p;
-        }
-
-        var pathEnv = Environment.GetEnvironmentVariable("PATH");
-        if (pathEnv is not null)
-        {
-            foreach (var dir in pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var candidate = Path.Combine(dir.Trim(), "omp.exe");
-                if (File.Exists(candidate)) return candidate;
-            }
-        }
-        return null;
-    }
 
     // 开发布局：从 bin/<配置>/net10.0 向上找到含 runtime/node/node.exe 的仓库根。
     // 打包布局（M7）由轨道 F 决定入口约定后再接入，不提前猜测。

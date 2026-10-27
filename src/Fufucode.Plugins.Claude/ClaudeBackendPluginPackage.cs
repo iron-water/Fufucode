@@ -23,7 +23,7 @@ public sealed class ClaudeBackendPluginPackage : IPluginPackage
     public Task InitializeAsync(PluginPackageContext context, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context);
-        BackendPluginLoader.RegisterPluginDirectory(context.PackageDirectory);
+        // 只登记工厂，不在磁盘/内存里做隐式探测；卸载时对称注销。
         BackendPluginLoader.RegisterSessionFactory(new ClaudeSessionFactory());
         return Task.CompletedTask;
     }
@@ -31,7 +31,6 @@ public sealed class ClaudeBackendPluginPackage : IPluginPackage
     public Task ShutdownAsync(CancellationToken cancellationToken = default)
     {
         BackendPluginLoader.UnregisterSessionFactory(BackendId.Claude);
-        BackendPluginLoader.ResetCache();
         return Task.CompletedTask;
     }
 }

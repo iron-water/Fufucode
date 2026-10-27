@@ -52,7 +52,10 @@ public sealed record ToolchainStatus(
 /// </summary>
 public static class ToolchainCatalog
 {
-    private const string PiCliRelative = "node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js";
+    /// <summary>Pi 是"Node + JS 脚本"型后端：脚本相对 runtime/pi 与标准安装目录的路径。</summary>
+    public const string PiScriptRelative = "node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js";
+
+    private const string PiCliRelative = PiScriptRelative;
 
     public static IReadOnlyList<ToolchainDescriptor> All { get; } = Build();
 
