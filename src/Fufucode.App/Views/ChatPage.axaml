@@ -569,11 +569,6 @@
           </ItemsControl>
         </ScrollViewer>
 
-        <!-- 与聊天内容同帧渲染；不占布局空间，上缘逐渐变清晰。 -->
-        <views:BackdropBlurBand x:Name="ComposerBlurBand" Height="44"
-                                VerticalAlignment="Bottom" ZIndex="5" IsHitTestVisible="False"
-                                IsVisible="{Binding #ComposerCard.IsVisible}"/>
-
         <!-- 回到最新：浮动 pill + 阴影（阴影挂在包裹层，Button 无 BoxShadow）。
              靠右放置，避免压住居中排版的正文。 -->
         <Border x:Name="BackToLatestHost" ZIndex="6" CornerRadius="{DynamicResource AppCornerPill}"
@@ -595,6 +590,14 @@
         </Button>
         </Border>
       </Grid>
+
+      <!-- 输入卡四周的模糊光晕：贴在卡边缘全强度，向外在 RingThickness 内快速衰减。
+           放在 ReadingColumn 层（TimelineArea 有 ClipToBounds，会把向外的光晕裁掉）。 -->
+      <views:BackdropBlurBand x:Name="ComposerBlurBand" Grid.ColumnSpan="2" ZIndex="5"
+                              VerticalAlignment="Bottom" IsHitTestVisible="False"
+                              RingThickness="16" BlurRadius="16"
+                              IsVisible="{Binding #ComposerCard.IsVisible}"/>
+
       <ScrollBar x:Name="TimelineScrollBar" Grid.Row="0" Grid.Column="1"
                  Width="14" HorizontalAlignment="Right" Margin="0,0,-20,0"
                  Orientation="Vertical" Minimum="0"

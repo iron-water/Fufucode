@@ -13,7 +13,10 @@ using SkiaSharp;
 
 namespace Fufucode.App.Views;
 
-/// <summary>在合成器当前帧内模糊身后的内容，上缘逐渐过渡到清晰正文。</summary>
+/// <summary>
+/// 在合成器当前帧内模糊身后的内容，形成环绕目标的环形光晕：
+/// 贴着目标边缘全强度，向外在 <see cref="RingThickness"/> 内快速衰减到清晰。
+/// </summary>
 public sealed class BackdropBlurBand : Control
 {
     private CompositionCustomVisual? _visual;
@@ -42,6 +45,17 @@ public sealed class BackdropBlurBand : Control
         set => SetValue(StrengthProperty, value);
     }
 
+    /// <summary>环形光晕的厚度：从目标边缘向外衰减到清晰的距离。越小衰减越快。</summary>
+    public static readonly StyledProperty<double> RingThicknessProperty =
+        AvaloniaProperty.Register<BackdropBlurBand, double>(nameof(RingThickness), 16d,
+            validate: value => double.IsFinite(value) && value > 0);
+
+    public double RingThickness
+    {
+        get => GetValue(RingThicknessProperty);
+        set => SetValue(RingThicknessProperty, value);
+    }
+
     public BackdropBlurBand()
     {
         IsHitTestVisible = false;
@@ -66,7 +80,7 @@ public sealed class BackdropBlurBand : Control
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        _visual?.SendHandlerMessage(new BlurState(default, default, 0, 0, false));
+        _visual?.SendHandlerMessage(new BlurState(default, default, 0, 0, 16, false));
         SetActive(false);
         foreach (var ancestor in _ancestors) ancestor.PropertyChanged -= AncestorChanged;
         _ancestors.Clear();
@@ -80,7 +94,8 @@ public sealed class BackdropBlurBand : Control
     {
         base.OnPropertyChanged(change);
         if (change.Property == BoundsProperty || change.Property == BlurRadiusProperty ||
-            change.Property == StrengthProperty || change.Property == IsVisibleProperty)
+            change.Property == StrengthProperty || change.Property == IsVisibleProperty ||
+            change.Property == RingThicknessProperty)
             UpdateVisual();
     }
 
@@ -108,7 +123,8 @@ public sealed class BackdropBlurBand : Control
             TopLevel.GetTopLevel(this) is not Window { WindowState: WindowState.Minimized } &&
             Bounds.Width > 0 && Bounds.Height > 0 && BlurRadius > 0 && Strength > 0;
         _visual.Visible = active;
-        _visual.SendHandlerMessage(new BlurState(sample, output, (float)BlurRadius, (float)Strength, active));
+        _visual.SendHandlerMessage(new BlurState(sample, output, (float)BlurRadius,
+            (float)Strength, (float)RingThickness, active));
         SetActive(active);
     }
 
@@ -119,7 +135,8 @@ public sealed class BackdropBlurBand : Control
         VisualEffectsStateChanged?.Invoke(active);
     }
 
-    private readonly record struct BlurState(Rect Sample, Rect Output, float Radius, float Strength, bool Active);
+    private readonly record struct BlurState(Rect Sample, Rect Output, float Radius, float Strength,
+        float Ring, bool Active);
 
     private sealed class BlurHandler : CompositionCustomVisualHandler
     {
@@ -145,13 +162,36 @@ public sealed class BackdropBlurBand : Control
             var rect = new SKRect((float)output.Left, (float)output.Top,
                 (float)output.Right, (float)output.Bottom);
             using var blur = SKImageFilter.CreateBlur(_state.Radius, _state.Radius, SKShaderTileMode.Clamp);
-            using var fade = SKShader.CreateLinearGradient(
-                new SKPoint(0, rect.Top), new SKPoint(0, rect.Bottom),
-                [SKColors.Transparent, new SKColor(0, 0, 0, (byte)(36 * _state.Strength)),
-                    new SKColor(0, 0, 0, (byte)(208 * _state.Strength)),
-                    new SKColor(0, 0, 0, (byte)(255 * _state.Strength))],
-                [0f, 0.25f, 0.7f, 1f], SKShaderTileMode.Clamp);
-            using var mask = SKImageFilter.CreateShader(fade);
+
+            // 环形遮罩：四边各一条由内向外衰减的线性渐变，合并成围绕目标的软边光晕。
+            // 目标内部（被不透明卡片覆盖）保持全强度，向外在 Ring 像素内衰减到 0。
+            var alpha = (byte)(255 * Math.Clamp(_state.Strength, 0f, 1f));
+            var solid = new SKColor(0, 0, 0, alpha);
+            var ring = Math.Max(1f, _state.Ring);
+            var innerLeft = rect.Left + ring;
+            var innerTop = rect.Top + ring;
+            var innerRight = Math.Max(innerLeft, rect.Right - ring);
+            var innerBottom = Math.Max(innerTop, rect.Bottom - ring);
+
+            using var topShader = SKShader.CreateLinearGradient(
+                new SKPoint(0, rect.Top), new SKPoint(0, innerTop),
+                [SKColors.Transparent, solid], [0f, 1f], SKShaderTileMode.Clamp);
+            using var bottomShader = SKShader.CreateLinearGradient(
+                new SKPoint(0, innerBottom), new SKPoint(0, rect.Bottom),
+                [solid, SKColors.Transparent], [0f, 1f], SKShaderTileMode.Clamp);
+            using var leftShader = SKShader.CreateLinearGradient(
+                new SKPoint(rect.Left, 0), new SKPoint(innerLeft, 0),
+                [SKColors.Transparent, solid], [0f, 1f], SKShaderTileMode.Clamp);
+            using var rightShader = SKShader.CreateLinearGradient(
+                new SKPoint(innerRight, 0), new SKPoint(rect.Right, 0),
+                [solid, SKColors.Transparent], [0f, 1f], SKShaderTileMode.Clamp);
+
+            using var topFilter = SKImageFilter.CreateShader(topShader);
+            using var bottomFilter = SKImageFilter.CreateShader(bottomShader);
+            using var leftFilter = SKImageFilter.CreateShader(leftShader);
+            using var rightFilter = SKImageFilter.CreateShader(rightShader);
+            using var mask = SKImageFilter.CreateMerge(
+                [topFilter, bottomFilter, leftFilter, rightFilter]);
             using var blurred = SKImageFilter.CreateBlendMode(SKBlendMode.DstIn, blur, mask);
             using var original = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOut, mask, null);
             using var transition = SKImageFilter.CreateArithmetic(0, 1, 1, 0, true, original, blurred);

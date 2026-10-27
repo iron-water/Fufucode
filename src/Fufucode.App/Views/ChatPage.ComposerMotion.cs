@@ -128,17 +128,22 @@ public partial class ChatPage
                         DataContext is MainViewModel { Timeline.IsAtBottom: true }) ScrollToEnd();
                 }, DispatcherPriority.Loaded);
         }
-        // 尾部留白与模糊带跟随同一进度，不创建底栏或改变聊天视口高度。
-        // 模糊带在 TimelineArea 内（横跨头像列与正文列），输入卡只在正文列；
-        // 左缩进必须带上头像列宽度，否则模糊带会比卡片向左多出一列。
-        // 再各让出一个圆角，只覆盖卡片顶边的平直段，不伸到卡片圆角之外。
-        // 下缘压进卡片 2px：布局取整与渐变末端的半透明像素会在接缝处留出一条细缝，
-        // 卡片本身不透明，压进去的部分被遮住，不会多模糊到卡片之外。
-        const double seal = 2;
-        var radius = ComposerCard.CornerRadius.TopLeft;
+        // 尾部留白与模糊光晕跟随同一进度，不创建底栏或改变聊天视口高度。
+        // 光晕环绕整张输入卡（左右上下各向外扩 RingThickness）：
+        // 它横跨头像列与正文列，卡片只在正文列，所以左缘要补上头像列宽度再外扩。
+        var ring = ComposerBlurBand.RingThickness;
         var cardLeft = ReadingColumn.ColumnDefinitions[0].ActualWidth;
-        ComposerBlurBand.Margin = new Thickness(
-            cardLeft + radius, 0, radius, Math.Max(0, clearance - seal));
+        var cardHeight = ComposerCard.Bounds.Height;
+        var cardBottom = ComposerCard.Margin.Bottom;
+        if (cardHeight > 0)
+        {
+            var slide = (1 - _composerProgress) * fullHeight;
+            ComposerBlurBand.Height = cardHeight + ring * 2;
+            ComposerBlurBand.Margin = new Thickness(
+                cardLeft - ring, 0, -ring,
+                Math.Max(0, cardBottom - ring) + slide);
+            ComposerBlurBand.Opacity = _composerProgress;
+        }
         BackToLatestHost.Margin = new Thickness(0, 0, 20, clearance + 10);
         ContentBandChanged?.Invoke(this, EventArgs.Empty);
     }
