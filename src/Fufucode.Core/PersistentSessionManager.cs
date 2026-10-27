@@ -757,34 +757,7 @@ public sealed class PersistentSessionManager
         try
         {
             using var stream = File.OpenRead(file);
-            using var document = JsonDocument.Parse(stream);
-            var root = document.RootElement;
-            JsonElement messages;
-            string? modelId = null, thinkingLevel = null, executionMode = null;
-
-            if (root.ValueKind == JsonValueKind.Array)
-            {
-                messages = root;
-            }
-            else if (root.ValueKind == JsonValueKind.Object &&
-                     root.TryGetProperty("messages", out var stored))
-            {
-                messages = stored;
-                if (root.TryGetProperty("modelId", out var model) && model.ValueKind == JsonValueKind.String)
-                    modelId = model.GetString();
-                if (root.TryGetProperty("thinkingLevel", out var thinking) && thinking.ValueKind == JsonValueKind.String)
-                    thinkingLevel = thinking.GetString();
-                if (root.TryGetProperty("executionMode", out var mode) && mode.ValueKind == JsonValueKind.String)
-                    executionMode = mode.GetString();
-            }
-            else
-            {
-                throw new InvalidDataException("会话文件缺少 messages。");
-            }
-
-            // 直接复用已解析的 JsonElement，不再 GetRawText() 生成字符串并二次解析。
-            var list = messages.Deserialize<List<PureAgentMessage>>();
-            return list is null ? null : new NativeSessionFile(list, modelId, thinkingLevel, executionMode);
+            return ParseNativeMessages(stream);
         }
         catch (Exception ex)
         {
@@ -797,6 +770,43 @@ public sealed class PersistentSessionManager
             catch { }
             return null;
         }
+    }
+
+    /// <summary>
+    /// 纯解析 FUMO 会话文件：不修复、不改名、不写盘。只读报告必须使用本入口，
+    /// 否则一次损坏读取就会把用户唯一的会话文件移走。
+    /// </summary>
+    public static NativeSessionFile? ParseNativeMessages(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        using var document = JsonDocument.Parse(stream);
+        var root = document.RootElement;
+        JsonElement messages;
+        string? modelId = null, thinkingLevel = null, executionMode = null;
+
+        if (root.ValueKind == JsonValueKind.Array)
+        {
+            messages = root;
+        }
+        else if (root.ValueKind == JsonValueKind.Object &&
+                 root.TryGetProperty("messages", out var stored))
+        {
+            messages = stored;
+            if (root.TryGetProperty("modelId", out var model) && model.ValueKind == JsonValueKind.String)
+                modelId = model.GetString();
+            if (root.TryGetProperty("thinkingLevel", out var thinking) && thinking.ValueKind == JsonValueKind.String)
+                thinkingLevel = thinking.GetString();
+            if (root.TryGetProperty("executionMode", out var mode) && mode.ValueKind == JsonValueKind.String)
+                executionMode = mode.GetString();
+        }
+        else
+        {
+            throw new InvalidDataException("会话文件缺少 messages。");
+        }
+
+        // 直接复用已解析的 JsonElement，不再 GetRawText() 生成字符串并二次解析。
+        var list = messages.Deserialize<List<PureAgentMessage>>();
+        return list is null ? null : new NativeSessionFile(list, modelId, thinkingLevel, executionMode);
     }
 
     private void InstallEndpoint(CompatibleEndpoint? endpoint)

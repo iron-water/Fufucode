@@ -81,6 +81,7 @@ public static class Program
             case "open": return OpenGui(options);
             case "status": return await CliStatusCommands.RunAsync(options, Console.Out, cancellationToken);
             case "commands": return await CommandsCommandAsync(active, options, cancellationToken);
+            case "backends": return await CliBackendCommands.RunAsync(options, Console.Out, cancellationToken);
             case "changes": return await CliReportCommands.ChangesAsync(options, Console.Out, cancellationToken);
             case "usage": return await CliReportCommands.UsageAsync(options, Console.Out);
             case "control": return await AutomationPluginCommands.RunControlAsync(options, Console.Out, cancellationToken);
@@ -89,18 +90,47 @@ public static class Program
                 if (options.SessionId is not null) throw new ArgumentException("ui preview cannot attach a real session.");
                 return await CliUiCommands.RunAsync(args, Console.Out, Console.Error, cancellationToken);
             case "sessions" when args.SequenceEqual(["list"]): return ListSessions(options);
-            case "sessions" when args.Count == 2 && args[0] == "show":
-                if (active?.Session.Id == args[1])
+            case "sessions" when (args.Count is 2 or 3) && args[0] == "show":
+                var showMode = args.Count == 3 ? args[2] : null;
+                if (showMode is not null and not ("--live" or "--offline"))
+                    throw new ArgumentException("Usage: sessions show <id> [--live|--offline].");
+                // REPL 查看当前活动会话时默认走实时状态；独立命令默认离线，避免抢租约。
+                var liveShow = showMode == "--live" || (showMode is null && active?.Session.Id == args[1]);
+                if (!liveShow)
+                {
+                    await CliSessionCommands.ShowOfflineAsync(layout, options.ProjectPath, args[1],
+                        options.Json, Console.Out);
+                }
+                else if (active?.Session.Id == args[1])
                 {
                     await active.RefreshHistoryAsync(cancellationToken);
                     await CliSessionCommands.ShowAsync(active, options.Json, Console.Out);
                 }
                 else
                 {
-                    await using var shown = await OpenSessionAsync(options with { SessionId = args[1] }, cancellationToken);
+                    await using var shown = await OpenSessionAsync(options with { SessionId = args[1] },
+                        cancellationToken);
                     await CliSessionCommands.ShowAsync(shown, options.Json, Console.Out);
                 }
                 return 0;
+            case "sessions" when args.Count >= 2 && args[0] == "export":
+                var exportFormat = "md";
+                string? exportPath = null;
+                for (var index = 2; index < args.Count; index++)
+                {
+                    switch (args[index])
+                    {
+                        case "--format" when index + 1 < args.Count:
+                            exportFormat = args[++index]; break;
+                        case "-o" or "--output" when index + 1 < args.Count:
+                            exportPath = args[++index]; break;
+                        default:
+                            throw new ArgumentException(
+                                "Usage: sessions export <id> [--format md|json] [-o <path>].");
+                    }
+                }
+                return await CliSessionCommands.ExportAsync(layout, options.ProjectPath, args[1],
+                    exportFormat, exportPath, options.Json, Console.Out, cancellationToken);
             case "sessions" when args.Count == 3 && args[0] == "rename":
                 // 活动会话同时回写后端；未打开的会话只改桌面元数据，不因外部运行时缺失而拒绝改名。
                 if (active?.Session.Id == args[1])
@@ -127,7 +157,7 @@ public static class Program
                 if (args.Count == 2 && args[0] == "thinking")
                     return await SetThinkingCommandAsync(active, options, args[1], cancellationToken);
                 if (active is not null) return await ModelCommandAsync(active, options, cancellationToken);
-                await using (var session = await OpenSessionAsync(options, cancellationToken))
+                await using (var session = await OpenSessionAsync(options, cancellationToken, allowNew: true))
                     return await ModelCommandAsync(session, options, cancellationToken);
             case "extensions":
                 // list is metadata-only; reject bad arity before runtime discovery.
@@ -184,7 +214,7 @@ public static class Program
     private static async Task<int> ThinkingCommandAsync(PersistentSession? active, CliOptions options, CancellationToken cancellationToken)
     {
         var session = active;
-        var owned = session is null ? await OpenSessionAsync(options, cancellationToken) : null;
+        var owned = session is null ? await OpenSessionAsync(options, cancellationToken, allowNew: true) : null;
         try
         {
             var coordinator = (session ?? owned)!.Coordinator;
@@ -210,7 +240,7 @@ public static class Program
     {
         if (options.Arguments.Count > 0) throw new ArgumentException("Usage: fufucode commands [--json].");
         var owns = active is null;
-        var session = active ?? await OpenSessionAsync(options, cancellationToken);
+        var session = active ?? await OpenSessionAsync(options, cancellationToken, allowNew: true);
         try
         {
             var response = await session.Coordinator.QueryCommandsAsync(cancellationToken);
@@ -240,7 +270,7 @@ public static class Program
         string level, CancellationToken cancellationToken)
     {
         var owns = active is null;
-        var session = active ?? await OpenSessionAsync(options, cancellationToken);
+        var session = active ?? await OpenSessionAsync(options, cancellationToken, allowNew: true);
         try
         {
             var response = await session.Coordinator.SetThinkingLevelAsync(level, cancellationToken);
@@ -287,7 +317,7 @@ public static class Program
     private static async Task<int> ChatAsync(CliOptions options, string prompt, CancellationToken cancellationToken)
     {
         using var input = new CliInputReader(Console.In);
-        await using var session = await OpenSessionAsync(options, cancellationToken);
+        await using var session = await OpenSessionAsync(options, cancellationToken, allowNew: true);
         await ApplySessionOverridesAsync(session, options, cancellationToken);
         var approval = session.Chat as IExtensionUiSession;
         var result = await CliChatRunner.RunAsync(session.Chat, approval, prompt, options.Json,
@@ -301,7 +331,7 @@ public static class Program
         PersistentSession? session = null;
         try
         {
-            session = await OpenSessionAsync(options, cancellationToken);
+            session = await OpenSessionAsync(options, cancellationToken, allowNew: true);
             await ApplySessionOverridesAsync(session, options, cancellationToken);
             if (!options.Json) await Console.Error.WriteLineAsync($"Fufucode CLI · {session.Chat.CurrentModel ?? "model unavailable"} · /exit to quit; /help for commands");
             while (true)
@@ -313,7 +343,7 @@ public static class Program
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 var first = line.TrimStart().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries)[0].TrimStart('/');
                 if (first is "sessions" or "models" or "settings" or "extensions" or "diag" or "approve"
-                    or "changes" or "usage" or "help" or "open" or "status" or "commands")
+                    or "changes" or "usage" or "help" or "open" or "status" or "commands" or "backends")
                 {
                     if (first == "help") { await Console.Error.WriteLineAsync(CliOptions.Usage); continue; }
                     // Fork rebinds the running Pi process; only the REPL owns a live session.
@@ -345,14 +375,15 @@ public static class Program
                     if (deletingCurrent) options = options with { SessionId = null };
                     if (reopen || deletingCurrent)
                     {
-                        session = await OpenSessionAsync(options, cancellationToken);
+                        session = await OpenSessionAsync(options, cancellationToken,
+                            allowNew: deletingCurrent);
                         await ApplySessionOverridesAsync(session, options, cancellationToken);
                     }
                     continue;
                 }
                 if (session is null)
                 {
-                    session = await OpenSessionAsync(options, cancellationToken);
+                    session = await OpenSessionAsync(options, cancellationToken, allowNew: true);
                     await ApplySessionOverridesAsync(session, options, cancellationToken);
                 }
                 if (line.TrimStart().StartsWith("/chat ", StringComparison.Ordinal) ||
@@ -469,6 +500,11 @@ public static class Program
         };
         start.ArgumentList.Add("--project");
         start.ArgumentList.Add(targetPath);
+        if (options.Backend is { } backend)
+        {
+            start.ArgumentList.Add("--backend");
+            start.ArgumentList.Add(BackendCapabilities.StorageId(backend));
+        }
         if (options.SessionId is not null)
         {
             start.ArgumentList.Add("--session");
@@ -487,7 +523,8 @@ public static class Program
         _ => RuntimeError
     });
 
-    private static async Task<PersistentSession> OpenSessionAsync(CliOptions options, CancellationToken cancellationToken)
+    private static async Task<PersistentSession> OpenSessionAsync(CliOptions options,
+        CancellationToken cancellationToken, bool allowNew = false)
     {
         var layout = new AppDataLayout(options.AppDataRoot);
         var manager = CreateManager(options);
@@ -512,7 +549,14 @@ public static class Program
         }
 
         PersistentSession session;
-        if (options.SessionId is { Length: > 0 } id)
+        if (allowNew && (options.NewSession || options.Backend is not null))
+        {
+            if (options.SessionId is not null)
+                throw new ArgumentException("--new/--backend cannot be combined with --session.");
+            var backend = ResolveBackend(manager, options);
+            session = await manager.CreateAsync(projectPath, backend: backend, cancellationToken: cancellationToken);
+        }
+        else if (options.SessionId is { Length: > 0 } id)
         {
             CliSessionCommands.RequireProject(manager.Metadata, projectPath, id);
             session = await manager.ResumeAsync(id, cancellationToken);
@@ -523,7 +567,8 @@ public static class Program
             var sessions = manager.Metadata.ListSessions(project.Id);
             var availableSession = sessions.FirstOrDefault(s => manager.IsBackendAvailable(s.Backend));
             session = availableSession is null
-                ? await manager.CreateAsync(projectPath, cancellationToken: cancellationToken)
+                ? await manager.CreateAsync(projectPath, backend: ResolveBackend(manager, options),
+                    cancellationToken: cancellationToken)
                 : await manager.ResumeAsync(availableSession.Id, cancellationToken);
         }
         session.Disposables.Add(pluginManager);
@@ -540,6 +585,17 @@ public static class Program
         return null;
     }
 
+    /// <summary>新建会话的后端：显式 --backend > 全局默认；不可用时与 App 一致回退 FUMO 并说明。</summary>
+    private static BackendId ResolveBackend(PersistentSessionManager manager, CliOptions options)
+    {
+        var requested = options.Backend ?? manager.PreferredBackend;
+        var probe = CliBackendCommands.Probe(manager.Layout, requested);
+        if (probe.Available) return requested;
+        var name = BackendCapabilities.For(requested).Name;
+        Console.Error.WriteLine($"后端 {name} 当前不可用（{probe.Reason}），本次新建使用 FUMO 原生内核。");
+        return BackendId.NativeCSharp;
+    }
+
     private static PersistentSessionManager CreateManager(CliOptions options)
     {
         // 默认后端是 FUMO 原生内核，不需要 Pi 运行时；仅在显式给出 --pi-node/--pi-cli
@@ -547,6 +603,7 @@ public static class Program
         var layout = new AppDataLayout(options.AppDataRoot);
         var preference = new Fufucode.Core.Backend.BackendPreferenceStore(layout).DefaultBackend;
         var needsExternal = options.PiNodePath is not null || options.PiCliPath is not null ||
+            options.Backend == BackendId.Pi ||
             preference is Fufucode.Core.Backend.EngineId.Pi or Fufucode.Core.Backend.EngineId.Omp;
         var (node, cli) = needsExternal
             ? TryResolveRuntime(options)
@@ -588,13 +645,15 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
     string? PermissionMode = null,
     bool Continue = false,
     int? MaxIterations = null,
-    string? ThinkingLevel = null)
+    string? ThinkingLevel = null,
+    BackendId? Backend = null,
+    bool NewSession = false)
 {
     private static readonly HashSet<string> KnownCommands = new(StringComparer.OrdinalIgnoreCase)
     {
         "chat", "sessions", "models", "settings", "extensions", "diag", "approve",
         "changes", "usage", "control", "host", "ui", "open", "runtime", "plugins",
-        "status", "commands"
+        "status", "commands", "backends"
     };
 
     public const string Usage = """
@@ -605,8 +664,9 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
           fufucode chat <prompt> [options]
           fufucode status [--json]
           fufucode commands [--json]
-          fufucode open [path] [--session ID]
-          fufucode sessions list | show <id> | rename <id> <name> | delete <id> [options]
+          fufucode backends list | use <id> [--json]
+          fufucode open [path] [--session ID] [--backend ID]
+          fufucode sessions list | show <id> [--live|--offline] | export <id> [--format md|json] [-o <path>] | rename <id> <name> | delete <id> [options]
           fufucode models list | set <provider/modelId> | thinking [level] [options]
           fufucode settings get [key] | set <key> <value> [options]
           fufucode extensions list | enable <path> | disable <path> [options]
@@ -622,6 +682,8 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
           fufucode ui snapshot | screenshot <new.png> | invoke nav.<page> [--page chat|extensions|settings] [--ui-app PATH]
 
         Chat & Session Options:
+          --new                                            Start a new conversation instead of resuming
+          --backend <fumo|pi|omp|claude|codex|dsh>         Backend for a new conversation
           -c, --continue                                   Continue the most recent conversation
           -r, --resume [id]                                Resume conversation by ID (or recent if omitted)
           -m, --model <provider/modelId>                   Temporarily override model for this run
@@ -653,6 +715,7 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
         string? project = null, session = null, data = null, node = null, cli = null;
         string? modelOverride = null, permissionMode = null;
         int? maxIterations = null; string? thinkingLevel = null;
+        BackendId? backend = null; var newSession = false;
         var positional = new List<string>();
         for (var index = 0; index < args.Length; index++)
         {
@@ -685,6 +748,10 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
                 case "--thinking" or "--thinking-level":
                     thinkingLevel = RequireValue(args, ref index);
                     break;
+                case "--new":
+                    newSession = true; break;
+                case "--backend":
+                    backend = ParseBackend(RequireValue(args, ref index)); break;
                 case "--app-data": data = RequireValue(args, ref index); break;
                 case "--pi-node": node = RequireValue(args, ref index); break;
                 case "--pi-cli": cli = RequireValue(args, ref index); break;
@@ -711,9 +778,22 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
         if (session is not null && (string.IsNullOrWhiteSpace(session) ||
             session.Any(c => !char.IsAsciiLetterOrDigit(c) && c is not '.' and not '_' and not '-')))
             throw new ArgumentException("Invalid session ID.");
+        if (newSession && session is not null)
+            throw new ArgumentException("--new cannot be combined with --session/--resume.");
+        if (newSession && continueLast)
+            throw new ArgumentException("--new cannot be combined with --continue.");
+        if (backend is not null && session is not null)
+            throw new ArgumentException("--backend only applies to a new conversation; omit --session/--resume.");
         return new CliOptions(command, commandArgs, json, help,
             Path.GetFullPath(project ?? Environment.CurrentDirectory), session, data, node, cli, literal,
-            autoApprove, modelOverride, permissionMode, continueLast, maxIterations, thinkingLevel);
+            autoApprove, modelOverride, permissionMode, continueLast, maxIterations, thinkingLevel,
+            backend, newSession);
+    }
+
+    private static BackendId ParseBackend(string value)
+    {
+        try { return BackendCapabilities.Parse(value); }
+        catch (InvalidOperationException error) { throw new ArgumentException(error.Message, nameof(value)); }
     }
 
     private static string RequireValue(string[] args, ref int index) =>

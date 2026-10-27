@@ -3,9 +3,10 @@ using Microsoft.Data.Sqlite;
 
 namespace Fufucode.Core;
 
-public sealed record ReadOnlySessionReportResult(string? SessionId, SessionHistory History, bool PartialTail);
+public sealed record ReadOnlySessionReportResult(string? SessionId, SessionHistory History, bool PartialTail,
+    string? ModelId = null, string? ThinkingLevel = null, string? ExecutionMode = null);
 
-/// <summary>Reads registered Pi history without starting Pi, taking a session lease, or mutating metadata.</summary>
+/// <summary>Reads registered session history without starting a backend, taking a lease, or mutating metadata.</summary>
 public static class ReadOnlySessionReport
 {
     private const int MaximumHistoryBytes = 32 * 1024 * 1024;
@@ -32,9 +33,11 @@ public static class ReadOnlySessionReport
             if (schema > DesktopMetadataStore.SchemaVersion)
                 throw new InvalidOperationException($"Metadata schema {schema} is newer than this app.");
         }
+        // schema 2/3 还没有 backend_id；旧库按 Pi 读取，保持最小只读 schema 兼容。
+        var hasBackendColumn = HasColumn(connection, "backend_id");
         using var query = connection.CreateCommand();
-        query.CommandText = """
-            SELECT s.id, s.project_id, s.file_path
+        query.CommandText = $"""
+            SELECT s.id, s.project_id, s.file_path{(hasBackendColumn ? ", s.backend_id" : "")}
             FROM sessions AS s JOIN projects AS p ON p.id=s.project_id
             WHERE p.path_key=$key
             """ + (sessionId is null ? " ORDER BY s.last_opened_utc DESC, s.id LIMIT 1" : " AND s.id=$id LIMIT 1");
@@ -46,16 +49,29 @@ public static class ReadOnlySessionReport
         var projectId = reader.GetString(1);
         var filePath = reader.IsDBNull(2) ? null : reader.GetString(2);
         if (filePath is null) return Empty(selectedId);
+        var backend = hasBackendColumn && !reader.IsDBNull(3)
+            ? BackendCapabilities.Parse(reader.GetString(3))
+            : BackendId.Pi;
         if (projectId.Length == 0 || projectId is "." or ".." ||
             projectId.IndexOfAny([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar]) >= 0 ||
             Path.IsPathRooted(projectId))
             throw new InvalidOperationException("Invalid registered project ID.");
         var directory = layout.ProjectSessionsDirectory(projectId);
+        var extension = Path.GetExtension(filePath);
+        var expectedExtension = backend is BackendId.Pi or BackendId.Omp ? ".jsonl" : ".json";
         if (!Path.IsPathFullyQualified(filePath) || !AppDataLayout.IsUnderDirectory(filePath, directory) ||
-            !string.Equals(Path.GetExtension(filePath), ".jsonl", StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Registered session history must be a JSONL file inside its project session directory.");
+            !string.Equals(extension, expectedExtension, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException(
+                $"Registered {BackendCapabilities.StorageId(backend)} session history must be a " +
+                $"{expectedExtension} file inside its project session directory.");
         RejectReparsePoints(filePath);
         if (!File.Exists(filePath)) return Empty(selectedId);
+
+        if (backend == BackendId.NativeCSharp)
+            return LoadNative(selectedId, filePath);
+        if (backend != BackendId.Pi && backend != BackendId.Omp)
+            throw new InvalidOperationException(
+                $"Offline reports do not support {BackendCapabilities.StorageId(backend)} .json history yet.");
 
         byte[] bytes;
         try
@@ -111,6 +127,39 @@ public static class ReadOnlySessionReport
             leafId = id.GetString();
         history.ApplyEntriesResponse(JsonSerializer.SerializeToElement(new { entries, leafId }), replace: true);
         return new(selectedId, history, partialTail);
+    }
+
+    /// <summary>FUMO 历史是带版本信封的 .json；解析失败只报告，绝不移动或改写原文件。</summary>
+    private static ReadOnlySessionReportResult LoadNative(string selectedId, string filePath)
+    {
+        try
+        {
+            using var file = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            var native = PersistentSessionManager.ParseNativeMessages(file);
+            if (native is null) return Empty(selectedId);
+            var history = new SessionHistory();
+            if (native.Messages.Count > 0)
+                history.ApplyEntries(NativeEntries.Build(native.Messages), NativeEntries.Leaf(native.Messages),
+                    replace: true);
+            return new(selectedId, history, false, native.ModelId, native.ThinkingLevel, native.ExecutionMode);
+        }
+        catch (InvalidDataException) { throw; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or JsonException)
+        {
+            throw new InvalidDataException("Invalid FUMO session history: " + error.Message, error);
+        }
+    }
+
+    private static bool HasColumn(SqliteConnection connection, string column)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "PRAGMA table_info(sessions)";
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+            if (!reader.IsDBNull(1) && reader.GetString(1).Equals(column, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
     }
 
     private static ReadOnlySessionReportResult Empty(string? sessionId) => new(sessionId, new SessionHistory(), false);

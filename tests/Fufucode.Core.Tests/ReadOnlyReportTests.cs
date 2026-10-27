@@ -65,7 +65,9 @@ internal static class ReadOnlyReportTests
                 beforeIndex.SequenceEqual(Fingerprint(index)), "A8 Git ranges preserve Unicode/new/deleted/binary flags without modifying index");
 
             var layout = new AppDataLayout(Path.Combine(stage, "data")); var metadata = new DesktopMetadataStore(layout);
-            var registeredProject = metadata.GetOrCreateProject(project); var session = metadata.CreateSession(registeredProject);
+            // 该夹具写的是 Pi JSONL 历史；显式声明 Pi，避免默认后端 FUMO 的 .json 校验拒绝它。
+            var registeredProject = metadata.GetOrCreateProject(project);
+            var session = metadata.CreateSession(registeredProject, backend: BackendId.Pi);
             var historyFile = Path.Combine(layout.ProjectSessionsDirectory(registeredProject.Id), session.Id + ".jsonl");
             Directory.CreateDirectory(Path.GetDirectoryName(historyFile)!);
             metadata.UpdateSessionFile(session.Id, historyFile);

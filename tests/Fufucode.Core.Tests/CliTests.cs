@@ -1,6 +1,7 @@
 using Fufucode.App.Abstractions;
 using Fufucode.Cli;
 using Fufucode.Core;
+using Fufucode.Core.Backend;
 using Fufucode.Pi;
 using System.Text.Json;
 
@@ -41,6 +42,7 @@ internal static class CliTests
         await TestDispatchAsync();
         await TestStatusAndRenameAsync(root);
         await TestNativeSessionDeletionAsync(root);
+        await TestSessionSurfaceAsync(root);
         // The headless UI group drives the App; it is skipped when the App cannot render in this environment.
         if (Environment.GetEnvironmentVariable("FUFUCODE_SKIP_UI_GROUP") != "1") await RunUiAsync(root);
         await RunContractsAsync(root);
@@ -289,6 +291,103 @@ internal static class CliTests
         Check(!File.Exists(sessionFile) &&
             manager.Metadata.ListSessions(projectRecord.Id).All(s => s.Id != sessionId),
             "CLI sessions delete removes the FUMO .json history and metadata");
+    }
+
+    /// <summary>FUMO 离线报告、离线查看/导出、--new/--backend 与后端选择。</summary>
+    private static async Task TestSessionSurfaceAsync(string root)
+    {
+        var layout = new AppDataLayout(Path.Combine(root, "tmp", "cli-session-surface",
+            Guid.NewGuid().ToString("N")));
+        var project = Path.Combine(layout.Root, "project");
+        Directory.CreateDirectory(project);
+        var metadata = new DesktopMetadataStore(layout);
+        var record = metadata.CreateSession(metadata.GetOrCreateProject(project), "offline",
+            BackendId.NativeCSharp);
+        var file = Path.Combine(layout.ProjectSessionsDirectory(record.ProjectId), "fumo", record.Id + ".json");
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        var messages = new List<PureAgentMessage>
+        {
+            new(PureAgentRole.User, "hello"),
+            new(PureAgentRole.Assistant, "world", Usage: new PureUsage(10, 5, 15))
+        };
+        File.WriteAllText(file, JsonSerializer.Serialize(new
+        {
+            version = 2, messages, modelId = "test-model", thinkingLevel = "high", executionMode = "plan"
+        }));
+        metadata.UpdateSessionFile(record.Id, file);
+
+        var report = ReadOnlySessionReport.Load(layout, project, record.Id);
+        Check(report.History.Entries.Count == 2 && report.ModelId == "test-model" &&
+            report.ThinkingLevel == "high" && report.ExecutionMode == "plan",
+            "ReadOnlySessionReport parses FUMO .json history and session settings");
+        Check(SessionUsageQuery.QueryHistory(report.History).Session.TotalTokens.Value == 15,
+            "FUMO offline usage keeps the recorded token total");
+
+        var oldOut = Console.Out; var oldError = Console.Error;
+        try
+        {
+            async Task<(int Code, string Out)> Run(params string[] args)
+            {
+                using var writer = new StringWriter();
+                Console.SetOut(writer);
+                try { return (await Fufucode.Cli.Program.Main(args), writer.ToString()); }
+                finally { Console.SetOut(oldOut); }
+            }
+
+            var usage = await Run("usage", "show", "--project", project, "--app-data", layout.Root, "--json");
+            Check(usage.Code == 0, "CLI usage show works for the default FUMO backend");
+            using (var usageJson = JsonDocument.Parse(usage.Out))
+                Check(usageJson.RootElement.GetProperty("report").GetProperty("session")
+                    .GetProperty("totalTokens").GetProperty("value").GetInt64() == 15,
+                    "CLI usage show reports the FUMO token total");
+
+            var shown = await Run("sessions", "show", record.Id, "--offline", "--project", project,
+                "--app-data", layout.Root, "--json");
+            Check(shown.Code == 0, "CLI sessions show defaults to offline and does not take a lease");
+            using (var shownJson = JsonDocument.Parse(shown.Out))
+                Check(shownJson.RootElement.GetProperty("backend").GetString() == "fumo" &&
+                    shownJson.RootElement.GetProperty("model").GetString() == "test-model" &&
+                    shownJson.RootElement.GetProperty("summary").GetArrayLength() == 2,
+                    "CLI sessions show reports offline FUMO entries and model");
+
+            var markdown = await Run("sessions", "export", record.Id, "--format", "md",
+                "--project", project, "--app-data", layout.Root);
+            Check(markdown.Code == 0 && markdown.Out.Contains("hello") && markdown.Out.Contains("world"),
+                "CLI sessions export writes Markdown text to stdout");
+
+            var exportPath = Path.Combine(layout.Root, "session-export.json");
+            var exported = await Run("sessions", "export", record.Id, "--format", "json", "-o", exportPath,
+                "--project", project, "--app-data", layout.Root, "--json");
+            Check(exported.Code == 0 && File.Exists(exportPath),
+                "CLI sessions export writes JSON to a new file");
+            using (var exportedJson = JsonDocument.Parse(File.ReadAllText(exportPath)))
+                Check(exportedJson.RootElement.GetProperty("messages").GetArrayLength() == 2,
+                    "CLI sessions JSON export contains the offline branch messages");
+
+            var backends = await Run("backends", "list", "--app-data", layout.Root, "--json");
+            Check(backends.Code == 0 && backends.Out.Contains("\"fumo\"") &&
+                backends.Out.Contains("\"available\":true"),
+                "CLI backends list reports the default native backend");
+            var use = await Run("backends", "use", "fumo", "--app-data", layout.Root, "--json");
+            Check(use.Code == 0 && use.Out.Contains("\"saved\":true"),
+                "CLI backends use persists the default backend");
+
+            var parsed = CliOptions.Parse(["--new", "--backend", "fumo", "hello"]);
+            Check(parsed.NewSession && parsed.Backend == BackendId.NativeCSharp && parsed.Command == "chat",
+                "CLI parses --new and --backend for a fresh conversation");
+            await ExpectAsync<ArgumentException>(() =>
+            {
+                CliOptions.Parse(["--new", "--session", "abc", "hello"]);
+                return Task.CompletedTask;
+            });
+            await ExpectAsync<ArgumentException>(() =>
+            {
+                CliOptions.Parse(["--backend", "pi", "--session", "abc", "hello"]);
+                return Task.CompletedTask;
+            });
+            Console.WriteLine("PASS CLI rejects --new with --session and --backend with --session");
+        }
+        finally { Console.SetOut(oldOut); Console.SetError(oldError); }
     }
 
     private static void Check(bool condition, string message)

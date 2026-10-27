@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Fufucode.Cli;
 using Fufucode.Core;
+using Fufucode.Core.Backend;
 
 internal static class CliMaintenanceTests
 {
@@ -14,6 +15,8 @@ internal static class CliMaintenanceTests
         var extension = Path.Combine(scratch, "extension.ts");
         File.WriteAllText(extension, "export default function() {};");
         var layout = new AppDataLayout(Path.Combine(scratch, "data"));
+        // 扩展验证本身是 Pi 行为；显式选择 Pi，避免默认后端改为 FUMO 后断言拿到 FUMO 状态。
+        new BackendPreferenceStore(layout).SetDefault(EngineId.Pi);
         var manager = new PersistentSessionManager(dotnet, fake, layout,
             Path.Combine(root, "extensions", "fufucode-bridge"), requireApprovalBridge: false);
         var projectRecord = manager.Metadata.GetOrCreateProject(project);
