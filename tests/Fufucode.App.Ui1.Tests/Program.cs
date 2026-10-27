@@ -98,8 +98,8 @@ Check(Regex.IsMatch(theme, "<Style Selector=\"Border\\.restoreInfo\"[\\s\\S]*?Bo
     "A：restoreInfo 嵌套在 composerCard 内已降级为无框");
 
 // 3c. ChatPage：toolCard 内的输出区改用 nestedFill（不再 codeCard）
-Check(!Regex.IsMatch(chat, "Classes=\"codeCard\"[^>]*IsVisible=\"\\{Binding HasOutput\\}\"")
-      && Regex.IsMatch(chat, "Classes=\"nestedFill\"[^>]*IsVisible=\"\\{Binding HasOutput\\}\""),
+Check(!Regex.IsMatch(chat, "Classes=\"codeCard\"[^>]*IsVisible=\"\\{Binding (HasOutput|ShowTextOutput)\\}\"")
+      && Regex.IsMatch(chat, "Classes=\"nestedFill\"[^>]*IsVisible=\"\\{Binding (HasOutput|ShowTextOutput)\\}\""),
     "A：ChatPage 工具卡输出区由闭合 codeCard 降级为 nestedFill");
 Check(chat.Contains("BorderBrush=\"{DynamicResource AppDividerSubtle}\""),
     "A：ChatPage 容器内结构划分改用 AppDividerSubtle 单向细线");

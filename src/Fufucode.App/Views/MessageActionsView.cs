@@ -33,6 +33,9 @@ public sealed class MessageActionsView : UserControl
     private readonly TextBlock _time;
     private readonly StackPanel _icons;
 
+    /// <summary>底部栏现在常驻（折叠容器内），元信息可能在挂载后才到达，必须持续观察。</summary>
+    private System.ComponentModel.INotifyPropertyChanged? _observedEntry;
+
     internal void ApplyAppearance(WorkbenchAppearance appearance)
     {
         _appearance = appearance;
@@ -136,11 +139,16 @@ public sealed class MessageActionsView : UserControl
             catch (Exception error) { FindChat()?.ReportActionError("朗读失败：" + error.Message); }
         };
 
-        DataContextChanged += (_, _) => Bind();
+        DataContextChanged += (_, _) =>
+        {
+            ObserveEntry(DataContext);
+            Bind();
+        };
         Content = row;
         AttachedToVisualTree += (_, _) =>
         {
             if (FindChat() is { } chat) ApplyAppearance(chat.Appearance);
+            ObserveEntry(DataContext);
             Bind();
         };
         // PointerEntered/Exited 是直接事件、不冒泡：按钮铺满后本控件收不到，
@@ -152,6 +160,25 @@ public sealed class MessageActionsView : UserControl
             if (e.Property == IsVisibleProperty && IsVisible) Motion.AnimateFooter(this);
         };
         AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
+    }
+
+    private void ObserveEntry(object? dataContext)
+    {
+        if (_observedEntry is not null) _observedEntry.PropertyChanged -= OnEntryPropertyChanged;
+        _observedEntry = dataContext as System.ComponentModel.INotifyPropertyChanged;
+        if (_observedEntry is not null) _observedEntry.PropertyChanged += OnEntryPropertyChanged;
+    }
+
+    private void OnEntryPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        switch (e.PropertyName)
+        {
+            case nameof(AssistantMessageViewModel.Model):
+            case nameof(AssistantMessageViewModel.Usage):
+            case nameof(TimelineEntryViewModel.Timestamp):
+                Bind();
+                break;
+        }
     }
 
     /// <summary>宿主在语音插件安装/启停后调用，重新计算依赖服务可用性的按钮。</summary>

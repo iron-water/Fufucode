@@ -572,7 +572,7 @@
         <!-- 回到最新：浮动 pill + 阴影（阴影挂在包裹层，Button 无 BoxShadow）。
              靠右放置，避免压住居中排版的正文。 -->
         <Border x:Name="BackToLatestHost" ZIndex="6" CornerRadius="{DynamicResource AppCornerPill}"
-                Opacity="{Binding Timeline.ShowBackToLatest, Converter={StaticResource BoolToOpacity}}"
+                Opacity="{Binding Timeline.ShowBackToLatest, Converter={x:Static anim:BoolToOpacityConverter.Instance}}"
                 IsHitTestVisible="{Binding Timeline.ShowBackToLatest}"
                 BoxShadow="{DynamicResource FluentPillShadow}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,10">

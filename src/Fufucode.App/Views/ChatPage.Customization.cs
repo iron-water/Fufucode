@@ -28,20 +28,37 @@ public partial class ChatPage
     internal void ApplyAppearance(WorkbenchAppearance settings)
     {
         Appearance = settings;
-        ReadingColumn.MaxWidth = settings.ReadWidth;
-        var inset = settings.Density switch { "compact" => 16, "airy" => 28, _ => 24 };
-        ReadingColumn.Margin = new Thickness(inset, 0);
-        ReadingColumn.ColumnDefinitions[0].Width = new GridLength(settings.ShowAvatars ? 40 : 12);
+        ApplyResponsiveMetrics();
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
         SetComposerExpanded(settings.Composer != "hidden");
         // 输入卡的轮廓由卡片样式/皮肤管理，不套用普通列表行的 4px 圆角。
         ComposerCard.ClearValue(Border.CornerRadiusProperty);
         UpdateComposerClearance();
         InputBox.FontSize = settings.FontSize;
-        // 刻度是对话区固定结构：常显示，不提供开关。
-        MessageRuler.IsVisible = true;
-        RefreshRuler();
         foreach (var actions in this.GetVisualDescendants().OfType<MessageActionsView>()) actions.ApplyAppearance(settings);
+    }
+
+    /// <summary>
+    /// 响应式布局：侧边栏/小停靠区（宽 &lt; 500）下隐藏刻度与留白、头像列设为 0、外边距收窄，
+    /// 确保输入区和工具栏按钮能在 232 最小侧栏宽度内完整展示而不溢出。
+    /// </summary>
+    internal void ApplyResponsiveMetrics()
+    {
+        var width = Bounds.Width;
+        var narrow = width > 0 && width < 500;
+        var inset = narrow ? 4 : (Appearance.Density switch { "compact" => 16, "airy" => 28, _ => 24 });
+        ReadingColumn.Margin = new Thickness(inset, 0);
+        ReadingColumn.MaxWidth = narrow ? double.PositiveInfinity : Appearance.ReadWidth;
+        ReadingColumn.ColumnDefinitions[0].Width = new GridLength(narrow ? 0 : (Appearance.ShowAvatars ? 40 : 12));
+        var rulerVisible = !narrow;
+        MessageRuler.IsVisible = rulerVisible;
+        if (ReadingColumnSpacer is not null)
+        {
+            ReadingColumnSpacer.Width = rulerVisible ? 42 : 0;
+            ReadingColumnSpacer.IsVisible = rulerVisible;
+        }
+        if (rulerVisible) RefreshRuler();
+        else MessageRuler.Children.Clear();
     }
     /// <summary>
     /// 左侧轮次刻度：只列用户轮次，悬停显示这一轮的指令，点击跳转，右键收藏。

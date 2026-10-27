@@ -1392,6 +1392,8 @@ public static class SelfTestRunner
         {
             var countBeforePreedit = vm.Timeline.Entries.OfType<UserMessageViewModel>().Count();
             window.KeyTextInput("abc");
+            // 文本输入可能先清空 preedit；在最接近真实按键的时刻重新标记组合态。
+            presenter.SetValue(Avalonia.Controls.Presenters.TextPresenter.PreeditTextProperty, "nihao");
             window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
             await Task.Delay(100);
             await DrainUiQueueAsync();

@@ -125,8 +125,25 @@ internal sealed class PluginWorkspacePageHost : IDisposable
                 var created = contribution.CreateView();
                 // 插件可以返回完整契约对象，也可以返回页面提供者（PluginPageView：不引用 Fufucode.App 的插件走这条）。
                 if (created is IPluginPageProvider provider) created = provider.CreatePluginPage();
-                if (created is not IPluginWorkspacePage page)
+                IPluginWorkspacePage page;
+                if (created is IPluginWorkspacePage wp)
+                {
+                    page = wp;
+                }
+                else if (created is Control control)
+                {
+                    page = new PluginPageAdapter(contribution.PageId, control,
+                        () =>
+                        {
+                            contribution.DetachView?.Invoke(control);
+                            if (control is IDisposable d) d.Dispose();
+                        },
+                        project => contribution.OnProjectChanged?.Invoke(control, project));
+                }
+                else
+                {
                     throw new InvalidOperationException("页面贡献没有实现宿主工作区页面契约。");
+                }
                 page.SetProject(_projectPath, _useMock());
                 try
                 {

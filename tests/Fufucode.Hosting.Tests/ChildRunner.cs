@@ -44,7 +44,7 @@ internal static class ChildRunner
             case "protocol":
                 return await Protocol(args);
             case "hold":
-                await Task.Delay(TimeSpan.FromSeconds(int.Parse(args[4])));
+                await Task.Delay(TimeSpan.FromSeconds(int.Parse(args[3])));
                 return 0;
             case "spawn":
                 {

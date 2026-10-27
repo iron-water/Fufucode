@@ -35,6 +35,7 @@ public partial class ChatPage : UserControl
         InitializeComponent();
         InitializeComposerTools();
         ComposerToolbar.SizeChanged += (_, _) => UpdateComposerToolbar();
+        SizeChanged += (_, _) => ApplyResponsiveMetrics();
         InitializeComposerMotion();
 
         // F06：AcceptsReturn 的 TextBox 在自身 OnKeyDown 里处理 Enter 并标记 Handled，

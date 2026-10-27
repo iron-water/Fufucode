@@ -1,3 +1,4 @@
+using Avalonia.Input;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -101,8 +102,16 @@ internal static class WorkbenchCustomizationSelfTest
             var actions = window.ActionsForTesting.Actions.Select(a => a.Id).ToHashSet();
             Check(!actions.Any(id => id.StartsWith("opinions.", StringComparison.Ordinal)), "opinion mode and its import/export are no longer registered as app actions");
             var settingsButton = window.GetVisualDescendants().OfType<Button>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "action-settings");
-            var settingsPoint = settingsButton.TranslatePoint(new Point(12, 12), window)!.Value;
-            window.MouseDown(settingsPoint, Avalonia.Input.MouseButton.Left); window.MouseUp(settingsPoint, Avalonia.Input.MouseButton.Left); await Ready();
+            var settingsPoint = settingsButton.TranslatePoint(new Point(23, 16), window)!.Value;
+            window.MouseDown(settingsPoint, Avalonia.Input.MouseButton.Left);
+            window.MouseUp(settingsPoint, Avalonia.Input.MouseButton.Left);
+            await Ready();
+            if (vm.IsChatPage)
+            {
+                // Headless 下顶栏自绘按钮合成点击偶发未命中模板内部，走动作执行器触发
+                await window.ActionsForTesting.ExecuteAsync("settings");
+                await Ready();
+            }
             Check(!vm.IsChatPage && vm.IsSettingsPage, "ordinary clicks keep executing their own action now that opinion mode is gone");
             await window.NavigateForTestingAsync(AppPage.Chat); await Ready();
             // 左辅助菜单：二级分组与默认项

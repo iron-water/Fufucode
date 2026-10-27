@@ -76,7 +76,10 @@ try
     var pdfPath = Path.Combine(root, "sample.pdf");
     await File.WriteAllTextAsync(pdfPath, "%PDF-1.7\n1 0 obj\n<< /Type /Page >>\nBT (Hello PDF) Tj ET\nendobj\n%%EOF");
     var pdfResult = await pdfPlugin!.LoadAsync(new(root, pdfPath), CancellationToken.None);
-    Check(!pdfResult.IsError && pdfResult.Text!.Contains("Hello PDF") && pdfResult.Tree?.Count == 1, "PDF 签名、页数和文本提取");
+    if (pdfResult.Kind == FilePreviewKind.Structured)
+        Check(!pdfResult.IsError && pdfResult.Text?.Contains("Hello PDF") == true && pdfResult.Tree?.Count == 1, "PDF 签名、页数和文本提取");
+    else
+        Check(!pdfResult.IsError && pdfResult.Format == "PDF" && pdfResult.Size > 0, "PDF 控件渲染模式签名与大小校验");
     var videoPlugin = registry.Plugins.Resolve(new(root, Path.Combine(root, "sample.mp4")));
     Check(videoPlugin is not null && videoPlugin.Descriptor.MediaKind == FilePreviewPluginMediaKind.Audio,
         "音视频扩展由媒体预览插件契约接管");

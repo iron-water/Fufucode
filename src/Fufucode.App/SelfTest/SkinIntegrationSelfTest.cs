@@ -262,7 +262,7 @@ internal static class SkinIntegrationSelfTest
                 "LiquidGlass dock host border also wrapped");
             var lgCornerCheck=chat.FindControl<Border>("ComposerCard")!.CornerRadius;
             // 输入区改版后圆角收敛为全局单值（composerCard 样式），皮肤不再单独给出 14。
-            Check(lgCornerCheck==new CornerRadius(12), "LiquidGlass composer card follows the shared composer radius");
+            Check(lgCornerCheck==new CornerRadius(24), "LiquidGlass composer card uses iOS 24pt continuous radius");
             using(var frame=window.CaptureRenderedFrame()) {Check(frame is not null,"actual LiquidGlass main frame exists");frame?.Save(Path.Combine(root,"main-liquidglass-light-1100x800.png"),PngBitmapEncoderOptions.Default);}
             Select("liquidglass","dark"); await Ready();
             Check(Resource(window,"AppWindowBackground")==Color.Parse("#FF000000") && Resource(window,"LiquidGlassAccent")==Color.Parse("#FF0A84FF"),

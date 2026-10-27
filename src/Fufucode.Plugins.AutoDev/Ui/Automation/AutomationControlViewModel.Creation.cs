@@ -16,8 +16,8 @@ public sealed partial class AutomationPackageDraft : ObservableObject
     [ObservableProperty] private string _goal = "";
     [ObservableProperty] private string _scope = "";
     [ObservableProperty] private string _acceptance = "";
-    [ObservableProperty] private string _harness = "";
-    [ObservableProperty] private string _model = "";
+    [ObservableProperty] private string _harness = "codex";
+    [ObservableProperty] private string _model = "devin/swe-2";
     [ObservableProperty] private string _artifact = "evidence";
     [ObservableProperty] private string _dependencies = "";
     [ObservableProperty] private string _knowledge = "";

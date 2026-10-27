@@ -1,3 +1,5 @@
+using Fufucode.App.Features.Automation;
+using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -35,6 +37,9 @@ internal static class Program
             return 0;
         }
 
+        BatchHarnessAdapters.Register();
+
+        _ = typeof(Fufucode.App.MainWindow).Assembly;
         var root = Path.Combine(Path.GetTempPath(),
             "fufucode-automation-selftest-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
@@ -62,13 +67,15 @@ internal static class Program
                 try
                 {
                     shell.Show();
-                    var host = shell.PageForTesting("automation") as Features.Plugins.AutomationPageHost;
-                    Console.WriteLine(host?.Controller is not null
+                    var page = shell.PageAvailableForTesting("automation") ? shell.PageForTesting("automation") : null;
+                    var hasPage = page is AutomationControlPageView;
+                    Console.WriteLine(hasPage
                         ? "PASS 插件页面已挂载到宿主页签"
                         : "FAIL 插件页面未挂载到宿主页签");
-                    if (host?.Controller is null) failures.Add("插件页面未挂载到宿主页签");
+                    if (!hasPage) failures.Add("插件页面未挂载到宿主页签");
                 }
                 finally { shell.Close(); }
+                BatchHarnessAdapters.Register();
                 await AutomationControlSelfTest.RunAsync(
                     name => Console.WriteLine("PASS " + name),
                     name => { failures.Add(name); Console.WriteLine("FAIL " + name); });

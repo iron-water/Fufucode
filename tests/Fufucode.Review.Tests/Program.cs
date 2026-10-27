@@ -45,6 +45,7 @@ static Task StateFailure()
 static Task RegistryConflict()
 {
     using var f = new Fixture();
+    f.EnablePayload("agent.browser-use");
     f.Store.Install("agent.browser-use");
     var owner = new Handler("owned");
     f.Registry.Register(owner);
@@ -56,6 +57,7 @@ static Task RegistryConflict()
 static Task RegistryOwner()
 {
     using var f = new Fixture();
+    f.EnablePayload("agent.browser-use");
     f.Store.Install("agent.browser-use");
     f.Registry.Register(new Handler("owned"));
     Check(!f.Registry.Unregister(new Handler("owned")), "unregistered foreign handler claimed success");
@@ -191,6 +193,12 @@ sealed class Fixture : IDisposable
         Registry = new(new PluginCapabilityGateway(Store));
     }
     public PluginPackageManager Manager() => new(Layout, Registry, Store);
+    public void EnablePayload(string id)
+    {
+        var dir = Path.Combine(Layout.PluginsDirectory, id);
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "manifest.json"), "{}");
+    }
     public string Source(string name) { var path = Path.Combine(Root, name); Directory.CreateDirectory(path); return path; }
     public string PackageSource(string name)
     {

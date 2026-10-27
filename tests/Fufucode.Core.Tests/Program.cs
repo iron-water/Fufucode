@@ -267,12 +267,14 @@ await UserExtensionTests.RunFakeAsync(root, fake, dotnet);
 await SettingsAndDiagnosticsTests.RunAsync(root, fake, dotnet);
 await ExtensionUiTests.RunAsync(root, fake, dotnet);
 
-await ExtensionUiTests.RunRealAsync(root, node, cli);
-await BridgeIntegrationTests.RunAsync(root, node, cli);
-await PersistentTests.RunRealAsync(root, node, cli);
-await ProjectForkTests.RunAsync(root, node, cli);
-await UserExtensionTests.RunRealAsync(root, node, cli);
-var work = Path.Combine(root, "tmp", "real-core-smoke");
+if (File.Exists(node) && File.Exists(cli))
+{
+    await ExtensionUiTests.RunRealAsync(root, node, cli);
+    await BridgeIntegrationTests.RunAsync(root, node, cli);
+    await PersistentTests.RunRealAsync(root, node, cli);
+    await ProjectForkTests.RunAsync(root, node, cli);
+    await UserExtensionTests.RunRealAsync(root, node, cli);
+    var work = Path.Combine(root, "tmp", "real-core-smoke");
 Directory.CreateDirectory(work);
 await using (var session = PiSessions.Coordinator(new PiRpcOptions(node,
     [cli, "--mode", "rpc", "--no-session", "--no-extensions"], work,
@@ -311,4 +313,9 @@ await using (var session = PiSessions.Coordinator(new PiRpcOptions(node,
             }
         }
     }
+}
+}
+else
+{
+    Console.WriteLine("SKIP: Pi 运行时未安装，跳过 real Pi 后端集成测试");
 }

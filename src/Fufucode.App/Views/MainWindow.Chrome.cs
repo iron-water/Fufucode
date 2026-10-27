@@ -40,14 +40,8 @@ public partial class MainWindow
     private static bool IsInteractiveCaptionSource(object? source)
     {
         if (source is not Control control) return false;
-        var origin = control;
         for (Visual? cursor = control; cursor is not null; cursor = cursor.GetVisualParent())
         {
-            if (ReferenceEquals(cursor, origin))
-            {
-                // 事件源本身就是装饰性内容时不拦截：此时它就是拖动热区的一部分。
-                if (cursor is TextBlock or PathIcon or Image or Border or Panel) return false;
-            }
             if (cursor is Button or TextBox or ComboBox or ToggleButton or CheckBox or RadioButton
                 or Slider or ScrollBar or TabControl or ListBox or TreeView or MenuItem) return true;
         }

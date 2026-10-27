@@ -26,11 +26,15 @@ namespace Fufucode.App.SelfTest;
 /// <summary>Isolated preview over the product controls. Only navigation is writable.</summary>
 public static class HeadlessUiRunner
 {
+    /// <summary>--results 目录：诊断产物（含浮动性能页截图）写入这里。</summary>
+    private static string? s_resultsRoot;
+
     public static int RunProcess(string[] args)
     {
         // --results <dir>：保留隔离数据根并把性能诊断输出写进去（用于性能监控端到端验证）。
         var resultsIndex = Array.IndexOf(args, "--results");
         var results = resultsIndex >= 0 && resultsIndex + 1 < args.Length ? args[resultsIndex + 1] : null;
+        s_resultsRoot = results;
         var data = results is null
             ? Path.Combine(Path.GetTempPath(), "fufucode-ui-" + Guid.NewGuid().ToString("N"))
             : Path.Combine(results, "data");
@@ -185,7 +189,7 @@ public static class HeadlessUiRunner
             var target = arguments[1];
             if (navigation.ContainsKey(target)) await NavigateAsync(target);
             else if (window.ActionsForTesting.GetDisabledReason(target) is { } reason)
-                throw new InvalidOperationException(reason);
+                throw new InvalidOperationException(reason + " | " + window.PerfDiagnosticLine);
             else await window.ActionsForTesting.ExecuteAsync(target);
             await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
         }
@@ -209,6 +213,7 @@ public static class HeadlessUiRunner
                 if (session.Activity == SessionActivity.Idle) break;
             }
             await Task.Delay(2500);
+            await CapturePerfWindowsAsync(window);
         }
         if (settingsCategory is not null && ((MainViewModel)window.DataContext!).Settings is { } settingsVm)
         {
@@ -375,6 +380,52 @@ public static class HeadlessUiRunner
     {
         if (item.Command is { } command && command.CanExecute(item.CommandParameter))
             command.Execute(item.CommandParameter);
+    }
+
+
+    /// <summary>
+    /// 性能页默认浮动成独立窗口，主窗口树里看不到。这里把浮动窗口的实际渲染与文本另存，
+    /// 供无头验证核对真实显示值；找不到窗口时不产出任何文件。
+    /// </summary>
+    private static async Task CapturePerfWindowsAsync(Window main)
+    {
+        if (s_resultsRoot is not { } root) return;
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime lifetime) return;
+        var perf = lifetime.Windows.FirstOrDefault(candidate => !ReferenceEquals(candidate, main) &&
+            candidate.GetVisualDescendants().Any(control => control.GetType().Name == "PerfCenterView"));
+        if (perf is null) return;
+        try
+        {
+            Directory.CreateDirectory(root);
+            var center = perf.GetVisualDescendants().FirstOrDefault(control => control.GetType().Name == "PerfCenterView");
+            var switchView = center?.GetType().GetMethod("ShowViewForTesting");
+            var views = switchView is null ? new[] { -1 } : new[] { 0, 1, 2 };
+            foreach (var view in views)
+            {
+                if (view >= 0) switchView!.Invoke(center, [view]);
+                await Dispatcher.UIThread.InvokeAsync(() => perf.UpdateLayout(), DispatcherPriority.Background);
+                await Task.Delay(450);
+                var suffix = view < 0 ? string.Empty : "-" + view;
+                var texts = perf.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>()
+                    .Select(block => block.Text)
+                    .Where(text => !string.IsNullOrWhiteSpace(text))
+                    .Distinct()
+                    .ToList();
+                // 插件内部诊断只用于无头验证，缺失时忽略。
+                if (center?.GetType().GetProperty("Diagnostic")?.GetValue(center) is string diagnostic)
+                    texts.Add("[diag] " + diagnostic);
+                File.WriteAllText(Path.Combine(root, "perf-window" + suffix + ".txt"), string.Join('\n', texts));
+                using var frame = perf.CaptureRenderedFrame();
+                if (frame is null) continue;
+                using var output = new FileStream(Path.Combine(root, "perf-window" + suffix + ".png"),
+                    FileMode.Create, FileAccess.Write, FileShare.None);
+                frame.Save(output, PngBitmapEncoderOptions.Default);
+            }
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            Console.Error.WriteLine("Perf window capture failed: " + error.Message);
+        }
     }
 
     private static void Write(object result) => Console.Out.WriteLine(JsonSerializer.Serialize(result,

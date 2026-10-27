@@ -181,6 +181,12 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     /// <summary>后端报告的真实耗时；存在时优先于 UI 本地近似计时。</summary>
     private long? _reportedDurationMs;
 
+    /// <summary>
+    /// 该块是否在“运行中”被观察到。历史回放的块第一次就是终态，
+    /// 本地时间戳没有意义（重建发生在同一瞬间），不能用它算出 0 ms。
+    /// </summary>
+    private bool _sawLiveStatus;
+
     /// <summary>块创建即视为工具开始时间；后端协议里没有可靠的起止时间戳。</summary>
     public ToolCallBlockViewModel() => _startedAt = DateTimeOffset.Now;
 
@@ -287,14 +293,14 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     /// <summary>工具耗时只在终态显示；后端有真实耗时，或本地拿到了起止时间。</summary>
     public bool HasDuration => _reportedDurationMs is not null ||
-        (_startedAt is { } start && _finishedAt is { } end && end >= start);
+        (_sawLiveStatus && _startedAt is { } start && _finishedAt is { } end && end >= start);
 
     public string DurationText
     {
         get
         {
             var ms = _reportedDurationMs ??
-                (_startedAt is { } start && _finishedAt is { } end && end >= start
+                (_sawLiveStatus && _startedAt is { } start && _finishedAt is { } end && end >= start
                     ? (long)(end - start).TotalMilliseconds
                     : (long?)null);
             if (ms is not { } value) return string.Empty;
@@ -368,6 +374,7 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     /// <summary>应用一次终态快照（BlockFinished 或 MessageFinished 的工具块）。</summary>
     public void ApplySnapshot(ToolCallBlock block)
     {
+        if (block.Status is ToolCallStatus.Pending or ToolCallStatus.Running) _sawLiveStatus = true;
         ToolCallId = block.ToolCallId;
         ToolName = block.ToolName;
         InputJson = block.InputJson;

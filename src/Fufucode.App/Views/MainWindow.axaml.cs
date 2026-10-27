@@ -31,6 +31,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private RealSessionHost? _host;
     private ExtensionUiDialogHost? _dialogHost;
     private DispatcherTimer? _draftDebounce;
+    private Action? _draftFlush;
     // 当前挂有草稿防抖 Input.PropertyChanged 订阅的 VM（重建前先解除，避免多份订阅与旧计时器）。
     private MainViewModel? _draftVm;
     private bool _closed;
@@ -1165,7 +1166,11 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         }
     }
 
-    /// <summary>草稿防抖落盘：编辑停顿 600ms 后写入 desktop.db（按当前会话隔离）。</summary>
+    /// <summary>
+    /// 草稿防抖落盘：编辑停顿 250ms 后写入 desktop.db（按当前会话隔离）。
+    /// 中断安全：窗口失焦、关闭、切换会话时立即刷盘，不等防抖；
+    /// 这样崩溃/强杀/关机最多丢最后 250ms 的按键，而不是整段草稿。
+    /// </summary>
     private void WireDraftPersistence(MainViewModel vm)
     {
         DetachDraftPersistence();
@@ -1175,12 +1180,17 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             return;
         }
 
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
-        timer.Tick += (_, _) =>
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        void FlushDraft()
         {
             timer.Stop();
             _host?.SaveDraft(vm.Input.ComposePrompt());
-        };
+        }
+        timer.Tick += (_, _) => FlushDraft();
+        _draftFlush = FlushDraft;
+        // 失焦与关闭立即刷盘：崩溃/关机前把最后一段输入落库，不等防抖。
+        Deactivated += OnDraftFlushRequested;
+        Closing += OnDraftFlushRequested;
         // 局部函数在方法内即已确定，DetachDraftPersistence 解绑的是同一委托。
         void OnInputPropertyChanged(object? sender, PropertyChangedEventArgs args)
         {
@@ -1203,7 +1213,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _draftVm = null;
         _draftDebounce?.Stop();
         _draftDebounce = null;
+        Deactivated -= OnDraftFlushRequested;
+        Closing -= OnDraftFlushRequested;
+        _draftFlush = null;
     }
+
+    private void OnDraftFlushRequested(object? sender, EventArgs e) => _draftFlush?.Invoke();
 
     private void OnInputPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {

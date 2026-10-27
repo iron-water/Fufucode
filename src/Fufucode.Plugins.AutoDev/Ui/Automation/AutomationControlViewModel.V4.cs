@@ -59,8 +59,8 @@ public sealed partial class AutomationDelegationSettings : ObservableObject
     [ObservableProperty] private int _concurrency = AutomationV4Projection.DefaultConcurrency;
     [ObservableProperty] private bool _autoReview = true;
     [ObservableProperty] private bool _autoIntegrate = true;
-    [ObservableProperty] private string _implementationModel = "";
-    [ObservableProperty] private string _verificationModel = "";
+    [ObservableProperty] private string _implementationModel = "devin/swe-2";
+    [ObservableProperty] private string _verificationModel = "devin/swe-2";
     [ObservableProperty] private bool _allowNetwork;
     [ObservableProperty] private bool _allowPaidActions;
     [ObservableProperty] private bool _periodicLocalSweep = true;

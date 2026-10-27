@@ -11,13 +11,13 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog | yes |
 | `src/Fufucode.App` | Avalonia UI shell | yes |
 | `src/Fufucode.Cli` | Headless CLI | yes |
-| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, remote control, cron, auto-dev, skins) | yes |
-| `src/Fufucode.Pi` / `src/Fufucode.Claude` | Protocol adapters carried by their backend plugins | yes |
+| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, cron, auto-dev, skins) | yes |
+| Backend plugin projects | Protocol adapters compiled by their owning plugins; check the project files before moving shared sources | yes |
 | `tools/` | Native launcher and CLI forwarder | yes |
 | `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
 | `tests/` | Executable verification suites | yes |
-| `docs/` | Current authority, design, tasks, records and evidence; start at `docs/README.md` | yes |
-| `android/` | WorkBuddy-style mobile client | yes |
+| `docs/` | Local development authority, design, tasks and evidence; start at `docs/README.md` when present | locally excluded |
+| Mobile / desktop pet | Moved outside the active solution; historical paths are not build targets | no |
 | `assets/` | Product visual assets | yes |
 | `extensions/` | Optional extension payloads | yes |
 | `TestApp/` | Legacy initial Avalonia scaffold; not a product entry; build output ignored | source only |
@@ -36,21 +36,37 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 
 ## Build and run
 
+For a desktop change, build the app and its dependencies first:
+
+```bash
+dotnet build src/Fufucode.App/Fufucode.App.csproj -c Debug
+```
+
+Build the full solution when the change requires integration coverage:
+
 ```bash
 dotnet build Fufucode.sln -c Release
 ```
 
-Local development build and deploy:
+On the local development machine, AI contributors should read `AGENTS.md`,
+`docs/ai-development-guide.md` and `docs/README.md` before editing. These files and
+`fucode/` are local development material excluded from public distribution; a clean
+clone may not contain them. The guide maps bug symptoms to source code and targeted
+executable tests, and explains how to preserve incremental builds.
+
+On the local development machine, the publish script builds the app, CLI and plugin
+payloads. Its default mode deploys and restarts `out/app`; use it when a deployment is
+intended. Updating an existing self-contained installation requires the same layout:
 
 ```bash
-pwsh fucode/publish-local.ps1
+pwsh fucode/publish-local.ps1 -SelfContained
 ```
 
 ### Optional local extensions
 
-A clean checkout builds with no extra packages and no local configuration. A few
-development-only enhancements (diagnostic tooling, richer file previews) are maintained
-outside version control and compiled out by default.
+A clean checkout uses the minimal feature track unless local properties enable
+additional components. Some enhancements (hot reload and richer previews) depend on
+local configuration or implementation files excluded from version control.
 
 They are gated behind two compile symbols:
 
@@ -90,40 +106,36 @@ Re-run `dotnet restore` after switching. Full details: [docs/dual-track-workflow
 
 ### Debugging tools
 
-Development builds wire up two tools. Both are Debug-only — neither ships to users.
+Debug builds can use XAML/C# hot reload when `EnableDevTooling` is enabled.
+Avalonia Developer Tools was removed on 2026-10-27; do not reinstall it or use F12
+as a verification step.
 
-| Tool | How to start | Reach for it when |
-| --- | --- | --- |
-| XAML hot reload | `dotnet watch run` | Iterating on `.axaml` — layout, styles, templates, resources. Edits apply on save; live state (typed text, selection, scroll position, view models, event wiring) survives. |
-| Avalonia Developer Tools | press **F12** inside the running app | The UI renders or behaves unexpectedly and the reason is not obvious from the markup. Gives the live visual tree, editable properties, the origin of each effective style, and actual layout bounds. |
+Use the isolated local watch entry when available:
 
-#### How to use them while working
+```bash
+pwsh fucode/watch-dev.ps1
+```
 
-These are the fast feedback loop, not an optional extra. Building without ever launching
-the app is not sufficient verification for UI work.
-
-- **Changing XAML** — run `dotnet watch run`, edit, save, observe. Do not rebuild the whole
-  solution to verify a spacing or colour tweak.
-- **A control is missing, mispositioned, or clipped** — press F12 and read the live tree for
-  real bounds and visibility, instead of re-deriving it from markup.
-- **A style or resource does not take effect** — the properties panel names which style or
-  resource currently supplies the value.
-- **A binding shows `null` or a stale value** — inspect the value on the live instance first;
-  the view model is often correct and the binding path is wrong.
-- **Something looks right in code but wrong on screen** — verify against the live tree before
-  concluding the code is correct.
-
-If Developer Tools is not installed on the machine, hot reload still works and remains the
-default loop.
+The wrapper preserves `FUFUCODE_DATA_ROOT` across watch restarts. Its default
+`tmp/watch-data` directory is shared, so coordinate concurrent use. Literal property
+edits such as text, colour and spacing can update in place; layout structure,
+compiled binding paths and event wiring require a rebuild. Inspect watch logs for
+compilation failures before diagnosing a blank window. UI changes need actual
+native UI verification; compilation alone is insufficient.
 
 ### Contribution rule
 
 When adding code that depends on a locally maintained extension, keep it in a file ending
 with `.local.cs` and wrap it in `#if ENHANCED_PREVIEW`. The calling site must always
-provide a working `#else` fallback. Nothing else is required — `.local.cs` files never
-reach the remote.
+provide a working `#else` fallback. `.local.cs` files are excluded from version control.
 
 ## Parallel feature review
+
+The local workflow permits concurrent edits to different files in the main checkout.
+Coordinate before editing the same file. Use a temporary feature worktree when overlap
+would block progress; consult the current local `AGENTS.md` for ownership and merge rules.
+
+The remaining command reference below describes the local review tooling.
 
 Several models can work at once without sharing a worktree or overwriting `out/app`:
 
@@ -139,7 +151,7 @@ pwsh fucode/feature-publish.ps1          # feature worktree
 pwsh fucode/feature-publish.ps1 -Main    # small change on main
 ```
 
-The script refuses `main`, checks that the worktree is clean, generates the
+Without `-Main`, the script refuses `main`; it checks that the worktree is clean, generates the
 `branch@commit` label, builds into the main worktree's `out/review/<branch>`, verifies the
 result, and **launches the new window immediately**. Re-publishing the same feature closes
 its previous window first; other features and the user's main instance keep running.
@@ -235,4 +247,4 @@ Closing the window exits Fufucode by default. Enable **Settings → Other → Ba
 
 ## Status
 
-Actively developed. FUMO is the default kernel; backend plugins are installed on demand. Mobile remote control and the plugin marketplace are implemented but under active iteration. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
+Actively developed. FUMO is the default kernel; backend plugins are installed on demand. The plugin marketplace is under active iteration. Mobile remote control is archived outside the active solution. `THIRD-PARTY-NOTICES.md` records the licence position; the application code has no licence file yet.
