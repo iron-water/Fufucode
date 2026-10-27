@@ -20,7 +20,7 @@ public partial class ChatPage
     {
         ComposerCard.RenderTransform = _composerOffset;
         ComposerRevealButton.RenderTransform = _composerRevealOffset;
-        ComposerCard.SizeChanged += (_, _) => UpdateComposerClearance();
+        ComposerCard.SizeChanged += (_, _) => { UpdateComposerClearance(); UpdateComposerResponsive(); };
         ComposerCard.PropertyChanged += (_, change) =>
         {
             if (change.Property == IsVisibleProperty || change.Property == MarginProperty ||
@@ -91,6 +91,19 @@ public partial class ChatPage
         ComposerCard.IsVisible = _composerExpanded;
         ComposerRevealButton.IsVisible = !_composerExpanded;
         UpdateComposerClearance();
+    }
+
+    /// <summary>
+    /// 窄栏（侧边聊缩到最小宽度）下收起模型/思考等模式按钮，只留附加与发送：
+    /// 这些按钮是固定宽度，保留会把工具栏挤出卡片。
+    /// </summary>
+    private void UpdateComposerResponsive()
+    {
+        var width = ComposerCard.Bounds.Width;
+        if (width <= 0) return;
+        var narrow = width < 320;
+        if (ComposerModes.IsVisible == !narrow) return;
+        ComposerModes.IsVisible = !narrow;
     }
 
     private void UpdateComposerClearance()

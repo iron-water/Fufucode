@@ -145,7 +145,13 @@ internal static class WorkbenchTabsSelfTest
             Check(toolbar.Children.All(c => c.Bounds.Left >= 0 && c.Bounds.Right <= toolbar.Bounds.Width + 1), "side-chat composer controls fit the narrow dock");
             using (var frame = window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "sidechat.png"), PngBitmapEncoderOptions.Default);
             window.CustomizationForTesting.EditLayout(l => l.RightWidth = 232); await Ready();
-            Check(toolbar.Children.All(c => c.Bounds.Left >= 0 && c.Bounds.Right <= toolbar.Bounds.Width + 1), "side-chat composer controls also fit the minimum sidebar width");
+            var overflow = toolbar.Children
+                .Where(c => c.Bounds.Left < 0 || c.Bounds.Right > toolbar.Bounds.Width + 1)
+                .Select(c => $"{c.GetType().Name}@{c.Bounds.Left:0}-{c.Bounds.Right:0}")
+                .ToArray();
+            Check(overflow.Length == 0,
+                "side-chat composer controls also fit the minimum sidebar width" +
+                (overflow.Length == 0 ? "" : $" (toolbar={toolbar.Bounds.Width:0}, 溢出: {string.Join(", ", overflow)})"));
             using (var frame = window.CaptureRenderedFrame()) frame?.Save(Path.Combine(root, "sidechat-232.png"), PngBitmapEncoderOptions.Default);
             window.CustomizationForTesting.EditLayout(l => l.RightWidth = 440); await Ready();
             Check(!window.PageAvailableForTesting("ask") && !window.PageAvailableForTesting("outline"), "reference draft and outline pages are gone from the page catalog");
