@@ -57,7 +57,12 @@ public partial class MainWindow
         {
             var width = Bounds.Width > 0 ? Bounds.Width : Width;
             if (CustomTopLeft.Parent is Control left) left.Width = Math.Min(540, width * .38);
-            if (CustomTopRight.Parent is Control right) right.Width = Math.Min(420, width * .34);
+            // 右侧动作列按内容自适应，不再钉死宽度：固定宽度会在“…”和窗口三大键之间留出一条缝。
+            if (CustomTopRight.Parent is Control right)
+            {
+                right.Width = double.NaN;
+                right.MaxWidth = Math.Min(420, width * .34);
+            }
             if (_customization is not null) BuildActionSurfaces(_customization.Current);
         };
         ApplyCustomization(_customization.Current);
