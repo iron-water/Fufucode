@@ -225,6 +225,7 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.SkinLiquidGlass.dll',
     'Fufucode.Plugins.AutoDev.dll',
     'Fufucode.Plugins.Terminal.dll',
+    'Fufucode.Plugins.LayerFs.dll',
     'Fufucode.Plugins.Browser.dll',
     'Fufucode.Plugins.Library.dll',
     'Fufucode.Plugins.LocalReview.dll'
@@ -378,6 +379,7 @@ $plugins = @(
     @{ Id = 'skin.liquidglass'; Project = 'src/Fufucode.Plugins.SkinLiquidGlass/Fufucode.Plugins.SkinLiquidGlass.csproj' },
     @{ Id = 'automation.auto-dev'; Project = 'src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj' },
     @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
+    @{ Id = 'workspace.layerfs'; Project = 'src/Fufucode.Plugins.LayerFs/Fufucode.Plugins.LayerFs.csproj' },
     @{ Id = 'workspace.browser'; Project = 'src/Fufucode.Plugins.Browser/Fufucode.Plugins.Browser.csproj' },
     @{ Id = 'workspace.library'; Project = 'src/Fufucode.Plugins.Library/Fufucode.Plugins.Library.csproj' },
     @{ Id = 'workspace.local-review'; Project = 'src/Fufucode.Plugins.LocalReview/Fufucode.Plugins.LocalReview.csproj' },

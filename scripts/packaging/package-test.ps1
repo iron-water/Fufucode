@@ -247,6 +247,7 @@ $forbiddenPluginDlls = @(
     'Fufucode.Plugins.SkinLiquidGlass.dll',
     'Fufucode.Plugins.AutoDev.dll',
     'Fufucode.Plugins.Terminal.dll',
+    'Fufucode.Plugins.LayerFs.dll',
     'Fufucode.Plugins.Browser.dll',
     'Fufucode.Plugins.Library.dll',
     'Fufucode.Plugins.LocalReview.dll'

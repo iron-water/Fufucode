@@ -157,6 +157,11 @@ public static class PluginMarketplaceCatalog
             "1.0.0", "Fufucode Team", ["WebView2 运行时", "网页导航与本地文件预览", "可选 CDP 控制"],
             DefaultInstalled: false, DefaultEnabled: false),
 
+        new("workspace.layerfs", "LayerFS 工作区", PluginCategory.ToolExtension,
+            "通过 WSL2 对接 LayerFS：导入独立项目副本、查看分支与提交、在 Docker 沙箱中执行命令并保存检查点。卸载保留 Linux Store 数据。",
+            "1.0.0", "Fufucode Team", ["WSL2 与 Linux Docker Engine", "启动 WSL 桥接进程", "读取导入目录并写入 Linux Store"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("workspace.library", "资料库", PluginCategory.ToolExtension,
             "资料条目、来源回溯与聊天引用；安装后出现在工作区页面中。",
             "1.0.0", "Fufucode Team", ["本地资料存储", "引用复制到聊天"],

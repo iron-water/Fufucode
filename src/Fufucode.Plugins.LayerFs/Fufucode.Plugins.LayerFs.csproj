@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+  <Target Name="StripUnusedWebView2ManagedRefs" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\1.0.4258.31\buildTransitive\..\\lib_manual\net5.0-windows10.0.17763.0\Microsoft.Web.WebView2.Wpf.dll" />
+      <Reference Remove="$(NuGetPackageRoot)microsoft.web.webview2\1.0.4258.31\buildTransitive\..\\lib_manual\netcoreapp3.0\Microsoft.Web.WebView2.WinForms.dll" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="../Fufucode.App/Fufucode.App.csproj" Private="false" ExcludeAssets="runtime" />
+    <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" Private="false" ExcludeAssets="runtime" />
+    <PackageReference Include="Avalonia" Version="12.1.3" Private="false" ExcludeAssets="runtime" />
+    <None Update="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="README.md" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Runtime.Dockerfile" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="install-wsl.sh" CopyToOutputDirectory="PreserveNewest" />
+    <None Update="Bridge/*.mjs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>
