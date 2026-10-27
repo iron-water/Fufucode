@@ -1,0 +1,9 @@
+{
+  "id": "workspace.layerfs",
+  "name": "LayerFS 工作区",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.LayerFs.dll",
+  "packageType": "Fufucode.Plugins.LayerFs.LayerFsPluginPackage",
+  "category": "Workspace",
+  "capabilities": ["WorkspacePage"]
+}
