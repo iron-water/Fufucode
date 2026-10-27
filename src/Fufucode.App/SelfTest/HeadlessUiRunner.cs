@@ -10,7 +10,10 @@ using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
 using Avalonia.Controls;
 using Avalonia.Controls.ApplicationLifetimes;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
+using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
@@ -158,10 +161,17 @@ public static class HeadlessUiRunner
         }
         var allowAction = arguments.Remove("--allow-action");
         var valid = arguments.Count == 1 && arguments[0] == "snapshot" ||
-            arguments.Count == 2 && arguments[0] is "screenshot" or "invoke";
-        if (!valid) throw new ArgumentException("Usage: ui snapshot | screenshot <new.png> | invoke nav.<page>|action [--allow-action] [--page <page>].");
-        if (arguments[0] == "invoke" && !allowAction && arguments[1] is not ("nav.chat" or "nav.extensions" or "nav.settings"))
-            throw new ArgumentException("Only nav.chat, nav.extensions and nav.settings can be invoked in preview.");
+            arguments.Count == 2 && arguments[0] is "screenshot" or "invoke" or "click" or "focus" or "toggle" ||
+            arguments.Count == 3 && arguments[0] == "set";
+        if (!valid) throw new ArgumentException(
+            "Usage: ui snapshot | screenshot <new.png> | invoke <action> [--allow-action] | " +
+            "click|focus|toggle <id> | set <id> <value> [--page <page>].");
+        if (arguments[0] == "invoke" && !allowAction &&
+            arguments[1] is not ("nav.chat" or "nav.extensions" or "nav.settings"))
+            throw new ArgumentException(
+                "Only nav.chat, nav.extensions and nav.settings can be invoked without --allow-action.");
+        if (arguments[0] is "click" or "focus" or "toggle" or "set" && !allowAction)
+            throw new ArgumentException("Control actions require --allow-action.");
         var lifetime = (IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
         var window = lifetime.MainWindow as MainWindow ?? throw new InvalidOperationException("Preview window is missing.");
         // Keep navigation deterministic; do not change product styles or view code.
@@ -174,8 +184,16 @@ public static class HeadlessUiRunner
         {
             var target = arguments[1];
             if (navigation.ContainsKey(target)) await NavigateAsync(target);
-            else if (window.ActionsForTesting.GetDisabledReason(target) is { } reason) throw new InvalidOperationException(reason);
+            else if (window.ActionsForTesting.GetDisabledReason(target) is { } reason)
+                throw new InvalidOperationException(reason);
             else await window.ActionsForTesting.ExecuteAsync(target);
+            await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
+        }
+        object? controlResult = null;
+        if (arguments[0] is "click" or "focus" or "toggle" or "set")
+        {
+            controlResult = ExecuteControl(window, arguments[0], arguments[1],
+                arguments[0] == "set" ? arguments[2] : null);
             await Dispatcher.UIThread.InvokeAsync(() => window.UpdateLayout(), DispatcherPriority.Background);
         }
         var currentPage = ((MainViewModel)window.DataContext!).CurrentPage.ToString().ToLowerInvariant();
@@ -233,7 +251,8 @@ public static class HeadlessUiRunner
             var remaining = 4000; var truncated = false;
             var tree = Node(window, "root", 0);
             Write(new { schemaVersion = 1, mode = "headless-preview", sessionSource = "mock", page = currentPage,
-                invoked = arguments[0] == "invoke" ? arguments[1] : null, truncated, tree,
+                invoked = arguments[0] == "invoke" ? arguments[1] : null,
+                control = controlResult, truncated, tree,
                 navigation = navigation.Select(pair => new { id = pair.Key, action = pair.Value,
                     enabled = window.ActionsForTesting.GetDisabledReason(pair.Value) is null,
                     actions = new[] { "invoke" }, source = "shared-action-registry" }).ToArray() });
@@ -275,6 +294,87 @@ public static class HeadlessUiRunner
             if (((MainViewModel)window.DataContext!).CurrentPage.ToString().ToLowerInvariant() != expected)
                 throw new InvalidOperationException("Navigation did not reach the requested page.");
         }
+    }
+
+    /// <summary>按 automationId / x:Name / accessibility name 查找主窗口内的控件。</summary>
+    private static Control? FindControl(Control root, string target) => root.GetVisualDescendants()
+        .OfType<Control>()
+        .FirstOrDefault(candidate =>
+            string.Equals(AutomationProperties.GetAutomationId(candidate), target, StringComparison.Ordinal) ||
+            string.Equals(candidate.Name, target, StringComparison.Ordinal) ||
+            string.Equals(AutomationProperties.GetName(candidate), target, StringComparison.Ordinal));
+
+    /// <summary>无头控制：只接受显式 --allow-action 的调用方，且只操作主窗口内可见控件。</summary>
+    private static object ExecuteControl(MainWindow window, string command, string target, string? value)
+    {
+        var control = FindControl(window, target) ?? throw new ArgumentException("Control not found: " + target);
+        if (!control.IsEffectivelyEnabled)
+            throw new InvalidOperationException("Control is disabled: " + target);
+        switch (command)
+        {
+            case "focus":
+                control.Focus();
+                return new { action = "focus", target, focused = control.IsFocused };
+            case "set":
+                if (control is not TextBox textBox)
+                    throw new ArgumentException("set supports TextBox controls; got " + control.GetType().Name);
+                if (textBox.IsReadOnly) throw new InvalidOperationException("Control is read-only: " + target);
+                textBox.Text = value ?? string.Empty;
+                var secret = textBox.PasswordChar != '\0';
+                return new { action = "set", target, redacted = secret, value = secret ? null : textBox.Text };
+            case "click":
+                Click(window, control);
+                return new { action = "click", target };
+            case "toggle":
+                if (control is not ToggleButton toggle)
+                    throw new ArgumentException("toggle supports ToggleButton controls; got " + control.GetType().Name);
+                Toggle(toggle);
+                return new { action = "toggle", target, isChecked = toggle.IsChecked };
+            default:
+                throw new ArgumentException("Unknown control action: " + command);
+        }
+    }
+
+    private static void Click(MainWindow window, Control control)
+    {
+        switch (control)
+        {
+            case MenuItem item:
+                ExecuteCommand(item);
+                item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+                return;
+            case ToggleButton toggle:
+                Toggle(toggle);
+                return;
+            case Button button:
+                ExecuteCommand(button);
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                return;
+        }
+        var point = control.TranslatePoint(
+            new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window);
+        if (point is null) throw new InvalidOperationException("Control is not attached to the preview window.");
+        window.MouseDown(point.Value, MouseButton.Left);
+        window.MouseUp(point.Value, MouseButton.Left);
+    }
+
+    private static void Toggle(ToggleButton toggle)
+    {
+        toggle.IsChecked = !(toggle.IsChecked ?? false);
+        ExecuteCommand(toggle);
+        toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+    }
+
+    private static void ExecuteCommand(Button button)
+    {
+        if (button.Command is { } command && command.CanExecute(button.CommandParameter))
+            command.Execute(button.CommandParameter);
+    }
+
+    private static void ExecuteCommand(MenuItem item)
+    {
+        if (item.Command is { } command && command.CanExecute(item.CommandParameter))
+            command.Execute(item.CommandParameter);
     }
 
     private static void Write(object result) => Console.Out.WriteLine(JsonSerializer.Serialize(result,

@@ -87,7 +87,7 @@ public static class Program
             case "control": return await AutomationPluginCommands.RunControlAsync(options, Console.Out, cancellationToken);
             case "host": return await AutomationPluginCommands.RunHostAsync(options, Console.Out, cancellationToken);
             case "ui":
-                if (options.SessionId is not null) throw new ArgumentException("ui preview cannot attach a real session.");
+                // 无头预览始终使用 mock 会话；REPL 里也可以直接调用。
                 return await CliUiCommands.RunAsync(args, Console.Out, Console.Error, cancellationToken);
             case "sessions" when args.SequenceEqual(["list"]): return ListSessions(options);
             case "sessions" when (args.Count is 2 or 3) && args[0] == "show":
@@ -343,7 +343,7 @@ public static class Program
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 var first = line.TrimStart().Split((char[]?)null, 2, StringSplitOptions.RemoveEmptyEntries)[0].TrimStart('/');
                 if (first is "sessions" or "models" or "settings" or "extensions" or "diag" or "approve"
-                    or "changes" or "usage" or "help" or "open" or "status" or "commands" or "backends")
+                    or "changes" or "usage" or "help" or "open" or "status" or "commands" or "backends" or "ui")
                 {
                     if (first == "help") { await Console.Error.WriteLineAsync(CliOptions.Usage); continue; }
                     // Fork rebinds the running Pi process; only the REPL owns a live session.
@@ -679,7 +679,11 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
           fufucode control init|snapshot|state|groups|inbox|export <absolute.db>
           fufucode host serve|status|stop <absolute-host-options.json>
           fufucode control apply|relation|knowledge|restructure|integration|review|reconsider|repair|consume-repair|archive <absolute.db> <command.json>
-          fufucode ui snapshot | screenshot <new.png> | invoke nav.<page> [--page chat|extensions|settings] [--ui-app PATH]
+          fufucode ui snapshot | screenshot <new.png> | invoke <action> [--allow-action]
+          fufucode ui click|focus|toggle <automation-id> | set <automation-id> <value> --allow-action
+                     [--page chat|extensions|settings] [--skin NAME] [--theme NAME]
+                     [--settings-category ID] [--settings-page ID] [--settings-scroll N]
+                     [--settings-anchor TEXT] [--shortcuts-group TEXT] [--results DIR] [--timeout SEC] [--ui-app PATH]
 
         Chat & Session Options:
           --new                                            Start a new conversation instead of resuming

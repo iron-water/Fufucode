@@ -18,8 +18,11 @@ internal static class CliUiTests
     public static async Task RunAsync(string root)
     {
         var binary = new DirectoryInfo(AppContext.BaseDirectory);
-        var app = Path.Combine(root, "src", "Fufucode.App", "bin", binary.Parent!.Name, binary.Name,
-            OperatingSystem.IsWindows() ? "Fufucode.App.exe" : "Fufucode.App");
+        // 允许用环境变量指向另一份 App 构建，避免正在运行的 Debug 实例锁住测试输出。
+        var app = Environment.GetEnvironmentVariable("FUFUCODE_UI_APP") is { Length: > 0 } overrideApp
+            ? Path.GetFullPath(overrideApp)
+            : Path.Combine(root, "src", "Fufucode.App", "bin", binary.Parent!.Name, binary.Name,
+                OperatingSystem.IsWindows() ? "Fufucode.App.exe" : "Fufucode.App");
         if (!File.Exists(app))
         {
             Console.WriteLine("FAIL CLI UI: Build App before running GUI CLI acceptance: " + app);
@@ -81,6 +84,29 @@ internal static class CliUiTests
                     Flatten(tree.RootElement.GetProperty("tree")).Any(node => node.GetProperty("type").GetString() == type),
                     "CLI ui invoke reaches actual " + type + " via shared action registry");
             }
+            var action = await Run("invoke", "session.new", "--allow-action");
+            using (var actionTree = ReadReport(action))
+                Check(action.Code == 0 && action.Error.Length == 0 &&
+                    actionTree.RootElement.GetProperty("invoked").GetString() == "session.new",
+                    "CLI ui invoke executes business actions only with --allow-action");
+            var controlSet = await Run("set", "SettingsSearchBox", "hello", "--page", "settings", "--allow-action");
+            using (var setTree = ReadReport(controlSet))
+                Check(controlSet.Code == 0 && setTree.RootElement.GetProperty("control")
+                    .GetProperty("value").GetString() == "hello",
+                    "CLI ui set writes a TextBox by x:Name");
+            var controlFocus = await Run("focus", "SettingsSearchBox", "--page", "settings", "--allow-action");
+            using (var focusTree = ReadReport(controlFocus))
+                Check(controlFocus.Code == 0 && focusTree.RootElement.GetProperty("control")
+                    .GetProperty("focused").GetBoolean(),
+                    "CLI ui focus targets a control by name");
+            var controlClick = await Run("click", "SettingsBackButton", "--page", "settings", "--allow-action");
+            using (var clickTree = ReadReport(controlClick))
+                Check(controlClick.Code == 0 && clickTree.RootElement.GetProperty("page").GetString() == "chat",
+                    "CLI ui click executes a command-bound button and navigates back");
+            var controlDenied = await Run("click", "SettingsBackButton");
+            Check(controlDenied.Code == 2 && controlDenied.Out.Length == 0 &&
+                controlDenied.Error.Contains("--allow-action"),
+                "CLI ui control commands require --allow-action");
             var png = Path.Combine(artifacts, "settings.png");
             var screenshot = await Run("screenshot", png, "--page", "settings");
             using var shot = ReadReport(screenshot);
@@ -97,8 +123,9 @@ internal static class CliUiTests
             var denied = await Run("invoke", "input.send");
             Check(denied.Code == 2 && denied.Out.Length == 0 && denied.Error.Contains("Only nav."),
                 "CLI preview refuses business actions rather than bypassing approvals");
-            var unknown = await Run("set", "EndpointKeyBox", "text", "not-a-key");
-            Check(unknown.Code == 2 && unknown.Out.Length == 0, "CLI preview rejects unsupported property reflection");
+            var noAllow = await Run("set", "EndpointKeyBox", "text", "not-a-key");
+            Check(noAllow.Code == 2 && noAllow.Out.Length == 0 && noAllow.Error.Contains("--allow-action"),
+                "CLI preview refuses direct control without --allow-action");
             var invalid = await Run("snapshot", "--page", "other");
             Check(invalid.Code == 2 && invalid.Error.Contains("Unknown preview page"), "CLI preview rejects unknown pages");
             using var errors = new StringWriter();
