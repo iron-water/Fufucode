@@ -115,17 +115,16 @@
   </ItemGroup>
 
   <!--
-    开发期辅助（热重载 + DevTools 桥）—— 受 EnableDevTooling 控制，且仅 Debug。
-    Release 与纯净构建均不包含，产物 runtimeconfig 里也不会有 Diagnostic 配置项。
+    开发期辅助：XAML/C# 热重载（dotnet watch）—— 受 EnableDevTooling 控制，且仅 Debug。
+    Release 与纯净构建均不包含。
+    DevTools（F12 可视化树）已于 2026-10-27 按用户决定移除，不再引用 AvaloniaUI.DiagnosticsSupport。
   -->
   <PropertyGroup Condition="'$(EnableDevTooling)' == 'true' and '$(Configuration)' == 'Debug'">
-    <DefineConstants>$(DefineConstants);DEV_TOOLING</DefineConstants>
     <AvaloniaHotReloadEnableFileWatcher>true</AvaloniaHotReloadEnableFileWatcher>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(EnableDevTooling)' == 'true' and '$(Configuration)' == 'Debug'">
     <PackageReference Include="AvaloniaUI.DiagnosticsSupport.HotReload" Version="1.0.1" />
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport" Version="2.2.3" />
   </ItemGroup>
 
   <ItemGroup>
