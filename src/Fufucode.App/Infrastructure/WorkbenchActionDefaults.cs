@@ -95,6 +95,7 @@ public static class WorkbenchActionDefaults
         "session.rename" => "Edit", "session.pin" => "Pin", "session.archive" => "Archive",
         "session.unread" or "chat" or "session.side" => "Chat", "session.fork" => "Branch",
         "session.export" or "session.export.markdown" => "ArrowDownload",
+        "session.export.docx" => "Document",
         "session.schedule" or "tasks" => "Calendar", "notifications" => "Alert", "browser" => "Globe",
         "files" or "project.open" => "Folder", "changes" => "Branch", "extensions" => "PuzzlePiece",
         "window.new" or "window.session" => "WindowNew", "auth.manage" => "Key",

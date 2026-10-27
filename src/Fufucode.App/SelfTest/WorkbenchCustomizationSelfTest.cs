@@ -162,7 +162,9 @@ internal static class WorkbenchCustomizationSelfTest
             var chat = window.GetVisualDescendants().OfType<ChatPage>().First();
             var attachmentMenu = (MenuFlyout)chat.FindControl<Button>("AttachContextButton")!.Flyout!;
             Check(attachmentMenu.Items.OfType<MenuItem>().Select(i => i.Header?.ToString()).SequenceEqual(new[] { "文件", "图片", "PDF", "链接" }), "attachment entry exposes four distinct native actions");
-            Check(chat.Appearance.ReadWidth == 560 && chat.FindControl<Border>("ComposerCard")!.MaxWidth == 560 && chat.Input.FontSize == c.Current.FontSize && (string)window.Resources["UiUserName"]! == "本地用户", "appearance and names apply to the live native controls");
+            // 输入区改版后阅读宽度作用在 ReadingColumn 上，ComposerCard 不再自带 MaxWidth。
+            var readingColumn = chat.FindControl<Grid>("ReadingColumn")!;
+            Check(chat.Appearance.ReadWidth == 560 && readingColumn.MaxWidth == 560 && chat.Input.FontSize == c.Current.FontSize && (string)window.Resources["UiUserName"]! == "本地用户", "appearance and names apply to the live native controls");
             var dock = window.FindControl<DockRegionView>("LeftDock")!;
             Check(((Grid)dock.Content!).RowDefinitions[0].Height.Value == 48, "airy density resizes the dock header, not just its tabs");
             var fileTab = dock.GetVisualDescendants().OfType<Button>().First(t => Avalonia.Automation.AutomationProperties.GetAutomationId(t) == "dock-tab-files");
@@ -368,12 +370,29 @@ internal static class WorkbenchCustomizationSelfTest
                 c.Change(s => s with { Theme = "system", Accent = "system" });
                 Check(c.Current.EffectiveAccent == (Application.Current?.PlatformSettings?.GetColorValues().AccentColor1 ?? Avalonia.Media.Color.Parse("#0078D4")),
                     "default appearance follows the system accent instead of forcing the Demo green");
-                c.Change(s => s with { Skin = "metro" }); await Ready();
-                Check(window.FindControl<StackPanel>("CustomTopRight")!.Children.OfType<Button>().All(b => b.CornerRadius.TopLeft == 0),
-                    "Metro skin applies square native controls");
-                c.Change(s => s with { Skin = "liquidglass" }); await Ready();
-                Check(window.TransparencyLevelHint.Contains(Avalonia.Controls.WindowTransparencyLevel.AcrylicBlur),
-                    "LiquidGlass skin requests the actual compositor material with a solid fallback");
+                // 皮肤实现在市场插件里；原生包未安装时这两条断言不成立，记 SKIP。
+                static bool PluginLoaded(string name) =>
+                    AppDomain.CurrentDomain.GetAssemblies().Any(a => a.GetName().Name == name);
+                if (!PluginLoaded("Fufucode.Plugins.SkinMetro"))
+                {
+                    Console.WriteLine("  SKIP: Metro 皮肤插件未安装，跳过方形控件断言");
+                }
+                else
+                {
+                    c.Change(s => s with { Skin = "metro" }); await Ready();
+                    Check(window.FindControl<StackPanel>("CustomTopRight")!.Children.OfType<Button>().All(b => b.CornerRadius.TopLeft == 0),
+                        "Metro skin applies square native controls");
+                }
+                if (!PluginLoaded("Fufucode.Plugins.SkinLiquidGlass"))
+                {
+                    Console.WriteLine("  SKIP: LiquidGlass 皮肤插件未安装，跳过合成材质断言");
+                }
+                else
+                {
+                    c.Change(s => s with { Skin = "liquidglass" }); await Ready();
+                    Check(window.TransparencyLevelHint.Contains(Avalonia.Controls.WindowTransparencyLevel.AcrylicBlur),
+                        "LiquidGlass skin requests the actual compositor material with a solid fallback");
+                }
                 c.Change(s => s with { Skin = "fluent" }); await Ready();
             }
             finally { settingsWindow.Close(); }
