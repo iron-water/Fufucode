@@ -158,11 +158,6 @@ public partial class ChatPage
         Tip(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
         Tip(SendButton, () => "发送");
         Tip(StopButton, () => "停止当前回合");
-        InputBox.GotFocus += (_, _) => ComposerGlowBand.Opacity = 1;
-        InputBox.LostFocus += (_, _) => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
-        {
-            if (!ComposerCard.IsKeyboardFocusWithin) ComposerGlowBand.Opacity = 0;
-        });
 
         var menu = new MenuFlyout();
         var live = new MenuItem { Header = "Markdown 即时预览" };

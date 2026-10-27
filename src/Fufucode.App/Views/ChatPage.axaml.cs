@@ -26,8 +26,6 @@ public partial class ChatPage : UserControl
     /// <summary>已经播放过进入动画的条目。虚拟化在滚动时会重建容器，不能重复播放。</summary>
     private readonly System.Collections.Generic.HashSet<string> _animatedEntries = new(StringComparer.Ordinal);
 
-    /// <summary>输入区可见性是否已经初始化过；首次应用外观不播动画。</summary>
-    private bool _composerVisibilityInitialized;
     private long _programmaticUntilTicks;
     private long _lastUserInputTicks;
     private MainViewModel? _attachedViewModel;
@@ -37,6 +35,7 @@ public partial class ChatPage : UserControl
         InitializeComponent();
         InitializeComposerTools();
         ComposerToolbar.SizeChanged += (_, _) => UpdateComposerToolbar();
+        InitializeComposerMotion();
 
         // F06：AcceptsReturn 的 TextBox 在自身 OnKeyDown 里处理 Enter 并标记 Handled，
         // XAML 挂的 bubble 处理器根本收不到；必须在 Tunnel 阶段拦截。
@@ -83,6 +82,8 @@ public partial class ChatPage : UserControl
         TimelineScroller.PointerWheelChanged += (_, _) => MarkUserScrollInput();
         TimelineScroller.PointerPressed += (_, _) => MarkUserScrollInput();
         TimelineScroller.KeyDown += (_, _) => MarkUserScrollInput();
+        ComposerBlurBand.VisualEffectsStateChanged += active =>
+            TimelineArea.Effect = active ? new Avalonia.Media.BlurEffect { Radius = 0 } : null;
     }
 
     private void MarkUserScrollInput() => _lastUserInputTicks = Stopwatch.GetTimestamp();
@@ -133,12 +134,9 @@ public partial class ChatPage : UserControl
     /// <summary>沉浸式模式下展开被收起的输入区，并把焦点交给输入框。</summary>
     private void OnExpandComposer(object? sender, RoutedEventArgs e)
     {
-        _composerVisibilityInitialized = true;
-        Motion.SetVisible(ComposerCard, true, offsetY: 8);
-        Motion.SetVisible(ComposerRevealButton, false);
+        if (Appearance.Composer == "hidden") ToggleComposer();
+        else SetComposerExpanded(true);
         InputBox.Focus();
-        if (DataContext is MainViewModel { Timeline.IsAtBottom: true })
-            TimelineScroller.ScrollToEnd();
     }
 
     /// <summary>展开/收起某个文件的内联 diff。</summary>
@@ -372,8 +370,15 @@ public partial class ChatPage : UserControl
         }
     }
 
+    private void OnTimelineScrollBar(object? sender, Avalonia.Controls.Primitives.ScrollEventArgs e)
+    {
+        MarkUserScrollInput();
+        TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, e.NewValue);
+    }
+
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
+        TimelineScrollBar.Value = TimelineScroller.Offset.Y;
         if (_programmaticScroll ||
             Stopwatch.GetTimestamp() < _programmaticUntilTicks ||
             Stopwatch.GetTimestamp() - _lastUserInputTicks < Stopwatch.Frequency * 0.15 ||

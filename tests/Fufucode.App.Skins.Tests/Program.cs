@@ -11,6 +11,8 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Fufucode.App.Features.Skins;
+using LiveMarkdown.Avalonia;
+using TextMateSharp.Grammars;
 using Fufucode.Core.Plugins;
 using Fufucode.App.Skins.Tests;
 
@@ -105,6 +107,25 @@ Check(SkinCatalog.All.Count == 6, "安装皮肤插件后目录恢复六套皮肤
         Check(ToolTip.GetTip(help) as string == copy.HelpText, $"{copy.Label} 长说明只挂在 ToolTip 上");
         Check(AutomationProperties.GetHelpText(help) == copy.HelpText, $"{copy.Label} 长说明同时供屏幕阅读器读取");
     }
+
+    // ---------- 1c. 代码块语法主题跟随明暗（浅色页面不应出现深色补丁） ----------
+    var markdownWindow = new Window { Width = 800, Height = 600, RequestedThemeVariant = ThemeVariant.Light };
+    var markdownSource = """
+```c
+int x;
+```
+""";
+    var markdownView = new Fufucode.App.Views.RichMarkdownView { Markdown = markdownSource };
+    markdownWindow.Content = markdownView;
+    markdownWindow.Show();
+    Harness.PumpTicks();
+    Harness.Pump(() => markdownView.GetVisualDescendants().OfType<CodeBlock>().Any());
+    var codeBlock = markdownView.GetVisualDescendants().OfType<CodeBlock>().FirstOrDefault();
+    Check(codeBlock?.ColorTheme == ThemeName.LightPlus, "浅色主题代码块使用 LightPlus（不再是深色补丁）");
+    markdownWindow.RequestedThemeVariant = ThemeVariant.Dark;
+    Harness.PumpTicks();
+    Check(codeBlock?.ColorTheme == ThemeName.DarkPlus, "深色主题代码块使用 DarkPlus");
+    markdownWindow.Close();
 
     var probe = Probe.Create(1100, 800);
     probe.Window.Show();

@@ -7,8 +7,10 @@ using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 using LiveMarkdown.Avalonia;
+using TextMateSharp.Grammars;
 using Markdig;
 
 namespace Fufucode.App.Views;
@@ -36,7 +38,10 @@ public sealed class RichMarkdownView : ContentControl
         // 渲染器自身不创建 builder：必须由调用方提供一个 ObservableStringBuilder，
         // 并通过 UpdateProducer 接管，否则 MarkdownBuilder 为 null、渲染器不产出任何内容。
         _renderer.UpdateProducer = new MarkdownUpdateProducer { MarkdownBuilder = _builder };
+        HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+        _renderer.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         Content = _renderer;
+        ApplyCodeTheme();
 
         // 图表交互统一在 ApplyDiagramGuard 里禁用：LiveMarkdown 的 PanAndZoom
         // 会抢滚轮，点击还会触发栈溢出崩溃（"无法创建新的堆栈防护页面"）。
@@ -52,7 +57,11 @@ public sealed class RichMarkdownView : ContentControl
         };
         // 设置页改强调色 / 切换明暗主题会替换窗口资源，行内代码颜色要跟着重刷。
         ResourcesChanged += (_, _) => ScheduleDiagramGuard();
-        ActualThemeVariantChanged += (_, _) => ScheduleDiagramGuard();
+        ActualThemeVariantChanged += (_, _) =>
+        {
+            ApplyCodeTheme();
+            ScheduleDiagramGuard();
+        };
     }
 
     /// <summary>Markdown 源文本；赋值即交给渲染器做增量更新。</summary>
@@ -119,6 +128,17 @@ public sealed class RichMarkdownView : ContentControl
             if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher) { _ = launcher.LaunchUriAsync(uri); return; }
         }
         if (TopLevel.GetTopLevel(this)?.Launcher is { } fallback) _ = fallback.LaunchUriAsync(uri);
+    }
+
+    /// <summary>
+    /// 代码块配色跟随窗口明暗：浅色主题用浅色 TextMate 主题，避免整块深色代码
+    /// 在浅色页面里像一块补丁（深色主题保持 DarkPlus）。
+    /// </summary>
+    private void ApplyCodeTheme()
+    {
+        _renderer.CodeBlockColorTheme = ActualThemeVariant == ThemeVariant.Light
+            ? ThemeName.LightPlus
+            : ThemeName.DarkPlus;
     }
 
     /// <summary>

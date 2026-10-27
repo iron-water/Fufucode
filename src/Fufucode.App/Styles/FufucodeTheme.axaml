@@ -24,6 +24,11 @@
                     <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <!-- 输入卡浮在聊天正文之上：浅色下用近不透明底，避免底下文字透上来。 -->
+                    <SolidColorBrush x:Key="AppComposerBackground" Color="#FAFFFFFF"/>
+                    <SolidColorBrush x:Key="AppComposerStroke" Color="#24000000"/>
+                    <SolidColorBrush x:Key="AppComposerStrokeHover" Color="#38000000"/>
+                    <SolidColorBrush x:Key="AppComposerStrokeFocused" Color="#58000000"/>
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
                     <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线。
                          浅色 = 6% 黑，深色 = 6% 白（见 Dark 分支），比 AppBorderBrush 更轻，
@@ -120,6 +125,11 @@
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <!-- 深色保持原有半透明卡片底；输入卡沿用同色。 -->
+                    <StaticResource x:Key="AppComposerBackground" ResourceKey="AppCardBackground"/>
+                    <SolidColorBrush x:Key="AppComposerStroke" Color="#26FFFFFF"/>
+                    <SolidColorBrush x:Key="AppComposerStrokeHover" Color="#3DFFFFFF"/>
+                    <SolidColorBrush x:Key="AppComposerStrokeFocused" Color="#66FFFFFF"/>
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
                     <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线（深色 = 6% 白）。 -->
                     <SolidColorBrush x:Key="AppDividerSubtle" Color="#0FFFFFFF"/>
@@ -725,27 +735,25 @@
     </Style>
 
     <!-- ================= 输入区（composer） ================= -->
+    <!-- 编辑区与工具栏共用一个卡片外壳；四边描边与圆角保持完整。 -->
     <Style Selector="Border.composerCard">
-        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+        <Setter Property="Background" Value="{DynamicResource AppComposerBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppComposerStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
-        <!-- 底部工具行整体下移：上方留白多一点、下方少一点。 -->
-        <Setter Property="Padding" Value="12,12,12,6"/>
-        <!-- 输入卡悬浮于页面之上：轻阴影 + 聚焦时 accent 描边，与"卡比底色高一线"一致。 -->
-        <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="16,14,16,12"/>
+        <Setter Property="BoxShadow" Value="0 4 16 0 #18000000"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="BorderBrush" Duration="0:0:0.1"/>
-                <BrushTransition Property="Background" Duration="0:0:0.1"/>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.15"/>
             </Transitions>
         </Setter>
     </Style>
-    <!-- 聚焦时描边转 accent：一眼看出焦点在输入区（Windows 文本框同语义）。 -->
-    <!-- 聚焦不再用 BoxShadow（会形成一圈很重的绿光）；辉光只由 ComposerGlowBand 表达。 -->
+    <Style Selector="Border.composerCard:pointerover">
+        <Setter Property="BorderBrush" Value="{DynamicResource AppComposerStrokeHover}"/>
+    </Style>
     <Style Selector="Border.composerCard:focus-within">
-        <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppComposerStrokeFocused}"/>
     </Style>
     <Style Selector="TextBox.composerInput">
         <Setter Property="Background" Value="Transparent"/>
@@ -753,25 +761,6 @@
         <Setter Property="Padding" Value="0,4"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="LineHeight" Value="20"/>
-    </Style>
-    <!-- composer 下划线：常驻透明，悬停中性、聚焦 accent（对齐 MegaQueryUnderline） -->
-    <Style Selector="Border.composerUnderline">
-        <Setter Property="Height" Value="2"/>
-        <Setter Property="CornerRadius" Value="1"/>
-        <Setter Property="Opacity" Value="0"/>
-        <Setter Property="Background" Value="{DynamicResource TextFillColorSecondaryBrush}"/>
-        <Setter Property="Transitions">
-            <Transitions>
-                <DoubleTransition Property="Opacity" Duration="0:0:0.12"/>
-            </Transitions>
-        </Setter>
-    </Style>
-    <Style Selector="Border.composerCard:pointerover Border.composerUnderline">
-        <Setter Property="Opacity" Value="0"/>
-    </Style>
-    <!-- focus-within 声明在 pointerover 之后：两者同现时聚焦态（accent）胜出 -->
-    <Style Selector="Border.composerCard:focus-within Border.composerUnderline">
-        <Setter Property="Opacity" Value="0"/>
     </Style>
     <!-- UI-1 单闭合边框原则：composerCard 已闭合，工具栏内的模型/思考选择器降级为无框轻质填充，
          仅靠悬停底色传达可交互性，避免"容器内再套闭合框"。 -->

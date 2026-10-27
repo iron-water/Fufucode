@@ -28,38 +28,15 @@ public partial class ChatPage
     internal void ApplyAppearance(WorkbenchAppearance settings)
     {
         Appearance = settings;
-        TimelineItems.MaxWidth = settings.ReadWidth;
-        // 底部留出富余：回合结束后出现的消息操作条（复制/点赞/更多）需要净空，
-        // 否则最后一条消息贴到输入区上沿、操作条被输入区挡住。
-        TimelineItems.Padding = settings.Density switch { "compact" => new Thickness(16, 12, 16, 28), "airy" => new Thickness(28, 24, 28, 40), _ => new Thickness(24, 20, 24, 32) };
+        ReadingColumn.MaxWidth = settings.ReadWidth;
+        var inset = settings.Density switch { "compact" => 16, "airy" => 28, _ => 24 };
+        ReadingColumn.Margin = new Thickness(inset, 0);
+        ReadingColumn.ColumnDefinitions[0].Width = new GridLength(settings.ShowAvatars ? 40 : 12);
         ConversationHeader.IsVisible = settings.ShowSessionHeader || (DataContext as MainViewModel)?.Sidebar.IsRenaming == true;
-        var composerVisible = settings.Composer != "hidden";
-        if (!_composerVisibilityInitialized)
-        {
-            // 首次应用外观时不播动画，避免启动瞬间输入区自己淡入。
-            _composerVisibilityInitialized = true;
-            ComposerCard.IsVisible = composerVisible;
-            ComposerRevealButton.IsVisible = !composerVisible;
-        }
-        else
-        {
-            // 沉浸式切换走平滑显示/隐藏，而不是瞬间消失。
-            Motion.SetVisible(ComposerCard, composerVisible, offsetY: 8);
-            Motion.SetVisible(ComposerRevealButton, !composerVisible);
-        }
-        // 输入区始终与阅读宽度对齐：正文多宽，输入框就多宽；
-        // “自由”宽度（Infinity）时才铺满可用区域。
-        // 只靠 MaxWidth 约束：Stretch + MaxWidth 时 Avalonia 会自动居中；
-        // 显式 Center 会让父容器按内容自适应，把输入卡压成窄条。
-        ComposerHost.MaxWidth = settings.ReadWidth;
-        ComposerHost.Width = double.IsInfinity(settings.ReadWidth) ? double.NaN : settings.ReadWidth;
-        ComposerCard.MaxWidth = settings.ReadWidth;
-        // 显式宽度：某些父容器会按内容自适应，仅靠 MaxWidth 会把输入卡压成窄条。
-        ComposerCard.Width = double.IsInfinity(settings.ReadWidth) ? double.NaN : settings.ReadWidth;
-        ComposerCard.HorizontalAlignment = HorizontalAlignment.Stretch;
-        if (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent)
-            ComposerCard.CornerRadius = new CornerRadius(settings.Corner);
-        else ComposerCard.ClearValue(Border.CornerRadiusProperty);
+        SetComposerExpanded(settings.Composer != "hidden");
+        // 输入卡的轮廓由卡片样式/皮肤管理，不套用普通列表行的 4px 圆角。
+        ComposerCard.ClearValue(Border.CornerRadiusProperty);
+        UpdateComposerClearance();
         InputBox.FontSize = settings.FontSize;
         // 刻度是对话区固定结构：常显示，不提供开关。
         MessageRuler.IsVisible = true;

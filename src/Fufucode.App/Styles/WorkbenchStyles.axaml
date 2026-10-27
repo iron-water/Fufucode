@@ -888,7 +888,7 @@
     <Setter Property="BorderThickness" Value="0"/>
   </Style>
   <!-- 悬停时 Fluent 模板会把输入框内部刷成深色，在输入卡片里像突然挖了个黑洞；
-       输入区自己已有下划线反馈，这里保持透明。 -->
+       聚焦反馈由整个输入卡的描边提供，编辑器内部保持透明。 -->
   <Style Selector="TextBox.composerInput:pointerover /template/ Border#PART_BorderElement">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
@@ -1128,10 +1128,6 @@
   <Style Selector="Border#TipBox TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
-  <!-- 输入区聚焦光带：宿主内获得焦点时点亮。 -->
-  <Style Selector="StackPanel#ComposerHost:focus-within Border#ComposerGlowBand">
-    <Setter Property="Opacity" Value="1"/>
-  </Style>
   <!-- 输入区工具行：所有图标按钮用同一个 4px 右间距，隐藏控件不占位，
        避免“左侧三枚 / 右侧三枚”间距不一致。 -->
   <Style Selector="Grid#ComposerToolbar Button.iconButton">
@@ -1151,14 +1147,6 @@
   </Style>
   <Style Selector="Button#IslandScrim:pointerover /template/ Border, Button#RightDrawerScrim:pointerover /template/ Border, Grid#GlobalOverlay > Button:pointerover /template/ Border">
     <Setter Property="Background" Value="Transparent"/>
-  </Style>
-  <!-- 输入区聚焦光带：淡入淡出。 -->
-  <Style Selector="Border#ComposerGlowBand">
-    <Setter Property="Transitions">
-      <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.15"/>
-      </Transitions>
-    </Setter>
   </Style>
   <!-- 模型选择行：中间灰横条，悬停升高亮；与其它列表行同一套层级。 -->
   <Style Selector="Button.modelChoiceRow">

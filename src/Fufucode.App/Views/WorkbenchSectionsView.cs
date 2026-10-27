@@ -257,7 +257,7 @@ public sealed class WorkbenchSectionsView : UserControl
 
         Group(rows, "主题与风格",
             ChoiceRow(vm, "主题", null, new[] { "跟随系统", "浅色", "深色" }, s => s.Theme, (s, v) => s with { Theme = v }, "Color", "system", "light", "dark"),
-            ChoiceRow(vm, "皮肤", "Fluent 为默认；其他皮肤使用各自的颜色与控件形状。", Features.Skins.SkinCatalog.All.Select(s => s.DisplayName).ToArray(), s => s.SkinResolution.Definition.StorageKey, (s, v) => s with { Skin = v }, "Color", Features.Skins.SkinCatalog.All.Select(s => s.StorageKey).ToArray()),
+            ChoiceRow(vm, "皮肤", "Fluent 为默认；其他皮肤由插件市场安装，使用各自的颜色与控件形状。", Features.Skins.SkinCatalog.All.Select(s => s.DisplayName).ToArray(), s => s.SkinResolution.Definition.StorageKey, (s, v) => s with { Skin = v }, "Color", Features.Skins.SkinCatalog.All.Select(s => s.StorageKey).ToArray()),
             skinNote,
             // “视觉风格”旧轴已下线：flat/classic 由 Metro/Luna 真皮肤覆盖，glass（iOS 液态玻璃）是未做的新皮肤，
             // 不再以半成品占位。Surface 字段保留读取以兼容旧配置。
@@ -297,8 +297,15 @@ public sealed class WorkbenchSectionsView : UserControl
         var baseGroup = rows.Children.Skip(baseGroupStart).ToArray();
         _bindings.Add(current =>
         {
+            // 这三档底色只作用于 Fluent 暗色；浅色主题下显示出来会让人误以为可调。
+            var dark = current.Theme switch
+            {
+                "light" => false,
+                "dark" => true,
+                _ => Avalonia.Application.Current?.ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark,
+            };
             foreach (var control in baseGroup)
-                control.IsVisible = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
+                control.IsVisible = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent && dark;
         });
 
         Group(rows, "字体与密度",

@@ -1,3 +1,4 @@
+using System;
 using Fufucode.Core;
 
 namespace Fufucode.App.Integration;
@@ -17,5 +18,12 @@ public static class MemoryProfile
     public static bool ReduceTerminalScrollback => _current.ReduceTerminalScrollback;
     public static bool ReduceBackgroundBrowserMemory => _current.ReduceBackgroundBrowserMemory;
 
-    public static void Apply(PerformanceSettings? settings) => _current = settings ?? new PerformanceSettings();
+    internal static event Action? VisualEffectsChanged;
+
+    public static void Apply(PerformanceSettings? settings)
+    {
+        var previous = DisableVisualEffects;
+        _current = settings ?? new PerformanceSettings();
+        if (previous != DisableVisualEffects) VisualEffectsChanged?.Invoke();
+    }
 }
