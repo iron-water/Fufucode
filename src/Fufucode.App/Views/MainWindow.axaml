@@ -122,7 +122,8 @@
           <TextBlock x:Name="StartupText" Classes="secondary" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,4"/>
           <StackPanel x:Name="StartupPickProject" IsVisible="False" Spacing="8">
             <Button x:Name="StartupOpenProjectButton" Classes="accent" Content="打开项目文件夹"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="38" FontSize="13"/>
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="38" FontSize="13"
+                    Click="StartupOpenProject_Click"/>
             <ItemsControl x:Name="StartupRecentProjects">
               <ItemsControl.ItemTemplate>
                 <DataTemplate>
