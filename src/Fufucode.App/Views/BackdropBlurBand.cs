@@ -167,6 +167,10 @@ public sealed class BackdropBlurBand : Control
             // 目标内部（被不透明卡片覆盖）保持全强度，向外在 Ring 像素内衰减到 0。
             var alpha = (byte)(255 * Math.Clamp(_state.Strength, 0f, 1f));
             var solid = new SKColor(0, 0, 0, alpha);
+            // 近似平方衰减：前段掉得快，贴边仍满强度。用户要求比旧纵向带更快衰减。
+            var quarter = new SKColor(0, 0, 0, (byte)(alpha * 0.36));
+            var tail = new SKColor(0, 0, 0, (byte)(alpha * 0.09));
+            float[] ramp = [0f, 0.4f, 0.7f, 1f];
             var ring = Math.Max(1f, _state.Ring);
             var innerLeft = rect.Left + ring;
             var innerTop = rect.Top + ring;
@@ -175,16 +179,16 @@ public sealed class BackdropBlurBand : Control
 
             using var topShader = SKShader.CreateLinearGradient(
                 new SKPoint(0, rect.Top), new SKPoint(0, innerTop),
-                [SKColors.Transparent, solid], [0f, 1f], SKShaderTileMode.Clamp);
+                [SKColors.Transparent, tail, quarter, solid], ramp, SKShaderTileMode.Decal);
             using var bottomShader = SKShader.CreateLinearGradient(
                 new SKPoint(0, innerBottom), new SKPoint(0, rect.Bottom),
-                [solid, SKColors.Transparent], [0f, 1f], SKShaderTileMode.Clamp);
+                [solid, quarter, tail, SKColors.Transparent], ramp, SKShaderTileMode.Decal);
             using var leftShader = SKShader.CreateLinearGradient(
                 new SKPoint(rect.Left, 0), new SKPoint(innerLeft, 0),
-                [SKColors.Transparent, solid], [0f, 1f], SKShaderTileMode.Clamp);
+                [SKColors.Transparent, tail, quarter, solid], ramp, SKShaderTileMode.Decal);
             using var rightShader = SKShader.CreateLinearGradient(
                 new SKPoint(innerRight, 0), new SKPoint(rect.Right, 0),
-                [solid, SKColors.Transparent], [0f, 1f], SKShaderTileMode.Clamp);
+                [solid, quarter, tail, SKColors.Transparent], ramp, SKShaderTileMode.Decal);
 
             using var topFilter = SKImageFilter.CreateShader(topShader);
             using var bottomFilter = SKImageFilter.CreateShader(bottomShader);

@@ -79,7 +79,7 @@
       <StackPanel x:Name="MessageRuler" Width="34" Spacing="2" IsVisible="False"
                   VerticalAlignment="Center" Margin="4,0,4,0"/>
       <!-- 正文与输入框共用阅读列；两侧为等宽的刻度留白，滚动条放在列外。 -->
-      <Border Grid.Column="2" Width="42"/>
+      <Border x:Name="ReadingColumnSpacer" Grid.Column="2" Width="42"/>
       <Grid x:Name="ReadingColumn" Grid.Column="1" MaxWidth="768" Margin="24,0"
             ColumnDefinitions="40,*">
       <Grid x:Name="TimelineArea" Grid.ColumnSpan="2" ClipToBounds="True">
@@ -595,7 +595,7 @@
            放在 ReadingColumn 层（TimelineArea 有 ClipToBounds，会把向外的光晕裁掉）。 -->
       <views:BackdropBlurBand x:Name="ComposerBlurBand" Grid.ColumnSpan="2" ZIndex="5"
                               VerticalAlignment="Bottom" IsHitTestVisible="False"
-                              RingThickness="16" BlurRadius="16"
+                              RingThickness="28" BlurRadius="18"
                               IsVisible="{Binding #ComposerCard.IsVisible}"/>
 
       <ScrollBar x:Name="TimelineScrollBar" Grid.Row="0" Grid.Column="1"
