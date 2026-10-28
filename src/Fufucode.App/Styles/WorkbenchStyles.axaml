@@ -613,8 +613,15 @@
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
   </Style>
-  <!-- Fluent 选中页签：只描左边和顶边（L 形）。padding 回退 2px，选中/未选中切换时文字不位移。
-       类由 DockRegionView 按当前皮肤注入，其它皮肤不受影响。 -->
+  <!-- Fluent 页签（accentStroke 类由 DockRegionView 按皮肤注入，其它皮肤不受影响）：
+       选中＝只描左边和顶边的 2px 直角描边；圆角必须显式压回 0（Button.subtle 的
+       ControlCornerRadius 会盖掉 Button.dockTab 的 0 值）；悬停底色不再盖住描边。 -->
+  <Style Selector="Button.dockTab.accentStroke">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
+  <Style Selector="Button.dockTab.accentStroke:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
   <Style Selector="Button.dockTab.accentStroke.selected">
     <Setter Property="BorderThickness" Value="2,2,0,0"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>

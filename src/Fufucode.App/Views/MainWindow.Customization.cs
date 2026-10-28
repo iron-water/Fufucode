@@ -189,6 +189,8 @@ public partial class MainWindow
         Add(s => s.OfType<Button>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         foreach (var buttonClass in new[] { "iconButton", "subtle", "accent", "dockTab" })
             Add(s => s.OfType<Button>().Class(buttonClass), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
+        // Fluent 页签的选中态是左上直角描边，圆角会把描边拐成弧线；只对这一类按钮压回直角。
+        Add(s => s.OfType<Button>().Class("accentStroke"), TemplatedControl.CornerRadiusProperty, new CornerRadius(0));
         Add(s => s.OfType<TextBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<ComboBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<Border>().Class("userBubble"), Border.CornerRadiusProperty, new CornerRadius(settings.Corner));
