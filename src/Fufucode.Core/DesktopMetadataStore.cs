@@ -144,6 +144,81 @@ public sealed class DesktopMetadataStore
         return new ProjectRecord(reader.GetString(0), reader.GetString(1));
     }
 
+    /// <summary>
+    /// 以指定 id 登记项目（收养用）。id 必须沿用会话目录名，否则
+    /// <c>SessionFilePath</c> 由项目 id 推导，历史仍然打不开。
+    /// 该路径已有另一 id 的项目时返回 false，由调用方决定搬移。
+    /// </summary>
+    public bool TryInsertProjectWithId(string projectId, string projectPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        var full = AppDataLayout.NormalizeProjectPath(projectPath);
+        var key = AppDataLayout.PathKey(full);
+        using var connection = Open();
+        using (var exists = connection.CreateCommand())
+        {
+            exists.CommandText = "SELECT 1 FROM projects WHERE path_key=$key LIMIT 1";
+            exists.Parameters.AddWithValue("$key", key);
+            if (exists.ExecuteScalar() is not null) return false;
+        }
+        using var command = connection.CreateCommand();
+        command.CommandText = "INSERT OR IGNORE INTO projects(id,path,path_key) VALUES($id,$path,$key)";
+        command.Parameters.AddWithValue("$id", projectId);
+        command.Parameters.AddWithValue("$path", full);
+        command.Parameters.AddWithValue("$key", key);
+        return command.ExecuteNonQuery() == 1;
+    }
+
+    /// <summary>收养一条会话：索引里没有同 id 的行时补一条。已存在时不动它（幂等）。</summary>
+    public bool AdoptSession(string sessionId, string projectId, string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        using var connection = Open();
+        using var guard = connection.CreateCommand();
+        guard.CommandText = "SELECT 1 FROM sessions WHERE id=$id LIMIT 1";
+        guard.Parameters.AddWithValue("$id", sessionId);
+        if (guard.ExecuteScalar() is not null) return false;
+
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            INSERT OR IGNORE INTO sessions(id,project_id,file_path,name,last_opened_utc,was_active,backend_id,backend_session_id)
+            VALUES($id,$project,$file,$name,$opened,0,'fumo',$id)
+            """;
+        command.Parameters.AddWithValue("$id", sessionId);
+        command.Parameters.AddWithValue("$project", projectId);
+        command.Parameters.AddWithValue("$file", Path.GetFullPath(filePath));
+        command.Parameters.AddWithValue("$name", DeriveSessionName(filePath));
+        command.Parameters.AddWithValue("$opened", DateTimeOffset.UtcNow.ToString("O"));
+        return command.ExecuteNonQuery() == 1;
+    }
+
+    /// <summary>收养出来的会话名：取首条用户消息前 40 字，与新建会话时的自动命名保持一致。</summary>
+    private static string? DeriveSessionName(string filePath)
+    {
+        try
+        {
+            // 必须用纯解析入口：LoadNativeMessages 遇到损坏文件会把文件改名成 .corrupt，
+            // 而收养面对的正是来源不明的文件，不能因此毁掉用户唯一的副本。
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            var messages = PersistentSessionManager.ParseNativeMessages(stream)?.Messages;
+            if (messages is null) return null;
+            foreach (var message in messages)
+            {
+                if (message.Role != Backend.PureAgentRole.User) continue;
+                if (string.IsNullOrWhiteSpace(message.Content)) continue;
+                if (message.Content.StartsWith("[预算提示]", StringComparison.Ordinal)) continue;
+                var text = message.Content.Trim();
+                return text.Length <= 40 ? text : text[..40] + "…";
+            }
+        }
+        catch
+        {
+            // 名字是装饰性的，读不出来就不填。
+        }
+        return null;
+    }
+
     /// <summary>Registers the child of a fork. The parent row is kept so both branches stay reachable.</summary>
     public SessionRecord CreateForkSession(ProjectRecord project, string parentSessionId, string entryId, string? piSessionId = null)
     {

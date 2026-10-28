@@ -65,7 +65,13 @@ public sealed class PersistentSessionManager
         _credentials = credentialResolver ?? (OperatingSystem.IsWindows() ?
             new WindowsPasswordVaultCredentialResolver() : new EnvironmentCredentialResolver());
         _clientFactoryFactory = clientFactoryFactory;
+        // 索引与磁盘不一致时先收养再对外提供服务：否则侧栏里那些历史会话永远点不开，
+        // 而文件其实完好。幂等、只扫描几个目录，构造期成本可忽略。
+        Adopted = SessionAdoption.Reconcile(_layout, _metadata);
     }
+
+    /// <summary>本次构造收养回索引的项目/会话数量（诊断与测试用）。</summary>
+    public SessionAdoption.Result Adopted { get; }
 
     public AppDataLayout Layout => _layout;
     public DesktopMetadataStore Metadata => _metadata;
@@ -608,6 +614,8 @@ public sealed class PersistentSessionManager
         {
             Diagnostics.StartupProbe.Mark("native.open.begin", "OpenNativeAsync");
             var file = NativeSessionFactory.SessionFilePath(_layout, project.Id, session.Id);
+            // 目录自带项目路径标记：索引丢行时收养才有依据。
+            SessionAdoption.WriteMarker(_layout, project.Id, project.Path);
             // 启动时 settings.json 可能被扫描器/备份短暂占用，当时读到的是默认值；
             // 打开会话时再读一次，避免一次读取失败就永久变成“未配置模型端点”。
             if (_settings.LastLoadError is not null && _settings.ReloadIfFailed())
