@@ -177,8 +177,6 @@ public sealed class BackdropBlurBand : Control
 
         private BlurState _state;
         private SKRuntimeEffect? _maskEffect;
-        private SKShader? _maskShader;
-        private (float W, float H, float R, float Ring, float Alpha) _maskKey;
 
         public override void OnMessage(object message)
         {
@@ -199,53 +197,56 @@ public sealed class BackdropBlurBand : Control
             var output = _state.Output;
             var rect = new SKRect((float)output.Left, (float)output.Top,
                 (float)output.Right, (float)output.Bottom);
-            using var blur = SKImageFilter.CreateBlur(_state.Radius, _state.Radius, SKShaderTileMode.Clamp);
-
-            // 沿卡片圆角描一圈的距离场遮罩。
-            // 之前用四条矩形渐变，交叉处会叠出十字、圆角处切成直角——必须用 SDF。
             var ring = Math.Max(1f, _state.Ring);
             var alpha = Math.Clamp(_state.Strength, 0f, 1f);
-            var key = (rect.Width, rect.Height, _state.Corner, ring, alpha);
-            if (_maskShader is null || _maskKey != key)
-            {
-                _maskEffect ??= SKRuntimeEffect.CreateShader(MaskSksl, out _);
-                if (_maskEffect is null) return;
-                using var uniforms = new SKRuntimeEffectUniforms(_maskEffect);
-                uniforms["uSize"] = new[] { rect.Width, rect.Height };
-                uniforms["uCard"] = new[] { _state.CardWidth, _state.CardHeight };
-                uniforms["uRadius"] = _state.Corner;
-                uniforms["uRing"] = ring;
-                uniforms["uAlpha"] = alpha;
-                _maskShader?.Dispose();
-                _maskShader = _maskEffect.ToShader(uniforms);
-                _maskKey = key;
-            }
-            if (_maskShader is null) return;
-            using var mask = SKImageFilter.CreateShader(_maskShader);
-            // 只把「按遮罩淡出的模糊」这一层，SrcOver 叠回原背景：
-            // 遮罩为 0 处完全透明 → 背景原样保留，不会出现灰带或黑块。
-            using var blurred = SKImageFilter.CreateBlendMode(SKBlendMode.DstIn, blur, mask);
-            using var transition = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOver, blurred, null);
-            using var replace = new SKPaint { BlendMode = SKBlendMode.SrcOver };
+            _maskEffect ??= SKRuntimeEffect.CreateShader(MaskSksl, out _);
+            if (_maskEffect is null) return;
 
             var saveCount = canvas.Save();
             try
             {
-                // 外边界用圆角矩形裁剪硬性保证贴合卡片圆角；
-                // 只靠距离场遮罩时，边缘仍会按控件矩形收口。
-                var outerRadius = (float)(_state.Corner + ring);
-                using (var outer = new SKRoundRect(rect, outerRadius))
-                {
-                    canvas.ClipRoundRect(outer, SKClipOperation.Intersect, antialias: true);
-                }
-                // 在时间线的透明绘制层内，将清晰内容渐变替换为模糊内容；
-                // 保留真实 alpha，不添加底色，也不把模糊文字叠到清晰文字上。
+                // 外边界用圆角矩形裁剪硬性保证贴合卡片圆角。
+                using (var outerRect = new SKRoundRect(rect, (float)(_state.Corner + ring)))
+                    canvas.ClipRoundRect(outerRect, SKClipOperation.Intersect, antialias: true);
+
+                // 两档模糊叠加成真正的递减：外圈弱、内圈强。
+                // 单靠 alpha 淡出只像半透明遮罩，看起来始终一样糊，所以拆成两遍。
+                PaintPass(canvas, rect, _state.Radius * 0.45f, ring, alpha * 0.9f);
+                PaintPass(canvas, rect, _state.Radius, ring * 0.55f, alpha);
+            }
+            finally
+            {
+                canvas.RestoreToCount(saveCount);
+            }
+        }
+
+        /// <summary>一次「按圆角距离场淡出的模糊」叠加；遮罩为 0 处背景原样保留。</summary>
+        private void PaintPass(SKCanvas canvas, SKRect rect, float radius, float ring, float alpha)
+        {
+            if (radius <= 0.05f || alpha <= 0.001f) return;
+            using var uniforms = new SKRuntimeEffectUniforms(_maskEffect!);
+            uniforms["uSize"] = new[] { rect.Width, rect.Height };
+            uniforms["uCard"] = new[] { _state.CardWidth, _state.CardHeight };
+            uniforms["uRadius"] = _state.Corner;
+            uniforms["uRing"] = ring;
+            uniforms["uAlpha"] = alpha;
+            using var shader = _maskEffect!.ToShader(uniforms);
+            if (shader is null) return;
+
+            using var blur = SKImageFilter.CreateBlur(radius, radius, SKShaderTileMode.Clamp);
+            using var mask = SKImageFilter.CreateShader(shader);
+            using var blurred = SKImageFilter.CreateBlendMode(SKBlendMode.DstIn, blur, mask);
+            using var transition = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOver, blurred, null);
+            using var replace = new SKPaint { BlendMode = SKBlendMode.SrcOver };
+            var count = canvas.Save();
+            try
+            {
                 canvas.SaveLayer(new SKCanvasSaveLayerRec
                     { Bounds = rect, Backdrop = transition, Paint = replace });
             }
             finally
             {
-                canvas.RestoreToCount(saveCount);
+                canvas.RestoreToCount(count);
             }
         }
     }
