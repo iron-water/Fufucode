@@ -745,13 +745,13 @@
     </Style>
 
     <!-- ================= 输入区（composer） ================= -->
-    <!-- 视觉沿用顶部会话岛（sessionIsland）：同款底色/描边/胶囊阴影，圆角取岛的 24。
+    <!-- Windows Fluent 卡片：AppCardBackground 底 + 1px 描边 + 轻阴影，圆角 8（Fluent 2 卡片标准）。
          不再做背景模糊——BackdropBlurBand 已移除（2026-10-27 实测该滤镜链不出模糊）。 -->
     <Style Selector="Border.composerCard">
         <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="24"/>
+        <Setter Property="CornerRadius" Value="8"/>
         <Setter Property="Padding" Value="16,14,16,12"/>
         <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
         <Setter Property="Transitions">
