@@ -128,5 +128,20 @@ internal static class SessionAdoptionTests
         Check(managerSix.Metadata.ListSessions(projectIdSix)
                   .Any(s => s.Id == "s6"),
             "收养的会话可从正常的项目/会话查询路径列出");
+
+        // ── 7) 已登记项目也要有标记：否则将来丢行时无从推断路径 ──
+        var seven = Scratch(root, "backfill");
+        var layoutSeven = new AppDataLayout(seven);
+        var projectPathSeven = Path.Combine(seven, "project-g");
+        Directory.CreateDirectory(projectPathSeven);
+        var metadataSeven = new DesktopMetadataStore(layoutSeven);
+        var registeredSeven = metadataSeven.GetOrCreateProject(projectPathSeven);
+        Check(!File.Exists(SessionAdoption.MarkerPath(layoutSeven, registeredSeven.Id)),
+            "新建项目时还没有目录标记（本用例的前提）");
+        SessionAdoption.Reconcile(layoutSeven, metadataSeven);
+        Check(SessionAdoption.MarkerPath(layoutSeven, registeredSeven.Id) is var marker &&
+              File.Exists(marker) &&
+              File.ReadAllText(marker).Contains("project-g", StringComparison.OrdinalIgnoreCase),
+            "收养时把目录标记回填给已登记项目，丢行后才救得回来");
     }
 }

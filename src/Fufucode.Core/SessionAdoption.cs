@@ -79,6 +79,10 @@ public static class SessionAdoption
         var unreadable = 0;
         try
         {
+            // 先给已登记的项目补标记：没有标记，将来丢行时收养就无从推断路径。
+            foreach (var project in metadata.ListProjects())
+                WriteMarker(layout, project.Id, project.Path);
+
             if (!Directory.Exists(layout.SessionsDirectory)) return new Result(0, 0, 0, 0);
             foreach (var directory in Directory.EnumerateDirectories(layout.SessionsDirectory))
             {
