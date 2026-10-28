@@ -1161,9 +1161,9 @@
   <Style Selector="Button.modelChoiceRow:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
-  <!-- 启动卡：深色背景上的一张中间灰卡，图标 + 品牌名 + 主操作。 -->
+  <!-- 启动卡：浮在启动遮罩上的一张主题卡片，图标 + 品牌名 + 主操作。 -->
   <Style Selector="Border.startupCard">
-    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="14"/>

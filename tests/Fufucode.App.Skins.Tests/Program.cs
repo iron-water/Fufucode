@@ -146,6 +146,47 @@ int x;
     Check(codeBlock?.ColorTheme == ThemeName.DarkPlus, "深色主题代码块使用 DarkPlus");
     markdownWindow.Close();
 
+    // ---------- 1d. 启动页浅色：遮罩与启动卡跟随主题，不再写死深色 ----------
+    var startupWindow = new Window { Width = 600, Height = 400, RequestedThemeVariant = ThemeVariant.Light };
+    var startupContent = new StackPanel { Spacing = 10, VerticalAlignment = Avalonia.Layout.VerticalAlignment.Center };
+    var startupMark = new TextBlock { Text = "Fufucode", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center };
+    startupMark.Classes.Add("startupWordmark");
+    var startupNote = new TextBlock { Text = "正在加载数据…", HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center, FontSize = 12 };
+    startupNote.Classes.Add("secondary");
+    startupContent.Children.Add(startupMark);
+    startupContent.Children.Add(new ProgressBar { IsIndeterminate = true, Width = 160, HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Center });
+    startupContent.Children.Add(startupNote);
+    var startupCard = new Border { Width = 320, Height = 180, Child = startupContent };
+    startupCard.Classes.Add("startupCard");
+    var startupOverlay = new Border { Child = startupCard };
+    startupOverlay.Classes.Add("startupOverlay");
+    startupWindow.Content = startupOverlay;
+    startupWindow.Show();
+    Harness.PumpTicks();
+
+    static double Luminance(IBrush? brush) => brush is ISolidColorBrush solid
+        ? (0.2126 * solid.Color.R + 0.7152 * solid.Color.G + 0.0722 * solid.Color.B) / 255
+        : -1;
+
+    Harness.Screenshot(startupWindow, Path.Combine(evidenceRoot, "startup-light.png"));
+    Check(Luminance(startupCard.Background) > 0.8,
+        $"浅色启动卡为浅色卡片（实际 {startupCard.Background}）");
+    Check(startupOverlay.Background is LinearGradientBrush lightGradient
+          && lightGradient.GradientStops.Count > 0
+          && lightGradient.GradientStops[0].Color.R > 200,
+        $"浅色启动遮罩为浅色渐变（实际 {startupOverlay.Background}）");
+
+    startupWindow.RequestedThemeVariant = ThemeVariant.Dark;
+    Harness.PumpTicks();
+    Harness.Screenshot(startupWindow, Path.Combine(evidenceRoot, "startup-dark.png"));
+    Check(Luminance(startupCard.Background) < 0.4,
+        $"深色启动卡保持深色（实际 {startupCard.Background}）");
+    Check(startupOverlay.Background is LinearGradientBrush darkGradient
+          && darkGradient.GradientStops.Count > 0
+          && darkGradient.GradientStops[0].Color.R < 80,
+        $"深色启动遮罩保持深色渐变（实际 {startupOverlay.Background}）");
+    startupWindow.Close();
+
     var probe = Probe.Create(1100, 800);
     probe.Window.Show();
     Harness.PumpTicks();

@@ -104,12 +104,6 @@
       </Grid>
       <!-- 启动遮罩使用不透明底色：Mica 皮肤会把 AppMicaPageBackground 变透明，导致半成品侧栏透出来。 -->
       <Border x:Name="StartupOverlay" Grid.ColumnSpan="3" IsVisible="False" ZIndex="20">
-        <Border.Background>
-          <LinearGradientBrush StartPoint="0%,0%" EndPoint="0%,100%">
-            <GradientStop Offset="0" Color="#FF1F1F1F"/>
-            <GradientStop Offset="1" Color="#FF141414"/>
-          </LinearGradientBrush>
-        </Border.Background>
         <Grid>
         <Border Classes="startupCard" HorizontalAlignment="Center" VerticalAlignment="Center" Width="400">
         <StackPanel x:Name="StartupSummary" HorizontalAlignment="Stretch" Spacing="14">
