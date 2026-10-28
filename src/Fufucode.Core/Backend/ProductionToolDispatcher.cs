@@ -305,6 +305,29 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         return resolved;
     }
 
+    /// <summary>
+    /// 只读工具的解析：允许工作区外的绝对路径。
+    ///
+    /// 工作区限制读取不是有效安全边界——run_command 里的 shell 从来不受它约束，
+    /// 硬拒只会白烧一轮并把模型教成"被拒就换工具绕"（Codex 同样允许读工作区外，
+    /// 锁的是写；Claude Code 明确不把自己当安全边界）。写与命令仍走 ResolveSafePath
+    /// 的工作区守卫；敏感路径的读权限留给安全中心的规则引擎统一管。
+    /// </summary>
+    private static string? ResolveReadablePath(string relativeOrAbsolute, string workspaceRoot, out string error)
+    {
+        try
+        {
+            var resolved = Path.GetFullPath(Path.Combine(workspaceRoot, relativeOrAbsolute));
+            error = string.Empty;
+            return resolved;
+        }
+        catch (Exception ex)
+        {
+            error = $"路径无法解析：'{relativeOrAbsolute}'（{ex.Message}）";
+            return null;
+        }
+    }
+
     private bool IsWithinWorkspace(string path) =>
         path.Equals(_workspaceRoot, PathComparison) ||
         path.StartsWith(_workspacePrefix, PathComparison);
@@ -362,7 +385,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (selector is not null && (hasOffset || hasLimit))
             return new PureToolResult(call.Id, false, "行选区（path:N 或 path:A-B）不能与 offset/limit 同时使用。");
 
-        var target = ResolveSafePath(relPath, out var error);
+        var target = ResolveReadablePath(relPath, _workspaceRoot, out var error);
         if (target is null) return new PureToolResult(call.Id, false, error);
 
         if (!File.Exists(target))
@@ -473,7 +496,27 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (lineNo == 0)
             return new PureToolResult(call.Id, true, "（文件为空）");
         if (emitted == 0)
-            return new PureToolResult(call.Id, false, $"offset {offset} 超出文件总行数（共 {lineNo} 行）。");
+        {
+            // 越界不再简单报错：模型多半是照着截断提示猜的行号。钳回文件末尾并给出
+            // 有效区间，让它当轮就能读到最后几行确认边界，省掉一次往返。
+            var from = Math.Max(1, Math.Min(lineNo, 200));
+            var tailSb = new StringBuilder();
+            var tailFrom = lineNo - from + 1;
+            var skipped = 0;
+            using (var reader = new StreamReader(target, new UTF8Encoding(false, true),
+                       detectEncodingFromByteOrderMarks: true))
+            {
+                while (await reader.ReadLineAsync(ct).ConfigureAwait(false) is { } line)
+                {
+                    skipped++;
+                    if (skipped < tailFrom) continue;
+                    tailSb.Append(skipped).Append('\t').AppendLine(line);
+                }
+            }
+            return new PureToolResult(call.Id, true,
+                $"[offset {offset} 超出文件总行数（共 {lineNo} 行），已自动返回最后 {from} 行：]\n" +
+                tailSb.ToString().TrimEnd('\r', '\n'));
+        }
 
         var lastRead = offset + emitted - 1;
         if (hasMore)
@@ -996,7 +1039,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             return new PureToolResult(call.Id, false, $"参数 JSON 无效：{ex.Message}");
         }
 
-        var target = ResolveSafePath(relPath, out var error);
+        var target = ResolveReadablePath(relPath, _workspaceRoot, out var error);
         if (target is null) return new PureToolResult(call.Id, false, error);
 
         if (!Directory.Exists(target))
@@ -1050,7 +1093,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (doc.RootElement.TryGetProperty("offset", out var offElem) && offElem.TryGetInt32(out var off) && off > 0)
             offset = off;
 
-        var targetDir = ResolveSafePath(relPath, out var error);
+        var targetDir = ResolveReadablePath(relPath, _workspaceRoot, out var error);
         if (targetDir is null) return new PureToolResult(call.Id, false, error);
 
         if (!Directory.Exists(targetDir))
@@ -1409,7 +1452,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         span.Tag("path", relPath);
         span.Tag("pattern", pattern);
-        var targetDir = ResolveSafePath(relPath, out var error);
+        var targetDir = ResolveReadablePath(relPath, _workspaceRoot, out var error);
         if (targetDir is null) { span.Fail("path_rejected"); return new PureToolResult(call.Id, false, error); }
 
         if (!Directory.Exists(targetDir))

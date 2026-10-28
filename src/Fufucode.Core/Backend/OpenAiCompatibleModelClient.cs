@@ -645,14 +645,24 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             {
                 var parts = new List<object>();
                 if (text.Length > 0) parts.Add(new { type = "text", text });
+                var missing = 0;
                 foreach (var img in images)
                 {
+                    // 外置引用按路径回取；文件已不在时跳过该图，不让整轮请求失败。
+                    var data = SessionImageStore.Resolve(img);
+                    if (string.IsNullOrEmpty(data))
+                    {
+                        missing++;
+                        continue;
+                    }
                     parts.Add(new
                     {
                         type = "image_url",
-                        image_url = new { url = $"data:{img.MimeType};base64,{img.Base64Data}" }
+                        image_url = new { url = $"data:{img.MimeType};base64,{data}" }
                     });
                 }
+                if (missing > 0)
+                    parts.Add(new { type = "text", text = $"[有 {missing} 张历史附件的本地文件已不可读，未随本次请求发送]" });
                 messagesList.Add(new
                 {
                     role = "user",

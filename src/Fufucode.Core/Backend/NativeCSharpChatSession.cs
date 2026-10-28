@@ -173,7 +173,10 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
 
     public Task SendWithImagesAsync(string text, IReadOnlyList<ChatImage> images, CancellationToken cancellationToken = default)
     {
-        var attachments = images?.Select(i => new PureImageAttachment(i.Data, i.MimeType)).ToArray();
+        // 附件先落盘并记录引用：会话 JSON 里只存 base64 会让 20 MB 级的历史每 5 秒重写一次。
+        // 内存里仍保留 base64，本轮请求不必回读磁盘。
+        var attachments = images?.Select(i => new PureImageAttachment(i.Data, i.MimeType)
+            .Externalize(_persistFilePath)).ToArray();
         return SendCoreAsync(text, attachments, cancellationToken);
     }
 
@@ -703,6 +706,38 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         PersistHistory();
     }
 
+    /// <summary>
+    /// 落盘形态：已外置的图片只写引用。内存中的历史保持原样，
+    /// 因此本轮请求不必回读磁盘，恢复的会话才按需加载。
+    /// </summary>
+    private static IReadOnlyList<PureAgentMessage> WithoutInlineImages(IReadOnlyList<PureAgentMessage> history)
+    {
+        for (var i = 0; i < history.Count; i++)
+        {
+            if (history[i].Images is { Count: > 0 } images &&
+                images.Any(image => image.FilePath is { Length: > 0 } && image.Base64Data.Length > 0))
+            {
+                var copy = new List<PureAgentMessage>(history.Count);
+                for (var j = 0; j < history.Count; j++)
+                {
+                    var message = history[j];
+                    if (message.Images is { Count: > 0 } imgs)
+                    {
+                        message = message with
+                        {
+                            Images = imgs.Select(image => image.FilePath is { Length: > 0 }
+                                ? image with { Base64Data = string.Empty }
+                                : image).ToArray()
+                        };
+                    }
+                    copy.Add(message);
+                }
+                return copy;
+            }
+        }
+        return history;
+    }
+
     private void PersistHistory()
     {
         if (string.IsNullOrEmpty(_persistFilePath)) return;
@@ -722,7 +757,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                     writer.WriteStartObject();
                     writer.WriteNumber("version", 2);
                     writer.WritePropertyName("messages");
-                    JsonSerializer.Serialize(writer, history);
+                    // 图片走引用：已外置的消息不再写 base64（恢复时按 FilePath 回取）。
+                    JsonSerializer.Serialize(writer, WithoutInlineImages(history));
                     if (modelId is null) writer.WriteNull("modelId");
                     else writer.WriteString("modelId", modelId);
                     writer.WriteString("thinkingLevel", thinkingLevel);

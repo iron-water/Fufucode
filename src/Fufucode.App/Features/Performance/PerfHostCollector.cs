@@ -50,6 +50,8 @@ public sealed class PerfHostCollector : IDisposable
     private long _currentTurnSpanId;
     private long _turnStartTicks;
     private readonly Dictionary<string, OpenTool> _openTools = new(StringComparer.Ordinal);
+    // 回合内已计入 turns 记录的工具调用 ID：与 span 生命周期解耦，性能追踪关闭时也能计数。
+    private readonly HashSet<string> _countedTools = new(StringComparer.Ordinal);
     private OpenModel? _openModel;
     private readonly Dictionary<string, long> _modelByMessage = new(StringComparer.Ordinal);
     private readonly HashSet<string> _usageMessages = new(StringComparer.Ordinal);
@@ -345,9 +347,21 @@ public sealed class PerfHostCollector : IDisposable
 
     private void ObserveToolLocked(string messageId, ToolCallBlock tool, long now)
     {
-        if (tool.Status == ToolCallStatus.Running) StartToolLocked(messageId, tool.ToolCallId, tool.ToolName, now);
-        else if (tool.Status is ToolCallStatus.Completed or ToolCallStatus.Failed or ToolCallStatus.Cancelled)
-            FinishToolLocked(tool.ToolCallId, tool.Status, tool.StatusText, tool.DurationMs, now);
+        if (tool.Status == ToolCallStatus.Running)
+        {
+            StartToolLocked(messageId, tool.ToolCallId, tool.ToolName, now);
+            return;
+        }
+
+        if (tool.Status is not (ToolCallStatus.Completed or ToolCallStatus.Failed or ToolCallStatus.Cancelled))
+            return;
+
+        // 计数与 span 发射解耦：性能追踪关闭时工具不会被 StartToolLocked 记录，
+        // 之前因此在 turns 记录里写出 tools=0（实际 345 次调用）。
+        if (_countedTools.Add(tool.ToolCallId) && _openTurns.Values.LastOrDefault() is { } turn)
+            turn.Tools++;
+
+        FinishToolLocked(tool.ToolCallId, tool.Status, tool.StatusText, tool.DurationMs, now);
     }
 
     private void StartToolLocked(string messageId, string toolId, string? name, long now)
@@ -367,7 +381,6 @@ public sealed class PerfHostCollector : IDisposable
     private void FinishToolLocked(string toolId, ToolCallStatus status, string? detail, long? durationMs, long now)
     {
         if (!_openTools.Remove(toolId, out var tool)) return;
-        if (_openTurns.Values.LastOrDefault() is { } turn) turn.Tools++;
         var tags = SessionTags();
         tags.Add(new("tool", tool.Name ?? string.Empty));
         tags.Add(new("ok", status == ToolCallStatus.Completed ? "true" : "false"));
@@ -396,6 +409,7 @@ public sealed class PerfHostCollector : IDisposable
         _modelByMessage.Clear();
         _usageMessages.Clear();
         _toolNames.Clear();
+        _countedTools.Clear();
     }
 
     private OpenTurn GetOpenTurnLocked(string messageId)

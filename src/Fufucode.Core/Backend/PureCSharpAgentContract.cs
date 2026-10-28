@@ -38,8 +38,11 @@ public sealed record PureModelRequest(
     /// <summary>采样温度；null 表示不发送该字段，沿用端点默认值。</summary>
     double? Temperature = null);
 
-/// <summary>图片附件（Base64 编码数据与 MIME 类型）。</summary>
-public sealed record PureImageAttachment(string Base64Data, string MimeType);
+/// <summary>
+/// 图片附件。Base64 数据只在内存与模型请求里存在；落盘时改写成 <see cref="FilePath"/>，
+/// 避免几十 MB 的历史每轮重发、会话文件无限膨胀。
+/// </summary>
+public sealed record PureImageAttachment(string Base64Data, string MimeType, string? FilePath = null);
 
 /// <summary>模型请求/工具调度共用的一条消息。支持工具调用与结果的精确关联。</summary>
 public sealed record PureAgentMessage(

@@ -190,10 +190,49 @@ internal static class PureCSharpContractTests
             checks.Check(globRes.Success, "glob_files 执行成功");
             checks.Check(globRes.Content.Contains("code.cs"), "glob_files 发现匹配的文件路径");
 
-            // ════════════════ 路径沙箱越界拦截测试 ════════════════
-            var escapeRes = await dispatcher.DispatchAsync(new PureToolCall(
-                "sec1", "read_file", "{\"path\":\"../../../../Windows/System32/drivers/etc/hosts\"}"));
-            checks.Check(!escapeRes.Success && escapeRes.Content.Contains("超出工作区范围"), "路径越界访问被沙箱守卫拦截拒绝");
+            // ════════════════ 工作区边界：读放开、写仍锁 ════════════════
+            // 硬拒越界读取不是有效安全边界（shell 从来不受它约束），只会白烧一轮并把
+            // 模型教成"被拒就换工具绕"。策略改为：只读工具允许工作区外路径，写/编辑/命令仍锁。
+            var outsideDir = Path.Combine(Path.GetTempPath(), "fufucode-outside-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(outsideDir);
+            try
+            {
+                var outsideFile = Path.Combine(outsideDir, "note.txt");
+                await File.WriteAllTextAsync(outsideFile, "OUTSIDE_MARKER");
+
+                var outsideRead = await dispatcher.DispatchAsync(new PureToolCall(
+                    "sec1", "read_file", "{\"path\":\"" + outsideFile.Replace("\\", "\\\\") + "\"}"));
+                checks.Check(outsideRead.Success && outsideRead.Content.Contains("OUTSIDE_MARKER"),
+                    "只读工具允许工作区外路径（不再假装有读墙）");
+
+                var outsideGrep = await dispatcher.DispatchAsync(new PureToolCall(
+                    "sec2", "grep_search",
+                    "{\"pattern\":\"OUTSIDE_MARKER\",\"path\":\"" + outsideDir.Replace("\\", "\\\\") + "\"}"));
+                checks.Check(outsideGrep.Success && outsideGrep.Content.Contains("note.txt"),
+                    "grep_search 可在工作区外检索");
+
+                var outsideWrite = await dispatcher.DispatchAsync(new PureToolCall(
+                    "sec3", "write_file",
+                    "{\"path\":\"" + Path.Combine(outsideDir, "evil.txt").Replace("\\", "\\\\") + "\",\"content\":\"x\"}"));
+                checks.Check(!outsideWrite.Success && outsideWrite.Content.Contains("超出工作区范围"),
+                    "写入工作区外仍被守卫拒绝");
+
+                var outsideEdit = await dispatcher.DispatchAsync(new PureToolCall(
+                    "sec4", "edit_file",
+                    "{\"path\":\"" + outsideFile.Replace("\\", "\\\\") + "\",\"old_string\":\"OUTSIDE\",\"new_string\":\"X\"}"));
+                checks.Check(!outsideEdit.Success && outsideEdit.Content.Contains("超出工作区范围"),
+                    "编辑工作区外文件仍被守卫拒绝");
+
+                var traversalWrite = await dispatcher.DispatchAsync(new PureToolCall(
+                    "sec5", "write_file", "{\"path\":\"../../../../outside-traversal.txt\",\"content\":\"x\"}"));
+                checks.Check(!traversalWrite.Success, "相对路径穿透写工作区被拒绝");
+                checks.Check(!File.Exists(Path.Combine(Path.GetTempPath(), "outside-traversal.txt")),
+                    "被拒绝的穿透写入没有落盘");
+            }
+            finally
+            {
+                try { Directory.Delete(outsideDir, true); } catch { }
+            }
 
             // ════════════════ 动态 Tool Schema 注入与生成测试 ════════════════
             var customToolDef = new PureToolDefinition("custom_browser_click", "点击网页元素",
@@ -506,8 +545,10 @@ internal static class PureCSharpContractTests
 
             var pastEndRes = await dispatcher.DispatchAsync(new PureToolCall(
                 "r_end", "read_file", "{\"path\":\"code.cs\",\"offset\":9999}"));
-            checks.Check(!pastEndRes.Success && pastEndRes.Content.Contains("超出文件总行数"),
-                "offset 越界明确报错而不是静默返回末行");
+            // 新契约：越界不再回错误让模型再猜一轮，而是钳回文件末尾并说明发生了钳制。
+            checks.Check(pastEndRes.Success && pastEndRes.Content.Contains("超出文件总行数") &&
+                         pastEndRes.Content.Contains("keep-me"),
+                "offset 越界时钳回末尾并给出真实行数，模型当轮即可确认边界");
 
             await File.WriteAllTextAsync(Path.Combine(tempDir, "Root.cs"), "class Root {}");
             var globRootRes = await dispatcher.DispatchAsync(new PureToolCall(
@@ -1217,6 +1258,53 @@ internal static class PureCSharpContractTests
                 "思考等级随历史持久化");
             checks.Equal("auto", persistedRoot.GetProperty("executionMode").GetString(),
                 "执行模式随历史持久化");
+
+            // ════════════════ 图片附件外置：会话 JSON 不内联 base64 ════════════════
+            const string pngBase64 = "iVBORw0KGgoAAAANSUhEUg==";
+            var imagePersist = Path.Combine(tempDir, "image-session.json");
+            var imageCapturing = new CapturingTextClient("带图答复");
+            await using (var imageSession = new NativeCSharpChatSession(
+                             new PureCSharpAgentEngine(dispatcher, imageCapturing), "img-session", "m",
+                             persistFilePath: imagePersist))
+            {
+                var imageSettled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                imageSession.Event += (_, e) => { if (e is SessionEvent.TurnSettled) imageSettled.TrySetResult(); };
+                await imageSession.SendWithImagesAsync("看这张图",
+                    new[] { new ChatImage(pngBase64, "image/png") });
+                await imageSettled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+
+                var carried = imageCapturing.Requests[0].Messages.FirstOrDefault(m => m.Images is { Count: > 0 });
+                checks.Check(carried?.Images![0].Base64Data == pngBase64,
+                    "本轮请求直接用内存中的图片字节，不回读磁盘");
+            }
+            var imageJson = await File.ReadAllTextAsync(imagePersist);
+            checks.Check(!imageJson.Contains(pngBase64), "会话 JSON 不再内联图片 base64");
+            checks.Check(imageJson.Contains(".assets"), "会话 JSON 记录图片引用路径");
+            var assetDirectory = imagePersist + ".assets";
+            var assetFiles = Directory.Exists(assetDirectory)
+                ? Directory.GetFiles(assetDirectory) : Array.Empty<string>();
+            checks.Check(assetFiles.Length == 1, "图片字节单独落到 assets 目录");
+
+            var referenceOnly = new PureImageAttachment(string.Empty, "image/png", assetFiles[0]);
+            var referenceBody = OpenAiCompatibleModelClient.BuildRequestBody(new PureModelRequest(
+                    new[] { new PureAgentMessage(PureAgentRole.User, "图", Images: new[] { referenceOnly }) },
+                    Array.Empty<string>(), "m"), "m", false);
+            checks.Check(JsonSerializer.Serialize(referenceBody)
+                    .Contains("data:image/png;base64," + pngBase64),
+                "引用型附件在构建请求时按路径回取，模型仍看得到图");
+
+            var lostBody = OpenAiCompatibleModelClient.BuildRequestBody(new PureModelRequest(
+                    new[] { new PureAgentMessage(PureAgentRole.User, "图",
+                        Images: new[] { new PureImageAttachment(string.Empty, "image/png",
+                            Path.Combine(tempDir, "gone.png")) }) },
+                    Array.Empty<string>(), "m"), "m", false);
+            // 默认编码器会把中文转成 \uXXXX，这里要按解码后的文本断言。
+            var lostJson = JsonSerializer.Serialize(lostBody, new JsonSerializerOptions
+            {
+                Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+            });
+            checks.Check(lostJson.Contains("已不可读") && !lostJson.Contains("data:image/png"),
+                "附件文件丢失时如实标注，而不是静默少发图片");
 
             // ════════════════ Plan 模式工具裁剪：不向模型声明必然被拒绝的工具 ════════════════
             var planCapturing = new CapturingTextClient("计划中");
