@@ -56,6 +56,12 @@ internal static class Program
         var checks = new Checks();
         try
         {
+            if (args.Length == 1 && args[0] == "--plugin-dist-only")
+            {
+                PluginDistributionInstallTests.Run(checks);
+                Console.WriteLine("插件分发安装：" + checks.Passed + " 项断言");
+                return 0;
+            }
             if (args.Length == 1 && args[0] == "--session-only")
             {
                 await NativeChatSessionStreamingTests.RunAsync(checks);
@@ -76,6 +82,7 @@ internal static class Program
             await PureCSharpContractTests.RunAsync(checks);
             PluginMarketplaceTests.Run(checks);
             await PluginCapabilityTests.RunAsync(checks);
+            PluginDistributionInstallTests.Run(checks);
             await PluginDependencyTests.RunAsync(checks);
             await AppUpdateServiceTests.RunAsync(checks);
             await UpdateDiscoveryTests.RunAsync(checks);

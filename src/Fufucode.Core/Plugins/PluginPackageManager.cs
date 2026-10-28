@@ -334,6 +334,30 @@ public sealed class PluginPackageManager : IAsyncDisposable
             if (_changing) return;
             foreach (var def in PluginMarketplaceCatalog.All)
             {
+                // CLI 的 `plugins install` 只把载荷放进 distribution/<id>，而激活要求
+                // plugins/<id> 下有 manifest。更糟的是 GetState 在缺载荷时会把"已安装"
+                // 改判为未安装，于是 IsActive 永远为 false、激活分支根本进不去——
+                // 市场里显示已启用，进程里却拿不到任何能力。
+                // 这里按"磁盘上用户真实选择"（TryGetStoredState）判断，就地把分发载荷
+                // 部署成可激活形态。
+                if (!HasPhysicalPayload(def.Id) && HasDistributionPayload(def.Id) &&
+                    _stateStore.TryGetStoredState(def.Id, out var stored) && stored.IsInstalled)
+                {
+                    try
+                    {
+                        InstallPackage(def.Id, DistributionDirectory(def.Id));
+                        // Deploy 回写时用的是被掩码过的状态（未安装/未启用），
+                        // 这里按用户真实选择恢复，否则装完仍是"未启用"。
+                        _stateStore.RestoreState(stored with
+                        {
+                            IsInstalled = true,
+                            IsEnabled = stored.IsEnabled,
+                            LastUpdatedUtc = DateTime.UtcNow,
+                        });
+                    }
+                    catch (Exception e) { _loadErrors[def.Id] = e.Message; }
+                }
+
                 if (_stateStore.IsActive(def.Id) && !_activePlugins.ContainsKey(def.Id) && HasPhysicalPayload(def.Id))
                 {
                     try { ActivatePluginLocked(def.Id); _loadErrors.Remove(def.Id); }
@@ -343,6 +367,13 @@ public sealed class PluginPackageManager : IAsyncDisposable
             }
         }
     }
+
+    private string DistributionDirectory(string pluginId) =>
+        Path.Combine(_layout.Root, "distribution", PluginPathGuard.Segment(pluginId));
+
+    /// <summary>分发目录里是否有可直接部署的载荷（CLI 安装落点）。</summary>
+    private bool HasDistributionPayload(string pluginId) =>
+        File.Exists(Path.Combine(DistributionDirectory(pluginId), "manifest.json"));
     /// <summary>把插件 id 映射到后端标识，并同步 BackendPluginLoader 的启用状态。</summary>
     private static void SetBackendEnabledFor(string pluginId, bool enabled)
     {
