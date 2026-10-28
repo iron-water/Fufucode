@@ -139,6 +139,7 @@ public partial class MainWindow
         // 否则深色窗口里的系统提示会按浅色主题渲染成白底黑字。
         if (Avalonia.Application.Current is { } application)
             application.RequestedThemeVariant = RequestedThemeVariant;
+        SyncStartupTheme(settings.Theme);
         // Surface 旧轴下线后：皮肤自己管理材质；Fluent 保留 Mica 基线；
         // LiquidGlass 请求 AcrylicBlur/Blur 让窗后桌面透出（玻璃面折射窗内内容，两者互补）；
         // 其余皮肤不再受 Surface 影响。
@@ -397,6 +398,25 @@ public partial class MainWindow
     }
 
     /// <summary>
+    /// 外观主题同时写回启动设置（settings.json）：下次启动在窗口出现前就用同一主题，
+    /// 标题栏按钮与设置页“主题”不会各切各的。写失败（只读/更新版本保护）不阻止换主题。
+    /// </summary>
+    private static void SyncStartupTheme(string theme)
+    {
+        try
+        {
+            var store = App.SettingsStore;
+            // 设置这次没读起来时不写：避免把默认值当用户配置落盘。
+            if (store.LastLoadError is not null) return;
+            if (store.Current.Theme != theme) store.Update(current => current with { Theme = theme });
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException
+            or InvalidOperationException or ArgumentException)
+        {
+        }
+    }
+
+    /// <summary>
     /// Fluent 暗色的三档底色与模型输出强调色。只覆盖语义底色键；
     /// 图标、diff 红绿、代码高亮、终端与状态色保持各自语义，不纳入三档底色。
     /// </summary>
@@ -415,8 +435,11 @@ public partial class MainWindow
         if (ActualThemeVariant != ThemeVariant.Dark) return;
 
         var deep = new SolidColorBrush(Color.Parse(settings.BaseBackground));
-        var bar = new SolidColorBrush(Color.Parse(settings.BaseBar));
-        var highlight = new SolidColorBrush(Color.Parse(settings.BaseHighlight));
+        var barColor = Color.Parse(settings.BaseBar);
+        // 高亮档必须比一般栏亮一档才看得见（两档备选值有重叠，用户可能选到同色）。
+        var highlightColor = ThemeTiers.EnsureVisibleHighlight(barColor, Color.Parse(settings.BaseHighlight));
+        var bar = new SolidColorBrush(barColor);
+        var highlight = new SolidColorBrush(highlightColor);
         Set("AppBaseDeep", deep);
         Set("AppBaseBar", bar);
         Set("AppBaseHighlight", highlight);

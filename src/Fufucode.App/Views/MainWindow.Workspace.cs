@@ -924,7 +924,12 @@ public partial class MainWindow
     private void CloseRightDrawer_Click(object? sender, RoutedEventArgs e) => ToggleDock(DockZone.Right);
     private void ToggleTheme_Click(object? sender, RoutedEventArgs e)
     {
-        if (_vm is { } vm) vm.Settings.ThemeIndex = ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark ? 1 : 2;
+        // 明暗主题和设置页“主题”必须是同一份外观主题：统一写 ui.json，再由 ApplyCustomization
+        // 落到窗口与应用级。此前这里写 AppSettings.Theme，会被 ApplyCustomization 用外观主题
+        // 立即覆盖（窗口被钉在旧变体、应用级被重置成跟随系统），表现为“切了又弹回去”。
+        if (_customization is null) return;
+        var next = ActualThemeVariant == Avalonia.Styling.ThemeVariant.Dark ? "light" : "dark";
+        _customization.Change(settings => settings with { Theme = next });
     }
     internal void ResetDockLayout() { _leftDrawerOpen = _rightDrawerOpen = false; _dockLayout = new() { NotificationMigrationApplied = true }; RenderDockPages(); SaveWorkspaceDimensions(); }
     private void ResetLayout_Click(object? sender, RoutedEventArgs e) => ResetDockLayout();

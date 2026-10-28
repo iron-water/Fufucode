@@ -587,6 +587,10 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             {
                 app.RequestedThemeVariant = ThemeVariantFor(next.Theme);
             }
+            // 界面主题以外观配置（ui.json）为单一真源：这里同步过去，
+            // 否则标题栏按钮与设置页会各自维护一份主题。
+            if (Customization is { } customization && customization.Current.Theme != next.Theme)
+                customization.Change(settings => settings with { Theme = next.Theme });
 
             AppearanceError = null;
             AppearanceState = SettingSaveState.Applied;

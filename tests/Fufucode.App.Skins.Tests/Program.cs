@@ -11,6 +11,7 @@ using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
 using Fufucode.App.Features.Skins;
+using Fufucode.App.Infrastructure;
 using LiveMarkdown.Avalonia;
 using TextMateSharp.Grammars;
 using Fufucode.Core.Plugins;
@@ -34,6 +35,16 @@ Directory.CreateDirectory(evidenceRoot);
 
 try
 {
+    // ---------- 0. 暗色三档底色：高亮档必须和一般栏拉开 ----------
+    Check(ThemeTiers.EnsureVisibleHighlight(Color.Parse("#2C2C2C"), Color.Parse("#3A3A3A")) == Color.Parse("#3A3A3A"),
+        "默认底色：一般栏 #2C2C2C / 高亮 #3A3A3A 原样保留");
+    Check(ThemeTiers.EnsureVisibleHighlight(Color.Parse("#333333"), Color.Parse("#333333")) == Color.Parse("#414141"),
+        "一般栏与高亮选到同色时高亮提亮一档（#333333 → #414141），悬停/选中不再隐形");
+    Check(ThemeTiers.EnsureVisibleHighlight(Color.Parse("#3A3A3A"), Color.Parse("#333333")) == Color.Parse("#484848"),
+        "高亮比一般栏更暗时纠正为一般栏 +14");
+    Check(ThemeTiers.EnsureVisibleHighlight(Color.Parse("#FFFFFF"), Color.Parse("#FFFFFF")) == Colors.White,
+        "一般栏接近纯白时提亮不溢出（保持 255）");
+
     // ---------- 1. 目录解析与解释性回退（无 UI、不写任何持久文件） ----------
 // 默认包只提供 Fluent；其余皮肤由插件市场安装。测试显式登记这些皮肤贡献，
 // 再验证插件可用后的目录、解析与换肤链路。
