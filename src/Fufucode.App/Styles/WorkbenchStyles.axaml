@@ -622,6 +622,12 @@
   <Style Selector="Button.dockTab.accentStroke:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent"/>
   </Style>
+  <!-- 悬停与选中用同一条左上描边：悬停的页签也要看得见这条主题色。 -->
+  <Style Selector="Button.dockTab.accentStroke:pointerover">
+    <Setter Property="BorderThickness" Value="2,2,0,0"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Padding" Value="10,2,4,4"/>
+  </Style>
   <Style Selector="Button.dockTab.accentStroke.selected">
     <Setter Property="BorderThickness" Value="2,2,0,0"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
