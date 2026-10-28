@@ -595,7 +595,7 @@
            放在 ReadingColumn 层（TimelineArea 有 ClipToBounds，会把向外的光晕裁掉）。 -->
       <views:BackdropBlurBand x:Name="ComposerBlurBand" Grid.ColumnSpan="2" ZIndex="5"
                               VerticalAlignment="Bottom" IsHitTestVisible="False"
-                              RingThickness="14" BlurRadius="26"
+                              RingThickness="7" BlurRadius="26"
                               IsVisible="{Binding #ComposerCard.IsVisible}"/>
 
       <ScrollBar x:Name="TimelineScrollBar" Grid.Row="0" Grid.Column="1"

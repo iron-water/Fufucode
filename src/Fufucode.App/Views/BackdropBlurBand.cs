@@ -235,14 +235,15 @@ public sealed class BackdropBlurBand : Control
 
             using var blur = SKImageFilter.CreateBlur(radius, radius, SKShaderTileMode.Clamp);
             using var mask = SKImageFilter.CreateShader(shader);
+            // 层内容 = 模糊后的背景按遮罩裁出的那一片；再由 Paint 把它 SrcOver 叠回原背景。
+            // 之前多包了一层 SrcOver(…, null)，前景为 null 使整层为空 → 完全没有模糊。
             using var blurred = SKImageFilter.CreateBlendMode(SKBlendMode.DstIn, blur, mask);
-            using var transition = SKImageFilter.CreateBlendMode(SKBlendMode.SrcOver, blurred, null);
             using var replace = new SKPaint { BlendMode = SKBlendMode.SrcOver };
             var count = canvas.Save();
             try
             {
                 canvas.SaveLayer(new SKCanvasSaveLayerRec
-                    { Bounds = rect, Backdrop = transition, Paint = replace });
+                    { Bounds = rect, Backdrop = blurred, Paint = replace });
             }
             finally
             {
