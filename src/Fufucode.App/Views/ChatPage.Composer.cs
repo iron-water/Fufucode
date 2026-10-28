@@ -158,6 +158,7 @@ public partial class ChatPage
         Tip(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
         Tip(SendButton, () => "发送");
         Tip(StopButton, () => "停止当前回合");
+        Tip(RestartButton, () => "重发上一条消息：上一回合被中断或失败，带着已有上下文续跑");
 
         var menu = new MenuFlyout();
         var live = new MenuItem { Header = "Markdown 即时预览" };

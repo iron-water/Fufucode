@@ -16,7 +16,7 @@ namespace Fufucode.Core.Backend;
 
 /// <summary>将原生引擎的流式文本、工具及轮次边界映射到既有桌面会话事件。</summary>
 public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession, IExecutionModeSession,
-    IChatAttachments, IPromptHandledSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
+    IChatAttachments, IResumableChatSession, IPromptHandledSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly IPureCSharpAgentEngine _engine;
     private readonly IPluginSystemPromptProvider? _systemPromptProvider;
@@ -178,6 +178,29 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var attachments = images?.Select(i => new PureImageAttachment(i.Data, i.MimeType)
             .Externalize(_persistFilePath)).ToArray();
         return SendCoreAsync(text, attachments, cancellationToken);
+    }
+
+    /// <summary>
+    /// restart 入口用：最后一条真实用户消息。
+    /// 从引擎历史倒着找，所以应用重启、回合被中断后依然可重发；
+    /// 内核自己注入的预算提示也是 User 角色，必须按前缀排除，否则 restart 会重发提示词。
+    /// </summary>
+    public string? LastUserPrompt
+    {
+        get
+        {
+            var history = _engine.GetState().History;
+            if (history is not { Count: > 0 }) return null;
+            for (var i = history.Count - 1; i >= 0; i--)
+            {
+                var message = history[i];
+                if (message.Role != PureAgentRole.User) continue;
+                if (string.IsNullOrWhiteSpace(message.Content)) continue;
+                if (message.Content.StartsWith("[预算提示]", StringComparison.Ordinal)) continue;
+                return message.Content;
+            }
+            return null;
+        }
     }
 
     public void SetModel(string modelId)

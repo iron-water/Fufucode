@@ -394,6 +394,7 @@ public static class SelfTestRunner
     {
         await RunOnHeadlessUiThreadAsync(() => MarkdownSelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(() => QueueStripSelfTest.RunAsync(Pass, Fail));
+        await RunOnHeadlessUiThreadAsync(() => ComposerRestartSelfTest.RunAsync(Pass, Fail));
     }
 
     private static async Task RunWave5D6ChecksAsync()

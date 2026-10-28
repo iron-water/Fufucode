@@ -11,8 +11,11 @@ namespace Fufucode.App.SelfTest;
 /// 事件经 <see cref="Raise"/> 手动注入，用于确定性验证视图模型对事件序列的反应
 /// （停止窗口的错误归一、排队显示、usage 覆盖等）。
 /// </summary>
-public sealed class ScriptedChatSession : IChatSession
+public sealed class ScriptedChatSession : IChatSession, IResumableChatSession
 {
+    /// <summary>restart 自测用：可注入的最后一条用户消息。</summary>
+    public string? LastUserPrompt { get; set; }
+
     private readonly List<string> _queue = new();
 
     public SessionConnection Connection { get; set; } = SessionConnection.Connected;

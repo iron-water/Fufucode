@@ -35,6 +35,8 @@ public sealed record QueuedItemViewModel(string Text, string BadgeText, bool IsL
 public sealed partial class InputViewModel : ViewModelBase
 {
     private readonly IChatSession _session;
+    /// <summary>可选能力：能回看最后一条用户消息的后端才提供 restart 入口。</summary>
+    private readonly IResumableChatSession? _resumable;
 
     private string _draftText = string.Empty;
     private string _pendingRestoreText = string.Empty;
@@ -45,6 +47,7 @@ public sealed partial class InputViewModel : ViewModelBase
     public InputViewModel(IChatSession session)
     {
         _session = session;
+        _resumable = session as IResumableChatSession;
         if (session is IExecutionModeSession modes)
         {
             ExecutionMode = modes.ExecutionMode;
@@ -70,6 +73,7 @@ public sealed partial class InputViewModel : ViewModelBase
                 OnPropertyChanged(nameof(HasText));
                 SendCommand.NotifyCanExecuteChanged();
                 SteerCommand.NotifyCanExecuteChanged();
+                NotifySendStopRestart();
             }
         }
     }
@@ -96,10 +100,10 @@ public sealed partial class InputViewModel : ViewModelBase
     public void AddAttachment(AttachedFile file)
     {
         if (Attachments.Any(a => string.Equals(a.Path, file.Path, StringComparison.OrdinalIgnoreCase))) return;
-        Attachments.Add(file); OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged();
+        Attachments.Add(file); OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); NotifySendStopRestart();
     }
     [RelayCommand] private void RemoveAttachment(AttachedFile? file)
-    { if (file is not null) Attachments.Remove(file); OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); }
+    { if (file is not null) Attachments.Remove(file); OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); NotifySendStopRestart(); }
 
     public string ComposePrompt() => (string.IsNullOrWhiteSpace(DraftText) && HasAttachments ? "请查看附加文件。" : DraftText)
         + (HasAttachments ? "\n\n<attached_files>\n" + string.Join("\n", Attachments.Select(a => a.Context)) + "\n</attached_files>" : "")
@@ -146,6 +150,7 @@ public sealed partial class InputViewModel : ViewModelBase
                 OnPropertyChanged(nameof(CanSteer));
                 OnPropertyChanged(nameof(CanChangeExecutionMode));
                 SteerCommand.NotifyCanExecuteChanged();
+                NotifySendStopRestart();
             }
         }
     }
@@ -288,6 +293,52 @@ public sealed partial class InputViewModel : ViewModelBase
         }
     }
 
+    /// <summary>
+    /// restart 可用：空闲、上一回合非正常收束、后端能回看最后一条用户消息、
+    /// 且输入框里没有更新的内容（有新草稿时优先让用户发新的）。
+    /// </summary>
+    public bool CanRestart =>
+        _resumable is not null &&
+        !_isTurnActive &&
+        _session.CanSend &&
+        _session.LastOutcome is SessionOutcome.Interrupted or SessionOutcome.Failed or SessionOutcome.Truncated &&
+        string.IsNullOrWhiteSpace(_draftText) &&
+        !HasAttachments &&
+        !string.IsNullOrWhiteSpace(_resumable.LastUserPrompt);
+
+    /// <summary>发送/停止/重启三态共用同一个位置：这里给出各自的可见性。</summary>
+    public bool ShowStopButton => IsTurnActive;
+
+    public bool ShowRestartButton => CanRestart;
+
+    public bool ShowSendButton => !IsTurnActive && !CanRestart;
+
+    /// <summary>同位三态一起刷新，避免停止后 restart 不出现或发送与重启同时显示。</summary>
+    private void NotifySendStopRestart()
+    {
+        OnPropertyChanged(nameof(CanRestart));
+        OnPropertyChanged(nameof(ShowStopButton));
+        OnPropertyChanged(nameof(ShowRestartButton));
+        OnPropertyChanged(nameof(ShowSendButton));
+        RestartCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>重发上一条用户消息：中断或失败的回合往往已经留下一半上下文，重投比新开会话省。</summary>
+    [RelayCommand(CanExecute = nameof(CanRestart))]
+    private async Task RestartAsync()
+    {
+        if (!CanRestart || _resumable?.LastUserPrompt is not { Length: > 0 } prompt) return;
+        try
+        {
+            await _session.SendAsync(prompt);
+        }
+        catch (Exception ex)
+        {
+            // 与 SendAsync 一致：没被接受就显式报告，不假装已经续上。
+            OperationFailed?.Invoke($"重发上一条消息失败：{ex.GetBaseException().Message}");
+        }
+    }
+
     /// <summary>把待恢复草稿接回输入框。</summary>
     [RelayCommand(CanExecute = nameof(HasPendingRestore))]
     private void ApplyPendingRestore()
@@ -333,6 +384,8 @@ public sealed partial class InputViewModel : ViewModelBase
                     or SessionActivity.Compacting or SessionActivity.Retrying;
                 SendCommand.NotifyCanExecuteChanged();
                 StopCommand.NotifyCanExecuteChanged();
+                // 终态刚落，restart 的可用性取决于它，必须在此刷新。
+                NotifySendStopRestart();
                 break;
             case SessionEvent.ConnectionChanged:
             case SessionEvent.SessionError:

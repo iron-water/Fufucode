@@ -835,17 +835,24 @@
                   <TextBlock Text="插入" VerticalAlignment="Center"/>
                 </StackPanel>
               </Button>
-              <!-- 发送/停止共用同一个位置：空闲显示发送，运行中显示停止。 -->
+              <!-- 发送/停止/重启共用同一个位置：运行中=停止，中断后=重启，其余=发送。 -->
               <Grid VerticalAlignment="Center">
                 <Button x:Name="StopButton" Classes="iconButton" Width="32" Height="32"
                         Command="{Binding Input.StopCommand}"
-                        IsVisible="{Binding Input.IsTurnActive}"
+                        IsVisible="{Binding Input.ShowStopButton}"
                         AutomationProperties.Name="停止">
                   <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
                 </Button>
+                <!-- 上一回合被中断/失败时出现：把最后一条用户消息重投本会话，带着已有上下文续跑。 -->
+                <Button x:Name="RestartButton" Classes="iconButton" Width="32" Height="32"
+                        Command="{Binding Input.RestartCommand}"
+                        IsVisible="{Binding Input.ShowRestartButton}"
+                        AutomationProperties.Name="重发上一条">
+                  <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
+                </Button>
                 <Button x:Name="SendButton" Classes="accent" Height="32" Padding="12,0"
                         Command="{Binding Input.SendCommand}"
-                        IsVisible="{Binding !Input.IsTurnActive}"
+                        IsVisible="{Binding Input.ShowSendButton}"
                         AutomationProperties.Name="发送">
                   <StackPanel Orientation="Horizontal" Spacing="6">
                     <PathIcon Data="{DynamicResource Icon.Send}" Width="13" Height="13" VerticalAlignment="Center"/>
