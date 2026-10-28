@@ -590,13 +590,14 @@
     <Setter Property="IsHitTestVisible" Value="False"/>
   </Style>
 
-  <!-- 页签：未选中退为次级文字；选中＝主文字 + 底部 accent 指示条，无额外填充块 -->
+  <!-- 页签：未选中退为次级文字；选中＝主文字 + 左上两侧 2px 强调描边，无额外填充块 -->
   <Style Selector="Button.dockTab">
     <Setter Property="CornerRadius" Value="0"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="Padding" Value="12,4,4,4"/>
     <Setter Property="HorizontalContentAlignment" Value="Left"/>
     <Setter Property="VerticalContentAlignment" Value="Center"/>
   </Style>
@@ -612,6 +613,13 @@
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
   </Style>
+  <!-- Fluent 选中页签：只描左边和顶边（L 形）。padding 回退 2px，选中/未选中切换时文字不位移。
+       类由 DockRegionView 按当前皮肤注入，其它皮肤不受影响。 -->
+  <Style Selector="Button.dockTab.accentStroke.selected">
+    <Setter Property="BorderThickness" Value="2,2,0,0"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Padding" Value="10,2,4,4"/>
+  </Style>
   <Style Selector="Grid.dockTabRow Button.dockTabClose">
     <Setter Property="Opacity" Value="0"/>
     <Setter Property="IsHitTestVisible" Value="False"/>
@@ -623,12 +631,6 @@
   <Style Selector="Grid.dockTabRow:pointerover Button.dockTabClose, Grid.dockTabRow:focus-within Button.dockTabClose, Grid.dockTabRow.selected Button.dockTabClose">
     <Setter Property="Opacity" Value="1"/>
     <Setter Property="IsHitTestVisible" Value="True"/>
-  </Style>
-  <Style Selector="Border.dockIndicator">
-    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
-    <Setter Property="Height" Value="2"/>
-    <Setter Property="Margin" Value="8,0"/>
-    <Setter Property="CornerRadius" Value="1"/>
   </Style>
   <Style Selector="Border.dockDropTarget">
     <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>

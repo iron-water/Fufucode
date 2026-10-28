@@ -17,12 +17,16 @@ namespace Fufucode.App.Views;
 internal sealed class DockRegionView : UserControl
 {
     private readonly StackPanel _tabs = new() { Orientation = Orientation.Horizontal };
+    // 页签栏不显示横向滚动条：滚动条滑块的基线会和选中态的强调描边抢同一条位置。
+    // 滚轮横向浏览仍可用（TabScrollForTesting / PointerWheel 处理器）。
     private readonly ScrollViewer _tabScroll = new()
     {
-        HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
+        HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden,
         VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
     };
     private string? _selectedId;
+    // Fluent 的选中态改用左上描边表达；其它皮肤保持原有指示条以外的样式，不注入该描边类。
+    private bool _accentStroke;
     private readonly Grid _pages = new();
     private readonly TextBlock _empty = new() { Text = "暂无页面", Margin = new Thickness(14, 12), IsVisible = false };
     private readonly Border _dropTarget = new() { BorderThickness = new Thickness(2), IsVisible = false, IsHitTestVisible = false };
@@ -202,7 +206,12 @@ internal sealed class DockRegionView : UserControl
         _rowHeight = settings.RowHeight;
         _header.Height = settings.RowHeight;
         _root.RowDefinitions[0].Height = new GridLength(settings.RowHeight);
-        foreach (var entry in _buttons.Values) entry.Tab.Height = entry.Tab.MinHeight = settings.RowHeight - 2;
+        _accentStroke = settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
+        foreach (var entry in _buttons.Values)
+        {
+            entry.Tab.Height = entry.Tab.MinHeight = settings.RowHeight - 2;
+            entry.Tab.Classes.Set("accentStroke", _accentStroke);
+        }
     }
 
     public void Render(WorkbenchLayoutState state)
@@ -226,9 +235,9 @@ internal sealed class DockRegionView : UserControl
                 var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,22"), MinWidth = 76, MaxWidth = 180 };
                 row.Classes.Add("dockTabRow");
                 var tab = new DockTabButton { Content = Label(page), Height = _rowHeight - 2, MinHeight = _rowHeight - 2,
-                    VerticalAlignment = VerticalAlignment.Center,
-                    Padding = new Thickness(12, 4, 4, 4), FontSize = 12 };
+                    VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                 tab.Classes.Add("subtle"); tab.Classes.Add("dockTab");
+                tab.Classes.Set("accentStroke", _accentStroke);
                 AutomationProperties.SetName(tab, "选择" + page.Title);
                 AutomationProperties.SetAutomationId(tab, "dock-tab-" + id);
                 tab.Click += (_, _) => SelectRequested?.Invoke(id);
@@ -266,8 +275,7 @@ internal sealed class DockRegionView : UserControl
                 AutomationProperties.SetAutomationId(close, "dock-close-" + id);
                 close.Click += (_, _) => CloseRequested?.Invoke(id);
                 row.Children.Add(tab); Grid.SetColumn(close, 1); row.Children.Add(close);
-                var indicator = new Border { VerticalAlignment = VerticalAlignment.Bottom, IsHitTestVisible = false };
-                indicator.Classes.Add("dockIndicator"); Grid.SetColumnSpan(indicator, 2); row.Children.Add(indicator);
+                // 选中态不再用底部指示条（Fluent 改为左上描边），避免与页签栏基线/滚动条打架。
                 entry = (row, tab); _buttons.Add(id, entry);
                 _tabs.Children.Insert(index, row);
             }
@@ -281,7 +289,6 @@ internal sealed class DockRegionView : UserControl
             entry.Row.Children.OfType<Button>().Single(button => Grid.GetColumn(button) == 1).IsEnabled = !pinned;
             entry.Tab.Content = Label(page);
             ToolTip.SetTip(entry.Tab, pinned ? Label(page) + " · 已固定" : Label(page));
-            entry.Row.Children.OfType<Border>().Single().IsVisible = id == selected;
             if (id == selected && selected != _selectedId)
                 Dispatcher.UIThread.Post(() => entry.Row.BringIntoView(), DispatcherPriority.Loaded);
             if (!_pages.Children.Contains(page.Content)) _pages.Children.Add(page.Content);
