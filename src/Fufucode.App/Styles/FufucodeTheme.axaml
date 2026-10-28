@@ -17,6 +17,12 @@
                          浅色侧栏用纯白浮于页面底(#F3F3F3)之上（Win11 浅色设置的 NavigationView 面）。 -->
                     <SolidColorBrush x:Key="AppEmphasis" Color="#9A6700"/>
                     <SolidColorBrush x:Key="AppCardHover" Color="#E9E9E9"/>
+                    <!-- 一般栏（标题栏、侧栏、停靠区、启动卡）浅色基准；深色分支有自己的 #2C2C2C。 -->
+                    <SolidColorBrush x:Key="AppBaseBar" Color="#FFFFFF"/>
+                    <LinearGradientBrush x:Key="AppStartupBackground" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#FFF3F3F3"/>
+                        <GradientStop Offset="1" Color="#FFFAFAFA"/>
+                    </LinearGradientBrush>
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="SolidBackgroundFillColorBaseBrush"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="SolidBackgroundFillColorQuaternaryBrush"/>
                     <StaticResource x:Key="AppSidebarBackground"  ResourceKey="SolidBackgroundFillColorBaseBrush"/>
@@ -116,6 +122,10 @@
                          主题色是 AppAccent；强调色只用于模型输出标记。 -->
                     <SolidColorBrush x:Key="AppBaseDeep" Color="#1C1C1C"/>
                     <SolidColorBrush x:Key="AppBaseBar" Color="#2C2C2C"/>
+                    <LinearGradientBrush x:Key="AppStartupBackground" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#FF1F1F1F"/>
+                        <GradientStop Offset="1" Color="#FF141414"/>
+                    </LinearGradientBrush>
                     <SolidColorBrush x:Key="AppBaseHighlight" Color="#3A3A3A"/>
                     <SolidColorBrush x:Key="AppCardHover" Color="#454545"/>
                     <SolidColorBrush x:Key="AppEmphasis" Color="#D97757"/>
@@ -735,14 +745,15 @@
     </Style>
 
     <!-- ================= 输入区（composer） ================= -->
-    <!-- 编辑区与工具栏共用一个卡片外壳；四边描边与圆角保持完整。 -->
+    <!-- 视觉沿用顶部会话岛（sessionIsland）：同款底色/描边/胶囊阴影，圆角取岛的 24。
+         不再做背景模糊——BackdropBlurBand 已移除（2026-10-27 实测该滤镜链不出模糊）。 -->
     <Style Selector="Border.composerCard">
-        <Setter Property="Background" Value="{DynamicResource AppComposerBackground}"/>
-        <Setter Property="BorderBrush" Value="{DynamicResource AppComposerStroke}"/>
+        <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
         <Setter Property="BorderThickness" Value="1"/>
-        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="CornerRadius" Value="24"/>
         <Setter Property="Padding" Value="16,14,16,12"/>
-        <Setter Property="BoxShadow" Value="0 4 16 0 #18000000"/>
+        <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
         <Setter Property="Transitions">
             <Transitions>
                 <BrushTransition Property="BorderBrush" Duration="0:0:0.15"/>
@@ -812,7 +823,7 @@
 
     <!-- 启动遮罩 -->
     <Style Selector="Border.startupOverlay">
-        <Setter Property="Background" Value="{DynamicResource AppMicaPageBackground}"/>
+        <Setter Property="Background" Value="{DynamicResource AppStartupBackground}"/>
     </Style>
 
     <!-- 内容页背景（Mica 激活时窗口层覆盖为透明） -->

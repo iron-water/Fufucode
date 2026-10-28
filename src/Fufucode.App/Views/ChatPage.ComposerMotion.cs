@@ -82,7 +82,6 @@ public partial class ChatPage
         ComposerRevealButton.Opacity = 1 - progress;
         ComposerRevealButton.IsHitTestVisible = !_composerExpanded;
         _composerRevealOffset.Y = -6 * progress;
-        ComposerBlurBand.Strength = progress;
         UpdateComposerClearance();
     }
 
@@ -127,23 +126,6 @@ public partial class ChatPage
                     if (TopLevel.GetTopLevel(this) is not null &&
                         DataContext is MainViewModel { Timeline.IsAtBottom: true }) ScrollToEnd();
                 }, DispatcherPriority.Loaded);
-        }
-        // 尾部留白与模糊光晕跟随同一进度，不创建底栏或改变聊天视口高度。
-        // 光晕环绕整张输入卡（左右上下各向外扩 RingThickness）：
-        // 它横跨头像列与正文列，卡片只在正文列，所以左缘要补上头像列宽度再外扩。
-        var ring = ComposerBlurBand.RingThickness;
-        var cardLeft = ReadingColumn.ColumnDefinitions[0].ActualWidth;
-        var cardHeight = ComposerCard.Bounds.Height;
-        var cardBottom = ComposerCard.Margin.Bottom;
-        if (cardHeight > 0)
-        {
-            var slide = (1 - _composerProgress) * fullHeight;
-            ComposerBlurBand.TargetCornerRadius = ComposerCard.CornerRadius.TopLeft;
-            ComposerBlurBand.Height = cardHeight + ring * 2;
-            // 下缘允许负外边距：卡片底部离父级只有 16px，光晕要再往下探 ring 才会四周等宽。
-            ComposerBlurBand.Margin = new Thickness(
-                cardLeft - ring, 0, -ring, cardBottom - ring + slide);
-            ComposerBlurBand.Opacity = _composerProgress;
         }
         BackToLatestHost.Margin = new Thickness(0, 0, 20, clearance + 10);
         ContentBandChanged?.Invoke(this, EventArgs.Empty);

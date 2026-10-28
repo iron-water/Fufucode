@@ -591,13 +591,6 @@
         </Border>
       </Grid>
 
-      <!-- 输入卡四周的模糊光晕：贴在卡边缘全强度，向外在 RingThickness 内快速衰减。
-           放在 ReadingColumn 层（TimelineArea 有 ClipToBounds，会把向外的光晕裁掉）。 -->
-      <views:BackdropBlurBand x:Name="ComposerBlurBand" Grid.ColumnSpan="2" ZIndex="5"
-                              VerticalAlignment="Bottom" IsHitTestVisible="False"
-                              RingThickness="7" BlurRadius="26"
-                              IsVisible="{Binding #ComposerCard.IsVisible}"/>
-
       <ScrollBar x:Name="TimelineScrollBar" Grid.Row="0" Grid.Column="1"
                  Width="14" HorizontalAlignment="Right" Margin="0,0,-20,0"
                  Orientation="Vertical" Minimum="0"

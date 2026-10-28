@@ -83,8 +83,6 @@ public partial class ChatPage : UserControl
         TimelineScroller.PointerWheelChanged += (_, _) => MarkUserScrollInput();
         TimelineScroller.PointerPressed += (_, _) => MarkUserScrollInput();
         TimelineScroller.KeyDown += (_, _) => MarkUserScrollInput();
-        ComposerBlurBand.VisualEffectsStateChanged += active =>
-            TimelineArea.Effect = active ? new Avalonia.Media.BlurEffect { Radius = 0 } : null;
     }
 
     private void MarkUserScrollInput() => _lastUserInputTicks = Stopwatch.GetTimestamp();
