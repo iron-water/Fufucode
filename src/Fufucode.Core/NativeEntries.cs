@@ -36,6 +36,13 @@ internal static class NativeEntries
                     _ => "system",
                 });
                 writer.WriteStartArray("content");
+                if (message.Role == PureAgentRole.Assistant && !string.IsNullOrEmpty(message.ReasoningContent))
+                {
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "thinking");
+                    writer.WriteString("thinking", message.ReasoningContent);
+                    writer.WriteEndObject();
+                }
                 if (!string.IsNullOrEmpty(message.Content))
                 {
                     writer.WriteStartObject();

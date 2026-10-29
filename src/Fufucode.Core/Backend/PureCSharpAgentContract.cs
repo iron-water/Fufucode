@@ -55,6 +55,10 @@ public sealed record PureAgentMessage(
 {
     /// <summary>持久消息身份；压缩或重排不把旧分叉点重新绑定到别的消息。</summary>
     public string EntryId { get; init; } = Guid.NewGuid().ToString("N");
+
+    /// <summary>供应商返回的独立推理内容；工具续轮与历史恢复须原样保留。</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ReasoningContent { get; init; }
 }
 
 /// <summary>一次模型响应的用量（未知字段保持 null，不补零）。</summary>
@@ -69,6 +73,9 @@ public sealed record PureUsage(long? InputTokens = null, long? OutputTokens = nu
 public sealed record PureModelResponse(string? Text, IReadOnlyList<PureToolCall> ToolCalls,
     string? FinishReason = null, PureUsage? Usage = null)
 {
+    /// <summary>与正文分开的推理内容，供工具续轮回传。</summary>
+    public string? ReasoningContent { get; init; }
+
     public static PureModelResponse FromText(string text) => new(text, Array.Empty<PureToolCall>());
 
     public static PureModelResponse FromToolCalls(IReadOnlyList<PureToolCall> toolCalls) =>

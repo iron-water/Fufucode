@@ -587,7 +587,7 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
 
     private static int SizeOf(PureAgentMessage message)
     {
-        var size = message.Content?.Length ?? 0;
+        var size = (message.Content?.Length ?? 0) + (message.ReasoningContent?.Length ?? 0);
         if (message.ToolCalls is { Count: > 0 } calls)
             size += calls.Sum(call => call.ArgumentsJson.Length);
         return size;

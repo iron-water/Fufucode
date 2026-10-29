@@ -14,7 +14,7 @@ internal static class PerfContextEstimate
         long system = 0, chat = 0, results = 0, tools = 0;
         foreach (var message in request.Messages)
         {
-            var tokens = PerfTracer.TokensOf(message.Content);
+            var tokens = PerfTracer.TokensOf(message.Content) + PerfTracer.TokensOf(message.ReasoningContent);
             if (message.Role == PureAgentRole.System) system += tokens;
             else if (message.Role == PureAgentRole.Tool) results += tokens;
             else chat += tokens;

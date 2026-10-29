@@ -189,12 +189,11 @@ public sealed class NativeAgentLoop
             {
                 var finalText = response.Text ?? "";
                 var finalMsg = new PureAgentMessage(PureAgentRole.Assistant, finalText,
-                    Usage: response.Usage);
+                    Usage: response.Usage) { ReasoningContent = response.ReasoningContent };
                 conversationHistory.Add(finalMsg);
                 onMessageAppended?.Invoke(finalMsg);
                 return new PureAgentTurnResult(PureAgentTurnStatus.Completed,
-                    new PureModelResponse(finalText, Array.Empty<PureToolCall>(), response.FinishReason,
-                        response.Usage),
+                    response with { Text = finalText },
                     allToolResults,
                     Usage: lastUsage);
             }
@@ -204,7 +203,7 @@ public sealed class NativeAgentLoop
                 PureAgentRole.Assistant,
                 response.Text ?? "",
                 ToolCalls: response.ToolCalls,
-                Usage: response.Usage);
+                Usage: response.Usage) { ReasoningContent = response.ReasoningContent };
             conversationHistory.Add(assistantToolMsg);
             onMessageAppended?.Invoke(assistantToolMsg);
 

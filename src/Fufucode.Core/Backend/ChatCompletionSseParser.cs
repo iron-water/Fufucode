@@ -130,24 +130,22 @@ public sealed class ChatCompletionSseParser
 
     private static void ApplyThinkingDelta(JsonElement delta, StreamedChoice choice, ModelStreamCallbacks? callbacks)
     {
-        string? thinking = null;
-        if (delta.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
-        {
-            thinking = rc.GetString();
-        }
-        else if (delta.TryGetProperty("thought", out var th) && th.ValueKind == JsonValueKind.String)
-        {
-            thinking = th.GetString();
-        }
-        else if (delta.TryGetProperty("reasoning", out var rs) && rs.ValueKind == JsonValueKind.String)
-        {
-            thinking = rs.GetString();
-        }
-
+        var thinking = ReadThinking(delta);
         if (string.IsNullOrEmpty(thinking)) return;
 
         choice.AppendThinking(thinking);
         callbacks?.OnThinkingDelta?.Invoke(thinking);
+    }
+
+    internal static string? ReadThinking(JsonElement message)
+    {
+        if (message.TryGetProperty("reasoning_content", out var rc) && rc.ValueKind == JsonValueKind.String)
+            return rc.GetString();
+        if (message.TryGetProperty("thought", out var th) && th.ValueKind == JsonValueKind.String)
+            return th.GetString();
+        if (message.TryGetProperty("reasoning", out var rs) && rs.ValueKind == JsonValueKind.String)
+            return rs.GetString();
+        return null;
     }
 
     private static void ApplyTextDelta(JsonElement delta, StreamedChoice choice, ModelStreamCallbacks? callbacks)

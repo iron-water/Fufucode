@@ -164,7 +164,12 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         var usage = root.TryGetProperty("usage", out var usageRoot) && usageRoot.ValueKind == JsonValueKind.Object
             ? ChatCompletionSseParser.ReadUsage(usageRoot) : null;
         RecordUsage(span, usage);
-        return new PureModelResponse(text, toolCalls, Usage: usage);
+        var finishReason = firstChoice.TryGetProperty("finish_reason", out var finish) &&
+                           finish.ValueKind == JsonValueKind.String ? finish.GetString() : null;
+        return new PureModelResponse(text, toolCalls, finishReason, usage)
+        {
+            ReasoningContent = ChatCompletionSseParser.ReadThinking(messageElem),
+        };
     }
 
     private static void RecordUsage(PerfSpan span, PureUsage? usage)
@@ -296,6 +301,11 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         }
         var completion = new StreamedCompletion();
         var choice = completion.Choice(0);
+        if (!string.IsNullOrEmpty(response.ReasoningContent))
+        {
+            choice.AppendThinking(response.ReasoningContent);
+            callbacks?.OnThinkingDelta?.Invoke(response.ReasoningContent);
+        }
         if (!string.IsNullOrEmpty(response.Text))
         {
             choice.AppendText(response.Text);
@@ -401,9 +411,16 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
                     "流式响应在收到任何数据帧之前结束。");
             }
 
+            var primary = parser.Completion.Primary;
+            if (primary is { ThinkingDeltaCount: > 0, TextDeltaCount: 0, ToolCallChunkCount: 0, FinishReason: null })
+            {
+                streamSpan.Fail("Transport");
+                throw new ModelClientException(ModelClientErrorKind.Transport,
+                    "流式响应在思考后中断，尚未收到正文、工具调用或结束信号。");
+            }
+
             // 例外：工具参数必须完整。缺 [DONE] 且没有 finish_reason 时，tool_calls 很可能被截断，
             // 半截 JSON 写入历史会让后续回合持续失败。
-            var primary = parser.Completion.Primary;
             if (primary is { ToolCalls.Count: > 0 } && primary.FinishReason is null)
             {
                 foreach (var call in primary.ToolCalls)
@@ -616,6 +633,8 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         bool includeStreamUsage = true)
     {
         var messagesList = new List<object>();
+        var requiresReasoningContent = model.Contains("deepseek", StringComparison.OrdinalIgnoreCase) &&
+                                       request.ToolNames.Count > 0;
         foreach (var msg in request.Messages)
         {
             var roleStr = msg.Role switch
@@ -637,28 +656,36 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
                     tool_call_id = msg.ToolCallId ?? "call_0"
                 });
             }
-            else if (msg.Role == PureAgentRole.Assistant && msg.ToolCalls is { Count: > 0 } calls)
+            else if (msg.Role == PureAgentRole.Assistant)
             {
-                var tcList = new List<object>();
-                foreach (var c in calls)
+                var assistant = new Dictionary<string, object>
                 {
-                    tcList.Add(new
+                    ["role"] = "assistant",
+                    ["content"] = text,
+                };
+                // DeepSeek 的工具请求要求所有历史助手消息带推理字段，包括未调用工具的轮次。
+                // 旧历史没有原值时只补空字段，不把正文或工具结果伪装成推理。
+                if (msg.ReasoningContent is not null || requiresReasoningContent)
+                    assistant["reasoning_content"] = msg.ReasoningContent ?? string.Empty;
+                if (msg.ToolCalls is { Count: > 0 } calls)
+                {
+                    var tcList = new List<object>();
+                    foreach (var c in calls)
                     {
-                        id = c.Id,
-                        type = "function",
-                        function = new
+                        tcList.Add(new
                         {
-                            name = c.Name,
-                            arguments = c.ArgumentsJson
-                        }
-                    });
+                            id = c.Id,
+                            type = "function",
+                            function = new
+                            {
+                                name = c.Name,
+                                arguments = c.ArgumentsJson
+                            }
+                        });
+                    }
+                    assistant["tool_calls"] = tcList;
                 }
-                messagesList.Add(new
-                {
-                    role = "assistant",
-                    content = text,
-                    tool_calls = tcList
-                });
+                messagesList.Add(assistant);
             }
             else if (msg.Images is { Count: > 0 } images && msg.Role == PureAgentRole.User)
             {

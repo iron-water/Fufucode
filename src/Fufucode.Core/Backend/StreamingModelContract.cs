@@ -232,7 +232,11 @@ public sealed class StreamedCompletion
             calls.Add(new PureToolCall(call.Id, call.Name, call.ArgumentsJson));
         }
 
-        var text = primary.Text.Length > 0 ? primary.Text : null;
-        return new PureModelResponse(text, calls, primary.FinishReason, Usage);
+        var text = primary.Text;
+        var thinking = primary.Thinking;
+        return new PureModelResponse(text.Length > 0 ? text : null, calls, primary.FinishReason, Usage)
+        {
+            ReasoningContent = thinking.Length > 0 ? thinking : null,
+        };
     }
 }

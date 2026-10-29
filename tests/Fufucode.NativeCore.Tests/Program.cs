@@ -6,7 +6,7 @@ for (var i = 0; i < args.Length; i++)
 {
     if (args[i] == "--all")
     {
-        requested.AddRange(Enumerable.Range(1, 15).Select(n => n.ToString("00")));
+        requested.AddRange(Enumerable.Range(1, 16).Select(n => n.ToString("00")));
         requested.Add("shared");
         continue;
     }
@@ -22,7 +22,7 @@ if (requested.Count == 0) requested.Add("12");
 
 var implemented = new HashSet<string>(StringComparer.Ordinal)
 {
-    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "shared",
+    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "shared",
 };
 var failures = 0;
 var passed = new HashSet<string>(StringComparer.Ordinal);
@@ -55,7 +55,7 @@ foreach (var name in requested.Distinct(StringComparer.Ordinal))
 if (args.Contains("--all"))
 {
     var cases = passed.Where(name => name != "shared").Count();
-    if (cases < 15) failures = Math.Max(failures, 1);
+    if (cases < 16) failures = Math.Max(failures, 1);
 }
 return failures == 0 ? 0 : 1;
 
@@ -76,6 +76,7 @@ static Task RunCaseAsync(string name, Checks checks) => name switch
     "13" => Case13LedgerTests.RunAsync(checks),
     "14" => Case14RoundRecorderTests.RunAsync(checks),
     "15" => Case15BatchEditTests.RunAsync(checks),
+    "16" => Case16ReasoningTests.RunAsync(checks),
     "shared" => RunSharedAsync(checks),
     _ => throw new InvalidOperationException("unknown case " + name),
 };

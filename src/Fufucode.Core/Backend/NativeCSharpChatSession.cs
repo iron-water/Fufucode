@@ -658,7 +658,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 if (result.Usage is { } usage) recorder.OnUsage(usage);
                 // 旧实现没有中间通知能力，按真实聚合结果生成完整块，避免发往不存在消息的状态事件。
                 recorder.OnMessageAppended(new PureAgentMessage(
-                    PureAgentRole.Assistant, result.Response.Text ?? "", ToolCalls: result.Response.ToolCalls));
+                    PureAgentRole.Assistant, result.Response.Text ?? "", ToolCalls: result.Response.ToolCalls)
+                    { ReasoningContent = result.Response.ReasoningContent });
                 foreach (var toolResult in result.ToolResults)
                     recorder.OnLegacyToolCompleted(toolResult);
             }
@@ -993,7 +994,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         {
             if (message.Role != PureAgentRole.Assistant) return;
             EnsureMessage();
-            // 非流式旧客户端/轮次上限提示未必产生 delta：仅在缺失时补一条真实聚合文本。
+            // 非流式客户端未必产生 delta：仅在缺失时补真实聚合内容。
+            if (_thinkingIndex is null && !string.IsNullOrEmpty(message.ReasoningContent))
+                OnThinkingDelta(message.ReasoningContent);
             if (_textIndex is null && message.Content.Length > 0) OnTextDelta(message.Content);
             if (message.ToolCalls is { } calls)
             {

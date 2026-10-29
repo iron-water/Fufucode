@@ -54,5 +54,6 @@ public static class NativeHistoryGroups
     /// <summary>单条消息参与预算的字符数；与压缩预算口径一致，不序列化、不分配副本。</summary>
     public static long SizeOf(PureAgentMessage message) =>
         (long)(message.Content?.Length ?? 0) +
+        (message.ReasoningContent?.Length ?? 0) +
         (message.ToolCalls?.Sum(call => (long)call.ArgumentsJson.Length) ?? 0);
 }
