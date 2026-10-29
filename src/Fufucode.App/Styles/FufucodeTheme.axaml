@@ -330,7 +330,7 @@
         <Setter Property="VerticalContentAlignment" Value="Center"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
             </Transitions>
         </Setter>
     </Style>
@@ -433,8 +433,8 @@
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.083"/>
-                <BrushTransition Property="Foreground" Duration="0:0:0.083"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
+                <BrushTransition Property="Foreground" Duration="0:0:0.1" Easing="CubicEaseOut"/>
             </Transitions>
         </Setter>
     </Style>
@@ -566,7 +566,7 @@
         <Setter Property="Foreground" Value="{DynamicResource HyperlinkForegroundBrush}"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
             </Transitions>
         </Setter>
     </Style>
@@ -582,7 +582,7 @@
         <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
             </Transitions>
         </Setter>
     </Style>
@@ -757,7 +757,7 @@
         <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="BorderBrush" Duration="0:0:0.15"/>
+                <BrushTransition Property="BorderBrush" Duration="0:0:0.1" Easing="CubicEaseOut"/>
             </Transitions>
         </Setter>
     </Style>
@@ -804,6 +804,10 @@
         <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
         <Setter Property="Padding" Value="10,6"/>
     </Style>
+    <!-- 同心圆角：输入卡外圆角 8、内缩 16，内部提示条已无外角可对齐，圆角钳到 0。 -->
+    <Style Selector="Border.composerCard Border.queueStrip, Border.composerCard Border.restoreInfo">
+        <Setter Property="CornerRadius" Value="0"/>
+    </Style>
 
     <!-- “回到最新”浮动 pill -->
     <Style Selector="Button.backToLatest">
@@ -814,7 +818,7 @@
         <Setter Property="BorderThickness" Value="1"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.083"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
             </Transitions>
         </Setter>
     </Style>

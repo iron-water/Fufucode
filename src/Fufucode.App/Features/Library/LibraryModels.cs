@@ -65,7 +65,7 @@ public sealed record LibraryVersion(
         _ => Origin,
     };
     public string Summary =>
-        $"v{Number} · {ShortHash} · {OriginText} · {CapturedUtc.ToLocalTime():yyyy-MM-dd HH:mm}";
+        $"v{Number}（{OriginText}）\n{ShortHash}，{CapturedUtc.ToLocalTime():yyyy-MM-dd HH:mm}";
 }
 
 public sealed record LibraryEntry(
@@ -125,15 +125,15 @@ public sealed record LibraryEntry(
     };
 
     public string VersionText => "v" + VersionCount.ToString();
-    /// <summary>列表行摘要：类型 · 存储方式 · 来源状态 · 索引状态 · 版本。</summary>
-    public string RowSummary => $"{KindText} · {StorageText} · {StatusText} · {TextStateText} · {VersionText}";
+    /// <summary>列表行摘要：类型（存储方式）一行，来源状态、索引状态、版本一行。</summary>
+    public string RowSummary => $"{KindText}（{StorageText}）\n{StatusText}，{TextStateText}，{VersionText}";
 
 
     public string ShortHash => ContentHash is { Length: >= 8 } hash ? hash[..8] : (ContentHash ?? "无哈希");
 
     public string AddedText => AddedUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
 
-    public string TagText => Tags.Count == 0 ? "无标签" : string.Join(" · ", Tags);
+    public string TagText => Tags.Count == 0 ? "无标签" : string.Join("、", Tags);
 }
 
 /// <summary>导入请求。Text 用于会话片段；Path 用于文件/产物；Url 用于网页链接。</summary>
@@ -190,7 +190,7 @@ public sealed record LibraryBundleImportResult(
     IReadOnlyList<string> Messages);
 
 /// <summary>
-/// 显式聊天引用载荷：聊天接线（G1 后由 Codex 接入）只消费本记录，不直接读资料库内部结构。
+/// 显式会话引用载荷：会话接线（G1 后由 Codex 接入）只消费本记录，不直接读资料库内部结构。
 /// </summary>
 public sealed record LibraryCitation(
     string EntryId,
@@ -208,8 +208,8 @@ public sealed record LibraryCitation(
         get
         {
             var builder = new StringBuilder();
-            builder.Append("> 资料《").Append(Title).Append("》· 来源：").Append(Source)
-                .Append(" · 版本 ").Append(ShortHash).Append('\n');
+            builder.Append("> 资料《").Append(Title).Append("》（来源：").Append(Source)
+                .Append("，版本 ").Append(ShortHash).Append("）\n");
             foreach (var line in Snippet.Replace("\r\n", "\n").Split('\n'))
                 builder.Append("> ").Append(line).Append('\n');
             return builder.ToString().TrimEnd('\n');

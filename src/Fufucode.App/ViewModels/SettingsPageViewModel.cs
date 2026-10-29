@@ -1572,7 +1572,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             return;
         }
 
-        EndpointSummary = $"{provider} · {modelId}";
+        EndpointSummary = $"{provider}/{modelId}";
         HasEndpoint = true;
         EndpointInfo = $"提供商「{provider}」已保存（{selectedModels.Length} 个模型；密钥不写入配置文件）";
         RestartNoticeText = "提供商已保存，重启会话后生效";
@@ -1903,7 +1903,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         ProxyInput = current.ProxyUrl;
         ProxyError = null;
         EndpointSummary = current.Endpoint is { } ep
-            ? $"{ep.ProviderName} · {ep.ModelId}"
+            ? $"{ep.ProviderName}/{ep.ModelId}"
             : "未设置";
         // 端点草稿只有一个来源：ResetEndpointDraft（未配置时预填本机 Magpie）。
         // 这里若再各自赋值，会覆盖预填值，导致表单只剩占位符。

@@ -13,7 +13,7 @@
       <TextBlock Classes="caption" Text="插件会执行本地代码，请仅导入可信来源。" TextWrapping="Wrap"/>
       <Expander Header="版本与加载说明" IsExpanded="False">
         <TextBlock x:Name="DescriptionBlock" Classes="caption" TextWrapping="Wrap"
-                   Text="导入本地固定版本副本，当前支持 Pi。启用不等于加载成功，实际加载以宿主状态为准。"/>
+                   Text="仅支持 Pi。启用不等于加载成功，以宿主状态为准。"/>
       </Expander>
       <TextBlock Classes="caption" Text="{Binding HostText}" TextWrapping="Wrap"
                  AutomationProperties.Name="宿主状态"/>
@@ -88,7 +88,6 @@
       <DockPanel x:Name="VersionsPanel" Grid.Column="1">
         <StackPanel DockPanel.Dock="Top" Spacing="4">
           <TextBlock Classes="settingsRowTitle" Text="固定版本"/>
-          <TextBlock Classes="caption" Text="{Binding SelectedPlugin.CountText}" TextWrapping="Wrap"/>
         </StackPanel>
         <ListBox x:Name="VersionList" ItemsSource="{Binding Versions}"
                  SelectedItem="{Binding SelectedVersion}"

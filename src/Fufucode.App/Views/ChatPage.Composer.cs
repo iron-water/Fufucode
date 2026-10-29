@@ -17,7 +17,8 @@ namespace Fufucode.App.Views;
 
 public partial class ChatPage
 {
-    private readonly ComboBox _executionMode = new() { MinWidth = 112, MinHeight = 28, FontSize = 11 };
+    // 统一字阶：辅助下拉 11 归入 12（该控件只承载选项，不进入可视树）。
+    private readonly ComboBox _executionMode = new() { MinWidth = 112, MinHeight = 28, FontSize = 12 };
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
     private Button? _executionModeButton;
@@ -67,7 +68,8 @@ public partial class ChatPage
                         Children =
                         {
                             BindIcon(new PathIcon { Width = 20, Height = 20 }, "Icon.Warning", "AppWarningForeground"),
-                            new TextBlock { Text = "要开启完整访问权限吗？", FontSize = 18, FontWeight = Avalonia.Media.FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center },
+                            // 统一字阶：权限对话框标题 18 归入 20。
+                            new TextBlock { Text = "要开启完整访问权限吗？", FontSize = 20, FontWeight = Avalonia.Media.FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center },
                         },
                     };
 
@@ -75,7 +77,8 @@ public partial class ChatPage
                     {
                         Text = "Fufucode 将能够在未经你确认的情况下，在这台计算机上的任何位置运行命令、使用互联网，以及创建和编辑文件。这包括但不限于：",
                         TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                        FontSize = 13,
+                        // 统一字阶：说明正文 13 归入 14。
+                        FontSize = 14,
                         LineHeight = 20,
                     };
                     intro.Classes.Add("secondary");
@@ -149,14 +152,12 @@ public partial class ChatPage
         // 构建时尚未挂到视觉树（GetTopLevel 为空），先记录，挂载后再登记到窗口。
         void Tip(Control target, Func<string?> text) => _composerTips.Add((target, text));
         MainViewModel? Vm() => DataContext as MainViewModel;
-        Tip(ComposerMoreButton, () => "附加功能");
         Tip(AttachContextButton, () => "添加文件、图片、PDF 或链接");
         Tip(SessionProjectChip, () =>
             Vm()?.Sidebar.ProjectName is { Length: > 0 } project ? "项目：" + project : "更改此会话的项目");
         Tip(ModelButton, () => "模型：" + (Vm()?.Settings.SelectedModel.Label ?? "选择模型"));
         Tip(ThinkingButton, () => "思考：" + (Vm()?.Settings.SelectedThinking?.Label ?? "默认"));
         Tip(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
-        Tip(SendButton, () => "发送");
         Tip(StopButton, () => "停止当前回合");
         Tip(RestartButton, () => "重发上一条消息：上一回合被中断或失败，带着已有上下文续跑");
 
@@ -345,7 +346,8 @@ public partial class ChatPage
         foreach (var file in vm.Input.Attachments)
         {
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Avalonia.Thickness(0, 0, 8, 4) };
-            var name = new TextBlock { Text = file.Name, MaxWidth = 170, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, FontSize = 11 };
+            // 统一字阶：附件名 11 归入 12。
+            var name = new TextBlock { Text = file.Name, MaxWidth = 170, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
             ToolTip.SetTip(name, file.Path);
             var remove = WorkbenchUi.IconButton("DismissCircle", "移除 " + file.Name);
             remove.Command = vm.Input.RemoveAttachmentCommand; remove.CommandParameter = file;
@@ -377,7 +379,8 @@ public partial class ChatPage
             VerticalAlignment = VerticalAlignment.Center,
         }, iconKey, "AppAccentText");
 
-        var caption = new TextBlock { Text = title, FontSize = 13, FontWeight = Avalonia.Media.FontWeight.SemiBold };
+        // 统一字阶：行标题 13 归入 14（正文级）。
+        var caption = new TextBlock { Text = title, FontSize = 14, FontWeight = Avalonia.Media.FontWeight.SemiBold };
         var detail = new TextBlock { Text = description, FontSize = 12, TextWrapping = Avalonia.Media.TextWrapping.Wrap, Margin = new Avalonia.Thickness(0, 2, 0, 0) };
         detail.Classes.Add("secondary");
         var texts = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center, Margin = new Avalonia.Thickness(12, 0, 0, 0) };

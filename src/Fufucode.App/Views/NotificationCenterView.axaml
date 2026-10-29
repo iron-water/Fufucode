@@ -66,15 +66,15 @@
             <Border Classes="card" Padding="12,10" IsVisible="{Binding HasItems}">
               <Grid ColumnDefinitions="*,*,*" ColumnSpacing="8" AutomationProperties.Name="通知概览">
                 <StackPanel Spacing="1">
-                  <TextBlock Classes="bodyStrong" FontSize="18" Text="{Binding UnreadCount}"/>
+                  <TextBlock Classes="bodyStrong" FontSize="20" Text="{Binding UnreadCount}"/>
                   <TextBlock Classes="caption" Text="未读"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="1">
-                  <TextBlock Classes="bodyStrong" FontSize="18" Text="{Binding PendingActionCount}"/>
+                  <TextBlock Classes="bodyStrong" FontSize="20" Text="{Binding PendingActionCount}"/>
                   <TextBlock Classes="caption" Text="待处理"/>
                 </StackPanel>
                 <StackPanel Grid.Column="2" Spacing="1">
-                  <TextBlock Classes="bodyStrong" FontSize="18" Text="{Binding TotalCount}"/>
+                  <TextBlock Classes="bodyStrong" FontSize="20" Text="{Binding TotalCount}"/>
                   <TextBlock Classes="caption" Text="全部"/>
                 </StackPanel>
               </Grid>

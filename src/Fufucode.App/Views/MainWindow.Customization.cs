@@ -290,12 +290,23 @@ public partial class MainWindow
                 var label = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 260, TextTrimming = TextTrimming.CharacterEllipsis };
                 label.Classes.Add("meta");
                 if (!_statusLabels.TryGetValue(action.Id, out var labels)) _statusLabels.Add(action.Id, labels = new());
-                labels.Add(label); ToolTip.SetTip(label, action.Title); panel.Children.Add(label);
+                labels.Add(label);
+                ToolTip.SetTip(label, action.Id switch
+                {
+                    "status.connection" => "当前会话与后端的连接状态",
+                    "status.activity" => "当前会话的执行状态",
+                    "status.tokens" => "当前会话累计使用的 Token",
+                    "status.duration" => "从本轮开始计时的时长",
+                    "status.project" => "当前会话所属的项目",
+                    _ => null,
+                });
+                panel.Children.Add(label);
             }
             else
             {
                 var title = action.Title;
-                var button = Views.WorkbenchUi.IconButton(WorkbenchActionDefaults.Icon(action.Id), title, 46);
+                var showToolTip = action.Id is not ("navigate.back" or "navigate.forward" or "session.new" or "settings");
+                var button = Views.WorkbenchUi.IconButton(WorkbenchActionDefaults.Icon(action.Id), title, 46, showToolTip);
                 button.Height = 32; button.MinHeight = 32; button.Classes.Add("captionSlot");
                 button.Classes.Add("toolButton");
                 button.Command = _actions.GetCommand(action.Id);

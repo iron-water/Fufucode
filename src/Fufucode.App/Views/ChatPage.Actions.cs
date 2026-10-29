@@ -119,7 +119,7 @@ public partial class ChatPage
         var query = new TextBox { PlaceholderText = "查找本会话", Width = 230 };
         var previous = WorkbenchUi.IconButton("ChevronUp","上一个匹配");
         var next = WorkbenchUi.IconButton("ChevronDown","下一个匹配");
-        var count = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        var count = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 5, Children = { query,previous,next,count } };
         TimelineEntryViewModel[] matches = [];
         var position = -1;

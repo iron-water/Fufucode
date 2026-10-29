@@ -30,11 +30,13 @@
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
         <Grid RowDefinitions="Auto,Auto" RowSpacing="4">
           <Grid ColumnDefinitions="*,Auto">
-            <TextBlock x:Name="ConversationTitle" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+            <!-- 统一字阶：会话标题 15 归入 16。 -->
+            <TextBlock x:Name="ConversationTitle" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                        Text="{Binding Sidebar.SelectedSession.Title, FallbackValue='会话'}"
                        ToolTip.Tip="{Binding Sidebar.SelectedSession.Title}" IsVisible="{Binding !Sidebar.IsRenaming}"/>
+            <!-- 图标已表达重命名动作，去掉重复提示，名称保留给无障碍读取。 -->
             <Button Grid.Column="1" Classes="iconButton" Command="{Binding Sidebar.BeginRenameCommand}"
-                    IsVisible="{Binding Sidebar.IsReal}" ToolTip.Tip="重命名会话">
+                    IsVisible="{Binding Sidebar.IsReal}" AutomationProperties.Name="重命名会话">
               <PathIcon Data="{DynamicResource Icon.Edit}" Width="14" Height="14"/>
             </Button>
             <TextBox x:Name="RenameBox" Grid.ColumnSpan="2" MaxWidth="360" HorizontalAlignment="Stretch"
@@ -48,10 +50,10 @@
         </Grid>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- 会话后端由顶栏会话岛展示（图标 + 名称），这里不再重复徽标。 -->
-          <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" ToolTip.Tip="会话操作"><PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16"/></Button>
+          <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" AutomationProperties.Name="会话操作"><PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16"/></Button>
           <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click" ToolTip.Tip="查找本会话"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
           <Button x:Name="SessionDetailsButton" Classes="iconButton" Width="32" Height="32"
-                  ToolTip.Tip="会话详情" AutomationProperties.Name="会话详情">
+                  AutomationProperties.Name="会话详情">
             <PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16"/>
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight">
@@ -88,7 +90,8 @@
                     Spacing="6" IsVisible="{Binding Timeline.IsEmpty}">
           <Image Source="{DynamicResource EmptyArt}" Width="160" Height="100"
                  HorizontalAlignment="Center"/>
-          <TextBlock Classes="bodyStrong" Text="开始新的对话" HorizontalAlignment="Center"/>
+          <!-- 术语统一：conversation 一律称“会话”。 -->
+          <TextBlock Classes="bodyStrong" Text="新建会话" HorizontalAlignment="Center"/>
           <TextBlock Classes="caption" Foreground="{DynamicResource AppTextSecondary}"
                      Text="{Binding ModeText}"
                      HorizontalAlignment="Center" TextWrapping="Wrap" MaxWidth="380"
@@ -190,7 +193,7 @@
                                                          Payload="{Binding Payload}" Margin="0,4"/>
                               </DataTemplate>
                               <DataTemplate DataType="vm:CodeSegmentViewModel" x:DataType="vm:CodeSegmentViewModel">
-                                <Border Classes="codeCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
+                                <Border Classes="codeCard" Margin="0,4">
                                   <StackPanel>
                                     <!-- 头部条：语言名 + 复制 -->
                                     <!-- UI-1：容器内结构划分用单向 1px 发丝细线（6% 白/黑），不用闭合框。 -->
@@ -198,7 +201,7 @@
                                             BorderThickness="0,0,0,1">
                                       <DockPanel LastChildFill="True">
                                         <Button DockPanel.Dock="Right" Classes="iconButton" Width="26" Height="22"
-                                                Command="{Binding CopyCommand}" ToolTip.Tip="复制代码">
+                                                Command="{Binding CopyCommand}" AutomationProperties.Name="复制代码">
                                           <PathIcon Data="{DynamicResource Icon.Copy}" Width="13" Height="13"
                                                     Foreground="{DynamicResource AppTextDim}"/>
                                         </Button>
@@ -262,8 +265,11 @@
                                                       IsVisible="{Binding IsActive}"/>
                                   <TextBlock Grid.Column="2" Classes="caption" Text="{Binding SummaryText}"
                                              VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                  <TextBlock Grid.Column="3" Classes="meta" Text="{Binding ExpandGlyph}"
-                                             VerticalAlignment="Center"/>
+                                  <!-- 纯图形不靠字号撑大小：▸/▾ 指示改用 10×10 的 PathIcon，保留原 ExpandGlyph 绑定。 -->
+                                  <PathIcon Grid.Column="3"
+                                            Data="{Binding ExpandGlyph, Converter={x:Static views:ChatPage.ExpandGlyphGeometry}}"
+                                            Width="10" Height="10" VerticalAlignment="Center"
+                                            Foreground="{DynamicResource AppTextDim}"/>
                                 </Grid>
                               </Button>
                               <TextBlock Classes="meta mono" Text="{Binding LatestHint, StringFormat='  └ {0}'}"
@@ -273,7 +279,7 @@
                               <ItemsControl ItemsSource="{Binding VisibleTools}">
                                 <ItemsControl.DataTemplates>
                                   <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                                    <Border Classes="toolCard" Margin="10,3" Loaded="OnTransientBlockLoaded"
+                                    <Border Classes="toolCard" Margin="10,3"
                                             PointerReleased="OnToolCardPointerReleased"
                                             Classes.success="{Binding BadgeIsSuccess}"
                                             Classes.failed="{Binding BadgeIsCritical}"
@@ -287,7 +293,7 @@
                                                      IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
                                           <Button Classes="iconButton" Width="22" Height="18" Padding="0"
                                                   Click="OnCopyToolOutput" IsVisible="{Binding HasOutput}"
-                                                  ToolTip.Tip="复制工具输出">
+                                                  AutomationProperties.Name="复制工具输出">
                                             <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
                                                       Foreground="{DynamicResource AppTextDim}"/>
                                           </Button>
@@ -305,7 +311,8 @@
                                                    Foreground="{DynamicResource AppTextDim}"/>
                                         <views:ToolImageView SourceText="{Binding ImageOutputSource}"
                                                            IsVisible="{Binding HasImageOutput}" Margin="12,0,12,8"/>
-                                        <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
+                                        <!-- 内层圆角钳 0，与 8px 的 toolCard 同心。 -->
+                                        <Border Classes="nestedFill" CornerRadius="0" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
                                           <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                                         VerticalScrollBarVisibility="Auto"
                                                         MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
@@ -328,7 +335,7 @@
 
                         <!-- 工具卡片（未分组的单次调用） -->
                         <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
-                          <Border Classes="toolCard" Margin="0,4" Loaded="OnTransientBlockLoaded"
+                          <Border Classes="toolCard" Margin="0,4"
                                   PointerReleased="OnToolCardPointerReleased"
                                   Classes.success="{Binding BadgeIsSuccess}"
                                   Classes.failed="{Binding BadgeIsCritical}"
@@ -338,12 +345,13 @@
                               <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8,12,4">
                                 <PathIcon Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
                                           VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                                <TextBlock Classes="mono" FontSize="12.5" FontWeight="SemiBold" Text="{Binding ToolName}" VerticalAlignment="Center"/>
+                                <!-- 统一字阶：工具名 12.5 收敛到 12，与工具组头一致。 -->
+                                <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold" Text="{Binding ToolName}" VerticalAlignment="Center"/>
                                 <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
                                            IsVisible="{Binding HasDuration}" VerticalAlignment="Center"/>
                                 <Button Classes="iconButton" Width="22" Height="18" Padding="0"
                                         Click="OnCopyToolOutput" IsVisible="{Binding HasOutput}"
-                                        ToolTip.Tip="复制工具输出">
+                                        AutomationProperties.Name="复制工具输出">
                                   <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
                                             Foreground="{DynamicResource AppTextDim}"/>
                                 </Button>
@@ -361,7 +369,8 @@
                                          Foreground="{DynamicResource AppTextDim}"/>
                               <views:ToolImageView SourceText="{Binding ImageOutputSource}"
                                                            IsVisible="{Binding HasImageOutput}" Margin="12,0,12,8"/>
-                              <Border Classes="nestedFill" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
+                              <!-- 内层圆角钳 0，与 8px 的 toolCard 同心。 -->
+                              <Border Classes="nestedFill" CornerRadius="0" Margin="12,0,12,8" IsVisible="{Binding ShowTextOutput}">
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto"
                                               MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
@@ -401,6 +410,7 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
+                  <!-- 相关文件与回合变更卡同一层级：整行展开，默认收起，空列表不出现。 -->
                   <Border Classes="changeCard" IsVisible="{Binding HasFiles}" Margin="0,6,0,0"
                           AutomationProperties.AutomationId="MSG-RELATED-FILES-CARD">
                     <StackPanel>
@@ -499,15 +509,16 @@
                                     <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
                                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
                                               IsVisible="{Binding IsCollapsed}"/>
-                                    <TextBlock Grid.Column="1" Classes="mono changePath" FontSize="12.5"
+                                    <!-- 统一字阶：变更路径与增删计数 12.5 归入 12。 -->
+                                    <TextBlock Grid.Column="1" Classes="mono changePath" FontSize="12"
                                                Text="{Binding Path}" TextTrimming="CharacterEllipsis"/>
-                                    <TextBlock Grid.Column="2" Classes="mono additions" FontSize="12.5"
+                                    <TextBlock Grid.Column="2" Classes="mono additions" FontSize="12"
                                                Text="{Binding AdditionsText}" IsVisible="{Binding HasAdditions}"/>
-                                    <TextBlock Grid.Column="3" Classes="mono deletions" FontSize="12.5"
+                                    <TextBlock Grid.Column="3" Classes="mono deletions" FontSize="12"
                                                Text="{Binding DeletionsText}" IsVisible="{Binding HasDeletions}"/>
                                     <!-- 直接把这个文件带到变更面板，并切到本次会话口径。 -->
                                     <Button Grid.Column="4" Classes="iconButton" Width="22" Height="22"
-                                            Click="OnOpenFileInChanges" ToolTip.Tip="在变更面板中查看此文件"
+                                            Click="OnOpenFileInChanges"
                                             AutomationProperties.Name="在变更面板中查看此文件">
                                       <PathIcon Data="{DynamicResource Icon.Open}" Width="11" Height="11"/>
                                     </Button>
@@ -515,7 +526,8 @@
                                 </Button>
                                 <!-- 与变更面板同一套行模型：行号、增删底色、语法着色一致。 -->
                                 <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="12,0,12,8">
-                                <Border Classes="diffWell">
+                                <!-- 内层圆角钳 0，与 8px 的 changeCard 同心。 -->
+                                <Border Classes="diffWell" CornerRadius="0">
                                   <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled"
                                                 VerticalScrollBarVisibility="Auto" Padding="6,4">
                                     <ItemsControl ItemsSource="{Binding DiffModel.Rows}">
@@ -593,7 +605,7 @@
                     </StackPanel>
                     <Button Grid.Column="2" Classes="iconButton toolButton" Width="24" Height="24" Margin="4,-4,-4,0"
                             VerticalAlignment="Top" Click="NoticeDismiss_Click"
-                            ToolTip.Tip="关闭这条提示" AutomationProperties.Name="关闭提示">
+                            AutomationProperties.Name="关闭提示">
                       <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/>
                     </Button>
                   </Grid>
@@ -638,7 +650,7 @@
       <Button x:Name="ComposerRevealButton" Grid.Row="0" Grid.Column="1" ZIndex="11" Classes="iconButton composerReveal"
               Width="30" Height="30" VerticalAlignment="Bottom" HorizontalAlignment="Center"
               Margin="0,0,0,10" IsVisible="False" Click="OnExpandComposer"
-              ToolTip.Tip="展开输入框" AutomationProperties.Name="展开输入框">
+              AutomationProperties.Name="展开输入框">
         <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="14" Height="14"
                   Foreground="{DynamicResource AppTextSecondary}"/>
       </Button>
@@ -651,7 +663,8 @@
                后端只在顶栏会话岛显示，输入卡内不再有后端徽标。 -->
 
           <!-- 排队条：subtle chip 列表 -->
-          <Border Classes="queueStrip" IsVisible="{Binding Input.HasQueue}" Margin="0,0,0,8">
+          <!-- 内层圆角钳 0，与 8px 的 composerCard 同心。 -->
+          <Border Classes="queueStrip" CornerRadius="0" IsVisible="{Binding Input.HasQueue}" Margin="0,0,0,8">
             <StackPanel Spacing="3">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"
@@ -667,13 +680,14 @@
                         <TextBlock Classes="caption" Text="{Binding BadgeText}"/>
                       </Border>
                       <TextBlock Text="{Binding Text}" Classes="caption" VerticalAlignment="Center"/>
-                      <Button Classes="subtle" Padding="6,0" MinHeight="18" FontSize="11"
+                      <!-- 统一字阶：队列操作 11 归入 12。 -->
+                      <Button Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
                               Content="编辑" VerticalAlignment="Center"
                               IsEnabled="{Binding CanEdit}"
                               ToolTip.Tip="{Binding BlockedReason}"
                               Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.EditQueuedCommand}"
                               CommandParameter="{Binding}"/>
-                      <Button Classes="subtle" Padding="6,0" MinHeight="18" FontSize="11"
+                      <Button Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
                               Content="删除" VerticalAlignment="Center"
                               IsEnabled="{Binding CanDelete}"
                               ToolTip.Tip="{Binding BlockedReason}"
@@ -689,7 +703,8 @@
           </Border>
 
           <!-- 待恢复草稿提示 -->
-          <Border Classes="restoreInfo" IsVisible="{Binding Input.HasPendingRestore}" Margin="0,0,0,8">
+          <!-- 内层圆角钳 0，与 8px 的 composerCard 同心。 -->
+          <Border Classes="restoreInfo" CornerRadius="0" IsVisible="{Binding Input.HasPendingRestore}" Margin="0,0,0,8">
             <DockPanel LastChildFill="True">
               <Button DockPanel.Dock="Right" Classes="subtle" Content="恢复"
                       Command="{Binding Input.ApplyPendingRestoreCommand}"/>
@@ -705,7 +720,7 @@
             <Border Classes="turnSummary" Margin="0" Padding="10,2,0,2" BorderBrush="{DynamicResource AppAccent}">
               <TextBlock Text="{Binding Input.ReferenceContext}" Classes="caption" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" ToolTip.Tip="{Binding Input.ReferenceContext}"/>
             </Border>
-            <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" ToolTip.Tip="移除引用" AutomationProperties.Name="移除引用"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
+            <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" AutomationProperties.Name="移除引用"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
           </Grid>
           <WrapPanel x:Name="AttachedFiles"/>
           <!-- 草稿预览走完整富文本渲染：表格、LaTeX、图片与代码高亮都可用。 -->
@@ -720,7 +735,7 @@
 
           <!-- 工具栏位于同一个卡片内，与编辑区留出间距。 -->
           <Grid x:Name="ComposerToolbar" Margin="0,10,0,0" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
-            <Button x:Name="ComposerMoreButton" Classes="iconButton" ToolTip.Tip="附加功能"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/></Button>
+            <Button x:Name="ComposerMoreButton" Classes="iconButton" AutomationProperties.Name="附加功能"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/></Button>
             <Button x:Name="CommandFlyoutButton" Grid.Column="1" Classes="iconButton" VerticalAlignment="Center" IsVisible="False"
                     IsEnabled="{Binding Extensions.CanUseCommands}"
                     ToolTip.Tip="{Binding Extensions.CommandButtonToolTip}">
@@ -796,19 +811,24 @@
                             <DataTemplate x:DataType="vm:ModelKeywordItem">
                               <Border Classes="keywordChip">
                                 <StackPanel Orientation="Horizontal" Spacing="0" VerticalAlignment="Center">
-                                  <Button Classes="keywordChipLabel" Content="{Binding Keyword}" FontSize="11"
+                                  <!-- 统一字阶：关键字标签 11 归入 12。 -->
+                                  <Button Classes="keywordChipLabel" Content="{Binding Keyword}" FontSize="12"
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ApplySearchKeywordCommand}"
                                           CommandParameter="{Binding Keyword}"/>
-                                  <Button Classes="keywordChipClose" Content="✕" FontSize="9"
-                                          ToolTip.Tip="关闭该关键字"
+                                  <!-- 纯图形不靠字号撑大小：✕ 改为 10×10 的 PathIcon，移除 FontSize。 -->
+                                  <Button Classes="keywordChipClose"
+                                          AutomationProperties.Name="关闭该关键字"
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.DismissSearchKeywordCommand}"
-                                          CommandParameter="{Binding}"/>
+                                          CommandParameter="{Binding}">
+                                    <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/>
+                                  </Button>
                                 </StackPanel>
                               </Border>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
-                        <Button Classes="subtle" Content="恢复已关闭的关键字" FontSize="11" Padding="8,2" MinHeight="24"
+                        <!-- 统一字阶：模型选择器操作 11 归入 12。 -->
+                        <Button Classes="subtle" Content="恢复已关闭的关键字" FontSize="12" Padding="8,2" MinHeight="24"
                                 HorizontalAlignment="Left"
                                 IsVisible="{Binding Settings.HasDismissedKeywords}"
                                 Command="{Binding Settings.RestoreSearchKeywordsCommand}"/>
@@ -817,7 +837,7 @@
                                    IsVisible="{Binding Settings.IsModelsLoading}"/>
                         <TextBlock Classes="meta" Text="{Binding Settings.ModelsError}"
                                    IsVisible="{Binding Settings.HasModelsError}" TextWrapping="Wrap"/>
-                        <Button Classes="subtle" Content="刷新模型" FontSize="11" Padding="8,2" MinHeight="24"
+                        <Button Classes="subtle" Content="刷新模型" FontSize="12" Padding="8,2" MinHeight="24"
                                 HorizontalAlignment="Left"
                                 IsVisible="{Binding Settings.HasModelsError}"
                                 Command="{Binding Settings.RefreshModelsCommand}"/>
@@ -833,13 +853,21 @@
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ChooseModelCommand}"
                                           CommandParameter="{Binding}"
                                           Click="ModelPickerItem_Click">
-                                    <TextBlock Text="{Binding Label}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                                    <!-- 统一字阶：模型名 11 归入 12。 -->
+                                    <TextBlock Text="{Binding Label}" FontSize="12" TextTrimming="CharacterEllipsis"/>
                                   </Button>
+                                  <!-- 纯图形不靠字号撑大小：置顶状态改用 12×12 的 PathIcon，不再用 ★/☆ 字号表达。 -->
                                   <Button Grid.Column="1" Classes="iconButton" Width="26" Height="26"
-                                          Content="{Binding PinGlyph}" FontSize="13"
-                                          ToolTip.Tip="{Binding PinToolTip}"
+                                          AutomationProperties.Name="置顶模型"
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ToggleModelPinCommand}"
-                                          CommandParameter="{Binding}"/>
+                                          CommandParameter="{Binding}">
+                                    <Panel>
+                                      <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
+                                                Foreground="{DynamicResource AppAccentText}" IsVisible="{Binding IsPinned}"/>
+                                      <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
+                                                Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsPinned}"/>
+                                    </Panel>
+                                  </Button>
                                 </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>

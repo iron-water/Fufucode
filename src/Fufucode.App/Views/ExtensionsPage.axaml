@@ -49,7 +49,7 @@
           </Button>
           <Button Classes="iconButton" Command="{Binding RefreshCommand}"
                   Margin="0,0,8,4"
-                  IsEnabled="{Binding !IsRefreshing}" ToolTip.Tip="刷新">
+                  IsEnabled="{Binding !IsRefreshing}" AutomationProperties.Name="刷新">
             <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
           </Button>
           <Button Command="{Binding RestartCommand}" Padding="12,6"
@@ -76,7 +76,7 @@
           <TextBlock Classes="body" TextWrapping="Wrap"
                      Text="{Binding LastStartupFailure.Message}"/>
           <TextBlock Classes="caption" TextWrapping="Wrap"
-                     Text="扩展加载失败会导致后端插件启动即退出。请检查最近添加的扩展后重试。"/>
+                     Text="加载失败会使后端退出；请检查最近添加的扩展。"/>
           <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}"
                      Text="{Binding LastStartupFailure.When.LocalDateTime, StringFormat='记录时间 {0:MM-dd HH:mm:ss}'}"/>
         </StackPanel>
@@ -99,7 +99,7 @@
         <!-- 4. 常驻说明行 -->
         <TextBlock Classes="caption" TextWrapping="Wrap"
                    Foreground="{DynamicResource AppTextSecondary}"
-                   Text="扩展以显式路径加载，变更在安全重启后生效。扩展代码以你的权限运行，只启用你信任的扩展。项目内扩展需要先信任项目。"/>
+                   Text="扩展按路径加载，安全重启后生效；以你的权限运行，只启用可信扩展。项目内扩展需先信任项目。"/>
         <TextBlock Classes="caption" TextWrapping="Wrap"
                    Foreground="{DynamicResource AppCriticalForeground}"
                    IsVisible="{Binding HasAddExtensionHint}" Text="{Binding AddExtensionHint}"/>
@@ -190,10 +190,6 @@
                       <TextBlock Classes="caption" TextWrapping="Wrap"
                                  Foreground="{DynamicResource AppCriticalForeground}"
                                  IsVisible="{Binding HasLoadError}" Text="{Binding LoadError}"/>
-                      <TextBlock Classes="caption" TextWrapping="Wrap"
-                                 Foreground="{DynamicResource AppTextSecondary}"
-                                 IsVisible="{Binding ShowTrustWarning}"
-                                 Text="需要先信任项目才能在会话中加载此扩展。"/>
                     </StackPanel>
                     <WrapPanel Grid.Column="1"
                                 VerticalAlignment="Center">
@@ -206,7 +202,7 @@
                             <Border Classes="card" Padding="10" MinWidth="240">
                               <StackPanel Spacing="8">
                                 <TextBlock Classes="caption" TextWrapping="Wrap"
-                                           Text="移除此手动添加的扩展记录？不会删除磁盘文件。"/>
+                                           Text="移除记录？磁盘文件会保留。"/>
                                 <StackPanel Orientation="Horizontal" Spacing="8"
                                             HorizontalAlignment="Right">
                                   <Button x:Name="ConfirmRemoveButton" Content="移除"
@@ -297,7 +293,7 @@
               </ItemsControl.ItemTemplate>
             </ItemsControl>
             <TextBlock Classes="caption" Foreground="{DynamicResource AppTextDim}" TextWrapping="Wrap"
-                       Text="信任不代替逐次工具审批；审批是否可用以页头审批指示为准。项目扩展仍需单独启用。"/>
+                       Text="信任后仍需逐次审批（可用性见页头）；项目扩展需另行启用。"/>
             <WrapPanel>
               <Button Classes="subtle" Content="更改"
                       Margin="0,0,8,0"
@@ -308,7 +304,7 @@
             </WrapPanel>
             <TextBlock Classes="caption" Foreground="{DynamicResource AppTextSecondary}"
                        IsVisible="{Binding TrustRestartPending}"
-                       Text="信任决定已更新，下次会话启动生效。"/>
+                       Text="信任已更新，下次会话启动生效。"/>
           </StackPanel>
         </Border>
 

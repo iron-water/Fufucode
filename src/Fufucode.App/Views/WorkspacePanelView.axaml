@@ -78,9 +78,9 @@
     <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
       <DockPanel LastChildFill="True" MinHeight="44">
         <Button DockPanel.Dock="Right" Classes="iconButton" Content="×" Width="32" Height="32" Margin="0,6,6,6"
-                Command="{Binding HidePanelCommand}" ToolTip.Tip="收起工作视图" AutomationProperties.Name="收起工作视图"/>
+                Command="{Binding HidePanelCommand}" ToolTip.Tip="收起工作视图，保留已打开的视图" AutomationProperties.Name="收起工作视图"/>
         <Button DockPanel.Dock="Right" Classes="iconButton" Content="+" Width="32" Height="32" Margin="0,6,2,6"
-                ToolTip.Tip="加入工作视图" AutomationProperties.Name="加入工作视图">
+                ToolTip.Tip="选择要打开的文件或变更视图" AutomationProperties.Name="加入工作视图">
           <Button.Flyout>
             <Flyout Placement="BottomEdgeAlignedRight">
               <StackPanel MinWidth="216" Spacing="4">
@@ -189,7 +189,7 @@
                   <TextBlock Text="{Binding Glyph}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                   <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
                   <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Document}" Width="13" Height="13" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
-                  <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
                   <TextBlock Grid.Column="3" Classes="caption" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 </Grid>
               </Button>
@@ -279,7 +279,7 @@
                          ToolTip.Tip="新增行数合计"/>
               <TextBlock Classes="mono diffStatRemoved" Text="{Binding RemovedTotalText}" IsVisible="{Binding HasTotals}"
                          ToolTip.Tip="删除行数合计"/>
-              <Button Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="重新读取变更"
+              <Button Classes="iconButton" Command="{Binding RefreshCommand}"
                       AutomationProperties.Name="刷新变更">
                 <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
               </Button>
@@ -319,8 +319,7 @@
               <ListBox.DataTemplates>
                 <DataTemplate DataType="vm:WorkspaceChangeGroupRowViewModel" x:DataType="vm:WorkspaceChangeGroupRowViewModel">
                   <Button Classes="groupRow" Click="ToggleGroup_Click" HorizontalAlignment="Stretch"
-                          HorizontalContentAlignment="Stretch" Padding="6,3" Background="Transparent"
-                          ToolTip.Tip="折叠或展开此目录">
+                          HorizontalContentAlignment="Stretch" Padding="6,3" Background="Transparent">
                     <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
                       <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronDown}" Width="9" Height="9"
                                 VerticalAlignment="Center" IsVisible="{Binding IsExpanded}"
@@ -364,7 +363,7 @@
           <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerSubtle}"
                   Background="{DynamicResource AppCardBackground}" Padding="8,6">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
-              <Button Classes="iconButton" Click="CloseDiff_Click" ToolTip.Tip="返回文件列表"
+              <Button Classes="iconButton" Click="CloseDiff_Click"
                       IsVisible="{Binding IsChangeListNarrow}" AutomationProperties.Name="返回变更列表">
                 <PathIcon Data="{DynamicResource Icon.ArrowLeft}" Width="14" Height="14"/>
               </Button>
@@ -381,7 +380,7 @@
                            IsVisible="{Binding SelectedChange.HasRemoved}"/>
                 <Button Classes="subtle" Content="打开当前文件" Padding="8,3" FontSize="12"
                         Click="PreviewSelectedChange_Click" ToolTip.Tip="在工作视图里打开这个文件"/>
-                <Button Classes="iconButton" Click="ChangeDiffMenu_Click" ToolTip.Tip="更多差异操作"
+                <Button Classes="iconButton" Click="ChangeDiffMenu_Click"
                         AutomationProperties.Name="差异操作">
                   <PathIcon Data="{DynamicResource Icon.More}" Width="14" Height="14"/>
                 </Button>
@@ -401,12 +400,12 @@
                   <!-- 行宽取滚动视口：底色整行铺满，而不是只铺到文字末尾。 -->
                   <StackPanel>
                     <Border Classes="diffHunkHeader" IsVisible="{Binding IsHeader}" MinWidth="{Binding MinWidth}">
-                      <TextBlock Classes="mono" FontSize="11" Text="{Binding HeaderText}"
+                      <TextBlock Classes="mono" FontSize="12" Text="{Binding HeaderText}"
                                  Foreground="{DynamicResource AppTextDim}" TextWrapping="NoWrap"/>
                     </Border>
                     <Button Classes="diffGap" IsVisible="{Binding IsGap}" Click="ExpandGap_Click" MinWidth="{Binding MinWidth}"
                             HorizontalAlignment="Stretch" HorizontalContentAlignment="Left">
-                      <TextBlock Classes="mono" FontSize="11" Text="{Binding GapText}"
+                      <TextBlock Classes="mono" FontSize="12" Text="{Binding GapText}"
                                  Foreground="{DynamicResource AppAccentText}" Margin="8,1"/>
                     </Button>
                     <Border Classes="diffRow" Classes.added="{Binding IsAdded}" Classes.removed="{Binding IsRemoved}"

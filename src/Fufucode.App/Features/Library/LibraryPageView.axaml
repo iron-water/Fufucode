@@ -99,7 +99,7 @@
           <StackPanel Spacing="12">
             <TextBlock Classes="body" Text="{Binding PreviewText}" TextWrapping="Wrap" IsVisible="{Binding HasPreview}"/>
             <StackPanel Spacing="4" IsVisible="{Binding HasCitation}">
-              <TextBlock Classes="bodyStrong" Text="聊天引用（可插入输入框）"/>
+              <TextBlock Classes="bodyStrong" Text="会话引用（可插入输入框）"/>
               <TextBlock Classes="caption mono" Text="{Binding CitationText}" TextWrapping="Wrap"/>
             </StackPanel>
             <StackPanel Spacing="4" IsVisible="{Binding HasVersions}">

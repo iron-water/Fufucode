@@ -12,32 +12,47 @@ namespace Fufucode.App.Views;
 /// <summary>
 /// 全应用共享的动画原语。视觉参数集中在这里，不随后端变化。
 ///
-/// 时值与缓动对齐 Windows 11 的 Fluent 动效：
-/// 常用 150–250ms，快出慢入，位移控制在 4–8px，不做弹跳。
+/// 时长统一收敛为三档（对齐 Windows 11 Fluent 节奏）：
+/// Fast=100ms（悬停/按压）、Base=160ms（淡入/折叠/内容切换）、Slow=250ms（页面/抽屉）。
+/// 位移控制在 4–8px，不做弹跳；缓动全应用只用 CubicEaseOut。
 /// 系统关闭动画时（<see cref="MotionPreference.ReducedMotion"/>）一律直接落到终态。
 /// </summary>
 internal static class Motion
 {
-    /// <summary>微交互：悬停、指示器、淡入淡出。</summary>
-    public static readonly TimeSpan FastDuration = TimeSpan.FromMilliseconds(150);
+    /// <summary>Fast：悬停、按压等即时反馈。</summary>
+    public static readonly TimeSpan Fast = TimeSpan.FromMilliseconds(100);
 
-    /// <summary>常规过渡：卡片、折叠、列表项。</summary>
-    public static readonly TimeSpan StandardDuration = TimeSpan.FromMilliseconds(200);
+    /// <summary>Base：淡入、折叠、内容切换。</summary>
+    public static readonly TimeSpan Base = TimeSpan.FromMilliseconds(160);
 
-    /// <summary>较大面积：页面切换、抽屉。</summary>
-    public static readonly TimeSpan SlowDuration = TimeSpan.FromMilliseconds(250);
+    /// <summary>Slow：页面切换、抽屉等大面积过渡。</summary>
+    public static readonly TimeSpan Slow = TimeSpan.FromMilliseconds(250);
 
-    /// <summary>消息进入时长（沿用既有节奏）。</summary>
-    public static readonly TimeSpan EnterDuration = StandardDuration;
+    // 旧名别名：调用点分布在其它文件（Views/Styles 由其它会话负责），
+    // 本轮不改那些文件，先统一指向三档，后续可逐个收编为 Fast/Base/Slow。
+    /// <summary>[别名] 旧微交互时长，现为 Fast。</summary>
+    public static readonly TimeSpan FastDuration = Fast;
 
-    /// <summary>底部元信息卡进入时长。</summary>
-    public static readonly TimeSpan FooterDuration = FastDuration;
+    /// <summary>[别名] 旧常规过渡时长，现为 Base。</summary>
+    public static readonly TimeSpan StandardDuration = Base;
 
-    /// <summary>Windows Fluent 的 fast-out-slow-in 曲线。</summary>
-    public static Easing FluentEasing { get; } = new ExponentialEaseOut();
+    /// <summary>[别名] 旧大面积过渡时长，现为 Slow。</summary>
+    public static readonly TimeSpan SlowDuration = Slow;
+
+    /// <summary>[别名] 消息进入时长，现为 Base。</summary>
+    public static readonly TimeSpan EnterDuration = Base;
+
+    /// <summary>[别名] 底部元信息卡进入时长，现为 Fast。</summary>
+    public static readonly TimeSpan FooterDuration = Fast;
+
+    /// <summary>全应用唯一缓动：CubicEaseOut（快出慢收），替代原 Exponential/Spline 曲线。</summary>
+    public static readonly CubicEaseOut CubicEase = new();
+
+    /// <summary>[别名] 旧名称保留给本文件之外的调用点，实例与 <see cref="CubicEase"/> 相同。</summary>
+    public static Easing FluentEasing => CubicEase;
 
     /// <summary>
-    /// 无头自测里动画一律即时落终态：断言检查的是最终可见性，不能被 150–250ms 的过渡时序影响。
+    /// 无头自测里动画一律即时落终态：断言检查的是最终可见性，不能被 100–250ms 的过渡时序影响。
     /// </summary>
     public static bool Reduced => Program.SelfTestMode || MotionPreference.ReducedMotion;
 
@@ -96,8 +111,8 @@ internal static class Motion
             var elapsed = (System.Diagnostics.Stopwatch.GetTimestamp() - startedAt) * 1000.0
                           / System.Diagnostics.Stopwatch.Frequency;
             var progress = Math.Clamp(elapsed / duration.TotalMilliseconds, 0, 1);
-            // 与其它过渡一致的快出慢入。
-            var eased = 1 - Math.Pow(1 - progress, 3);
+            // 与其它过渡共用唯一缓动，避免手写曲线再次分叉。
+            var eased = CubicEase.Ease(progress);
             apply(from + (to - from) * eased);
             if (progress < 1) return;
             timer.Stop();

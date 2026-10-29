@@ -65,20 +65,20 @@
                HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
         <StackPanel x:Name="LegacyCaptionActions" Grid.Column="2" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0" IsVisible="False">
           <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" ToolTip.Tip="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{DynamicResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" ToolTip.Tip="左区"><PathIcon Data="{DynamicResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" ToolTip.Tip="显示或隐藏左侧边栏，保留已打开的页面"><PathIcon Data="{DynamicResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
           <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTerminal_Click" ToolTip.Tip="底区 · Ctrl+J"><PathIcon Data="{DynamicResource Icon.PanelBottom}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleRightDock_Click" ToolTip.Tip="右区"><PathIcon Data="{DynamicResource Icon.PanelRight}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavChatButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回对话"><PathIcon Data="{DynamicResource Icon.Chat}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" ToolTip.Tip="扩展"><PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" ToolTip.Tip="明暗主题"><PathIcon Data="{DynamicResource Icon.Color}" Width="16" Height="16"/></Button>
-          <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="通知"><PathIcon Data="{DynamicResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}" ToolTip.Tip="设置"><PathIcon Data="{DynamicResource Icon.Settings}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleRightDock_Click" ToolTip.Tip="显示或隐藏右侧边栏，保留已打开的页面"><PathIcon Data="{DynamicResource Icon.PanelRight}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavChatButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}"><PathIcon Data="{DynamicResource Icon.Chat}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" ToolTip.Tip="查看扩展与插件"><PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" ToolTip.Tip="切换浅色 / 深色主题"><PathIcon Data="{DynamicResource Icon.Color}" Width="16" Height="16"/></Button>
+          <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="查看会话提醒与待处理通知"><PathIcon Data="{DynamicResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}"><PathIcon Data="{DynamicResource Icon.Settings}" Width="16" Height="16"/></Button>
         </StackPanel>
         <ScrollViewer Grid.Column="2" MaxWidth="420" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopRight" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0"/></ScrollViewer>
         <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-          <views:CaptionAssetButton x:Name="CaptionMinimize" Kind="minimize" Click="CaptionMinimize_Click" ToolTip.Tip="最小化"/>
-          <views:CaptionAssetButton x:Name="CaptionMaximize" Kind="maximize" Click="CaptionMaximize_Click" ToolTip.Tip="最大化"/>
-          <views:CaptionAssetButton x:Name="CaptionClose" Kind="close" Click="CaptionClose_Click" ToolTip.Tip="关闭"/>
+          <views:CaptionAssetButton x:Name="CaptionMinimize" Kind="minimize" Click="CaptionMinimize_Click"/>
+          <views:CaptionAssetButton x:Name="CaptionMaximize" Kind="maximize" Click="CaptionMaximize_Click"/>
+          <views:CaptionAssetButton x:Name="CaptionClose" Kind="close" Click="CaptionClose_Click"/>
         </StackPanel>
       </Grid>
     </Border>
@@ -88,7 +88,7 @@
       <Grid x:Name="WorkspaceShell" Grid.Column="2" ColumnDefinitions="*,8,345" RowDefinitions="*,8,190">
         <Grid RowDefinitions="Auto,*">
           <Border x:Name="WorkspaceReturnBar" IsVisible="{Binding IsExtensionsPage}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="12,6">
-            <Button x:Name="WorkspaceReturnButton" Classes="subtle" HorizontalAlignment="Left" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回工作区">
+            <Button x:Name="WorkspaceReturnButton" Classes="subtle" HorizontalAlignment="Left" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}">
               <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{DynamicResource Icon.ArrowLeft}"/><TextBlock Text="返回工作区"/></StackPanel>
             </Button>
           </Border>
@@ -116,7 +116,7 @@
           <TextBlock x:Name="StartupText" Classes="secondary" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,0,0,4"/>
           <StackPanel x:Name="StartupPickProject" IsVisible="False" Spacing="8">
             <Button x:Name="StartupOpenProjectButton" Classes="accent" Content="打开项目文件夹"
-                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="38" FontSize="13"
+                    HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Height="38" FontSize="14"
                     Click="StartupOpenProject_Click"/>
             <ItemsControl x:Name="StartupRecentProjects">
               <ItemsControl.ItemTemplate>
@@ -148,7 +148,7 @@
                 Background="{DynamicResource AppSubtleBackground}" AutomationProperties.Name="边角提示">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <PathIcon x:Name="CornerNoticeIcon" Width="12" Height="12" VerticalAlignment="Center"/>
-            <TextBlock x:Name="CornerNoticeText" Classes="meta" FontSize="11" VerticalAlignment="Center"
+            <TextBlock x:Name="CornerNoticeText" Classes="meta" FontSize="12" VerticalAlignment="Center"
                        MaxWidth="520" TextTrimming="CharacterEllipsis"/>
           </StackPanel>
         </Border>
@@ -163,7 +163,7 @@
         </Border>
         <TextBlock Grid.Column="1" Text="{Binding Title}" Classes="bodyStrong" VerticalAlignment="Center"
                    TextWrapping="Wrap"/>
-        <Button Grid.Column="2" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" ToolTip.Tip="关闭通知" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
+        <Button Grid.Column="2" Classes="iconButton toolButton" VerticalAlignment="Top" Margin="0,-4,-8,0" Click="NotificationPromptDismiss_Click" AutomationProperties.Name="关闭通知"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
         <TextBlock Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Text="{Binding Message}" TextWrapping="Wrap" Classes="caption"/>
         <Button Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Classes="subtle" Padding="0,2" HorizontalAlignment="Left"
                 Content="{Binding RouteLabel}" Click="NotificationPromptOpen_Click"/>
@@ -186,7 +186,7 @@
     <!-- 图标提示层：窗口内浮层，不用 Popup。位置按目标控件计算，显示在图标上方。 -->
     <Panel x:Name="TipLayer" Grid.RowSpan="3" ZIndex="60" IsVisible="False" IsHitTestVisible="False">
       <Border x:Name="TipBox" HorizontalAlignment="Left" VerticalAlignment="Top">
-        <TextBlock x:Name="TipText" FontSize="11"/>
+        <TextBlock x:Name="TipText" FontSize="12"/>
       </Border>
     </Panel>
   </Grid>

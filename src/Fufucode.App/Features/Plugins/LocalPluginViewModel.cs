@@ -35,10 +35,10 @@ public sealed class LocalPluginVersionItem
         ImportedText = version.ImportedAtUtc.LocalDateTime.ToString("MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
         EntryText = version.EntryRelativePath;
         HashText = version.ContentHash.Length >= 12 ? version.ContentHash[..12] : version.ContentHash;
-        SingleLine = $"{VersionText} · {SourceText} · 摘要 {HashText} · 入口 {EntryText}" +
-            (isActive ? " · 宿主实际加载" : string.Empty) +
-            (isPending ? " · 待应用" : string.Empty) +
-            (isSelected && !isActive ? " · 已选定（未确认加载）" : string.Empty);
+        SingleLine = $"{VersionText}，{SourceText}，摘要 {HashText}，入口 {EntryText}" +
+            (isActive ? "，宿主实际加载" : string.Empty) +
+            (isPending ? "，待应用" : string.Empty) +
+            (isSelected && !isActive ? "，已选定（未确认加载）" : string.Empty);
         StatusText = isActive ? "宿主实际加载" : isPending ? "待应用" : isSelected ? "已选定" : "本地副本";
     }
 
@@ -98,7 +98,7 @@ public sealed class LocalPluginRow
             ? string.Empty
             : "在途宿主回调受保护（不可删除）：" + string.Join(", ", item.InFlightVersionIds);
         StorageRootText = Path.Combine(root, PluginIdRules.Sanitize(item.Id, "plugin"));
-        SingleLine = $"{DisplayName} · {BackendText} · 选定 {SelectedVersionText} · {CountText}";
+        SingleLine = $"{DisplayName}，{BackendText}，选定 {SelectedVersionText}，{CountText}";
     }
 
     public LocalPluginItem Item { get; }
@@ -429,8 +429,8 @@ public sealed partial class LocalPluginViewModel : ViewModelBase, IDisposable
         }
 
         var descriptor = preview.Descriptor;
-        PreviewText = $"{descriptor.DisplayName} {descriptor.Version} · {descriptor.Backend} · " +
-                      $"入口 {preview.EntryRelativePath} · {preview.CompatibilityText}";
+        PreviewText = $"{descriptor.DisplayName} {descriptor.Version}，{descriptor.Backend}，" +
+                      $"入口 {preview.EntryRelativePath}，{preview.CompatibilityText}";
         CanImport = preview.CanImport;
         OnPropertyChanged(nameof(HasPreview));
         OnPropertyChanged(nameof(HasPreviewError));

@@ -93,7 +93,7 @@ internal sealed class DockRegionView : UserControl
         _dropTarget.Classes.Add("dockDropTarget");
         _header.Classes.Add("dockHeader");
         _headerRule.Classes.Add("dockHeaderRule");
-        var add = WorkbenchUi.IconButton("Add", "打开功能页");
+        var add = WorkbenchUi.IconButton("Add", "打开功能页", showToolTip: false);
         var hide = WorkbenchUi.IconButton("ChevronDown", "隐藏此区域（页面与进程保留）");
         _hideButton = hide;
         // 整栏浮动必须有可见入口：页签占满栏头时右键只能落到页签菜单，
@@ -265,7 +265,7 @@ internal sealed class DockRegionView : UserControl
                 var closeItem = new MenuItem { Header = "关闭页签", Tag = "dock-close" };
                 closeItem.Click += (_, _) => CloseRequested?.Invoke(id);
                 menu.Items.Add(closeItem); tab.ContextMenu = menu;
-                var close = WorkbenchUi.IconButton("Dismiss", "关闭页签：" + page.Title);
+                var close = WorkbenchUi.IconButton("Dismiss", "关闭页签：" + page.Title, showToolTip: false);
                 close.Classes.Add("dockTabClose");
                 // DESK-1：关闭按钮从 24 粗大笨重缩到 16 轻量圆形，图标 10，
                 // 命中区靠皮肤样式保证不缩到不可点；悬停只在皮肤层加高亮与危险色。
@@ -366,8 +366,8 @@ internal sealed class DockRegionView : UserControl
 
 internal static class WorkbenchUi
 {
-    public static Button IconButton(string icon, string title) => IconButton(icon, title, 30);
-    public static Button IconButton(string icon, string title, double size)
+    public static Button IconButton(string icon, string title, bool showToolTip = true) => IconButton(icon, title, 30, showToolTip);
+    public static Button IconButton(string icon, string title, double size, bool showToolTip = true)
     {
         object? geometry = null;
         var resourceKey = "Icon." + icon;
@@ -378,7 +378,8 @@ internal static class WorkbenchUi
         var button = new Button { Width = size, Height = size, MinWidth = size, MinHeight = size, Padding = new Thickness(6),
             Content = path };
         button.Classes.Add("iconButton");
-        ToolTip.SetTip(button, title); AutomationProperties.SetName(button, title);
+        if (showToolTip) ToolTip.SetTip(button, title);
+        AutomationProperties.SetName(button, title);
         return button;
     }
 }

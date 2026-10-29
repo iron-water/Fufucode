@@ -56,7 +56,7 @@ internal static class WorkbenchCustomizationSelfTest
         try { bad.Save(new(), false); } catch (InvalidOperationException) { protectedFile = true; }
         Check(protectedFile && bad.LoadError is not null && File.ReadAllText(bad.GlobalPath) == "{\"version\":99}", "unknown config version is diagnosed and preserved");
         var normalized = new WorkbenchAppearance { FontSize = double.NaN, Accent = "not-color", Radius = "invalid" }.Normalize();
-        Check(normalized.FontSize == 13 && normalized.Accent == "system" && normalized.Corner == 4, "invalid dimensions normalize and colors fall back to the system palette");
+        Check(normalized.FontSize == 14 && normalized.Accent == "system" && normalized.Corner == 4, "invalid dimensions normalize and colors fall back to the system palette");
         var demo = WorkbenchAppearance.Parse("{\"accent\":\"#087e66\",\"msgActions\":\"show\",\"readWidth\":\"std\",\"layout\":{\"left\":[\"overview\"],\"right\":[\"files\",\"browser\"],\"bottom\":[\"terminal\"],\"selected\":{\"left\":\"overview\",\"right\":\"files\",\"bottom\":\"terminal\"},\"hidden\":{\"left\":false,\"right\":false,\"bottom\":false},\"sizes\":{\"left\":240,\"right\":810,\"bottom\":200}}}");
         Check(demo.MessageActions == "show" && demo.ReadingWidth == "standard" && demo.Layout!.Find("files") == DockZone.Right && demo.Layout.RightWidth == 810,
             "the actual R05 Demo JSON imports reading, message actions, page assignments and dimensions");

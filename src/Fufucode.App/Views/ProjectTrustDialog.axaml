@@ -10,7 +10,7 @@
     <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="10" Margin="24,20,24,4">
       <PathIcon Data="{DynamicResource Icon.ShieldCheckmark}" Width="20" Height="20"
                 VerticalAlignment="Center" Foreground="{DynamicResource AppAccentText}"/>
-      <TextBlock Classes="subtitle" FontSize="17" Text="是否信任此项目？"
+      <TextBlock Classes="subtitle" FontSize="16" Text="是否信任此项目？"
                  VerticalAlignment="Center" />
     </StackPanel>
 

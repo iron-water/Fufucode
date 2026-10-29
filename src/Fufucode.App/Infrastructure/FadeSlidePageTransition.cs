@@ -1,22 +1,23 @@
+// 当前未接线（保留供页面切换使用）。
 using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Animation;
-using Avalonia.Animation.Easings;
 using Avalonia.Media;
 using Avalonia.Styling;
+using Fufucode.App.Views;
 
 namespace Fufucode.App.Infrastructure;
 
 /// <summary>
 /// WinUI 式页面入场：新页淡入同时上滑一小段（对应 Frame NavigationThemeTransition），
 /// 旧页立即隐藏不参与动画。对齐 UniGetUI EntrancePageTransition：
-/// 250ms / 28px / SplineEasing(0,0,0,1)，尊重系统「减少动画」。
+/// 250ms / 28px / CubicEaseOut，尊重系统「减少动画」。
 /// </summary>
 public sealed class FadeSlidePageTransition : IPageTransition
 {
-    public TimeSpan Duration { get; set; } = TimeSpan.FromMilliseconds(250);
+    public TimeSpan Duration { get; set; } = Motion.Slow;
 
     /// <summary>新页淡入时的上滑距离（px）。</summary>
     public double VerticalOffset { get; set; } = 28;
@@ -53,8 +54,8 @@ public sealed class FadeSlidePageTransition : IPageTransition
         var enter = new Animation
         {
             Duration = Duration,
-            // WinUI Fluent 直接入场曲线：即时响应 + 收尾强减速。
-            Easing = new SplineEasing(0d, 0d, 0d, 1d),
+            // 统一复用 Motion 的唯一缓动 CubicEaseOut，原 SplineEasing 曲线已删除。
+            Easing = Motion.CubicEase,
             FillMode = FillMode.Forward,
             Children =
             {

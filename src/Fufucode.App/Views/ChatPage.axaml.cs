@@ -18,10 +18,25 @@ namespace Fufucode.App.Views;
 /// <summary>对话页：页头 chips、时间线、输入卡片。Enter/IME 守卫与时间线滚动都在本页内处理。</summary>
 public partial class ChatPage : UserControl
 {
+    /// <summary>工具组展开指示：把 ▾/▸ 文本映射为 10px 图形，纯图形不再靠字号撑大小。</summary>
+    public static readonly Avalonia.Data.Converters.IValueConverter ExpandGlyphGeometry =
+        new Avalonia.Data.Converters.FuncValueConverter<string?, Avalonia.Media.Geometry?>(glyph =>
+        {
+            if (glyph is null) return null;
+            var key = glyph == "▾" ? "Icon.ChevronDown" : "Icon.ChevronRight";
+            var app = Avalonia.Application.Current;
+            return app is not null && app.TryGetResource(key, null, out var value)
+                ? value as Avalonia.Media.Geometry
+                : null;
+        });
+
     private readonly ImeEnterGuard _imeGuard = new();
     private bool _preeditHooked;
     private bool _programmaticScroll;
     private Avalonia.Threading.DispatcherTimer? _scrollTimer;
+
+    /// <summary>滚轮停止后的兜底判定：最后一次 ScrollChanged 可能落在用户输入的忽略窗口内。</summary>
+    private IDisposable? _atBottomTimer;
 
     /// <summary>已经播放过进入动画的条目。虚拟化在滚动时会重建容器，不能重复播放。</summary>
     private readonly System.Collections.Generic.HashSet<string> _animatedEntries = new(StringComparer.Ordinal);
@@ -80,7 +95,14 @@ public partial class ChatPage : UserControl
         AddHandler(PointerReleasedEvent, SelectionReleased, RoutingStrategies.Bubble, handledEventsToo: true);
 
         // 滚动跟随：用户一操作就标记时间，150ms 内不抢滚动；程序化滚动有短暂 latch。
-        TimelineScroller.PointerWheelChanged += (_, _) => MarkUserScrollInput();
+        TimelineScroller.PointerWheelChanged += (_, _) =>
+        {
+            MarkUserScrollInput();
+            // 滚轮一动就交出控制权：否则流式输出每来一段都会把视图拉回底部，
+            // 触控板双指上滑会表现为反复回弹的抖动。
+            if (DataContext is MainViewModel vm) vm.Timeline.SetAutoScrollAtBottom(false);
+            ScheduleAtBottomRecompute();
+        };
         TimelineScroller.PointerPressed += (_, _) => MarkUserScrollInput();
         TimelineScroller.KeyDown += (_, _) => MarkUserScrollInput();
     }
@@ -238,16 +260,35 @@ public partial class ChatPage : UserControl
         }, Avalonia.Threading.DispatcherPriority.Loaded);
     }
 
+    /// <summary>
+    /// 用户停止滚动后重新判断是否贴近底部。
+    /// ScrollChanged 在用户输入后的 150ms 内被忽略，最后一次滚动可能刚好落在这个窗口里，
+    /// 不补一次判定会导致“已经回到最底部却不再自动跟随”。
+    /// </summary>
+    private void ScheduleAtBottomRecompute()
+    {
+        _atBottomTimer?.Dispose();
+        _atBottomTimer = Avalonia.Threading.DispatcherTimer.RunOnce(() =>
+        {
+            if (DataContext is not MainViewModel vm) return;
+            var distance = Math.Max(0,
+                TimelineScroller.Extent.Height - TimelineScroller.Viewport.Height - TimelineScroller.Offset.Y);
+            vm.Timeline.SetAutoScrollAtBottom(distance <= 40);
+            vm.Timeline.SetBackToLatestVisible(distance > 120);
+        }, TimeSpan.FromMilliseconds(180));
+    }
+
     /// <summary>点工具卡展开/收起明细；点复制等按钮时不触发。</summary>
     private void OnToolCardPointerReleased(object? sender, Avalonia.Input.PointerReleasedEventArgs e)
     {
         if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
         if (sender is not Control { DataContext: ToolCallBlockViewModel tool }) return;
 
-        // 按钮、可选文本、滚动区域内的点击有自己的行为，不切换卡片。
-        if (e.Source is Visual source)
+        // 只检查"卡片内部"的可交互元素。时间线本身也在 ScrollViewer 里，
+        // 若沿整条祖先链判断，任何一次点击都会被外层滚动区拦掉，卡片永远展不开。
+        if (e.Source is Visual source && sender is Visual card)
         {
-            foreach (var ancestor in source.GetVisualAncestors().Prepend(source))
+            for (var ancestor = source; ancestor is not null && !ReferenceEquals(ancestor, card); ancestor = ancestor.GetVisualParent())
             {
                 if (ancestor is Button or SelectableTextBlock or ScrollViewer or TextBox) return;
             }

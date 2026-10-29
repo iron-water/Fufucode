@@ -42,7 +42,7 @@ public sealed record WorkbenchAppearance
     // Retain an unknown stored identity for forward compatibility; resolve only for display/application.
     public string Skin { get; init; } = "fluent";
     [JsonIgnore] public SkinResolution SkinResolution => SkinCatalog.Resolve(Skin);
-    public double FontSize { get; init; } = 13;
+    public double FontSize { get; init; } = 14;
     public string Density { get; init; } = "cozy";
     public string Radius { get; init; } = "mid";
     public string ReadingWidth { get; init; } = "standard";
@@ -134,7 +134,7 @@ public sealed record WorkbenchAppearance
                 _ => Color(Emphasis, "#D97757"),
             },
             Surface = Choose(Surface, "fluent", "fluent", "glass", "flat", "classic"),
-            FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 11, 24) : 13,
+            FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 12, 24) : 14,
             Density = Choose(Density, "cozy", "compact", "cozy", "airy"),
             Radius = Choose(Radius, "mid", "none", "mid", "high"),
             ReadingWidth = Choose(ReadingWidth, "standard", "narrow", "standard", "wide", "free"),

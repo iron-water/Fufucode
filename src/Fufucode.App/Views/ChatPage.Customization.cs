@@ -85,19 +85,26 @@ public partial class ChatPage
         foreach (var (entry, number) in numbered)
         {
             var tick = new StackPanel { Spacing = 1, HorizontalAlignment = HorizontalAlignment.Center };
+            // 纯图形不靠字号撑大小：收藏圆点改用 6×6 的 Border（圆角取半径 3）。
             if (entry.IsPinned)
             {
-                tick.Children.Add(new TextBlock
+                var dot = new Border
                 {
-                    Text = "●",
-                    FontSize = 6,
+                    Width = 6,
+                    Height = 6,
+                    CornerRadius = new CornerRadius(3),
                     HorizontalAlignment = HorizontalAlignment.Center,
-                });
+                };
+                // 收藏态沿用刻度样式的 accent 色，圆点不再依赖 TextBlock 的字体颜色。
+                dot.Bind(Border.BackgroundProperty,
+                    new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccentText"));
+                tick.Children.Add(dot);
             }
+            // 统一字阶：刻度数字 10 归入 12，01/02 的轮次编号格式保留。
             tick.Children.Add(new TextBlock
             {
                 Text = number.ToString("00"),
-                FontSize = 10,
+                FontSize = 12,
                 HorizontalAlignment = HorizontalAlignment.Center,
             });
 

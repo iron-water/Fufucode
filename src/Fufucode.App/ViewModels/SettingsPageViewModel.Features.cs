@@ -90,22 +90,22 @@ public sealed record MarketplaceGroupViewModel(string Title, int Count, int Inst
         "个性皮肤" => "theme",
         _ => "tools",
     };
-    public string Summary => $"{Count} 个插件 · {InstalledCount} 个已安装";
+    public string Summary => $"{Count} 个插件（已安装 {InstalledCount} 个）";
 }
 
 public sealed partial class SettingsPageViewModel
 {
     // ════════════════════ 默认 Agent 内核后端（NativeCSharp 为原生核心，四后端为插件） ════════════════════
     [ObservableProperty] private int _selectedBackendIndex = 0; // 0=NativeCSharp, 1=Pi, 2=OMP, 3=Codex, 4=DSH, 5=Claude
-    [ObservableProperty] private string _backendStatusText = "当前默认：FUMO（原生内核 · 纯 C# 实现 · 零外部依赖）";
+    [ObservableProperty] private string _backendStatusText = "当前默认：FUMO（原生内核，纯 C# 实现，零外部依赖）";
 
     /// <summary>默认 Agent 内核只在「插件市场 → 后端内核」二级页出现；
-    /// 新建聊天不再弹窗，直接使用这里的默认值。</summary>
+    /// 新建会话不再弹窗，直接使用这里的默认值。</summary>
     public bool ShowBackendCard => ShowMarketplaceGroup && MarketplaceGroupId == "backend";
 
     public IReadOnlyList<string> BackendEngineChoices { get; } =
     [
-        "FUMO (默认原生内核 · 纯 C#)",
+        "FUMO（默认原生内核，纯 C#）",
         "Pi (后端插件)",
         "OMP (后端插件)",
         "Codex (后端插件)",
@@ -157,12 +157,12 @@ public sealed partial class SettingsPageViewModel
             EngineId.Claude => "backend.claude",
             _ => "core.csharp",
         };
-        if (_pluginStore is null) return " · 插件状态未接线";
+        if (_pluginStore is null) return "；插件状态未接线";
         var state = _pluginStore.GetState(pluginId);
-        if (state.IsInstalled && state.IsEnabled) return " · 插件已启用";
+        if (state.IsInstalled && state.IsEnabled) return "；插件已启用";
         return state.IsInstalled
-            ? " · 插件已停用；新建会话将回退 FUMO"
-            : " · 插件未安装；新建会话将回退 FUMO";
+            ? "；插件已停用，新建会话将回退 FUMO"
+            : "；插件未安装，新建会话将回退 FUMO";
     }
 
     private void SyncBackendPreference(string? dataRoot)

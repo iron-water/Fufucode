@@ -305,6 +305,14 @@ public partial class MainWindow
     private Button OverviewIcon(string icon, string title, Func<Task> action)
     {
         var button = WorkbenchUi.IconButton(icon, title, 26);
+        ToolTip.SetTip(button, title switch
+        {
+            "归档" => "将此会话移入已归档列表",
+            "重命名" => "修改此会话的显示名称",
+            "分叉" => "选择历史消息作为新会话的起点",
+            "分享" => "复制此会话的深度链接，便于分享",
+            _ => title,
+        });
         button.Padding = new Thickness(6);
         if (button.Content is PathIcon glyph) glyph.Width = glyph.Height = 14;
         button.Click += (_, _) => OverviewRun(action); return button;

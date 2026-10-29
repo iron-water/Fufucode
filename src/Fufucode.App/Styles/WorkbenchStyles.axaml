@@ -27,7 +27,7 @@
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -83,7 +83,7 @@
     <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -119,8 +119,8 @@
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.083"/>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.083"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -182,6 +182,14 @@
   <!-- 伪类兜底：覆盖子树，行内任意位置悬停都亮（不依赖手动 PointerEntered）。 -->
   <Style Selector="Border.overviewSession:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <!-- 同心圆角：组卡外圆角 4、内缩 4，内层项目/会话行圆角钳到 0。
+       Avalonia 不支持逗号并列选择器，必须拆成两条。 -->
+  <Style Selector="Border.overviewGroup Border.overviewSession">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
+  <Style Selector="Border.overviewGroup Button.overviewProject">
+    <Setter Property="CornerRadius" Value="0"/>
   </Style>
   <!-- 输入区上下文条：项目/后端 chip，与设置行同一层轻质填充，不使用独立卡片。 -->
   <Style Selector="Button.contextChip">
@@ -264,7 +272,7 @@
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -318,12 +326,12 @@
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="24,20,20,24"/>
     <Setter Property="RenderTransform" Value="translate(0,0)"/>
-    <!-- 分类切换淡入+上滑（Win11 设置同款 ~150ms），由 AnimateContentIn 复位触发。
+    <!-- 分类切换淡入+上滑（Win11 设置同款 ~160ms），由 AnimateContentIn 复位触发。
          TransformOperationsTransition 要求 RenderTransform 为 TransformOperations。 -->
     <Setter Property="Transitions">
       <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="CubicEaseOut"/>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.18" Easing="CubicEaseOut"/>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.16" Easing="CubicEaseOut"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.16" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -343,7 +351,7 @@
     <Setter Property="CornerRadius" Value="4"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -381,7 +389,7 @@
     <Setter Property="Opacity" Value="0"/>
     <Setter Property="Transitions">
       <Transitions>
-        <DoubleTransition Property="Opacity" Duration="0:0:0.15" Easing="CubicEaseOut"/>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.16" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -440,6 +448,14 @@
     <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
     <Setter Property="BorderThickness" Value="0"/>
   </Style>
+  <!-- 同心圆角：内容卡/设置行内缩 18px，内层 well、子卡与填充块圆角钳到 0。 -->
+  <Style Selector="Border.settingsPanel Border.innerWell,
+                   Border.settingsPanel Border.nestedFill,
+                   Border.settingsPanel Border.settingsPanel,
+                   Border.settingsRow Border.settingsPanel,
+                   Border.settingsRow Border.innerWell">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
   <Style Selector="Border.settingsGroup > StackPanel">
     <Setter Property="Margin" Value="0"/>
     <!-- settingsGroup 包一层无间距 StackPanel：里面的 settingsRow 需要
@@ -475,7 +491,7 @@
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.083"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -520,7 +536,7 @@
     <Setter Property="Background" Value="Transparent"/>
   </Style>
   <Style Selector="TextBlock.settingsPageTitle">
-    <Setter Property="FontSize" Value="22"/>
+    <Setter Property="FontSize" Value="20"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="VerticalAlignment" Value="Bottom"/>
@@ -528,12 +544,12 @@
     <Setter Property="Margin" Value="0"/>
   </Style>
   <Style Selector="TextBlock.breadcrumb">
-    <Setter Property="FontSize" Value="22"/>
+    <Setter Property="FontSize" Value="20"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
     <Setter Property="VerticalAlignment" Value="Bottom"/>
   </Style>
   <!-- 面包屑父级按钮：20px 次级文字，悬停转主色，无按钮底。
-       与 settingsPageTitle(22) 保持次级差。 -->
+       与 settingsPageTitle(20) 同字号，层级靠颜色区分。 -->
   <Style Selector="Button.crumbLink">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
@@ -541,7 +557,7 @@
     <Setter Property="Margin" Value="0"/>
     <!-- 与 settingsPageTitle 完全同字号同字重：层级只靠颜色区分，
          避免父级文字变小变轻、和当前页标题不在同一视觉基线上。 -->
-    <Setter Property="FontSize" Value="22"/>
+    <Setter Property="FontSize" Value="20"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="MinHeight" Value="0"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
@@ -769,6 +785,10 @@
       <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
       <Setter Property="FontWeight" Value="SemiBold"/>
     </Style>
+    <!-- 同心圆角：分段条外圆角 4、内缩 2，内层 chip 取 4-2=2。 -->
+    <Style Selector="Border.scopeSwitch Button.scopeChip">
+      <Setter Property="CornerRadius" Value="2"/>
+    </Style>
     <!-- 目录组标题：弱于文件行，只在悬停时给底。 -->
     <Style Selector="Button.groupRow">
       <Setter Property="Background" Value="Transparent"/>
@@ -795,12 +815,12 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
     </Style>
     <Style Selector="TextBlock.statusMark">
-      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
       <Setter Property="Width" Value="11"/>
     </Style>
     <Style Selector="TextBlock.fileName">
-      <Setter Property="FontSize" Value="12.5"/>
+      <Setter Property="FontSize" Value="14"/>
       <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
     <Style Selector="TextBlock.diffStatAdded">
@@ -823,13 +843,13 @@
       <Setter Property="Background" Value="{DynamicResource AppDiffRemovedBackground}"/>
     </Style>
     <Style Selector="TextBlock.diffGutter">
-      <Setter Property="FontSize" Value="11"/>
+      <Setter Property="FontSize" Value="12"/>
       <Setter Property="Padding" Value="0,0,6,0"/>
       <Setter Property="Foreground" Value="{DynamicResource AppDiffLineNumber}"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
     </Style>
     <Style Selector="TextBlock.diffMarker">
-      <Setter Property="FontSize" Value="11"/>
+      <!-- 增删符号沿用继承字号，不单独定义字阶。 -->
       <Setter Property="Width" Value="12"/>
       <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
       <Setter Property="VerticalAlignment" Value="Center"/>
@@ -936,7 +956,7 @@
 
   <!-- ===== 会话灵动岛（Fluent，顶栏中央活态显示）=====
        紧凑胶囊 = AppSubtleBackground 云母感 + AppCardStroke 细描边 + 16 圆角 + FluentPillShadow；
-       几何/颜色变化即信号：运行呼吸点、空闲灰点、失败 critical。 -->
+       语义色表达状态：运行 accent 点、空闲灰点、失败 critical。 -->
   <Style Selector="Border.sessionIsland">
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
@@ -944,7 +964,7 @@
     <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.15"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -961,16 +981,10 @@
   <Style Selector="Border.sessionIsland PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
   </Style>
-  <!-- 状态圆点：语义色（accent 运行 / 灰空闲 / critical 失败），运行带呼吸缩放。 -->
+  <!-- 状态圆点：语义色（accent 运行 / 灰空闲 / critical 失败）。 -->
   <Style Selector="Border.sessionIsland Border.running">
     <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
-    <Style.Animations>
-      <Animation Duration="0:0:1.5" IterationCount="Infinite" PlaybackDirection="Alternate">
-        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-        <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.45"/></KeyFrame>
-        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
-      </Animation>
-    </Style.Animations>
+    <!-- 动效收敛：运行态只保留实色圆点，去掉三档之外的 1.5s 呼吸循环。 -->
   </Style>
   <Style Selector="Border.sessionIsland Border.idle">
     <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
@@ -990,8 +1004,8 @@
     <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.15"/>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -1112,16 +1126,22 @@
   <Style Selector="Border.islandLiveBar Border.failed">
     <Setter Property="Background" Value="{DynamicResource AppCriticalForeground}"/>
   </Style>
+  <!-- 同心圆角：面板外圆角 8、内缩 16，实时活动条圆角钳到 0。 -->
+  <Style Selector="Border.islandPanel Border.islandLiveBar">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
   <!-- Flyout 自带一层表面（底/描边/阴影）。内容里再套 .card 就会画成"两层框"，
-       这里把 flyout 内的卡片降级为透明容器，只保留内边距与内容。 -->
+       这里把 flyout 内的卡片降级为透明容器，只保留内边距与内容，圆角一并归零。 -->
   <Style Selector="FlyoutPresenter Border.card">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
     <Setter Property="BoxShadow" Value="0 0 0 0 #00000000"/>
   </Style>
   <Style Selector="MenuFlyoutPresenter Border.card">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
     <Setter Property="BoxShadow" Value="0 0 0 0 #00000000"/>
   </Style>
   <!-- 行悬停兜底：窗口级 PointerMoved 添加 pointerHover，覆盖所有横条类型。 -->
@@ -1191,7 +1211,7 @@
     <Setter Property="Padding" Value="10"/>
   </Style>
   <Style Selector="TextBlock.startupWordmark">
-    <Setter Property="FontSize" Value="24"/>
+    <Setter Property="FontSize" Value="20"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
@@ -1206,8 +1226,8 @@
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.083"/>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.083"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -1227,7 +1247,7 @@
     <Setter Property="Cursor" Value="Hand"/>
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12"/>
+        <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>
@@ -1237,7 +1257,7 @@
 
   <!-- 中央会话：元信息退为三级文字；助手正文不加卡片 -->
   <Style Selector="TextBlock.meta">
-    <Setter Property="FontSize" Value="11"/>
+    <Setter Property="FontSize" Value="12"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
     <!-- UI-1 排版微调：会话元信息常含时间戳/计数，锁定等宽数字。 -->
     <Setter Property="FontFeatures" Value="{StaticResource AppTabularNumericFeatures}"/>
@@ -1312,6 +1332,12 @@
   </Style>
   <Style Selector="Border.toolCard:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
+  </Style>
+  <!-- 同心圆角：工具组卡外圆角 8、工具卡内缩 10，内层卡与输出区圆角钳到 0。 -->
+  <Style Selector="Border.toolGroupCard Border.toolCard,
+                   Border.toolCard Border.nestedFill,
+                   Border.toolCard Border.innerWell">
+    <Setter Property="CornerRadius" Value="0"/>
   </Style>
 
   <!-- 左侧轮次刻度：常态低存在感，悬停或固定时高亮。 -->
@@ -1406,6 +1432,10 @@
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
   </Style>
+  <!-- 同心圆角：变更卡外圆角 8、内缩 12，内联 diff 区圆角钳到 0。 -->
+  <Style Selector="Border.changeCard Border.diffWell">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
   <Style Selector="Border.changeIcon">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
     <Setter Property="HorizontalAlignment" Value="Center"/>
@@ -1450,7 +1480,7 @@
     <Setter Property="CornerRadius" Value="11"/>
     <Setter Property="Transitions">
       <Transitions>
-        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12"/>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.1" Easing="CubicEaseOut"/>
       </Transitions>
     </Setter>
   </Style>

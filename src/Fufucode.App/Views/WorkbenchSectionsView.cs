@@ -651,7 +651,7 @@ public sealed class WorkbenchSectionsView : UserControl
     private void RenderConfig(WorkbenchCustomizationViewModel vm, StackPanel rows)
     {
         Group(rows, "",
-            SettingsLayout.Row("当前范围", vm.ScopePath, TextButton("切换范围", vm.HasProject ? (vm.ProjectScope ? "改到全局" : "改到此项目覆盖") : "无项目", () => vm.ProjectScope = !vm.ProjectScope), "Folder"),
+            SettingsLayout.Row("当前范围", vm.ScopePath, TextButton(vm.HasProject ? (vm.ProjectScope ? "改到全局" : "改到此项目覆盖") : "无项目", () => vm.ProjectScope = !vm.ProjectScope), "Folder"),
             SettingsLayout.Row("撤销与重做", "每次修改可回退一步", IconButtons(
                 ("ArrowUndo", "撤销 UI 配置", vm.Undo), ("ArrowRedo", "重做 UI 配置", vm.Redo))),
             SettingsLayout.Row("导入与导出", "配置文件为 JSON，可备份或迁移", IconButtons(
@@ -1113,10 +1113,9 @@ public sealed class WorkbenchSectionsView : UserControl
         return host;
     }
 
-    private static Button TextButton(string title, string content, Action action)
+    private static Button TextButton(string content, Action action)
     {
         var button = new Button { Content = content, VerticalAlignment = VerticalAlignment.Center };
-        ToolTip.SetTip(button, title);
         button.Click += (_, _) => action();
         return button;
     }

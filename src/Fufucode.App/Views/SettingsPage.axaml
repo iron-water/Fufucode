@@ -188,7 +188,7 @@
 
             <!-- ═══ 插件市场 → 分类（第二层） ═══ -->
             <StackPanel IsVisible="{Binding ShowMarketplaceGroup}" Spacing="0">
-              <!-- 默认 Agent 内核：新建聊天直接使用这里的值，不再弹出选择窗。 -->
+              <!-- 默认 Agent 内核：新建会话直接使用这里的值，不再弹出选择窗。 -->
               <Border Classes="settingsPanel" IsVisible="{Binding ShowBackendCard}" Margin="0,0,0,8">
                 <StackPanel Spacing="8">
                   <TextBlock Classes="bodyStrong" Text="默认 Agent 内核"/>
@@ -196,9 +196,9 @@
                   <ComboBox HorizontalAlignment="Stretch" MinWidth="220"
                             ItemsSource="{Binding BackendEngineChoices}"
                             SelectedIndex="{Binding SelectedBackendIndex}"
-                            ToolTip.Tip="新建聊天使用的默认核心。已有会话保持创建时的后端。"/>
+                            ToolTip.Tip="新建会话使用的默认核心。已有会话保持创建时的后端。"/>
                   <TextBlock Classes="meta" TextWrapping="Wrap"
-                             Text="新建聊天直接使用此内核；六类后端都会列出，插件未安装或运行时缺失时新建会回退到 FUMO 并提示原因。"/>
+                             Text="新建会话直接使用此内核；六类后端都会列出，插件未安装或运行时缺失时新建会回退到 FUMO 并提示原因。"/>
                 </StackPanel>
               </Border>
               <ItemsControl ItemsSource="{Binding MarketplaceGroupPlugins}">
@@ -228,14 +228,12 @@
                                         Command="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).TogglePluginEnabledCommand}"
                                         CommandParameter="{Binding}"
                                         IsEnabled="{Binding IsInstalled}"
-                                        IsVisible="{Binding !IsCoreBuiltin}"
-                                        ToolTip.Tip="启用或停用插件"/>
+                                        IsVisible="{Binding !IsCoreBuiltin}"/>
                           <Button Classes="subtle" Padding="12,4"
                                   Content="{Binding ActionButtonText}"
                                   Command="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).InstallOrUninstallPluginCommand}"
                                   CommandParameter="{Binding}"
-                                  IsEnabled="{Binding !IsCoreBuiltin}"
-                                  ToolTip.Tip="安装或卸载插件"/>
+                                  IsEnabled="{Binding !IsCoreBuiltin}"/>
                         </StackPanel>
                       </Grid>
                     </Border>
@@ -258,8 +256,6 @@
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center"
                                   HorizontalAlignment="Left">
                         <TextBlock Classes="settingsRowTitle" Text="已归档"/>
-                        <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
-                                   Text="查看并恢复已归档的项目与会话"/>
                       </StackPanel>
                       <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
                                 VerticalAlignment="Center"/>
@@ -300,7 +296,6 @@
                       <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Settings}" Width="18" Height="18" VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="关闭视觉特效"/>
-                        <TextBlock Classes="settingsRowDesc" Text="停止玻璃/模糊采样；界面立即生效，外观会变得更简洁。" TextWrapping="Wrap"/>
                       </StackPanel>
                       <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding DisableVisualEffects, Mode=TwoWay}"/>
                     </Grid>
@@ -310,7 +305,6 @@
                       <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Settings}" Width="18" Height="18" VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="减少终端回滚"/>
-                        <TextBlock Classes="settingsRowDesc" Text="终端历史从 1500 行降到 500 行；对新建终端生效。" TextWrapping="Wrap"/>
                       </StackPanel>
                       <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding ReduceTerminalScrollback, Mode=TwoWay}"/>
                     </Grid>
@@ -339,7 +333,7 @@
                   </Border>
                 </StackPanel>
               </Border>
-              <TextBlock Classes="meta" Text="开关写入 settings.json；软件渲染需要重启，其余立即生效。" TextWrapping="Wrap" Margin="4,8,4,0"/>
+              <TextBlock Classes="meta" Text="软件渲染需重启；终端回滚从 1500 行减至 500 行，对新建终端生效；其余立即生效。" TextWrapping="Wrap" Margin="4,8,4,0"/>
             </StackPanel>
             <StackPanel IsVisible="{Binding ShowModels}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="模型"/>
@@ -355,7 +349,7 @@
                       </StackPanel>
                       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                         <Button Classes="iconButton" Command="{Binding RefreshModelsCommand}"
-                                IsVisible="{Binding !IsMock}" ToolTip.Tip="刷新可用模型">
+                                IsVisible="{Binding !IsMock}">
                           <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
                         </Button>
                         <ComboBox Width="260" VerticalAlignment="Center"
@@ -498,7 +492,7 @@
                             </StackPanel>
                             <!-- 删除入口：没有它，误选的提供商会一直留在列表里。 -->
                             <Button Grid.Column="2" Classes="iconButton" Width="28" Height="28"
-                                    ToolTip.Tip="删除此提供商" AutomationProperties.Name="删除提供商"
+                                    AutomationProperties.Name="删除提供商"
                                     Command="{Binding $parent[ItemsControl].((vm:SettingsPageViewModel)DataContext).RemoveProviderCommand}"
                                     CommandParameter="{Binding}">
                               <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/>
@@ -730,7 +724,6 @@
                                 VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="完成与失败提醒"/>
-                        <TextBlock Classes="settingsRowDesc" Text="选择何时显示主动提示"/>
                       </StackPanel>
                       <ComboBox Grid.Column="2" MinWidth="200" VerticalAlignment="Center"
                                 SelectedIndex="{Binding NotificationPreferences.SelectedCompletionPolicyIndex}"
@@ -745,7 +738,6 @@
                                 VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="权限与问题提醒"/>
-                        <TextBlock Classes="settingsRowDesc" Text="有待处理审批时显示主动提示"/>
                       </StackPanel>
                       <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                     IsChecked="{Binding NotificationPreferences.NotifyApprovals}"
@@ -772,7 +764,7 @@
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Left">
                       <TextBlock Classes="settingsRowTitle" Text="应用内 / 通知页 / Windows 系统通知"/>
                       <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
-                                 Text="选择哪些渠道真正投递提醒；与上面的提醒策略分开保存。"/>
+                                 Text="与上面的提醒策略分开保存。"/>
                     </StackPanel>
                     <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
@@ -792,7 +784,6 @@
                                 VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="关闭窗口时最小化到托盘"/>
-                        <TextBlock Classes="settingsRowDesc" Text="窗口隐藏后，会话与后台任务继续运行" TextWrapping="Wrap"/>
                       </StackPanel>
                       <ToggleSwitch Grid.Column="2" VerticalAlignment="Center"
                                     IsChecked="{Binding CloseToTray}"
@@ -802,7 +793,7 @@
                 </StackPanel>
               </Border>
               <StackPanel Spacing="4" Margin="2,8,0,0">
-                <TextBlock Classes="meta" Text="开启后，单击托盘图标恢复窗口；托盘菜单可显示主窗口或退出。关闭此选项时，关闭窗口会直接退出应用。" TextWrapping="Wrap"/>
+                <TextBlock Classes="meta" Text="隐藏窗口后，会话与后台任务继续运行；单击托盘图标恢复，从托盘菜单退出。关闭此选项后，关窗即退出。" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Foreground="{DynamicResource AppCriticalForeground}"
                            Text="{Binding BackgroundSaveError}"
                            IsVisible="{Binding HasBackgroundSaveError}" TextWrapping="Wrap"/>
@@ -1009,7 +1000,7 @@
                   <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Classes="settingsRowTitle" Text="显示为一级侧栏分类"/>
                     <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
-                               Text="把这个小功能放到设置侧栏的一级分类里；关闭后收纳进「其他」。"/>
+                               Text="关闭后收纳进「其他」。"/>
                   </StackPanel>
                   <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" MinHeight="20"
                                 IsChecked="{Binding CurrentCategoryIsPinned}"

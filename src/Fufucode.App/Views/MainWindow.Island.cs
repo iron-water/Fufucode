@@ -87,17 +87,14 @@ public partial class MainWindow
         _islandModel = new TextBlock { FontSize = 12.5, VerticalAlignment = VerticalAlignment.Center,
             MaxWidth = 170, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandModel.Classes.Add("dim");
-        // 经验对齐：几何体在 12x12 盒里偏上，下移 3px 才与文字视觉中线齐平。
-        var chevron = new Avalonia.Controls.Shapes.Path { Width = 13, Height = 13, Stretch = Stretch.Uniform, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 6, 0, 0) };
-        chevron.Bind(Avalonia.Controls.Shapes.Path.DataProperty, new DynamicResourceExtension("Icon.ChevronDown"));
-        chevron.Bind(Avalonia.Controls.Shapes.Shape.FillProperty, new DynamicResourceExtension("AppTextDim"));
+        // 会话岛不再显示下拉箭头（用户 2026-10-29 要求删除，后续可能在该位置放别的图标）。
+        // 需要新图标时在这里追加到 pillContent，不要再恢复 chevron。
 
         var pillContent = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 10, VerticalAlignment = VerticalAlignment.Center };
         pillContent.Children.Add(_islandDot);
         pillContent.Children.Add(backendHost);
         pillContent.Children.Add(_islandTitle);
         pillContent.Children.Add(_islandModel);
-        pillContent.Children.Add(chevron);
 
         // 胶囊为 Border：PointerPressed 标记 handled，顶栏 PointerPressed→BeginMoveDrag
         // 的冒泡监听不会触发（默认不订阅 handledEventsToo），点击岛不误判为拖窗。
@@ -244,9 +241,21 @@ public partial class MainWindow
         };
         button.Classes.Add("islandTile");
         button.FocusAdorner = null;
-        var tip = string.IsNullOrEmpty(action.Description) || action.Description == action.Title
-            ? action.Title : $"{action.Title}\n{action.Description}";
-        ToolTip.SetTip(button, tip);
+        var tip = !string.IsNullOrWhiteSpace(action.Description) && action.Description != action.Title
+            ? $"{action.Title}\n{action.Description}"
+            : action.Id switch
+            {
+                "settings" or "edit.copy" or "edit.cut" or "edit.paste" => null,
+                "session.new" => "开始一个新的对话会话",
+                "session.rename" => "修改当前会话的显示名称",
+                "session.pin" => "将当前会话置顶或取消置顶",
+                "session.side" => "在侧栏创建聊天",
+                "session.fork" => "选择历史消息作为新会话的起点",
+                "session.schedule" => "为当前会话添加计划任务",
+                _ => action.Title,
+            };
+        if (!string.IsNullOrWhiteSpace(action.Shortcut)) tip = $"{tip ?? action.Title} · {action.Shortcut}";
+        if (tip is not null) ToolTip.SetTip(button, tip);
         Avalonia.Automation.AutomationProperties.SetAutomationId(button, "island-" + action.Id);
         Avalonia.Automation.AutomationProperties.SetName(button, action.Title);
         return button;

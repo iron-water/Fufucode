@@ -20,7 +20,7 @@ public sealed record UsageCounterViewModel(string Label, UsageCounter Counter, b
     public string KnownSubtotalText => IsUnknown && Counter.KnownSubtotal is { } subtotal
         ? "已知小计 " + Number(subtotal) + "（不完整）" : string.Empty;
     public bool HasKnownSubtotal => KnownSubtotalText.Length > 0;
-    public string CountText => $"已知 {Counter.KnownMessageCount} 条响应 · 未知 {Counter.UnknownMessageCount} 条";
+    public string CountText => $"已知 {Counter.KnownMessageCount} 条响应；未知 {Counter.UnknownMessageCount} 条";
     internal static string Number(long value) => value.ToString("N0", CultureInfo.CurrentCulture);
 }
 public sealed record UsageTurnViewModel(int TurnNumber, string? UserEntryId, UsageCounter Counter, bool IsPartial)
@@ -29,7 +29,7 @@ public sealed record UsageTurnViewModel(int TurnNumber, string? UserEntryId, Usa
     public string Title => TurnNumber == 0 ? "首条用户消息之前" : $"第 {TurnNumber} 轮";
     public string ValueText => IsPartial || Counter.Value is null ? "暂无完整数据" : UsageCounterViewModel.Number(Counter.Value.Value);
     public string Detail => Totals is { } totals
-        ? $"输入 {Format(totals.Input)} · 输出 {Format(totals.Output)} · 缓存读 {Format(totals.CacheRead)} · 缓存写 {Format(totals.CacheWrite)}"
+        ? $"输入 {Format(totals.Input)}，输出 {Format(totals.Output)}\n缓存读 {Format(totals.CacheRead)}，缓存写 {Format(totals.CacheWrite)}"
         : "暂无细分数据";
     private string Format(UsageCounter value) => !IsPartial && value.Value is { } known ? UsageCounterViewModel.Number(known) : "未知";
     public bool HasUserEntry => UserEntryId is not null;
@@ -61,7 +61,7 @@ public sealed partial class UsageDetailsViewModel : ViewModelBase, IDisposable
     public bool IsCurrentTurn => SelectedScopeIndex == 1;
     public bool IsAllRecorded => SelectedScopeIndex == 2;
     public bool HasTurns => Turns.Count > 0;
-    public string SourceLabel => IsMock ? "mock 用量演示 · 未连接真实后端" : "后端报告的 token 用量";
+    public string SourceLabel => IsMock ? "mock 用量演示（未连接真实后端）" : "后端报告的 token 用量";
     public string ScopeDescription => SelectedScopeIndex switch
     {
         1 => "当前分支的最近一轮；仅计已结束的 assistant 响应。",
@@ -151,10 +151,10 @@ public sealed partial class UsageDetailsViewModel : ViewModelBase, IDisposable
         var incomplete = snapshot.PartialTail || excluded > 0;
         SourceScope = scope == UsageDetailScope.CurrentTurn ? "live-turn-current-branch" : snapshot.Scope;
         UpdatedText = "统计时间 " + snapshot.QueriedAt.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.CurrentCulture);
-        CompletenessText = snapshot.PartialTail ? "记录尾部尚未写完 · 仅显示已完成前缀的已知小计（不完整）"
-            : excluded > 0 ? $"{excluded} 条进行中的 assistant 响应已排除 · 已知小计不完整"
+        CompletenessText = snapshot.PartialTail ? "记录尾部尚未写完；仅显示已完成前缀的已知小计（不完整）"
+            : excluded > 0 ? $"{excluded} 条进行中的 assistant 响应已排除；已知小计不完整"
             : new[] { totals.Input, totals.Output, totals.CacheRead, totals.CacheWrite, totals.TotalTokens }.Any(value => value.Value is null)
-                ? "缺少部分用量字段 · 已知小计不完整，未知值不会换成 0"
+                ? "缺少部分用量字段；已知小计不完整，未知值不会换成 0"
                 : $"已记录 {totals.AssistantMessageCount} 条 assistant 响应；所选范围内字段完整";
         Counters.Clear();
         CacheShareText = !incomplete && totals.Input.Value is { } input && totals.CacheRead.Value is { } read && totals.CacheWrite.Value is { } write && (decimal)input + read + write > 0

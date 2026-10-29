@@ -216,7 +216,6 @@ public sealed class StoragePage : UserControl
             {
                 var detail = new TextBlock { Text = text };
                 detail.Classes.Add("settingsRowDesc");
-                ToolTip.SetTip(detail, text);
                 textPanel.Children.Add(detail);
             }
         }
@@ -241,7 +240,6 @@ public sealed class StoragePage : UserControl
         {
             var detail = new TextBlock { Text = target.Path };
             detail.Classes.Add("settingsRowDesc");
-            ToolTip.SetTip(detail, target.Path);
             textPanel.Children.Add(detail);
         }
         return line;
@@ -254,7 +252,6 @@ public sealed class StoragePage : UserControl
         {
             var detail = new TextBlock { Text = skip.Path };
             detail.Classes.Add("settingsRowDesc");
-            ToolTip.SetTip(detail, skip.Path);
             textPanel.Children.Add(detail);
         }
         return line;

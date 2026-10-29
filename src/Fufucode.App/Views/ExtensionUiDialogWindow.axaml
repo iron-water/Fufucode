@@ -10,7 +10,7 @@
        内容由代码后置按 method（confirm/select/input/editor）装配，不使用数据绑定。
        WinUI ContentDialog 观感：标题 / 正文 / 实色底条按钮区。 -->
   <Grid RowDefinitions="Auto,*,Auto">
-    <TextBlock x:Name="DialogTitle" Classes="subtitle" FontSize="17"
+    <TextBlock x:Name="DialogTitle" Classes="subtitle" FontSize="16"
                TextWrapping="Wrap" Margin="24,18,24,6" />
 
     <ScrollViewer Grid.Row="1" MaxHeight="340" VerticalScrollBarVisibility="Auto">
