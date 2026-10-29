@@ -421,6 +421,29 @@ public static class HeadlessUiRunner
                     FileMode.Create, FileAccess.Write, FileShare.None);
                 frame.Save(output, PngBitmapEncoderOptions.Default);
             }
+
+            // 停靠栏只有 ~560px：单独验证协同页的窄布局，而不是只看浮窗的宽布局。
+            if (switchView is not null)
+            {
+                perf.Width = 560;
+                perf.Height = 760;
+                switchView.Invoke(center, [2]);
+                await Dispatcher.UIThread.InvokeAsync(() => perf.UpdateLayout(), DispatcherPriority.Background);
+                await Task.Delay(500);
+                var narrowTexts = perf.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>()
+                    .Select(block => block.Text)
+                    .Where(text => !string.IsNullOrWhiteSpace(text))
+                    .Distinct()
+                    .ToList();
+                File.WriteAllText(Path.Combine(root, "perf-window-2-narrow.txt"), string.Join('\n', narrowTexts));
+                using var narrowFrame = perf.CaptureRenderedFrame();
+                if (narrowFrame is not null)
+                {
+                    using var narrowOutput = new FileStream(Path.Combine(root, "perf-window-2-narrow.png"),
+                        FileMode.Create, FileAccess.Write, FileShare.None);
+                    narrowFrame.Save(narrowOutput, PngBitmapEncoderOptions.Default);
+                }
+            }
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
