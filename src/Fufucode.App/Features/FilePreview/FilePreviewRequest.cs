@@ -5,7 +5,7 @@ namespace Fufucode.App.Features.FilePreview;
 
 public sealed record FilePreviewRequest(string ProjectRoot, string Path)
 {
-    public string FullPath => System.IO.Path.GetFullPath(Path);
+    public string FullPath => System.IO.Path.GetFullPath(Path, System.IO.Path.GetFullPath(ProjectRoot));
 }
 
 public sealed record FilePreviewTreeNode(string Label, string? Value = null,

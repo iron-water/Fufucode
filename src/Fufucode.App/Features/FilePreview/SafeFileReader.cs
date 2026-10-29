@@ -34,7 +34,7 @@ public sealed class SafeFileReader
         string requested;
         try
         {
-            requested = Path.GetFullPath(request.Path);
+            requested = request.FullPath;
         }
         catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -44,8 +44,9 @@ public sealed class SafeFileReader
         try
         {
             var root = Path.GetFullPath(request.ProjectRoot);
-            var resolvedRoot = ResolveExistingPath(root, root, 0);
-            var resolvedPath = ResolveExistingPath(requested, root, 0);
+            if (!IsWithinRoot(requested, root)) return SafeFileReadResult.Failure(requested, "文件路径超出当前项目范围。");
+            var resolvedRoot = ResolvePhysicalPath(root, 0);
+            var resolvedPath = ResolvePhysicalPath(requested, 0);
             if (!IsWithinRoot(resolvedPath, resolvedRoot))
                 return SafeFileReadResult.Failure(requested, "文件路径超出当前项目范围。");
             if (!File.Exists(resolvedPath))
@@ -67,7 +68,9 @@ public sealed class SafeFileReader
                 count += read;
             }
 
-            var truncated = count > maxBytes;
+            var truncated = count > maxBytes || info.Length > maxBytes;
+            if (truncated && !allowTruncate)
+                return SafeFileReadResult.Failure(requested, $"文件在读取时超出预览上限 {FormatSize(maxBytes)}。") with { Size = stream.Length };
             var payload = bytes[..(int)Math.Min(count, maxBytes)];
             var detection = DetectEncoding(payload);
             string? text = null;
@@ -93,9 +96,10 @@ public sealed class SafeFileReader
         try
         {
             var root = Path.GetFullPath(projectRoot);
-            var requested = Path.GetFullPath(path);
-            var resolvedRoot = ResolveExistingPath(root, root, 0);
-            var resolved = ResolveExistingPath(requested, root, 0);
+            var requested = Path.GetFullPath(path, root);
+            if (!IsWithinRoot(requested, root)) throw new IOException("路径超出当前项目范围。");
+            var resolvedRoot = ResolvePhysicalPath(root, 0);
+            var resolved = ResolvePhysicalPath(requested, 0);
             if (!IsWithinRoot(resolved, resolvedRoot))
             {
                 error = "路径超出当前项目范围。";
@@ -110,34 +114,23 @@ public sealed class SafeFileReader
         }
     }
 
-    private static string ResolveExistingPath(string path, string root, int depth)
+    private static string ResolvePhysicalPath(string path, int depth)
     {
         if (depth > MaxLinkDepth) throw new IOException("符号链接层级过深。");
         var full = Path.GetFullPath(path);
-        var rootFull = Path.GetFullPath(root);
-        if (!IsWithinRoot(full, rootFull)) throw new IOException("路径超出当前项目范围。");
-        var relative = Path.GetRelativePath(rootFull, full);
-        var current = rootFull;
-        if (relative is "." or "") return current;
-        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar,
-                     StringSplitOptions.RemoveEmptyEntries))
+        var current = Path.GetPathRoot(full) ?? throw new IOException("路径缺少根目录。");
+        foreach (var segment in full[current.Length..].Split(
+                     [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries))
         {
             var next = Path.Combine(current, segment);
-            if (!File.Exists(next) && !Directory.Exists(next))
-            {
-                current = next;
-                continue;
-            }
-            var attributes = File.GetAttributes(next);
-            if ((attributes & FileAttributes.ReparsePoint) == 0)
-            {
-                current = next;
-                continue;
-            }
-
             FileSystemInfo info = Directory.Exists(next) ? new DirectoryInfo(next) : new FileInfo(next);
-            var target = info.ResolveLinkTarget(true) ?? throw new IOException("链接目标不存在。");
-            current = ResolveExistingPath(target.FullName, rootFull, depth + 1);
+            // LinkTarget 也能识别目标已失效的链接，避免 File.Exists=false 绕过链接检查。
+            if (info.LinkTarget is not null)
+            {
+                var target = info.ResolveLinkTarget(false) ?? throw new IOException("链接目标不存在。");
+                current = ResolvePhysicalPath(target.FullName, depth + 1);
+            }
+            else current = next;
         }
         return current;
     }
@@ -165,7 +158,10 @@ public sealed class SafeFileReader
             return (new UnicodeEncoding(false, false, true), "UTF-16 LE", 2);
         if (bytes.AsSpan().StartsWith(new byte[] { 0xFE, 0xFF }))
             return (new UnicodeEncoding(true, false, true), "UTF-16 BE", 2);
-        return (new UTF8Encoding(false, false), "UTF-8", 0);
+        if (bytes.Contains((byte)0)) return (null, null, 0);
+        try { _ = new UTF8Encoding(false, true).GetCharCount(bytes); }
+        catch (DecoderFallbackException) { return (null, null, 0); }
+        return (new UTF8Encoding(false, true), "UTF-8", 0);
     }
 
     internal static string FormatSize(long bytes) => bytes switch

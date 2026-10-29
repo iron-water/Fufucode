@@ -401,29 +401,56 @@
                       </DataTemplate>
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
-                  <StackPanel IsVisible="{Binding HasFiles}" Margin="0,4,0,0" Spacing="4">
-                    <Button Classes="subtle" HorizontalAlignment="Left" Padding="8,4"
-                            Content="{Binding RelatedFilesToggleText}" Click="OnToggleRelatedFiles"
-                            ToolTip.Tip="消息中提到的文件路径；不代表模型已经读取"/>
-                    <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
-                      <ItemsControl ItemsSource="{Binding Files}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
-                            <Button Classes="referenceChip" Click="OnOpenMessageFile" Margin="0,0,6,6"
-                                    IsEnabled="{Binding Exists}" ToolTip.Tip="{Binding Path}">
-                              <StackPanel Orientation="Horizontal" Spacing="6">
-                                <PathIcon Data="{DynamicResource Icon.Document}" Width="12" Height="12"
-                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
-                                <TextBlock Classes="mono" FontSize="12" Text="{Binding DisplayName}"/>
-                                <TextBlock Classes="meta" Text="{Binding StatusText}" VerticalAlignment="Center"
-                                           MaxWidth="150" TextTrimming="CharacterEllipsis"/>
-                              </StackPanel>
-                            </Button>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </views:CollapsiblePanel>
-                  </StackPanel>
+                  <Border Classes="changeCard" IsVisible="{Binding HasFiles}" Margin="0,6,0,0"
+                          AutomationProperties.AutomationId="MSG-RELATED-FILES-CARD">
+                    <StackPanel>
+                      <Button Classes="changeFileRow" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch" Padding="12,8"
+                              ToolTip.Tip="消息中提到的文件路径；不代表模型已经读取">
+                        <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
+                          <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="13" Height="13"
+                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                          <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
+                            <TextBlock Classes="metaName" Text="{Binding RelatedFilesHeaderText}"/>
+                            <TextBlock Classes="meta" Text="消息提到的路径，不代表已读取"/>
+                          </StackPanel>
+                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
+                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                    IsVisible="{Binding RelatedFilesExpanded}"/>
+                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
+                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                    IsVisible="{Binding !RelatedFilesExpanded}"/>
+                        </Grid>
+                      </Button>
+                      <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
+                        <StackPanel>
+                          <Border Height="1" Background="{DynamicResource AppDividerSubtle}"/>
+                          <ItemsControl ItemsSource="{Binding Files}" Margin="0,2,0,2">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
+                                <Button Classes="changeFileRow" Click="OnOpenMessageFile" IsEnabled="{Binding Exists}"
+                                        HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                        Padding="12,5" ToolTip.Tip="{Binding Path}">
+                                  <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
+                                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="12" Height="12"
+                                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                                    <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                      <!-- 统一字阶：相关文件名 12.5 归入 12。 -->
+                                      <TextBlock Text="{Binding DisplayName}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                      <TextBlock Classes="meta" Text="{Binding Folder}" IsVisible="{Binding HasFolder}"
+                                                 TextTrimming="CharacterEllipsis"/>
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="2" Classes="meta" Text="{Binding StatusText}"
+                                               VerticalAlignment="Center"/>
+                                  </Grid>
+                                </Button>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </views:CollapsiblePanel>
+                    </StackPanel>
+                  </Border>
                   <!-- 变更卡已逐文件列出产物时不再重复；没有产物时整块不出现。 -->
                   <Border IsVisible="{Binding ShowArtifactBlock}" Classes="turnSummary">
                     <StackPanel IsVisible="{DynamicResource UiShowArtifactSummary}" Spacing="4">

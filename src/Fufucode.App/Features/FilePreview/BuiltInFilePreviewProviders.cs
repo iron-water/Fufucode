@@ -15,6 +15,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Fufucode.App.Views;
 using SkiaSharp;
+using Svg.Skia;
 
 namespace Fufucode.App.Features.FilePreview;
 
@@ -92,10 +93,14 @@ internal sealed class StructuredFilePreviewProvider : FilePreviewProviderBase
         try
         {
             var extension = Extension(request);
-            var tree = extension is "json" or "jsonc" ? ParseJson(read.Text ?? string.Empty) :
-                extension is "xml" or "xsd" ? ParseXml(read.Text ?? string.Empty) : ParseYaml(read.Text ?? string.Empty);
-            return new(Kind, read.FullPath, read.Size, extension.ToUpperInvariant(), read.Encoding,
-                read.IsTruncated, null, read.Text, tree);
+            var parsed = await Task.Run(() =>
+            {
+                var nodes = StructuredPreviewControl.Parse(read.Text ?? string.Empty, extension, out var limited, cancellationToken);
+                return (Nodes: nodes, Truncated: limited);
+            }, cancellationToken);
+            var format = extension is "yaml" or "yml" ? "YAML 大纲" : extension.ToUpperInvariant();
+            return new(Kind, read.FullPath, read.Size, format, read.Encoding,
+                read.IsTruncated || parsed.Truncated, null, read.Text, parsed.Nodes);
         }
         catch (Exception error) when (error is JsonException or XmlException or InvalidOperationException)
         {
@@ -103,82 +108,7 @@ internal sealed class StructuredFilePreviewProvider : FilePreviewProviderBase
         }
     }
 
-    public override Control CreateView(FilePreviewResult result) => new TreeView
-    {
-        ItemsSource = result.Tree,
-        Margin = new Thickness(10),
-    };
-
-    private static IReadOnlyList<FilePreviewTreeNode> ParseJson(string text)
-    {
-        using var document = JsonDocument.Parse(text, new JsonDocumentOptions { MaxDepth = 64, AllowTrailingCommas = true, CommentHandling = JsonCommentHandling.Skip });
-        return [JsonNode("root", document.RootElement, 0)];
-    }
-
-    private static FilePreviewTreeNode JsonNode(string label, JsonElement element, int depth)
-    {
-        if (depth >= 64) return new(label, "深度上限");
-        return element.ValueKind switch
-        {
-            JsonValueKind.Object => new(label, "{}", element.EnumerateObject().Take(1000).Select(x => JsonNode(x.Name, x.Value, depth + 1)).ToArray()),
-            JsonValueKind.Array => new(label, $"[{element.GetArrayLength()}]", element.EnumerateArray().Take(1000).Select((x, i) => JsonNode($"[{i}]", x, depth + 1)).ToArray()),
-            JsonValueKind.String => new(label, element.GetString()),
-            _ => new(label, element.ToString()),
-        };
-    }
-
-    private static IReadOnlyList<FilePreviewTreeNode> ParseXml(string text)
-    {
-        var root = XDocument.Parse(text, LoadOptions.PreserveWhitespace).Root ?? throw new XmlException("XML 没有根节点。");
-        return [XmlNode(root, 0)];
-    }
-
-    private static FilePreviewTreeNode XmlNode(XElement element, int depth)
-    {
-        if (depth >= 64) return new(element.Name.LocalName, "深度上限");
-        var attributes = element.Attributes().Take(100).Select(x => new FilePreviewTreeNode("@" + x.Name.LocalName, x.Value));
-        var children = element.Elements().Take(1000).Select(x => XmlNode(x, depth + 1));
-        var text = string.Concat(element.Nodes().OfType<XText>().Select(x => x.Value)).Trim();
-        return new(element.Name.LocalName, text.Length > 0 ? text : null, attributes.Concat(children).ToArray());
-    }
-
-    private static IReadOnlyList<FilePreviewTreeNode> ParseYaml(string text)
-    {
-        var roots = new List<FilePreviewTreeNode>();
-        var stack = new Stack<(int Indent, FilePreviewTreeNode Node)>();
-        foreach (var raw in text.Split('\n').Take(10000))
-        {
-            var line = raw.TrimEnd('\r');
-            if (string.IsNullOrWhiteSpace(line) || line.TrimStart().StartsWith('#')) continue;
-            var indent = line.Length - line.TrimStart().Length;
-            var content = line.Trim();
-            var separator = content.IndexOf(':');
-            var label = separator > 0 ? content[..separator].Trim() : content;
-            var value = separator > 0 ? content[(separator + 1)..].Trim() : null;
-            var node = new FilePreviewTreeNode(label, value);
-            while (stack.Count > 0 && stack.Peek().Indent >= indent) stack.Pop();
-            if (stack.Count == 0) roots.Add(node);
-            else
-            {
-                var parent = stack.Pop();
-                var children = (parent.Node.Children ?? []).Append(node).ToArray();
-                var replacement = parent.Node with { Children = children };
-                if (stack.Count == 0)
-                {
-                    var index = roots.IndexOf(parent.Node);
-                    if (index >= 0) roots[index] = replacement;
-                }
-                else
-                {
-                    var grand = stack.Pop();
-                    stack.Push((grand.Indent, grand.Node with { Children = (grand.Node.Children ?? []).Select(x => ReferenceEquals(x, parent.Node) ? replacement : x).ToArray() }));
-                }
-                node = replacement;
-            }
-            stack.Push((indent, node));
-        }
-        return roots;
-    }
+    public override Control CreateView(FilePreviewResult result) => new StructuredPreviewControl(result);
 }
 
 internal sealed class CsvFilePreviewProvider : FilePreviewProviderBase
@@ -191,47 +121,19 @@ internal sealed class CsvFilePreviewProvider : FilePreviewProviderBase
         var read = await Reader.ReadAsync(request, SafeFileReader.DefaultMaxBytes, cancellationToken);
         if (!read.Success) return ReadFailure(request, read);
         var delimiter = Extension(request) == "tsv" ? '\t' : ',';
-        var records = Parse(read.Text ?? string.Empty, delimiter).Take(10000).ToArray();
-        var headers = records.FirstOrDefault() ?? [];
-        var rows = records.Skip(1).Select(x => new FilePreviewTableRow(x)).ToArray();
-        return new(Kind, read.FullPath, read.Size, delimiter == '\t' ? "TSV" : "CSV", read.Encoding,
-            read.IsTruncated, null, read.Text, Headers: headers, Rows: rows);
-    }
-
-    public override Control CreateView(FilePreviewResult result)
-    {
-        var grid = new Grid { Margin = new Thickness(10), RowSpacing = 1, ColumnSpacing = 1 };
-        var columns = Math.Min(32, result.Headers?.Count ?? 0);
-        for (var i = 0; i < columns; i++) grid.ColumnDefinitions.Add(new ColumnDefinition(new GridLength(220)));
-        AddRow(grid, result.Headers ?? [], 0, true);
-        var rows = result.Rows ?? [];
-        for (var rowIndex = 0; rowIndex < rows.Count; rowIndex++) AddRow(grid, rows[rowIndex].Cells, rowIndex + 1, false);
-        return new ScrollViewer { Content = grid, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto };
-
-        void AddRow(Grid owner, IReadOnlyList<string> cells, int rowIndex, bool header)
+        try
         {
-            owner.RowDefinitions.Add(new RowDefinition(GridLength.Auto));
-            for (var column = 0; column < Math.Min(columns, cells.Count); column++)
-            {
-                var text = new TextBlock { Text = cells[column], Padding = new Thickness(8, 5), TextWrapping = TextWrapping.NoWrap };
-                if (header) text.FontWeight = FontWeight.Bold;
-                Grid.SetRow(text, rowIndex); Grid.SetColumn(text, column); owner.Children.Add(text);
-            }
+            var data = await Task.Run(() => CsvPreviewControl.Parse(read.Text ?? string.Empty, delimiter, cancellationToken), cancellationToken);
+            return new(Kind, read.FullPath, read.Size, delimiter == '\t' ? "TSV" : "CSV", read.Encoding,
+                read.IsTruncated || data.IsTruncated, null, read.Text, Headers: data.Headers, Rows: data.Rows);
+        }
+        catch (FormatException error)
+        {
+            return FilePreviewResult.Failure(read.FullPath, $"表格解析失败：{error.Message}", Kind);
         }
     }
 
-    private static IEnumerable<IReadOnlyList<string>> Parse(string text, char delimiter)
-    {
-        var cells = new List<string>(); var value = new StringBuilder(); var quoted = false;
-        foreach (var character in text)
-        {
-            if (character == '"') { quoted = !quoted; continue; }
-            if (!quoted && character == delimiter) { cells.Add(value.ToString()); value.Clear(); continue; }
-            if (!quoted && character == '\n') { cells.Add(value.ToString().TrimEnd('\r')); yield return cells.ToArray(); cells.Clear(); value.Clear(); continue; }
-            value.Append(character);
-        }
-        if (value.Length > 0 || cells.Count > 0) { cells.Add(value.ToString()); yield return cells.ToArray(); }
-    }
+    public override Control CreateView(FilePreviewResult result) => new CsvPreviewControl(result);
 }
 
 internal sealed class ImageFilePreviewProvider : FilePreviewProviderBase
@@ -247,26 +149,104 @@ internal sealed class ImageFilePreviewProvider : FilePreviewProviderBase
         if (read.Bytes.Length == 0) return FilePreviewResult.Failure(read.FullPath, "图片文件为空。", Kind);
         if (Extension(request) != "svg")
         {
-            using var decoded = SKBitmap.Decode(read.Bytes);
-            if (decoded is null) return FilePreviewResult.Failure(read.FullPath, "图片解码失败或格式损坏。", Kind);
-            if ((long)decoded.Width * decoded.Height > 64L * 1024 * 1024)
+            // 先用 codec 只读尺寸，再解码，避免超大像素图在检查前就分配内存。
+            using var codec = SKCodec.Create(new MemoryStream(read.Bytes));
+            if (codec is null) return FilePreviewResult.Failure(read.FullPath, "图片解码失败或格式损坏。", Kind);
+            if ((long)codec.Info.Width * codec.Info.Height > 64L * 1024 * 1024)
                 return FilePreviewResult.Failure(read.FullPath, "图片像素总量超过 64M，已拒绝加载以防止解压炸弹。", Kind);
         }
         if (Extension(request) == "svg")
         {
-            var svg = read.Text ?? Encoding.UTF8.GetString(read.Bytes);
-            if (svg.Contains("<script", StringComparison.OrdinalIgnoreCase) || svg.Contains("<!entity", StringComparison.OrdinalIgnoreCase) ||
-                svg.Contains("http://", StringComparison.OrdinalIgnoreCase) || svg.Contains("https://", StringComparison.OrdinalIgnoreCase) ||
-                svg.Contains("data:", StringComparison.OrdinalIgnoreCase))
-                return FilePreviewResult.Failure(read.FullPath, "SVG 包含脚本或外部资源，已拒绝渲染。", Kind);
+            try
+            {
+                var rendered = RenderSvg(read.Bytes, out var error);
+                if (rendered is null) return FilePreviewResult.Failure(read.FullPath, error ?? "SVG 无法渲染。", Kind);
+                return new(Kind, read.FullPath, read.Size, "SVG", read.Encoding, read.IsTruncated, null, Bytes: rendered);
+            }
+            catch (Exception error) when (error is XmlException or IOException or ArgumentException or InvalidOperationException)
+            {
+                return FilePreviewResult.Failure(read.FullPath, $"SVG 解析失败：{error.Message}", Kind);
+            }
         }
         return new(Kind, read.FullPath, read.Size, Extension(request).ToUpperInvariant(), read.Encoding,
             read.IsTruncated, null, Bytes: read.Bytes);
     }
 
+    /// <summary>拒绝脚本、事件处理与外部引用；只允许文档内 # 引用，再栅格化为 PNG 交给图片控件。</summary>
+    private static byte[]? RenderSvg(byte[] bytes, out string? error)
+    {
+        error = null;
+        using var xml = XmlReader.Create(new MemoryStream(bytes, writable: false), new XmlReaderSettings
+        {
+            DtdProcessing = DtdProcessing.Prohibit,
+            XmlResolver = null,
+            MaxCharactersInDocument = 4_000_000,
+            IgnoreProcessingInstructions = true,
+        });
+        var document = XDocument.Load(xml);
+        if (document.Root is not { Name.LocalName: "svg" }) { error = "SVG 根元素无效。"; return null; }
+        foreach (var element in document.Descendants())
+        {
+            if (element.Name.LocalName is "script" or "foreignObject" or "iframe" or "audio" or "video" or "canvas")
+            { error = "SVG 包含脚本或嵌入内容，已拒绝渲染。"; return null; }
+            foreach (var attribute in element.Attributes())
+            {
+                if (attribute.IsNamespaceDeclaration) continue;
+                var local = attribute.Name.LocalName;
+                if (local.StartsWith("on", StringComparison.OrdinalIgnoreCase) ||
+                    attribute.Value.Contains("javascript:", StringComparison.OrdinalIgnoreCase))
+                { error = "SVG 包含脚本事件，已拒绝渲染。"; return null; }
+                if (local is "href" or "src" && !attribute.Value.TrimStart().StartsWith('#'))
+                { error = "SVG 引用外部资源，已拒绝渲染。"; return null; }
+                if (ContainsExternalUrl(attribute.Value))
+                { error = "SVG 样式引用外部资源，已拒绝渲染。"; return null; }
+            }
+            if (element.Name.LocalName == "style" && ContainsExternalUrl(element.Value))
+            { error = "SVG 样式引用外部资源，已拒绝渲染。"; return null; }
+        }
+
+        using var svg = new SKSvg();
+        using var stream = new MemoryStream(bytes, writable: false);
+        var picture = svg.Load(stream);
+        if (picture is null) { error = "SVG 无法解析。"; return null; }
+        var rect = picture.CullRect;
+        if (rect.Width <= 0 || rect.Height <= 0) { error = "SVG 没有可绘制内容。"; return null; }
+        var scale = Math.Min(1d, Math.Min(4096d / rect.Width, 4096d / rect.Height));
+        var width = Math.Max(1, (int)Math.Ceiling(rect.Width * scale));
+        var height = Math.Max(1, (int)Math.Ceiling(rect.Height * scale));
+        if ((long)width * height > 64L * 1024 * 1024) { error = "SVG 渲染尺寸过大。"; return null; }
+        using var bitmap = new SKBitmap(width, height);
+        using (var canvas = new SKCanvas(bitmap))
+        {
+            canvas.Clear(SKColors.Transparent);
+            canvas.Scale((float)scale);
+            canvas.Translate(-rect.Left, -rect.Top);
+            canvas.DrawPicture(picture);
+        }
+        using var image = SKImage.FromBitmap(bitmap);
+        using var data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data?.ToArray();
+    }
+
+    private static bool ContainsExternalUrl(string value)
+    {
+        var index = 0;
+        while ((index = value.IndexOf("url(", index, StringComparison.OrdinalIgnoreCase)) >= 0)
+        {
+            var start = index + 4;
+            while (start < value.Length && char.IsWhiteSpace(value[start])) start++;
+            var end = value.IndexOf(')', start);
+            if (end < 0) return true;
+            var target = value[start..end].Trim('\'', '"', ' ');
+            if (!target.StartsWith('#')) return true;
+            index = end + 1;
+        }
+        return false;
+    }
+
     public override Control CreateView(FilePreviewResult result)
     {
-        try { return new ImagePreviewControl(result.Bytes ?? []); }
+        try { return new ImagePreviewControl(result.Bytes ?? [], result.Path); }
         catch (Exception error) { return Message($"图片解码失败：{error.Message}"); }
     }
 }
@@ -284,11 +264,12 @@ internal sealed class TextFilePreviewProvider : FilePreviewProviderBase
     {
         var read = await Reader.ReadAsync(request, SafeFileReader.DefaultMaxBytes, cancellationToken);
         if (!read.Success) return ReadFailure(request, read);
-        if (read.Text is null) return FilePreviewResult.Failure(read.FullPath, "文件不是可读文本，已切换为二进制预览。", FilePreviewKind.Binary);
+        if (read.Text is null) return FilePreviewResult.Failure(read.FullPath, "文件包含二进制内容，无法按文本预览。", FilePreviewKind.Binary);
         return new(Kind, read.FullPath, read.Size, "源码", read.Encoding, read.IsTruncated, null, read.Text);
     }
 
-    public override Control CreateView(FilePreviewResult result) => new TextPreviewControl(result.Text ?? string.Empty);
+    public override Control CreateView(FilePreviewResult result) =>
+        new TextPreviewControl(result.Text ?? string.Empty, Path.GetExtension(result.Path));
 }
 
 internal sealed class BinaryFilePreviewProvider : FilePreviewProviderBase
@@ -301,8 +282,10 @@ internal sealed class BinaryFilePreviewProvider : FilePreviewProviderBase
         var read = await Reader.ReadAsync(request, 64 * 1024, cancellationToken, allowTruncate: true);
         if (!read.Success) return ReadFailure(request, read);
         var signature = Signature(read.Bytes);
-        var hex = string.Join(" ", read.Bytes.Take(256).Select(x => x.ToString("X2")));
-        return new(Kind, read.FullPath, read.Size, $"Hex · {signature}", null, read.IsTruncated, null, hex, Bytes: read.Bytes);
+        var shown = Math.Min(read.Bytes.Length, 1024);
+        var hex = string.Join(" ", read.Bytes.Take(shown).Select(x => x.ToString("X2")));
+        return new(Kind, read.FullPath, read.Size, $"Hex · {signature}", null,
+            read.IsTruncated || read.Bytes.Length > shown, null, hex, Bytes: read.Bytes);
     }
 
     public override Control CreateView(FilePreviewResult result) => new ScrollViewer

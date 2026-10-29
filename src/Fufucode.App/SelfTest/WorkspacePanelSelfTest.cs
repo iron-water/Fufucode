@@ -89,13 +89,16 @@ public static class WorkspacePanelSelfTest
 
             vm.OpenFilesCommand.Execute(null);
             await vm.RefreshFilesAsync();
-            await vm.BrowseFileCommand.ExecuteAsync(vm.Files.Single(x => x.IsDirectory));
-            Check(vm.Files.Count == 1 && vm.CanGoUp && vm.CurrentDirectory == directory.FullName, "Files 逐层浏览实际项目目录");
-            await vm.BrowseFileCommand.ExecuteAsync(vm.Files.Single());
+            var folder = vm.Files.Single(x => x.IsDirectory);
+            await vm.ToggleDirectoryAsync(folder);
+            var child = folder.Children.Single(x => !x.IsDirectory);
+            Check(folder.IsExpanded && vm.VisibleFiles.Contains(child) && !vm.CanGoUp,
+                "Files 就地展开项目目录并显示子项");
+            vm.SelectedFile = child;
             await vm.CopyFilePathCommand.ExecuteAsync(null);
             Check(clipboard.LastCopied == filePath && vm.SelectedFile?.Name == "可读文件.txt", "Files 选择与路径复制保留 Unicode");
-            await vm.GoUpCommand.ExecuteAsync(null);
-            Check(vm.CurrentDirectory == root && !vm.CanGoUp, "上一级停在项目根");
+            await vm.ToggleDirectoryAsync(folder);
+            Check(!vm.VisibleFiles.Contains(child) && vm.CurrentDirectory == root, "折叠目录后子项移除且根目录不变");
 
             var stale = new TaskCompletionSource<ChangeRangeReport>();
             vm.AttachContext(root, "old-session", _ => stale.Task, _ => stale.Task);

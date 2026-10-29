@@ -127,18 +127,41 @@ public sealed class WorkspacePanelFileItemViewModel : ViewModelBase
     public bool ChildrenLoaded { get; private set; }
     public bool IsLoadingChildren { get; private set; }
     public bool IsExpanded { get; private set; }
-    public string Glyph => IsDirectory ? (IsExpanded ? "▾" : "▸") : "·";
-    public string Detail => IsLink ? "链接 · 不展开" : IsDirectory ? (ChildrenLoaded ? $"文件夹 · {Children.Count} 项" : "文件夹 · 点击展开") : "文件";
+    public string Glyph => IsDirectory ? (IsExpanded ? "▾" : "▸") : "";
+    public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
+    public string? LoadError { get; private set; }
+    public bool IsTruncated { get; private set; }
+    public string Detail => LoadError ?? (IsLoadingChildren ? "正在读取…" : IsLink ? "链接 · 不展开" : IsTruncated ? "仅显示前 300 项" : "");
+    public bool HasDetail => Detail.Length > 0;
 
-    public void BeginChildrenLoad() => IsLoadingChildren = true;
+    public void BeginChildrenLoad()
+    {
+        IsLoadingChildren = true;
+        LoadError = null;
+        NotifyLoadState();
+    }
+    public void EndChildrenLoad(string? error = null, bool truncated = false)
+    {
+        IsLoadingChildren = false;
+        LoadError = error;
+        IsTruncated = truncated;
+        NotifyLoadState();
+    }
+    private void NotifyLoadState()
+    {
+        OnPropertyChanged(nameof(IsLoadingChildren));
+        OnPropertyChanged(nameof(LoadError));
+        OnPropertyChanged(nameof(Detail));
+        OnPropertyChanged(nameof(HasDetail));
+    }
     public void SetChildren(IEnumerable<WorkspacePanelFileItemViewModel> children)
     {
         Children.Clear();
         foreach (var child in children) Children.Add(child);
         ChildrenLoaded = true;
-        IsLoadingChildren = false;
+        EndChildrenLoad();
         OnPropertyChanged(nameof(HasChildren));
-        OnPropertyChanged(nameof(Detail));
+        OnPropertyChanged(nameof(ChildrenLoaded));
     }
     public void SetExpanded(bool expanded)
     {
@@ -193,6 +216,8 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     private string _contextIdentity = string.Empty;
     private int _changeGeneration;
     private int _fileGeneration;
+    private CancellationTokenSource? _searchCancellation;
+    private IReadOnlyList<WorkspacePanelFileItemViewModel> _searchResults = [];
     private bool _disposed;
 
     public WorkspacePanelViewModel(IClipboardService clipboard)
@@ -201,6 +226,23 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         _previewHost = new FilePreviewHost();
         _previewHost.PreviewChanged += (_, _) =>
         {
+            if (_previewHost.Result is { } result)
+            {
+                PreviewFilePath = result.Path;
+                PreviewFileName = Path.GetFileName(result.Path);
+                PreviewFileSize = SafeFileReader.FormatSize(result.Size);
+                PreviewFileDetail = result.IsError ? "无法预览" : string.Join(" · ", new[] { result.DisplayType, result.Encoding, result.IsTruncated ? "已截断" : null }.Where(x => !string.IsNullOrWhiteSpace(x)));
+            }
+            else if (_previewHost.CurrentRequest is { } request)
+            {
+                PreviewFilePath = request.Path;
+                PreviewFileName = Path.GetFileName(request.Path);
+                PreviewFileSize = "正在读取…";
+                PreviewFileDetail = "加载中";
+            }
+            OnPropertyChanged(nameof(CanShowPreviewSource));
+            OnPropertyChanged(nameof(PreviewSourceToggleText));
+            OnPropertyChanged(nameof(IsDiagramPreview));
             OnPropertyChanged(nameof(PreviewResult));
             OnPropertyChanged(nameof(PreviewSource));
             OnPropertyChanged(nameof(CanCopyPreviewSource));
@@ -228,7 +270,10 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     public FilePreviewHost PreviewHost => _previewHost;
     public FilePreviewResult? PreviewResult => _previewHost.Result;
     public string PreviewSource => PreviewResult?.Text ?? string.Empty;
-    public bool CanCopyPreviewSource => PreviewResult?.Kind is FilePreviewKind.Mermaid;
+    public bool CanCopyPreviewSource => PreviewResult?.Text is not null;
+    public bool CanShowPreviewSource => _previewHost.CanShowSource && PreviewResult?.Kind != FilePreviewKind.Text;
+    public string PreviewSourceToggleText => _previewHost.IsSourceMode ? "渲染视图" : "查看源码";
+    public bool IsDiagramPreview => PreviewResult?.Kind == FilePreviewKind.Mermaid;
     public bool HasPreviewError => PreviewResult?.IsError == true;
     public string PreviewError => PreviewResult?.Error ?? string.Empty;
 
@@ -239,10 +284,85 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(VisibleFiles))]
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
     private string _fileFilter = "";
-    public System.Collections.Generic.IEnumerable<WorkspacePanelFileItemViewModel> VisibleFiles =>
-        Flatten(Files).Where(file => string.IsNullOrWhiteSpace(FileFilter) ||
-            file.Name.Contains(FileFilter, StringComparison.OrdinalIgnoreCase) ||
-            file.RelativePath.Contains(FileFilter, StringComparison.OrdinalIgnoreCase));
+    public IEnumerable<WorkspacePanelFileItemViewModel> VisibleFiles =>
+        string.IsNullOrWhiteSpace(FileFilter) ? Flatten(Files) : _searchResults;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsFileOperationLoading))]
+    [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
+    private bool _isFileSearchLoading;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FileLimitText))]
+    [NotifyPropertyChangedFor(nameof(HasFileLimit))]
+    private bool _isFileSearchTruncated;
+    public bool IsFileOperationLoading => IsFilesLoading || IsFileSearchLoading;
+    public bool HasFileLimit => IsDirectoryTruncated || IsFileSearchTruncated;
+    public string FileLimitText => IsFileSearchTruncated
+        ? "搜索达到上限（20,000 个路径 / 500 个结果），请缩小关键词。"
+        : "部分目录仅显示前 300 项；搜索可继续查找项目内文件。";
+    public string FileStatusText => CopyFeedback.Length > 0 ? CopyFeedback : SelectedFile?.RelativePath ?? FileCountText;
+
+    partial void OnFileFilterChanged(string value) => _ = SearchFilesAsync(value);
+
+    private async Task SearchFilesAsync(string query)
+    {
+        _searchCancellation?.Cancel();
+        _searchCancellation?.Dispose();
+        _searchCancellation = new();
+        var token = _searchCancellation.Token;
+        var root = ProjectPath;
+        _searchResults = [];
+        IsFileSearchTruncated = false;
+        IsFileSearchLoading = !string.IsNullOrWhiteSpace(query);
+        NotifyFileRows();
+        if (!IsFileSearchLoading) return;
+        try
+        {
+            await Task.Delay(180, token);
+            var result = await Task.Run(() => SearchProject(root, query.Trim(), token), token);
+            if (token.IsCancellationRequested || _disposed) return;
+            _searchResults = result.Items;
+            IsFileSearchTruncated = result.Truncated;
+            NotifyFileRows();
+        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+        finally
+        {
+            if (!token.IsCancellationRequested && !_disposed) IsFileSearchLoading = false;
+        }
+    }
+
+    private static (IReadOnlyList<WorkspacePanelFileItemViewModel> Items, bool Truncated) SearchProject(
+        string root, string query, CancellationToken token)
+    {
+        var matches = new List<WorkspacePanelFileItemViewModel>();
+        var pending = new Stack<string>();
+        pending.Push(root);
+        var scanned = 0;
+        while (pending.TryPop(out var directory))
+        {
+            token.ThrowIfCancellationRequested();
+            try
+            {
+                foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+                {
+                    token.ThrowIfCancellationRequested();
+                    if (++scanned > 20000) return (matches, true);
+                    var link = (entry.Attributes & FileAttributes.ReparsePoint) != 0;
+                    var folder = (entry.Attributes & FileAttributes.Directory) != 0;
+                    var relative = Path.GetRelativePath(root, entry.FullName).Replace('\\', '/');
+                    if (relative.Contains(query, StringComparison.OrdinalIgnoreCase))
+                    {
+                        matches.Add(new(relative, relative, entry.FullName, folder, link));
+                        if (matches.Count >= 500) return (matches, true);
+                    }
+                    if (folder && !link && entry.Name is not ".git" and not "node_modules" and not "bin" and not "obj")
+                        pending.Push(entry.FullName);
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
+        }
+        return (matches.OrderByDescending(x => x.IsDirectory).ThenBy(x => x.RelativePath, StringComparer.OrdinalIgnoreCase).ToArray(), false);
+    }
 
     private static IEnumerable<WorkspacePanelFileItemViewModel> Flatten(IEnumerable<WorkspacePanelFileItemViewModel> items)
     {
@@ -268,12 +388,13 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     public bool IsPreviewSelected => IsFilePreviewOpen;
     public bool CanPreviewBack => _previewHost.CanGoBack;
     public bool CanPreviewForward => _previewHost.CanGoForward;
-    public bool IsPreviewLoading => PreviewResult is null && IsFilePreviewOpen;
+    public bool IsPreviewLoading => _previewHost.IsLoading;
     public string FindQuery { get; private set; } = string.Empty;
     public string FindStatus => _previewHost.FindStatus;
     public bool IsPreviewWordWrapEnabled => _previewHost.IsWordWrapEnabled;
-    public bool IsImagePreview => PreviewResult?.Kind == FilePreviewKind.Image;
-    public bool IsTextPreviewToolbar => !IsImagePreview;
+    public bool IsImagePreview => _previewHost.ImageContent is not null;
+    public bool IsTextPreviewToolbar => _previewHost.Content is TextPreviewControl;
+    [RelayCommand] private void TogglePreviewSource() => _previewHost.ToggleSource();
     public bool HasSelectedTab => SelectedTab is not null;
 
     [ObservableProperty] private bool _isFilePreviewOpen;
@@ -300,7 +421,11 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             await _clipboard.SetTextAsync(source);
     }
 
-    public void SetFindQuery(string? query) => FindQuery = query ?? string.Empty;
+    public void SetFindQuery(string? query)
+    {
+        FindQuery = query ?? string.Empty;
+        _previewHost.Find(FindQuery);
+    }
 
     [RelayCommand]
     private void FindNext() => _previewHost.Find(FindQuery, forward: true);
@@ -344,15 +469,9 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
 
     private async Task LoadPreviewAsync(string path)
     {
-        await _previewHost.OpenAsync(ProjectPath, path);
-        var result = PreviewResult;
-        if (result is null) return;
-        PreviewFilePath = result.Path;
-        PreviewFileName = Path.GetFileName(result.Path);
-        PreviewFileSize = SafeFileReader.FormatSize(result.Size);
-        PreviewFileDetail = result.IsError
-            ? result.Error ?? "无法预览"
-            : string.Join(" · ", new[] { result.DisplayType, result.Encoding, result.IsTruncated ? "已截断" : null }.Where(x => !string.IsNullOrWhiteSpace(x)));
+        try { await _previewHost.OpenAsync(ProjectPath, path); }
+        catch (ObjectDisposedException) { }
+        // 元数据由宿主事件统一更新，历史导航与直接打开使用同一条路径。
     }
 
     [ObservableProperty]
@@ -507,22 +626,28 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [ObservableProperty] private string _currentDirectory = string.Empty;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
+    [NotifyPropertyChangedFor(nameof(IsFileOperationLoading))]
     private bool _isFilesLoading;
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasFilesError))]
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
     private string? _filesError;
-    [ObservableProperty] private bool _isDirectoryTruncated;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasFileLimit))]
+    [NotifyPropertyChangedFor(nameof(FileLimitText))]
+    private bool _isDirectoryTruncated;
     [ObservableProperty] private WorkspacePanelFileItemViewModel? _selectedFile;
-    [ObservableProperty] private string _copyFeedback = string.Empty;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(FileStatusText))]
+    private string _copyFeedback = string.Empty;
     public bool HasFilesError => FilesError is not null;
-    public bool IsFilesEmpty => !IsFilesLoading && !HasFilesError && !VisibleFiles.Any();
+    public bool IsFilesEmpty => !IsFileOperationLoading && !HasFilesError && !VisibleFiles.Any();
     public bool CanGoUp => ProjectPath.Length > 0 && !PathEquals(CurrentDirectory, ProjectPath);
     public string CurrentDirectoryText => CurrentDirectory.Length == 0 ? "尚未选择项目" : CurrentDirectory;
     public string FileSelectionText => SelectedFile?.FullPath ?? "选择文件查看完整路径";
     public bool HasSelectedFile => SelectedFile is not null;
     public bool CanPreviewSelectedFile => SelectedFile is { IsDirectory: false };
-    public string FileCountText => $"{Files.Count} 项";
+    public string FileCountText => $"{VisibleFiles.Count()} 项";
 
     /// <summary>All calls occur on the UI thread. The delegates capture the current Core context in the caller.</summary>
     public void AttachContext(string projectPath, string? sessionId,
@@ -561,6 +686,11 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             _contextIdentity = identity;
             _changeCancellation?.Cancel();
             _fileCancellation?.Cancel();
+            _searchCancellation?.Cancel();
+            _searchResults = [];
+            FileFilter = "";
+            CloseFilePreview();
+            _previewHost.ClearHistory();
             _changeGeneration++;
             _fileGeneration++;
             Changes.Clear();
@@ -628,6 +758,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(HasSelectedFile));
         OnPropertyChanged(nameof(CanPreviewSelectedFile));
         OnPropertyChanged(nameof(FileSelectionText));
+        OnPropertyChanged(nameof(FileStatusText));
     }
     partial void OnCurrentDirectoryChanged(string value)
     {
@@ -797,47 +928,62 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
             cancellation.ThrowIfCancellationRequested();
             var isDirectory = (entry.Attributes & FileAttributes.Directory) != 0;
             var isLink = (entry.Attributes & FileAttributes.ReparsePoint) != 0;
-            rows.Add(new(entry.Name, Path.GetRelativePath(root, entry.FullName).Replace('\\', '/'), entry.FullName, isDirectory, isLink, depth));
-            if (rows.Count >= DirectoryLimit)
+            if (rows.Count == DirectoryLimit)
             {
                 truncated = true;
                 break;
             }
+            rows.Add(new(entry.Name, Path.GetRelativePath(root, entry.FullName).Replace('\\', '/'), entry.FullName, isDirectory, isLink, depth));
         }
         return (rows.OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name, StringComparer.OrdinalIgnoreCase).ToArray(), truncated);
     }
 
     public async Task ToggleDirectoryAsync(WorkspacePanelFileItemViewModel? item)
     {
-        if (item is not { IsDirectory: true, IsLink: false } || _disposed) return;
-        if (item.IsExpanded) { item.SetExpanded(false); return; }
+        if (item is not { IsDirectory: true, IsLink: false } || _disposed || item.IsLoadingChildren) return;
+        if (!Flatten(Files).Contains(item) && !_searchResults.Contains(item)) return;
+        if (item.IsExpanded)
+        {
+            item.SetExpanded(false);
+            if (SelectedFile is { } selected && selected.FullPath.StartsWith(item.FullPath + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+                SelectedFile = item;
+            NotifyFileRows();
+            return;
+        }
+        var generation = _fileGeneration;
+        var root = ProjectPath;
+        var token = _fileCancellation?.Token ?? CancellationToken.None;
         if (!item.ChildrenLoaded)
         {
             item.BeginChildrenLoad();
             try
             {
-                var result = await Task.Run(() => ReadDirectoryItems(item.FullPath, ProjectPath, CancellationToken.None, item.Depth + 1));
+                var resolved = new SafeFileReader().ResolvePathWithinRoot(root, item.FullPath, out var error);
+                if (resolved is null) throw new IOException(error);
+                var result = await Task.Run(() => ReadDirectoryItems(resolved, root, token, item.Depth + 1), token);
+                if (generation != _fileGeneration || _disposed || token.IsCancellationRequested) return;
                 item.SetChildren(result.Items);
+                item.EndChildrenLoad(truncated: result.Truncated);
                 if (result.Truncated) IsDirectoryTruncated = true;
             }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { return; }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
-                item.SetChildren([new WorkspacePanelFileItemViewModel("无法读取", item.RelativePath, item.FullPath, false, false, item.Depth + 1)]);
+                if (generation != _fileGeneration || _disposed) return;
+                item.EndChildrenLoad("无法读取：" + error.Message);
+                return;
             }
         }
         item.SetExpanded(true);
+        NotifyFileRows();
     }
 
     [RelayCommand]
     private async Task BrowseFileAsync(WorkspacePanelFileItemViewModel? file)
     {
-        if (file is null || !Files.Contains(file)) return;
+        if (file is null || (!Flatten(Files).Contains(file) && !_searchResults.Contains(file))) return;
         SelectedFile = file;
-        if (!file.IsDirectory || file.IsLink) return;
-        if (!IsUnderRoot(file.FullPath, ProjectPath)) return;
-        CurrentDirectory = file.FullPath;
-        SelectedFile = null;
-        await RefreshFilesAsync();
+        if (file.IsDirectory) await ToggleDirectoryAsync(file);
     }
 
     [RelayCommand]
@@ -886,6 +1032,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(VisibleFiles));
         OnPropertyChanged(nameof(IsFilesEmpty));
         OnPropertyChanged(nameof(FileCountText));
+        OnPropertyChanged(nameof(FileStatusText));
     }
     private static bool PathEquals(string? a, string? b) => string.Equals(a, b,
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
@@ -910,6 +1057,8 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
         _fileCancellation?.Cancel();
         _changeCancellation?.Dispose();
         _fileCancellation?.Dispose();
+        _searchCancellation?.Cancel();
+        _searchCancellation?.Dispose();
         _previewHost.Dispose();
     }
 }

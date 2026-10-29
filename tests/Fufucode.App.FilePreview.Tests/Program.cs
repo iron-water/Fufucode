@@ -26,6 +26,14 @@ try
     var empty = await reader.ReadAsync(new(root, emptyPath));
     Check(empty.Success && empty.Text == string.Empty && empty.Size == 0, "空文件可读");
 
+    var relative = await reader.ReadAsync(new(root, "bom.txt"));
+    Check(relative.Success && relative.Text == "中文文本", "相对路径按项目根解析");
+
+    var binaryPath = Path.Combine(root, "blob.bin");
+    await File.WriteAllBytesAsync(binaryPath, [0x00, 0x01, 0x02, 0x00]);
+    var binaryRead = await reader.ReadAsync(new(root, binaryPath));
+    Check(binaryRead.Success && binaryRead.Text is null, "含 NUL 的内容不当作文本");
+
     var badPath = Path.Combine(root, "bad.txt");
     File.WriteAllBytes(badPath, [0xFF, 0xFE, 0x00]);
     var bad = await reader.ReadAsync(new(root, badPath));
@@ -91,15 +99,31 @@ try
     textControl.SetWordWrap(true);
     Check(textControl.IsWordWrapEnabled, "文本自动换行开关");
 
+    var svgPath = Path.Combine(root, "shape.svg");
+    await File.WriteAllTextAsync(svgPath,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"10\" height=\"10\"><rect width=\"10\" height=\"10\" fill=\"red\"/></svg>");
+    var svg = await registry.Resolve(new(root, svgPath))!.LoadAsync(new(root, svgPath), CancellationToken.None);
+    Check(svg.Kind == FilePreviewKind.Image && svg.Bytes is { Length: > 8 } png && png[0] == 0x89,
+        "标准 SVG 渲染为 PNG 预览");
+    var scriptSvgPath = Path.Combine(root, "script.svg");
+    await File.WriteAllTextAsync(scriptSvgPath,
+        "<svg xmlns=\"http://www.w3.org/2000/svg\"><script>alert(1)</script></svg>");
+    var scriptSvg = await registry.Resolve(new(root, scriptSvgPath))!.LoadAsync(new(root, scriptSvgPath), CancellationToken.None);
+    Check(scriptSvg.IsError && scriptSvg.Error!.Contains("脚本"), "SVG 脚本被拒绝渲染");
+
     var imageControl = new ImagePreviewControl(Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="));
     imageControl.ZoomBy(2);
     imageControl.RotateBy(90);
+    var checkerboard = imageControl.IsCheckerboard;
     imageControl.ToggleCheckerboard();
-    Check(imageControl.Zoom == 2 && imageControl.RotationDegrees == 90 && imageControl.IsCheckerboard,
-        "图片缩放旋转棋盘状态");
+    Check(imageControl.Zoom == 2 && imageControl.RotationDegrees == 90 && imageControl.IsCheckerboard != checkerboard,
+        "图片缩放、旋转与棋盘切换");
     imageControl.SetFitMode();
-    Check(imageControl.Zoom == 1 && imageControl.IsFitMode, "图片适配模式");
+    Check(imageControl.IsFitMode, "图片适配模式");
+    imageControl.SetOriginalSize();
+    Check(!imageControl.IsFitMode && imageControl.Zoom == 1, "原始尺寸回到 1:1");
+    imageControl.Dispose();
 
     using var cancellation = new CancellationTokenSource();
     cancellation.Cancel();
@@ -107,6 +131,63 @@ try
     try { await reader.ReadAsync(new(root, textPath), cancellationToken: cancellation.Token); }
     catch (OperationCanceledException) { cancelled = true; }
     Check(cancelled, "取消令牌中止加载");
+
+    // 真实交互链：工作区文件树必须能展开、选中嵌套文件并加载预览，而不只是根目录列表。
+    var project = Path.Combine(root, "project");
+    Directory.CreateDirectory(Path.Combine(project, "src", "nested"));
+    await File.WriteAllTextAsync(Path.Combine(project, "src", "Program.cs"), "class Program { }");
+    await File.WriteAllTextAsync(Path.Combine(project, "src", "nested", "Deep.cs"), "class Deep { }");
+    var vm = new Fufucode.App.ViewModels.WorkspacePanelViewModel(new FakeClipboard());
+    vm.AttachMock(project);
+    await vm.RefreshFilesAsync();
+    var src = vm.Files.Single(item => item.Name == "src");
+    await vm.ToggleDirectoryAsync(src);
+    Check(src.IsExpanded && src.Children.Count >= 2, "目录可懒加载展开");
+    Check(vm.VisibleFiles.Any(item => item.Name == "nested"), "展开后的子目录进入可见文件列表");
+    var nested = src.Children.Single(item => item.Name == "nested");
+    await vm.ToggleDirectoryAsync(nested);
+    var deep = nested.Children.Single(item => item.Name == "Deep.cs");
+    Check(vm.VisibleFiles.Contains(deep) && deep.Depth == 2, "嵌套文件按层级进入可见列表");
+    vm.SelectedFile = deep;
+    Check(vm.CanPreviewSelectedFile, "选中嵌套文件后可预览");
+    using var deepRegistry = FilePreviewRegistry.CreateDefault();
+    var deepProvider = deepRegistry.Resolve(new(project, deep.FullPath));
+    var deepPreview = await deepProvider!.LoadAsync(new(project, deep.FullPath), CancellationToken.None);
+    Check(deepPreview.Kind == FilePreviewKind.Text && deepPreview.Text?.Contains("class Deep") == true,
+        "嵌套文件按完整路径加载出文本预览");
+
+    // 宿主接线：同步完成加载时不跨线程，可以在无消息循环的无头测试里验证视图与元数据。
+    using (var host = new FilePreviewHost(new FilePreviewRegistry([new SynchronousPreviewProvider()])))
+    {
+        await host.OpenAsync(project, "src/nested/Deep.cs");
+        Check(host.Result?.Kind == FilePreviewKind.Text && host.Content is Avalonia.Controls.TextBlock,
+            "宿主加载结果并创建 provider 视图");
+        Check(host.CurrentRequest?.Path.EndsWith("Deep.cs", StringComparison.OrdinalIgnoreCase) == true,
+            "宿主记录完整预览请求");
+        host.Close();
+        Check(host.Result is null && host.Content is null, "关闭预览清空结果与视图");
+    }
+
+    await vm.ToggleDirectoryAsync(src);
+    Check(!src.IsExpanded && !vm.VisibleFiles.Contains(nested), "折叠目录后子项从可见列表移除");
+
+    vm.FileFilter = "Deep";
+    await WaitUntil(() => !vm.IsFileSearchLoading && vm.VisibleFiles.Any(item => item.Name.Contains("Deep")));
+    Check(vm.VisibleFiles.Any(item => item.RelativePath == "src/nested/Deep.cs"), "筛选搜索整个项目而非仅当前层");
+    vm.FileFilter = "";
+    await WaitUntil(() => !vm.IsFileSearchLoading);
+    Check(vm.VisibleFiles.Any(item => item.Name == "src"), "清空筛选恢复文件树");
+
+    var reference = new Fufucode.App.ViewModels.MessageFileViewModel("src/Program.cs");
+    var changedProperties = new List<string>();
+    reference.PropertyChanged += (_, args) => changedProperties.Add(args.PropertyName ?? "");
+    reference.Resolve(project);
+    Check(reference.Exists && reference.ResolvedPath is not null, "相关文件按项目根解析");
+    Check(changedProperties.Contains(nameof(Fufucode.App.ViewModels.MessageFileViewModel.Exists)),
+        "相关文件解析后通知按钮状态");
+    var outsideReference = new Fufucode.App.ViewModels.MessageFileViewModel("../outside.txt");
+    outsideReference.Resolve(project);
+    Check(!outsideReference.Exists && outsideReference.ResolvedPath is null, "相关文件拒绝越界路径");
 
     Console.WriteLine($"FilePreview tests passed: {passed}");
 }
@@ -122,4 +203,25 @@ void Check(bool condition, string name)
     if (!condition) throw new Exception("FAIL " + name);
     passed++;
     Console.WriteLine("PASS " + name);
+}
+
+static async Task WaitUntil(Func<bool> condition)
+{
+    var deadline = DateTime.UtcNow.AddSeconds(5);
+    while (!condition() && DateTime.UtcNow < deadline) await Task.Delay(25);
+}
+
+sealed class FakeClipboard : Fufucode.App.Infrastructure.IClipboardService
+{
+    public Task SetTextAsync(string text) => Task.CompletedTask;
+}
+
+sealed class SynchronousPreviewProvider : IFilePreviewProvider
+{
+    public FilePreviewKind Kind => FilePreviewKind.Text;
+    public bool CanPreview(FilePreviewRequest request) => true;
+    public Task<FilePreviewResult> LoadAsync(FilePreviewRequest request, CancellationToken cancellationToken) =>
+        Task.FromResult(new FilePreviewResult(FilePreviewKind.Text, request.FullPath, 1, "Text", "UTF-8", false, null, "sync"));
+    public Avalonia.Controls.Control CreateView(FilePreviewResult result) => new Avalonia.Controls.TextBlock { Text = result.Text };
+    public void Dispose() { }
 }

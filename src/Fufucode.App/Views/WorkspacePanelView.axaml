@@ -15,7 +15,7 @@
       <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
       <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     </Style>
-    <!-- Files 列表遵循设置页的三层层次：页底 → 目录二级面板 → 选中/悬停反馈。 -->
+    <!-- 页签样式仅用于旧工作视图；Files 自带样式，停靠拆出后仍然有效。 -->
     <Style Selector="ListBox.workspaceList > ListBoxItem">
       <Setter Property="Padding" Value="0"/>
       <Setter Property="Margin" Value="2,1"/>
@@ -122,65 +122,96 @@
     </StackPanel>
 
     <!-- Both content instances stay alive, keeping independent list scrolling and selection. -->
-    <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}">
+    <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}" Background="{DynamicResource AppMicaPageBackground}">
+      <Grid.Styles>
+        <Style Selector="ListBox.fileTree > ListBoxItem">
+          <Setter Property="Padding" Value="0"/>
+          <Setter Property="Margin" Value="0,1"/>
+          <Setter Property="MinHeight" Value="32"/>
+          <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+          <Setter Property="Template">
+            <ControlTemplate>
+              <Border x:Name="FileRowSurface" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ControlCornerRadius}">
+                <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
+              </Border>
+            </ControlTemplate>
+          </Setter>
+          <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox.fileTree > ListBoxItem:pointerover">
+          <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+        </Style>
+        <Style Selector="ListBox.fileTree > ListBoxItem:selected">
+          <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+        </Style>
+        <Style Selector="ListBox.fileTree > ListBoxItem:focus-visible /template/ Border#FileRowSurface">
+          <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+          <Setter Property="BorderThickness" Value="1"/>
+        </Style>
+        <Style Selector="Button.fileTreeRow">
+          <Setter Property="Background" Value="Transparent"/>
+          <Setter Property="BorderThickness" Value="0"/>
+          <Setter Property="Padding" Value="0"/>
+          <Setter Property="HorizontalAlignment" Value="Stretch"/>
+          <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+          <Setter Property="Cursor" Value="Hand"/>
+          <Setter Property="Template">
+            <ControlTemplate>
+              <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
+            </ControlTemplate>
+          </Setter>
+        </Style>
+      </Grid.Styles>
       <!-- 列表态：文件目录浏览 -->
       <Grid x:Name="FilesListContainer" IsVisible="{Binding !IsFilePreviewOpen}" RowDefinitions="Auto,*,Auto">
-      <StackPanel Grid.Row="0" Spacing="6" Margin="12,0,12,8">
-        <Grid ColumnDefinitions="*,Auto,Auto">
+      <StackPanel Grid.Row="0" Spacing="6" Margin="12,8,12,8">
+        <Grid ColumnDefinitions="*,Auto">
           <TextBlock Classes="bodyStrong" Text="项目文件" VerticalAlignment="Center"/>
-          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshCommand}" ToolTip.Tip="刷新文件和变更" AutomationProperties.Name="刷新文件"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
-          <Button Grid.Column="2" Classes="subtle" Content="上一级" Command="{Binding GoUpCommand}" IsEnabled="{Binding CanGoUp}" Padding="6,3"/>
+          <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshFilesCommand}" AutomationProperties.Name="刷新文件"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
         </Grid>
-        <TextBlock Classes="caption mono" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis"
-                   ToolTip.Tip="{Binding CurrentDirectoryText}"/>
-        <TextBox Text="{Binding FileFilter}" PlaceholderText="搜索当前目录" AutomationProperties.Name="搜索当前目录"/>
-        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsFilesLoading}" Height="3"/>
+        <TextBlock Classes="caption" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectoryText}"/>
+        <TextBox Text="{Binding FileFilter}" PlaceholderText="搜索项目文件" AutomationProperties.Name="搜索项目文件"/>
+        <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsFileOperationLoading}" Height="2"/>
         <TextBlock Classes="caption" Text="{Binding FilesError}" IsVisible="{Binding HasFilesError}" TextWrapping="Wrap"/>
         <TextBlock Classes="caption" Text="没有匹配文件" IsVisible="{Binding IsFilesEmpty}" Margin="0,8"/>
-        <TextBlock Classes="caption" Text="本层仅显示前 300 项；进入子目录继续浏览。" IsVisible="{Binding IsDirectoryTruncated}" TextWrapping="Wrap"/>
+        <TextBlock Classes="caption" Text="{Binding FileLimitText}" IsVisible="{Binding HasFileLimit}" TextWrapping="Wrap"/>
       </StackPanel>
-      <ListBox x:Name="FilesList" Grid.Row="1" Classes="workspaceList" ItemsSource="{Binding VisibleFiles}" SelectedItem="{Binding SelectedFile}"
-               BorderThickness="0" Background="Transparent" Margin="4,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-        <ListBox.ItemTemplate>
-          <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
-            <Button Classes="fileRow" Classes.folder="{Binding IsDirectory}" Click="BrowseFile_Click"
-                    ToolTip.Tip="{Binding FullPath}">
-              <Grid ColumnDefinitions="20,*" ColumnSpacing="8">
-                <PathIcon Data="{DynamicResource Icon.Folder}" Width="15" Height="15" VerticalAlignment="Center"
-                          Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
-                <PathIcon Data="{DynamicResource Icon.Document}" Width="14" Height="14" VerticalAlignment="Center"
-                          Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
-                <StackPanel Grid.Column="1" Spacing="2">
-                  <TextBlock Classes="body" Text="{Binding Name}" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Classes="caption" Text="{Binding Detail}" Foreground="{DynamicResource AppTextSecondary}"/>
-                </StackPanel>
-              </Grid>
-            </Button>
-          </DataTemplate>
-        </ListBox.ItemTemplate>
-      </ListBox>
-      <Border Grid.Row="2" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="12,10">
-        <StackPanel Spacing="8">
-          <TextBlock Classes="caption mono" Text="{Binding FileSelectionText}" TextWrapping="Wrap"/>
-          <Grid ColumnDefinitions="*,Auto">
-            <TextBlock Classes="caption" Text="{Binding FileCountText}" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" Classes="subtle" Content="复制路径" Command="{Binding CopyFilePathCommand}" IsEnabled="{Binding HasSelectedFile}" Padding="8,4"/>
-          </Grid>
-          <TextBlock Classes="caption" Text="{Binding CopyFeedback}" TextWrapping="Wrap"/>
-          <Button Classes="subtle" Content="打开预览" Click="PreviewSelectedFile_Click" IsEnabled="{Binding CanPreviewSelectedFile}" HorizontalAlignment="Left"/>
-        </StackPanel>
+      <Border Grid.Row="1" Background="{DynamicResource AppCardBackground}" CornerRadius="{DynamicResource ControlCornerRadius}" Margin="8,0,8,4" Padding="4">
+        <ListBox x:Name="FilesList" Classes="fileTree" ItemsSource="{Binding VisibleFiles}" SelectedItem="{Binding SelectedFile}"
+                 KeyDown="FilesList_KeyDown" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 AutomationProperties.Name="项目文件树">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
+              <Button Classes="fileTreeRow" Click="FileRow_Click" ToolTip.Tip="{Binding FullPath}">
+                <Grid Margin="{Binding Indent}" ColumnDefinitions="16,18,*,Auto" ColumnSpacing="6" Height="32" Background="Transparent">
+                  <TextBlock Text="{Binding Glyph}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                  <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
+                  <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Document}" Width="13" Height="13" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
+                  <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                  <TextBlock Grid.Column="3" Classes="caption" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                </Grid>
+              </Button>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
       </Border>
+      <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="12,2,8,6" ColumnSpacing="6">
+        <TextBlock Classes="caption" Text="{Binding FileStatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding FileSelectionText}"/>
+        <Button Grid.Column="1" Classes="subtle" Content="复制路径" Command="{Binding CopyFilePathCommand}" IsEnabled="{Binding HasSelectedFile}" Padding="6,3"/>
+      </Grid>
       </Grid>
       <!-- 统一预览宿主：provider 负责分类与加载，面板只显示统一元数据和错误。 -->
       <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,Auto,*">
         <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
                 Background="{DynamicResource AppCardBackground}" Padding="8,6">
           <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="5" VerticalAlignment="Center">
-            <Button Classes="iconButton" Content="←" Command="{Binding CloseFilePreviewCommand}" ToolTip.Tip="返回文件列表"
+            <Button Classes="iconButton" Content="←" Command="{Binding CloseFilePreviewCommand}"
                     AutomationProperties.Name="返回文件列表"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
-              <Button Classes="iconButton" Content="‹" Command="{Binding PreviewBackCommand}" IsEnabled="{Binding CanPreviewBack}" ToolTip.Tip="预览后退"/>
-              <Button Classes="iconButton" Content="›" Command="{Binding PreviewForwardCommand}" IsEnabled="{Binding CanPreviewForward}" ToolTip.Tip="预览前进"/>
+              <Button Classes="iconButton" Content="‹" Command="{Binding PreviewBackCommand}" IsEnabled="{Binding CanPreviewBack}"/>
+              <Button Classes="iconButton" Content="›" Command="{Binding PreviewForwardCommand}" IsEnabled="{Binding CanPreviewForward}"/>
             </StackPanel>
             <StackPanel Grid.Column="2" Margin="6,0" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="bodyStrong" Text="{Binding PreviewFileName}" TextTrimming="CharacterEllipsis"/>
@@ -194,7 +225,7 @@
           </Grid>
         </Border>
         <Border Grid.Row="1" BorderBrush="{DynamicResource AppDividerSubtle}" BorderThickness="0,0,0,1" Padding="8,4">
-          <StackPanel Orientation="Horizontal" Spacing="6">
+          <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4">
             <TextBlock Classes="caption" Text="{Binding PreviewResult.DisplayType}" VerticalAlignment="Center"/>
             <TextBlock Classes="caption mono" Text="{Binding PreviewResult.Format}" VerticalAlignment="Center"/>
             <TextBox x:Name="PreviewFindBox" Width="150" PlaceholderText="查找文本" Padding="6,2"
@@ -207,18 +238,20 @@
             <TextBlock Classes="caption" Text="{Binding FindStatus}" VerticalAlignment="Center"
                        IsVisible="{Binding IsTextPreviewToolbar}"/>
             <Button Classes="subtle" Content="换行" Padding="7,2" Command="{Binding TogglePreviewWordWrapCommand}"
-                    IsVisible="{Binding IsTextPreviewToolbar}" ToolTip.Tip="切换文本换行"/>
+                    IsVisible="{Binding IsTextPreviewToolbar}"/>
             <Button Classes="subtle" Content="缩小" Padding="7,2" Command="{Binding ZoomImageOutCommand}" IsVisible="{Binding IsImagePreview}"/>
             <Button Classes="subtle" Content="放大" Padding="7,2" Command="{Binding ZoomImageInCommand}" IsVisible="{Binding IsImagePreview}"/>
             <Button Classes="subtle" Content="适配" Padding="7,2" Command="{Binding FitImageCommand}" IsVisible="{Binding IsImagePreview}"/>
             <Button Classes="subtle" Content="原始尺寸" Padding="7,2" Command="{Binding OriginalImageCommand}" IsVisible="{Binding IsImagePreview}"/>
-            <Button Classes="subtle" Content="↶" Padding="7,2" Command="{Binding RotateImageLeftCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向左旋转"/>
-            <Button Classes="subtle" Content="↷" Padding="7,2" Command="{Binding RotateImageRightCommand}" IsVisible="{Binding IsImagePreview}" ToolTip.Tip="向右旋转"/>
+            <Button Classes="subtle" Content="↶" Padding="7,2" Command="{Binding RotateImageLeftCommand}" IsVisible="{Binding IsImagePreview}"/>
+            <Button Classes="subtle" Content="↷" Padding="7,2" Command="{Binding RotateImageRightCommand}" IsVisible="{Binding IsImagePreview}"/>
             <Button Classes="subtle" Content="棋盘" Padding="7,2" Command="{Binding ToggleImageCheckerboardCommand}" IsVisible="{Binding IsImagePreview}"/>
             <Button Classes="subtle" Content="复制路径" Padding="7,2" Command="{Binding CopyPreviewPathCommand}"/>
             <Button Classes="subtle" Content="复制源码" Padding="7,2" Command="{Binding CopyPreviewSourceCommand}" IsVisible="{Binding CanCopyPreviewSource}"/>
+            <Button Classes="subtle" Content="{Binding PreviewSourceToggleText}" Padding="7,2" Command="{Binding TogglePreviewSourceCommand}" IsVisible="{Binding CanShowPreviewSource}"/>
+            <Button Classes="subtle" Content="保存 PNG" Padding="7,2" Click="OnDownloadDiagram" IsVisible="{Binding IsDiagramPreview}"/>
             <Button Classes="subtle" Content="系统打开" Padding="7,2" Click="OpenPreviewInSystem_Click"/>
-          </StackPanel>
+          </WrapPanel>
         </Border>
         <ContentControl x:Name="PreviewHost" Grid.Row="2" Content="{Binding PreviewHost}"/>
       </Grid>

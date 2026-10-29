@@ -113,6 +113,7 @@ public static class Wave5D6SelfTest
     {
         var root = Path.Combine(Path.GetTempPath(), "fufucode-d6-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(root, "子目录"));
+        File.WriteAllText(Path.Combine(root, "子目录", "子文件.txt"), "child");
         var filePath = Path.Combine(root, "预览文件.txt");
         File.WriteAllText(filePath, "fixture");
         try
@@ -134,29 +135,31 @@ public static class Wave5D6SelfTest
                 if (previewHost is null) return;
                 check(previewHost.Content is FilePreviewHost, "初始预览由统一 FilePreviewHost 承载");
 
-                // 单击文件：走行内按钮的真实 Click 路由（与用户点击同一路径）。
+                // 单击文件：走行内按钮的真实 Click 路由（与用户点击同一路径），直接进入预览。
                 var row = RowOf(view, vm, file);
                 check(row is not null, "Files 行可定位（列表已实现容器）");
                 if (row is null) return;
                 Click(row);
-                await Task.Delay(80);
-                check(vm.SelectedFile?.FullPath == file.FullPath, "Files 单击文件只更新选中项");
-                check(vm.SelectedTab!.Kind == WorkspacePanelKind.Files, "单击只就位预览目标，不抢 Files tab");
-
-                // 双击（同一文件行连续第二次点击）：打开统一预览宿主。
-                Click(row);
-                await Task.Delay(120);
+                for (var i = 0; i < 40 && vm.PreviewResult is null; i++) await Task.Delay(50);
+                check(vm.SelectedFile?.FullPath == file.FullPath, "Files 单击文件同步选中项");
+                check(vm.SelectedTab!.Kind == WorkspacePanelKind.Files, "打开预览不抢 Files tab");
                 check(vm.IsFilePreviewOpen && vm.PreviewResult?.Path == file.FullPath,
-                    "Files 双击文件 → 进入统一文件预览态且预览目标不变");
+                    "Files 单击文件 → 进入统一文件预览态");
 
-                // 目录不进入预览（只做逐层浏览）。
+                // 目录就地展开：不切换目录、不打开预览，子项必须真正进入可见列表。
                 vm.CloseFilePreviewCommand.Execute(null);
                 await Task.Delay(60);
+                host.UpdateLayout();
                 var folderRow = RowOf(view, vm, folder);
-                if (folderRow is not null) Click(folderRow);
-                await Task.Delay(120);
+                check(folderRow is not null, "目录行可定位");
+                if (folderRow is null) return;
+                Click(folderRow);
+                for (var i = 0; i < 40 && !vm.VisibleFiles.Any(item => item.Name == "子文件.txt"); i++)
+                    await Task.Delay(50);
                 check(!vm.IsFilePreviewOpen && vm.CurrentDirectory == root,
-                    "目录只做递归展开，不抢占预览目标");
+                    "目录不打开预览也不切换当前目录");
+                check(folder.IsExpanded && vm.VisibleFiles.Any(item => item.Name == "子文件.txt" && item.Depth == 1),
+                    "目录点击后就地展开并显示子项");
             }
             finally
             {

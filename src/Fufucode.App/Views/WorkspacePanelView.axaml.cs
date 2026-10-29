@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -23,7 +24,7 @@ public partial class WorkspacePanelView : UserControl
     private async void OnDownloadDiagram(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not WorkspacePanelViewModel model) return;
-        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage) return;
+        if (TopLevel.GetTopLevel(FilesContent)?.StorageProvider is not { } storage) return;
 
         try
         {
@@ -37,8 +38,7 @@ public partial class WorkspacePanelView : UserControl
             });
             if (target is null) return;
 
-            var diagram = this.FindControl<ContentControl>("PreviewHost")?.Content is FilePreviewHost host
-                ? host.Content as RichMarkdownView : null;
+            var diagram = model.PreviewHost.Content as RichMarkdownView;
             var size = diagram?.Bounds.Size ?? default;
             if (diagram is null || size.Width < 1 || size.Height < 1) return;
 
@@ -74,8 +74,7 @@ public partial class WorkspacePanelView : UserControl
     public WorkspacePanelView()
     {
         InitializeComponent();
-        // Files 选中只更新列表，点击“打开预览”或再次点击打开统一本地预览宿主。
-        FilesList.SelectionChanged += OnFilesSelectionChanged;
+        // 文件单击预览，目录就地展开；键盘 Enter 和左右键复用相同入口。
         // 语法着色按深浅色选调色板：跟随实际主题，切换后重新着色当前 diff。
         ActualThemeVariantChanged += (_, _) => PushTheme();
         DataContextChanged += (_, _) => PushTheme();
@@ -141,49 +140,34 @@ public partial class WorkspacePanelView : UserControl
             vm.CloseTabCommand.Execute(tab);
     }
 
-    private void BrowseFile_Click(object? sender, RoutedEventArgs args)
+    /// <summary>行点击：目录就地展开，文件直接进入统一预览；两者都先同步列表选中。</summary>
+    private async void FileRow_Click(object? sender, RoutedEventArgs args)
     {
-        if (DataContext is not WorkspacePanelViewModel vm ||
-            sender is not Button { DataContext: WorkspacePanelFileItemViewModel file })
+        if (sender is not Control { DataContext: WorkspacePanelFileItemViewModel file } ||
+            DataContext is not WorkspacePanelViewModel vm) return;
+        vm.SelectedFile = file;
+        if (file.IsDirectory) await vm.ToggleDirectoryAsync(file);
+        else
         {
-            return;
-        }
-
-        // 目录走原有逐层浏览；文件在选中命令之后立刻把预览目标推给内置浏览器。
-        // 「再次点击已选中文件」= 打开预览；双击的第二下走的正是这条路径，
-        // 因此不另挂 DoubleTapped 手势——同一语义只保留一个可断言入口。
-        var reopen = IsSamePath(vm.SelectedFile?.FullPath, file.FullPath);
-        if (file.IsDirectory)
-        {
-            _ = vm.ToggleDirectoryAsync(file);
-            return;
-        }
-        vm.BrowseFileCommand.Execute(file);
-        if (reopen)
-        {
+            if (!vm.IsFilePreviewOpen) vm.SelectedTab = vm.Tabs.FirstOrDefault(tab => tab.Kind == WorkspacePanelKind.Files);
             vm.OpenFilePreview(file.FullPath);
             PreviewRequested?.Invoke();
         }
     }
 
-    /// <summary>
-    /// 选中文件（键盘或列表自身选中）→ 把路径推给内置浏览器，进入文件预览态，但<b>不</b>抢走 Files tab：
-    /// 每次点击都跳到 Preview 会让目录连续浏览不可用（guideline §3.4 要求 tab 身份稳定）。
-    /// </summary>
-    private void OnFilesSelectionChanged(object? sender, SelectionChangedEventArgs args)
+    private async void FilesList_KeyDown(object? sender, KeyEventArgs args)
     {
-        // 选择只更新列表状态；预览由“打开预览”或再次点击触发。
-    }
-
-    private static bool IsSamePath(string? a, string? b) =>
-        a is not null && b is not null && string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
-
-    private void PreviewSelectedFile_Click(object? sender, RoutedEventArgs args)
-    {
-        if (DataContext is WorkspacePanelViewModel { SelectedFile: { IsDirectory: false } file } vm)
+        if (DataContext is not WorkspacePanelViewModel { SelectedFile: { } file } vm) return;
+        if (args.Key is Key.Enter || (args.Key == Key.Right && file.IsDirectory && !file.IsExpanded) ||
+            (args.Key == Key.Left && file.IsDirectory && file.IsExpanded))
         {
-            vm.OpenFilePreview(file.FullPath);
-            PreviewRequested?.Invoke();
+            args.Handled = true;
+            if (file.IsDirectory) await vm.ToggleDirectoryAsync(file);
+            else
+            {
+                vm.OpenFilePreview(file.FullPath);
+                PreviewRequested?.Invoke();
+            }
         }
     }
 
@@ -198,9 +182,13 @@ public partial class WorkspacePanelView : UserControl
         if (DataContext is not WorkspacePanelViewModel vm || string.IsNullOrWhiteSpace(vm.PreviewFilePath)) return;
         try
         {
-            if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher &&
-                await TopLevel.GetTopLevel(this)!.StorageProvider.TryGetFileFromPathAsync(vm.PreviewFilePath) is { } item)
-                await launcher.LaunchFileAsync(item);
+            var top = TopLevel.GetTopLevel(FilesContent);
+            if (top?.Launcher is { } launcher &&
+                await top.StorageProvider.TryGetFileFromPathAsync(vm.PreviewFilePath) is { } item)
+            {
+                if (!await launcher.LaunchFileAsync(item)) vm.PreviewFileDetail = "系统未能打开此文件。";
+            }
+            else vm.PreviewFileDetail = "无法定位文件或外部应用。";
         }
         catch (Exception error) { vm.PreviewFileDetail = "系统打开失败：" + error.Message; }
     }

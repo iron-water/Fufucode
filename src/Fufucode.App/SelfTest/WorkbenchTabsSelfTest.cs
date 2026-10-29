@@ -83,12 +83,11 @@ internal static class WorkbenchTabsSelfTest
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "folder" }));
             await Ready();
             Check(!workspace.VisibleFiles.Any(f => f.Name == "child.txt"), "file tree collapses an expanded directory");
-            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "tracked.txt" })); await Ready();
-            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "打开预览"));
+            Click(files.GetVisualDescendants().OfType<Button>().Single(b => b.DataContext is WorkspacePanelFileItemViewModel { Name: "tracked.txt" }));
             await Until(() => workspace.PreviewResult is not null);
             Check(workspace.IsFilePreviewOpen && workspace.PreviewResult?.Path == file &&
                   workspace.PreviewResult.Kind == Fufucode.App.Features.FilePreview.FilePreviewKind.Text,
-                "file preview button opens the unified provider host for the selected file");
+                "file row click opens the unified provider host for the selected file");
             var backButton = files.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "←");
             Click(backButton); await Ready();
             Check(!workspace.IsFilePreviewOpen, "returning from unified file preview restores file list");
@@ -97,9 +96,10 @@ internal static class WorkbenchTabsSelfTest
             Click(files.GetVisualDescendants().OfType<Button>().Single(b => Avalonia.Automation.AutomationProperties.GetName(b) == "刷新文件"));
             await Until(() => workspace.Files.Any(f => f.Name == "refresh.txt"));
             Check(workspace.Files.Any(f => f.Name == "refresh.txt"), "detached file tab retains working refresh command");
-            files.GetVisualDescendants().OfType<TextBox>().Single(t => Avalonia.Automation.AutomationProperties.GetName(t) == "搜索当前目录").Text = "REFRESH";
-            await Ready();
-            Check(workspace.VisibleFiles.Single().Name == "refresh.txt", "native file search filters actual rows without case sensitivity");
+            files.GetVisualDescendants().OfType<TextBox>().Single(t => Avalonia.Automation.AutomationProperties.GetName(t) == "搜索项目文件").Text = "REFRESH";
+            await Until(() => workspace.VisibleFiles.Count() == 1 && workspace.VisibleFiles.Single().Name == "refresh.txt");
+            Check(workspace.VisibleFiles.Count() == 1 && workspace.VisibleFiles.Single().Name == "refresh.txt",
+                "native file search finds project files without case sensitivity");
             workspace.FileFilter = ""; await Ready();
             window.OpenDockPage("changes", DockZone.Right); await Ready();
             var changes = window.PageForTesting("changes");

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Threading.Tasks;
 using Avalonia;
@@ -9,186 +10,273 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Fufucode.App.Features.FilePreview;
 
 namespace Fufucode.App.Views;
 
-/// <summary>前台图片预览：缩放、平移、旋转、适配、复制和系统打开。</summary>
+/// <summary>Foreground image viewer sharing the same pixel-accurate viewport as Files.</summary>
 internal static class ImageLightbox
 {
-    public static void Show(Visual anchor, IImage source, string? filePath = null)
+    // Preserve the existing call shape. Borrowed sources remain owned by the caller.
+    public static void Show(Visual anchor, IImage source, string? filePath = null) =>
+        ShowCanvas(anchor, new ImagePreviewCanvas(source), filePath);
+
+    internal static void Show(Visual anchor, ImagePreviewCanvas source, string? filePath = null) =>
+        ShowCanvas(anchor, source.CreateSharedCanvas(), filePath);
+
+    private static void ShowCanvas(Visual anchor, ImagePreviewCanvas canvas, string? filePath)
     {
-        var image = new ImagePreviewSurface(source, filePath);
-        var toolbar = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            Spacing = 6,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(10),
-        };
-        var window = new Window
-        {
-            Background = Brushes.Black,
-            Width = 1100,
-            Height = 800,
-            MinWidth = 520,
-            MinHeight = 360,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Title = filePath is null ? "图片预览" : Path.GetFileName(filePath),
-        };
+        try { ShowWindow(anchor, new ImageLightboxWindow(canvas, filePath)); }
+        catch { canvas.Dispose(); throw; }
+    }
 
-        Button Action(string label, Action action, string? tip = null)
-        {
-            var button = new Button { Content = label, Padding = new Thickness(10, 5) };
-            if (tip is not null) ToolTip.SetTip(button, tip);
-            button.Click += (_, _) => action();
-            return button;
-        }
-
-        toolbar.Children.Add(Action("−", () => image.ZoomBy(0.8), "缩小"));
-        toolbar.Children.Add(Action("+", () => image.ZoomBy(1.25), "放大"));
-        toolbar.Children.Add(Action("适配", image.Fit, "适配窗口"));
-        toolbar.Children.Add(Action("原始", image.Original, "原始尺寸"));
-        toolbar.Children.Add(Action("↶", () => image.RotateBy(-90), "向左旋转"));
-        toolbar.Children.Add(Action("↷", () => image.RotateBy(90), "向右旋转"));
-        toolbar.Children.Add(Action("棋盘", image.ToggleCheckerboard, "透明背景棋盘"));
-        toolbar.Children.Add(Action("复制", () => _ = image.CopyAsync(window), "复制图片"));
-        toolbar.Children.Add(Action("外部打开", () => _ = image.OpenExternalAsync(window), "使用系统默认应用打开"));
-        toolbar.Children.Add(Action("关闭", window.Close, "关闭预览"));
-
-        var layout = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
-        Grid.SetRow(image, 0); Grid.SetRow(toolbar, 1);
-        layout.Children.Add(image); layout.Children.Add(toolbar);
-        window.Content = layout;
-        window.KeyDown += (_, args) => { if (args.Key == Key.Escape) window.Close(); };
+    private static void ShowWindow(Visual anchor, ImageLightboxWindow window)
+    {
         if (TopLevel.GetTopLevel(anchor) is Window owner) window.Show(owner);
         else window.Show();
     }
+}
 
-    private sealed class ImagePreviewSurface : ContentControl
+/// <summary>Named controls and explicit actions/state allow focused headless and native interaction checks.</summary>
+public sealed class ImageLightboxWindow : Window
+{
+    private readonly TextBlock _status;
+    private readonly Button _copy;
+    private readonly Button _openExternal;
+    private readonly Button _fullscreen;
+    private WindowState _previousWindowState = WindowState.Normal;
+    private bool _closed;
+
+    public ImageLightboxWindow(ImagePreviewCanvas canvas, string? filePath = null)
     {
-        private readonly Image _image;
-        private readonly IImage _source;
-        private readonly string? _filePath;
-        private readonly ScaleTransform _scale = new(1, 1);
-        private readonly RotateTransform _rotation = new(0);
-        private readonly TranslateTransform _translation = new(0, 0);
-        private readonly Border _surface;
-        private Point? _dragOrigin;
-        private Vector _pan;
-        private double _zoom = 1;
-        private int _rotationDegrees;
+        Canvas = canvas;
+        FilePath = filePath;
+        Name = "ImageLightboxWindow";
+        Background = Brushes.Black;
+        Foreground = Brushes.White;
+        Width = 1100;
+        Height = 800;
+        MinWidth = 320;
+        MinHeight = 240;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        WindowState = WindowState.FullScreen;
+        Title = string.IsNullOrWhiteSpace(filePath) ? "图片预览" : Path.GetFileName(filePath);
 
-        public ImagePreviewSurface(IImage source, string? filePath)
+        var toolbar = new WrapPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(8),
+        };
+        Button Action(string name, string label, Action action, string tip)
+        {
+            var button = new Button
+            {
+                Name = name,
+                Content = label,
+                Margin = new Thickness(3),
+                Padding = new Thickness(10, 5),
+            };
+            ToolTip.SetTip(button, tip);
+            button.Click += (_, _) => action();
+            toolbar.Children.Add(button);
+            return button;
+        }
+
+        Action("ImageZoomOut", "−", () => Canvas.ZoomBy(0.8), "缩小（−）");
+        Action("ImageZoomIn", "+", () => Canvas.ZoomBy(1.25), "放大（+）");
+        Action("ImageFit", "适配", Canvas.SetFitMode, "适配窗口（F）");
+        Action("ImageOriginal", "100%", Canvas.SetOriginalSize, "一个图片像素对应一个屏幕像素（1）");
+        Action("ImageRotateLeft", "左转", () => Canvas.RotateBy(-90), "向左旋转 90°");
+        Action("ImageRotateRight", "右转", () => Canvas.RotateBy(90), "向右旋转 90°（R）");
+        Action("ImageCheckerboard", "棋盘", Canvas.ToggleCheckerboard, "切换透明背景棋盘（B）");
+        _copy = Action("ImageCopy", "复制", () => _ = CopyAsync(), "复制原图（Ctrl+C），不包含当前缩放或旋转");
+        _openExternal = Action("ImageOpenExternal", "外部打开", () => _ = OpenExternalAsync(), "使用系统默认应用打开原文件");
+        _fullscreen = Action("ImageFullScreen", "退出全屏", ToggleFullScreen, "切换全屏（F11）；Escape 关闭预览");
+        Action("ImageClose", "关闭", Close, "关闭预览（Escape）");
+        _copy.IsEnabled = Canvas.Source is Bitmap;
+        _openExternal.IsEnabled = CanOpenExternal;
+        if (!CanOpenExternal)
+            ToolTip.SetTip(_openExternal, string.IsNullOrWhiteSpace(filePath) ? "图片没有本地文件路径。" : "原文件不存在。");
+
+        _status = new TextBlock
+        {
+            Name = "ImagePreviewStatus",
+            Foreground = Brushes.White,
+            TextWrapping = TextWrapping.Wrap,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Margin = new Thickness(12, 0, 12, 10),
+        };
+        var footer = new StackPanel { Children = { toolbar, _status } };
+        var layout = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
+        Canvas.Name = "ImagePreviewCanvas";
+        Grid.SetRow(footer, 1);
+        layout.Children.Add(Canvas);
+        layout.Children.Add(footer);
+        Content = layout;
+        Canvas.StateChanged += OnCanvasStateChanged;
+        AddHandler(KeyDownEvent, OnPreviewKeyDown, RoutingStrategies.Tunnel);
+        Opened += (_, _) => { Canvas.Focus(); RefreshStatus(); };
+        Closed += (_, _) =>
+        {
+            _closed = true;
+            Canvas.StateChanged -= OnCanvasStateChanged;
+            Canvas.Dispose();
+        };
+        RefreshStatus();
+    }
+
+    public ImagePreviewCanvas Canvas { get; }
+    public string? FilePath { get; }
+    public bool CanOpenExternal => !string.IsNullOrWhiteSpace(FilePath) && File.Exists(FilePath);
+    public bool IsFullScreen => WindowState == WindowState.FullScreen;
+    public string? LastError { get; private set; }
+    public string StatusText => _status.Text ?? string.Empty;
+
+    public void ToggleFullScreen()
+    {
+        if (IsFullScreen) WindowState = _previousWindowState;
+        else
+        {
+            _previousWindowState = WindowState;
+            WindowState = WindowState.FullScreen;
+        }
+        _fullscreen.Content = IsFullScreen ? "退出全屏" : "全屏";
+    }
+
+    public async Task<bool> CopyAsync()
+    {
+        if (_closed) return false;
+        if (Canvas.Source is not Bitmap)
+            return ReportError("当前图片类型不支持直接复制。请使用外部应用复制。");
+        if (Clipboard is not { } clipboard) return ReportError("系统剪贴板不可用。");
+
+        // The clipboard owns this lease until its data is replaced, so closing either
+        // viewport cannot invalidate a lazily requested bitmap on the clipboard.
+        var data = new ImageClipboardData(Canvas.RetainSource());
+        _copy.IsEnabled = false;
+        var transferred = false;
+        try
+        {
+            await clipboard.SetDataAsync(data);
+            transferred = true;
+            await clipboard.FlushAsync();
+            ReportSuccess("已复制原图。");
+            return true;
+        }
+        catch (Exception error)
+        {
+            if (!transferred) data.Dispose();
+            return ReportError($"复制图片失败：{error.Message}");
+        }
+        finally
+        {
+            if (!_closed) _copy.IsEnabled = true;
+        }
+    }
+
+    public async Task<bool> OpenExternalAsync()
+    {
+        if (_closed) return false;
+        if (string.IsNullOrWhiteSpace(FilePath)) return ReportError("图片没有本地文件路径，无法外部打开。");
+        if (!File.Exists(FilePath)) return ReportError("原文件不存在，无法外部打开。");
+        _openExternal.IsEnabled = false;
+        try
+        {
+            using var item = await StorageProvider.TryGetFileFromPathAsync(FilePath);
+            if (_closed) return false;
+            if (item is null) return ReportError("无法访问原文件。");
+            if (!await Launcher.LaunchFileAsync(item)) return ReportError("系统未能打开图片，请检查默认应用。");
+            ReportSuccess("已请求系统默认应用打开原文件。");
+            return true;
+        }
+        catch (Exception error)
+        {
+            return ReportError($"外部打开失败：{error.Message}");
+        }
+        finally
+        {
+            if (!_closed) _openExternal.IsEnabled = CanOpenExternal;
+        }
+    }
+
+    private void OnPreviewKeyDown(object? sender, KeyEventArgs args)
+    {
+        if (args.Key == Key.Escape) { Close(); args.Handled = true; return; }
+        if (args.Key == Key.F11) { ToggleFullScreen(); args.Handled = true; return; }
+        if (args.Key == Key.C && (args.KeyModifiers.HasFlag(KeyModifiers.Control) || args.KeyModifiers.HasFlag(KeyModifiers.Meta)))
+        {
+            _ = CopyAsync();
+            args.Handled = true;
+            return;
+        }
+        if ((args.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Meta | KeyModifiers.Alt)) != 0) return;
+        switch (args.Key)
+        {
+            case Key.Add:
+            case Key.OemPlus: Canvas.ZoomBy(1.25); break;
+            case Key.Subtract:
+            case Key.OemMinus: Canvas.ZoomBy(0.8); break;
+            case Key.F: Canvas.SetFitMode(); break;
+            case Key.D1:
+            case Key.NumPad1: Canvas.SetOriginalSize(); break;
+            case Key.R: Canvas.RotateBy(args.KeyModifiers.HasFlag(KeyModifiers.Shift) ? -90 : 90); break;
+            case Key.B: Canvas.ToggleCheckerboard(); break;
+            case Key.Left: Canvas.PanBy(new Vector(-32, 0)); break;
+            case Key.Right: Canvas.PanBy(new Vector(32, 0)); break;
+            case Key.Up: Canvas.PanBy(new Vector(0, -32)); break;
+            case Key.Down: Canvas.PanBy(new Vector(0, 32)); break;
+            default: return;
+        }
+        args.Handled = true;
+    }
+
+    private void OnCanvasStateChanged(object? sender, EventArgs e)
+    {
+        if (_closed) return;
+        LastError = null;
+        RefreshStatus();
+    }
+
+    private void RefreshStatus()
+    {
+        var size = Canvas.OriginalSize;
+        _status.Text = $"{size.Width} × {size.Height}  ·  {Canvas.Zoom:P0}  ·  {Canvas.RotationDegrees}°"
+            + (Canvas.IsFitMode ? "  ·  适配" : string.Empty);
+        _status.Foreground = Brushes.White;
+    }
+
+    private bool ReportError(string message)
+    {
+        LastError = message;
+        if (!_closed)
+        {
+            _status.Text = message;
+            _status.Foreground = Brushes.LightSalmon;
+        }
+        return false;
+    }
+
+    private void ReportSuccess(string message)
+    {
+        LastError = null;
+        if (!_closed) { _status.Text = message; _status.Foreground = Brushes.White; }
+    }
+
+    private sealed class ImageClipboardData : IDataTransfer, IAsyncDataTransfer
+    {
+        private readonly DataTransfer _data = new();
+        private ImagePreviewSource? _source;
+
+        public ImageClipboardData(ImagePreviewSource source)
         {
             _source = source;
-            _filePath = filePath;
-            _image = new Image
-            {
-                Source = source,
-                Stretch = Stretch.Uniform,
-                RenderTransformOrigin = new RelativePoint(0.5, 0.5, RelativeUnit.Relative),
-                RenderTransform = new TransformGroup { Children = { _scale, _rotation, _translation } },
-            };
-            _surface = new Border
-            {
-                Background = Brushes.Black,
-                Child = new ScrollViewer
-                {
-                    Content = _image,
-                    HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-                    VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto,
-                },
-            };
-            Content = _surface;
-            AddHandler(InputElement.PointerWheelChangedEvent, OnPointerWheel, RoutingStrategies.Bubble);
-            AddHandler(PointerPressedEvent, OnPointerPressed, RoutingStrategies.Bubble);
-            AddHandler(PointerMovedEvent, OnPointerMoved, RoutingStrategies.Bubble);
-            AddHandler(PointerReleasedEvent, OnPointerReleased, RoutingStrategies.Bubble);
+            _data.Add(DataTransferItem.Create(DataFormat.Bitmap, (Bitmap)source.Image));
         }
 
-        public void ZoomBy(double factor)
-        {
-            _zoom = Math.Clamp(_zoom * factor, 0.1, 8);
-            ApplyTransform();
-        }
-
-        public void Fit()
-        {
-            _zoom = 1; _pan = default; ApplyTransform();
-        }
-
-        public void Original()
-        {
-            _zoom = 1; _pan = default; ApplyTransform();
-        }
-
-        public void RotateBy(int degrees)
-        {
-            _rotationDegrees = (_rotationDegrees + degrees) % 360;
-            if (_rotationDegrees < 0) _rotationDegrees += 360;
-            ApplyTransform();
-        }
-
-        public void ToggleCheckerboard() => _surface.Background = _surface.Background == Brushes.Black
-            ? CheckerboardBrush() : Brushes.Black;
-
-        public async Task CopyAsync(Window window)
-        {
-            if (_source is not Bitmap bitmap || window.Clipboard is not { } clipboard) return;
-            var data = new DataTransfer();
-            data.Add(DataTransferItem.Create(DataFormat.Bitmap, bitmap));
-            await clipboard.SetDataAsync(data);
-        }
-
-        public async Task OpenExternalAsync(Window window)
-        {
-            if (string.IsNullOrWhiteSpace(_filePath)) return;
-            var item = await window.StorageProvider.TryGetFileFromPathAsync(_filePath);
-            if (item is not null) await window.Launcher.LaunchFileAsync(item);
-        }
-
-        private void ApplyTransform()
-        {
-            _scale.ScaleX = _zoom; _scale.ScaleY = _zoom;
-            _rotation.Angle = _rotationDegrees;
-            _translation.X = _pan.X; _translation.Y = _pan.Y;
-        }
-
-        private void OnPointerWheel(object? sender, PointerWheelEventArgs args)
-        {
-            ZoomBy(args.Delta.Y > 0 ? 1.1 : 1 / 1.1);
-            args.Handled = true;
-        }
-
-        private void OnPointerPressed(object? sender, PointerPressedEventArgs args)
-        {
-            if (args.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            {
-                _dragOrigin = args.GetPosition(this);
-                args.Handled = true;
-            }
-        }
-
-        private void OnPointerMoved(object? sender, PointerEventArgs args)
-        {
-            if (_dragOrigin is not { } origin || !args.GetCurrentPoint(this).Properties.IsLeftButtonPressed) return;
-            var current = args.GetPosition(this);
-            _pan += current - origin; _dragOrigin = current;
-            ApplyTransform(); args.Handled = true;
-        }
-
-        private void OnPointerReleased(object? sender, PointerReleasedEventArgs args) => _dragOrigin = null;
-
-        private static IBrush CheckerboardBrush() => new LinearGradientBrush
-        {
-            StartPoint = new RelativePoint(0, 0, RelativeUnit.Relative),
-            EndPoint = new RelativePoint(1, 1, RelativeUnit.Relative),
-            GradientStops =
-            {
-                new GradientStop(Colors.White, 0), new GradientStop(Color.FromRgb(224, 224, 224), .25),
-                new GradientStop(Colors.White, .5), new GradientStop(Color.FromRgb(224, 224, 224), .75),
-                new GradientStop(Colors.White, 1),
-            },
-        };
+        public IReadOnlyList<DataFormat> Formats => _data.Formats;
+        IReadOnlyList<IDataTransferItem> IDataTransfer.Items => ((IDataTransfer)_data).Items;
+        IReadOnlyList<IAsyncDataTransferItem> IAsyncDataTransfer.Items => ((IAsyncDataTransfer)_data).Items;
+        public void Dispose() => System.Threading.Interlocked.Exchange(ref _source, null)?.Release();
     }
 }

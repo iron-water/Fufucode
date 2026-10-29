@@ -286,6 +286,7 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         }
     }
     public string RelatedFilesToggleText => RelatedFilesExpanded ? "收起相关文件" : $"相关文件 · {Files.Count}";
+    public string RelatedFilesHeaderText => $"相关文件 · {Files.Count}";
     public void ToggleRelatedFiles() => RelatedFilesExpanded = !RelatedFilesExpanded;
 
     private string _changeSummary = "", _artifactSummary = "";
@@ -543,6 +544,8 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
             assistant.ResolveReferencedFiles(root);
         OnPropertyChanged(nameof(HasLinks));
         OnPropertyChanged(nameof(HasFiles));
+        OnPropertyChanged(nameof(RelatedFilesHeaderText));
+        OnPropertyChanged(nameof(RelatedFilesToggleText));
     }
 
     public string? ProjectRootForReferences { get; private set; }
