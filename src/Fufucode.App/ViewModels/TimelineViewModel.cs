@@ -126,6 +126,9 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         }
 
         ApplyBatch();
+        // 历史没有实时 TurnSettled 事件；空闲会话须在回放后收束，运行中的重接仍保留活动回合。
+        if (_session.Activity == SessionActivity.Idle)
+            FinalizeCurrentTurn(_session.LastOutcome ?? SessionOutcome.Unknown, restored: true);
         RefreshTurnSummaries();
         ScrollToEndRequested?.Invoke();
     }
@@ -490,10 +493,11 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>回合结束：定阶段、算耗时、收起未固定的工具组与思考块，并解除旧回合的工具组订阅。</summary>
-    internal void FinalizeCurrentTurn(SessionOutcome outcome)
+    internal void FinalizeCurrentTurn(SessionOutcome outcome, bool restored = false)
     {
         if (_currentTurn is not { IsComplete: false } turn) return;
-        var elapsed = DateTimeOffset.Now - (_currentTurnStartedAt == default ? DateTimeOffset.Now : _currentTurnStartedAt);
+        var elapsed = restored ? TimeSpan.Zero
+            : DateTimeOffset.Now - (_currentTurnStartedAt == default ? DateTimeOffset.Now : _currentTurnStartedAt);
         turn.FinalizeTurn(outcome, elapsed);
         _currentTurn = null;
         // 结束后本回合不再流式更新；解除工具组订阅（块与投影保留，回合照常显示）。

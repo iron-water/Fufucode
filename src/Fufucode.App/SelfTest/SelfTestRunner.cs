@@ -53,6 +53,13 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--timeline-history-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => TimelineHistorySelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Timeline history failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--security-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => SecurityCenterSelfTest.RunAsync(Pass, Fail));
@@ -282,6 +289,7 @@ public static class SelfTestRunner
 
         // VM 部分：在无头 UI 线程上执行
         await RunOnHeadlessUiThreadAsync(TestMockSessionFlowAsync);
+        await RunOnHeadlessUiThreadAsync(() => TimelineHistorySelfTest.RunAsync(Pass, Fail));
         await RunOnHeadlessUiThreadAsync(TestStopClearsQueueAndRestoresDraftAsync);
         await RunOnHeadlessUiThreadAsync(TestStopWindowErrorSeverityAsync);
         await RunOnHeadlessUiThreadAsync(TestQueueIndicationAsync);
