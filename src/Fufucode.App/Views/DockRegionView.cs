@@ -71,7 +71,7 @@ internal sealed class DockRegionView : UserControl
     {
         foreach (var page in Catalog)
             if (_buttons.TryGetValue(page.Id, out var entry))
-            { entry.Tab.Content = Label(page); ToolTip.SetTip(entry.Tab, Label(page)); }
+            { entry.Tab.Content = Label(page); }
     }
     public IReadOnlyCollection<WorkbenchPage> Catalog { get; set; } = Array.Empty<WorkbenchPage>();
     public event Action<string, DockZone>? OpenRequested;
@@ -288,7 +288,9 @@ internal sealed class DockRegionView : UserControl
             entry.Tab.ContextMenu.Items.OfType<MenuItem>().Single(item => item.Tag as string == "dock-close").IsEnabled = !pinned;
             entry.Row.Children.OfType<Button>().Single(button => Grid.GetColumn(button) == 1).IsEnabled = !pinned;
             entry.Tab.Content = Label(page);
-            ToolTip.SetTip(entry.Tab, pinned ? Label(page) + " · 已固定" : Label(page));
+            // 页签文字就在鼠标下，重复弹一遍标题没有信息量；只有固定态才补一句。
+            if (pinned) ToolTip.SetTip(entry.Tab, Label(page) + " · 已固定");
+            else ToolTip.SetTip(entry.Tab, null);
             if (id == selected && selected != _selectedId)
                 Dispatcher.UIThread.Post(() => entry.Row.BringIntoView(), DispatcherPriority.Loaded);
             if (!_pages.Children.Contains(page.Content)) _pages.Children.Add(page.Content);

@@ -246,7 +246,10 @@ public partial class MainWindow
             {
                 var item = new MenuItem { Header = action.Title, Command = _actions.GetCommand(action.Id) };
                 item.Icon = Views.WorkbenchUi.IconButton(WorkbenchActionDefaults.Icon(action.Id), action.Title).Content;
-                ToolTip.SetTip(item, action.Description);
+                // 菜单项本身已显示标题；说明与标题相同（绝大多数动作）时不挂悬浮提示，否则只是把同一句话再弹一遍。
+                if (!string.IsNullOrWhiteSpace(action.Description) &&
+                    !string.Equals(action.Description, action.Title, StringComparison.Ordinal))
+                    ToolTip.SetTip(item, action.Description);
                 var group = WorkbenchActionDefaults.SubMenu(action.Id);
                 if (group is null) { menu.Items.Add(item); continue; }
                 var key = effective + "/" + group;

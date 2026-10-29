@@ -851,7 +851,7 @@ public sealed class WorkbenchSectionsView : UserControl
             finally { applying = false; }
         });
         var host = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Children = { selector, order } };
-        ToolTip.SetTip(host, action.Description);
+        // 行内已经显示标题和说明，不再把同一句说明挂成悬浮提示。
         return SettingsLayout.Row(action.Title, action.Description, host, WorkbenchActionDefaults.Icon(action.Id));
     }
 
