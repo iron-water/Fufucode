@@ -31,6 +31,7 @@ internal sealed class PerfAnalysisView : UserControl
     private bool _followLatest = true;
     // 避免每个刷新周期都重建 Span 树与检查器（运行中的回合会每秒刷新）。
     private int _treeSpanCount = -1;
+    private long _treeRebuildTicks;
     private long _inspectorSpanId = -1;
 
     public PerfAnalysisView()
@@ -147,11 +148,14 @@ internal sealed class PerfAnalysisView : UserControl
             .Concat(_snapshot.Startup is { } startup ? new[] { startup } : Array.Empty<PerfTurnInfo>())
             .OrderBy(item => item.StartUtc).ToArray() ?? Array.Empty<PerfTurnInfo>();
         _strip.SetData(strip, turn.TraceId);
-        // 只有换回合或 span 数量变化时才重建树；运行中的回合每秒刷新不重复分配 600 行。
-        if (changed || turn.Spans.Count != _treeSpanCount)
+        // 换回合或 span 数量变化时才重建树；运行中的回合每 5 秒补一次实时耗时，避免每秒分配数百行。
+        var due = turn.Outcome == "running" && _treeRebuildTicks != 0 &&
+                  System.Diagnostics.Stopwatch.GetElapsedTime(_treeRebuildTicks).TotalSeconds >= 5;
+        if (changed || turn.Spans.Count != _treeSpanCount || due)
         {
             _tree.SetTurn(turn);
             _treeSpanCount = turn.Spans.Count;
+            _treeRebuildTicks = System.Diagnostics.Stopwatch.GetTimestamp();
         }
         _timeline.SetTurn(turn, _snapshot?.HostSamples ?? [], _selectedSpanId);
         _timelineTitle.Text = turn.IsStartup ? $"启动 · {PerfPalette.FormatMs(turn.DurationMs)}"
