@@ -82,10 +82,16 @@ public sealed class NativeAgentLoop
         string? reasoningEffort = null,
         Func<CancellationToken, Task>? prepareRequest = null,
         Action<PureUsage>? onModelUsage = null,
-        Func<CancellationToken, Task<bool>>? recoverFromContextOverflow = null)
+        Func<CancellationToken, Task<bool>>? recoverFromContextOverflow = null,
+        Func<PermissionMode>? currentMode = null)
     {
         ArgumentNullException.ThrowIfNull(conversationHistory);
         cancellationToken.ThrowIfCancellationRequested();
+        ArgumentNullException.ThrowIfNull(toolNames);
+        // 固定本回合声明，避免请求在途或审批期间调用方修改集合扩展执行权限。
+        toolNames = Array.AsReadOnly(toolNames.ToArray());
+        var declaredToolNames = new HashSet<string>(toolNames, StringComparer.Ordinal);
+        toolDefinitions = toolDefinitions is null ? null : Array.AsReadOnly(toolDefinitions.ToArray());
 
         var allToolResults = new List<PureToolResult>();
         PureUsage? lastUsage = null;
@@ -232,8 +238,22 @@ public sealed class NativeAgentLoop
                     onMessageAppended?.Invoke(toolMsg);
                 }
 
+                PureToolResult? Denied(PureToolCall call)
+                {
+                    if (!declaredToolNames.Contains(call.Name))
+                        return new PureToolResult(call.Id, false,
+                            $"<tool_use_error>本次请求未声明工具 '{call.Name}'。</tool_use_error>");
+                    if (currentMode?.Invoke() == PermissionMode.Plan &&
+                        !ProductionToolDispatcher.IsPlanSafeTool(call.Name))
+                        return new PureToolResult(call.Id, false,
+                            $"<tool_use_error>Plan 模式禁止执行工具 '{call.Name}'。</tool_use_error>");
+                    return null;
+                }
+
                 async Task<PureToolResult> ExecuteOneAsync(PureToolCall call)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (Denied(call) is { } denied) return denied;
                     var needsApproval = !ProductionToolDispatcher.IsConcurrencySafe(call.Name) &&
                                         !string.Equals(call.Name, "update_plan", StringComparison.Ordinal);
                     using var toolSpan = PerfTracer.Step("tool", "tool", call.Name);
@@ -258,6 +278,9 @@ public sealed class NativeAgentLoop
 
                     try
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        // 审批等待期间模式可能已经切换；所有外层路由都必须重新过门。
+                        if (Denied(call) is { } changed) return changed;
                         var result = await _toolDispatcher.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
                         toolSpan.Tag("ok", result.Success);
                         toolSpan.Tag("outputChars", result.Content?.Length ?? 0);

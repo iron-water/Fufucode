@@ -340,7 +340,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         {
             if (_skills?.HasModelInvocableSkills == true) merged.Add(SkillRegistry.ToolName);
             if (_mcp?.HasServers == true) merged.Add(McpGatewayDispatcher.ToolName);
-            if (_subagents is not null) merged.Add(NativeSubagentContract.ToolName);
+            if (_subagents is { IsActive: true }) merged.Add(NativeSubagentContract.ToolName);
         }
 
         // Plan 模式不声明插件工具：第三方工具无法静态证明只读，调度器必然拒绝，
@@ -371,7 +371,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         if (!planOnly)
         {
             if (_mcp?.HasServers == true) list.Add(McpGatewayDispatcher.Definition);
-            if (_subagents is not null) list.Add(NativeSubagentContract.Definition);
+            if (_subagents is { IsActive: true }) list.Add(NativeSubagentContract.Definition);
             if (_skills?.HasModelInvocableSkills == true) list.Add(SkillRegistry.Definition);
         }
 
@@ -409,7 +409,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         AppendSection(planSnippet);
         AppendSection(skillsSection);
         AppendSection(_mcp?.BuildPromptSection());
-        AppendSection(_subagents?.BuildPromptSection());
+        AppendSection(_subagents is { IsActive: true } ? _subagents.BuildPromptSection() : null);
 
         // 用户显式 /skill:name：把技能正文注入本轮用户消息。
         var effectiveText = _skills?.ExpandUserInvocation(text) ?? text;
@@ -679,18 +679,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             recorder.Finish(outcome);
             PersistHistory();
 
-            (string Text, IReadOnlyList<PureImageAttachment>? Images)? next = null;
+            bool ownsTurn;
             lock (_gate)
             {
-                _activity = SessionActivity.Idle;
-                _lastOutcome = outcome;
-                _activeCts = null;
-                cts.Dispose();
-                if (!_stopRequested && !_disposed && _queue.Count > 0)
-                {
-                    next = _queue[0];
-                    _queue.RemoveAt(0);
-                }
+                ownsTurn = ReferenceEquals(_activeCts, cts);
+                if (ownsTurn) _lastOutcome = outcome;
+                // 保持当前所有权直到终态事件派发完毕；同步重入 Send 只能追加队列。
             }
 
             // 事件在锁外派发：订阅者可以安全地再次调用会话方法，不会被持锁回调卡住。
@@ -698,23 +692,32 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 Emit(new SessionEvent.SessionError(SessionErrorKind.ModelFailed, summary ?? "模型请求失败。", null));
             Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
             Emit(new SessionEvent.TurnSettled(outcome, summary));
-            PromptHandled?.Invoke();
-
-            if (next is { } pending)
+            var handled = PromptHandled;
+            if (handled is not null)
             {
-                lock (_gate)
+                foreach (Action handler in handled.GetInvocationList())
                 {
-                    if (!_disposed && !_stopRequested)
+                    try { handler(); }
+                    catch (Exception error) { Trace.TraceError("Native prompt subscriber: {0}", error); }
+                }
+            }
+
+            lock (_gate)
+            {
+                if (ownsTurn && ReferenceEquals(_activeCts, cts))
+                {
+                    _activeCts = null;
+                    _activity = SessionActivity.Idle;
+                    if (!_disposed && !_stopRequested && _queue.Count > 0)
                     {
+                        var pending = _queue[0];
+                        _queue.RemoveAt(0);
                         StartTurnLocked(pending.Text, pending.Images, CancellationToken.None);
                     }
-                    else
-                    {
-                        next = null;
-                    }
                 }
-                Emit(new SessionEvent.QueueChanged(QueuedTexts().Length, QueuedTexts()));
+                cts.Dispose();
             }
+            Emit(new SessionEvent.QueueChanged(QueuedTexts().Length, QueuedTexts()));
         }
     }
 
@@ -862,7 +865,10 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         if (cts is not null)
         {
             Emit(new SessionEvent.ActivityChanged(SessionActivity.Cancelling));
-            cts.Cancel();
+            // The owning turn can finish and dispose its CTS after we release _gate.
+            // In that case cancellation is already unnecessary; still await the captured task.
+            try { cts.Cancel(); }
+            catch (ObjectDisposedException) { }
         }
 
         await turn.WaitAsync(cancellationToken).ConfigureAwait(false);
@@ -929,7 +935,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 session.Emit(new SessionEvent.BlockStarted(_messageId!, _thinkingIndex.Value, MessageBlockKind.Thinking, null, null));
             }
             _thinking.Append(delta);
-            _blocks[_thinkingIndex.Value] = new ThinkingBlock(_thinking.ToString());
+            // 最终文本只在 CloseMessage 物化，增量事件不复制累计内容。
             session.Emit(new SessionEvent.ThinkingAppended(_messageId!, _thinkingIndex.Value, delta));
         }
 
@@ -944,7 +950,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 session.Emit(new SessionEvent.BlockStarted(_messageId!, _textIndex.Value, MessageBlockKind.Text, null, null));
             }
             _text.Append(delta);
-            _blocks[_textIndex.Value] = new TextBlock(_text.ToString());
+            // 累计文本在消息结束时生成一次快照。
             session.Emit(new SessionEvent.TextAppended(_messageId!, _textIndex.Value, delta));
         }
 
@@ -955,7 +961,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             {
                 tool = new ToolState(_blocks.Count, id ?? $"call_{index}", name ?? "");
                 _toolsByIndex.Add(index, tool);
-                _blocks.Add(tool.Block);
+                // 占位只保留块顺序；参数仅在 CloseMessage 物化。
+                _blocks.Add(new ToolCallBlock(tool.Id, tool.Name, "", ToolCallStatus.Pending, null, null, false));
                 session.Emit(new SessionEvent.BlockStarted(
                     _messageId!, tool.ContentIndex, MessageBlockKind.ToolCall, tool.Id, tool.Name));
             }
@@ -966,7 +973,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             }
             if (!string.IsNullOrEmpty(name) && tool.Name.Length == 0) tool.Name = name;
             tool.Arguments.Append(argumentsFragment);
-            _blocks[tool.ContentIndex] = tool.Block;
             session.Emit(new SessionEvent.ToolCallAppended(_messageId!, tool.ContentIndex, tool.Id, argumentsFragment));
         }
 
@@ -999,7 +1005,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                     // 兜底起点：即使派发回调没到，也能算出真实耗时（派发时 OnToolStarting 仍会补写）。
                     tool.StartedTicks ??= Stopwatch.GetTimestamp();
                     _toolsById[call.Id] = tool;
-                    _blocks[tool.ContentIndex] = tool.Block;
                 }
             }
             _assistantAppended = true;
@@ -1012,7 +1017,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             if (!_toolsById.TryGetValue(call.Id, out var tool)) return;
             tool.Status = ToolCallStatus.Running;
             tool.StartedTicks ??= Stopwatch.GetTimestamp();
-            _blocks[tool.ContentIndex] = tool.Block;
             session.Emit(new SessionEvent.ToolCallStatusChanged(
                 _messageId!, tool.ContentIndex, tool.Id, ToolCallStatus.Running, null));
         }
@@ -1034,7 +1038,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             tool.DurationMs = tool.StartedTicks is { } started
                 ? (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
                 : null;
-            _blocks[tool.ContentIndex] = tool.Block;
             session.Emit(new SessionEvent.ToolCallStatusChanged(
                 _messageId!, tool.ContentIndex, tool.Id, tool.Status, result.Content, tool.DurationMs));
             if (_toolsByIndex.Values.All(t => t.Status is ToolCallStatus.Completed or ToolCallStatus.Failed))
@@ -1051,7 +1054,6 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 tool.DurationMs = tool.StartedTicks is { } started
                     ? (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds
                     : null;
-                _blocks[tool.ContentIndex] = tool.Block;
                 session.Emit(new SessionEvent.ToolCallStatusChanged(
                     _messageId, tool.ContentIndex, tool.Id, tool.Status, null, tool.DurationMs));
             }
@@ -1069,6 +1071,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         private void CloseMessage()
         {
             if (_messageId is null) return;
+            if (_textIndex is { } textIndex) _blocks[textIndex] = new TextBlock(_text.ToString());
+            if (_thinkingIndex is { } thinkingIndex) _blocks[thinkingIndex] = new ThinkingBlock(_thinking.ToString());
+            foreach (var tool in _toolsByIndex.Values) _blocks[tool.ContentIndex] = tool.Block;
             for (var index = 0; index < _blocks.Count; index++)
                 session.Emit(new SessionEvent.BlockFinished(_messageId, index, _blocks[index]));
             session.Emit(new SessionEvent.MessageFinished(_messageId,

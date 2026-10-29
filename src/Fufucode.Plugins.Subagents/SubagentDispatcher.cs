@@ -32,11 +32,21 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
 
     /// <summary>裸调度器默认不视为已安装；插件运行时覆盖为 true。</summary>
     public bool IsActive { get; init; }
+    public Func<bool>? ActiveProvider { get; init; }
+    bool INativeSubagentDispatcher.IsActive => ActiveProvider?.Invoke() ?? IsActive;
 
-    public Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default) =>
-        string.Equals(call.Name, ToolName, StringComparison.Ordinal)
-            ? HandleAsync(call, _runner, cancellationToken)
-            : _inner.DispatchAsync(call, cancellationToken);
+    public Task<PureToolResult> DispatchAsync(PureToolCall call, CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(call.Name, ToolName, StringComparison.Ordinal))
+            return _inner.DispatchAsync(call, cancellationToken);
+        // 撤销后连 list 也不能用：旧会话可能仍持有 wrapper并绕过声明检查。
+        if (ActiveProvider is { } active && !active())
+            return Task.FromResult(Revoked(call));
+        return HandleAsync(call, _runner, cancellationToken);
+    }
+
+    private static PureToolResult Revoked(PureToolCall call) =>
+        new(call.Id, false, "子代理插件已卸载，调用被拒绝。");
 
     internal static Task<PureToolResult> HandleForegroundAsync(PureToolCall call, SubagentRunner runner,
         CancellationToken cancellationToken) => HandleAsync(call, runner, cancellationToken);
@@ -44,6 +54,8 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
     private static async Task<PureToolResult> HandleAsync(PureToolCall call, SubagentRunner runner,
         CancellationToken cancellationToken)
     {
+        if (runner.Lifetime is { IsActive: false })
+            return Revoked(call);
         JsonElement root;
         try
         {

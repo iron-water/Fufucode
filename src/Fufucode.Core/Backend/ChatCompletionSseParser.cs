@@ -19,7 +19,7 @@ public sealed class ChatCompletionSseParser
 
     /// <summary>
     /// 处理一条 SSE 事件。返回 true 表示事件被识别为流式数据帧（含 delta）；
-    /// 非 JSON 的数据帧（例如网关心跳 "ping"）返回 false，且不产生错误。
+    /// 明确的空帧或 "ping" 心跳返回 false；其它损坏 JSON 数据帧使整轮失败。
     /// 流内出现标准 error 对象时抛出 <see cref="ModelClientException"/>。
     /// </summary>
     public bool TryApply(ServerSentEvent sse, ModelStreamCallbacks? callbacks)
@@ -28,17 +28,19 @@ public sealed class ChatCompletionSseParser
         if (sse.IsDone) return false;
 
         var data = sse.Data.TrimStart();
-        if (data.Length == 0) return false;
+        if (data.Length == 0 || string.Equals(data.Trim(), "ping", StringComparison.Ordinal)) return false;
 
         JsonDocument document;
         try
         {
             document = JsonDocument.Parse(data);
         }
-        catch (JsonException)
+        catch (JsonException error)
         {
-            // 非 JSON 心跳/注释帧按忽略处理，不污染流状态。
-            return false;
+            // 丢失任何数据帧都可能把工具参数拼成另一个合法 JSON，必须拒绝整个响应。
+            throw new ModelClientException(ModelClientErrorKind.StreamError,
+                "模型流式响应包含损坏的 JSON 数据帧，本次工具调用未执行。",
+                errorCode: "invalid_sse_json", innerException: error);
         }
 
         using (document)

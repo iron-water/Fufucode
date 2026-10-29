@@ -65,12 +65,14 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         for (var attempt = 1; ; attempt++)
         {
             using var httpRequest = CreateRequest(request, streaming: false);
+            using var timeout = CreateAttemptTimeout(cancellationToken);
+            var attemptToken = timeout?.Token ?? cancellationToken;
             HttpResponseMessage? response = null;
             try
             {
-                response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                response = await SendAsync(httpRequest, attemptToken).ConfigureAwait(false);
                 span.Tag("status", (long)response.StatusCode);
-                var responseJson = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                var responseJson = await response.Content.ReadAsStringAsync(attemptToken).ConfigureAwait(false);
                 span.Tag("responseChars", (long)responseJson.Length);
                 return ParseNonStreaming(response, responseJson, span);
             }
@@ -78,6 +80,11 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
             {
                 span.Cancel();
                 throw;
+            }
+            catch (OperationCanceledException error) when (timeout?.IsCancellationRequested == true)
+            {
+                span.Fail("Timeout");
+                throw AttemptTimeout(error);
             }
             catch (Exception error) when (attempt < MaxAttempts && IsRetryable(error))
             {
@@ -199,16 +206,24 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         for (var attempt = 1; ; attempt++)
         {
             using var httpRequest = CreateRequest(request, streaming: true);
+            using var timeout = CreateAttemptTimeout(cancellationToken);
+            var attemptToken = timeout?.Token ?? cancellationToken;
             var delivered = false;
             var tracked = TrackDeliveries(callbacks, () => delivered = true);
             try
             {
                 var requestStarted = PerfTracer.Enabled ? System.Diagnostics.Stopwatch.GetTimestamp() : 0;
-                using var response = await SendAsync(httpRequest, cancellationToken).ConfigureAwait(false);
+                using var response = await SendAsync(httpRequest, attemptToken).ConfigureAwait(false);
                 http.Tag("status", (long)response.StatusCode);
                 if (requestStarted != 0)
                     http.Tag("ttfbMs", (long)System.Diagnostics.Stopwatch.GetElapsedTime(requestStarted).TotalMilliseconds);
-                return await ReadStreamAsync(response, tracked, cancellationToken, requestStarted).ConfigureAwait(false);
+                return await ReadStreamAsync(response, tracked, attemptToken, requestStarted).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested &&
+                                                           timeout?.IsCancellationRequested == true)
+            {
+                http.Fail("Timeout");
+                throw AttemptTimeout(error);
             }
             catch (OperationCanceledException)
             {
@@ -519,33 +534,37 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         };
     }
 
+    // 超时属于整次尝试，必须存活到成功/错误响应体或 SSE 消费结束。
+    private CancellationTokenSource? CreateAttemptTimeout(CancellationToken cancellationToken)
+    {
+        if (_requestTimeout is not { } duration) return null;
+        var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        timeout.CancelAfter(duration);
+        return timeout;
+    }
+
+    private TimeoutException AttemptTimeout(OperationCanceledException error) =>
+        new($"模型请求超过配置的 {_requestTimeout!.Value.TotalSeconds:0.#} 秒超时。", error);
+
     /// <summary>发送 HTTP 请求。virtual 供本机/离线环境注入脚本化响应（测试与诊断探针）。</summary>
     protected virtual async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
         HttpResponseMessage response;
-        using var timeout = _requestTimeout is { } duration
-            ? CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)
-            : null;
-        if (timeout is not null) timeout.CancelAfter(_requestTimeout!.Value);
-        var effectiveToken = timeout?.Token ?? cancellationToken;
         try
         {
             response = await _httpClient
-                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, effectiveToken)
+                .SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken)
                 .ConfigureAwait(false);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeout?.IsCancellationRequested == true)
-        {
-            throw new TimeoutException($"模型请求超过配置的 {_requestTimeout!.Value.TotalSeconds:0.#} 秒超时。", null);
         }
         catch (OperationCanceledException error) when (!cancellationToken.IsCancellationRequested)
         {
-            // 不是用户取消，而是注入的 HttpClient 自带超时：按可重试的传输失败处理。
+            // 尝试 token 尚未取消：注入 HttpClient 自身超时仍按可重试传输失败处理。
             throw new ModelClientException(ModelClientErrorKind.Transport,
                 "模型请求被 HTTP 客户端超时取消。", innerException: error);
         }
         catch (OperationCanceledException)
         {
+            // 用户取消与配置超时由拥有整次尝试的调用方区分。
             throw;
         }
         catch (Exception ex)

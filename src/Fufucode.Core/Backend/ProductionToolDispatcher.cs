@@ -600,6 +600,61 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         }
     }
 
+    // 同进程所有会话共享；外部编辑器/进程不参与此锁，原子替换并非跨进程 CAS。
+    private static readonly object PathLocksGate = new();
+    private static readonly Dictionary<string, PathLock> PathLocks = new(
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
+
+    private sealed class PathLock
+    {
+        public readonly SemaphoreSlim Semaphore = new(1, 1);
+        public int Users;
+    }
+
+    private sealed class PathLease(string path, PathLock entry) : IDisposable
+    {
+        private int _disposed;
+
+        public void Dispose()
+        {
+            // 幂等：重复 Dispose 不能二次 Release 或把引用计数减成负数。
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            entry.Semaphore.Release();
+            ReleasePathReference(path, entry);
+        }
+    }
+
+    private static void ReleasePathReference(string path, PathLock entry)
+    {
+        lock (PathLocksGate)
+        {
+            if (--entry.Users != 0) return;
+            PathLocks.Remove(path);
+            entry.Semaphore.Dispose();
+        }
+    }
+
+    private static async Task<IDisposable> AcquirePathAsync(string target, CancellationToken ct)
+    {
+        var path = ResolveRealPath(target);
+        PathLock entry;
+        lock (PathLocksGate)
+        {
+            if (!PathLocks.TryGetValue(path, out entry!)) PathLocks[path] = entry = new PathLock();
+            entry.Users++;
+        }
+        try
+        {
+            await entry.Semaphore.WaitAsync(ct).ConfigureAwait(false);
+            return new PathLease(path, entry);
+        }
+        catch
+        {
+            ReleasePathReference(path, entry);
+            throw;
+        }
+    }
+
     private async Task WriteAllTextAtomicAsync(string target, string content, Encoding encoding,
         CancellationToken ct)
     {
@@ -629,6 +684,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var target = ResolveSafePath(relPath, out var error);
         if (target is null) return new PureToolResult(call.Id, false, error);
 
+        using var pathLease = await AcquirePathAsync(target, ct).ConfigureAwait(false);
         var dir = Path.GetDirectoryName(target);
         if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
         {
@@ -671,6 +727,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var target = ResolveSafePath(relPath, out var error);
         if (target is null) return new PureToolResult(call.Id, false, error);
 
+        using var pathLease = await AcquirePathAsync(target, ct).ConfigureAwait(false);
         if (!File.Exists(target))
             return new PureToolResult(call.Id, false, $"文件不存在：'{relPath}'。");
 
@@ -880,6 +937,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         var target = ResolveSafePath(relPath, out var error);
         if (target is null) return new PureToolResult(call.Id, false, error);
+        using var pathLease = await AcquirePathAsync(target, ct).ConfigureAwait(false);
         if (!File.Exists(target))
             return new PureToolResult(call.Id, false, $"文件不存在：'{relPath}'。");
 
@@ -954,9 +1012,23 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     "请拆成互不重叠的编辑。");
         }
 
-        var replacedContent = rawContent;
-        foreach (var range in ordered.OrderByDescending(range => range.Start))
-            replacedContent = replacedContent.Remove(range.Start, range.Length).Insert(range.Start, range.NewText);
+        long replacedLength = rawContent.Length;
+        foreach (var range in ordered)
+            replacedLength += (long)range.NewText.Length - range.Length;
+        if (replacedLength > int.MaxValue)
+            return new PureToolResult(call.Id, false,
+                $"编辑结果将超过 {int.MaxValue} 个字符，已拒绝以免截断 '{relPath}'。");
+
+        var replacement = new StringBuilder((int)replacedLength);
+        var copiedThrough = 0;
+        foreach (var range in ordered)
+        {
+            replacement.Append(rawContent, copiedThrough, range.Start - copiedThrough);
+            replacement.Append(range.NewText);
+            copiedThrough = range.Start + range.Length;
+        }
+        replacement.Append(rawContent, copiedThrough, rawContent.Length - copiedThrough);
+        var replacedContent = replacement.ToString();
 
         if (ValidateStructuredText(target, replacedContent) is { } invalid)
             return new PureToolResult(call.Id, false, invalid);

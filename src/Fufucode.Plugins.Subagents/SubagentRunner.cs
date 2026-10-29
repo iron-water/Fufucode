@@ -99,6 +99,10 @@ public sealed class SubagentRunner
     }
 
     public string JobId { get; }
+
+    /// <summary>插件激活代次；非 null 时执行进入 lease，撤销后拒绝并取消在途调用。</summary>
+    internal SubagentGeneration? Lifetime { get; init; }
+
     public Func<PureToolCall, CancellationToken, Task<bool>>? ApprovalGate { get; set; }
     public Action<SubagentProgress>? Progress { get; set; }
 
@@ -117,6 +121,7 @@ public sealed class SubagentRunner
             _agents, _modelClient, _capabilities, _defaultModelId, _workspaceRoot, _capabilityDefinitions,
             _depth + 1, _maxDepth, HistoryProvider, JobId)
         {
+            Lifetime = Lifetime,
             ApprovalGate = ApprovalGate,
             ParentMode = ParentMode,
             Progress = Progress
@@ -126,6 +131,27 @@ public sealed class SubagentRunner
 
     public async Task<SubagentResult> RunAsync(string agentName, string prompt, string? modelOverride,
         CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null)
+    {
+        if (Lifetime is not { } generation)
+            return await RunObservedAsync(agentName, prompt, modelOverride, cancellationToken, fork, mode)
+                .ConfigureAwait(false);
+        // 旧会话在 Shutdown 后仍可能调用：撤销后拒绝新执行，执行中的调用由代次 token 取消。
+        if (!generation.TryEnter(out var generationToken))
+            return Failure(agentName, mode ?? SubagentMode.Read, "子代理插件已卸载，调用被拒绝。");
+        try
+        {
+            using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, generationToken);
+            return await RunObservedAsync(agentName, prompt, modelOverride, linked.Token, fork, mode)
+                .ConfigureAwait(false);
+        }
+        finally
+        {
+            generation.Exit();
+        }
+    }
+
+    private async Task<SubagentResult> RunObservedAsync(string agentName, string prompt, string? modelOverride,
+        CancellationToken cancellationToken, bool? fork, SubagentMode? mode)
     {
         // 子代理在独立上下文中运行：开启新的根 span，内部模型/工具调用挂在它下面。
         using var span = PerfTracer.Step("subagent", "agent", agentName);
@@ -393,19 +419,23 @@ public sealed class SubagentRunner
     private IReadOnlyList<PureAgentMessage> BuildForkHistory()
     {
         if (HistoryProvider?.Invoke() is not { Count: > 0 } history) return [];
-        // 取最近一段历史；不要以孤立的 tool 结果开头，总字符预算 100k。
-        var start = Math.Max(0, history.Count - 30);
-        while (start < history.Count && history[start].Role == PureAgentRole.Tool) start++;
-        var kept = new List<PureAgentMessage>();
-        var total = 0;
-        for (var i = start; i < history.Count; i++)
+        // 父调用尚在执行时不能继承其 assistant/tool 部分组，也不能伪造取消结果。
+        var groups = NativeHistoryGroups.Enumerate(history)
+            .Where(group => group.Complete && history[group.Start].Role != PureAgentRole.System).ToArray();
+        long total = 0;
+        var count = 0;
+        var first = groups.Length;
+        for (var i = groups.Length - 1; i >= 0; i--)
         {
-            var message = history[i];
-            var size = (message.Content?.Length ?? 0) + (message.ToolCalls?.Sum(call => call.ArgumentsJson.Length) ?? 0);
-            if (total + size > 100_000) break;
-            total += size;
-            kept.Add(message);
+            var group = groups[i];
+            if (total + group.Characters > 100_000 || count + group.End - group.Start > 30) break;
+            total += group.Characters;
+            count += group.End - group.Start;
+            first = i;
         }
+        var kept = new List<PureAgentMessage>();
+        for (var i = first; i < groups.Length; i++)
+            for (var j = groups[i].Start; j < groups[i].End; j++) kept.Add(history[j]);
         return kept;
     }
 

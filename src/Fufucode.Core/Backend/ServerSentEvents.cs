@@ -39,7 +39,7 @@ public static class ServerSentEvents
         var encoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
         // 有状态解码器：多字节字符被网络分片截断时不会丢字。
         var decoder = encoding.GetDecoder();
-        var charBuffer = new char[4096];
+        var charBuffer = new char[encoding.GetMaxCharCount(buffer.Length)];
         var state = new EventState();
 
         while (true)

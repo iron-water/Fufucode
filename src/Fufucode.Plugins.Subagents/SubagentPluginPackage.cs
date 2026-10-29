@@ -12,50 +12,60 @@ namespace Fufucode.Plugins.Subagents;
 public sealed class SubagentPluginPackage : IPluginPackage
 {
     public const string PluginId = "workspace.subagents";
+    private readonly object _gate = new();
     private SubagentFactory? _factory;
+    private SubagentGeneration? _generation;
 
     public string Id => PluginId;
     public string Version => "1.0.0";
 
     public Task InitializeAsync(PluginPackageContext context, CancellationToken cancellationToken = default)
     {
-        _factory = new SubagentFactory();
-        NativeSubagentRegistry.Register(_factory);
+        var generation = new SubagentGeneration();
+        var factory = new SubagentFactory(generation);
+        lock (_gate)
+        {
+            _generation = generation;
+            _factory = factory;
+        }
+        NativeSubagentRegistry.Register(factory);
         return Task.CompletedTask;
     }
 
-    public Task ShutdownAsync(CancellationToken cancellationToken = default)
+    /// <summary>
+    /// 先撤销并取消该插件代次的所有在途调用，等待执行 lease 退出后才释放取消源。
+    /// 可重复调用；若等待被取消，保留 generation 供下次重试，避免提前 Dispose 造成竞态。
+    /// </summary>
+    public async Task ShutdownAsync(CancellationToken cancellationToken = default)
     {
-        if (_factory is not null)
+        SubagentFactory? factory;
+        SubagentGeneration? generation;
+        lock (_gate)
         {
-            NativeSubagentRegistry.Unregister(_factory);
-            _factory.Clear();
+            factory = _factory;
+            generation = _generation;
+            _factory = null;
         }
-        _factory = null;
-        return Task.CompletedTask;
+        if (factory is not null) NativeSubagentRegistry.Unregister(factory);
+        if (generation is null) return;
+        generation.Revoke();
+        await generation.DrainAsync(cancellationToken).ConfigureAwait(false);
     }
 
     public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => null;
 
-    private sealed class SubagentFactory : INativeSubagentFactory
+    private sealed class SubagentFactory(SubagentGeneration generation) : INativeSubagentFactory
     {
         public INativeSubagentRuntime Create(IPureModelClient modelClient, IPureToolDispatcher capabilities,
             string? defaultModelId, string? workspaceRoot,
-            IReadOnlyList<PureToolDefinition> capabilityDefinitions)
-        {
-            var runtime = new SubagentRuntime(modelClient, capabilities, defaultModelId, workspaceRoot,
+            IReadOnlyList<PureToolDefinition> capabilityDefinitions) =>
+            new SubagentRuntime(generation, modelClient, capabilities, defaultModelId, workspaceRoot,
                 capabilityDefinitions);
-            _runtimes.Add(runtime);
-            return runtime;
-        }
-
-        public void Clear() => _runtimes.Clear();
-
-        private readonly List<SubagentRuntime> _runtimes = new();
     }
 
     private sealed class SubagentRuntime : INativeSubagentRuntime, INativeSubagentDispatcher
     {
+        private readonly SubagentGeneration _generation;
         private readonly IPureModelClient _modelClient;
         private readonly IPureToolDispatcher _capabilities;
         private readonly string? _defaultModelId;
@@ -63,10 +73,11 @@ public sealed class SubagentPluginPackage : IPluginPackage
         private readonly IReadOnlyList<PureToolDefinition> _capabilityDefinitions;
         private SubagentRunner _runner;
 
-        public SubagentRuntime(IPureModelClient modelClient, IPureToolDispatcher capabilities,
-            string? defaultModelId, string? workspaceRoot,
+        public SubagentRuntime(SubagentGeneration generation, IPureModelClient modelClient,
+            IPureToolDispatcher capabilities, string? defaultModelId, string? workspaceRoot,
             IReadOnlyList<PureToolDefinition> capabilityDefinitions)
         {
+            _generation = generation;
             _modelClient = modelClient;
             _capabilities = capabilities;
             _defaultModelId = defaultModelId;
@@ -76,7 +87,10 @@ public sealed class SubagentPluginPackage : IPluginPackage
         }
 
         public IPureToolDispatcher Inner => _capabilities;
-        public bool IsActive => true;
+
+        /// <summary>Shutdown 撤销后立即为 false；旧会话的声明与执行都读取这同一状态。</summary>
+        public bool IsActive => _generation.IsActive;
+
         public Func<PureToolCall, CancellationToken, Task<bool>>? ApprovalGate
         {
             get => _runner.ApprovalGate;
@@ -100,18 +114,19 @@ public sealed class SubagentPluginPackage : IPluginPackage
         private Action<NativeSubagentProgress>? _progress;
 
         public IPureToolDispatcher Wrap(IPureToolDispatcher inner) =>
-            new SubagentDispatcher(inner, _runner);
+            new SubagentDispatcher(inner, _runner) { ActiveProvider = () => IsActive };
 
         public IReadOnlyList<NativeSubagentDescriptor> Agents =>
             _runner.Agents.Select(agent => new NativeSubagentDescriptor(
                 agent.Name, agent.Description, agent.Mode.ToString().ToLowerInvariant())).ToArray();
 
-        public string BuildPromptSection() => _runner.BuildPromptSection();
+        /// <summary>撤销后旧会话即使仍拼装提示词，也不再注入子代理目录。</summary>
+        public string BuildPromptSection() => IsActive ? _runner.BuildPromptSection() : string.Empty;
 
         /// <summary>只读 utility 任务：使用内置 explore 代理，失败时返回 null 由调用方回退。</summary>
         public async Task<string?> RunUtilityAsync(string prompt, CancellationToken cancellationToken)
         {
-            if (string.IsNullOrWhiteSpace(prompt)) return null;
+            if (!IsActive || string.IsNullOrWhiteSpace(prompt)) return null;
             try
             {
                 var result = await _runner.RunAsync("explore", prompt, null, cancellationToken).ConfigureAwait(false);
@@ -124,7 +139,10 @@ public sealed class SubagentPluginPackage : IPluginPackage
         private SubagentRunner CreateRunner()
         {
             var runner = new SubagentRunner(AgentRegistry.Discover(_workspaceRoot), _modelClient,
-                _capabilities, _defaultModelId, _workspaceRoot, _capabilityDefinitions);
+                _capabilities, _defaultModelId, _workspaceRoot, _capabilityDefinitions)
+            {
+                Lifetime = _generation
+            };
             runner.Progress = progress => _progress?.Invoke(new NativeSubagentProgress(
                 progress.JobId, progress.Agent, progress.Kind, progress.Detail));
             return runner;

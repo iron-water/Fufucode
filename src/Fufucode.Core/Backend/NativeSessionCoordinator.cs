@@ -282,58 +282,17 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
             JsonSerializer.SerializeToElement(new { commands }), null));
     }
 
-    /// <summary>
-    /// 会话条目查询：以引擎完整历史为唯一来源（包含恢复的历史），ID 为稳定的位置式 entry_N。
-    /// since 指定游标时只返回其后的条目，供增量刷新使用。
-    /// </summary>
+    /// <summary>原生历史可被压缩重排；始终返回带持久身份的完整快照，不能使用位置游标增量读取。</summary>
     public Task<RpcResponse> QueryEntriesAsync(string? since = null, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var history = _session.GetHistoryMessages();
-        var start = 0;
-        if (!string.IsNullOrEmpty(since) && since.StartsWith("entry_", StringComparison.Ordinal) &&
-            int.TryParse(since.AsSpan("entry_".Length), out var cursor) && cursor >= 0)
-        {
-            start = cursor + 1;
-        }
-
-        var entryList = new List<object>();
-        string? lastId = start > 0 ? $"entry_{start - 1}" : null;
-        for (var i = start; i < history.Count; i++)
-        {
-            var id = $"entry_{i}";
-            var message = history[i];
-            var role = message.Role switch
-            {
-                PureAgentRole.User => "user",
-                PureAgentRole.Assistant => "assistant",
-                PureAgentRole.Tool => "toolResult",
-                _ => "system",
-            };
-            // 角色映射与 Pi 线格式一致：Tool→toolResult，System→system；内容形状保持不变。
-
-            var content = new List<object>();
-            if (!string.IsNullOrEmpty(message.Content)) content.Add(new { type = "text", text = message.Content });
-            if (message.ToolCalls is { Count: > 0 } calls)
-            {
-                foreach (var call in calls)
-                {
-                    JsonElement? arguments = null;
-                    try
-                    {
-                        using var document = JsonDocument.Parse(call.ArgumentsJson);
-                        arguments = JsonSerializer.SerializeToElement(document.RootElement);
-                    }
-                    catch (JsonException) { }
-                    content.Add(new { type = "toolCall", id = call.Id, name = call.Name, arguments });
-                }
-            }
-
-            entryList.Add(new { id, parentId = lastId, type = "message", message = new { role, content } });
-            lastId = id;
-        }
-
         return Task.FromResult(new RpcResponse("fumo", "get_entries", true,
-            JsonSerializer.SerializeToElement(new { entries = entryList, leafId = lastId }), null));
+            JsonSerializer.SerializeToElement(new
+            {
+                entries = NativeEntries.Build(history, stableIds: true),
+                leafId = NativeEntries.Leaf(history, stableIds: true),
+            }), null));
     }
 
     public Task<RpcResponse> SetSessionNameAsync(string name, CancellationToken cancellationToken = default) =>

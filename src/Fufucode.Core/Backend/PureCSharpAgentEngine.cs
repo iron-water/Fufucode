@@ -289,7 +289,8 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
                 reasoningEffort: request.ReasoningEffort,
                 prepareRequest: ct => PrepareRequestAsync(effectiveModel, ct),
                 onModelUsage: OnModelUsage,
-                recoverFromContextOverflow: ct => RecoverFromContextOverflowAsync(effectiveModel, ct))
+                recoverFromContextOverflow: ct => RecoverFromContextOverflowAsync(effectiveModel, ct),
+                currentMode: () => Mode)
                 .ConfigureAwait(false);
         }
         finally
@@ -369,10 +370,11 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
 
     private async Task<bool> RecoverFromContextOverflowAsync(string? modelId, CancellationToken cancellationToken)
     {
-        var before = _history.Count;
+        var beforeChars = TotalChars(_history);
+        bool compacted;
         try
         {
-            await CompactIfNeededAsync(_history, modelId, cancellationToken,
+            compacted = await CompactIfNeededAsync(_history, modelId, cancellationToken,
                 force: true, aggressive: true).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
@@ -383,8 +385,12 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         {
             return false;
         }
+        if (!compacted) return false;
+        // The compaction result is authoritative: ledger/pinned inserts can keep the
+        // message count flat. Require a real byte reduction before retrying the request.
+        var afterChars = TotalChars(_history);
         _compactionDeferred = true;
-        return _history.Count < before;
+        return afterChars < beforeChars;
     }
 
     private static long TotalChars(List<PureAgentMessage> history)
@@ -406,6 +412,10 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         var transcriptBudget = limit is { } contextBudget
             ? Math.Clamp((long)(contextBudget * 0.25 * 3), 30_000, 240_000)
             : 60_000;
+        // 摘要输入必须逐条截断：单个超大工具结果若原样渲染，会永久挤不进 transcriptBudget，
+        // 导致 coveredThrough 停在它之前、整个大组被原样保留，尾预算形同虚设。
+        const int summaryContentChars = 6_000;
+        const int summaryArgumentsChars = 800;
 
         var total = TotalChars(history);
         if (history.Count <= keepRecent + 1) return false;
@@ -418,59 +428,86 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         // 后续所有工作都会偏离。它们在预算内逐字保留，不交给摘要模型改写。
         var pinned = FindPinnedInstructions(history, start);
 
-        var firstKept = Math.Max(start + 1, history.Count - keepRecent);
-        // 不要从孤立的 tool 结果开始：它们对应的 assistant tool_call 已被折叠。
-        while (firstKept < history.Count && history[firstKept].Role == PureAgentRole.Tool) firstKept++;
-        // 最近窗口同时受字符预算约束：8 条超大工具结果同样会撑爆上下文。
-        var recentChars = 0;
-        while (firstKept < history.Count - 1)
+        var groups = NativeHistoryGroups.Enumerate(history, start);
+        if (groups.Count < 2 || groups.Any(group => !group.Complete)) return false;
+        // 至少保留最新完整组；该组自身超预算时也不拆开工具配对。
+        var firstRecentGroup = groups.Count - 1;
+        long recentChars = groups[firstRecentGroup].Characters;
+        var recentCount = groups[firstRecentGroup].End - groups[firstRecentGroup].Start;
+        while (firstRecentGroup > 1)
         {
-            recentChars += SizeOf(history[firstKept]);
-            if (recentChars <= keepRecentChars || history.Count - firstKept <= 2) break;
-            firstKept++;
-            while (firstKept < history.Count && history[firstKept].Role == PureAgentRole.Tool) firstKept++;
+            var previous = groups[firstRecentGroup - 1];
+            if (recentCount + previous.End - previous.Start > keepRecent ||
+                recentChars + previous.Characters > keepRecentChars) break;
+            firstRecentGroup--;
+            recentChars += previous.Characters;
+            recentCount += previous.End - previous.Start;
         }
-        if (firstKept >= history.Count) return false;
-
-        var omitted = firstKept - start;
-        if (omitted <= 0) return false;
-
+        // Summary coverage is a prefix of complete groups. A group is retired only when its
+        // entire transcript fit the budget; an oversized group and every later message stay live.
+        var coveredThrough = start;
         var transcript = new StringBuilder();
         var filesTouched = new List<string>();
-        var commands = new List<string>();
-        var exitCodes = new List<string>();
+        var commands = new List<(string Command, string? ExitCode)>();
+        var pendingCommands = new Dictionary<string, int>(StringComparer.Ordinal);
         var failedTools = 0;
-        for (var i = start; i < firstKept && transcript.Length < transcriptBudget; i++)
+        foreach (var group in groups.Take(firstRecentGroup))
         {
-            var message = history[i];
-            var text = message.Content ?? string.Empty;
-            if (text.Length > 6000) text = text[..6000] + "…";
-            transcript.Append(message.Role).Append(": ").AppendLine(text);
-            if (message.ToolCalls is { Count: > 0 } calls)
+            // Cost the group before rendering so one oversized group cannot build an
+            // unbounded string. The estimate and the renderer must count the same fields.
+            long groupCost = 0;
+            for (var i = group.Start; i < group.End; i++)
             {
-                foreach (var call in calls)
+                var message = history[i];
+                groupCost += message.Role.ToString().Length + 2 +
+                             ClipForSummary(message.Content ?? string.Empty, summaryContentChars).Length +
+                             Environment.NewLine.Length;
+                if (message.ToolCalls is { Count: > 0 } calls)
                 {
-                    CollectTouchedFile(call, filesTouched);
-                    CollectCommand(call, commands);
-                    transcript.Append("  [tool_call] ").Append(call.Name).Append(' ')
-                        .AppendLine(call.ArgumentsJson.Length > 800
-                            ? call.ArgumentsJson[..800] + "…"
-                            : call.ArgumentsJson);
+                    foreach (var call in calls)
+                        groupCost += "  [tool_call] ".Length + call.Name.Length + 1 +
+                                     ClipForSummary(call.ArgumentsJson, summaryArgumentsChars).Length +
+                                     Environment.NewLine.Length;
                 }
             }
-            if (message.Role == PureAgentRole.Tool && message.Content is { Length: > 0 } toolText)
+            if (transcript.Length + groupCost > transcriptBudget) break;
+
+            for (var i = group.Start; i < group.End; i++)
             {
-                if (toolText.Contains("tool_use_error", StringComparison.Ordinal)) failedTools++;
-                if (TryReadExitCode(toolText) is { } code) exitCodes.Add(code);
+                var message = history[i];
+                // ToolCallId is scoped to one assistant tool-call batch, not the whole history.
+                if (message.Role != PureAgentRole.Tool) pendingCommands.Clear();
+                transcript.Append(message.Role).Append(": ").AppendLine(
+                    ClipForSummary(message.Content ?? string.Empty, summaryContentChars));
+                if (message.ToolCalls is { Count: > 0 } calls)
+                {
+                    foreach (var call in calls)
+                    {
+                        CollectTouchedFile(call, filesTouched);
+                        CollectCommand(call, commands, pendingCommands);
+                        transcript.Append("  [tool_call] ").Append(call.Name).Append(' ')
+                            .AppendLine(ClipForSummary(call.ArgumentsJson, summaryArgumentsChars));
+                    }
+                }
+                if (message.Role == PureAgentRole.Tool && message.Content is { Length: > 0 } toolText)
+                {
+                    if (toolText.Contains("tool_use_error", StringComparison.Ordinal)) failedTools++;
+                    if (message.ToolCallId is { } id && pendingCommands.Remove(id, out var commandIndex))
+                        commands[commandIndex] = (commands[commandIndex].Command, TryReadExitCode(toolText));
+                }
             }
+            coveredThrough = group.End;
         }
+
+        var omitted = coveredThrough - start;
+        if (omitted == 0) return false;
 
         var fileHint = filesTouched.Count > 0
             ? $"涉及文件（按出现顺序，最多 20 个）：{string.Join(", ", filesTouched.Take(20))}"
             : "涉及文件：未从工具调用中识别";
 
         // 确定性状态台账：这些事实不依赖摘要模型的可靠性，压缩后必须原样存在。
-        var ledger = BuildStateLedger(filesTouched, commands, exitCodes, failedTools);
+        var ledger = BuildStateLedger(filesTouched, commands, failedTools);
 
         string summary;
         try
@@ -495,9 +532,9 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
                         $"{fileHint}\n{ledger}\n\n--- 对话记录 ---\n{transcript}")
                 },
                 Array.Empty<string>(), modelId), cancellationToken).ConfigureAwait(false);
-            summary = string.IsNullOrWhiteSpace(response.Text)
-                ? $"[上下文已压缩] 早先 {omitted} 条消息已省略；如需细节请重新读取相关文件。"
-                : $"[上下文摘要：早先 {omitted} 条消息已压缩]\n{response.Text}";
+            // An empty answer is not a summary; never retire messages without one.
+            if (string.IsNullOrWhiteSpace(response.Text)) return false;
+            summary = $"[上下文摘要：早先 {omitted} 条消息已压缩]\n{response.Text}";
         }
         catch (OperationCanceledException)
         {
@@ -505,11 +542,12 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         }
         catch
         {
-            summary = $"[上下文已压缩] 早先 {omitted} 条消息因超出上下文预算被省略；如需细节请重新读取相关文件。";
+            // The summarizer failed: keep the full history so a later attempt can retry.
+            return false;
         }
 
         var note = new PureAgentMessage(PureAgentRole.Assistant, summary);
-        var kept = history.Skip(firstKept).ToList();
+        var kept = history.Skip(coveredThrough).ToList();
 
         // 计划是结构化待办，且不在对话文本里——摘要模型看不到它。
         // 压缩后必须原样保留，否则模型会忘记剩余步骤并重复已完成的工作。
@@ -534,6 +572,16 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
             history.AddRange(kept);
         }
         return true;
+    }
+
+    /// <summary>
+    /// 摘要输入逐条截断；标记显式给出省略字符数，成本估算与最终渲染共用同一结果。
+    /// 只作用于将被摘要替换的前缀，保留尾组的原文不受影响。
+    /// </summary>
+    private static string ClipForSummary(string text, int max)
+    {
+        if (text.Length <= max) return text;
+        return string.Concat(text.AsSpan(0, max), $"…[truncated {text.Length - max} chars]");
     }
 
     private static int SizeOf(PureAgentMessage message)
@@ -580,8 +628,8 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
     /// 构造确定性状态台账：已改文件、执行过的命令与退出码、失败工具次数。
     /// 摘要模型可能漏项，而这些是继续工作必需的事实，必须由代码保证保留。
     /// </summary>
-    private static string BuildStateLedger(List<string> files, List<string> commands,
-        List<string> exitCodes, int failedTools)
+    private static string BuildStateLedger(List<string> files,
+        List<(string Command, string? ExitCode)> commands, int failedTools)
     {
         var builder = new StringBuilder();
         builder.AppendLine("[压缩时保留的状态台账]");
@@ -591,12 +639,13 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
 
         if (commands.Count > 0)
         {
-            builder.AppendLine("执行过的命令（最近 8 条）：");
+            builder.AppendLine("命令调用及退出码（最近 8 条；未知不代表已执行）：");
             var startIndex = Math.Max(0, commands.Count - 8);
             for (var i = startIndex; i < commands.Count; i++)
             {
-                var code = i < exitCodes.Count ? exitCodes[i] : "未知";
-                var command = commands[i].Length > 160 ? commands[i][..160] + "…" : commands[i];
+                var code = commands[i].ExitCode ?? "未知";
+                var value = commands[i].Command;
+                var command = value.Length > 160 ? value[..160] + "…" : value;
                 builder.Append("- `").Append(command).Append("` → ExitCode ").AppendLine(code);
             }
         }
@@ -605,7 +654,8 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         return builder.ToString().TrimEnd();
     }
 
-    private static void CollectCommand(PureToolCall call, List<string> commands)
+    private static void CollectCommand(PureToolCall call,
+        List<(string Command, string? ExitCode)> commands, Dictionary<string, int> pendingCommands)
     {
         if (!string.Equals(call.Name, "run_command", StringComparison.Ordinal)) return;
         try
@@ -613,7 +663,10 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
             using var document = System.Text.Json.JsonDocument.Parse(call.ArgumentsJson);
             if (document.RootElement.TryGetProperty("command", out var command) &&
                 command.GetString() is { Length: > 0 } value)
-                commands.Add(value.Replace('\n', ' '));
+            {
+                pendingCommands[call.Id] = commands.Count;
+                commands.Add((value.Replace('\n', ' '), null));
+            }
         }
         catch
         {

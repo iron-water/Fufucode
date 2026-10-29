@@ -51,7 +51,11 @@ public sealed record PureAgentMessage(
     string? ToolCallId = null,
     IReadOnlyList<PureToolCall>? ToolCalls = null,
     IReadOnlyList<PureImageAttachment>? Images = null,
-    PureUsage? Usage = null);
+    PureUsage? Usage = null)
+{
+    /// <summary>持久消息身份；压缩或重排不把旧分叉点重新绑定到别的消息。</summary>
+    public string EntryId { get; init; } = Guid.NewGuid().ToString("N");
+}
 
 /// <summary>一次模型响应的用量（未知字段保持 null，不补零）。</summary>
 public sealed record PureUsage(long? InputTokens = null, long? OutputTokens = null, long? TotalTokens = null,

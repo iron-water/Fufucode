@@ -353,9 +353,9 @@ public sealed class PersistentSessionManager
             : LoadNativeMessages(NativeSessionFactory.SessionFilePath(_layout, project.Id, parent.Id))?.Messages;
         if (messages is not { Count: > 0 })
             throw new InvalidOperationException("会话还没有可分支的消息。");
-        if (!entryId.StartsWith("entry_", StringComparison.Ordinal) ||
-            !int.TryParse(entryId.AsSpan("entry_".Length), out var index) || index < 0 || index >= messages.Count)
-            throw new ArgumentOutOfRangeException(nameof(entryId), "分叉点不在当前会话历史中。");
+        var index = NativeEntries.ResolveIndex(messages, entryId);
+        if (index < 0)
+            throw new ArgumentOutOfRangeException(nameof(entryId), "分叉点已失效；请刷新历史后重新选择。");
         if (messages[index].Role != PureAgentRole.User)
             throw new InvalidOperationException("只能在用户消息处分叉。");
 
@@ -669,7 +669,7 @@ public sealed class PersistentSessionManager
                     if (saved.Messages.Count > 0)
                     {
                         chat.RestoreHistory(saved.Messages);
-                        history.ApplyEntries(NativeEntries.Build(saved.Messages), leaf: NativeEntries.Leaf(saved.Messages), replace: true);
+                        history.ApplyEntries(NativeEntries.Build(saved.Messages, stableIds: true), leaf: NativeEntries.Leaf(saved.Messages, stableIds: true), replace: true);
                         interrupted |= saved.Messages[^1].Role == PureAgentRole.User;
                         if (interrupted) chat.MarkInterrupted();
                     }
@@ -1119,8 +1119,9 @@ public sealed class PersistentSession : IAsyncDisposable
         {
             if (Coordinator.Snapshot.Activity != ActivityState.Idle)
                 throw new InvalidOperationException("Cannot refresh persisted history during a run.");
-            var result = await Coordinator.QueryEntriesAsync(History.Cursor, cancellationToken);
-            History.ApplyEntriesResponse(PersistentSessionManager.RequireData(result, "get_entries"));
+            var replace = Session.Backend == BackendId.NativeCSharp;
+            var result = await Coordinator.QueryEntriesAsync(replace ? null : History.Cursor, cancellationToken);
+            History.ApplyEntriesResponse(PersistentSessionManager.RequireData(result, "get_entries"), replace: replace);
             RecordFileIfCreated();
             Coordinator.RestoreHistory(History, Coordinator.Snapshot.LastResult == TaskResult.Interrupted);
         }

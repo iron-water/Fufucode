@@ -10,6 +10,11 @@ public sealed record NativeSubagentProgress(string JobId, string Agent, string K
 /// <summary>原生会话与可选 Subagent 插件之间的最小运行时契约。</summary>
 public interface INativeSubagentRuntime
 {
+    /// <summary>
+    /// 插件是否仍处于已安装且启用状态；旧会话每轮读取，
+    /// Shutdown 必须先置 false 再取消在途调用。
+    /// </summary>
+    bool IsActive => true;
     IPureToolDispatcher Wrap(IPureToolDispatcher inner);
     IReadOnlyList<NativeSubagentDescriptor> Agents { get; }
     string BuildPromptSection();

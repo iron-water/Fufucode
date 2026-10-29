@@ -10,7 +10,7 @@ namespace Fufucode.Core;
 /// </summary>
 internal static class NativeEntries
 {
-    public static List<JsonElement> Build(IReadOnlyList<PureAgentMessage> messages)
+    public static List<JsonElement> Build(IReadOnlyList<PureAgentMessage> messages, bool stableIds = false)
     {
         ArgumentNullException.ThrowIfNull(messages);
         var entries = new List<JsonElement>(messages.Count);
@@ -18,7 +18,7 @@ internal static class NativeEntries
         for (var i = 0; i < messages.Count; i++)
         {
             var message = messages[i];
-            var id = $"entry_{i}";
+            var id = stableIds ? StableId(message) : $"entry_{i}";
             using var buffer = new MemoryStream();
             using (var writer = new Utf8JsonWriter(buffer))
             {
@@ -82,9 +82,25 @@ internal static class NativeEntries
     }
 
     /// <summary>最后一条消息的条目 id（空历史时为 null）。</summary>
-    public static JsonElement Leaf(IReadOnlyList<PureAgentMessage> messages) => messages.Count == 0
+    public static JsonElement Leaf(IReadOnlyList<PureAgentMessage> messages, bool stableIds = false) => messages.Count == 0
         ? JsonSerializer.SerializeToElement((string?)null)
-        : JsonSerializer.SerializeToElement($"entry_{messages.Count - 1}");
+        : JsonSerializer.SerializeToElement(stableIds ? StableId(messages[^1]) : $"entry_{messages.Count - 1}");
+
+    private static string StableId(PureAgentMessage message) => "native_" + message.EntryId;
+
+    public static int ResolveIndex(IReadOnlyList<PureAgentMessage> messages, string entryId)
+    {
+        // Legacy positional IDs must never silently select a different message after compaction.
+        if (!entryId.StartsWith("native_", StringComparison.Ordinal)) return -1;
+        var found = -1;
+        for (var i = 0; i < messages.Count; i++)
+        {
+            if (!string.Equals(StableId(messages[i]), entryId, StringComparison.Ordinal)) continue;
+            if (found >= 0) return -1; // Ambiguous persisted identities are not valid selections.
+            found = i;
+        }
+        return found;
+    }
 
     private static void WriteArguments(Utf8JsonWriter writer, string? argumentsJson)
     {
