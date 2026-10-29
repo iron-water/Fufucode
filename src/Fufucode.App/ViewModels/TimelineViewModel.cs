@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -40,16 +41,35 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private bool _disposed;
     private string? _projectRoot;
 
+    /// <summary>时间线实际渲染的最近条目数；更早的条目仍留在 <see cref="Entries"/> 中，按需加载。</summary>
+    private const int VisibleEntryLimit = 20;
+
+    /// <summary>点击一次"加载更早"向前展开的条目数。</summary>
+    private const int LoadEarlierBatch = 20;
+
+    private int _visibleStart;
+    private bool _suspendVisibleSync;
+
     public TimelineViewModel(IChatSession session, IRefreshScheduler scheduler, IClipboardService clipboard)
     {
         _session = session;
         _scheduler = scheduler;
         _clipboard = clipboard;
         _session.Event += OnSessionEvent;
-        Entries.CollectionChanged += (_, _) => OnPropertyChanged(nameof(IsEmpty));
+        Entries.CollectionChanged += OnEntriesChanged;
     }
 
+    /// <summary>全部时间线条目（会话数据，保留用于加载更早、搜索与跳转）。</summary>
     public ObservableCollection<TimelineEntryViewModel> Entries { get; } = new();
+
+    /// <summary>界面实际绑定的窗口：最近 <see cref="VisibleEntryLimit"/> 条，或用户手动加载的更早条目。</summary>
+    public ObservableCollection<TimelineEntryViewModel> VisibleEntries { get; } = new();
+
+    public bool HasHiddenEntries => _visibleStart > 0;
+
+    public int HiddenEntryCount => _visibleStart;
+
+    public string LoadEarlierLabel => _visibleStart > 0 ? $"加载更早（还有 {_visibleStart} 条）" : string.Empty;
 
     public void ResolveReferencedFiles(string? projectRoot)
     {
@@ -60,6 +80,166 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
 
     /// <summary>时间线为空（用于对话页空态插画）。</summary>
     public bool IsEmpty => Entries.Count == 0;
+
+    /// <summary>向前展开一批更早的条目；视图负责在插入后补偿滚动偏移。</summary>
+    public void LoadEarlier()
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(LoadEarlier);
+            return;
+        }
+
+        if (_visibleStart <= 0) return;
+
+        var first = Math.Max(0, _visibleStart - LoadEarlierBatch);
+        _suspendVisibleSync = true;
+        try
+        {
+            for (var index = _visibleStart - 1; index >= first; index--)
+                VisibleEntries.Insert(0, Entries[index]);
+            _visibleStart = first;
+        }
+        finally
+        {
+            _suspendVisibleSync = false;
+        }
+
+        NotifyHiddenChanged();
+    }
+
+    /// <summary>
+    /// 跳转到某条历史消息前确保它已进入渲染窗口。返回 true 表示刚刚展开过，
+    /// 调用方应等一帧布局完成后再定位容器。
+    /// </summary>
+    public bool EnsureEntryVisible(TimelineEntryViewModel entry)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => EnsureEntryVisible(entry));
+            return false;
+        }
+
+        var index = Entries.IndexOf(entry);
+        if (index < 0 || index >= _visibleStart) return false;
+
+        _suspendVisibleSync = true;
+        try
+        {
+            for (var current = _visibleStart - 1; current >= index; current--)
+                VisibleEntries.Insert(0, Entries[current]);
+            _visibleStart = index;
+        }
+        finally
+        {
+            _suspendVisibleSync = false;
+        }
+
+        NotifyHiddenChanged();
+        return true;
+    }
+
+    private void OnEntriesChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        OnPropertyChanged(nameof(IsEmpty));
+        if (_suspendVisibleSync) return;
+
+        switch (e.Action)
+        {
+            case NotifyCollectionChangedAction.Add when e.NewItems is not null:
+            {
+                // e.NewStartingIndex 为 -1 时按"追加到末尾"处理。
+                var start = e.NewStartingIndex < 0 ? Entries.Count - e.NewItems.Count : e.NewStartingIndex;
+                for (var offset = 0; offset < e.NewItems.Count; offset++)
+                {
+                    if (e.NewItems[offset] is not TimelineEntryViewModel item) continue;
+                    var absolute = start + offset;
+                    if (absolute < _visibleStart)
+                    {
+                        // 插入点隐藏在当前窗口之前：窗口起点随之后移，界面不变。
+                        _visibleStart++;
+                        continue;
+                    }
+
+                    var visibleIndex = absolute - _visibleStart;
+                    if (visibleIndex >= 0 && visibleIndex <= VisibleEntries.Count)
+                        VisibleEntries.Insert(visibleIndex, item);
+                    else
+                        VisibleEntries.Add(item);
+                }
+                break;
+            }
+            case NotifyCollectionChangedAction.Remove when e.OldItems is not null:
+            {
+                var start = e.OldStartingIndex < 0 ? 0 : e.OldStartingIndex;
+                for (var offset = 0; offset < e.OldItems.Count; offset++)
+                {
+                    var absolute = start + offset;
+                    if (absolute < _visibleStart)
+                    {
+                        _visibleStart = Math.Max(0, _visibleStart - 1);
+                        continue;
+                    }
+
+                    var visibleIndex = absolute - _visibleStart;
+                    if (visibleIndex >= 0 && visibleIndex < VisibleEntries.Count)
+                        VisibleEntries.RemoveAt(visibleIndex);
+                }
+                break;
+            }
+            case NotifyCollectionChangedAction.Reset:
+                VisibleEntries.Clear();
+                _visibleStart = 0;
+                break;
+            default:
+                // Replace / Move 很少见；直接按当前窗口重建，避免索引错位。
+                RebuildVisible();
+                return;
+        }
+
+        if (IsAtBottom) TrimVisible();
+        NotifyHiddenChanged();
+    }
+
+    private void RebuildVisible()
+    {
+        var wasSuspended = _suspendVisibleSync;
+        _suspendVisibleSync = true;
+        try
+        {
+            VisibleEntries.Clear();
+            var start = Math.Max(0, Entries.Count - VisibleEntryLimit);
+            for (var index = start; index < Entries.Count; index++)
+                VisibleEntries.Add(Entries[index]);
+            _visibleStart = start;
+        }
+        finally
+        {
+            _suspendVisibleSync = wasSuspended;
+        }
+
+        NotifyHiddenChanged();
+    }
+
+    private bool TrimVisible()
+    {
+        var trimmed = false;
+        while (VisibleEntries.Count > VisibleEntryLimit)
+        {
+            VisibleEntries.RemoveAt(0);
+            _visibleStart++;
+            trimmed = true;
+        }
+
+        return trimmed;
+    }
+
+    private void NotifyHiddenChanged()
+    {
+        OnPropertyChanged(nameof(HasHiddenEntries));
+        OnPropertyChanged(nameof(HiddenEntryCount));
+        OnPropertyChanged(nameof(LoadEarlierLabel));
+    }
 
     /// <summary>用户当前是否停留在时间线底部（由 View 在滚动时回写）。</summary>
     [ObservableProperty]
@@ -95,6 +275,9 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         foreach (var entry in Entries)
             (entry as AssistantMessageViewModel)?.DetachForRemoval();
         Entries.Clear();
+        VisibleEntries.Clear();
+        _visibleStart = 0;
+        NotifyHiddenChanged();
         _byId.Clear();
         _rebuilder.Reset();
         _currentTurn = null;
@@ -118,14 +301,26 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        Reset();
-        foreach (var message in messages)
+        // 回放期间不逐条同步 VisibleEntries：先灌满重建器，最后一次性只呈现最近一段。
+        _suspendVisibleSync = true;
+        try
         {
-            _rebuilder.Apply(new SessionEvent.MessageStarted(message.Id, message.Role, message.Model, message.Blocks.Count));
-            _rebuilder.Apply(new SessionEvent.MessageFinished(message.Id, message, message.CumulativeUsage));
+            Reset();
+            foreach (var message in messages)
+            {
+                _rebuilder.Apply(new SessionEvent.MessageStarted(message.Id, message.Role, message.Model, message.Blocks.Count));
+                _rebuilder.Apply(new SessionEvent.MessageFinished(message.Id, message, message.CumulativeUsage));
+            }
+
+            ApplyBatch();
+        }
+        finally
+        {
+            _suspendVisibleSync = false;
         }
 
-        ApplyBatch();
+        RebuildVisible();
+
         // 历史没有实时 TurnSettled 事件；空闲会话须在回放后收束，运行中的重接仍保留活动回合。
         if (_session.Activity == SessionActivity.Idle)
             FinalizeCurrentTurn(_session.LastOutcome ?? SessionOutcome.Unknown, restored: true);
@@ -167,6 +362,12 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         {
             PendingSinceScrollUp = 0;
             BackToLatestVisible = false;
+            // 上翻期间窗口允许增长；回到最新时再裁掉顶部，避免在用户阅读位置上方抽走内容。
+            if (TrimVisible())
+            {
+                NotifyHiddenChanged();
+                ScrollToEndRequested?.Invoke();
+            }
         }
     }
 
@@ -519,6 +720,8 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             (entry as AssistantMessageViewModel)?.DetachForRemoval();
         }
         Entries.Clear();
+        VisibleEntries.Clear();
+        _visibleStart = 0;
         _byId.Clear();
     }
 

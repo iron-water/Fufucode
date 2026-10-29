@@ -204,6 +204,24 @@ public partial class ChatPage : UserControl
     }
 
     /// <summary>
+    /// 展开更早的条目：在窗口顶部插入内容后，把滚动偏移增加同样的高度，
+    /// 让用户当前阅读的那一条保持原地，而不是被新插入的历史顶走。
+    /// </summary>
+    private void OnLoadEarlierClicked(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+
+        var beforeExtent = TimelineScroller.Extent.Height;
+        var offset = TimelineScroller.Offset.Y;
+        vm.Timeline.LoadEarlier();
+        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var added = Math.Max(0, TimelineScroller.Extent.Height - beforeExtent);
+            TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, offset + added);
+        }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>
     /// 展开/收起代码块会显著改变某一条的高度；Avalonia 会把焦点控件带回视野，
     /// 表现为整页跳回这段输出的开头。这里在布局完成后恢复原来的滚动位置。
     /// </summary>

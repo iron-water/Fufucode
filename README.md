@@ -233,6 +233,8 @@ Settings → 性能与内存 provides opt-in switches; the default is high perfo
 
 Measured idle build: 327 MB working set (default) vs 189 MB (low-memory preset).
 
+Long sessions render only the most recent 20 timeline entries; older entries stay in memory and appear through **加载更早**. Collapsed tool groups do not instantiate their cards, and a collapsed tool output lays out only its first 20 and last 10 lines until expanded.
+
 ## Verify
 
 ```bash

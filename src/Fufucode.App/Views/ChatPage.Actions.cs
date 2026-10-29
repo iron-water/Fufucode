@@ -39,6 +39,14 @@ public partial class ChatPage
         var entry = vm.Timeline.Entries.FirstOrDefault(entry => entry.Id == id);
         if (entry is null) return;
 
+        // 目标可能在"加载更早"窗口之外：先展开到它，再等布局完成定位。
+        if (vm.Timeline.EnsureEntryVisible(entry))
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(
+                () => ScrollToMessage(id), Avalonia.Threading.DispatcherPriority.Loaded);
+            return;
+        }
+
         // 已实现的行：按它相对滚动区的位置平滑滚过去；未实现时退回框架的定位。
         if (TimelineItems.ContainerFromItem(entry) is Avalonia.Visual container &&
             container.TranslatePoint(new Point(0, 0), TimelineScroller) is { } point)

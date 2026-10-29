@@ -46,6 +46,12 @@ public sealed partial class ToolGroupViewModel : ObservableObject
 
     public ObservableCollection<ToolCallBlockViewModel> Tools { get; } = new();
 
+    /// <summary>
+    /// 实际绑定到界面的工具集合：折叠时为空，展开时才把 <see cref="Tools"/> 投影过来。
+    /// 工具组的子卡片（含工具输出文本）只有展开后才实例化；仅折叠组不常驻控件与字形对象。
+    /// </summary>
+    public ObservableCollection<ToolCallBlockViewModel> VisibleTools { get; } = new();
+
     public ToolGroupState State
     {
         get => _state;
@@ -90,6 +96,7 @@ public sealed partial class ToolGroupViewModel : ObservableObject
         {
             if (!SetProperty(ref _isExpanded, value)) return;
             if (value) IsUserPinned = true;
+            SyncVisibleTools();
             OnPropertyChanged(nameof(ExpandGlyph));
         }
     }
@@ -106,8 +113,17 @@ public sealed partial class ToolGroupViewModel : ObservableObject
     {
         _tools.Add(tool);
         Tools.Add(tool);
+        if (IsExpanded) VisibleTools.Add(tool);
         if (!_isDetached) tool.PropertyChanged += OnToolChanged;
         Recompute();
+    }
+
+    /// <summary>折叠时释放子卡片；展开时按源顺序重新投影。</summary>
+    private void SyncVisibleTools()
+    {
+        VisibleTools.Clear();
+        if (!IsExpanded) return;
+        foreach (var tool in _tools) VisibleTools.Add(tool);
     }
 
     /// <summary>移除订阅，避免组被丢弃后仍收到子工具通知。解除后不再重新订阅。</summary>
@@ -220,6 +236,7 @@ public sealed partial class ToolGroupViewModel : ObservableObject
         if (!_tools.Remove(tool)) return;
         tool.PropertyChanged -= OnToolChanged;
         Tools.Remove(tool);
+        VisibleTools.Remove(tool);
         Recompute();
     }
 

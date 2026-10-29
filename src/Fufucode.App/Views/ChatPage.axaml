@@ -98,7 +98,14 @@
                       VerticalScrollBarVisibility="Hidden"
                       HorizontalScrollBarVisibility="Disabled"
                       ScrollChanged="TimelineScroller_ScrollChanged">
-          <ItemsControl x:Name="TimelineItems" ItemsSource="{Binding Timeline.Entries}"
+          <StackPanel>
+            <!-- 只实例化最近一段；更早的条目仍在 Timeline.Entries 中，点击后向前展开。 -->
+            <Button x:Name="LoadEarlierButton" Classes="subtle"
+                    Content="{Binding Timeline.LoadEarlierLabel}"
+                    IsVisible="{Binding Timeline.HasHiddenEntries}"
+                    Click="OnLoadEarlierClicked"
+                    HorizontalAlignment="Center" Margin="0,10,0,0"/>
+          <ItemsControl x:Name="TimelineItems" ItemsSource="{Binding Timeline.VisibleEntries}"
                         Margin="0" Padding="0,20,0,32" HorizontalAlignment="Stretch">
             <ItemsControl.ItemsPanel>
               <ItemsPanelTemplate>
@@ -263,7 +270,7 @@
                                          TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                          Margin="30,0,12,6" IsVisible="{Binding HasHint}"/>
                               <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="0,0,0,6">
-                              <ItemsControl ItemsSource="{Binding Tools}">
+                              <ItemsControl ItemsSource="{Binding VisibleTools}">
                                 <ItemsControl.DataTemplates>
                                   <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
                                     <Border Classes="toolCard" Margin="10,3" Loaded="OnTransientBlockLoaded"
@@ -304,7 +311,7 @@
                                                         MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
                                             <views:ToolOutputView FontSize="12"
                                                                   Foreground="{DynamicResource AppTextSecondary}"
-                                                                  Output="{Binding Output}"/>
+                                                                  IsExpanded="{Binding IsExpanded}" Output="{Binding Output}"/>
                                           </ScrollViewer>
                                         </Border>
                                         </StackPanel>
@@ -358,7 +365,7 @@
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                               VerticalScrollBarVisibility="Auto"
                                               MaxHeight="{Binding OutputMaxHeight}" Padding="10,6">
-                                  <views:ToolOutputView FontSize="12" Foreground="{DynamicResource AppTextSecondary}" Output="{Binding Output}"/>
+                                  <views:ToolOutputView FontSize="12" Foreground="{DynamicResource AppTextSecondary}" IsExpanded="{Binding IsExpanded}" Output="{Binding Output}"/>
                                 </ScrollViewer>
                               </Border>
                               <Button Classes="subtle" Content="{Binding OutputToggleLabel}"
@@ -568,6 +575,7 @@
 
             </ItemsControl.DataTemplates>
           </ItemsControl>
+          </StackPanel>
         </ScrollViewer>
 
         <!-- 回到最新：浮动 pill + 阴影（阴影挂在包裹层，Button 无 BoxShadow）。

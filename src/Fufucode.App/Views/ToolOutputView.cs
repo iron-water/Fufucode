@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using Avalonia;
 using Avalonia.Controls;
@@ -19,6 +20,12 @@ public sealed class ToolOutputView : SelectableTextBlock
     /// <summary>超过此行数不再逐行着色。</summary>
     private const int MaxRichLines = 4000;
 
+    /// <summary>折叠时只排版头部这些行。</summary>
+    private const int CollapsedHeadLines = 20;
+
+    /// <summary>折叠时保留尾部这些行，方便看命令结果/错误结尾。</summary>
+    private const int CollapsedTailLines = 10;
+
     private static readonly IBrush AddedBrush = Brush.Parse("#4CAF50");
     private static readonly IBrush RemovedBrush = Brush.Parse("#E57373");
     private static readonly IBrush HunkBrush = Brush.Parse("#64B5F6");
@@ -27,10 +34,23 @@ public sealed class ToolOutputView : SelectableTextBlock
     public static readonly StyledProperty<string?> OutputProperty =
         AvaloniaProperty.Register<ToolOutputView, string?>(nameof(Output));
 
+    public static readonly StyledProperty<bool> IsExpandedProperty =
+        AvaloniaProperty.Register<ToolOutputView, bool>(nameof(IsExpanded), false);
+
     public string? Output
     {
         get => GetValue(OutputProperty);
         set => SetValue(OutputProperty, value);
+    }
+
+    /// <summary>
+    /// 工具卡是否展开。折叠时只把首尾几十行交给文本排版；完整输出仍在 ViewModel 中，
+    /// 展开时再重新生成 Inlines。折叠面板不应为几万行不可见文本持续驻留字形与样式对象。
+    /// </summary>
+    public bool IsExpanded
+    {
+        get => GetValue(IsExpandedProperty);
+        set => SetValue(IsExpandedProperty, value);
     }
 
     public ToolOutputView()
@@ -43,12 +63,12 @@ public sealed class ToolOutputView : SelectableTextBlock
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == OutputProperty) Rebuild();
+        if (change.Property == OutputProperty || change.Property == IsExpandedProperty) Rebuild();
     }
 
     private void Rebuild()
     {
-        var text = Output ?? string.Empty;
+        var text = BuildDisplayText(Output ?? string.Empty);
         Inlines ??= new InlineCollection();
         Inlines.Clear();
         if (text.Length == 0) return;
@@ -66,6 +86,21 @@ public sealed class ToolOutputView : SelectableTextBlock
             if (index > 0) Inlines.Add(new LineBreak());
             AppendLine(lines[index], diff);
         }
+    }
+
+    /// <summary>折叠时只返回首尾片段；展开时返回完整文本。复制仍走 ViewModel 的完整输出。</summary>
+    private string BuildDisplayText(string text)
+    {
+        if (IsExpanded || text.Length == 0) return text;
+
+        var normalized = text.Replace("\r\n", "\n");
+        var lines = normalized.Split('\n');
+        if (lines.Length <= CollapsedHeadLines + CollapsedTailLines + 1) return normalized;
+
+        var omitted = lines.Length - CollapsedHeadLines - CollapsedTailLines;
+        var head = string.Join("\n", lines.Take(CollapsedHeadLines));
+        var tail = string.Join("\n", lines.Skip(lines.Length - CollapsedTailLines));
+        return head + $"\n… 已折叠 {omitted:N0} 行（展开工具卡查看全部）…\n" + tail;
     }
 
     private void AppendLine(string line, bool diff)
