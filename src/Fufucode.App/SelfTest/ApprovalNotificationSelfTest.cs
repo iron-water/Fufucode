@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Fufucode.App.Abstractions;
 using Fufucode.App.Integration;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
@@ -153,6 +154,28 @@ internal static class ApprovalNotificationSelfTest
         Check(notices.Length == 1, "identical notices arriving together collapse into one card");
         timeline.Dismiss(notices[0]);
         Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 0, "a timeline notice can be dismissed");
+
+        // 定时提示：到期后自动消失，不需要用户点 ×。
+        timeline.AddTransientNotification("子代理 explore 已完成", TimeSpan.FromMilliseconds(60));
+        Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 1, "a transient notice appears first");
+        await Task.Delay(500);
+        Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 0,
+            "a transient notice removes itself after its lifetime");
+
+        // 子代理只在结束时提示一次；逐次工具调用/中间回复不再生成提示。
+        var scripted = new ScriptedChatSession();
+        var subTimeline = new TimelineViewModel(scripted, SynchronousRefreshScheduler.Instance,
+            new RecordingClipboardService());
+        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "tool_start", "grep_search"));
+        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "tool_end", "grep_search"));
+        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "assistant", "正在整理结果"));
+        Check(!subTimeline.Entries.OfType<ErrorEntryViewModel>().Any(),
+            "subagent tool-call chatter never becomes a timeline notice");
+        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "completed", null));
+        var completion = subTimeline.Entries.OfType<ErrorEntryViewModel>().Single();
+        Check(completion.Message.Contains("已完成", StringComparison.Ordinal),
+            "only the subagent completion is announced");
+        subTimeline.Dispose();
 
         // 6) 通知中心条目：可以逐条移除，概览计数随之更新。
         var dismissCenter = new NotificationCenterViewModel(new NotificationPreferencesViewModel(
