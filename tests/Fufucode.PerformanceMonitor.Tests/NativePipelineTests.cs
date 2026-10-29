@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using System.Threading;
 using Fufucode.App.Abstractions;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Diagnostics;
@@ -55,6 +56,9 @@ internal static class NativePipelineTests
                 PerfTracer.Detach(recorder);
             }
 
+            // TurnSettled 在回合根 span 释放之前发出：等待它真正结束，避免测试与实现赛跑。
+            SpinWait.SpinUntil(() => recorder.Ring.Snapshot().Any(span => span.Name == "turn"),
+                TimeSpan.FromSeconds(5));
             var spans = recorder.Ring.Snapshot();
             TestUtil.Check(spans.Count(s => s.Name == "engine.turn") == 1, "engine turn recorded exactly once");
             var turn = spans.SingleOrDefault(s => s.Name == "turn");

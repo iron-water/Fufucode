@@ -228,7 +228,8 @@ internal sealed class PerfOverviewView : UserControl
             _usedTokensText.Text = $"{PerfPalette.FormatTokens(breakdown.TotalTokens)} token";
             var capacity = breakdown.CapacityTokens;
             _usedTokensSub.Text = capacity is { } cap && cap > 0
-                ? $"窗口 {PerfPalette.FormatTokens(cap)} · 占用 {PerfPalette.FormatPercent((double)breakdown.TotalTokens / cap)}"
+                ? $"窗口 {PerfPalette.FormatTokens(cap)} · 占用 {PerfPalette.FormatPercent((double)breakdown.TotalTokens / cap)}" +
+                  (breakdown.IsEstimated ? " · 估算" : string.Empty)
                 : breakdown.IsEstimated
                     ? breakdown.IsPartial
                         ? "按可见会话文本估算 · 不含系统与工具定义"
@@ -240,9 +241,11 @@ internal sealed class PerfOverviewView : UserControl
             _cacheHitText.Text = breakdown.CachedTokens > 0
                 ? PerfPalette.FormatPercent(breakdown.CacheHitRate)
                 : "—";
-            _cacheHitSub.Text = breakdown.CachedTokens > 0
-                ? $"{PerfPalette.FormatTokens(breakdown.CachedTokens)} 缓存输入 · {PerfPalette.FormatTokens(breakdown.UncachedTokens)} 未命中"
-                : "供应商未回报缓存用量";
+            _cacheHitSub.Text = breakdown.AwaitingUsage
+                ? "本次请求尚在生成"
+                : breakdown.CachedTokens > 0
+                    ? $"{PerfPalette.FormatTokens(breakdown.CachedTokens)} 缓存输入 · {PerfPalette.FormatTokens(breakdown.UncachedTokens)} 未命中"
+                    : "供应商未回报缓存用量";
         }
         else
         {

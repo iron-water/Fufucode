@@ -109,9 +109,12 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         _timer.Tick += async (_, _) =>
         {
             if (_disposed) return;
-            // 隐藏/浮动窗口也可能接收数据：按数据变化刷新，不因不可见而永久停在空快照。
-            var changed = _source.TotalWritten != _lastTotal || _source.ActiveSpanCount > 0;
-            if (_activeViewIndex == 2 && (changed || IsEffectivelyVisible)) _companionView.UpdateData();
+            // 页签被其他页面盖住时不为“仍在运行”每秒重建快照；切回来时活动 span 会立即触发刷新。
+            var completed = _source.TotalWritten != _lastTotal;
+            var active = _source.ActiveSpanCount > 0;
+            var visible = IsEffectivelyVisible;
+            var changed = completed || (active && visible);
+            if (_activeViewIndex == 2 && (changed || visible)) _companionView.UpdateData();
             if (changed) await RefreshAsync(force: false);
         };
         _timer.Start();
@@ -139,6 +142,7 @@ internal sealed class PerfCenterView : UserControl, IDisposable
         };
         _content.Content = targetView;
         if (index == 2) _companionView.UpdateData();
+        if (index == 1 && _snapshot is { } snapshot) _analysis.SetSnapshot(snapshot);
 
         UpdateSegmentButtonStyle(_btnOverview, index == 0);
         UpdateSegmentButtonStyle(_btnAnalysis, index == 1);
@@ -238,7 +242,8 @@ internal sealed class PerfCenterView : UserControl, IDisposable
     private void Apply(PerfSnapshot snapshot)
     {
         _overview.Render(snapshot);
-        _analysis.SetSnapshot(snapshot);
+        // 分析页含数百行树与时间线：不在前台时不重建，切到分析页时补一次最新快照。
+        if (_activeViewIndex == 1) _analysis.SetSnapshot(snapshot);
     }
 
     public void Dispose()

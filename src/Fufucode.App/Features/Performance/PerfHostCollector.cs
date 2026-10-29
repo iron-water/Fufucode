@@ -108,7 +108,12 @@ public sealed class PerfHostCollector : IDisposable
                 _sessionId = sessionId ?? (session is null ? null : Guid.NewGuid().ToString("N"));
             }
             _session = session;
-            _sessionName = sessionName;
+            // 会话没有显式标题时调用方会退化成会话 id；不要把 GUID 当标题显示，
+            // 优先用首条用户消息做可读标签，仍没有就由页面显示“当前会话”。
+            var label = sessionName;
+            if (string.IsNullOrWhiteSpace(label) || Guid.TryParse(label, out _)) label = null;
+            if (label is null && history is { Count: > 0 }) label = DeriveSessionLabel(history);
+            _sessionName = label;
             _currentModel = session?.CurrentModel ?? model;
             _backend = (session as IBackendChatSession)?.BackendId;
             _isFumo = _backend == "fumo";
@@ -119,6 +124,19 @@ public sealed class PerfHostCollector : IDisposable
             PublishContextLocked(force: true);
             if (session is not null) session.Event += OnSessionEvent;
         }
+    }
+
+    private static string? DeriveSessionLabel(IReadOnlyList<ChatMessage> history)
+    {
+        foreach (var message in history)
+        {
+            if (message.Role != MessageRole.User) continue;
+            var text = string.Concat(message.Blocks.OfType<TextBlock>().Select(block => block.Text));
+            text = string.Join(' ', text.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+            if (text.Length == 0) continue;
+            return text.Length <= 24 ? text : text[..24] + "…";
+        }
+        return null;
     }
 
     private void RememberMessageLocked(ChatMessage message)

@@ -42,6 +42,14 @@ internal sealed class PerfCompanionNetworkView : UserControl
     // 审计流水
     private readonly StackPanel _auditRowsHost = new() { Spacing = 6 };
 
+    // 响应式承载：停靠栏宽度只有 ~560px 时三列会互相挤压，需要切换成单列/双列。
+    private readonly Grid _topologyGrid = new() { ColumnSpacing = 12 };
+    private readonly Grid _kpiGrid = new() { ColumnSpacing = 10 };
+    private readonly Border[] _kpiCards = new Border[4];
+    private Border _hostCard = null!;
+    private Border _fufuCard = null!;
+    private Border _jiiiCard = null!;
+
     public PerfCompanionNetworkView()
     {
         _hostEventsText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextPrimary"));
@@ -71,49 +79,36 @@ internal sealed class PerfCompanionNetworkView : UserControl
         titleRow.Children.Add(versionBadge);
 
         // 三节点拓扑卡片
-        var topologyGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*"), ColumnSpacing = 12 };
-
-        // 1. FUFUCODE 宿主核心
-        var hostCard = MakeNodeCard("FUFUCODE 核心", "Canonical Bus", _hostStateText, "读取中", PerfPalette.Tool,
+        _hostCard = MakeNodeCard("FUFUCODE 核心", "Canonical Bus", _hostStateText, "读取中", PerfPalette.Tool,
         [
             ("事件计数", (Control)_hostEventsText),
             ("路由职责", (Control)Text("去重 / 幂等 / 扇出", 11, "AppTextSecondary")),
             ("总线时延", (Control)Text("未采集", 11, "AppTextDim")),
         ]);
-        topologyGrid.Children.Add(hostCard);
+        _topologyGrid.Children.Add(_hostCard);
 
-        // 2. FUFU 桌宠连接
-        var fufuCard = MakeNodeCard("FUFU 桌宠", "service.fufu-bridge", _fufuStateText, "读取中", PerfPalette.Model,
+        _fufuCard = MakeNodeCard("FUFU 桌宠", "service.fufu-bridge", _fufuStateText, "读取中", PerfPalette.Model,
         [
             ("IPC 管道", (Control)Text(@"\\.\pipe\fufu", 10.5, "AppTextSecondary")),
             ("传输状态", (Control)_fufuMetricsText),
             ("渲染帧率", (Control)_fufuRenderText),
         ]);
-        Grid.SetColumn(fufuCard, 1);
-        topologyGrid.Children.Add(fufuCard);
+        _topologyGrid.Children.Add(_fufuCard);
 
-        // 3. JIII 远程协同
-        var jiiiCard = MakeNodeCard("JIII 远程协同", "service.remote-control", _jiiiStateText, "读取中", PerfPalette.Approval,
+        _jiiiCard = MakeNodeCard("JIII 远程协同", "service.remote-control", _jiiiStateText, "读取中", PerfPalette.Approval,
         [
             ("传输通道", (Control)Text("WebSocket / Web 桥", 10.5, "AppTextSecondary")),
             ("远控状态", (Control)_jiiiMetricsText),
             ("意图审计", (Control)Text("Notice 仅入站", 11, "AppTextDim")),
         ]);
-        Grid.SetColumn(jiiiCard, 2);
-        topologyGrid.Children.Add(jiiiCard);
+        _topologyGrid.Children.Add(_jiiiCard);
 
         // 性能指标网格
-        var kpiGrid = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*"), ColumnSpacing = 10 };
-        kpiGrid.Children.Add(KpiBlock("协同事件总数", _throughputText, "规范事实与通知累计"));
-        var kpi2 = KpiBlock("活跃连接器", _pipeRttText, "已连接 / 已注册");
-        Grid.SetColumn(kpi2, 1);
-        kpiGrid.Children.Add(kpi2);
-        var kpi3 = KpiBlock("最近审计", _idempotencyLatencyText, "去重后的意图流水");
-        Grid.SetColumn(kpi3, 2);
-        kpiGrid.Children.Add(kpi3);
-        var kpi4 = KpiBlock("待接入指标", _lossRateText, "RTT / 幂等时延 / 丢包需对端上报");
-        Grid.SetColumn(kpi4, 3);
-        kpiGrid.Children.Add(kpi4);
+        _kpiCards[0] = KpiBlock("协同事件总数", _throughputText, "规范事实与通知累计");
+        _kpiCards[1] = KpiBlock("活跃连接器", _pipeRttText, "已连接 / 已注册");
+        _kpiCards[2] = KpiBlock("最近审计", _idempotencyLatencyText, "去重后的意图流水");
+        _kpiCards[3] = KpiBlock("待接入指标", _lossRateText, "RTT / 幂等时延 / 丢包需对端上报");
+        foreach (var kpi in _kpiCards) _kpiGrid.Children.Add(kpi);
 
         // 实时规范事件与审计流水
         var auditHead = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), Margin = new Thickness(0, 0, 0, 8) };
@@ -134,8 +129,8 @@ internal sealed class PerfCompanionNetworkView : UserControl
         var slotCard = MakeSlotCard();
 
         _root.Children.Add(titleRow);
-        _root.Children.Add(topologyGrid);
-        _root.Children.Add(kpiGrid);
+        _root.Children.Add(_topologyGrid);
+        _root.Children.Add(_kpiGrid);
         _root.Children.Add(auditCard);
         _root.Children.Add(slotCard);
 
@@ -146,7 +141,36 @@ internal sealed class PerfCompanionNetworkView : UserControl
             Padding = new Thickness(16, 12, 16, 16),
         };
 
+        SizeChanged += (_, _) => ApplyResponsiveLayout(Bounds.Width);
+        ApplyResponsiveLayout(0);
         UpdateData();
+    }
+
+    /// <summary>
+    /// 窄停靠栏（约 560px）下三列卡片会把标题与数值全部截断：
+    /// 拓扑改为单列纵向堆叠，KPI 改为两列；宽屏保持三列/四列。
+    /// </summary>
+    private void ApplyResponsiveLayout(double width)
+    {
+        var narrow = width <= 0 || width < 760;
+        _topologyGrid.ColumnDefinitions = new ColumnDefinitions(narrow ? "*" : "*,*,*");
+        _topologyGrid.RowDefinitions = new RowDefinitions(narrow ? "Auto,Auto,Auto" : "Auto");
+        _topologyGrid.RowSpacing = narrow ? 10 : 0;
+        var cards = new[] { _hostCard, _fufuCard, _jiiiCard };
+        for (var i = 0; i < cards.Length; i++)
+        {
+            Grid.SetColumn(cards[i], narrow ? 0 : i);
+            Grid.SetRow(cards[i], narrow ? i : 0);
+        }
+
+        _kpiGrid.ColumnDefinitions = new ColumnDefinitions(narrow ? "*,*" : "*,*,*,*");
+        _kpiGrid.RowDefinitions = new RowDefinitions(narrow ? "Auto,Auto" : "Auto");
+        _kpiGrid.RowSpacing = narrow ? 10 : 0;
+        for (var i = 0; i < _kpiCards.Length; i++)
+        {
+            Grid.SetColumn(_kpiCards[i], narrow ? i % 2 : i);
+            Grid.SetRow(_kpiCards[i], narrow ? i / 2 : 0);
+        }
     }
 
     public void UpdateData()

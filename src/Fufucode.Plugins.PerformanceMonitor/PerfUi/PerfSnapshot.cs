@@ -117,7 +117,11 @@ internal sealed class PerfSnapshot
                 });
             }
 
-            var all = ordered.Concat(eventSpans).OrderBy(span => span.StartTicks).ThenBy(span => span.SpanId).ToList();
+            // 同一 span 可能同时出现在完成缓冲与实时视图里：按 id 去重，避免重复计数与树行缺失。
+            var all = ordered.Concat(eventSpans)
+                .GroupBy(span => span.SpanId)
+                .Select(group => group.OrderBy(span => span.EndTicks).Last())
+                .OrderBy(span => span.StartTicks).ThenBy(span => span.SpanId).ToList();
             var modelSpans = all.Where(span => span.Name == "model.request").ToList();
             if (modelSpans.Count == 0) modelSpans = all.Where(span => span.Name == "model.stream").ToList();
             if (modelSpans.Count == 0) modelSpans = all.Where(span => span.Name == "model.http").ToList();
@@ -263,7 +267,7 @@ internal sealed class PerfSnapshot
             Tools = tools,
             Context = context,
             ContextBreakdown = breakdown,
-            SessionLabel = session?.SessionName ?? session?.SessionId ?? "当前会话",
+            SessionLabel = string.IsNullOrWhiteSpace(session?.SessionName) ? "当前会话" : session!.SessionName,
             TotalModelMs = (long)turns.Sum(turn => turn.ModelMs),
             TotalToolMs = (long)turns.Sum(turn => turn.ToolMs),
             TotalApprovalMs = (long)turns.Sum(turn => turn.ApprovalMs),
@@ -369,6 +373,8 @@ internal sealed class PerfSnapshot
             EstimatedTokens = estimatedTotal,
             CategoriesAreEstimated = estimatedTotal > 0,
             IsEstimated = measured == 0,
+            // 已有新请求的文本估算、但该请求的 usage 还没回来：缓存/实测数字暂时不可用。
+            AwaitingUsage = awaitingUsage,
             IsPartial = estimate is null && session?.IsPartial == true,
             CachedTokens = cached,
             UncachedTokens = Math.Max(0, total - cached),
@@ -407,6 +413,7 @@ internal sealed class PerfContextBreakdown
     public long? CapacityTokens { get; init; }
     public long EstimatedTokens { get; init; }
     public bool IsEstimated { get; init; }
+    public bool AwaitingUsage { get; init; }
     public bool CategoriesAreEstimated { get; init; }
     public bool IsPartial { get; init; }
     public long CachedTokens { get; init; }

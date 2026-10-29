@@ -151,17 +151,18 @@ internal static class Program
                 .StartWithClassicDesktopLifetime(Array.Empty<string>());
             Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
         }
-        Startup?.Mark("avalonia.headless", "headless preview");
         if (args.Length > 0 && args[0] == "--headless-ui")
         {
+            // 里程碑必须只在真正进入该分支时记录；否则普通启动的追踪里会混入不存在的阶段。
+            Startup?.Mark("avalonia.headless", "headless preview");
             SelfTestMode = true;
             Environment.Exit(SelfTest.HeadlessUiRunner.RunProcess(args.Skip(1).ToArray()));
         }
 
         // --selftest：无头自测入口，不依赖交互式桌面会话即可验证界面与 mock 会话
-        Startup?.Mark("avalonia.selftest", "headless selftest");
         if (Array.IndexOf(args, "--selftest") >= 0)
         {
+            Startup?.Mark("avalonia.selftest", "headless selftest");
             SelfTestMode = true;
             Environment.Exit(RunSelfTestHeadless(args));
         }

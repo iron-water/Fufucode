@@ -34,6 +34,13 @@ internal static class HostCollectorTests
                 Check(recorder.SessionContext!.Parts.Sum(part => part.Tokens) > 0, "transcript text estimate available");
                 Check(recorder.Ring.Count == 0, "history does not invent model/tool timings");
 
+                // 未命名会话的调用方会把会话 id 当标题传入：页面必须换成可读标签而不是 GUID。
+                collector.AttachSession(new TestSession(), Guid.NewGuid().ToString("N"),
+                    history: history, sessionId: "guid-label");
+                Check(recorder.SessionContext?.SessionName == "中文 hello",
+                    "guid session name falls back to the first user prompt");
+                collector.AttachSession(session, "相同标题", history: history, sessionId: "session-one");
+
                 session.Emit(new SessionEvent.MessageStarted("u2", MessageRole.User, null, 1));
                 session.Emit(new SessionEvent.TextAppended("u2", 0, "abcd中文"));
                 session.Emit(new SessionEvent.MessageFinished("u2",

@@ -27,6 +27,11 @@ internal sealed class PerfAnalysisView : UserControl
     private long _selectedTraceId;
     private long _selectedSpanId;
     private bool _narrow;
+    // 默认跟随最新回合；用户从总览条/概览点选后才钉住某个 trace。
+    private bool _followLatest = true;
+    // 避免每个刷新周期都重建 Span 树与检查器（运行中的回合会每秒刷新）。
+    private int _treeSpanCount = -1;
+    private long _inspectorSpanId = -1;
 
     public PerfAnalysisView()
     {
@@ -76,18 +81,20 @@ internal sealed class PerfAnalysisView : UserControl
         _strip.TurnSelected += traceId =>
         {
             if (_snapshot?.FindTurn(traceId) is not { } turn) return;
-            ShowTurn(turn);
+            ShowTurn(turn, pinSelection: true);
             _timeline.ResetView();
         };
         _tree.SpanSelected += span =>
         {
             _selectedSpanId = span.SpanId;
+            _inspectorSpanId = span.SpanId;
             _timeline.SelectSpan(span.SpanId);
             _inspector.SetSpan(span, _snapshot?.Events ?? []);
         };
         _timeline.SpanSelected += span =>
         {
             _selectedSpanId = span.SpanId;
+            _inspectorSpanId = span.SpanId;
             _tree.SelectSpan(span.SpanId, raiseEvent: false);
             _inspector.SetSpan(span, _snapshot?.Events ?? []);
         };
@@ -97,7 +104,7 @@ internal sealed class PerfAnalysisView : UserControl
     public void ShowTrace(long traceId)
     {
         if (_snapshot?.FindTurn(traceId) is not { } turn) return;
-        ShowTurn(turn);
+        ShowTurn(turn, pinSelection: true);
         _timeline.ResetView();
     }
 
@@ -123,13 +130,15 @@ internal sealed class PerfAnalysisView : UserControl
             return;
         }
 
-        var current = _selectedTraceId != 0 ? snapshot.FindTurn(_selectedTraceId) : null;
-        ShowTurn(current ?? snapshot.LatestSession ?? turns[0]);
+        // 首次打开时还没有任何回合：不要因此把启动轨迹钉死；默认始终跟随最新回合。
+        var current = !_followLatest && _selectedTraceId != 0 ? snapshot.FindTurn(_selectedTraceId) : null;
+        ShowTurn(current ?? snapshot.LatestTurn ?? snapshot.Startup ?? turns[0]);
         UpdateLayoutForWidth();
     }
 
-    private void ShowTurn(PerfTurnInfo turn)
+    private void ShowTurn(PerfTurnInfo turn, bool pinSelection = false)
     {
+        if (pinSelection) _followLatest = false;
         var changed = _turn?.TraceId != turn.TraceId;
         _turn = turn;
         _selectedTraceId = turn.TraceId;
@@ -138,7 +147,12 @@ internal sealed class PerfAnalysisView : UserControl
             .Concat(_snapshot.Startup is { } startup ? new[] { startup } : Array.Empty<PerfTurnInfo>())
             .OrderBy(item => item.StartUtc).ToArray() ?? Array.Empty<PerfTurnInfo>();
         _strip.SetData(strip, turn.TraceId);
-        _tree.SetTurn(turn);
+        // 只有换回合或 span 数量变化时才重建树；运行中的回合每秒刷新不重复分配 600 行。
+        if (changed || turn.Spans.Count != _treeSpanCount)
+        {
+            _tree.SetTurn(turn);
+            _treeSpanCount = turn.Spans.Count;
+        }
         _timeline.SetTurn(turn, _snapshot?.HostSamples ?? [], _selectedSpanId);
         _timelineTitle.Text = turn.IsStartup ? $"启动 · {PerfPalette.FormatMs(turn.DurationMs)}"
             : $"回合 {turn.TimeLabel} · {PerfPalette.FormatMs(turn.DurationMs)}";
@@ -147,14 +161,19 @@ internal sealed class PerfAnalysisView : UserControl
             : $"模型 {turn.ModelCalls} · 工具 {turn.ToolCalls} · 审批 {turn.ApprovalSpans.Count} · 持久化 {turn.PersistSpans.Count}";
         if (_selectedSpanId != 0 && turn.Spans.FirstOrDefault(span => span.SpanId == _selectedSpanId) is { } selected)
         {
-            _tree.SelectSpan(selected.SpanId, raiseEvent: false);
-            _timeline.SelectSpan(selected.SpanId);
-            _inspector.SetSpan(selected, _snapshot?.Events ?? []);
+            if (_inspectorSpanId != selected.SpanId)
+            {
+                _tree.SelectSpan(selected.SpanId, raiseEvent: false);
+                _timeline.SelectSpan(selected.SpanId);
+                _inspector.SetSpan(selected, _snapshot?.Events ?? []);
+                _inspectorSpanId = selected.SpanId;
+            }
         }
-        else
+        else if (_inspectorSpanId != 0)
         {
             _selectedSpanId = 0;
             _inspector.SetSpan(null, _snapshot?.Events ?? []);
+            _inspectorSpanId = 0;
         }
     }
 
@@ -170,7 +189,9 @@ internal sealed class PerfAnalysisView : UserControl
         var fit = TextButton("适应", () => _timeline.ResetView());
         var latest = TextButton("最新", () =>
         {
+            _followLatest = true;
             if (_snapshot?.LatestSession is { } turn) ShowTurn(turn);
+            _timeline.ResetView();
         });
         actions.Children.Add(fit);
         actions.Children.Add(latest);

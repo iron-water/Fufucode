@@ -25,8 +25,14 @@ internal sealed class PerfSpanTreeRow
     public SpanRecord Span => Node.Span;
     public string Name => Node.DisplayName;
     public string Detail => Node.Detail;
-    // 用量标记是零时长事件，显示 0.0 ms 会像一次瞬时调用。
-    public string Duration => Span.Name == "model.usage" ? "用量" : PerfPalette.FormatMs(Span.DurationMs);
+    // 标记类 span（用量/容量/请求估算）是零时长记录点，显示 0.0 ms 会像一次瞬时调用。
+    public string Duration => Span.Name switch
+    {
+        "model.usage" => "用量",
+        "context.window" => "容量",
+        "context.snapshot" => "估算",
+        _ => PerfPalette.FormatMs(Span.DurationMs),
+    };
     public string Status => Span.Name.Contains("stall", StringComparison.OrdinalIgnoreCase)
         ? "warn"
         : Span.Status switch
@@ -160,6 +166,8 @@ internal static class PerfTreeBuilder
             };
         }
         if (span.Name is "model.request" or "model.http" or "model.stream") return span.Name;
+        if (span.Name == "context.window") return "窗口容量";
+        if (span.Name == "context.snapshot") return "上下文估算";
         return span.Name;
     }
 
