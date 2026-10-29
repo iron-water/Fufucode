@@ -1255,9 +1255,10 @@
     <Setter Property="Margin" Value="0,10,0,0"/>
   </Style>
   <!-- 工具组：与工具卡同一视觉族，但更轻；整组折叠成一行状态。 -->
-  <!-- 回合结束后被最终总结弱化的中间文字：内容保留，降低存在感。 -->
+  <!-- 回合结束后的中间文字：保留可读性，不再整体压暗（用户 2026-10-29 要求）。
+       历史实现是 Opacity 0.62，导致除最后总结外所有正文都发灰。 -->
   <Style Selector="ItemsControl.absorbed">
-    <Setter Property="Opacity" Value="0.62"/>
+    <Setter Property="Opacity" Value="1"/>
   </Style>
   <Style Selector="Border.toolGroupCard">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
