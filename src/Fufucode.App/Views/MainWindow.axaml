@@ -82,10 +82,10 @@
         </StackPanel>
       </Grid>
     </Border>
-    <Grid x:Name="ShellGrid" Grid.Row="1" ColumnDefinitions="224,5,*">
+    <Grid x:Name="ShellGrid" Grid.Row="1" ColumnDefinitions="224,8,*">
       <Border x:Name="SidebarBorder" Classes="dockHost dockLeft"><views:DockRegionView x:Name="LeftDock"/></Border>
       <infra:DeadZoneGridSplitter x:Name="LeftPanelSplitter" Grid.Column="1" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Cursor="SizeWestEast" Classes="dockSplitter"/>
-      <Grid x:Name="WorkspaceShell" Grid.Column="2" ColumnDefinitions="*,5,345" RowDefinitions="*,5,190">
+      <Grid x:Name="WorkspaceShell" Grid.Column="2" ColumnDefinitions="*,8,345" RowDefinitions="*,8,190">
         <Grid RowDefinitions="Auto,*">
           <Border x:Name="WorkspaceReturnBar" IsVisible="{Binding IsExtensionsPage}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="12,6">
             <Button x:Name="WorkspaceReturnButton" Classes="subtle" HorizontalAlignment="Left" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}" ToolTip.Tip="返回工作区">

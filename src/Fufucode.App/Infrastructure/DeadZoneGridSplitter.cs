@@ -55,6 +55,7 @@ public class DeadZoneGridSplitter : GridSplitter
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         _pointerInitiated = false;
+        Classes.Remove("dragging");
         base.OnPointerCaptureLost(e);
     }
 
@@ -62,7 +63,16 @@ public class DeadZoneGridSplitter : GridSplitter
     {
         _accumulated = 0;
         _open = false;
+        // 拖动期间分隔条会随指针移动，:pointerover 会反复得失（表现为强调色闪烁）；
+        // 用显式类把高亮钉住，拖动结束再撤掉。
+        Classes.Add("dragging");
         base.OnDragStarted(e);
+    }
+
+    protected override void OnDragCompleted(VectorEventArgs e)
+    {
+        Classes.Remove("dragging");
+        base.OnDragCompleted(e);
     }
 
     /// <summary>

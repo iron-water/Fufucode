@@ -25,6 +25,9 @@ namespace Fufucode.App;
 
 public partial class MainWindow
 {
+    /// <summary>停靠区分隔条的命中宽度：可见线仍是 2px，两侧留容错；鼠标稍微偏一点不会丢掉悬停。</summary>
+    internal const double DockSplitterSize = 8;
+
     private WorkbenchLayoutState _dockLayout = new();
     private readonly WorkbenchPageRegistry _workbenchPages = new();
     private Features.Plugins.PluginWorkspacePageHost? _pluginPageHost;
@@ -690,17 +693,17 @@ public partial class MainWindow
     {
         handle?.Dispose();
         panel.Height = new GridLength(from);
-        splitter.Height = new GridLength(from > 1 ? 5 : 0);
+        splitter.Height = new GridLength(from > 1 ? DockSplitterSize : 0);
         handle = Views.Motion.AnimateValue(from, to, Views.Motion.StandardDuration,
             value =>
             {
                 panel.Height = new GridLength(value);
-                splitter.Height = new GridLength(value > 1 ? 5 : 0);
+                splitter.Height = new GridLength(value > 1 ? DockSplitterSize : 0);
             },
             () =>
             {
                 panel.Height = new GridLength(to);
-                splitter.Height = new GridLength(to > 1 ? 5 : 0);
+                splitter.Height = new GridLength(to > 1 ? DockSplitterSize : 0);
                 if (!opening) onClosed();
             });
     }
@@ -710,17 +713,17 @@ public partial class MainWindow
     {
         handle?.Dispose();
         column.Width = new GridLength(from);
-        splitter.Width = new GridLength(from > 1 ? 5 : 0);
+        splitter.Width = new GridLength(from > 1 ? DockSplitterSize : 0);
         handle = Views.Motion.AnimateValue(from, to, Views.Motion.StandardDuration,
             value =>
             {
                 column.Width = new GridLength(value);
-                splitter.Width = new GridLength(value > 1 ? 5 : 0);
+                splitter.Width = new GridLength(value > 1 ? DockSplitterSize : 0);
             },
             () =>
             {
                 column.Width = new GridLength(to);
-                splitter.Width = new GridLength(to > 1 ? 5 : 0);
+                splitter.Width = new GridLength(to > 1 ? DockSplitterSize : 0);
                 if (!opening) onClosed();
             });
     }
@@ -760,7 +763,7 @@ public partial class MainWindow
             else
             {
                 ShellGrid.ColumnDefinitions[0].Width = new GridLength(targetLeftWidth);
-                ShellGrid.ColumnDefinitions[1].Width = new GridLength(left && !narrow ? 5 : 0);
+                ShellGrid.ColumnDefinitions[1].Width = new GridLength(left && !narrow ? DockSplitterSize : 0);
                 if (shouldAnimate && narrow) Views.Motion.SetVisible(SidebarBorder, left, offsetY: 0);
                 else SidebarBorder.IsVisible = left;
                 LeftPanelSplitter.IsVisible = left && !narrow;
@@ -782,7 +785,7 @@ public partial class MainWindow
             Grid.SetColumn(WorkspaceShell, 2);
             Grid.SetColumnSpan(WorkspaceShell, 1);
 
-            var available = width - (left && !narrow ? leftWidth + 5 : 0);
+            var available = width - (left && !narrow ? leftWidth + DockSplitterSize : 0);
             var rightHasPages = _dockLayout.Pages.TryGetValue(DockZone.Right, out var rPages) && rPages.Count > 0;
             var right = !settings && (narrow ? _rightDrawerOpen : (!_dockLayout.Hidden[DockZone.Right] && (rightHasPages || IsRightDrawerForTesting)));
             IsRightDrawerForTesting = narrow;
@@ -801,7 +804,7 @@ public partial class MainWindow
             }
             else
             {
-                WorkspaceShell.ColumnDefinitions[1].Width = new GridLength(right && !IsRightDrawerForTesting ? 5 : 0);
+                WorkspaceShell.ColumnDefinitions[1].Width = new GridLength(right && !IsRightDrawerForTesting ? DockSplitterSize : 0);
                 WorkspaceShell.ColumnDefinitions[2].Width = new GridLength(targetRightWidth);
                 if (shouldAnimate && IsRightDrawerForTesting) Views.Motion.SetVisible(RightPanelBorder, right, offsetY: 0);
                 else RightPanelBorder.IsVisible = right;
@@ -842,7 +845,7 @@ public partial class MainWindow
             }
             else
             {
-                WorkspaceShell.RowDefinitions[1].Height = new GridLength(bottom ? 5 : 0);
+                WorkspaceShell.RowDefinitions[1].Height = new GridLength(bottom ? DockSplitterSize : 0);
                 WorkspaceShell.RowDefinitions[2].Height = new GridLength(targetBottomHeight);
                 TerminalBorder.IsVisible = bottom;
                 TerminalSplitter.IsVisible = bottom;
