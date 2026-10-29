@@ -101,10 +101,15 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
     {
         Preferences = preferences;
         Items.CollectionChanged += OnItemsChanged;
+        Activity.CollectionChanged += OnActivityChanged;
         _consumer = Task.Run(ConsumeAsync);
     }
     public NotificationPreferencesViewModel Preferences { get; }
     public ObservableCollection<NotificationItemViewModel> Items { get; } = new();
+
+    /// <summary>应用级反馈的活动记录（来自 NoticeHub）；不打断对话，只在通知页可查。</summary>
+    public ObservableCollection<Fufucode.App.Infrastructure.Notice> Activity => NoticeHub.Shared.History;
+    public bool HasActivity => Activity.Count > 0;
 
     /// <summary>按当前过滤条件显示的行；Items 仍是完整记录。</summary>
     public ObservableCollection<NotificationItemViewModel> FilteredItems { get; } = new();
@@ -334,6 +339,12 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
         if (proactive) LatestPrompt = row;
         NotifyCounts();
     }
+    private void OnActivityChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        OnPropertyChanged(nameof(HasActivity));
+
+    [RelayCommand]
+    private void ClearActivity() => NoticeHub.Shared.Clear();
+
     private void OnItemsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.OldItems is not null)
@@ -408,6 +419,7 @@ public sealed partial class NotificationCenterViewModel : ViewModelBase, IDispos
     {
         if (_disposed) return;
         Detach(); lock (_gate) _disposed = true;
+        Activity.CollectionChanged -= OnActivityChanged;
         _events.Writer.TryComplete(); _shutdown.Cancel();
         _ = _consumer.ContinueWith(_ => _shutdown.Dispose(), TaskScheduler.Default);
     }

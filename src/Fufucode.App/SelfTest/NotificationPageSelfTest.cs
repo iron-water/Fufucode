@@ -67,6 +67,17 @@ internal static class NotificationPageSelfTest
             var floating = window.FloatingDockWindowForTesting(state.Id)!;
             Check(floating.IsVisible && ReferenceEquals(TopLevel.GetTopLevel(page), floating) && ReferenceEquals(page.DataContext, center),
                 "opening migrated notifications reveals the original function page and shared center");
+            // 应用级反馈：边角一行 + 活动记录，不进对话时间线。
+            NoticeHub.Shared.Clear();
+            NoticeHub.Shared.Publish("设置已保存", NoticeTier.Corner);
+            await Ready();
+            var corner = window.FindControl<Border>("CornerNotice")!;
+            Check(corner.IsVisible && window.FindControl<TextBlock>("CornerNoticeText")!.Text == "设置已保存",
+                "application feedback appears as a corner notice in the status bar");
+            Check(page.GetVisualDescendants().OfType<TextBlock>().Any(text => text.Text == "设置已保存" && text.IsEffectivelyVisible),
+                "the same feedback is recorded in the notification page activity list");
+            NoticeHub.Shared.Clear();
+
             // 卡片化布局的静态证据：空状态 + 概览卡 + 消息卡各截一张。
             await CaptureAsync(floating, Path.Combine(root, "cards-empty-420.png"));
             var delivery = window.NotificationDeliveryForTesting;

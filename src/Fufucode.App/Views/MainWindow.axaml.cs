@@ -1627,6 +1627,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _localPluginViewModel?.Dispose();
         _libraryService?.Dispose();
         _palette.Dispose();
+        Infrastructure.NoticeHub.Shared.CornerRequested -= ShowCornerNotice;
         _notifications.Dispose();
         if (_workspaceSession is not null) _workspaceSession.Event -= OnWorkspaceSessionEvent;
         _vm?.WorkspacePanel.Dispose();

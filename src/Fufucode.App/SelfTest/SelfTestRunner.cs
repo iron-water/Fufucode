@@ -1685,9 +1685,8 @@ public static class SelfTestRunner
                     sawRunning = true;
                 }
 
-                var noticeArrived = timeline.Entries.OfType<ErrorEntryViewModel>()
-                    .Any(entry => entry.KindText == "提示" &&
-                                  entry.Message.Contains("fufucode-bridge", StringComparison.Ordinal));
+                var noticeArrived = NoticeHub.Shared.History.Any(notice =>
+                    notice.Text.Contains("fufucode-bridge", StringComparison.Ordinal));
                 if (noticeArrived || (sawRunning && chat.Activity == SessionActivity.Idle))
                 {
                     break;
@@ -1706,13 +1705,12 @@ public static class SelfTestRunner
                 Pass("扩展命令经真实 UI 链路完成，未永久等待运行结束（P07）");
             }
 
-            var notices = timeline.Entries.OfType<ErrorEntryViewModel>()
-                .Where(entry => entry.KindText == "提示" &&
-                                entry.Message.Contains("fufucode-bridge", StringComparison.Ordinal))
+            var notices = NoticeHub.Shared.History
+                .Where(notice => notice.Text.Contains("fufucode-bridge", StringComparison.Ordinal))
                 .ToArray();
             if (notices.Length > 0)
             {
-                Pass("扩展 notify 经通知接线显示：" + notices[0].Message);
+                Pass("扩展 notify 经通知接线显示：" + notices[0].Text);
             }
             else
             {

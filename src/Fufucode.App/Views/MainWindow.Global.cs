@@ -65,6 +65,8 @@ public partial class MainWindow
             if (_host is null || _host.Current.Session.Id == id) await NavigateWorkspaceAsync(AppPage.Chat);
         };
         _notifications.PropertyChanged += OnNotificationPropertyChanged;
+        // 应用级反馈统一走 NoticeHub：这里只接边角提示，悬浮留给审批/会话失败。
+        NoticeHub.Shared.CornerRequested += ShowCornerNotice;
         InitializeNotificationDelivery();
         RenderDockPages();
         _actions.ExecutionFailed += message => _vm?.Timeline.AddNotification("动作失败：" + message);
@@ -212,6 +214,42 @@ public partial class MainWindow
         else SetNotificationPromptVisible(_notifications.HasPrompt);
     }
 
+    /// <summary>边角指示：状态栏中央一行，按类别换图标与颜色，几秒后自动淡出。</summary>
+    private void ShowCornerNotice(Notice notice)
+    {
+        if (!Dispatcher.UIThread.CheckAccess())
+        {
+            Dispatcher.UIThread.Post(() => ShowCornerNotice(notice));
+            return;
+        }
+        if (_closed) return;
+
+        CornerNoticeText.Text = notice.Text;
+        var (icon, brush) = notice.Kind switch
+        {
+            NoticeKind.Error => ("Icon.ErrorCircle", "AppCriticalForeground"),
+            NoticeKind.Success => ("Icon.CheckmarkCircle", "AppSuccessForeground"),
+            NoticeKind.Warning => ("Icon.Alert", "SystemFillColorAttentionBrush"),
+            NoticeKind.Progress => ("Icon.RecordStop", "AppTextDim"),
+            _ => ("Icon.Info", "AppTextDim"),
+        };
+        if (this.TryFindResource(icon, null, out var geometry)) CornerNoticeIcon.Data = geometry as Avalonia.Media.Geometry;
+        if (this.TryFindResource(brush, null, out var foreground)) CornerNoticeIcon.Foreground = foreground as Avalonia.Media.IBrush;
+
+        _cornerNoticeTimer?.Stop();
+        Views.Motion.SetVisible(CornerNotice, true, offsetY: 3);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(notice.Kind == NoticeKind.Error ? 10 : 6) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (ReferenceEquals(_cornerNoticeTimer, timer)) _cornerNoticeTimer = null;
+            Views.Motion.SetVisible(CornerNotice, false, offsetY: 3);
+        };
+        _cornerNoticeTimer = timer;
+        timer.Start();
+    }
+
+    private DispatcherTimer? _cornerNoticeTimer;
     private DispatcherTimer? _notificationPromptTimer;
 
     /// <summary>

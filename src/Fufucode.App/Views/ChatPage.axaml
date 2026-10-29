@@ -538,13 +538,8 @@
               <DataTemplate DataType="vm:ErrorEntryViewModel" x:DataType="vm:ErrorEntryViewModel">
                 <Border Classes="errorCard" Classes.neutral="{Binding IsNeutral}"
                         Classes.info="{Binding IsInfo}" Margin="0,6"
-                        Opacity="{Binding IsExpiring, Converter={x:Static anim:BoolToOpacityConverter.Instance}}">
-                  <Border.Transitions>
-                    <Transitions>
-                      <DoubleTransition Property="Opacity" Duration="0:0:0.18"/>
-                    </Transitions>
-                  </Border.Transitions>
-                  <!-- 入场动画挂在内层：外层 Opacity 绑定给定时退场用，两者互不覆盖。 -->
+>
+                  <!-- 入场动画挂在内层：外层负责边框与配色。 -->
                   <Grid ColumnDefinitions="Auto,*,Auto" AttachedToVisualTree="NoticeCard_Attached">
                     <PathIcon Grid.Column="0" Width="18" Height="18" Margin="0,1,0,0"
                               Data="{DynamicResource Icon.ErrorCircle}"

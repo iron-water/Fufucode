@@ -628,17 +628,6 @@ public sealed class ErrorEntryViewModel : TimelineEntryViewModel
     public bool IsNeutral => Severity == EntrySeverity.Neutral;
     public bool IsInfo => Severity == EntrySeverity.Info;
 
-    /// <summary>
-    /// 定时提示进入退场阶段：视图据此淡出，随后条目从时间线移除。
-    /// 非定时提示始终为 false。
-    /// </summary>
-    private bool _isExpiring;
-    public bool IsExpiring
-    {
-        get => _isExpiring;
-        set => SetProperty(ref _isExpiring, value);
-    }
-
     public void UpdateFrom(ErrorEntry error)
     {
         if (error.Kind == SessionErrorKind.UserCancelled)

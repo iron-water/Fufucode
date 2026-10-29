@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -145,37 +146,46 @@ internal static class ApprovalNotificationSelfTest
         denyHost.Detach();
         center.Dispose();
 
-        // 5) 时间线提示：瞬时重复的同文提示合并；提示可以被显式关闭。
-        var timeline = new TimelineViewModel(new Mock.MockChatSession(), SynchronousRefreshScheduler.Instance,
-            new RecordingClipboardService());
-        timeline.AddNotification("粘贴内容较长（2,604 字符），已转为附件，发送时一并引用。");
-        timeline.AddNotification("粘贴内容较长（2,604 字符），已转为附件，发送时一并引用。");
-        var notices = timeline.Entries.OfType<ErrorEntryViewModel>().ToArray();
-        Check(notices.Length == 1, "identical notices arriving together collapse into one card");
-        timeline.Dismiss(notices[0]);
-        Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 0, "a timeline notice can be dismissed");
+        // 5) 应用级提示走 NoticeHub：不进时间线，只在边角提示与活动记录里出现。
+        NoticeHub.Shared.Clear();
+        var cornerShown = new List<Notice>();
+        void OnCorner(Notice notice) => cornerShown.Add(notice);
+        NoticeHub.Shared.CornerRequested += OnCorner;
+        try
+        {
+            var timeline = new TimelineViewModel(new Mock.MockChatSession(), SynchronousRefreshScheduler.Instance,
+                new RecordingClipboardService());
+            timeline.AddNotification("粘贴内容较长（2,604 字符），已转为附件，发送时一并引用。");
+            timeline.AddNotification("粘贴内容较长（2,604 字符），已转为附件，发送时一并引用。");
+            Check(!timeline.Entries.OfType<ErrorEntryViewModel>().Any(),
+                "application feedback no longer becomes a timeline card");
+            Check(NoticeHub.Shared.History.Count == 1, "identical notices arriving together collapse into one record");
+            Check(cornerShown.Count == 1, "a corner notice is raised once for the collapsed pair");
 
-        // 定时提示：到期后自动消失，不需要用户点 ×。
-        timeline.AddTransientNotification("子代理 explore 已完成", TimeSpan.FromMilliseconds(60));
-        Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 1, "a transient notice appears first");
-        await Task.Delay(500);
-        Check(timeline.Entries.OfType<ErrorEntryViewModel>().Count() == 0,
-            "a transient notice removes itself after its lifetime");
+            NoticeHub.Shared.Publish("设置已保存", NoticeTier.Quiet);
+            Check(NoticeHub.Shared.History.Count == 2 && cornerShown.Count == 1,
+                "quiet notices are recorded without interrupting");
 
-        // 子代理只在结束时提示一次；逐次工具调用/中间回复不再生成提示。
-        var scripted = new ScriptedChatSession();
-        var subTimeline = new TimelineViewModel(scripted, SynchronousRefreshScheduler.Instance,
-            new RecordingClipboardService());
-        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "tool_start", "grep_search"));
-        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "tool_end", "grep_search"));
-        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "assistant", "正在整理结果"));
-        Check(!subTimeline.Entries.OfType<ErrorEntryViewModel>().Any(),
-            "subagent tool-call chatter never becomes a timeline notice");
-        scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "completed", null));
-        var completion = subTimeline.Entries.OfType<ErrorEntryViewModel>().Single();
-        Check(completion.Message.Contains("已完成", StringComparison.Ordinal),
-            "only the subagent completion is announced");
-        subTimeline.Dispose();
+            // 子代理只在结束时提示一次；逐次工具调用/中间回复不产生任何通知。
+            var scripted = new ScriptedChatSession();
+            var subTimeline = new TimelineViewModel(scripted, SynchronousRefreshScheduler.Instance,
+                new RecordingClipboardService());
+            var before = NoticeHub.Shared.History.Count;
+            scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "tool_start", "grep_search"));
+            scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "tool_end", "grep_search"));
+            scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "assistant", "正在整理结果"));
+            Check(NoticeHub.Shared.History.Count == before, "subagent tool-call chatter never raises a notice");
+            scripted.Raise(new SessionEvent.SubagentUpdated("job-1", "explore", "completed", null));
+            var completion = NoticeHub.Shared.History[0];
+            Check(completion.Text.Contains("已完成", StringComparison.Ordinal) && completion.Kind == NoticeKind.Progress,
+                "only the subagent completion is announced, as progress");
+            Check(!subTimeline.Entries.OfType<ErrorEntryViewModel>().Any(),
+                "the completion notice stays out of the conversation timeline");
+            timeline.Dispose();
+            subTimeline.Dispose();
+        }
+        finally { NoticeHub.Shared.CornerRequested -= OnCorner; }
+        NoticeHub.Shared.Clear();
 
         // 6) 通知中心条目：可以逐条移除，概览计数随之更新。
         var dismissCenter = new NotificationCenterViewModel(new NotificationPreferencesViewModel(
@@ -186,7 +196,6 @@ internal static class ApprovalNotificationSelfTest
         dismissCenter.DismissItemCommand.Execute(dismissCenter.Items[0]);
         Check(dismissCenter.TotalCount == 0 && !dismissCenter.HasItems, "a notification record can be removed from the list");
         dismissCenter.Dispose();
-        timeline.Dispose();
         await Task.CompletedTask;
     }
 

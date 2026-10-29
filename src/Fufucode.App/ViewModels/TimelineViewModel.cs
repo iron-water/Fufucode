@@ -39,11 +39,6 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _submissionCts;
     private bool _disposed;
     private string? _projectRoot;
-    // 最近一条界面级提示的原文与时间：用于合并瞬间重复的同文提示。
-    private string? _lastNoticeText;
-    private DateTimeOffset _lastNoticeAt;
-    // 定时提示的到期/淡出计时器；条目被手动关闭或视图销毁时一并停掉。
-    private readonly Dictionary<ErrorEntryViewModel, DispatcherTimer> _noticeTimers = new();
 
     public TimelineViewModel(IChatSession session, IRefreshScheduler scheduler, IClipboardService clipboard)
     {
@@ -139,85 +134,18 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     /// 追加一条界面级提示（如恢复诊断、"审批功能接入中"）。它不是会话错误，
     /// 不走 SessionError 语义，也不进入重建器（一次性条目，无后续更新）。
     /// </summary>
-    public void AddNotification(string text) => AddNotice(text, TimeSpan.Zero);
-
     /// <summary>
-    /// 定时提示：只用于进度类信息（如子代理完成）。展示 <paramref name="lifetime"/> 后
-    /// 自动淡出并从时间线移除，不长期占用对话区。
+    /// 应用级提示不再写进时间线：时间线只记录会话本身的错误。
+    /// 这里统一交给 <see cref="NoticeHub"/>，由它按级别决定边角提示或只进活动记录。
     /// </summary>
-    public void AddTransientNotification(string text, TimeSpan? lifetime = null) =>
-        AddNotice(text, lifetime ?? TimeSpan.FromSeconds(8));
+    public void AddNotification(string text, NoticeTier tier = NoticeTier.Corner) =>
+        NoticeHub.Shared.Publish(text, tier, source: "session");
 
-    private void AddNotice(string text, TimeSpan lifetime)
-    {
-        if (!Dispatcher.UIThread.CheckAccess())
-        {
-            Dispatcher.UIThread.Post(() => AddNotice(text, lifetime));
-            return;
-        }
+    /// <summary>进度类提示（子代理完成等）：边角一行，不打断。</summary>
+    public void AddTransientNotification(string text) =>
+        NoticeHub.Shared.Publish(text, NoticeTier.Corner, NoticeKind.Progress, "progress");
 
-        // 同一条提示在极短时间内重复到达（例如一次粘贴同时走了两条处理路径）时只保留一条：
-        // 否则界面上会出现两张一模一样的“提示”卡。
-        var now = DateTimeOffset.Now;
-        if (string.Equals(_lastNoticeText, text, StringComparison.Ordinal) &&
-            now - _lastNoticeAt < TimeSpan.FromSeconds(2))
-        {
-            return;
-        }
-        _lastNoticeText = text;
-        _lastNoticeAt = now;
-
-        var vm = new ErrorEntryViewModel
-        {
-            KindText = "提示",
-            Message = text,
-            Severity = EntrySeverity.Info,
-            Timestamp = now,
-        };
-        Entries.Add(vm);
-
-        if (IsAtBottom)
-        {
-            ScrollToEndRequested?.Invoke();
-        }
-        else
-        {
-            PendingSinceScrollUp++;
-        }
-
-        if (lifetime > TimeSpan.Zero) ScheduleExpiry(vm, lifetime);
-    }
-
-    /// <summary>定时提示到期：先让视图淡出，再真正删除。</summary>
-    private void ScheduleExpiry(ErrorEntryViewModel entry, TimeSpan lifetime)
-    {
-        var timer = new DispatcherTimer { Interval = lifetime };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            _noticeTimers.Remove(entry);
-            ExpireNotice(entry);
-        };
-        _noticeTimers[entry] = timer;
-        timer.Start();
-    }
-
-    private void ExpireNotice(ErrorEntryViewModel entry)
-    {
-        if (!Entries.Contains(entry)) return;
-        entry.IsExpiring = true;
-        var fade = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(220) };
-        fade.Tick += (_, _) =>
-        {
-            fade.Stop();
-            _noticeTimers.Remove(entry);
-            Dismiss(entry);
-        };
-        _noticeTimers[entry] = fade;
-        fade.Start();
-    }
-
-    /// <summary>移除一条界面级提示：视图先做退场动画，动画结束后调用这里真正删除。</summary>
+    /// <summary>移除一条界面级条目（会话错误卡上的 ×）。</summary>
     public void Dismiss(TimelineEntryViewModel entry)
     {
         if (!Dispatcher.UIThread.CheckAccess())
@@ -225,7 +153,6 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             Dispatcher.UIThread.Post(() => Dismiss(entry));
             return;
         }
-        if (entry is ErrorEntryViewModel notice && _noticeTimers.Remove(notice, out var timer)) timer.Stop();
         Entries.Remove(entry);
     }
 
@@ -285,13 +212,13 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
                 or SessionConnection.Stopped }:
                 _inStopWindow = false;
                 break;
-            // 子代理的每一次工具调用/中间回复都不进时间线——那是噪音。
-            // 只在子代理真正结束（完成/失败）时给一条定时提示，几秒后自动消失。
+            // 子代理的每一次工具调用/中间回复都不提示——那是噪音。
+            // 只在子代理真正结束（完成/失败）时给一条边角提示。
             case SessionEvent.SubagentUpdated { Kind: "completed" or "failed" } updated:
                 var detail = string.IsNullOrWhiteSpace(updated.Detail) ? string.Empty : "：" + updated.Detail;
                 AddTransientNotification(updated.Kind == "failed"
                     ? $"子代理 {updated.Agent} 失败{detail}"
-                    : $"子代理 {updated.Agent} 已完成", TimeSpan.FromSeconds(updated.Kind == "failed" ? 12 : 8));
+                    : $"子代理 {updated.Agent} 已完成");
                 break;
         }
 
@@ -583,8 +510,6 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         _disposed = true;
         _session.Event -= OnSessionEvent;
         _currentTurn = null;
-        foreach (var timer in _noticeTimers.Values) timer.Stop();
-        _noticeTimers.Clear();
         foreach (var entry in Entries)
         {
             (entry as AssistantMessageViewModel)?.DetachForRemoval();
