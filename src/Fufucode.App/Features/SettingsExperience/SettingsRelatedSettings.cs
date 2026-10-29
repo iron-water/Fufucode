@@ -21,6 +21,7 @@ public static class SettingsRelatedSettings
         ("network", "config", "端点与配置可整体导入导出"),
         ("models", "shortcuts", "切换模型可绑定快捷键"),
         ("storage", "about", "缓存与日志目录在关于页可打开"),
+        ("security", "storage", "备份与审计保存在应用数据目录"),
         ("browser", "network", "浏览器下载与代理走网络设置"),
         ("browser", "files", "下载文件在文件管理中查看"),
         ("terminal", "shortcuts", "终端开关可绑定快捷键"),

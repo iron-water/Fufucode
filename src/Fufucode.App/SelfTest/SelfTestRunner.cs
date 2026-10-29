@@ -53,6 +53,13 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--security-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => SecurityCenterSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"Security failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--settings-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => SettingsDestinationSelfTest.RunAsync(Pass, Fail));

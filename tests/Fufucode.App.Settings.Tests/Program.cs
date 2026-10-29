@@ -27,7 +27,7 @@ try
     var basic = Ids(SettingsNavTier.Basic);
     var features = Ids(SettingsNavTier.Features);
     var other = Ids(SettingsNavTier.Other);
-    Check(basic.SequenceEqual(new[] { "appearance", "about", "network", "shortcuts", "models", "storage", "memory" }),
+    Check(basic.SequenceEqual(new[] { "appearance", "about", "network", "shortcuts", "models", "security", "storage", "memory" }),
         "基础类包含外观/关于/网络/键盘/模型/储存");
     // 插件市场（MKT 轨道）在目录中已是大功能一级条目，此处按实际目录核对，不再沿用旧四条目断言。
     Check(features.SequenceEqual(new[] { "marketplace", "browser", "terminal", "files", "automation" }),

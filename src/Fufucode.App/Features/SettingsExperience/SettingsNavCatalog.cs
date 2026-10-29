@@ -55,6 +55,8 @@ public static class SettingsNavCatalog
             "快捷键 按键 绑定 冲突 keyboard shortcuts", "Keyboard", "#8A8A8E"),
         new("models", "模型与思考", SettingsNavTier.Basic,
             "模型 思考 等级 默认 model thinking", "Brain", "#FF9E4C"),
+        new("security", "安全中心", SettingsNavTier.Basic,
+            "安全 规则 文件 命令 网络 敏感 密钥 注入 审批 备份 审计 security permissions sandbox secrets audit backup", "ShieldCheckmark", "#6CCB5F"),
         new("storage", "储存", SettingsNavTier.Basic,
             "空间 占用 缓存 日志 保留 清理 归档 已归档 storage cache logs archive", "Folder", "#8A8A8E"),
         new("memory", "性能与内存", SettingsNavTier.Basic,

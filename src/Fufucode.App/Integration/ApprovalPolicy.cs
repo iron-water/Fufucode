@@ -59,7 +59,7 @@ internal static partial class ApprovalPolicy
     /// <summary>是否需要直接放行该审批请求。</summary>
     internal static bool IsAlwaysAllowed(ExtensionUiRequest request, string? projectPath)
     {
-        if (ToolOf(request) is not { } tool) return false;
+        if (RequiresSecurityConfirmation(request) || ToolOf(request) is not { } tool) return false;
         var project = Normalize(projectPath);
         lock (Gate)
         {
@@ -71,7 +71,7 @@ internal static partial class ApprovalPolicy
     /// <summary>记住“始终允许”；写入失败时报错，不假装已保存。</summary>
     internal static bool Remember(ExtensionUiRequest request, string? projectPath)
     {
-        if (ToolOf(request) is not { } tool || string.IsNullOrWhiteSpace(projectPath)) return false;
+        if (RequiresSecurityConfirmation(request) || ToolOf(request) is not { } tool || string.IsNullOrWhiteSpace(projectPath)) return false;
         var project = Normalize(projectPath);
         lock (Gate)
         {
@@ -90,6 +90,10 @@ internal static partial class ApprovalPolicy
             }
         }
     }
+
+    internal static bool RequiresSecurityConfirmation(ExtensionUiRequest request) =>
+        request.Payload.ValueKind == JsonValueKind.Object &&
+        request.Payload.TryGetProperty("securityRequired", out var value) && value.ValueKind == JsonValueKind.True;
 
     /// <summary>审批请求对应的工具名；非工具审批（扩展 ask）按方法名归类。</summary>
     internal static string? ToolOf(ExtensionUiRequest request)

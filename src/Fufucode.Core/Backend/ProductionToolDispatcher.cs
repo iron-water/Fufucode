@@ -44,6 +44,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     }
 
     public string WorkspaceRoot => _workspaceRoot;
+    public Security.SecurityPolicyEvaluator? SecurityEvaluator { get; set; }
+    public Security.SecurityBackupStore? SecurityBackups { get; set; }
+    private bool SecurityReadable(string path) => SecurityEvaluator is null ||
+        SecurityEvaluator.FileAction(path) == Security.SecurityAction.Allow;
 
     private GitIgnoreMatcher? _ignoreMatcher;
     private DateTime _ignoreStamp;
@@ -121,12 +125,12 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     foreach (var file in Directory.EnumerateFiles(dir))
                     {
                         var relative = Relative(file);
-                        if (!ignore.IsIgnored(relative)) files.Add(relative);
+                        if (!ignore.IsIgnored(relative) && SecurityReadable(file)) files.Add(relative);
                     }
                     foreach (var subDir in Directory.EnumerateDirectories(dir))
                     {
                         var name = Path.GetFileName(subDir);
-                        if (ExcludedDirectories.Contains(name)) continue;
+                        if (ExcludedDirectories.Contains(name) || !SecurityReadable(subDir)) continue;
                         if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
                         if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
                         pending.Push(subDir);
@@ -658,6 +662,17 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     private async Task WriteAllTextAtomicAsync(string target, string content, Encoding encoding,
         CancellationToken ct)
     {
+        if (SecurityEvaluator is { } evaluator)
+        {
+            var policy = evaluator.Store.Current;
+            if (policy.Enabled)
+            {
+                if (evaluator.FileAction(target, "write") == Security.SecurityAction.Deny)
+                    throw new UnauthorizedAccessException("安全策略禁止写入。");
+                if (policy.BackupEnabled)
+                    (SecurityBackups ?? throw new IOException("安全备份服务不可用，已停止写入。")).Capture(target, policy);
+            }
+        }
         var temp = target + ".tmp-" + Guid.NewGuid().ToString("N")[..8];
         try
         {
@@ -1126,6 +1141,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var lines = new List<string>(Math.Min(entries.Length, limit));
         foreach (var entry in entries.Take(limit))
         {
+            if (!SecurityReadable(entry)) continue;
             var isDir = Directory.Exists(entry);
             lines.Add((isDir ? "[DIR]  " : "[FILE] ") + Path.GetFileName(entry));
         }
@@ -1354,6 +1370,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 continue;
 
             var full = Path.Combine(_workspaceRoot, relative.Replace('/', Path.DirectorySeparatorChar));
+            if (!SecurityReadable(full)) continue;
             try
             {
                 var fileLength = new FileInfo(full).Length;
@@ -1414,6 +1431,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 ct.ThrowIfCancellationRequested();
                 if (results.IsFull) return;
 
+                if (!SecurityReadable(file)) continue;
                 var fileName = Path.GetFileName(file);
                 var relative = Path.GetRelativePath(_workspaceRoot, file).Replace('\\', '/');
                 if (ignore.IsIgnored(relative)) continue;
@@ -1486,7 +1504,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 if (results.IsFull) return;
 
                 var dirName = Path.GetFileName(subDir);
-                if (ExcludedDirectories.Contains(dirName)) continue;
+                if (ExcludedDirectories.Contains(dirName) || !SecurityReadable(subDir)) continue;
                 // 不跟随目录符号链接/联接，避免扫描到工作区外或形成环。
                 if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
                 if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
@@ -1546,6 +1564,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 if (matched.Count >= maxResults) break;
                 if (prefixWithSeparator.Length > 0 &&
                     !relative.StartsWith(prefixWithSeparator, StringComparison.Ordinal)) continue;
+                if (!SecurityReadable(Path.Combine(_workspaceRoot, relative))) continue;
                 var fileName = Path.GetFileName(relative);
                 if (WildcardMatches(globRegex, fileName) || WildcardMatches(globRegex, relative))
                     matched.Add(relative);
@@ -1593,7 +1612,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 if (results.Count >= maxResults) return;
 
                 var dirName = Path.GetFileName(subDir);
-                if (ExcludedDirectories.Contains(dirName)) continue;
+                if (ExcludedDirectories.Contains(dirName) || !SecurityReadable(subDir)) continue;
                 if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
                 if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
 

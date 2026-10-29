@@ -135,6 +135,11 @@
                                          SearchActive="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).IsSearching}"
                                          SearchText="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SearchText}"/>
 
+            <views:SecurityCenterView x:Name="SecurityCenter"
+                                      IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowSecurity}"
+                                      DataContext="{Binding Security}"
+                                      Page="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ActivePageId}"/>
+
             <!-- ═══ 模型与思考 ═══ -->
                         <!-- ═══ 插件市场（Plugin Marketplace） ═══ -->
             <StackPanel IsVisible="{Binding ShowMarketplace}" Spacing="0">

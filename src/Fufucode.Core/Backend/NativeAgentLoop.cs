@@ -257,6 +257,9 @@ public sealed class NativeAgentLoop
                     var needsApproval = !ProductionToolDispatcher.IsConcurrencySafe(call.Name) &&
                                         !string.Equals(call.Name, "update_plan", StringComparison.Ordinal);
                     using var toolSpan = PerfTracer.Step("tool", "tool", call.Name);
+                    if (_toolDispatcher is Security.SecurityToolDispatcher security)
+                        return await security.ExecuteCheckedAsync(call, approvalGate, needsApproval,
+                            () => Denied(call), cancellationToken).ConfigureAwait(false);
                     if (approvalGate is not null && needsApproval)
                     {
                         bool approved;

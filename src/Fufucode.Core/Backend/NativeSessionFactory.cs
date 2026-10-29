@@ -41,11 +41,21 @@ public static class NativeSessionFactory
         }
 
         // 内置工具始终绑定当前会话的工作区；插件工具按组合根提供的实时注册表路由。
-        var builtin = new ProductionToolDispatcher(workspaceRoot);
+        var securityPolicy = new Security.SecurityPolicyStore(settings.DataRoot);
+        var securityEvaluator = new Security.SecurityPolicyEvaluator(securityPolicy,
+            Path.GetFullPath(workspaceRoot ?? Environment.CurrentDirectory));
+        var securityAudit = new Security.SecurityAuditStore(settings.DataRoot);
+        var builtin = new ProductionToolDispatcher(workspaceRoot)
+        {
+            SecurityEvaluator = securityEvaluator,
+            SecurityBackups = new Security.SecurityBackupStore(settings.DataRoot)
+        };
         var baseDispatcher = toolRegistry
             ?? (pluginProviders is null ? builtin : new NativeToolComposite(builtin, pluginProviders));
         var pluginCatalog = toolRegistry as Plugins.IPluginToolCatalog
                             ?? baseDispatcher as Plugins.IPluginToolCatalog;
+        securityEvaluator.IsExternalTool = name => pluginCatalog?.ActiveToolNames.Contains(name, StringComparer.Ordinal) == true ||
+            (toolRegistry is not null && toolRegistry is not ProductionToolDispatcher && pluginCatalog is null);
 
         // 技能是轻量的 Markdown 资源：发现失败不影响会话；skill 工具统一由注册表处理。
         Diagnostics.StartupProbe.Mark("fumo.skills.begin", "discover skills");
@@ -57,6 +67,7 @@ public static class NativeSessionFactory
         // 能力链：插件/内置 → Skill → MCP。子代理可按定义白名单使用这些能力。
         IPureToolDispatcher capabilities = new SkillAwareDispatcher(baseDispatcher, skills);
         capabilities = new McpGatewayDispatcher(capabilities, mcp);
+        capabilities = new Security.SecurityToolDispatcher(capabilities, securityEvaluator, securityAudit);
 
         var capabilityDefinitions = new List<PureToolDefinition>();
         if (skills.HasModelInvocableSkills) capabilityDefinitions.Add(SkillRegistry.Definition);
@@ -73,7 +84,8 @@ public static class NativeSessionFactory
             subagents = factory.Create(client, capabilities, modelId, workspaceRoot, capabilityDefinitions);
 
         // 调度链：可选 Subagent → MCP → Skill → 插件/内置。
-        var dispatcher = subagents?.Wrap(capabilities) ?? capabilities;
+        IPureToolDispatcher dispatcher = subagents?.Wrap(capabilities) ?? capabilities;
+        dispatcher = new Security.SecurityToolDispatcher(dispatcher, securityEvaluator, securityAudit);
 
         // 主会话默认不设置轮次预算。CLI/无人值守调用方如需预算，显式传入 maxIterations。
         var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations);

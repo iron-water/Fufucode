@@ -99,6 +99,7 @@ public sealed class AppSettingsStore
     }
 
     public event Action<AppSettings>? Changed;
+    public string DataRoot => Path.GetDirectoryName(_path)!;
     public string? LastLoadError { get; private set; }
 
     /// <summary>本次加载是否退回了上次成功读取的快照（主文件读不到时）；正常读取为 false。</summary>

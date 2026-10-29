@@ -69,6 +69,12 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             new("marketplace.automation", "工作流与自动化", "自动化与任务", "自动化 工作流 automation workflow"),
             new("marketplace.theme", "个性皮肤", "主题与皮肤", "皮肤 主题 theme skin"),
             new("marketplace.tools", "工具扩展", "其他工具插件", "工具 扩展 tools extension"),
+            new("security.files", "文件安全", "按路径配置读取、写入和删除权限", "路径 文件 权限 file"),
+            new("security.commands", "命令安全", "程序黑名单和命令规则", "程序 命令 shell command"),
+            new("security.network", "网络安全", "域名规则与 HTTP 请求策略", "域名 HTTP network"),
+            new("security.sensitive", "敏感信息保护", "检测规则与自定义正则表达式", "敏感 密钥 token secret"),
+            new("security.review", "行为审查规则", "工具执行前的风险检查与自定义提示", "风险 审查 review"),
+            new("security.audit", "审计中心", "查看、导出和清空安全记录", "审计 日志 audit"),
             new("storage.archive", "已归档", "归档项目与归档会话", "归档 已归档 项目 会话 恢复 打开 列表 archive archived project session restore"),
         ];
         // “跟随默认”始终可选：模型查询失败或尚未返回时下拉也不该是空白。
@@ -247,6 +253,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// <summary>是否处于提供商子页面（第二/三层）。此时主分类内容整页隐藏，由独立宿主渲染。</summary>
     public bool IsProviderPageOpen => IsModelsCategory
         && CurrentPageId is "models.providers" or "models.providers.add" or "models.providers.edit";
+    public bool ShowSecurity => SelectedCategory?.Id == "security";
+    public SecurityCenterViewModel Security { get; } = new();
     public bool ShowNetwork => SelectedCategory?.Id == "network";
     public bool ShowNotifications => SelectedCategory?.Id == "notifications";
     /// <summary>后台与托盘：关闭窗口时是否常驻。</summary>
@@ -396,7 +404,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool MatchesOption(string terms) => SearchText.Trim().Length == 0 || terms.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase);
     private void NotifyCategoryVisibility()
     {
-        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
+        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowSecurity), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
                      nameof(ShowStorage), nameof(ShowMemory), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
@@ -1865,6 +1873,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         _queryCts?.Cancel();
         _thinkingCts?.Cancel();
         _context = context;
+        Security.Navigate = OpenPage;
+        Security.Attach(context.DataRoot ?? context.Store.DataRoot, path => _ = context.OpenFolder(path));
         // 侧栏三级架构的升降级偏好随数据根目录持久化（mock 无 dataRoot 时仅内存态）。
         RebuildSearchKeywords();
         AttachNavPreference(context.DataRoot);

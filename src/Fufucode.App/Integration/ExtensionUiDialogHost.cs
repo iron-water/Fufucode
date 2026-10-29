@@ -79,7 +79,7 @@ public sealed class ExtensionUiDialogHost
             return;
         }
 
-        if (request.Method == "confirm" && AlwaysAllow?.Invoke(request) == true)
+        if (request.Method == "confirm" && !ApprovalPolicy.RequiresSecurityConfirmation(request) && AlwaysAllow?.Invoke(request) == true)
         {
             AutoAnsweredCount++;
             _ = RespondAsync(request, PiExtensionUiResponse.Confirm(true));
@@ -87,7 +87,7 @@ public sealed class ExtensionUiDialogHost
         }
 
         var window = new ExtensionUiDialogWindow(request, RespondAsync,
-            alwaysAllow: request.Method == "confirm" && _projectPath is not null
+            alwaysAllow: request.Method == "confirm" && !ApprovalPolicy.RequiresSecurityConfirmation(request) && _projectPath is not null
                 ? () => ApprovalPolicy.Remember(request, _projectPath)
                 : null);
         _open[request.Id] = window;

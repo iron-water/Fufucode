@@ -98,8 +98,11 @@ public partial class MainWindow
         var allow = Integration.ApprovalLink.TryCreate(notice.RequestId, notice.SessionId, Integration.ApprovalDecision.Allow, project);
         var always = Integration.ApprovalLink.TryCreate(notice.RequestId, notice.SessionId, Integration.ApprovalDecision.AlwaysAllow, project);
         var deny = Integration.ApprovalLink.TryCreate(notice.RequestId, notice.SessionId, Integration.ApprovalDecision.Deny, project);
-        if (allow is null || always is null || deny is null) return [];
-        return [new("允许", allow), new("始终允许", always), new("拒绝", deny)];
+        if (allow is null || deny is null) return [];
+        var request = _dialogHost?.PendingRequestFor(notice.RequestId!) ?? _sideDialogHost?.PendingRequestFor(notice.RequestId!);
+        if (request is not null && ApprovalPolicy.RequiresSecurityConfirmation(request))
+            return [new("允许", allow), new("拒绝", deny)];
+        return always is null ? [] : [new("允许", allow), new("始终允许", always), new("拒绝", deny)];
     }
 
     /// <summary>

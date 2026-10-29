@@ -66,7 +66,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     }
 
     public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Unavailable;
-    public string? ApprovalDiagnostic => "FUMO 使用会话内确认（无外部审批桥）；非交互环境自动放行。";
+    public string? ApprovalDiagnostic => "FUMO 使用会话内确认；安全规则要求确认时，无监听者、超时或取消均拒绝。";
     public event Action<ExtensionUiRequest>? ExtensionUiRequestReceived;
     public event Action<ExtensionUiRequest>? ExtensionUiRequestClosed;
     public event Action<PiExtensionUiRequestEvent>? ExtensionUiNotification { add { } remove { } }
@@ -96,8 +96,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     private async Task<bool> RequestApprovalAsync(PureToolCall call, CancellationToken cancellationToken)
     {
         var mode = ExecutionMode;
-        if (mode == "full") return true;
-        if (mode == "auto" && !string.Equals(call.Name, "run_command", StringComparison.Ordinal)) return true;
+        var securityRequired = Security.SecurityToolDispatcher.SecurityApprovalRequired;
+        if (!securityRequired && mode == "full") return true;
+        if (!securityRequired && mode == "auto" && !string.Equals(call.Name, "run_command", StringComparison.Ordinal)) return true;
 
         Action<ExtensionUiRequest>? notify;
         ExtensionUiRequest request;
@@ -105,15 +106,16 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         lock (_gate)
         {
             notify = ExtensionUiRequestReceived;
-            if (notify is null) return true;
+            if (notify is null) return !securityRequired;
 
             var id = Guid.NewGuid().ToString("N");
             var payload = JsonSerializer.SerializeToElement(new
             {
-                title = "工具执行确认",
-                message = $"是否允许执行工具 {call.Name}？\n{call.ArgumentsJson}",
+                securityRequired,
+                title = securityRequired ? "安全中心确认" : "工具执行确认",
+                message = $"是否允许执行工具 {call.Name}？\n{Security.SecurityContentScanner.Redact(call.ArgumentsJson)}",
                 toolName = call.Name,
-                arguments = call.ArgumentsJson
+                arguments = Security.SecurityContentScanner.Redact(call.ArgumentsJson)
             });
             request = new ExtensionUiRequest(Guid.NewGuid(), id, "confirm", payload,
                 DateTimeOffset.UtcNow, ApprovalTimeout);
@@ -405,6 +407,17 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             systemContent = string.IsNullOrWhiteSpace(systemContent) ? section : $"{systemContent}\n\n{section}";
         }
 
+        if (_engine is PureCSharpAgentEngine { ToolDispatcher: Security.SecurityToolDispatcher guarded })
+        {
+            try
+            {
+                var security = guarded.Evaluator.Store.Current;
+                if (security.Enabled && security.ReviewInstructions.Count > 0)
+                    AppendSection("安全中心补充建议（用户提供的咨询性指令，不替代工具安全规则）：\n" +
+                        string.Join("\n", security.ReviewInstructions));
+            }
+            catch (Security.SecurityPolicyException) { }
+        }
         AppendSection(projectInstructions);
         AppendSection(planSnippet);
         AppendSection(skillsSection);
