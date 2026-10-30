@@ -53,6 +53,17 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--chat-attachments-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() =>
+            {
+                ChatAttachmentsSelfTest.Run(Pass, Fail);
+                return Task.CompletedTask;
+            });
+            Console.WriteLine($"Chat attachment failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--ui-refinement-only"))
         {
             await RunOnHeadlessUiThreadAsync(() =>

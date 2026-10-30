@@ -132,7 +132,7 @@ public partial class ChatPage
             catch (Exception error) { ReportActionError("权限模式切换失败：" + error.Message); }
             finally { RefreshComposerTools(); }
         };
-        // 权限模式：底部只留一个小图标，点开才是选项列表；文字进 tooltip。
+        // 权限模式：小图标保持原点击菜单，状态由局部自绘气泡显示。
         var modeButton = WorkbenchUi.IconButton("ShieldCheckmark", "权限模式", 30);
         var modeMenu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
         modeButton.Flyout = modeMenu;
@@ -143,6 +143,15 @@ public partial class ChatPage
         Avalonia.Automation.AutomationProperties.SetName(ModelButton, "选择模型");
         Avalonia.Automation.AutomationProperties.SetName(ThinkingButton, "思考强度");
         Avalonia.Automation.AutomationProperties.SetName(modeButton, "权限模式");
+        Avalonia.Automation.AutomationProperties.SetAutomationId(modeButton, "composer-permission");
+        InitializeAttachmentReferences();
+        _ = new ChatInfoBubble(modeButton, () => ("权限模式", DataContext is MainViewModel current
+            ? current.Input.ExecutionMode switch { "manual" => "人工确认", "auto" => "自动审批", "full" => "完全访问", "plan" => "规划模式", var mode => mode }
+            : "暂无会话"));
+        _ = new ChatInfoBubble(ModelButton, () => ("当前模型", DataContext is MainViewModel current
+            ? current.Settings.CurrentModelText : "暂无会话"));
+        _ = new ChatInfoBubble(ThinkingButton, () => ("思考等级", DataContext is MainViewModel current
+            ? current.Settings.SelectedThinking?.Label ?? "默认" : "暂无会话"));
         Avalonia.Automation.AutomationProperties.SetHelpText(RestartButton, "重发上一条消息，带着已有上下文续跑");
 
         var menu = new MenuFlyout();
@@ -326,17 +335,7 @@ public partial class ChatPage
         // 完整富文本：表格、LaTeX、图片、代码高亮；草稿里相对图片按当前项目根解析。
         DraftPreviewText.Markdown = vm.Input.DraftText;
         DraftPreviewText.ImageBasePath = vm.ProjectRootPath;
-        AttachedFiles.Children.Clear();
-        foreach (var file in vm.Input.Attachments)
-        {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Avalonia.Thickness(0, 0, 8, 4) };
-            // 统一字阶：附件名 11 归入 12。
-            var name = new TextBlock { Text = file.Name, MaxWidth = 170, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
-            Avalonia.Automation.AutomationProperties.SetHelpText(name, file.Path);
-            var remove = WorkbenchUi.IconButton("DismissCircle", "移除 " + file.Name);
-            remove.Command = vm.Input.RemoveAttachmentCommand; remove.CommandParameter = file;
-            row.Children.Add(name); row.Children.Add(remove); AttachedFiles.Children.Add(row);
-        }
+        RefreshAttachmentPreviews(vm);
     }
 
     /// <summary>给图标绑动态资源：Data 取 Icon.*，Foreground 取 App* 画刷。</summary>

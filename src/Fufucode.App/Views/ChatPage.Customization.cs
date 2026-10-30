@@ -117,12 +117,14 @@ public partial class ChatPage
                 Background = Avalonia.Media.Brushes.Transparent,
                 BorderThickness = new Thickness(0),
             };
+            Avalonia.Automation.AutomationProperties.SetAutomationId(button, $"ruler-turn-{number:00}");
             button.Classes.Add("rulerTick");
             if (entry.IsPinned) button.Classes.Add("pinned");
 
-            // 悬停预览：完整显示这一轮的用户指令，长文本换行而不是截成省略号。
-            var preview = string.IsNullOrWhiteSpace(entry.Text) ? "（无文字输入）" : entry.Text.Trim();
-            Avalonia.Automation.AutomationProperties.SetHelpText(button, preview);
+            // 真实用户消息的开头作为轮次预览，不恢复全局提示层。
+            Avalonia.Automation.AutomationProperties.SetName(button, $"第 {number} 轮，跳转到消息");
+            Avalonia.Automation.AutomationProperties.SetHelpText(button, TurnPreview(entry.DisplayText));
+            _ = new ChatInfoBubble(button, () => ($"第 {number:00} 轮", TurnPreview(entry.DisplayText)), turnPreview: true);
 
             var menu = new MenuFlyout();
             var pin = new MenuItem { Header = entry.IsPinned ? "取消收藏" : "收藏这一轮" };
@@ -140,6 +142,17 @@ public partial class ChatPage
             button.Click += (_, _) => ScrollToMessage(id);
             MessageRuler.Children.Add(button);
         }
+    }
+
+    internal static string TurnPreview(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return "（无文字输入）";
+        var value = text.Trim();
+        // A bounded excerpt keeps long turns readable without filling the window.
+        const int limit = 260;
+        if (value.Length <= limit) return value;
+        var length = char.IsHighSurrogate(value[limit - 1]) ? limit - 1 : limit;
+        return value[..length].TrimEnd() + "…";
     }
 
     internal void FindConversation() => FindConversation_Click(HeaderActionsButton, new Avalonia.Interactivity.RoutedEventArgs());

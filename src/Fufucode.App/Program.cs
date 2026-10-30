@@ -19,6 +19,7 @@ internal static class Program
     /// <summary>自测隔离的数据根目录（AppSettingsStore/诊断用）；产品路径为 null。</summary>
     internal static string? SelfTestDataRoot { get; set; }
     internal static bool NativeModuleSelfTest { get; private set; }
+    internal static bool NativeMotionSelfTest { get; private set; }
 
     /// <summary>独立测试组件进入无头自测模式：隔离数据根并跳过启动期主题/产品路径副作用。</summary>
     internal static void EnterSelfTestMode(string dataRoot)
@@ -47,7 +48,8 @@ internal static class Program
         StartupActivationPayload = startupOptions.ActivationPayload;
         // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。
         var isolatedRun = args.Contains("--selftest") || args.Contains("--headless-ui") ||
-                          args.Contains("--native-module-selftest") || args.Contains("--native-security-selftest") || args.Contains("--parallel-review");
+                          args.Contains("--native-module-selftest") || args.Contains("--native-security-selftest") ||
+                          args.Contains("--native-motion-selftest") || args.Contains("--parallel-review");
 
         // 单实例：同一登录会话只允许一个 Fufucode。第二个实例先唤醒已有窗口（可能在托盘），
         // 再自己退出；不在用户数据目录留下启动记录。自测/探针可并行，不参与单实例。
@@ -106,6 +108,30 @@ internal static class Program
                 actions: actions).GetAwaiter().GetResult();
             Console.WriteLine(result.Status);
             Environment.Exit(result.Delivered ? 0 : 1);
+        }
+        if (args.Contains("--native-motion-selftest"))
+        {
+            SelfTestMode = NativeMotionSelfTest = true;
+            SelfTestDataRoot = System.IO.Path.GetFullPath("tmp/dock-motion-native-data");
+            var completion = new TaskCompletionSource<int>();
+            Dispatcher.UIThread.Post(async () =>
+            {
+                var lifetime = (IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+                lifetime.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                var code = 1;
+                try
+                {
+                    var window = (MainWindow)lifetime.MainWindow!;
+                    code = args.Contains("--chat-feedback-only")
+                        ? await SelfTest.NativeChatFeedbackSelfTest.RunAsync(window)
+                        : await SelfTest.NativeDockMotionSelfTest.RunAsync(window);
+                }
+                catch (Exception error) { Console.WriteLine("Native motion test failed: " + error); }
+                finally { completion.TrySetResult(code); lifetime.Shutdown(code); }
+            }, DispatcherPriority.Background);
+            BuildAvaloniaApp(AppOptions.Mock with { AppDataRootOverride = SelfTestDataRoot })
+                .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
         }
         if (args.Contains("--native-security-selftest"))
         {

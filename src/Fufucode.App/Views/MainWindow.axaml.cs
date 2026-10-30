@@ -344,23 +344,28 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             if (!_syncingDockState && _vm is { } viewModel)
             {
                 // 页签被关空的区域重开时回填默认页，否则面板永远打不开（Pages 空+Hidden=false 的死态）。
+                _dockLayout.Hidden[DockZone.Right] = !viewModel.IsRightPanelOpen;
+                if (Bounds.Width < 1100)
+                {
+                    _rightDrawerOpen = viewModel.IsRightPanelOpen;
+                    if (_rightDrawerOpen) _leftDrawerOpen = false;
+                }
                 if (viewModel.IsRightPanelOpen && EnsureDockHasPages(DockZone.Right))
-                { _dockLayout.Hidden[DockZone.Right] = false; RenderDockPages(); SaveWorkspaceDimensions(); }
-                else _dockLayout.Hidden[DockZone.Right] = !viewModel.IsRightPanelOpen;
+                { RenderDockPages(); SaveWorkspaceDimensions(); }
             }
             if (_vm?.IsRightPanelOpen == true)
             {
                 _rightReturnFocus = FocusManager?.GetFocusedElement() as Control;
                 _ = _vm.WorkspacePanel.RefreshAsync();
             }
-            ApplyWorkspaceLayout();
+            if (!_syncingDockState) ApplyWorkspaceLayout();
             if (_vm?.IsRightPanelOpen == false) RestoreFocus(_rightReturnFocus);
         }
 
         if (e.PropertyName == nameof(MainViewModel.CurrentPage))
         {
             UpdatePageHost();
-            ApplyWorkspaceLayout();
+            ApplyWorkspaceLayout(snap: true);
         }
     }
 

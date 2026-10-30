@@ -54,7 +54,7 @@ internal static class Motion
     /// <summary>
     /// 无头自测里动画一律即时落终态：断言检查的是最终可见性，不能被 100–250ms 的过渡时序影响。
     /// </summary>
-    public static bool Reduced => Program.SelfTestMode || MotionPreference.ReducedMotion;
+    public static bool Reduced => (Program.SelfTestMode && !Program.NativeMotionSelfTest) || MotionPreference.ReducedMotion;
 
     /// <summary>
     /// 消息进入：淡入并轻微上移。只在元素第一次挂到可视树时调用，

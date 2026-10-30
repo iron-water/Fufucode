@@ -97,16 +97,32 @@ public sealed partial class InputViewModel : ViewModelBase
         await session.SetExecutionModeAsync(mode);
         ExecutionMode = mode; OnPropertyChanged(nameof(ExecutionMode));
     }
-    public void AddAttachment(AttachedFile file)
+    private int _nextAttachmentNumber = 1;
+    public event Action<AttachedFile, int>? AttachmentAdded;
+    public void AddAttachment(AttachedFile file, bool insertReference = true)
     {
         if (Attachments.Any(a => string.Equals(a.Path, file.Path, StringComparison.OrdinalIgnoreCase))) return;
-        Attachments.Add(file); OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); NotifySendStopRestart();
+        if (file.ReferenceNumber <= 0) file.ReferenceNumber = _nextAttachmentNumber++;
+        else _nextAttachmentNumber = Math.Max(_nextAttachmentNumber, file.ReferenceNumber + 1);
+        Attachments.Add(file);
+        if (insertReference) AttachmentAdded?.Invoke(file, file.ReferenceNumber);
+        OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); NotifySendStopRestart();
     }
     [RelayCommand] private void RemoveAttachment(AttachedFile? file)
-    { if (file is not null) Attachments.Remove(file); OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); NotifySendStopRestart(); }
+    {
+        if (file is not null)
+        {
+            var removed = Attachments.IndexOf(file);
+            if (removed >= 0)
+            {
+                Attachments.RemoveAt(removed);
+            }
+        }
+        OnPropertyChanged(nameof(HasAttachments)); OnPropertyChanged(nameof(HasText)); SendCommand.NotifyCanExecuteChanged(); NotifySendStopRestart();
+    }
 
     public string ComposePrompt() => (string.IsNullOrWhiteSpace(DraftText) && HasAttachments ? "请查看附加文件。" : DraftText)
-        + (HasAttachments ? "\n\n<attached_files>\n" + string.Join("\n", Attachments.Select(a => a.Context)) + "\n</attached_files>" : "")
+        + (HasAttachments ? "\n\n<attached_files>\n" + string.Join("\n", Attachments.Select(a => $"<attachment index=\"{a.ReferenceNumber}\" path=\"{System.Net.WebUtility.HtmlEncode(a.Path)}\" chars=\"{a.Context.Length}\">\n{a.Context}\n</attachment>")) + "\n</attached_files>" : "")
         + (HasReferenceContext ? "\n\n<reference_context>\n" + ReferenceContext + "\n</reference_context>" : "")
         + (string.IsNullOrEmpty(IdentityContext) || IsExtensionCommand(DraftText) ? "" : "\n\n<display_preferences>\n" + IdentityContext + "\n</display_preferences>");
 
@@ -230,10 +246,11 @@ public sealed partial class InputViewModel : ViewModelBase
         var draft = DraftText;
         var reference = ReferenceContext;
         var text = ComposePrompt();
+        SubmissionStarted?.Invoke(text);
         DraftText = string.Empty;
         ReferenceContext = string.Empty;
-        Attachments.Clear(); OnPropertyChanged(nameof(HasAttachments));
-        SubmissionStarted?.Invoke(text);
+        Attachments.Clear();
+        OnPropertyChanged(nameof(HasAttachments));
         try
         {
             var images = files.Where(f => f.Image is not null).Select(f => f.Image!).ToArray();
@@ -251,7 +268,7 @@ public sealed partial class InputViewModel : ViewModelBase
             // 发送未被接受：回填草稿（不覆盖用户其间新输入），并显式报告，不静默吞掉。
             ApplyExternalText(draft);
             ReferenceContext = string.IsNullOrEmpty(ReferenceContext) ? reference : ReferenceContext + "\n" + reference;
-            foreach (var file in files) AddAttachment(file);
+            foreach (var file in files) AddAttachment(file, insertReference: false);
 
             OperationFailed?.Invoke($"发送失败：{ex.GetBaseException().Message}");
         }

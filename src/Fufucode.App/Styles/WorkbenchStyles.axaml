@@ -1162,6 +1162,13 @@
   <Style Selector="Button#IslandScrim:pointerover /template/ Border, Button#RightDrawerScrim:pointerover /template/ Border, Grid#GlobalOverlay > Button:pointerover /template/ Border">
     <Setter Property="Background" Value="Transparent"/>
   </Style>
+  <!-- The model picker has one themed surface; its content stays transparent. -->
+  <Style Selector="FlyoutPresenter.modelPickerFlyout">
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
   <!-- 模型选择行：中间灰横条，悬停升高亮；与其它列表行同一套层级。 -->
   <Style Selector="Button.modelChoiceRow">
     <Setter Property="Background" Value="Transparent"/>

@@ -45,8 +45,19 @@ public sealed class UserMessageViewModel : TimelineEntryViewModel
     public string Text
     {
         get => _text;
-        set => SetProperty(ref _text, value);
+        set
+        {
+            if (!SetProperty(ref _text, value)) return;
+            var presentation = AttachmentPresentation.Parse(value);
+            DisplayText = presentation.Body;
+            DisplayAttachments = presentation.Files;
+            OnPropertyChanged(nameof(DisplayText));
+            OnPropertyChanged(nameof(DisplayAttachments));
+        }
     }
+
+    public string DisplayText { get; private set; } = string.Empty;
+    public IReadOnlyList<AttachedFile> DisplayAttachments { get; private set; } = Array.Empty<AttachedFile>();
 
     /// <summary>在左侧轮次刻度里固定这一轮，便于快速跳回。</summary>
     public bool IsPinned

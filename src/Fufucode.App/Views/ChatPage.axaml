@@ -22,7 +22,7 @@
     </ResourceDictionary>
   </UserControl.Resources>
 
-  <Grid RowDefinitions="Auto,*">
+  <Grid x:Name="ChatRoot" RowDefinitions="Auto,*">
 
     <!-- 会话头：标题/项目/单一活动摘要，连接与模型详情进入局部浮层。 -->
     <Border x:Name="ConversationHeader" Grid.Row="0" MinHeight="64" Padding="20,8,16,8"
@@ -121,14 +121,17 @@
 
               <!-- 用户消息：右对齐 accent 低透明气泡 + person 图标 -->
               <DataTemplate DataType="vm:UserMessageViewModel" x:DataType="vm:UserMessageViewModel">
-                <StackPanel Margin="0,6" Loaded="OnMessageEntryLoaded">
+                <StackPanel Margin="0,6">
                   <Grid ColumnDefinitions="*,24" ColumnSpacing="8">
-                    <Border Classes="userBubble" Classes.pending="{Binding IsPending}" Classes.failed="{Binding IsFailed}"
-                            HorizontalAlignment="Right" AutomationProperties.AutomationId="MSG-USER-BUBBLE">
-                      <views:RichMarkdownView Classes="body" FontSize="14"
-                                              Markdown="{Binding Text}"
-                                              ImageBasePath="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ProjectRootPath}" />
-                    </Border>
+                    <Grid RowDefinitions="Auto,Auto" MaxWidth="560" HorizontalAlignment="Right">
+                      <views:AttachmentWallet Files="{Binding DisplayAttachments}" Margin="0,0,0,6"/>
+                      <Border Grid.Row="1" Classes="userBubble" Classes.pending="{Binding IsPending}" Classes.failed="{Binding IsFailed}"
+                              HorizontalAlignment="Stretch" AutomationProperties.AutomationId="MSG-USER-BUBBLE">
+                        <views:RichMarkdownView Classes="body" FontSize="14"
+                                                Markdown="{Binding DisplayText}"
+                                                ImageBasePath="{Binding $parent[UserControl].((vm:MainViewModel)DataContext).ProjectRootPath}" />
+                      </Border>
+                    </Grid>
                     <Border Grid.Column="1" Classes="avatar" AutomationProperties.AutomationId="MSG-USER-AVATAR" Width="24" Height="24" CornerRadius="{DynamicResource AppCornerAvatarUser}" VerticalAlignment="Top" IsVisible="{DynamicResource UiShowAvatars}"
                             Background="{DynamicResource AppAccentSubtle}">
                       <PathIcon Data="{DynamicResource Icon.Person}" Width="14" Height="14"
@@ -137,9 +140,6 @@
                   </Grid>
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,32,0">
                     <TextBlock Text="{DynamicResource UiUserName}" Classes="metaName" IsVisible="{DynamicResource UiShowUserNames}"/>
-                    <Panel IsVisible="{DynamicResource UiShowMessageTimes}">
-                      <TextBlock Text="{Binding TimeText}" Classes="meta" VerticalAlignment="Center" IsVisible="{Binding HasTime}"/>
-                    </Panel>
                   </StackPanel>
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6" Margin="0,2,32,0">
                     <TextBlock Classes="meta" Text="发送中…" IsVisible="{Binding ShowAckHint}"/>
@@ -152,7 +152,7 @@
 
               <!-- 助手消息：28px 圆形 sparkle 头像 + 块列表 -->
               <DataTemplate DataType="vm:AssistantMessageViewModel" x:DataType="vm:AssistantMessageViewModel">
-                <Grid Margin="0,6" ColumnDefinitions="Auto,*" Loaded="OnMessageEntryLoaded">
+                <Grid Margin="0,6" ColumnDefinitions="Auto,*">
                   <Border Grid.Column="0" Classes="avatar" AutomationProperties.AutomationId="MSG-ASSISTANT-AVATAR" Width="28" Height="28" CornerRadius="{DynamicResource AppCornerAvatarAssistant}" IsVisible="{DynamicResource UiShowAvatars}"
                           VerticalAlignment="Top" Margin="0,2,0,0"
                           Background="{DynamicResource AppAccentSubtle}">
@@ -704,7 +704,7 @@
             </Border>
             <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" AutomationProperties.Name="移除引用"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
           </Grid>
-          <WrapPanel x:Name="AttachedFiles"/>
+          <StackPanel x:Name="AttachedFiles"/>
           <!-- 草稿预览走完整富文本渲染：表格、LaTeX、图片与代码高亮都可用。 -->
           <ScrollViewer x:Name="DraftPreview" IsVisible="False" MaxHeight="200" Margin="0,4,0,8">
             <views:RichMarkdownView x:Name="DraftPreviewText" FontSize="14"/>
@@ -776,15 +776,32 @@
                      >
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
                 <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened">
-                    <Border Width="380" Classes="card" Padding="10">
+                  <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened" FlyoutPresenterClasses="modelPickerFlyout">
+                    <Border Width="380" Classes="modelPickerSurface" Padding="10" Background="Transparent">
+                      <Border.Styles>
+                        <!-- Override the actual Fluent presenter states only inside this picker. -->
+                        <Style Selector="Button.modelChoiceRow">
+                          <Setter Property="Background" Value="Transparent"/>
+                        </Style>
+                        <Style Selector="Button.modelChoiceRow /template/ ContentPresenter#PART_ContentPresenter">
+                          <Setter Property="Background" Value="Transparent"/>
+                        </Style>
+                        <Style Selector="Button.modelChoiceRow:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.modelChoiceRow.pointerHover /template/ ContentPresenter#PART_ContentPresenter, Button.modelChoiceRow:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
+                          <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+                        </Style>
+                        <Style Selector="Border.keywordChip">
+                          <Setter Property="Background" Value="Transparent"/>
+                          <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+                          <Setter Property="BorderThickness" Value="1"/>
+                        </Style>
+                      </Border.Styles>
                       <StackPanel Spacing="8">
                         <TextBox x:Name="ModelPickerSearchBox"
                                  Text="{Binding Settings.ModelPickerFilter, UpdateSourceTrigger=PropertyChanged}"
                                  TextChanged="ModelPickerSearchBox_TextChanged"
                                  PlaceholderText="搜索模型…"/>
-                        <!-- 关键字快捷：最多三行 -->
-                        <ItemsControl ItemsSource="{Binding Settings.ModelSearchKeywords}" MaxHeight="84">
+                        <!-- Natural wrap height keeps every keyword above the separate count row. -->
+                        <ItemsControl ItemsSource="{Binding Settings.ModelSearchKeywords}">
                           <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate><WrapPanel ItemSpacing="6" LineSpacing="6"/></ItemsPanelTemplate>
                           </ItemsControl.ItemsPanel>
@@ -901,5 +918,6 @@
       </views:ComposerFocusBorder>
       </Grid>
     </Grid>
+    <Canvas x:Name="ChatHintLayer" Grid.RowSpan="2" ZIndex="100" IsHitTestVisible="False"/>
   </Grid>
 </UserControl>

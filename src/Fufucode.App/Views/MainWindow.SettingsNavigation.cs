@@ -30,7 +30,9 @@ public partial class MainWindow
             }
             var returning = vm.IsSettingsPage;
             vm.CurrentPage = page;
-            Views.SurfaceMotion.Show(PageHost, offsetY: 6);
+            // 内容宿主只保留这一段过渡；先完成停靠区恢复和正文布局，避免淡入末尾再重排。
+            UpdateLayout();
+            Views.SurfaceMotion.Show(PageHost, offsetY: returning ? 0 : 6);
             RecordNavigation();
             if (returning) RestoreFocus(_settingsReturnFocus);
         }

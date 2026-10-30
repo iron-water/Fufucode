@@ -92,7 +92,7 @@
               <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{DynamicResource Icon.ArrowLeft}"/><TextBlock Text="返回工作区"/></StackPanel>
             </Button>
           </Border>
-          <TransitioningContentControl x:Name="PageHost" Grid.Row="1"/>
+          <TransitioningContentControl x:Name="PageHost" Grid.Row="1" PageTransition="{x:Null}"/>
         </Grid>
         <infra:DeadZoneGridSplitter x:Name="RightPanelSplitter" Grid.Column="1" Grid.RowSpan="3" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" KeyboardIncrement="10" Cursor="SizeWestEast" Classes="dockSplitter"/>
         <Border x:Name="RightPanelBorder" Grid.Column="2" Grid.RowSpan="3" ClipToBounds="True" Classes="dockHost dockRight"><views:DockRegionView x:Name="RightDock"/></Border>

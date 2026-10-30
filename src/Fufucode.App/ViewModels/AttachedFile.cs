@@ -7,6 +7,7 @@ namespace Fufucode.App.ViewModels;
 
 public sealed record AttachedFile(string Path, string Context, ChatImage? Image = null)
 {
+    public int ReferenceNumber { get; set; }
     public string Name => System.IO.Path.GetFileName(Path);
     public static async Task<AttachedFile> LoadAsync(string path)
     {
