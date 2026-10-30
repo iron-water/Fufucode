@@ -125,7 +125,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private sealed record EndpointDraft(string? Provider, string? Url, string? Model, int KeyMode, string? EnvironmentName);
     public bool HasNotificationPreferences => NotificationPreferences is not null;
     public bool HasSearchResults => FilteredCategories.Count > 0;
-    public string SearchSummary => SearchText.Trim().Length == 0 ? "只显示本产品可用的设置" : $"找到 {FilteredCategories.Count} 个分类";
+    public string SearchSummary => SearchText.Trim().Length == 0 ? string.Empty : $"找到 {FilteredCategories.Count} 个分类";
     public string CategoryTitle => SelectedCategory?.Title ?? "没有匹配的设置";
 
     /// <summary>当前二级页 id；空串表示停在分类首页。</summary>
@@ -1158,7 +1158,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     /// <summary>首页显示已配置提供商的摘要。</summary>
     public string ProviderSummary => EndpointProviders.Count == 0
-        ? "未配置；点此添加提供商并选择模型"
+        ? "未配置"
         : $"{EndpointProviders.Count} 个提供商：" + string.Join("、", EndpointProviders.Select(p => p.DisplayName));
 
     // ── 添加提供商：先选预设，再填必要配置 ──

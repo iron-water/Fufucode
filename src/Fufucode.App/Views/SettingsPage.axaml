@@ -103,14 +103,12 @@
           <StackPanel MaxWidth="880" Margin="4,0,8,32" Spacing="0" HorizontalAlignment="Stretch">
             <StackPanel IsVisible="{Binding !HasSearchResults}" Spacing="8" Margin="12,20">
               <TextBlock Classes="subtitle" Text="没有匹配的设置"/>
-              <TextBlock Classes="caption" Text="试试“主题”“代理”或“通知”。"/>
             </StackPanel>
 
             <Border Classes="errorCard info" IsVisible="{Binding ShowDraftBanner}" Margin="0,0,0,8">
               <StackPanel Spacing="4">
                 <TextBlock Classes="bodyStrong" Text="有未保存的草稿"/>
                 <TextBlock Classes="caption" Text="{Binding UnsavedChangesText}" TextWrapping="Wrap"/>
-                <TextBlock Classes="caption" Text="保存各项设置，或返回时选择继续编辑、丢弃草稿。" TextWrapping="Wrap"/>
               </StackPanel>
             </Border>
             <Border Classes="errorCard" IsVisible="{Binding HasAppearanceError}" Margin="0,0,0,8">
@@ -144,13 +142,6 @@
                         <!-- ═══ 插件市场（Plugin Marketplace） ═══ -->
             <StackPanel IsVisible="{Binding ShowMarketplace}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="插件市场"/>
-              <Border Classes="settingsPanel">
-                <StackPanel Spacing="6">
-                  <TextBlock Classes="subtitle" Text="按需扩展 Agent 能力与后端内核"/>
-                  <TextBlock Classes="caption" Text="C# Native 为核心内置；四大后端作为插件默认启用；高级控制功能（浏览器控制 / 电脑操控）默认不安装，按需一键启用。" TextWrapping="Wrap"/>
-                </StackPanel>
-              </Border>
-
               <!-- 能力门禁真实状态：未安装时如实显示安装入口，不渲染假开关。 -->
               <Border Classes="settingsPanel">
                 <StackPanel Spacing="6">
@@ -197,8 +188,6 @@
                             ItemsSource="{Binding BackendEngineChoices}"
                             SelectedIndex="{Binding SelectedBackendIndex}"
                             ToolTip.Tip="新建会话使用的默认核心。已有会话保持创建时的后端。"/>
-                  <TextBlock Classes="meta" TextWrapping="Wrap"
-                             Text="新建会话直接使用此内核；六类后端都会列出，插件未安装或运行时缺失时新建会回退到 FUMO 并提示原因。"/>
                 </StackPanel>
               </Border>
               <ItemsControl ItemsSource="{Binding MarketplaceGroupPlugins}">
@@ -219,7 +208,6 @@
                               <TextBlock Classes="caption" Text="{Binding StatusBadgeText}"/>
                             </Border>
                           </StackPanel>
-                          <TextBlock Classes="caption" Text="{Binding Description}" TextWrapping="Wrap" Margin="0,2,0,0"/>
                           <TextBlock Classes="meta" Text="{Binding PermissionsSummary}" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding HasPermissions}"/>
                         </StackPanel>
 
@@ -274,8 +262,6 @@
             <ContentControl IsVisible="{Binding ShowArchive}" Content="{Binding ArchiveContent}"/>
             <StackPanel IsVisible="{Binding ShowArchiveEmpty}" Spacing="8" Margin="12,20">
               <TextBlock Classes="subtitle" Text="归档管理尚未就绪"/>
-              <TextBlock Classes="caption" Text="连接真实会话后可在此查看和管理已归档的项目与会话。"
-                         TextWrapping="Wrap"/>
             </StackPanel>
             <StackPanel IsVisible="{Binding ShowMemory}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="内存优化"/>
@@ -314,7 +300,6 @@
                       <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Globe}" Width="18" Height="18" VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="浏览器后台降内存"/>
-                        <TextBlock Classes="settingsRowDesc" Text="非活动页签不提前创建 WebView2，并设为低内存目标；后台页面继续运行，不暂停脚本。" TextWrapping="Wrap"/>
                       </StackPanel>
                       <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" IsChecked="{Binding ReduceBackgroundBrowserMemory, Mode=TwoWay}"/>
                     </Grid>
@@ -333,7 +318,6 @@
                   </Border>
                 </StackPanel>
               </Border>
-              <TextBlock Classes="meta" Text="软件渲染需重启；终端回滚从 1500 行减至 500 行，对新建终端生效；其余立即生效。" TextWrapping="Wrap" Margin="4,8,4,0"/>
             </StackPanel>
             <StackPanel IsVisible="{Binding ShowModels}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="模型"/>
@@ -387,7 +371,6 @@
                                 VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="思考等级"/>
-                        <TextBlock Classes="settingsRowDesc" Text="「默认」跟随 Pi/模型自身行为"/>
                       </StackPanel>
                       <ComboBox Grid.Column="2" Width="140" VerticalAlignment="Center"
                                 IsEnabled="{Binding CanChangeModel}"
@@ -432,8 +415,6 @@
             <!-- ═══ 模型与思考 → 提供商 → 添加提供商（预设选择） ═══ -->
             <StackPanel IsVisible="{Binding ShowPresetPicker}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="添加提供商"/>
-              <TextBlock Classes="settingsGroupDesc"
-                         Text="选择一个预填好的提供商，或自定义任意 OpenAI 兼容端点。"/>
               <Border Classes="settingsGroup">
                 <StackPanel Spacing="8">
                   <Border Classes="settingsRow">
@@ -449,7 +430,6 @@
                                       VerticalAlignment="Center" Classes="meta"/>
                             <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Left">
                               <TextBlock Classes="settingsRowTitle" Text="{Binding Name}"/>
-                              <TextBlock Classes="settingsRowDesc" Text="{Binding Description}" TextWrapping="Wrap"/>
                             </StackPanel>
                             <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
                                       VerticalAlignment="Center" Classes="meta"/>
@@ -509,8 +489,6 @@
                   <Border Classes="settingsRow" IsVisible="{Binding !HasEndpointProviders}">
                     <StackPanel Spacing="4">
                       <TextBlock Classes="settingsRowTitle" Text="还没有配置提供商"/>
-                      <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
-                                 Text="添加一个 OpenAI 兼容端点（如本机 Magpie），即可拉取它的模型列表并选择可用模型。"/>
                     </StackPanel>
                   </Border>
 
@@ -523,7 +501,6 @@
                                 VerticalAlignment="Center"/>
                       <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                         <TextBlock Classes="settingsRowTitle" Text="添加提供商"/>
-                        <TextBlock Classes="settingsRowDesc" Text="填写 Base URL 后自动拉取该提供商的模型" TextWrapping="Wrap"/>
                       </StackPanel>
                       <Button Grid.Column="2" Classes="accent" Content="添加提供商" Padding="12,2" MinHeight="28"
                               Command="{Binding BeginAddProviderCommand}"/>
@@ -747,7 +724,6 @@
                 </StackPanel>
               </Border>
               <StackPanel Spacing="4" Margin="2,8,0,0">
-                <TextBlock Classes="meta" Text="此页控制提醒策略；通知渠道（应用内、通知页、Windows 系统通知）在“会话与消息 → 通知提示”中统一配置。会话标记和通知列表仍可查看。" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Text="当前无法修改提醒偏好。" IsVisible="{Binding !HasNotificationPreferences}" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Text="{Binding NotificationPreferences.SaveStatusText}" TextWrapping="Wrap"/>
                 <TextBlock Classes="meta" Foreground="{DynamicResource AppCriticalForeground}"
@@ -763,8 +739,6 @@
                               VerticalAlignment="Center"/>
                     <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center" HorizontalAlignment="Left">
                       <TextBlock Classes="settingsRowTitle" Text="应用内 / 通知页 / Windows 系统通知"/>
-                      <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
-                                 Text="与上面的提醒策略分开保存。"/>
                     </StackPanel>
                     <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="12" Height="12"
                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
@@ -999,8 +973,6 @@
                             VerticalAlignment="Center"/>
                   <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                     <TextBlock Classes="settingsRowTitle" Text="显示为一级侧栏分类"/>
-                    <TextBlock Classes="settingsRowDesc" TextWrapping="Wrap"
-                               Text="关闭后收纳进「其他」。"/>
                   </StackPanel>
                   <ToggleSwitch Grid.Column="2" VerticalAlignment="Center" MinHeight="20"
                                 IsChecked="{Binding CurrentCategoryIsPinned}"
@@ -1023,7 +995,6 @@
                       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
                         <StackPanel Spacing="2" VerticalAlignment="Center">
                           <TextBlock Classes="settingsRowTitle" Text="{Binding Title}"/>
-                          <TextBlock Classes="settingsRowDesc" Text="{Binding Reason}" TextWrapping="Wrap"/>
                         </StackPanel>
                         <PathIcon Grid.Column="1" Data="{DynamicResource Icon.ChevronRight}"
                                   Width="12" Height="12" VerticalAlignment="Center"
