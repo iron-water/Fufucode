@@ -36,7 +36,7 @@
     <Style Selector="ListBox.workspaceList > ListBoxItem:selected">
       <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
       <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
-      <Setter Property="BorderThickness" Value="3,0,0,0"/>
+      <Setter Property="BorderThickness" Value="2,0,0,0"/>
     </Style>
     <Style Selector="Button.fileRow">
       <Setter Property="Background" Value="Transparent"/>

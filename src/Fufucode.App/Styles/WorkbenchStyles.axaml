@@ -984,7 +984,14 @@
   <!-- 状态圆点：语义色（accent 运行 / 灰空闲 / critical 失败）。 -->
   <Style Selector="Border.sessionIsland Border.running">
     <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
-    <!-- 动效收敛：运行态只保留实色圆点，去掉三档之外的 1.5s 呼吸循环。 -->
+    <!-- 运行态呼吸：2s 慢速循环（用户 2026-10-29 要求恢复）。 -->
+    <Style.Animations>
+      <Animation Duration="0:0:2" IterationCount="Infinite" PlaybackDirection="Alternate">
+        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+        <KeyFrame Cue="50%"><Setter Property="Opacity" Value="0.45"/></KeyFrame>
+        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+      </Animation>
+    </Style.Animations>
   </Style>
   <Style Selector="Border.sessionIsland Border.idle">
     <Setter Property="Background" Value="{DynamicResource AppTextDim}"/>
@@ -1269,7 +1276,7 @@
   </Style>
   <Style Selector="Border.turnSummary">
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
     <Setter Property="BorderThickness" Value="2,0,0,0"/>
     <Setter Property="Padding" Value="12,4,0,4"/>
     <Setter Property="Margin" Value="0,10,0,0"/>

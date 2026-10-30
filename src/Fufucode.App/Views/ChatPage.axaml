@@ -234,12 +234,7 @@
                                   <PathIcon Data="{DynamicResource Icon.Brain}" Width="15" Height="15"
                                             Foreground="{DynamicResource AppTextSecondary}"/>
                                   <TextBlock Classes="caption" Text="思考过程" VerticalAlignment="Center"/>
-                                  <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="12" Height="12"
-                                            VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                                            IsVisible="{Binding IsExpanded}"/>
-                                  <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="12" Height="12"
-                                            VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                                            IsVisible="{Binding IsCollapsed}"/>
+                                  <!-- 展开态不再显示箭头（用户 2026-10-29 要求）；整行本身可点。 -->
                                 </StackPanel>
                               </Button>
                               <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
@@ -265,11 +260,7 @@
                                                       IsVisible="{Binding IsActive}"/>
                                   <TextBlock Grid.Column="2" Classes="caption" Text="{Binding SummaryText}"
                                              VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                                  <!-- 纯图形不靠字号撑大小：▸/▾ 指示改用 10×10 的 PathIcon，保留原 ExpandGlyph 绑定。 -->
-                                  <PathIcon Grid.Column="3"
-                                            Data="{Binding ExpandGlyph, Converter={x:Static views:ChatPage.ExpandGlyphGeometry}}"
-                                            Width="10" Height="10" VerticalAlignment="Center"
-                                            Foreground="{DynamicResource AppTextDim}"/>
+                                  <!-- 工具组行不再显示展开箭头（用户 2026-10-29 要求）；整行可点。 -->
                                 </Grid>
                               </Button>
                               <TextBlock Classes="meta mono" Text="{Binding LatestHint, StringFormat='  └ {0}'}"

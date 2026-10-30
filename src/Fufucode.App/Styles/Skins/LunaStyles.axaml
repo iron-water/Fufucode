@@ -231,7 +231,7 @@
         <Setter Property="CornerRadius" Value="0"/>
     </Style>
     <Style Selector="Border.turnSummary">
-        <Setter Property="BorderThickness" Value="3,0,0,0"/>
+        <Setter Property="BorderThickness" Value="2,0,0,0"/>
     </Style>
 
     <!-- 焦点：1px XP 选择蓝单环（高对比、无 Fluent 双环） -->
