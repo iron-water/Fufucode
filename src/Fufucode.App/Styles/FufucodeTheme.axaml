@@ -29,7 +29,12 @@
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="LayerFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppContentBackground"  ResourceKey="SolidBackgroundFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="CardBackgroundFillColorDefaultBrush"/>
-                    <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <SolidColorBrush x:Key="AppCardStroke" Color="#24000000"/>
+                    <LinearGradientBrush x:Key="AppCardStrokeHover" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#CCFFFFFF"/>
+                        <GradientStop Offset="0.5" Color="#66000000"/>
+                        <GradientStop Offset="1" Color="#30000000"/>
+                    </LinearGradientBrush>
                     <!-- 输入卡浮在聊天正文之上：浅色下用近不透明底，避免底下文字透上来。 -->
                     <SolidColorBrush x:Key="AppComposerBackground" Color="#FAFFFFFF"/>
                     <SolidColorBrush x:Key="AppComposerStroke" Color="#24000000"/>
@@ -134,7 +139,12 @@
                     <StaticResource x:Key="AppSidebarBackground"  ResourceKey="AppBaseDeep"/>
                     <StaticResource x:Key="AppSurfaceBackground"  ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppCardBackground"     ResourceKey="AppBaseBar"/>
-                    <StaticResource x:Key="AppCardStroke"         ResourceKey="CardStrokeColorDefaultSolidBrush"/>
+                    <SolidColorBrush x:Key="AppCardStroke" Color="#90000000"/>
+                    <LinearGradientBrush x:Key="AppCardStrokeHover" StartPoint="0%,0%" EndPoint="0%,100%">
+                        <GradientStop Offset="0" Color="#80FFFFFF"/>
+                        <GradientStop Offset="0.5" Color="#30FFFFFF"/>
+                        <GradientStop Offset="1" Color="#0FFFFFFF"/>
+                    </LinearGradientBrush>
                     <!-- 深色保持原有半透明卡片底；输入卡沿用同色。 -->
                     <StaticResource x:Key="AppComposerBackground" ResourceKey="AppCardBackground"/>
                     <SolidColorBrush x:Key="AppComposerStroke" Color="#26FFFFFF"/>

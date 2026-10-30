@@ -75,12 +75,11 @@
   </UserControl.Styles>
   <Grid RowDefinitions="Auto,Auto,*" Background="{DynamicResource AppMicaPageBackground}">
     <!-- Persistent tab objects survive close/reopen; disabled capabilities are explicit launcher slots. -->
-    <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+    <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0">
       <DockPanel LastChildFill="True" MinHeight="44">
         <Button DockPanel.Dock="Right" Classes="iconButton" Content="×" Width="32" Height="32" Margin="0,6,6,6"
-                Command="{Binding HidePanelCommand}" ToolTip.Tip="收起工作视图，保留已打开的视图" AutomationProperties.Name="收起工作视图"/>
-        <Button DockPanel.Dock="Right" Classes="iconButton" Content="+" Width="32" Height="32" Margin="0,6,2,6"
-                ToolTip.Tip="选择要打开的文件或变更视图" AutomationProperties.Name="加入工作视图">
+                Command="{Binding HidePanelCommand}" AutomationProperties.Name="收起工作视图"/>
+        <Button DockPanel.Dock="Right" Classes="iconButton" Content="+" Width="32" Height="32" Margin="0,6,2,6" AutomationProperties.Name="加入工作视图">
           <Button.Flyout>
             <Flyout Placement="BottomEdgeAlignedRight">
               <StackPanel MinWidth="216" Spacing="4">
@@ -100,8 +99,7 @@
                 <StackPanel Orientation="Horizontal" Spacing="0">
                   <Button Classes="subtle" Content="{Binding Title}" Click="SelectTab_Click" MinHeight="42" Padding="10,4"
                           AutomationProperties.Name="{Binding Title}"/>
-                  <Button Classes="iconButton" Content="×" Click="CloseTab_Click" Width="24" Height="28" Margin="0,0,4,0"
-                          ToolTip.Tip="关闭此视图，可从 + 重新打开" AutomationProperties.Name="关闭工作视图 tab"/>
+                  <Button Classes="iconButton" Content="×" Click="CloseTab_Click" Width="24" Height="28" Margin="0,0,4,0" AutomationProperties.Name="关闭工作视图 tab"/>
                 </StackPanel>
               </Border>
             </DataTemplate>
@@ -111,8 +109,7 @@
     </Border>
     <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="12,8,10,8">
       <TextBlock Classes="caption" Text="{Binding SourceLabel}" VerticalAlignment="Center"/>
-      <Button Grid.Column="1" Classes="subtle" Content="刷新" Padding="8,3" Command="{Binding RefreshCommand}"
-              ToolTip.Tip="重新读取文件目录与当前变更范围"/>
+      <Button Grid.Column="1" Classes="subtle" Content="刷新" Padding="8,3" Command="{Binding RefreshCommand}"/>
     </Grid>
 
     <StackPanel Grid.Row="2" IsVisible="{Binding !HasSelectedTab}" Margin="20,24" Spacing="12">
@@ -160,7 +157,7 @@
           <TextBlock Classes="bodyStrong" Text="项目文件" VerticalAlignment="Center"/>
           <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshFilesCommand}" AutomationProperties.Name="刷新文件"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
         </Grid>
-        <TextBlock Classes="caption" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding CurrentDirectoryText}"/>
+        <TextBlock Classes="caption" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis"/>
         <TextBox Text="{Binding FileFilter}" PlaceholderText="搜索项目文件" AutomationProperties.Name="搜索项目文件"/>
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsFileOperationLoading}" Height="2"/>
         <TextBlock Classes="caption" Text="{Binding FilesError}" IsVisible="{Binding HasFilesError}" TextWrapping="Wrap"/>
@@ -174,13 +171,12 @@
                       Focusable="True" AutomationProperties.Name="项目文件树">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FileTreeSectionViewModel">
-              <Border Background="{DynamicResource AppCardBackground}" CornerRadius="{DynamicResource ControlCornerRadius}"
+              <Border Classes="fileTreeSection" Background="{DynamicResource AppCardBackground}" CornerRadius="{DynamicResource ControlCornerRadius}"
                       Padding="4" Margin="0,0,0,6">
-                <ItemsControl ItemsSource="{Binding Rows}">
+                <views:FileTreeSectionPanel ItemsSource="{Binding Rows}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
-                      <Button Classes="fileTreeRow" Classes.selected="{Binding IsSelected}" Click="FileRow_Click"
-                              ToolTip.Tip="{Binding FullPath}">
+                      <Button Classes="fileTreeRow" Classes.selected="{Binding IsSelected}" Click="FileRow_Click">
                         <Grid Margin="{Binding Indent}" ColumnDefinitions="16,18,*,Auto" ColumnSpacing="6" Height="32" Background="Transparent">
                           <TextBlock Text="{Binding Glyph}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                           <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
@@ -191,20 +187,20 @@
                       </Button>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                </views:FileTreeSectionPanel>
               </Border>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
       <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="12,2,8,6" ColumnSpacing="6">
-        <TextBlock Classes="caption" Text="{Binding FileStatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding FileSelectionText}"/>
+        <TextBlock Classes="caption" Text="{Binding FileStatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
         <Button Grid.Column="1" Classes="subtle" Content="复制路径" Command="{Binding CopyFilePathCommand}" IsEnabled="{Binding HasSelectedFile}" Padding="6,3"/>
       </Grid>
       </Grid>
       <!-- 统一预览宿主：provider 负责分类与加载，面板只显示统一元数据和错误。 -->
       <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,Auto,*">
-        <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1"
+        <Border Grid.Row="0" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0"
                 Background="{DynamicResource AppCardBackground}" Padding="8,6">
           <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="5" VerticalAlignment="Center">
             <Button Classes="iconButton" Content="←" Command="{Binding CloseFilePreviewCommand}"
@@ -216,7 +212,7 @@
             <StackPanel Grid.Column="2" Margin="6,0" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="bodyStrong" Text="{Binding PreviewFileName}" TextTrimming="CharacterEllipsis"/>
               <TextBlock Classes="caption mono" Text="{Binding PreviewFilePath}" TextTrimming="CharacterEllipsis"
-                         Foreground="{DynamicResource AppTextSecondary}" ToolTip.Tip="{Binding PreviewFilePath}"/>
+                         Foreground="{DynamicResource AppTextSecondary}"/>
             </StackPanel>
             <StackPanel Grid.Column="3" HorizontalAlignment="Right" VerticalAlignment="Center" Spacing="2">
               <TextBlock Classes="caption mono" Text="{Binding PreviewFileSize}" HorizontalAlignment="Right" Foreground="{DynamicResource AppTextSecondary}"/>
@@ -224,7 +220,7 @@
             </StackPanel>
           </Grid>
         </Border>
-        <Border Grid.Row="1" BorderBrush="{DynamicResource AppDividerSubtle}" BorderThickness="0,0,0,1" Padding="8,4">
+        <Border Grid.Row="1" BorderBrush="{DynamicResource AppDividerSubtle}" BorderThickness="0" Padding="8,4">
           <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4">
             <TextBlock Classes="caption" Text="{Binding PreviewResult.DisplayType}" VerticalAlignment="Center"/>
             <TextBlock Classes="caption mono" Text="{Binding PreviewResult.Format}" VerticalAlignment="Center"/>
@@ -267,26 +263,23 @@
             <Border Classes="scopeSwitch">
               <StackPanel Orientation="Horizontal">
                 <Button Classes="scopeChip" Classes.selected="{Binding IsWorkspaceScope}" Content="工作区"
-                        Command="{Binding WorkspaceScopeCommand}" ToolTip.Tip="整个 Git 工作树的当前状态，包含用户与外部程序改动"
+                        Command="{Binding WorkspaceScopeCommand}"
                         AutomationProperties.Name="工作区范围"/>
                 <Button Classes="scopeChip" Classes.selected="{Binding IsSessionScope}" Content="本次会话"
-                        Command="{Binding SessionScopeCommand}" ToolTip.Tip="当前分支已确认成功的 write/edit 路径；不包含终端命令的全部副作用"
+                        Command="{Binding SessionScopeCommand}"
                         AutomationProperties.Name="会话写入范围"/>
               </StackPanel>
             </Border>
             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-              <TextBlock Classes="mono diffStatAdded" Text="{Binding AddedTotalText}" IsVisible="{Binding HasTotals}"
-                         ToolTip.Tip="新增行数合计"/>
-              <TextBlock Classes="mono diffStatRemoved" Text="{Binding RemovedTotalText}" IsVisible="{Binding HasTotals}"
-                         ToolTip.Tip="删除行数合计"/>
+              <TextBlock Classes="mono diffStatAdded" Text="{Binding AddedTotalText}" IsVisible="{Binding HasTotals}"/>
+              <TextBlock Classes="mono diffStatRemoved" Text="{Binding RemovedTotalText}" IsVisible="{Binding HasTotals}"/>
               <Button Classes="iconButton" Command="{Binding RefreshCommand}"
                       AutomationProperties.Name="刷新变更">
                 <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
               </Button>
             </StackPanel>
           </Grid>
-          <TextBlock Classes="caption mono" Text="{Binding ChangesRoot}" TextTrimming="CharacterEllipsis"
-                     ToolTip.Tip="{Binding ChangesRoot}" IsVisible="{Binding HasChanges}"/>
+          <TextBlock Classes="caption mono" Text="{Binding ChangesRoot}" TextTrimming="CharacterEllipsis" IsVisible="{Binding HasChanges}"/>
           <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsChangesLoading}" Height="2"/>
           <TextBlock Classes="caption" Text="{Binding ChangesError}" IsVisible="{Binding HasChangesError}" TextWrapping="Wrap"/>
           <TextBlock Classes="caption" Text="{Binding ExcludedPathsText}" IsVisible="{Binding HasExcludedPaths}" TextWrapping="Wrap"/>
@@ -336,7 +329,7 @@
                 </DataTemplate>
                 <DataTemplate DataType="vm:WorkspacePanelChangedFileViewModel" x:DataType="vm:WorkspacePanelChangedFileViewModel">
                   <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6" Margin="16,0,0,0"
-                        Height="26" ToolTip.Tip="{Binding Path}">
+                        Height="26">
                     <TextBlock Grid.Column="0" Classes="mono statusMark" Text="{Binding StatusMark}"
                                VerticalAlignment="Center"/>
                     <TextBlock Grid.Column="1" Classes="mono fileName" Text="{Binding Name}"
@@ -360,7 +353,7 @@
                 Background="{DynamicResource AppDividerSubtle}" IsHitTestVisible="False"/>
         <Grid Grid.Column="0" Grid.ColumnSpan="3" x:Name="ChangeDiffPane" RowDefinitions="Auto,*"
               IsVisible="{Binding HasSelectedChange}">
-          <Border Grid.Row="0" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource AppDividerSubtle}"
+          <Border Grid.Row="0" BorderThickness="0" BorderBrush="{DynamicResource AppDividerSubtle}"
                   Background="{DynamicResource AppCardBackground}" Padding="8,6">
             <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
               <Button Classes="iconButton" Click="CloseDiff_Click"
@@ -369,7 +362,7 @@
               </Button>
               <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                 <TextBlock Classes="mono" FontSize="12.5" Text="{Binding SelectedChange.Name}"
-                           TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SelectedChange.FullPath}"/>
+                           TextTrimming="CharacterEllipsis"/>
                 <TextBlock Classes="caption mono" Text="{Binding SelectedChange.Folder}" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding SelectedChange.HasFolder}" Foreground="{DynamicResource AppTextDim}"/>
               </StackPanel>
@@ -379,7 +372,7 @@
                 <TextBlock Classes="mono deletions" FontSize="12" Text="{Binding SelectedChange.RemovedText}"
                            IsVisible="{Binding SelectedChange.HasRemoved}"/>
                 <Button Classes="subtle" Content="打开当前文件" Padding="8,3" FontSize="12"
-                        Click="PreviewSelectedChange_Click" ToolTip.Tip="在工作视图里打开这个文件"/>
+                        Click="PreviewSelectedChange_Click"/>
                 <Button Classes="iconButton" Click="ChangeDiffMenu_Click"
                         AutomationProperties.Name="差异操作">
                   <PathIcon Data="{DynamicResource Icon.More}" Width="14" Height="14"/>

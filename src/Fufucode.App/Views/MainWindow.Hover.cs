@@ -14,7 +14,7 @@ public partial class MainWindow
 
     private static readonly string[] RowClasses =
     [
-        "settingsRow", "overviewSession", "dockTabRow", "navFill", "changeFileRow", "overviewProject", "modelChoiceRow", "toolCard",
+        "settingsRow", "overviewSession", "navFill", "changeFileRow", "overviewProject", "modelChoiceRow", "toolCard",
     ];
 
     private void InitializeRowHover()
@@ -26,7 +26,6 @@ public partial class MainWindow
     private void OnRowPointerMoved(object? sender, PointerEventArgs e)
     {
         var row = FindRow(e.Source as Visual);
-        OnTipHoverChanged(row);
         if (ReferenceEquals(row, _hoverRow)) return;
         // 指针仍停留在原控件上时忽略这次“找不到行”的抖动，避免高亮忽明忽暗。
         if (row is null && _hoverRow is { IsPointerOver: true }) return;

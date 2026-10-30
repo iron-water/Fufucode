@@ -14,7 +14,7 @@
       <Button Grid.Column="1" Classes="subtle" Height="28" Padding="8,0"
               IsVisible="{Binding Sidebar.HasBackendChoice}"
               AutomationProperties.Name="新建会话使用的后端"
-              ToolTip.Tip="选择新建会话使用的后端"
+              AutomationProperties.HelpText="选择新建会话使用的后端"
               PointerPressed="BackendChip_PointerPressed">
         <StackPanel Orientation="Horizontal" Spacing="4">
           <TextBlock Text="{Binding Sidebar.DefaultBackendLabel}" FontSize="12" VerticalAlignment="Center"/>

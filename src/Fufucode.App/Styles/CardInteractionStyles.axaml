@@ -1,0 +1,51 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 卡片只画一层 1px 轮廓：常态深边，悬停才显出由上到下衰减的亮边。 -->
+  <Style Selector="Window.fluentWorkbench Border.settingsRow,
+                   Window.fluentWorkbench Border.settingsPanel:not(.subtle),
+                   Window.fluentWorkbench Border.overviewGroup,
+                   Window.fluentWorkbench Border.fileTreeSection,
+                   Window.fluentWorkbench Border.navFill,
+                   Window.fluentWorkbench Border.card,
+                   Window.fluentWorkbench Border.toolGroupCard,
+                   Window.fluentWorkbench Border.toolCard,
+                   Window.fluentWorkbench Border.changeCard">
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Border.settingsRow:pointerover,
+                   Window.fluentWorkbench Border.settingsPanel:not(.subtle):pointerover,
+                   Window.fluentWorkbench Border.overviewGroup:pointerover,
+                   Window.fluentWorkbench Border.fileTreeSection:pointerover,
+                   Window.fluentWorkbench Border.navFill:pointerover,
+                   Window.fluentWorkbench Border.card:pointerover,
+                   Window.fluentWorkbench Border.toolGroupCard:pointerover,
+                   Window.fluentWorkbench Border.toolCard:pointerover,
+                   Window.fluentWorkbench Border.changeCard:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Border.settingsRow.pointerHover,
+                   Window.fluentWorkbench Border.navFill.pointerHover,
+                   Window.fluentWorkbench Border.toolCard.pointerHover">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Border.overviewGroup:pointerover,
+                   Window.fluentWorkbench Border.fileTreeSection:pointerover,
+                   Window.fluentWorkbench Border.card:pointerover,
+                   Window.fluentWorkbench Border.settingsPanel:not(.subtle):pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Button.settingsRow">
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Button.settingsRow:pointerover">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
+  </Style>
+  <!-- 按钮模板仍由同一张表面承载，避免悬停时再盖一块矩形底。 -->
+  <Style Selector="Window.fluentWorkbench Button.settingsRow /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{TemplateBinding Background}"/>
+    <Setter Property="BorderBrush" Value="{TemplateBinding BorderBrush}"/>
+    <Setter Property="BorderThickness" Value="{TemplateBinding BorderThickness}"/>
+    <Setter Property="CornerRadius" Value="{TemplateBinding CornerRadius}"/>
+  </Style>
+</Styles>

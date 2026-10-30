@@ -212,7 +212,7 @@ public partial class MainWindow
             foreach (var demo in _vm.Sidebar.Sessions)
             {
                 var label = OverviewHeading(demo.Title, 0); label.FontWeight = FontWeight.Normal;
-                ToolTip.SetTip(label, demo.StatusDescription);
+                Avalonia.Automation.AutomationProperties.SetHelpText(label, demo.StatusDescription);
             }
     }
 
@@ -263,9 +263,9 @@ public partial class MainWindow
     /// <summary>可折叠分组标题：整行可点，左侧箭头指示展开/收起。</summary>
     private Button OverviewCollapsibleHeading(string title, bool collapsed, Action toggle, double indent = 0)
     {
-        var chevron = new PathIcon { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
+        var chevron = new PathIcon { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
         chevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension(
-            collapsed ? "Icon.ChevronRight" : "Icon.ChevronDown"));
+            collapsed ? "Icon.CaretRight" : "Icon.CaretDown"));
         var text = new TextBlock
         {
             Text = title, FontSize = 12, FontWeight = FontWeight.SemiBold,
@@ -305,7 +305,7 @@ public partial class MainWindow
     private Button OverviewIcon(string icon, string title, Func<Task> action)
     {
         var button = WorkbenchUi.IconButton(icon, title, 26);
-        ToolTip.SetTip(button, title switch
+        Avalonia.Automation.AutomationProperties.SetHelpText(button, title switch
         {
             "归档" => "将此会话移入已归档列表",
             "重命名" => "修改此会话的显示名称",
@@ -345,9 +345,9 @@ public partial class MainWindow
         var projectSessions = sessions.Where(s => organization.Placement(s.Id).ProjectId == project.Id)
             .OrderByDescending(SessionActivityAt).ToArray();
 
-        var chevron = new PathIcon { Width = 10, Height = 10, VerticalAlignment = VerticalAlignment.Center };
+        var chevron = new PathIcon { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
         chevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension(
-            collapsed ? "Icon.ChevronRight" : "Icon.ChevronDown"));
+            collapsed ? "Icon.CaretRight" : "Icon.CaretDown"));
         var name = new TextBlock
         {
             Text = settings.Name, FontSize = 12, FontWeight = FontWeight.SemiBold,
@@ -364,7 +364,7 @@ public partial class MainWindow
         Grid.SetColumn(count, 2); content.Children.Add(count);
 
         var row = new Button { Content = content, Classes = { "overviewProject" } };
-        ToolTip.SetTip(row, settings.Folder + "（点击折叠/展开会话）");
+        Avalonia.Automation.AutomationProperties.SetHelpText(row, settings.Folder + "（点击折叠/展开会话）");
         AutomationProperties.SetAutomationId(row, "project.row." + project.Id);
         row.Click += (_, _) =>
         {
@@ -472,9 +472,8 @@ public partial class MainWindow
             HorizontalContentAlignment = HorizontalAlignment.Left, MinHeight = 30,
             Content = titleText,
         };
-        ToolTip.SetTip(button, OverviewSessionCard(session, presentation,
-            projectLabel ?? projectPath, title));
-        ToolTip.SetShowDelay(button, 500);
+        Avalonia.Automation.AutomationProperties.SetHelpText(button, "会话：" + title);
+
         AutomationProperties.SetAutomationId(button, "session.row." + session.Id);
         button.Click += (_, _) => OverviewRun(() => ActivateOverviewSessionAsync(session));
 
@@ -670,51 +669,6 @@ public partial class MainWindow
         _archivePage?.Refresh();
         RefreshSessionList();
     }
-    /// <summary>会话行悬停卡：标题、状态、后端、项目、更新时间与分叉信息。</summary>
-    private Control OverviewSessionCard(SessionRecord session, SessionPresentation presentation,
-        string projectPath, string title)
-    {
-        var card = new StackPanel { Spacing = 3, MaxWidth = 320 };
-        card.Children.Add(new TextBlock
-        {
-            Text = title,
-            FontWeight = FontWeight.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-        });
-        var status = session.Id == CurrentSessionId ? "当前会话"
-            : session.WasActive ? "上次运行中断"
-            : presentation.Unread ? "有未读结果"
-            : presentation.Pinned ? "已置顶"
-            : "空闲";
-        card.Children.Add(new TextBlock { Text = status, Classes = { "caption" } });
-        card.Children.Add(new TextBlock
-        {
-            Text = "后端：" + BackendCapabilities.For(session.Backend).Name,
-            Classes = { "caption" },
-        });
-        card.Children.Add(new TextBlock
-        {
-            Text = projectPath,
-            Classes = { "caption", "mono" },
-            TextWrapping = TextWrapping.Wrap,
-        });
-        card.Children.Add(new TextBlock
-        {
-            Text = "更新：" + session.LastOpened.LocalDateTime.ToString("yyyy-MM-dd HH:mm"),
-            Classes = { "caption" },
-        });
-        if (session.IsFork)
-            card.Children.Add(new TextBlock { Text = "由其他会话分叉", Classes = { "caption" } });
-        card.Children.Add(new TextBlock
-        {
-            // 悬停卡保留完整 id，方便排查；行标题本身不再显示 id。
-            Text = "ID " + session.Id,
-            Classes = { "caption", "mono" },
-            TextTrimming = TextTrimming.CharacterEllipsis,
-        });
-        return card;
-    }
-
     private void SetOverviewPresentation(string id, Func<SessionPresentation, SessionPresentation> change)
     {
         var store = _host!.Manager.Metadata;

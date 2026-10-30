@@ -27,6 +27,75 @@ public class DeadZoneGridSplitter : GridSplitter
     private double _accumulated;
     private bool _open;
     private bool _pointerInitiated;
+    private readonly Avalonia.Threading.DispatcherTimer _leaveTimer;
+    private TopLevel? _topLevel;
+    private Border? _grip;
+
+    protected override void OnApplyTemplate(Avalonia.Controls.Primitives.TemplateAppliedEventArgs e)
+    {
+        base.OnApplyTemplate(e);
+        _grip = e.NameScope.Find<Border>("SplitGrip");
+        UpdateGripWidth();
+    }
+
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        _topLevel = TopLevel.GetTopLevel(this);
+        if (_topLevel is not null) _topLevel.ScalingChanged += OnScalingChanged;
+        UpdateGripWidth();
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        if (_topLevel is not null) _topLevel.ScalingChanged -= OnScalingChanged;
+        _topLevel = null;
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    private void OnScalingChanged(object? sender, EventArgs e) => UpdateGripWidth();
+
+    private void UpdateGripWidth()
+    {
+        if (_grip is null) return;
+        var width = 4 / (_topLevel?.RenderScaling ?? 1);
+        if (ResizeDirection == GridResizeDirection.Rows) _grip.Height = width;
+        else _grip.Width = width;
+    }
+
+    public DeadZoneGridSplitter()
+    {
+        _leaveTimer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
+        _leaveTimer.Tick += (_, _) => { _leaveTimer.Stop(); if (!_pointerInitiated) Classes.Remove("interactionActive"); };
+        DetachedFromVisualTree += (_, _) => ResetInteraction();
+    }
+
+    private void ResetInteraction()
+    {
+        _leaveTimer.Stop();
+        _pointerInitiated = false;
+        Classes.Remove("dragging");
+        Classes.Remove("interactionActive");
+    }
+
+    protected override void OnPointerEntered(PointerEventArgs e)
+    {
+        _leaveTimer.Stop();
+        Classes.Add("interactionActive");
+        base.OnPointerEntered(e);
+    }
+
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        if (!_pointerInitiated) { _leaveTimer.Stop(); _leaveTimer.Start(); }
+        base.OnPointerExited(e);
+    }
+
+    protected override void OnPointerReleased(PointerReleasedEventArgs e)
+    {
+        base.OnPointerReleased(e);
+        ResetInteraction();
+    }
 
     /// <summary>
     /// UI-1 死区门纯判定，供定向测试确定性验证：给定「是否指针发起」「当前累计位移」「本次增量」，
@@ -49,13 +118,13 @@ public class DeadZoneGridSplitter : GridSplitter
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         _pointerInitiated = e.GetCurrentPoint(this).Properties.IsLeftButtonPressed;
+        if (_pointerInitiated) { _leaveTimer.Stop(); Classes.Add("interactionActive"); }
         base.OnPointerPressed(e);
     }
 
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
-        _pointerInitiated = false;
-        Classes.Remove("dragging");
+        ResetInteraction();
         base.OnPointerCaptureLost(e);
     }
 
@@ -71,7 +140,7 @@ public class DeadZoneGridSplitter : GridSplitter
 
     protected override void OnDragCompleted(VectorEventArgs e)
     {
-        Classes.Remove("dragging");
+        ResetInteraction();
         base.OnDragCompleted(e);
     }
 

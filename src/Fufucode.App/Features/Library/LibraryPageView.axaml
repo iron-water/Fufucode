@@ -15,7 +15,7 @@
       </StackPanel>
       <WrapPanel x:Name="HeaderActions" Grid.Column="1" VerticalAlignment="Center">
         <ToggleSwitch IsChecked="{Binding ImportAsCopy}" OnContent="副本" OffContent="引用"
-                      ToolTip.Tip="{Binding ImportModeHint}" Margin="0,0,8,4"
+                      AutomationProperties.HelpText="{Binding ImportModeHint}" Margin="0,0,8,4"
                       AutomationProperties.Name="导入方式"/>
         <Button Classes="subtle" Content="导入文件…" Command="{Binding ImportFilesCommand}" Margin="0,0,8,4"/>
         <Button Classes="subtle" Content="导入资料包…" Command="{Binding ImportBundleCommand}" Margin="0,0,8,4"/>
@@ -45,7 +45,7 @@
                 <Button Classes="subtle" Content="{Binding Label}" Tag="{Binding Tag}"
                         Click="TagChip_Click" MinHeight="28"/>
                 <Button Classes="iconButton" Content="×" Width="28" Height="28" Tag="{Binding Tag}"
-                        Click="RemoveTag_Click" ToolTip.Tip="从选中条目移除该标签"
+                        Click="RemoveTag_Click" AutomationProperties.HelpText="从选中条目移除该标签"
                         AutomationProperties.Name="移除标签"/>
               </StackPanel>
             </DataTemplate>

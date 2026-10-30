@@ -29,7 +29,7 @@ internal sealed class TrayIconService : IDisposable
 
         _tray = new TrayIcon
         {
-            ToolTipText = "Fufucode",
+
             Menu = _menu,
             IsVisible = true,
         };

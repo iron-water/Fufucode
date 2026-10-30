@@ -122,14 +122,7 @@ public partial class ChatPage
 
             // 悬停预览：完整显示这一轮的用户指令，长文本换行而不是截成省略号。
             var preview = string.IsNullOrWhiteSpace(entry.Text) ? "（无文字输入）" : entry.Text.Trim();
-            var tipBlock = new TextBlock
-            {
-                Text = preview,
-                TextWrapping = Avalonia.Media.TextWrapping.Wrap,
-                MaxWidth = 340,
-            };
-            ToolTip.SetTip(button, tipBlock);
-            ToolTip.SetShowDelay(button, 200);
+            Avalonia.Automation.AutomationProperties.SetHelpText(button, preview);
 
             var menu = new MenuFlyout();
             var pin = new MenuItem { Header = entry.IsPinned ? "取消收藏" : "收藏这一轮" };

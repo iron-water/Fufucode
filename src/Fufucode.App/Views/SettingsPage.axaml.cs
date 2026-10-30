@@ -34,6 +34,7 @@ public partial class SettingsPage : UserControl
     public SettingsPage()
     {
         InitializeComponent();
+        InitializeNavigationMarker();
         EndpointKeyBox.TextChanged += (_, _) => _viewModel?.SetEndpointKeyDraftPresence(!string.IsNullOrEmpty(EndpointKeyBox.Text));
         // 侧栏选中项不双向绑定：搜索/升降级会重建条目实例，双向绑定会把选中写回成 null。
         SettingsCategoryList.SelectionChanged += OnNavSelectionChanged;

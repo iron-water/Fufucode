@@ -74,7 +74,7 @@ internal static class SessionManagementRealSelfTest
             window.RenderOverview();
             var toolbarGrid = view.Toolbar.Children.OfType<Grid>().First();
             var addButton = toolbarGrid.Children.OfType<Button>()
-                .Single(button => ToolTip.GetTip(button) as string == "新建分区或项目");
+                .Single(button => AutomationProperties.GetName(button) == "新建分区或项目");
             Check(addButton.ContextMenu!.Items.OfType<MenuItem>().Select(item => item.Header)
                     .SequenceEqual(new object[] { "新建分区", "添加项目" }),
                 "overview plus menu offers new section and add project");

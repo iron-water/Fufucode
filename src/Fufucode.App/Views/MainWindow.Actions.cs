@@ -355,7 +355,7 @@ public partial class MainWindow
         {
             var path = (Environment.GetEnvironmentVariable("PATH") ?? "").Split(Path.PathSeparator).Select(p => Path.Combine(p.Trim('"'), executable)).FirstOrDefault(File.Exists);
             var button = new Button { Content = name, IsEnabled = path is not null };
-            ToolTip.SetTip(button, path ?? "未在 PATH 中找到，可用下面的自选程序");
+            Avalonia.Automation.AutomationProperties.SetHelpText(button, path ?? "未在 PATH 中找到，可用下面的自选程序");
             button.Click += (_, _) => Process.Start(new ProcessStartInfo { FileName = path!, Arguments = "\"" + folder + "\"", UseShellExecute = true }); panel.Children.Add(button);
         }
         var custom = new Button { Content = "选择程序…" };

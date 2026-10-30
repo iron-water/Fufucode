@@ -99,7 +99,7 @@ public static class Wave5R3SelfTest
                 "长标题截断且保留详情与面板入口，不堆叠常态chips");
             Check(window.GetVisualDescendants().OfType<Button>().Any(button => button.IsEffectivelyVisible &&
                 button.GetVisualDescendants().OfType<PathIcon>().Any(x => x.Data is not null) &&
-                (ToolTip.GetTip(button) as string)?.StartsWith("右侧边栏", StringComparison.Ordinal) == true),
+                (Avalonia.Automation.AutomationProperties.GetName(button))?.StartsWith("右侧边栏", StringComparison.Ordinal) == true),
                 "工作区入口使用实际存在的图标geometry");
             Save("header-long-title-1200.png");
             vm.Sidebar.SelectedSession = originalRow;

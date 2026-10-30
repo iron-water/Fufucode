@@ -286,7 +286,7 @@ public sealed class ShortcutsPage : UserControl
             {
                 var detail = new TextBlock { Text = text };
                 detail.Classes.Add("settingsRowDesc");
-                ToolTip.SetTip(detail, text);
+                Avalonia.Automation.AutomationProperties.SetHelpText(detail, text);
                 textPanel.Children.Add(detail);
             }
         line.Tag = row;

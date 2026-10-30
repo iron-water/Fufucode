@@ -25,8 +25,9 @@ namespace Fufucode.App;
 
 public partial class MainWindow
 {
-    /// <summary>停靠区分隔条的命中宽度：可见线仍是 2px，两侧留容错；鼠标稍微偏一点不会丢掉悬停。</summary>
+    /// <summary>布局间隙保持 8px；透明命中区覆盖两侧，避免扩大永久空隙。</summary>
     internal const double DockSplitterSize = 8;
+    internal const double DockSplitterHitSize = 24;
 
     private WorkbenchLayoutState _dockLayout = new();
     private readonly WorkbenchPageRegistry _workbenchPages = new();
@@ -169,6 +170,11 @@ public partial class MainWindow
         {
             splitter.DragStarted += (_, _) => _resizingDock = true;
             splitter.DragCompleted += (_, _) => { CaptureWorkspaceDimensions(); _resizingDock = false; ApplyWorkspaceLayout(); };
+            splitter.PointerCaptureLost += (_, _) =>
+            {
+                if (!_resizingDock) return;
+                CaptureWorkspaceDimensions(); _resizingDock = false; ApplyWorkspaceLayout();
+            };
             splitter.AddHandler(KeyDownEvent, (_, e) =>
             {
                 if (e.Key is Key.Left or Key.Right or Key.Up or Key.Down) _resizingDock = true;
@@ -778,9 +784,10 @@ public partial class MainWindow
 
             Grid.SetColumn(LeftPanelSplitter, 1);
             Grid.SetColumnSpan(LeftPanelSplitter, 1);
-            LeftPanelSplitter.Margin = default;
-            LeftPanelSplitter.Width = double.NaN;
-            LeftPanelSplitter.ZIndex = 0;
+            LeftPanelSplitter.Margin = new Thickness(-8, 0);
+            LeftPanelSplitter.Width = DockSplitterHitSize;
+            LeftPanelSplitter.HorizontalAlignment = HorizontalAlignment.Center;
+            LeftPanelSplitter.ZIndex = 5;
 
             Grid.SetColumn(WorkspaceShell, 2);
             Grid.SetColumnSpan(WorkspaceShell, 1);
@@ -825,9 +832,10 @@ public partial class MainWindow
             RightDrawerScrim.Margin = RightPanelBorder.Margin;
             Grid.SetColumn(RightPanelSplitter, 1);
             Grid.SetColumnSpan(RightPanelSplitter, 1);
-            RightPanelSplitter.Margin = default;
-            RightPanelSplitter.Width = double.NaN;
-            RightPanelSplitter.ZIndex = 0;
+            RightPanelSplitter.Margin = new Thickness(-8, 0);
+            RightPanelSplitter.Width = DockSplitterHitSize;
+            RightPanelSplitter.HorizontalAlignment = HorizontalAlignment.Center;
+            RightPanelSplitter.ZIndex = 5;
 
             var bottom = !settings && !_dockLayout.Hidden[DockZone.Bottom];
             var height = WorkspaceShell.Bounds.Height > 0 ? WorkspaceShell.Bounds.Height : Height - 74;
@@ -861,9 +869,10 @@ public partial class MainWindow
             Grid.SetColumn(TerminalSplitter, 0);
             Grid.SetRow(TerminalSplitter, 1);
             Grid.SetRowSpan(TerminalSplitter, 1);
-            TerminalSplitter.Margin = default;
-            TerminalSplitter.Height = double.NaN;
-            TerminalSplitter.ZIndex = 0;
+            TerminalSplitter.Margin = new Thickness(0, -8);
+            TerminalSplitter.Height = DockSplitterHitSize;
+            TerminalSplitter.VerticalAlignment = VerticalAlignment.Center;
+            TerminalSplitter.ZIndex = 5;
 
             var drawerVisible = narrow && (left || right);
             if (drawerVisible && !_drawerWasVisible)

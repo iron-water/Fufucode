@@ -138,8 +138,8 @@ public partial class TerminalDockView : UserControl
     internal Task PasteToDraftAsync() => TerminalSurface.PasteToDraftAsync();
     internal void UpdateShortcutLabels(Func<string, string> binding)
     {
-        ToolTip.SetTip(CopyOutputButton, Label("复制选中的输出", "terminal.copy"));
-        ToolTip.SetTip(FindButton, Label("查找输出", "terminal.find"));
+        Avalonia.Automation.AutomationProperties.SetHelpText(CopyOutputButton, Label("复制选中的输出", "terminal.copy"));
+        Avalonia.Automation.AutomationProperties.SetHelpText(FindButton, Label("查找输出", "terminal.find"));
         string Label(string text, string id) => string.IsNullOrEmpty(binding(id)) ? text : text + "（" + binding(id) + "）";
     }
     internal void FindOutput() => OpenFind();

@@ -18,7 +18,6 @@ namespace Fufucode.Plugins.PerformanceMonitor;
 /// 2. Map 视图采用 Magpie 的 share^0.35 温和幂律曲线，避免低占用时树图塌陷为细线。
 /// 3. Grid 视图绘制 400 个 1/400 窗口单元格，支持开场波浪级联弹入（CubicEaseOut 动效）。
 /// 4. 支持类别/条目悬停对焦（未对焦区域平滑降至 0.16 透明度，对焦区域放大 1.12 倍并高亮）。
-/// 5. 悬停浮动跟随 ToolTip 卡片。
 /// </summary>
 internal sealed class PerfTreemapControl : Control
 {
@@ -174,11 +173,6 @@ internal sealed class PerfTreemapControl : Control
             RenderTreemapMap(context, width, height);
         }
 
-        // 鼠标悬停 ToolTip 浮层
-        if (_hoveredIndex >= 0 && _hoveredIndex < _hits.Count)
-        {
-            DrawHoverTooltip(context, _hits[_hoveredIndex]);
-        }
     }
 
     // ──────────────────────────── 1. Magpie 树图算法 (Map 模式) ────────────────────────────
@@ -466,39 +460,6 @@ internal sealed class PerfTreemapControl : Control
     }
 
     // ──────────────────────────── 3. 悬停浮层与交互 ────────────────────────────
-
-    private void DrawHoverTooltip(DrawingContext context, (Rect Rect, PerfContextItem? Item, string? CategoryKey) hit)
-    {
-        var item = hit.Item;
-        var isFree = hit.CategoryKey == "free";
-        var title = isFree ? "剩余未用空间" : (item?.Name ?? hit.CategoryKey ?? "未知");
-        var tokens = isFree ? Math.Max(0, (_windowCapacity ?? _totalTokens) - _totalTokens) : (item?.Tokens ?? 0);
-        var denominator = _windowCapacity ?? _totalTokens;
-        var percent = denominator > 0 ? (double)tokens / denominator : 0;
-        var info = _windowCapacity is null
-            ? $"{PerfPalette.FormatTokens(tokens)} token · 占已用 {PerfPalette.FormatPercent(percent)}"
-            : $"{PerfPalette.FormatTokens(tokens)} token · 占窗口 {PerfPalette.FormatPercent(percent)}";
-
-        var formattedTitle = new FormattedText(title, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, BoldFace, 12, TextBrush ?? Brushes.White);
-        var formattedInfo = new FormattedText(info, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, RegularFace, 11, MutedBrush ?? Brushes.Gray);
-
-        var padW = 20;
-        var tipW = Math.Max(formattedTitle.Width, formattedInfo.Width) + padW;
-        var tipH = 40;
-
-        var tipX = Math.Clamp(_mousePos.X + 12, 6, Math.Max(6, Bounds.Width - tipW - 8));
-        var tipY = _mousePos.Y + 16 + tipH > Bounds.Height ? Math.Max(6, _mousePos.Y - tipH - 8) : _mousePos.Y + 16;
-        var tipRect = new Rect(tipX, tipY, tipW, tipH);
-
-        // 浮层沿用卡片底色与发丝边框，不写死暗色值，亮色皮肤下同样可读。
-        var bgBrush = CardBackgroundBrush ?? new SolidColorBrush(Color.FromRgb(44, 44, 44));
-        var strokeColor = MutedBrush is ISolidColorBrush solid ? solid.Color : Color.FromRgb(148, 163, 184);
-        var strokePen = new Pen(new SolidColorBrush(Color.FromArgb(70, strokeColor.R, strokeColor.G, strokeColor.B)), 1);
-        context.DrawRectangle(bgBrush, strokePen, tipRect, 8, 8);
-
-        context.DrawText(formattedTitle, new Point(tipX + 10, tipY + 6));
-        context.DrawText(formattedInfo, new Point(tipX + 10, tipY + 22));
-    }
 
     private static void SplitRect(Rect bounds, List<(object Data, double Weight)> items, Action<object, Rect> emit)
     {

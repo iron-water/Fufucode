@@ -1,0 +1,61 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:infra="using:Fufucode.App.Infrastructure">
+  <!-- 正文始终止于滚动槽左侧；只在滚动/操作时显出滑块，不绘制轨道。 -->
+  <Style Selector="Window.fluentWorkbench ScrollViewer /template/ ScrollContentPresenter#PART_ContentPresenter">
+    <Setter Property="Grid.ColumnSpan" Value="1"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench ScrollBar:vertical">
+    <Setter Property="MinWidth" Value="14"/>
+    <Setter Property="Width" Value="14"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="infra:ScrollActivity.Enabled" Value="True"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Grid Background="Transparent">
+          <Track Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}"
+                 Value="{TemplateBinding Value, Mode=TwoWay}"
+                 ViewportSize="{TemplateBinding ViewportSize}"
+                 Orientation="Vertical" IsDirectionReversed="True"
+                 DeferThumbDrag="{TemplateBinding ScrollViewer.IsDeferredScrollingEnabled}">
+            <Track.DecreaseButton>
+              <RepeatButton Name="PART_PageUpButton" Focusable="False"
+                            AutomationProperties.Name="向上翻页" Background="Transparent">
+                <RepeatButton.Template><ControlTemplate><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+              </RepeatButton>
+            </Track.DecreaseButton>
+            <Track.IncreaseButton>
+              <RepeatButton Name="PART_PageDownButton" Focusable="False"
+                            AutomationProperties.Name="向下翻页" Background="Transparent">
+                <RepeatButton.Template><ControlTemplate><Border Background="Transparent"/></ControlTemplate></RepeatButton.Template>
+              </RepeatButton>
+            </Track.IncreaseButton>
+            <Thumb Name="SlimScrollThumb" Width="14" MinHeight="28"
+                   RenderTransform="none" AutomationProperties.Name="滚动位置">
+              <Thumb.Template>
+                <ControlTemplate>
+                  <Border Background="Transparent">
+                    <Border Name="SlimScrollThumbPaint" Width="4" Margin="0,2"
+                            HorizontalAlignment="Center" CornerRadius="2"
+                            Background="{DynamicResource AppTextSecondary}"/>
+                  </Border>
+                </ControlTemplate>
+              </Thumb.Template>
+            </Thumb>
+          </Track>
+        </Grid>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Window.fluentWorkbench ScrollBar:vertical /template/ Thumb#SlimScrollThumb /template/ Border#SlimScrollThumbPaint">
+    <Setter Property="Opacity" Value="0.55"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench ScrollBar:vertical:pointerover /template/ Thumb#SlimScrollThumb /template/ Border#SlimScrollThumbPaint">
+    <Setter Property="Opacity" Value="0.8"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench ScrollBar:vertical /template/ Thumb#SlimScrollThumb:pressed /template/ Border#SlimScrollThumbPaint">
+    <Setter Property="Opacity" Value="1"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench ScrollBar:vertical:disabled /template/ Thumb#SlimScrollThumb /template/ Border#SlimScrollThumbPaint">
+    <Setter Property="Opacity" Value="0.25"/>
+  </Style>
+</Styles>

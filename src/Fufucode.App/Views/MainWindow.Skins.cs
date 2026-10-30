@@ -24,6 +24,7 @@ public partial class MainWindow
     private void ApplyWindowSkin(Window target, WorkbenchAppearance appearance)
     {
         var resolution = appearance.SkinResolution;
+        target.Classes.Set("fluentWorkbench", resolution.Skin == SkinId.Fluent);
         // strip 注入键=让皮肤令牌字典的固定色赢（Metro/M3/Aero/Luna 锁色皮肤需要）。
         // FollowsSystemAccent 皮肤（LiquidGlass）：保留本地注入键——本地 Resources 直接条目
         // 优先于 merged 字典，用户/系统 accent 继续生效，皮肤令牌只贡献中性色与形状。

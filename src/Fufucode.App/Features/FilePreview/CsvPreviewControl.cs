@@ -79,7 +79,7 @@ public sealed class CsvPreviewControl : UserControl
                     TextTrimming = TextTrimming.CharacterEllipsis,
                     FontWeight = header ? FontWeight.Bold : FontWeight.Normal,
                 };
-                ToolTip.SetTip(block, new TextBlock { Text = value, TextWrapping = TextWrapping.Wrap, MaxWidth = 640 });
+                Avalonia.Automation.AutomationProperties.SetHelpText(block, value);
                 Grid.SetColumn(block, column);
                 grid.Children.Add(block);
             }

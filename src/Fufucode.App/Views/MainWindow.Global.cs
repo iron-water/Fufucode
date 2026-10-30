@@ -94,7 +94,7 @@ public partial class MainWindow
             () => _terminalPage?.HasRunningTab == true ? null : "没有运行中的终端");
         Register("terminal.new", "新建终端", "终端", "", "在当前项目新增独立终端", () => { _terminalPage?.CreateTerminal(); return Task.CompletedTask; },
             () => _terminalPage is null ? "未安装或未启用交互终端插件" : null);
-        Register("notifications", "通知中心", "全局", "", "完成、失败与待审批归属", () => { OpenNotificationCenterOverlay(); return Task.CompletedTask; });
+        Register("notifications", "通知中心", "全局", "", "显示或关闭通知页", () => { ToggleNotificationCenter(); return Task.CompletedTask; });
         Register("browser", "浏览器", "工作区", "", "内置浏览器", () => { OpenDockPage("browser", DockZone.Right); return Task.CompletedTask; },
             () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         Register("library", "资料库", "工作区", "", "导入、检索与引用本地资料", () => { OpenDockPage("library", DockZone.Right); return Task.CompletedTask; },
@@ -168,11 +168,26 @@ public partial class MainWindow
         await vm.WorkspacePanel.RefreshAsync();
     }
 
+    private void ToggleNotificationCenter()
+    {
+        var visible = _dockLayout.FindFloating("notifications") is { Hidden: false, Selected: "notifications" } ||
+            (_dockLayout.Find("notifications") is { } zone && !_dockLayout.Hidden[zone] &&
+             _dockLayout.Selected[zone] == "notifications" && _vm?.IsSettingsPage != true);
+        if (visible)
+        {
+            _animateNextLayout = true;
+            CloseDockPage("notifications");
+        }
+        else OpenNotificationCenterOverlay();
+    }
+
     /// <summary>打开同一通知功能页；已有浮动位置和通知历史保留。</summary>
     internal void OpenNotificationCenterOverlay()
     {
+        _animateNextLayout = true;
         OpenDockPage("notifications", DockZone.Right);
         _notifications.Open();
+        Views.SurfaceMotion.Show(_notificationsView, offsetY: 5);
         _notificationsView.Focus();
     }
 
@@ -183,6 +198,7 @@ public partial class MainWindow
         _overlayKind = kind;
         GlobalOverlayHost.Content = kind == "commands" ? _paletteView : _notificationsView;
         GlobalOverlay.IsVisible = true;
+        Views.SurfaceMotion.Show(GlobalOverlayHost, offsetY: -6, scale: true);
         SetBrowserOcclusion(true);
         ResizeGlobalOverlay();
         if (kind != "commands") Dispatcher.UIThread.Post(() => GlobalOverlayHost.Focus());
@@ -198,8 +214,14 @@ public partial class MainWindow
     {
         if (expected is not null && expected != _overlayKind) return;
         _palette.IsOpen = false;
-        _overlayKind = null; GlobalOverlay.IsVisible = false; GlobalOverlayHost.Content = null;
-        SetBrowserOcclusion(false);
+        _overlayKind = null;
+        Views.SurfaceMotion.Hide(GlobalOverlayHost, () =>
+        {
+            if (_overlayKind is not null) return;
+            GlobalOverlay.IsVisible = false;
+            GlobalOverlayHost.Content = null;
+            SetBrowserOcclusion(false);
+        });
         RestoreFocus(_overlayReturnFocus);
         _overlayReturnFocus = null;
     }
@@ -207,7 +229,7 @@ public partial class MainWindow
     private void GlobalScrim_Click(object? sender, RoutedEventArgs e) => CloseGlobalOverlay();
     private void OnNotificationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        ToolTip.SetTip(CaptionNotifications, _notifications.SummaryText);
+        Avalonia.Automation.AutomationProperties.SetHelpText(CaptionNotifications, _notifications.SummaryText);
         NotificationPrompt.DataContext = _notifications.LatestPrompt;
         // 浮层只在用户选择该渠道时出现；关掉浮层渠道后浮窗仍按原策略提醒。
         if (_notificationDelivery is not null) RefreshNotificationChannel();

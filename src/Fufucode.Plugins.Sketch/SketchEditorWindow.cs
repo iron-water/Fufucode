@@ -225,7 +225,7 @@ public sealed class SketchEditorWindow : Window
             Background = Brushes.Transparent,
             Foreground = new SolidColorBrush(Color.Parse("#BDBDBD")),
         };
-        ToolTip.SetTip(button, tooltip);
+        Avalonia.Automation.AutomationProperties.SetHelpText(button, tooltip);
         return button;
     }
 }

@@ -141,7 +141,7 @@ public partial class AutomationControlPageView : UserControl
     {
         var button = new Button { Content = new TextBlock { Text = text, TextTrimming = TextTrimming.CharacterEllipsis },
             HorizontalAlignment = HorizontalAlignment.Stretch, Height = height, Tag = id };
-        button.Classes.Add("subtle"); AutomationProperties.SetAutomationId(button, id); ToolTip.SetTip(button, id);
+        button.Classes.Add("subtle"); AutomationProperties.SetAutomationId(button, id); Avalonia.Automation.AutomationProperties.SetHelpText(button, id);
         button.Click += (_, _) => select(); return button;
     }
 }

@@ -238,7 +238,7 @@ public sealed partial class LayerFsPage : UserControl, IDisposable
         secondary.Classes.Add("caption");
         var content = new StackPanel { Spacing = 2, Children = { primary, secondary } };
         var row = new ListBoxItem { Content = content, Tag = key };
-        ToolTip.SetTip(row, key);
+        Avalonia.Automation.AutomationProperties.SetHelpText(row, key);
         return row;
     }
     public void SetProject(string? path) { if (!_busy && !_disposed) Source.Text = path ?? ""; }

@@ -428,15 +428,8 @@ public partial class ChatPage : UserControl
         }
     }
 
-    private void OnTimelineScrollBar(object? sender, Avalonia.Controls.Primitives.ScrollEventArgs e)
-    {
-        MarkUserScrollInput();
-        TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X, e.NewValue);
-    }
-
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        TimelineScrollBar.Value = TimelineScroller.Offset.Y;
         if (_programmaticScroll ||
             Stopwatch.GetTimestamp() < _programmaticUntilTicks ||
             Stopwatch.GetTimestamp() - _lastUserInputTicks < Stopwatch.Frequency * 0.15 ||

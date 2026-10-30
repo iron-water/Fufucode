@@ -27,7 +27,7 @@ public sealed class ArtifactLinksView : UserControl
         foreach (var path in (_message?.ArtifactSummary ?? "").Split('\n', StringSplitOptions.RemoveEmptyEntries))
         {
             var button = new Button { Content = path, HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left, FontSize = 12 };
-            button.Classes.Add("subtle"); ToolTip.SetTip(button, path);
+            button.Classes.Add("subtle"); Avalonia.Automation.AutomationProperties.SetHelpText(button, path);
             button.Click += (_, _) =>
             {
                 try { if (TopLevel.GetTopLevel(this) is MainWindow window) window.PreviewArtifact(path); }

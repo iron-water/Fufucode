@@ -33,7 +33,7 @@
             <!-- 统一字阶：会话标题 15 归入 16。 -->
             <TextBlock x:Name="ConversationTitle" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                        Text="{Binding Sidebar.SelectedSession.Title, FallbackValue='会话'}"
-                       ToolTip.Tip="{Binding Sidebar.SelectedSession.Title}" IsVisible="{Binding !Sidebar.IsRenaming}"/>
+                       IsVisible="{Binding !Sidebar.IsRenaming}"/>
             <!-- 图标已表达重命名动作，去掉重复提示，名称保留给无障碍读取。 -->
             <Button Grid.Column="1" Classes="iconButton" Command="{Binding Sidebar.BeginRenameCommand}"
                     IsVisible="{Binding Sidebar.IsReal}" AutomationProperties.Name="重命名会话">
@@ -43,15 +43,14 @@
                      Text="{Binding Sidebar.RenameDraft}" IsVisible="{Binding Sidebar.IsRenaming}" KeyDown="RenameBox_KeyDown"/>
           </Grid>
           <Grid Grid.Row="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-            <TextBlock Classes="caption" Text="{Binding Sidebar.ProjectName}" IsVisible="{Binding Sidebar.HasProject}"
-                       ToolTip.Tip="{Binding Sidebar.ProjectText}"/>
+            <TextBlock Classes="caption" Text="{Binding Sidebar.ProjectName}" IsVisible="{Binding Sidebar.HasProject}"/>
             <TextBlock Grid.Column="1" Classes="caption" Text="{Binding StatusBar.ActivityText}"/>
           </Grid>
         </Grid>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- 会话后端由顶栏会话岛展示（图标 + 名称），这里不再重复徽标。 -->
           <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" AutomationProperties.Name="会话操作"><PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click" ToolTip.Tip="查找本会话"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
+          <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click"><PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15"/></Button>
           <Button x:Name="SessionDetailsButton" Classes="iconButton" Width="32" Height="32"
                   AutomationProperties.Name="会话详情">
             <PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16"/>
@@ -377,8 +376,7 @@
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
                       <DataTemplate DataType="vm:MessageLinkViewModel" x:DataType="vm:MessageLinkViewModel">
-                        <Button Classes="referenceChip" Click="OnOpenMessageLink" Margin="0,0,6,6"
-                                ToolTip.Tip="{Binding Url}">
+                        <Button Classes="referenceChip" Click="OnOpenMessageLink" Margin="0,0,6,6">
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <PathIcon Data="{DynamicResource Icon.Globe}" Width="12" Height="12"
                                       VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
@@ -396,8 +394,7 @@
                           AutomationProperties.AutomationId="MSG-RELATED-FILES-CARD">
                     <StackPanel>
                       <Button Classes="changeFileRow" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Stretch" Padding="12,8"
-                              ToolTip.Tip="消息中提到的文件路径；不代表模型已经读取">
+                              HorizontalContentAlignment="Stretch" Padding="12,8">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                           <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="13" Height="13"
                                     VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
@@ -421,7 +418,7 @@
                               <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
                                 <Button Classes="changeFileRow" Click="OnOpenMessageFile" IsEnabled="{Binding Exists}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                        Padding="12,5" ToolTip.Tip="{Binding Path}">
+                                        Padding="12,5">
                                   <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
                                     <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="12" Height="12"
                                               VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
@@ -463,14 +460,14 @@
                           <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Classes="metaName" Text="{Binding ChangeCard.HeaderText}"/>
                             <Button Classes="subtle" Padding="0,1" HorizontalAlignment="Left"
-                                    Click="OnViewChanges" ToolTip.Tip="在工作区打开变更面板">
+                                    Click="OnViewChanges">
                               <TextBlock Classes="meta" Text="查看变更 ↗"/>
                             </Button>
                           </StackPanel>
                           <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
                                       VerticalAlignment="Center">
                             <Button Classes="subtle" Content="撤销 ↶" Click="OnUndoChanges"
-                                    IsVisible="{Binding ChangeCard.CanUndo}" ToolTip.Tip="恢复本轮改动前的文件内容"/>
+                                    IsVisible="{Binding ChangeCard.CanUndo}"/>
                             <Button Classes="subtle" Content="查看变更" Click="OnViewChanges"/>
                           </StackPanel>
                         </Grid>
@@ -620,13 +617,6 @@
         </Border>
       </Grid>
 
-      <ScrollBar x:Name="TimelineScrollBar" Grid.Row="0" Grid.Column="1"
-                 Width="14" HorizontalAlignment="Right" Margin="0,0,-20,0"
-                 Orientation="Vertical" Minimum="0"
-                 Maximum="{Binding #TimelineScroller.ScrollBarMaximum.Y}"
-                 ViewportSize="{Binding #TimelineScroller.Viewport.Height}"
-                 Scroll="OnTimelineScrollBar"/>
-
       <!-- 沉浸式：输入区收起后只留一个小的向上按钮，点击恢复输入区。 -->
       <Button x:Name="ComposerRevealButton" Grid.Row="0" Grid.Column="1" ZIndex="11" Classes="iconButton composerReveal"
               Width="30" Height="30" VerticalAlignment="Bottom" HorizontalAlignment="Center"
@@ -637,7 +627,7 @@
       </Button>
 
       <!-- 输入卡直接叠放在聊天上方，四周没有单独的底栏或填充容器。 -->
-      <Border x:Name="ComposerCard" Grid.Column="1" ZIndex="10" Classes="composerCard"
+      <views:ComposerFocusBorder x:Name="ComposerCard" Grid.Column="1" ZIndex="10" Classes="composerCard"
               Margin="0,0,0,16" VerticalAlignment="Bottom" HorizontalAlignment="Stretch">
         <StackPanel>
           <!-- 会话上下文（项目切换）在底部工具行，与模型/思考/权限同排；
@@ -677,14 +667,12 @@
                         <!-- 界面仍持有的项才能改写/删除；后端队列里的项按钮禁用并给出受阻原因。 -->
                         <Button Grid.Column="2" Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
                                 Content="编辑" VerticalAlignment="Center"
-                                IsEnabled="{Binding CanEdit}"
-                                ToolTip.Tip="{Binding BlockedReason}"
+                                IsEnabled="{Binding CanEdit}" AutomationProperties.HelpText="{Binding BlockedReason}"
                                 Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.EditQueuedCommand}"
                                 CommandParameter="{Binding}"/>
                         <Button Grid.Column="3" Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
                                 Content="删除" VerticalAlignment="Center"
-                                IsEnabled="{Binding CanDelete}"
-                                ToolTip.Tip="{Binding BlockedReason}"
+                                IsEnabled="{Binding CanDelete}" AutomationProperties.HelpText="{Binding BlockedReason}"
                                 Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.DeleteQueuedCommand}"
                                 CommandParameter="{Binding}"/>
                       </Grid>
@@ -712,7 +700,7 @@
 
           <Grid ColumnDefinitions="*,Auto" IsVisible="{Binding Input.HasReferenceContext}" Margin="0,0,0,5">
             <Border Classes="turnSummary" Margin="0" Padding="10,2,0,2" BorderBrush="{DynamicResource AppAccent}">
-              <TextBlock Text="{Binding Input.ReferenceContext}" Classes="caption" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap" ToolTip.Tip="{Binding Input.ReferenceContext}"/>
+              <TextBlock Text="{Binding Input.ReferenceContext}" Classes="caption" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap"/>
             </Border>
             <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" AutomationProperties.Name="移除引用"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/></Button>
           </Grid>
@@ -731,8 +719,7 @@
           <Grid x:Name="ComposerToolbar" Margin="0,10,0,0" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
             <Button x:Name="ComposerMoreButton" Classes="iconButton" AutomationProperties.Name="附加功能"><PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/></Button>
             <Button x:Name="CommandFlyoutButton" Grid.Column="1" Classes="iconButton" VerticalAlignment="Center" IsVisible="False"
-                    IsEnabled="{Binding Extensions.CanUseCommands}"
-                    ToolTip.Tip="{Binding Extensions.CommandButtonToolTip}">
+                    IsEnabled="{Binding Extensions.CanUseCommands}">
               <PathIcon Data="{DynamicResource Icon.AppsList}" Width="14" Height="14"/>
               <Button.Flyout>
                 <Flyout Placement="TopEdgeAlignedLeft">
@@ -771,7 +758,7 @@
                 </Flyout>
               </Button.Flyout>
             </Button>
-            <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="添加文件、图片、PDF 或链接"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
+            <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton"><PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/></Button>
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
             <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="4"
                         VerticalAlignment="Center" IsVisible="False">
@@ -911,7 +898,7 @@
             </StackPanel>
           </Grid>
         </StackPanel>
-      </Border>
+      </views:ComposerFocusBorder>
       </Grid>
     </Grid>
   </Grid>

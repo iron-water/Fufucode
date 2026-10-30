@@ -104,7 +104,7 @@
                           <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                             <TextBlock Classes="caption" Text="{Binding TimeText}" VerticalAlignment="Center"/>
                             <Button Classes="iconButton toolButton" Width="22" Height="22" Click="Dismiss_Click"
-                                    ToolTip.Tip="移除这条通知" AutomationProperties.Name="移除这条通知">
+                                    AutomationProperties.HelpText="移除这条通知" AutomationProperties.Name="移除这条通知">
                               <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="9" Height="9"/>
                             </Button>
                           </StackPanel>
@@ -161,7 +161,7 @@
           </StackPanel>
         </ScrollViewer>
       </Grid>
-      <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
+      <Border Grid.Row="3" Padding="16,12">
         <StackPanel Spacing="8">
           <TextBlock Classes="caption" Text="{Binding DroppedNoticeText}" IsVisible="{Binding HasDroppedNotices}" TextWrapping="Wrap"/>
           <TextBlock Classes="caption" Text="提示位置可在设置中分别开关。关闭页签保留通知记录。" TextWrapping="Wrap"/>

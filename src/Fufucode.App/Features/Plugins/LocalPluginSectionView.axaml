@@ -108,7 +108,7 @@
     <!-- 生命周期动作 -->
     <WrapPanel x:Name="LifecycleActions" Grid.Row="3" Orientation="Horizontal">
       <Button Classes="subtle" Content="{Binding ApplyButtonText}" Command="{Binding ApplyCommand}"
-              ToolTip.Tip="真实Pi空闲时安全重启，保留会话和草稿；仅运行你信任的本地插件。"
+              AutomationProperties.HelpText="真实Pi空闲时安全重启，保留会话和草稿；仅运行你信任的本地插件。"
               IsEnabled="{Binding CanApply}" Margin="0,0,8,4"
               AutomationProperties.Name="应用所选版本"/>
       <Button Classes="subtle" Content="回退到上一版本" Command="{Binding RollbackCommand}"
@@ -130,7 +130,7 @@
       <Button x:Name="InspectInFlightButton" Classes="subtle" HorizontalAlignment="Left" Content="只读核对未结束请求" Command="{Binding InspectInFlightCommand}"/>
       <TextBox x:Name="InFlightObservation" IsReadOnly="True" Text="{Binding InFlightObservationText}" TextWrapping="Wrap" AutomationProperties.Name="未结束请求只读核对结果"/>
       <CheckBox x:Name="ConfirmRegistrationEnd" IsChecked="{Binding ConfirmRegistrationEnd}" Content="仅结束已返回登记，保留文件与原回执"/>
-      <Button x:Name="ReconcileInFlightButton" Classes="subtle" HorizontalAlignment="Left" Content="结束已返回请求登记" Command="{Binding ReconcileInFlightCommand}" ToolTip.Tip="先核对原请求。仅同会话空闲、原调用已结束且候选未加载时可用；不删除文件、不重发、不认证外部任务终止。"/>
+      <Button x:Name="ReconcileInFlightButton" Classes="subtle" HorizontalAlignment="Left" Content="结束已返回请求登记" Command="{Binding ReconcileInFlightCommand}" AutomationProperties.HelpText="先核对原请求。仅同会话空闲、原调用已结束且候选未加载时可用；不删除文件、不重发、不认证外部任务终止。"/>
       <ListBox x:Name="InFlightRequestList" MaxHeight="120" ItemsSource="{Binding InFlightRequests}" SelectedItem="{Binding SelectedInFlight}" AutomationProperties.Name="未结束请求列表">
         <ListBox.ItemTemplate><DataTemplate x:DataType="features:PluginInFlightRow"><TextBlock Text="{Binding Caption}" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
       </ListBox>

@@ -77,7 +77,7 @@ public sealed class ImageLightboxWindow : Window
                 Margin = new Thickness(3),
                 Padding = new Thickness(10, 5),
             };
-            ToolTip.SetTip(button, tip);
+            Avalonia.Automation.AutomationProperties.SetHelpText(button, tip);
             button.Click += (_, _) => action();
             toolbar.Children.Add(button);
             return button;
@@ -97,7 +97,7 @@ public sealed class ImageLightboxWindow : Window
         _copy.IsEnabled = Canvas.Source is Bitmap;
         _openExternal.IsEnabled = CanOpenExternal;
         if (!CanOpenExternal)
-            ToolTip.SetTip(_openExternal, string.IsNullOrWhiteSpace(filePath) ? "图片没有本地文件路径。" : "原文件不存在。");
+            Avalonia.Automation.AutomationProperties.SetHelpText(_openExternal, string.IsNullOrWhiteSpace(filePath) ? "图片没有本地文件路径。" : "原文件不存在。");
 
         _status = new TextBlock
         {

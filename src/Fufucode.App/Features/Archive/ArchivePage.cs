@@ -114,7 +114,7 @@ public sealed class ArchivePage : UserControl
             Text = detail, Classes = { "caption" },
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        ToolTip.SetTip(projectDetail, entry.Folder);
+        Avalonia.Automation.AutomationProperties.SetHelpText(projectDetail, entry.Folder);
         text.Children.Add(projectDetail);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
@@ -147,7 +147,7 @@ public sealed class ArchivePage : UserControl
             Text = detail, Classes = { "caption" },
             TextTrimming = TextTrimming.CharacterEllipsis,
         };
-        ToolTip.SetTip(projectDetail, entry.ProjectPath);
+        Avalonia.Automation.AutomationProperties.SetHelpText(projectDetail, entry.ProjectPath);
         text.Children.Add(projectDetail);
 
         var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };

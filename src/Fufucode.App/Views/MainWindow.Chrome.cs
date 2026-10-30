@@ -18,7 +18,7 @@ public partial class MainWindow
             if (change.Property == WindowStateProperty)
             {
                 CaptionMaximize.Kind = WindowState == WindowState.Maximized ? "restore" : "maximize";
-                ToolTip.SetTip(CaptionMaximize, WindowState == WindowState.Maximized ? "还原" : "最大化");
+                Avalonia.Automation.AutomationProperties.SetHelpText(CaptionMaximize, WindowState == WindowState.Maximized ? "还原" : "最大化");
             }
         };
     }

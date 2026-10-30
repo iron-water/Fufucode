@@ -155,7 +155,8 @@ public partial class MainWindow
             if (palette.TryGetResource(key, ActualThemeVariant, out var color)) Resources[key] = color;
         Color AccentColor(string key) => Resources[key] is Color color ? color : accent;
         var darkTheme = ActualThemeVariant == ThemeVariant.Dark;
-        var fill = darkTheme ? AccentColor("SystemAccentColorLight2") : accent;
+        // 交互线和主色填充使用原始主题色，深色模式也不混白变成另一种颜色。
+        var fill = accent;
         var textFill = AccentColor(darkTheme ? "SystemAccentColorLight3" : "SystemAccentColorDark2");
         // 深色主题下强调色文字（链接、选中项）实际观感偏暗；向白色提亮一档，保持可读性。
         if (darkTheme) textFill = Blend(textFill, Colors.White, 0.18);
@@ -191,7 +192,7 @@ public partial class MainWindow
         foreach (var buttonClass in new[] { "iconButton", "subtle", "accent", "dockTab" })
             Add(s => s.OfType<Button>().Class(buttonClass), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         // Fluent 页签的选中态是左上直角描边，圆角会把描边拐成弧线；只对这一类按钮压回直角。
-        Add(s => s.OfType<Button>().Class("accentStroke"), TemplatedControl.CornerRadiusProperty, new CornerRadius(0));
+        Add(s => s.OfType<Button>().Class("fluentDockTab"), TemplatedControl.CornerRadiusProperty, new CornerRadius(0));
         Add(s => s.OfType<TextBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<ComboBox>(), TemplatedControl.CornerRadiusProperty, new CornerRadius(settings.Corner));
         Add(s => s.OfType<Border>().Class("userBubble"), Border.CornerRadiusProperty, new CornerRadius(settings.Corner));
@@ -226,7 +227,7 @@ public partial class MainWindow
         CustomTopLeft.Children.Clear(); CustomTopRight.Children.Clear(); CustomStatusLeft.Children.Clear(); CustomStatusRight.Children.Clear(); CustomTopCenter.Children.Clear();
         _statusLabels.Clear();
         var menus = new Dictionary<UiActionPosition, MenuFlyout>
-        { [UiActionPosition.MenuLeft] = new(), [UiActionPosition.MenuRight] = new(), [UiActionPosition.HeaderMenu] = new() };
+        { [UiActionPosition.MenuLeft] = new Views.AnimatedMenuFlyout(), [UiActionPosition.MenuRight] = new Views.AnimatedMenuFlyout(), [UiActionPosition.HeaderMenu] = new() };
         // 菜单二级分组：父项（如"复制"）在列表里出现一次，组内动作挂到它的子菜单。
         var subMenus = new Dictionary<string, MenuItem>(StringComparer.Ordinal);
         foreach (var action in _actions.Actions
@@ -249,7 +250,7 @@ public partial class MainWindow
                 // 菜单项本身已显示标题；说明与标题相同（绝大多数动作）时不挂悬浮提示，否则只是把同一句话再弹一遍。
                 if (!string.IsNullOrWhiteSpace(action.Description) &&
                     !string.Equals(action.Description, action.Title, StringComparison.Ordinal))
-                    ToolTip.SetTip(item, action.Description);
+                    Avalonia.Automation.AutomationProperties.SetHelpText(item, action.Description);
                 var group = WorkbenchActionDefaults.SubMenu(action.Id);
                 if (group is null) { menu.Items.Add(item); continue; }
                 var key = effective + "/" + group;
@@ -291,7 +292,7 @@ public partial class MainWindow
                 label.Classes.Add("meta");
                 if (!_statusLabels.TryGetValue(action.Id, out var labels)) _statusLabels.Add(action.Id, labels = new());
                 labels.Add(label);
-                ToolTip.SetTip(label, action.Id switch
+                Avalonia.Automation.AutomationProperties.SetHelpText(label, action.Id switch
                 {
                     "status.connection" => "当前会话与后端的连接状态",
                     "status.activity" => "当前会话的执行状态",

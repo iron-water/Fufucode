@@ -16,12 +16,12 @@
     <Grid Grid.Row="0" Margin="16,10,16,10">
       <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
         <Button x:Name="SettingsBackButton" Grid.Column="0" Classes="iconButton toolButton"
-                Command="{Binding BackOrReturnCommand}" ToolTip.Tip="{Binding BackToolTip}" AutomationProperties.Name="返回">
+                Command="{Binding BackOrReturnCommand}" AutomationProperties.HelpText="{Binding BackToolTip}" AutomationProperties.Name="返回">
           <PathIcon Data="{DynamicResource Icon.ArrowLeft}" Width="16" Height="16"/>
         </Button>
         <TextBlock Grid.Column="1" Classes="settingsPageTitle" Text="设置" Margin="4,0,0,0"/>
         <TextBlock Grid.Column="3" Classes="meta" Text="{Binding SearchSummary}" VerticalAlignment="Center" MaxWidth="200"
-                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding SearchSummary}"/>
+                   TextTrimming="CharacterEllipsis" AutomationProperties.HelpText="{Binding SearchSummary}"/>
       </Grid>
     </Grid>
 
@@ -37,7 +37,8 @@
                         Foreground="{DynamicResource AppTextSecondary}"/>
             </TextBox.InnerLeftContent>
           </TextBox>
-          <ListBox x:Name="SettingsCategoryList" Grid.Row="1" Classes="settingsNav"
+          <Grid x:Name="SettingsNavigationTrack" Grid.Row="1" ClipToBounds="True">
+          <ListBox x:Name="SettingsCategoryList" Classes="settingsNav"
                ItemsSource="{Binding FilteredCategories}">
         <ListBox.ItemTemplate>
           <DataTemplate x:DataType="vm:SettingsCategoryViewModel">
@@ -46,8 +47,6 @@
                  渐变。accent 叠加不占列。外包 StackPanel 会让内容塌成 20px。 -->
             <Grid>
               <Border Classes="navFill"/>
-              <Border Classes="navAccent"
-                      VerticalAlignment="Center" HorizontalAlignment="Left"/>
               <Grid ColumnDefinitions="Auto,*" ColumnSpacing="14" Margin="12,0,8,0">
                 <views:SemanticIcon Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center"
                           IconName="{Binding Icon}" CategoryColor="{Binding IconColor}"/>
@@ -58,6 +57,10 @@
           </DataTemplate>
         </ListBox.ItemTemplate>
       </ListBox>
+          <Border x:Name="SettingsNavigationMarker"
+                  Width="3" Height="20" CornerRadius="{DynamicResource ControlCornerRadius}" Background="{DynamicResource AppAccent}"
+                  HorizontalAlignment="Left" VerticalAlignment="Top" IsVisible="False" IsHitTestVisible="False"/>
+          </Grid>
         </Grid>
       </Border>
       <ListBox x:Name="CompactSettingsCategories" Grid.Column="0" Grid.Row="0" Classes="settingsNav compactBar" IsVisible="False"
@@ -187,7 +190,7 @@
                   <ComboBox HorizontalAlignment="Stretch" MinWidth="220"
                             ItemsSource="{Binding BackendEngineChoices}"
                             SelectedIndex="{Binding SelectedBackendIndex}"
-                            ToolTip.Tip="新建会话使用的默认核心。已有会话保持创建时的后端。"/>
+                            AutomationProperties.HelpText="新建会话使用的默认核心。已有会话保持创建时的后端。"/>
                 </StackPanel>
               </Border>
               <ItemsControl ItemsSource="{Binding MarketplaceGroupPlugins}">
@@ -341,7 +344,7 @@
                                   ItemsSource="{Binding ModelChoices}"
                                   SelectedItem="{Binding SelectedModel}"
                                   PlaceholderText="选择模型"
-                                  ToolTip.Tip="空闲时对当前会话立即生效；回合进行中仅保存给新建会话">
+                                  AutomationProperties.HelpText="空闲时对当前会话立即生效；回合进行中仅保存给新建会话">
                           <ComboBox.ItemTemplate>
                             <DataTemplate x:DataType="{x:Type vm:SettingsPageViewModel+ModelChoice}">
                               <TextBlock Text="{Binding Label}"/>
@@ -376,7 +379,7 @@
                                 IsEnabled="{Binding CanChangeModel}"
                                 ItemsSource="{Binding ThinkingChoices}"
                                 SelectedItem="{Binding SelectedThinking}"
-                                ToolTip.Tip="空闲时对当前会话立即生效；回合进行中仅保存给新建会话">
+                                AutomationProperties.HelpText="空闲时对当前会话立即生效；回合进行中仅保存给新建会话">
                         <ComboBox.Styles><Style Selector="ComboBoxItem" x:DataType="vm:SettingsPageViewModel+ThinkingChoice"><Setter Property="IsEnabled" Value="{Binding IsSupported}"/></Style></ComboBox.Styles>
                         <ComboBox.ItemTemplate>
                           <DataTemplate x:DataType="{x:Type vm:SettingsPageViewModel+ThinkingChoice}">
@@ -554,7 +557,7 @@
                     <Button Classes="subtle" Content="刷新" Padding="8,1" MinHeight="22"
                             Command="{Binding LoadEndpointModelsCommand}"
                             IsEnabled="{Binding !IsLoadingEndpointModels}"
-                            ToolTip.Tip="从该提供商的 /models 拉取"/>
+                            AutomationProperties.HelpText="从该提供商的 /models 拉取"/>
                     <Button Classes="subtle" Content="全选" Padding="8,1" MinHeight="22"
                             Command="{Binding SelectAllEndpointModelsCommand}"
                             IsEnabled="{Binding HasAvailableEndpointModels}"/>
@@ -573,7 +576,7 @@
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="vm:EndpointModelOption">
                             <CheckBox Content="{Binding DisplayName}" IsChecked="{Binding IsSelected}"
-                                      ToolTip.Tip="{Binding Id}" Margin="10,1"/>
+                                      AutomationProperties.HelpText="{Binding Id}" Margin="10,1"/>
                           </DataTemplate>
                         </ItemsControl.ItemTemplate>
                       </ItemsControl>
@@ -642,7 +645,7 @@
                       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <Button Classes="subtle" Content="移除端点" Padding="10,2" MinHeight="28"
                                 Command="{Binding RemoveEndpointCommand}" IsVisible="{Binding HasEndpoint}"
-                                ToolTip.Tip="移除后 models.json 中的 provider 随下次启动清理；凭据管理器中的密钥不删除（无删除接口），可手动清理"/>
+                                AutomationProperties.HelpText="移除后 models.json 中的 provider 随下次启动清理；凭据管理器中的密钥不删除（无删除接口），可手动清理"/>
                         <Button Classes="subtle" Content="配置…" Padding="10,2" MinHeight="28" Command="{Binding ToggleEndpointFormCommand}"/>
                       </StackPanel>
                     </Grid>
@@ -676,7 +679,7 @@
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <TextBlock Classes="meta" Text="{Binding KeyText}"/>
                             <Border Classes="badge attention" Padding="6,0" MinHeight="16" IsVisible="{Binding KeyIsCaution}"
-                                    ToolTip.Tip="建议改用环境变量引用（$VAR），不要把密钥写进文件">
+                                    AutomationProperties.HelpText="建议改用环境变量引用（$VAR），不要把密钥写进文件">
                               <TextBlock Classes="caption" Text="建议改用环境变量引用"/>
                             </Border>
                           </StackPanel>
@@ -822,7 +825,7 @@
                         <StackPanel VerticalAlignment="Center" Spacing="2">
                           <TextBlock Classes="settingsRowTitle" Text="Fufucode"/>
                           <TextBlock Classes="settingsRowDesc"
-                                     Text="{Binding AppVersion, StringFormat='版本 {0}'}" ToolTip.Tip="{Binding AppVersionTooltip}"/>
+                                     Text="{Binding AppVersion, StringFormat='版本 {0}'}" AutomationProperties.HelpText="{Binding AppVersionTooltip}"/>
                         </StackPanel>
                       </StackPanel>
                       <ItemsControl ItemsSource="{Binding VersionRows}">
@@ -841,7 +844,7 @@
                     <StackPanel Spacing="6" x:Name="AboutPaths">
                       <Grid Classes="settingsPathRow" ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Classes="meta" Text="数据目录" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding DataRootText}" ToolTip.Tip="{Binding DataRootText}"
+                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding DataRootText}" AutomationProperties.HelpText="{Binding DataRootText}"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                         <Button Grid.Column="2" Classes="subtle" Content="打开" Padding="8,2" MinHeight="24"
                                 Command="{Binding OpenFolderCommand}" CommandParameter="{Binding DataRootText}"
@@ -849,7 +852,7 @@
                       </Grid>
                       <Grid Classes="settingsPathRow" ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Classes="meta" Text="代理配置目录" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding AgentDirectoryText}" ToolTip.Tip="{Binding AgentDirectoryText}"
+                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding AgentDirectoryText}" AutomationProperties.HelpText="{Binding AgentDirectoryText}"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                         <Button Grid.Column="2" Classes="subtle" Content="打开" Padding="8,2" MinHeight="24"
                                 Command="{Binding OpenFolderCommand}" CommandParameter="{Binding AgentDirectoryText}"
@@ -857,7 +860,7 @@
                       </Grid>
                       <Grid Classes="settingsPathRow" ColumnDefinitions="120,*,Auto" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Classes="meta" Text="日志目录" VerticalAlignment="Center"/>
-                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding LogsDirectoryText}" ToolTip.Tip="{Binding LogsDirectoryText}"
+                        <TextBlock Grid.Column="1" Classes="caption mono" Text="{Binding LogsDirectoryText}" AutomationProperties.HelpText="{Binding LogsDirectoryText}"
                                    TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
                         <Button Grid.Column="2" Classes="subtle" Content="打开" Padding="8,2" MinHeight="24"
                                 Command="{Binding OpenFolderCommand}" CommandParameter="{Binding LogsDirectoryText}"
@@ -873,7 +876,7 @@
                           <TextBlock Text="复制诊断摘要" VerticalAlignment="Center"/>
                         </StackPanel>
                       </Button>
-                      <Button Classes="subtle" Click="OnExportDiagnostics" ToolTip.Tip="导出系统版本和脱敏调用记录，不含凭据或会话正文">
+                      <Button Classes="subtle" Click="OnExportDiagnostics" AutomationProperties.HelpText="导出系统版本和脱敏调用记录，不含凭据或会话正文">
                         <StackPanel Orientation="Horizontal" Spacing="6">
                           <PathIcon Data="{DynamicResource Icon.Share}" Width="13" Height="13"/>
                           <TextBlock Text="导出完整诊断包" VerticalAlignment="Center"/>

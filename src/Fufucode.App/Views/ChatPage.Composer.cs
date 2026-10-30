@@ -22,8 +22,6 @@ public partial class ChatPage
     private readonly string[] _modes = ["manual", "auto", "full", "plan"];
     private bool _updatingComposer;
     private Button? _executionModeButton;
-    private readonly System.Collections.Generic.List<(Control Target, Func<string?> Text)> _composerTips = new();
-    private bool _composerTipsWired;
     private MenuFlyout? _executionModeMenu;
     /// <summary>边写边渲染：预览与编辑器同时显示，随每次输入更新。</summary>
     private bool _livePreview;
@@ -44,7 +42,7 @@ public partial class ChatPage
             if (await TryPasteAttachmentsAsync()) e.Handled = true;
         }, RoutingStrategies.Tunnel, handledEventsToo: true);
         _executionMode.ItemsSource = new[] { "人工确认", "自动审批", "完全访问", "规划模式" };
-        ToolTip.SetTip(_executionMode, "自动审批允许内置文件编辑，Shell/未知工具仍需确认；规划模式只允许内置读取工具。不是系统沙箱。");
+        Avalonia.Automation.AutomationProperties.SetHelpText(_executionMode, "自动审批允许内置文件编辑，Shell/未知工具仍需确认；规划模式只允许内置读取工具。不是系统沙箱。");
         _executionMode.SelectionChanged += async (_, _) =>
         {
             if (_updatingComposer || _executionMode.SelectedIndex < 0 || DataContext is not MainViewModel vm) return;
@@ -141,25 +139,11 @@ public partial class ChatPage
         _executionModeMenu = modeMenu;
         _executionModeButton = modeButton;
         ComposerModes.Children.Insert(0, modeButton);
-        AttachedToVisualTree += (_, _) =>
-        {
-            if (_composerTipsWired || TopLevel.GetTopLevel(this) is not MainWindow window) return;
-            _composerTipsWired = true;
-            foreach (var (target, text) in _composerTips) window.RegisterWindowTip(target, text, ComposerCard);
-        };
-        // 提示改为窗口内浮层：显示在图标正上方、离开 0.3 秒消失，
-        // 不用 Popup/ToolTip（会按浅色渲染成白框并造成悬停闪烁）。
-        // 构建时尚未挂到视觉树（GetTopLevel 为空），先记录，挂载后再登记到窗口。
-        void Tip(Control target, Func<string?> text) => _composerTips.Add((target, text));
-        MainViewModel? Vm() => DataContext as MainViewModel;
-        Tip(AttachContextButton, () => "添加文件、图片、PDF 或链接");
-        Tip(SessionProjectChip, () =>
-            Vm()?.Sidebar.ProjectName is { Length: > 0 } project ? "项目：" + project : "更改此会话的项目");
-        Tip(ModelButton, () => "模型：" + (Vm()?.Settings.SelectedModel.Label ?? "选择模型"));
-        Tip(ThinkingButton, () => "思考：" + (Vm()?.Settings.SelectedThinking?.Label ?? "默认"));
-        Tip(modeButton, () => "权限：" + (_executionMode.SelectedItem?.ToString() ?? "—"));
-        Tip(StopButton, () => "停止当前回合");
-        Tip(RestartButton, () => "重发上一条消息：上一回合被中断或失败，带着已有上下文续跑");
+        Avalonia.Automation.AutomationProperties.SetName(AttachContextButton, "添加附件");
+        Avalonia.Automation.AutomationProperties.SetName(ModelButton, "选择模型");
+        Avalonia.Automation.AutomationProperties.SetName(ThinkingButton, "思考强度");
+        Avalonia.Automation.AutomationProperties.SetName(modeButton, "权限模式");
+        Avalonia.Automation.AutomationProperties.SetHelpText(RestartButton, "重发上一条消息，带着已有上下文续跑");
 
         var menu = new MenuFlyout();
         var live = new MenuItem { Header = "Markdown 即时预览" };
@@ -348,7 +332,7 @@ public partial class ChatPage
             var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4, Margin = new Avalonia.Thickness(0, 0, 8, 4) };
             // 统一字阶：附件名 11 归入 12。
             var name = new TextBlock { Text = file.Name, MaxWidth = 170, TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis, VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
-            ToolTip.SetTip(name, file.Path);
+            Avalonia.Automation.AutomationProperties.SetHelpText(name, file.Path);
             var remove = WorkbenchUi.IconButton("DismissCircle", "移除 " + file.Name);
             remove.Command = vm.Input.RemoveAttachmentCommand; remove.CommandParameter = file;
             row.Children.Add(name); row.Children.Add(remove); AttachedFiles.Children.Add(row);

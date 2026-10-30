@@ -629,26 +629,6 @@
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
   </Style>
-  <!-- Fluent 页签（accentStroke 类由 DockRegionView 按皮肤注入，其它皮肤不受影响）：
-       选中＝只描左边和顶边的 2px 直角描边；圆角必须显式压回 0（Button.subtle 的
-       ControlCornerRadius 会盖掉 Button.dockTab 的 0 值）；悬停底色不再盖住描边。 -->
-  <Style Selector="Button.dockTab.accentStroke">
-    <Setter Property="CornerRadius" Value="0"/>
-  </Style>
-  <Style Selector="Button.dockTab.accentStroke:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent"/>
-  </Style>
-  <!-- 悬停与选中用同一条左上描边：悬停的页签也要看得见这条主题色。 -->
-  <Style Selector="Button.dockTab.accentStroke:pointerover">
-    <Setter Property="BorderThickness" Value="2,2,0,0"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
-    <Setter Property="Padding" Value="10,2,4,4"/>
-  </Style>
-  <Style Selector="Button.dockTab.accentStroke.selected">
-    <Setter Property="BorderThickness" Value="2,2,0,0"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
-    <Setter Property="Padding" Value="10,2,4,4"/>
-  </Style>
   <Style Selector="Grid.dockTabRow Button.dockTabClose">
     <Setter Property="Opacity" Value="0"/>
     <Setter Property="IsHitTestVisible" Value="False"/>
@@ -1137,6 +1117,10 @@
   <Style Selector="Border.islandPanel Border.islandLiveBar">
     <Setter Property="CornerRadius" Value="0"/>
   </Style>
+  <!-- 辅助菜单和上下文菜单不显示项末尾的 >；模板仍负责子菜单展开与键盘导航。 -->
+  <Style Selector="MenuItem /template/ Path#PART_ChevronPath">
+    <Setter Property="IsVisible" Value="False"/>
+  </Style>
   <!-- Flyout 自带一层表面（底/描边/阴影）。内容里再套 .card 就会画成"两层框"，
        这里把 flyout 内的卡片降级为透明容器，只保留内边距与内容，圆角一并归零。 -->
   <Style Selector="FlyoutPresenter Border.card">
@@ -1157,18 +1141,6 @@
   </Style>
   <Style Selector="Grid.pointerHover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
-  </Style>
-  <!-- 窗口内图标提示：与卡片同一套栏层配色。 -->
-  <Style Selector="Border#TipBox">
-    <Setter Property="Background" Value="{DynamicResource AppBaseBar}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="Padding" Value="8,4"/>
-    <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
-  </Style>
-  <Style Selector="Border#TipBox TextBlock">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
   <!-- 输入区工具行：所有图标按钮用同一个 4px 右间距，隐藏控件不占位，
        避免“左侧三枚 / 右侧三枚”间距不一致。 -->

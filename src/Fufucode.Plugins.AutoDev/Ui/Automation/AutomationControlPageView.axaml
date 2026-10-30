@@ -37,7 +37,7 @@
         <Button Content="连接工作台…" Click="Connect_Click" Margin="0,0,8,4" AutomationProperties.Name="连接现有工作台数据库"/>
         <Button Content="刷新" Command="{Binding RefreshCommand}" Margin="0,0,8,4"/>
         <Button x:Name="ResumeAutomatic" Content="暂停新任务/继续（自动模式）" Command="{Binding ResumeAutomaticCommand}" Margin="0,0,8,4"
-                ToolTip.Tip="向核心提交自动开发模式；未启用时保留核心拒绝的真实原因，不伪造切换成功。"/>
+                AutomationProperties.HelpText="向核心提交自动开发模式；未启用时保留核心拒绝的真实原因，不伪造切换成功。"/>
         <Button Content="委托与预算" Command="{Binding OpenDelegationDrawerCommand}" Margin="0,0,8,4"/>
         <Button Content="返回总览" Command="{Binding ReturnToOverviewCommand}" Margin="0,0,0,4"/>
       </WrapPanel>
@@ -249,7 +249,7 @@
           <SelectableTextBlock x:Name="InvalidatedInputPreview" Text="{Binding InvalidatedInputPreview}" TextWrapping="Wrap"/>
           <WrapPanel>
             <Button x:Name="SaveInvalidatedInput" Content="保存这份旧输入" Command="{Binding SaveInvalidatedDraftCommand}" Margin="0,0,8,4"/>
-            <Button Content="丢弃这份未保存输入" Command="{Binding DiscardInvalidatedDraftCommand}" Margin="0,0,8,4" ToolTip.Tip="只移除此处临时输入，不删除已保存草稿。"/>
+            <Button Content="丢弃这份未保存输入" Command="{Binding DiscardInvalidatedDraftCommand}" Margin="0,0,8,4" AutomationProperties.HelpText="只移除此处临时输入，不删除已保存草稿。"/>
           </WrapPanel>
         </StackPanel>
         <Expander x:Name="LocalAutomationRecords" Header="本地草稿与原回执" IsVisible="{Binding Connected}">

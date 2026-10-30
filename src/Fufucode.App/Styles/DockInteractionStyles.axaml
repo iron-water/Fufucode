@@ -1,0 +1,57 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Fluent owns one hover surface at row level. The dedicated presenter has no
+       theme state layers; its independent sibling contour stays above both buttons. -->
+  <Style Selector="Button.dockTab.fluentDockTab">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
+    <Setter Property="Padding" Value="12,4,26,4"/>
+    <Setter Property="Template">
+      <ControlTemplate>
+        <ContentPresenter Name="DockTabContent" Content="{TemplateBinding Content}"
+                          Background="{TemplateBinding Background}"
+                          ContentTemplate="{TemplateBinding ContentTemplate}"
+                          Padding="{TemplateBinding Padding}"
+                          HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                          VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}"/>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="Button.dockTab.fluentDockTab:pointerover, Button.dockTab.fluentDockTab:pressed">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Grid.dockTabRow.fluentDockRow">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Grid.dockTabRow.fluentDockRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <!-- Keep native resize controls and their transparent target; only an active
+       four-pixel grip is painted, centered on the actual layout boundary. -->
+  <Style Selector="GridSplitter.dockSplitter">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="Transparent">
+          <Border Name="SplitGrip" IsHitTestVisible="False"/>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter /template/ Border#SplitGrip">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter[ResizeDirection=Columns] /template/ Border#SplitGrip">
+    <Setter Property="Width" Value="4"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter[ResizeDirection=Rows] /template/ Border#SplitGrip">
+    <Setter Property="Height" Value="4"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="GridSplitter.dockSplitter.interactionActive /template/ Border#SplitGrip, GridSplitter.dockSplitter.dragging /template/ Border#SplitGrip, GridSplitter.dockSplitter:focus-visible /template/ Border#SplitGrip">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Border.chromeBar, Window.fluentWorkbench Border.dockHost, Window.fluentWorkbench Border#WorkspaceReturnBar">
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+</Styles>

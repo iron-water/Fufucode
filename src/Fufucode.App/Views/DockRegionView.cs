@@ -22,7 +22,8 @@ internal sealed class DockRegionView : UserControl
     private readonly ScrollViewer _tabScroll = new()
     {
         HorizontalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden,
-        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled
+        VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Disabled,
+        BringIntoViewOnFocusChange = false
     };
     private string? _selectedId;
     // Fluent 的选中态改用左上描边表达；其它皮肤保持原有指示条以外的样式，不注入该描边类。
@@ -31,6 +32,11 @@ internal sealed class DockRegionView : UserControl
     private readonly TextBlock _empty = new() { Text = "暂无页面", Margin = new Thickness(14, 12), IsVisible = false };
     private readonly Border _dropTarget = new() { BorderThickness = new Thickness(2), IsVisible = false, IsHitTestVisible = false };
     private readonly Border _headerRule = new();
+    private readonly Dictionary<string, Border> _strokes = new();
+    private IDisposable? _strokeAnimation;
+    private int _strokeGeneration;
+    private IDisposable? _tabScrollAnimation;
+    private int _tabScrollGeneration;
     private readonly Dictionary<string, (Grid Row, Button Tab)> _buttons = new();
     private WorkbenchLayoutState? _state;
     private readonly DockPanel _header = new() { Height = 40, LastChildFill = true };
@@ -89,7 +95,12 @@ internal sealed class DockRegionView : UserControl
     public DockRegionView()
     {
         _empty.Classes.Add("dockEmpty");
-        ToolTip.SetTip(_empty, "点击 + 打开功能页，也可以把页签拖到这里。");
+        AutomationProperties.SetName(_empty, "暂无页面，可用打开功能页按钮添加页面");
+        DetachedFromVisualTree += (_, _) =>
+        {
+            _strokeGeneration++; _strokeAnimation?.Dispose(); _strokeAnimation = null;
+            _tabScrollGeneration++; _tabScrollAnimation?.Dispose(); _tabScrollAnimation = null;
+        };
         _dropTarget.Classes.Add("dockDropTarget");
         _header.Classes.Add("dockHeader");
         _headerRule.Classes.Add("dockHeaderRule");
@@ -175,6 +186,8 @@ internal sealed class DockRegionView : UserControl
         var maximum = Math.Max(0, _tabScroll.Extent.Width - _tabScroll.Viewport.Width);
         if (maximum <= 0 || delta == 0) return false;
         // DESK-1：一次滚轮/触摸格步进从 48 提到 72（约 6 个字宽），长页签列表不用反复滚。
+        _tabScrollGeneration++;
+        _tabScrollAnimation?.Dispose(); _tabScrollAnimation = null;
         _tabScroll.Offset = new Vector(Math.Clamp(_tabScroll.Offset.X - delta * 72, 0, maximum), 0);
         return true;
     }
@@ -206,12 +219,43 @@ internal sealed class DockRegionView : UserControl
         _rowHeight = settings.RowHeight;
         _header.Height = settings.RowHeight;
         _root.RowDefinitions[0].Height = new GridLength(settings.RowHeight);
+        var accentChanged = _accentStroke != (settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent);
         _accentStroke = settings.SkinResolution.Skin == Features.Skins.SkinId.Fluent;
         foreach (var entry in _buttons.Values)
         {
-            entry.Tab.Height = entry.Tab.MinHeight = settings.RowHeight - 2;
-            entry.Tab.Classes.Set("accentStroke", _accentStroke);
+            entry.Tab.Height = entry.Tab.MinHeight = _accentStroke ? settings.RowHeight : settings.RowHeight - 2;
+            Grid.SetColumnSpan(entry.Tab, _accentStroke ? 2 : 1);
+            entry.Tab.Classes.Set("fluentDockTab", _accentStroke);
+            entry.Row.Classes.Set("fluentDockRow", _accentStroke);
         }
+        Classes.Set("fluentDock", _accentStroke);
+        _headerRule.IsVisible = !_accentStroke;
+        if (accentChanged) UpdateStroke(_selectedId, animate: false);
+    }
+
+    // The row owns the contour, above both the tab presenter and its close button.
+    // One cancellable sequence means rapid selections always fade the currently visible contour
+    // before lighting the latest destination; no delayed callback can resurrect an old selection.
+    private void UpdateStroke(string? selected, bool animate)
+    {
+        _strokeAnimation?.Dispose();
+        _strokeAnimation = null;
+        var generation = ++_strokeGeneration;
+        var target = _accentStroke && selected is not null ? _strokes.GetValueOrDefault(selected) : null;
+        if (!animate || Motion.Reduced)
+        {
+            foreach (var stroke in _strokes.Values) stroke.Opacity = ReferenceEquals(stroke, target) ? 1 : 0;
+            return;
+        }
+        var fading = _strokes.Values.Where(stroke => stroke.Opacity > 0).Select(stroke => (Stroke: stroke, From: stroke.Opacity)).ToArray();
+        void FadeIn()
+        {
+            if (generation != _strokeGeneration || target is null) return;
+            _strokeAnimation = Motion.AnimateValue(0, 1, Motion.Fast, value => target.Opacity = value);
+        }
+        if (fading.Length == 0) { FadeIn(); return; }
+        _strokeAnimation = Motion.AnimateValue(0, 1, Motion.Fast,
+            value => { foreach (var item in fading) item.Stroke.Opacity = item.From * (1 - value); }, FadeIn);
     }
 
     public void Render(WorkbenchLayoutState state)
@@ -224,7 +268,7 @@ internal sealed class DockRegionView : UserControl
         _empty.IsVisible = ids.Count == 0;
         var selected = ids.Contains(SelectedPage(state)!) ? SelectedPage(state) : ids.FirstOrDefault();
         foreach (var id in _buttons.Keys.Except(ids).ToArray())
-        { _tabs.Children.Remove(_buttons[id].Row); _buttons.Remove(id); }
+        { _tabs.Children.Remove(_buttons[id].Row); _buttons.Remove(id); _strokes.Remove(id); }
         for (var index = 0; index < ids.Count; index++)
         {
             var id = ids[index];
@@ -234,10 +278,11 @@ internal sealed class DockRegionView : UserControl
                 // DESK-1：关闭按钮瘦身后列宽同步收紧（28→22），页签更紧凑、滑动手感更顺。
                 var row = new Grid { ColumnDefinitions = new ColumnDefinitions("*,22"), MinWidth = 76, MaxWidth = 180 };
                 row.Classes.Add("dockTabRow");
-                var tab = new DockTabButton { Content = Label(page), Height = _rowHeight - 2, MinHeight = _rowHeight - 2,
+                var tab = new DockTabButton { Content = Label(page), Height = _accentStroke ? _rowHeight : _rowHeight - 2, MinHeight = _accentStroke ? _rowHeight : _rowHeight - 2,
                     VerticalAlignment = VerticalAlignment.Center, FontSize = 12 };
                 tab.Classes.Add("subtle"); tab.Classes.Add("dockTab");
-                tab.Classes.Set("accentStroke", _accentStroke);
+                tab.Classes.Set("fluentDockTab", _accentStroke);
+                row.Classes.Set("fluentDockRow", _accentStroke);
                 AutomationProperties.SetName(tab, "选择" + page.Title);
                 AutomationProperties.SetAutomationId(tab, "dock-tab-" + id);
                 tab.Click += (_, _) => SelectRequested?.Invoke(id);
@@ -265,17 +310,23 @@ internal sealed class DockRegionView : UserControl
                 var closeItem = new MenuItem { Header = "关闭页签", Tag = "dock-close" };
                 closeItem.Click += (_, _) => CloseRequested?.Invoke(id);
                 menu.Items.Add(closeItem); tab.ContextMenu = menu;
-                var close = WorkbenchUi.IconButton("Dismiss", "关闭页签：" + page.Title, showToolTip: false);
+                var close = WorkbenchUi.IconButton("DockDismiss", "关闭页签：" + page.Title, showToolTip: false);
                 close.Classes.Add("dockTabClose");
-                // DESK-1：关闭按钮从 24 粗大笨重缩到 16 轻量圆形，图标 10，
-                // 命中区靠皮肤样式保证不缩到不可点；悬停只在皮肤层加高亮与危险色。
-                close.Width = close.MinWidth = close.Height = close.MinHeight = 16; close.Padding = new Thickness(3);
-                if (close.Content is PathIcon closeIcon) closeIcon.Width = closeIcon.Height = 10;
+                // 完整的 12 单位实心轮廓按原尺寸呈现，高 DPI 下仍保持连续笔画。
+                close.Width = close.MinWidth = close.Height = close.MinHeight = 18; close.Padding = new Thickness(3);
+                if (close.Content is PathIcon closeIcon) closeIcon.Width = closeIcon.Height = 12;
                 close.VerticalAlignment = VerticalAlignment.Center; close.Margin = new Thickness(0, 0, 3, 0);
                 AutomationProperties.SetAutomationId(close, "dock-close-" + id);
                 close.Click += (_, _) => CloseRequested?.Invoke(id);
+                Grid.SetColumnSpan(tab, _accentStroke ? 2 : 1);
+                close.ZIndex = 2;
                 row.Children.Add(tab); Grid.SetColumn(close, 1); row.Children.Add(close);
-                // 选中态不再用底部指示条（Fluent 改为左上描边），避免与页签栏基线/滚动条打架。
+                var stroke = new Border { BorderThickness = new Thickness(2, 2, 0, 0), CornerRadius = new CornerRadius(0),
+                    IsHitTestVisible = false, Opacity = 0, ZIndex = 1, Margin = new Thickness(0, 1, 0, 1) };
+                stroke.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppAccent"));
+                Grid.SetColumnSpan(stroke, 2);
+                row.Children.Add(stroke);
+                _strokes.Add(id, stroke);
                 entry = (row, tab); _buttons.Add(id, entry);
                 _tabs.Children.Insert(index, row);
             }
@@ -288,15 +339,39 @@ internal sealed class DockRegionView : UserControl
             entry.Tab.ContextMenu.Items.OfType<MenuItem>().Single(item => item.Tag as string == "dock-close").IsEnabled = !pinned;
             entry.Row.Children.OfType<Button>().Single(button => Grid.GetColumn(button) == 1).IsEnabled = !pinned;
             entry.Tab.Content = Label(page);
-            // 页签文字就在鼠标下，重复弹一遍标题没有信息量；只有固定态才补一句。
-            if (pinned) ToolTip.SetTip(entry.Tab, Label(page) + " · 已固定");
-            else ToolTip.SetTip(entry.Tab, null);
-            if (id == selected && selected != _selectedId)
-                Dispatcher.UIThread.Post(() => entry.Row.BringIntoView(), DispatcherPriority.Loaded);
+            AutomationProperties.SetName(entry.Tab, "选择" + page.Title + (pinned ? " · 已固定" : ""));
             if (!_pages.Children.Contains(page.Content)) _pages.Children.Add(page.Content);
             page.Content.IsVisible = id == selected;
         }
+        if (_selectedId != selected)
+        {
+            var animate = _selectedId is not null;
+            UpdateStroke(selected, animate);
+            RevealSelectedTab(selected, animate);
+        }
         _selectedId = selected;
+    }
+
+    private void RevealSelectedTab(string? selected, bool animate)
+    {
+        _tabScrollAnimation?.Dispose(); _tabScrollAnimation = null;
+        var generation = ++_tabScrollGeneration;
+        if (selected is null || !_buttons.TryGetValue(selected, out var entry)) return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (generation != _tabScrollGeneration || VisualRoot is null) return;
+            var viewport = _tabScroll.Viewport.Width;
+            if (viewport <= 0) return;
+            var from = _tabScroll.Offset.X;
+            var left = entry.Row.Bounds.X;
+            var right = entry.Row.Bounds.Right;
+            var target = left < from ? left : right > from + viewport ? right - viewport : from;
+            target = Math.Clamp(target, 0, Math.Max(0, _tabScroll.Extent.Width - viewport));
+            if (!animate || Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects)
+                _tabScroll.Offset = new Vector(target, 0);
+            else _tabScrollAnimation = Motion.AnimateValue(from, target, Motion.StandardDuration,
+                value => _tabScroll.Offset = new Vector(value, 0));
+        }, DispatcherPriority.Loaded);
     }
 
     private sealed class DockTabButton : Button
@@ -378,7 +453,7 @@ internal static class WorkbenchUi
         var button = new Button { Width = size, Height = size, MinWidth = size, MinHeight = size, Padding = new Thickness(6),
             Content = path };
         button.Classes.Add("iconButton");
-        if (showToolTip) ToolTip.SetTip(button, title);
+        // Accessible names remain available without hover popups.
         AutomationProperties.SetName(button, title);
         return button;
     }

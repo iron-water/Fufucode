@@ -30,6 +30,7 @@ public partial class MainWindow
             }
             var returning = vm.IsSettingsPage;
             vm.CurrentPage = page;
+            Views.SurfaceMotion.Show(PageHost, offsetY: 6);
             RecordNavigation();
             if (returning) RestoreFocus(_settingsReturnFocus);
         }

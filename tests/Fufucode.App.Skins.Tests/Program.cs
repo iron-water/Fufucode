@@ -115,7 +115,7 @@ Check(SkinCatalog.All.Count == 6, "安装皮肤插件后目录恢复六套皮肤
             $"{copy.Label} 帮助按钮带 settingsHelp/skinHelp 类");
         Check(help.Content is string marker && marker.Length <= 2,
             $"{copy.Label} 帮助按钮自身只有短标记（{help.Content}）");
-        Check(ToolTip.GetTip(help) as string == copy.HelpText, $"{copy.Label} 长说明只挂在 ToolTip 上");
+        Check(ToolTip.GetTip(help) is null && !help.IsVisible, $"{copy.Label} 无悬浮说明且隐藏无动作帮助入口");
         Check(AutomationProperties.GetHelpText(help) == copy.HelpText, $"{copy.Label} 长说明同时供屏幕阅读器读取");
     }
 

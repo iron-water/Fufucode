@@ -53,6 +53,17 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--ui-refinement-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() =>
+            {
+                DockInteractionSelfTest.Run(Pass, Fail);
+                return UiRefinementSelfTest.RunAsync(Pass, Fail);
+            });
+            Console.WriteLine($"UI refinement failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--timeline-history-only"))
         {
             await RunOnHeadlessUiThreadAsync(() => TimelineHistorySelfTest.RunAsync(Pass, Fail));

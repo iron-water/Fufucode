@@ -45,6 +45,26 @@ public partial class MainWindow
     /// </summary>
     private void BuildSessionIsland(WorkbenchAppearance settings, IEnumerable<Infrastructure.AppActionDefinition> actions)
     {
+        if (!_islandMotionInitialized)
+        {
+            _islandMotionInitialized = true;
+            IslandOverlayHost.RenderTransform = _islandScale;
+            IslandOverlayHost.RenderTransformOrigin = new RelativePoint(0.5, 0, RelativeUnit.Relative);
+            AddHandler(KeyDownEvent, (_, e) =>
+            {
+                if (e.Key != Key.Escape || !_islandExpanded) return;
+                SetIslandExpanded(false);
+                e.Handled = true;
+            }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
+            Closed += (_, _) => SetIslandExpanded(false, animate: false);
+            IslandOverlay.DetachedFromVisualTree += (_, _) => SetIslandExpanded(false, animate: false);
+            PropertyChanged += (_, change) =>
+            {
+                if (change.Property == IsVisibleProperty && !IsVisible)
+                    SetIslandExpanded(false, animate: false);
+            };
+        }
+        SetIslandExpanded(false, animate: false);
         IslandHost.Children.Clear();
         IslandOverlayHost.Content = null;
         IslandOverlay.IsVisible = false;
@@ -109,7 +129,6 @@ public partial class MainWindow
         _islandPill.Classes.Add("sessionIsland");
         Avalonia.Automation.AutomationProperties.SetAutomationId(_islandPill, "session-island");
         Avalonia.Automation.AutomationProperties.SetName(_islandPill, "会话岛");
-        ToolTip.SetTip(_islandPill, "会话岛 · 点击展开会话详情与快捷操作");
         _islandPill.PointerPressed += (_, e) => e.Handled = true;
         _islandPill.PointerReleased += (_, e) =>
         {
@@ -135,10 +154,51 @@ public partial class MainWindow
         RefreshIsland();
     }
 
-    private void ToggleIslandPanel() => IslandOverlay.IsVisible = !IslandOverlay.IsVisible;
+    private bool _islandExpanded;
+    private int _islandMotionVersion;
+    private double _islandProgress;
+    private readonly ScaleTransform _islandScale = new(0.97, 0.97);
+    private bool _islandMotionInitialized;
+
+    private void ToggleIslandPanel() => SetIslandExpanded(!_islandExpanded);
 
     private void IslandScrim_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e) =>
-        IslandOverlay.IsVisible = false;
+        SetIslandExpanded(false);
+
+    private void SetIslandExpanded(bool expanded, bool animate = true)
+    {
+        _islandExpanded = expanded;
+        var version = ++_islandMotionVersion;
+        var from = _islandProgress;
+        var target = expanded ? 1d : 0d;
+        IslandOverlay.IsVisible = true;
+        IslandOverlayHost.IsHitTestVisible = expanded;
+        void Apply(double progress)
+        {
+            _islandProgress = progress;
+            IslandOverlayHost.Opacity = progress;
+            _islandScale.ScaleX = _islandScale.ScaleY = 0.97 + 0.03 * progress;
+        }
+        var reduced = Views.Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects;
+        if (!animate || reduced || Math.Abs(target - from) < 0.001)
+        {
+            Apply(target);
+            IslandOverlay.IsVisible = expanded;
+            return;
+        }
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var duration = (expanded ? Views.Motion.SlowDuration : Views.Motion.StandardDuration).TotalMilliseconds;
+        void Frame(TimeSpan _)
+        {
+            if (version != _islandMotionVersion) return;
+            var progress = Views.Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects
+                ? 1 : Math.Clamp(System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds / duration, 0, 1);
+            Apply(from + (target - from) * (1 - Math.Pow(1 - progress, 3)));
+            if (progress < 1) RequestAnimationFrame(Frame);
+            else IslandOverlay.IsVisible = _islandExpanded;
+        }
+        RequestAnimationFrame(Frame);
+    }
 
     private Control BuildIslandPanel(WorkbenchAppearance settings, IEnumerable<Infrastructure.AppActionDefinition> actions)
     {
@@ -225,13 +285,20 @@ public partial class MainWindow
 
     private Control BuildIslandTile(Infrastructure.AppActionDefinition action)
     {
-        // Win10 磁贴语义：整齐等大方格 + 居中图标 + 名称下沉 tooltip。
+        // 图标与短名称直接放在磁贴里，不依赖悬浮说明识别动作。
         var icon = new PathIcon { Width = 18, Height = 18, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + WorkbenchActionDefaults.Icon(action.Id)));
+        var tileContent = new StackPanel { Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
+        tileContent.Children.Add(icon);
+        tileContent.Children.Add(new TextBlock
+        {
+            Text = action.Title, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center,
+            TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 82,
+        });
         var button = new Button
         {
-            Content = icon,
-            Height = 44,
+            Content = tileContent,
+            Height = 58,
             Margin = new Thickness(3),
             Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
@@ -241,21 +308,6 @@ public partial class MainWindow
         };
         button.Classes.Add("islandTile");
         button.FocusAdorner = null;
-        var tip = !string.IsNullOrWhiteSpace(action.Description) && action.Description != action.Title
-            ? $"{action.Title}\n{action.Description}"
-            : action.Id switch
-            {
-                "settings" or "edit.copy" or "edit.cut" or "edit.paste" => null,
-                "session.new" => "开始一个新的对话会话",
-                "session.rename" => "修改当前会话的显示名称",
-                "session.pin" => "将当前会话置顶或取消置顶",
-                "session.side" => "在侧栏创建聊天",
-                "session.fork" => "选择历史消息作为新会话的起点",
-                "session.schedule" => "为当前会话添加计划任务",
-                _ => action.Title,
-            };
-        if (!string.IsNullOrWhiteSpace(action.Shortcut)) tip = $"{tip ?? action.Title} · {action.Shortcut}";
-        if (tip is not null) ToolTip.SetTip(button, tip);
         Avalonia.Automation.AutomationProperties.SetAutomationId(button, "island-" + action.Id);
         Avalonia.Automation.AutomationProperties.SetName(button, action.Title);
         return button;
@@ -366,7 +418,7 @@ public partial class MainWindow
             };
             _islandBackend.SetValue(Avalonia.Controls.Shapes.Path.DataProperty, FindGeometry(key));
         }
-        ToolTip.SetTip(_islandBackendCircle ?? (Control)_islandBackend,
+        Avalonia.Automation.AutomationProperties.SetName(_islandBackendCircle ?? (Control)_islandBackend,
             "后端：" + (string.IsNullOrWhiteSpace(backendName) ? "FUMO" : backendName));
     }
 

@@ -53,6 +53,7 @@ public static class SkinPresentation
         var help = new Button
         {
             Content = "?",
+            IsVisible = false, // 无点击动作的旧悬浮帮助入口不再展示。
             Width = size,
             Height = size,
             MinWidth = size,
@@ -65,7 +66,6 @@ public static class SkinPresentation
         };
         help.Classes.Add("settingsHelp");
         help.Classes.Add("skinHelp");
-        ToolTip.SetTip(help, copy.HelpText);
         AutomationProperties.SetHelpText(help, copy.HelpText);
         AutomationProperties.SetName(help, "关于" + copy.Label + "皮肤");
         return help;

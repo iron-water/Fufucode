@@ -23,5 +23,11 @@
         <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
         <StyleInclude Source="avares://Fufucode.App/Styles/FufucodeTheme.axaml" />
         <StyleInclude Source="avares://Fufucode.App/Styles/WorkbenchStyles.axaml" />
+        <StyleInclude Source="avares://Fufucode.App/Styles/CardInteractionStyles.axaml" />
+        <StyleInclude Source="avares://Fufucode.App/Styles/DockInteractionStyles.axaml" />
+        <StyleInclude Source="avares://Fufucode.App/Styles/ScrollInteractionStyles.axaml" />
+        <Style Selector=":is(Control)">
+            <Setter Property="ToolTip.ServiceEnabled" Value="False" />
+        </Style>
     </Application.Styles>
 </Application>

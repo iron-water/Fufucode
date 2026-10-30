@@ -59,13 +59,13 @@
             <DataTemplate x:DataType="bx:BrowserTab">
               <Border Classes="browserTabRow">
                 <Grid ColumnDefinitions="*,18,22">
-                  <Button Classes="browserTab" Classes.selected="{Binding IsSelected}" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).SelectTabByIdCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding TabHeader}" AutomationProperties.Name="{Binding TabHeader}" PointerPressed="Tab_PointerPressed" PointerMoved="Tab_PointerMoved" PointerReleased="Tab_PointerReleased">
+                  <Button Classes="browserTab" Classes.selected="{Binding IsSelected}" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).SelectTabByIdCommand}" CommandParameter="{Binding}" AutomationProperties.HelpText="{Binding TabHeader}" AutomationProperties.Name="{Binding TabHeader}" PointerPressed="Tab_PointerPressed" PointerMoved="Tab_PointerMoved" PointerReleased="Tab_PointerReleased">
                     <StackPanel Orientation="Horizontal" Spacing="5">
                       <Image Source="{Binding FaviconSource}" Width="12" Height="12" IsVisible="{Binding HasFavicon}" VerticalAlignment="Center"/>
                       <TextBlock Text="{Binding TabHeader}" FontSize="12" MaxWidth="160" TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
                   </Button>
-                  <Button Grid.Column="1" Classes="iconButton" Width="18" Height="18" MinWidth="18" MinHeight="18" Padding="3" VerticalAlignment="Center" IsVisible="{Binding ShowsAudio}" Command="{Binding ToggleMuteCommand}" ToolTip.Tip="仅切换此页签的静音状态" AutomationProperties.Name="浏览器页签静音"><PathIcon Data="{DynamicResource Icon.Speaker}" Width="10" Height="10"/></Button>
+                  <Button Grid.Column="1" Classes="iconButton" Width="18" Height="18" MinWidth="18" MinHeight="18" Padding="3" VerticalAlignment="Center" IsVisible="{Binding ShowsAudio}" Command="{Binding ToggleMuteCommand}" AutomationProperties.HelpText="仅切换此页签的静音状态" AutomationProperties.Name="浏览器页签静音"><PathIcon Data="{DynamicResource Icon.Speaker}" Width="10" Height="10"/></Button>
                   <Button Grid.Column="2" Classes="iconButton" Width="20" Height="20" MinWidth="20" MinHeight="20" Padding="5" VerticalAlignment="Center" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).CloseTabByIdCommand}" CommandParameter="{Binding}" AutomationProperties.Name="关闭浏览器页签"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="9" Height="9"/></Button>
                 </Grid>
               </Border>
@@ -87,15 +87,15 @@
       <Grid Grid.Column="1">
       <Border Classes="omniBar" VerticalAlignment="Center">
         <Grid ColumnDefinitions="Auto,Auto,*,Auto">
-          <Panel Grid.Column="0" Margin="4,0,2,0" VerticalAlignment="Center" ToolTip.Tip="{Binding SecurityToolTip}" IsVisible="{Binding ShowSecurity}">
+          <Panel Grid.Column="0" Margin="4,0,2,0" VerticalAlignment="Center" AutomationProperties.HelpText="{Binding SecurityToolTip}" IsVisible="{Binding ShowSecurity}">
             <PathIcon Data="{DynamicResource Icon.ShieldCheckmark}" Width="13" Height="13" IsVisible="{Binding IsSecure}" Foreground="{DynamicResource AppSuccessForeground}"/>
             <PathIcon Data="{DynamicResource Icon.ShieldError}" Width="13" Height="13" IsVisible="{Binding IsInsecure}" Foreground="{DynamicResource AppCautionForeground}"/>
           </Panel>
-          <Button Grid.Column="1" Classes="omniAction" Classes.bookmarked="{Binding IsCurrentBookmarked}" Margin="2,0" Command="{Binding ToggleBookmarkCommand}" ToolTip.Tip="{Binding BookmarkToolTip}" AutomationProperties.Name="浏览器收藏当前页面">
+          <Button Grid.Column="1" Classes="omniAction" Classes.bookmarked="{Binding IsCurrentBookmarked}" Margin="2,0" Command="{Binding ToggleBookmarkCommand}" AutomationProperties.HelpText="{Binding BookmarkToolTip}" AutomationProperties.Name="浏览器收藏当前页面">
             <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12" Foreground="{DynamicResource AppTextSecondary}"/>
           </Button>
           <TextBox Grid.Column="2" x:Name="AddressBox" Text="{Binding AddressText}" MinWidth="0" PlaceholderText="输入网址、搜索词或本地文件路径…" KeyDown="Address_KeyDown" AutomationProperties.Name="浏览器地址栏" VerticalContentAlignment="Center"/>
-          <Button Grid.Column="3" Classes="omniAction" Margin="2,0,4,0" Command="{Binding ShareCommand}" ToolTip.Tip="复制当前页面地址" AutomationProperties.Name="浏览器分享"><PathIcon Data="{DynamicResource Icon.Share}" Width="12" Height="12"/></Button>
+          <Button Grid.Column="3" Classes="omniAction" Margin="2,0,4,0" Command="{Binding ShareCommand}" AutomationProperties.HelpText="复制当前页面地址" AutomationProperties.Name="浏览器分享"><PathIcon Data="{DynamicResource Icon.Share}" Width="12" Height="12"/></Button>
         </Grid>
       </Border>
         <!-- 地址栏候选：用 Popup（独立窗口）浮在 WebView2 原生子窗口之上，不挤压页面布局 -->
@@ -108,7 +108,7 @@
                 <ItemsControl.ItemTemplate>
                   <DataTemplate x:DataType="bx:BrowserSuggestion">
                     <Button HorizontalAlignment="Stretch" Height="34" Padding="8,0" Background="Transparent" BorderThickness="0"
-                            Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).AcceptSuggestionCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding Address}" AutomationProperties.Name="{Binding Header}">
+                            Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).AcceptSuggestionCommand}" CommandParameter="{Binding}" AutomationProperties.HelpText="{Binding Address}" AutomationProperties.Name="{Binding Header}">
                       <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                         <TextBlock Grid.Column="0" Text="{Binding Badge}" FontSize="12" Classes="caption" VerticalAlignment="Center"/>
                         <TextBlock Grid.Column="1" Text="{Binding Header}" FontSize="12" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
@@ -123,11 +123,11 @@
         </Popup>
       </Grid>
       <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2" VerticalAlignment="Center">
-        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Command="{Binding ToggleFullViewCommand}" ToolTip.Tip="{Binding FullViewToolTip}" AutomationProperties.Name="浏览器全宽查看"><PathIcon Data="{DynamicResource Icon.FullScreenMaximize}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Command="{Binding ToggleFullViewCommand}" AutomationProperties.HelpText="{Binding FullViewToolTip}" AutomationProperties.Name="浏览器全宽查看"><PathIcon Data="{DynamicResource Icon.FullScreenMaximize}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Command="{Binding ToggleHistoryCommand}" AutomationProperties.Name="浏览器历史"><PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"/></Button>
-        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="Download_Click" ToolTip.Tip="{Binding DownloadSummary}" AutomationProperties.Name="浏览器下载"><PathIcon Data="{DynamicResource Icon.ArrowDownload}" Width="13" Height="13"/></Button>
-        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="InspectElement_Click" ToolTip.Tip="检查与拾取页面元素 (Inspect)" AutomationProperties.Name="浏览器检查元素"><PathIcon Data="{DynamicResource Icon.Code}" Width="13" Height="13"/></Button>
-        <Button Classes="iconButton" Width="28" Height="28" Click="OpenFile_Click" ToolTip.Tip="从本机选择文件在浏览器中预览" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="Download_Click" AutomationProperties.HelpText="{Binding DownloadSummary}" AutomationProperties.Name="浏览器下载"><PathIcon Data="{DynamicResource Icon.ArrowDownload}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" IsVisible="{Binding ShowWideTools}" Click="InspectElement_Click" AutomationProperties.HelpText="检查与拾取页面元素 (Inspect)" AutomationProperties.Name="浏览器检查元素"><PathIcon Data="{DynamicResource Icon.Code}" Width="13" Height="13"/></Button>
+        <Button Classes="iconButton" Width="28" Height="28" Click="OpenFile_Click" AutomationProperties.HelpText="从本机选择文件在浏览器中预览" AutomationProperties.Name="浏览器打开文件"><PathIcon Data="{DynamicResource Icon.Folder}" Width="13" Height="13"/></Button>
         <Button Classes="iconButton" Width="28" Height="28" Click="More_Click" AutomationProperties.Name="浏览器更多操作"><PathIcon Data="{DynamicResource Icon.More}" Width="13" Height="13"/></Button>
       </StackPanel>
     </Grid>
@@ -156,7 +156,7 @@
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="ib:BrowserHistoryEntry">
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="6" Margin="0,3">
-                    <Button Grid.Column="0" HorizontalAlignment="Stretch" Background="Transparent" BorderThickness="0" Padding="6,3" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).OpenHistoryEntryCommand}" CommandParameter="{Binding}" ToolTip.Tip="{Binding Address}" AutomationProperties.Name="{Binding Title}">
+                    <Button Grid.Column="0" HorizontalAlignment="Stretch" Background="Transparent" BorderThickness="0" Padding="6,3" Command="{Binding $parent[ItemsControl].((vm:BrowserViewModel)DataContext).OpenHistoryEntryCommand}" CommandParameter="{Binding}" AutomationProperties.HelpText="{Binding Address}" AutomationProperties.Name="{Binding Title}">
                       <StackPanel Spacing="2">
                         <TextBlock Text="{Binding Title}" FontSize="12" TextTrimming="CharacterEllipsis"/>
                         <TextBlock Text="{Binding Address}" FontSize="12" Classes="caption" Opacity="0.7" TextTrimming="CharacterEllipsis"/>

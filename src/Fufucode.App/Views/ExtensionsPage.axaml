@@ -55,7 +55,7 @@
           <Button Command="{Binding RestartCommand}" Padding="12,6"
                   Margin="0,0,0,4"
                   CornerRadius="{DynamicResource ControlCornerRadius}"
-                  ToolTip.Tip="{Binding RestartDisabledReason}">
+                  AutomationProperties.HelpText="{Binding RestartDisabledReason}">
             <TextBlock Text="{Binding RestartButtonText}"/>
           </Button>
         </WrapPanel>
@@ -171,13 +171,13 @@
                                 Classes.success="{Binding StatusIsSuccess}"
                                 Classes.attention="{Binding StatusIsAttention}"
                                 Classes.critical="{Binding StatusIsCritical}"
-                                ToolTip.Tip="{Binding StatusTip}">
+                                AutomationProperties.HelpText="{Binding StatusTip}">
                           <TextBlock Classes="caption" Text="{Binding StatusText}"/>
                         </Border>
                         <Border Classes="badge" VerticalAlignment="Center" Margin="0,0,8,6"
                                 IsVisible="{Binding IsApprovalBridge}"
                                 Classes.success="{Binding ApprovalChipIsSuccess}"
-                                ToolTip.Tip="{Binding ApprovalDiagnostic}">
+                                AutomationProperties.HelpText="{Binding ApprovalDiagnostic}">
                           <TextBlock Classes="caption" Text="{Binding ApprovalChipText}"/>
                         </Border>
                         <TextBlock Classes="caption"
@@ -196,7 +196,7 @@
                       <Button x:Name="RemoveExtensionButton" Classes="subtle" Content="移除"
                               VerticalAlignment="Center" Margin="0,0,16,0"
                               IsVisible="{Binding IsAdded}"
-                              ToolTip.Tip="移除手动添加记录；若已启用则计入待停用">
+                              AutomationProperties.HelpText="移除手动添加记录；若已启用则计入待停用">
                         <Button.Flyout>
                           <Flyout Placement="BottomEdgeAlignedRight">
                             <Border Classes="card" Padding="10" MinWidth="240">
@@ -221,7 +221,7 @@
                       <ToggleSwitch IsChecked="{Binding IsPendingEnabled}"
                                     IsEnabled="{Binding ToggleIsEnabled}"
                                     VerticalAlignment="Center"
-                                    ToolTip.Tip="{Binding StatusTip}"/>
+                                    AutomationProperties.HelpText="{Binding StatusTip}"/>
                     </WrapPanel>
                   </Grid>
                 </Border>

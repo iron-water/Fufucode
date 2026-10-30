@@ -64,14 +64,14 @@
         <Panel x:Name="IslandHost" Grid.ColumnSpan="4" ZIndex="5"
                HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
         <StackPanel x:Name="LegacyCaptionActions" Grid.Column="2" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0" IsVisible="False">
-          <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" ToolTip.Tip="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{DynamicResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" ToolTip.Tip="显示或隐藏左侧边栏，保留已打开的页面"><PathIcon Data="{DynamicResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTerminal_Click" ToolTip.Tip="底区 · Ctrl+J"><PathIcon Data="{DynamicResource Icon.PanelBottom}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleRightDock_Click" ToolTip.Tip="显示或隐藏右侧边栏，保留已打开的页面"><PathIcon Data="{DynamicResource Icon.PanelRight}" Width="16" Height="16"/></Button>
+          <Button x:Name="CaptionCommands" Classes="subtle" Height="30" Padding="10,4" AutomationProperties.Name="搜索会话与功能 · Ctrl+K"><StackPanel Orientation="Horizontal" Spacing="7"><PathIcon Data="{DynamicResource Icon.Search}" Width="14" Height="14"/><TextBlock Text="会话与功能" FontSize="12"/></StackPanel></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleSidebar_Click" AutomationProperties.Name="显示或隐藏左侧边栏，保留已打开的页面"><PathIcon Data="{DynamicResource Icon.PanelLeft}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTerminal_Click" AutomationProperties.Name="底区 · Ctrl+J"><PathIcon Data="{DynamicResource Icon.PanelBottom}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleRightDock_Click" AutomationProperties.Name="显示或隐藏右侧边栏，保留已打开的页面"><PathIcon Data="{DynamicResource Icon.PanelRight}" Width="16" Height="16"/></Button>
           <Button x:Name="NavChatButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}"><PathIcon Data="{DynamicResource Icon.Chat}" Width="16" Height="16"/></Button>
-          <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" ToolTip.Tip="查看扩展与插件"><PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
-          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" ToolTip.Tip="切换浅色 / 深色主题"><PathIcon Data="{DynamicResource Icon.Color}" Width="16" Height="16"/></Button>
-          <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" ToolTip.Tip="查看会话提醒与待处理通知"><PathIcon Data="{DynamicResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
+          <Button x:Name="NavExtensionsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Extensions}" AutomationProperties.Name="查看扩展与插件"><PathIcon Data="{DynamicResource Icon.PuzzlePiece}" Width="16" Height="16"/></Button>
+          <Button Classes="iconButton captionSlot" Width="46" Height="32" Click="ToggleTheme_Click" AutomationProperties.Name="切换浅色 / 深色主题"><PathIcon Data="{DynamicResource Icon.Color}" Width="16" Height="16"/></Button>
+          <Button x:Name="CaptionNotifications" Classes="iconButton captionSlot" Width="46" Height="32" AutomationProperties.Name="查看会话提醒与待处理通知"><PathIcon Data="{DynamicResource Icon.CheckmarkCircle}" Width="16" Height="16"/></Button>
           <Button x:Name="NavSettingsButton" Classes="iconButton captionSlot" Width="46" Height="32" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Settings}"><PathIcon Data="{DynamicResource Icon.Settings}" Width="16" Height="16"/></Button>
         </StackPanel>
         <ScrollViewer Grid.Column="2" MaxWidth="420" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled"><StackPanel x:Name="CustomTopRight" Orientation="Horizontal" Spacing="3" VerticalAlignment="Center" Margin="0,0,8,0"/></ScrollViewer>
@@ -87,7 +87,7 @@
       <infra:DeadZoneGridSplitter x:Name="LeftPanelSplitter" Grid.Column="1" ResizeDirection="Columns" ResizeBehavior="PreviousAndNext" Cursor="SizeWestEast" Classes="dockSplitter"/>
       <Grid x:Name="WorkspaceShell" Grid.Column="2" ColumnDefinitions="*,8,345" RowDefinitions="*,8,190">
         <Grid RowDefinitions="Auto,*">
-          <Border x:Name="WorkspaceReturnBar" IsVisible="{Binding IsExtensionsPage}" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1" Padding="12,6">
+          <Border x:Name="WorkspaceReturnBar" IsVisible="{Binding IsExtensionsPage}" BorderBrush="{DynamicResource AppBorderBrush}" Padding="12,6">
             <Button x:Name="WorkspaceReturnButton" Classes="subtle" HorizontalAlignment="Left" Command="{Binding NavigateCommand}" CommandParameter="{x:Static vm:AppPage.Chat}">
               <StackPanel Orientation="Horizontal" Spacing="8"><PathIcon Data="{DynamicResource Icon.ArrowLeft}"/><TextBlock Text="返回工作区"/></StackPanel>
             </Button>
@@ -182,12 +182,6 @@
         <Button.Template><ControlTemplate><Border Background="{TemplateBinding Background}"/></ControlTemplate></Button.Template>
       </Button>
       <ContentControl x:Name="IslandOverlayHost" HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,52,0,0"/>
-    </Panel>
-    <!-- 图标提示层：窗口内浮层，不用 Popup。位置按目标控件计算，显示在图标上方。 -->
-    <Panel x:Name="TipLayer" Grid.RowSpan="3" ZIndex="60" IsVisible="False" IsHitTestVisible="False">
-      <Border x:Name="TipBox" HorizontalAlignment="Left" VerticalAlignment="Top">
-        <TextBlock x:Name="TipText" FontSize="12"/>
-      </Border>
     </Panel>
   </Grid>
 </Window>

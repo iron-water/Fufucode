@@ -323,7 +323,7 @@ public sealed class WorkbenchSectionsView : UserControl
         Control FluentOnly(Control row)
         {
             _bindings.Add(current => row.IsVisible = row.IsEnabled = current.SkinResolution.Skin == Features.Skins.SkinId.Fluent);
-            ToolTip.SetTip(row, "此项用于 Fluent；当前皮肤使用自己的颜色和形状。原设置会保留。");
+            Avalonia.Automation.AutomationProperties.SetHelpText(row, "此项用于 Fluent；当前皮肤使用自己的颜色和形状。原设置会保留。");
             return row;
         }
     }
@@ -420,7 +420,7 @@ public sealed class WorkbenchSectionsView : UserControl
         var row = SettingsLayout.Row(action.Title, description, combo, WorkbenchActionDefaults.Icon(action.Id));
         // 子菜单归属提示：这些动作在菜单里是收在父项下的
         if (WorkbenchActionDefaults.SubMenu(action.Id) is { } parent)
-            ToolTip.SetTip(row, "在「" + parent + "」子菜单内");
+            Avalonia.Automation.AutomationProperties.SetHelpText(row, "在「" + parent + "」子菜单内");
         return row;
     }
 
@@ -743,7 +743,7 @@ public sealed class WorkbenchSectionsView : UserControl
         Func<bool>? getOverride = null, string? tooltip = null)
     {
         var control = new ToggleSwitch { OnContent = "", OffContent = "", VerticalAlignment = VerticalAlignment.Center };
-        if (tooltip is not null) ToolTip.SetTip(control, tooltip);
+        if (tooltip is not null) Avalonia.Automation.AutomationProperties.SetHelpText(control, tooltip);
         var applying = false;
         control.IsCheckedChanged += (_, _) =>
         {
@@ -1085,7 +1085,7 @@ public sealed class WorkbenchSectionsView : UserControl
             MinWidth = 150, Margin = new Thickness(0, 0, 8, 0), SelectedIndex = -1,
             PlaceholderText = "选择范围", VerticalAlignment = VerticalAlignment.Center
         };
-        ToolTip.SetTip(resetScope, "「恢复布局」只还原位置与显隐；「恢复全部默认设置」同时重置颜色、名称与密度");
+        Avalonia.Automation.AutomationProperties.SetHelpText(resetScope, "「恢复布局」只还原位置与显隐；「恢复全部默认设置」同时重置颜色、名称与密度");
         resetScope.Items.Add(new ComboBoxItem { Content = "仅恢复布局" });
         resetScope.Items.Add(new ComboBoxItem { Content = "恢复全部默认设置" });
         var reset = new Button { Content = "执行", MinWidth = 72, VerticalAlignment = VerticalAlignment.Center };

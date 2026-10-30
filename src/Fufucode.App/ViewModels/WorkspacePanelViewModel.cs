@@ -1068,18 +1068,42 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     }
     private void RebuildFileTreeSections()
     {
-        FileTreeSections.Clear();
+        var targets = new List<(WorkspacePanelFileItemViewModel? Root, WorkspacePanelFileItemViewModel[] Rows)>();
         if (!string.IsNullOrWhiteSpace(FileFilter))
         {
-            if (_searchResults.Count > 0) FileTreeSections.Add(new(null, _searchResults));
+            if (_searchResults.Count > 0) targets.Add((null, _searchResults.ToArray()));
         }
         else
         {
             foreach (var folder in Files.Where(item => item.IsDirectory))
-                FileTreeSections.Add(new(folder, SectionRows(folder)));
+                targets.Add((folder, SectionRows(folder).ToArray()));
             var rootFiles = Files.Where(item => !item.IsDirectory).ToArray();
-            if (rootFiles.Length > 0) FileTreeSections.Add(new(null, rootFiles));
+            if (rootFiles.Length > 0) targets.Add((null, rootFiles));
         }
+        for (var index = 0; index < targets.Count; index++)
+        {
+            var target = targets[index];
+            var section = FileTreeSections.FirstOrDefault(item => ReferenceEquals(item.Root, target.Root));
+            if (section is null)
+            {
+                section = new FileTreeSectionViewModel(target.Root, target.Rows);
+                FileTreeSections.Insert(index, section);
+            }
+            else
+            {
+                var previous = FileTreeSections.IndexOf(section);
+                if (previous != index) FileTreeSections.Move(previous, index);
+                for (var row = 0; row < target.Rows.Length; row++)
+                {
+                    if (row < section.Rows.Count && ReferenceEquals(section.Rows[row], target.Rows[row])) continue;
+                    var existing = section.Rows.IndexOf(target.Rows[row]);
+                    if (existing >= 0) section.Rows.Move(existing, row);
+                    else section.Rows.Insert(row, target.Rows[row]);
+                }
+                while (section.Rows.Count > target.Rows.Length) section.Rows.RemoveAt(section.Rows.Count - 1);
+            }
+        }
+        while (FileTreeSections.Count > targets.Count) FileTreeSections.RemoveAt(FileTreeSections.Count - 1);
         foreach (var row in FileTreeSections.SelectMany(section => section.Rows))
             row.IsSelected = ReferenceEquals(row, SelectedFile);
     }

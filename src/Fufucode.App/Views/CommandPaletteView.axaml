@@ -18,8 +18,13 @@
     <Grid RowDefinitions="Auto,Auto,*,Auto" MaxHeight="560">
       <Grid ColumnDefinitions="*,Auto" Margin="16,12,12,8">
         <TextBlock Classes="sectionTitle" Text="命令面板" VerticalAlignment="Center"/>
-        <Button Grid.Column="1" Classes="iconButton" Content="×" Width="32" Height="32"
-                Command="{Binding CloseCommand}" AutomationProperties.Name="关闭命令面板"/>
+        <Button x:Name="CloseButton" Grid.Column="1" Width="46" Height="32"
+                Padding="12,6" Background="{DynamicResource AppHover}" BorderThickness="0"
+                CornerRadius="{DynamicResource ControlCornerRadius}"
+                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                Command="{Binding CloseCommand}" AutomationProperties.Name="关闭命令面板">
+          <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="14" Height="14"/>
+        </Button>
       </Grid>
       <TextBox x:Name="SearchBox" Grid.Row="1" Text="{Binding SearchText}" PlaceholderText="搜索动作、会话与设置"
                Margin="16,0,16,8" MinHeight="36" AutomationProperties.Name="搜索动作、会话与设置"/>
@@ -53,8 +58,8 @@
       <Border Grid.Row="3" BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,1,0,0" Padding="16,12">
         <StackPanel Spacing="6">
           <TextBlock Classes="caption" Text="{Binding Feedback}" IsVisible="{Binding HasFeedback}" TextWrapping="Wrap"/>
-          <Button Classes="subtle" Content="执行所选动作" Command="{Binding ExecuteSelectedCommand}"
-                  HorizontalAlignment="Right" MinHeight="32"/>
+          <Button x:Name="ExecuteButton" Classes="accent" Content="执行所选动作" Command="{Binding ExecuteSelectedCommand}"
+                  HorizontalAlignment="Right" MinHeight="36" Padding="16,6"/>
         </StackPanel>
       </Border>
     </Grid>

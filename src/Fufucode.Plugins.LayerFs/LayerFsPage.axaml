@@ -7,11 +7,11 @@
     <Border BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto,Auto" Margin="12,8,10,8" ColumnSpacing="4">
         <TextBlock Classes="bodyStrong" Text="LayerFS" VerticalAlignment="Center"/>
-        <Button x:Name="RefreshButton" Grid.Column="1" Classes="iconButton" ToolTip.Tip="刷新项目与工作区"
+        <Button x:Name="RefreshButton" Grid.Column="1" Classes="iconButton" AutomationProperties.HelpText="刷新项目与工作区"
                 AutomationProperties.Name="刷新项目">
           <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
         </Button>
-        <Button x:Name="ConnectionButton" Grid.Column="2" Classes="iconButton" ToolTip.Tip="连接设置"
+        <Button x:Name="ConnectionButton" Grid.Column="2" Classes="iconButton" AutomationProperties.HelpText="连接设置"
                 AutomationProperties.Name="连接设置">
           <PathIcon Data="{DynamicResource Icon.Settings}" Width="14" Height="14"/>
         </Button>

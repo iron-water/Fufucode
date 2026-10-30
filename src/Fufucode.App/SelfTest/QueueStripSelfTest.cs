@@ -121,9 +121,10 @@ public static class QueueStripSelfTest
             // 必须先确认确实找到按钮，否则下面的 All() 会在空集上假通过。
             Check(buttons.Count == 2 && buttons.All(button => !button.IsEnabled),
                   "真实界面中两个按钮对 Core 持有项为禁用态");
-            Check(buttons.Count == 2 && buttons.All(button => button.GetValue(ToolTip.TipProperty) is string tip &&
+            Check(buttons.Count == 2 && buttons.All(button => ToolTip.GetTip(button) is null &&
+                                                              Avalonia.Automation.AutomationProperties.GetHelpText(button) is string tip &&
                                                               tip.Contains("停止", StringComparison.Ordinal)),
-                  "真实界面按钮带受阻原因 tooltip");
+                  "真实界面按钮无悬浮说明且保留可访问受阻原因");
 
             using var frame = window.CaptureRenderedFrame();
             if (frame is null)
