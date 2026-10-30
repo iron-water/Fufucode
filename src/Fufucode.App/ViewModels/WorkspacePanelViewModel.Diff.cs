@@ -153,7 +153,7 @@ public sealed partial class WorkspacePanelViewModel
             if (diff.Truncated) notes.Add("差异过长，仅显示前一部分");
             if (sides.Truncated) notes.Add("文件过大，已跳过语法着色");
             if (SelectedScope == WorkspaceChangeScope.SessionWrites) notes.Add("显示的是 Git 当前工作树差异，不是会话前后的快照");
-            DiffNote = string.Join(" · ", notes);
+            DiffNote = string.Join("  ", notes);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

@@ -182,7 +182,7 @@ public sealed partial class ToolGroupViewModel : ObservableObject
         var parts = new List<string> { $"{_tools.Count} 个工具" };
         var failures = FailureCount;
         if (failures > 0) parts.Add($"{failures} 个失败");
-        return string.Join(" · ", parts);
+        return string.Join("  ", parts);
     }
 
     /// <summary>把工具名翻译成中文动作。</summary>

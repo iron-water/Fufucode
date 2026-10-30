@@ -288,12 +288,7 @@
                                             <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
                                                       Foreground="{DynamicResource AppTextDim}"/>
                                           </Button>
-                                          <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                                                    IsVisible="{Binding IsExpanded}"/>
-                                          <PathIcon Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
-                                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                                                    IsVisible="{Binding IsCollapsed}"/>
+                                          <!-- 工具行不再显示展开箭头（用户 2026-10-29 要求）；整行可点。 -->
                                         </StackPanel>
                                         <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
                                         <StackPanel>
@@ -346,12 +341,7 @@
                                   <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
                                             Foreground="{DynamicResource AppTextDim}"/>
                                 </Button>
-                                <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                                          IsVisible="{Binding IsExpanded}"/>
-                                <PathIcon Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
-                                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                                          IsVisible="{Binding IsCollapsed}"/>
+                                          <!-- 工具行不再显示展开箭头（用户 2026-10-29 要求）；整行可点。 -->
                               </StackPanel>
                               <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
                               <StackPanel>

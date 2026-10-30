@@ -171,7 +171,7 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
             if (usage.InputTokens is { } input) parts.Add("输入 " + FormatTokens(input));
             if (usage.OutputTokens is { } output) parts.Add("输出 " + FormatTokens(output));
             if (usage.TotalCost is { } cost) parts.Add("$" + cost.ToString("0.####", System.Globalization.CultureInfo.InvariantCulture));
-            return string.Join(" · ", parts);
+            return string.Join("  ", parts);
         }
     }
 

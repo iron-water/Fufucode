@@ -307,7 +307,7 @@ public partial class MainWindow
         if (!string.IsNullOrEmpty(model)) parts.Add(model);
         if (!string.IsNullOrEmpty(project)) parts.Add(project);
         if (!string.IsNullOrEmpty(branch) && branch != "未查询") parts.Add(branch);
-        _islandPanelSubtitle?.SetValue(TextBlock.TextProperty, string.Join(" · ", parts));
+        _islandPanelSubtitle?.SetValue(TextBlock.TextProperty, string.Join("  ", parts));
         _islandLiveMeta?.SetValue(TextBlock.TextProperty,
             (showLive ? "⏱ " + (DateTimeOffset.UtcNow - _turnStarted).ToString(@"mm\:ss") : activity) + (string.IsNullOrEmpty(usage) ? "" : "\n" + usage.Replace("会话累计：", "")));
         _islandLiveText?.SetValue(TextBlock.TextProperty,

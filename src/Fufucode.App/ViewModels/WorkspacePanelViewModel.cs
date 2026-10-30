@@ -87,7 +87,7 @@ public sealed partial class WorkspacePanelChangedFileViewModel : ViewModelBase
     public bool IsDeleted => Source.IsDeleted == true;
     public bool IsBinary => Source.IsBinary == true;
     public bool HasUnknownFlags => Source.IsNew is null || Source.IsDeleted is null || Source.IsBinary is null;
-    public string UnknownFlags => string.Join(" · ", new[]
+    public string UnknownFlags => string.Join("  ", new[]
     {
         Source.IsNew is null ? "new ?" : null,
         Source.IsDeleted is null ? "deleted ?" : null,
@@ -259,7 +259,7 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
                 PreviewFilePath = result.Path;
                 PreviewFileName = Path.GetFileName(result.Path);
                 PreviewFileSize = SafeFileReader.FormatSize(result.Size);
-                PreviewFileDetail = result.IsError ? "无法预览" : string.Join(" · ", new[] { result.DisplayType, result.Encoding, result.IsTruncated ? "已截断" : null }.Where(x => !string.IsNullOrWhiteSpace(x)));
+                PreviewFileDetail = result.IsError ? "无法预览" : string.Join("  ", new[] { result.DisplayType, result.Encoding, result.IsTruncated ? "已截断" : null }.Where(x => !string.IsNullOrWhiteSpace(x)));
             }
             else if (_previewHost.CurrentRequest is { } request)
             {
