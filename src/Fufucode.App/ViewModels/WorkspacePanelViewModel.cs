@@ -128,6 +128,17 @@ public sealed class WorkspacePanelFileItemViewModel : ViewModelBase
     public bool IsLoadingChildren { get; private set; }
     public bool IsExpanded { get; private set; }
     public string Glyph => IsDirectory ? (IsExpanded ? "▾" : "▸") : "";
+    private bool _isSelected;
+    public bool IsSelected
+    {
+        get => _isSelected;
+        set
+        {
+            if (_isSelected == value) return;
+            _isSelected = value;
+            OnPropertyChanged();
+        }
+    }
     public Avalonia.Thickness Indent => new(Depth * 16, 0, 0, 0);
     public string? LoadError { get; private set; }
     public bool IsTruncated { get; private set; }
@@ -169,6 +180,23 @@ public sealed class WorkspacePanelFileItemViewModel : ViewModelBase
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(Glyph));
     }
+}
+
+/// <summary>
+/// 文件树的一级分组：每个顶层文件夹一张二级色卡片，展开的子孙行都留在同一张卡里。
+/// 根文件合并成一张没有标题的卡片，避免每个文件各套一层框。
+/// </summary>
+public sealed class FileTreeSectionViewModel
+{
+    public FileTreeSectionViewModel(WorkspacePanelFileItemViewModel? root,
+        IEnumerable<WorkspacePanelFileItemViewModel> rows)
+    {
+        Root = root;
+        Rows = new ObservableCollection<WorkspacePanelFileItemViewModel>(rows);
+    }
+
+    public WorkspacePanelFileItemViewModel? Root { get; }
+    public ObservableCollection<WorkspacePanelFileItemViewModel> Rows { get; }
 }
 
 /// <summary>变更列表里的一组文件（按所在目录），目录可折叠。</summary>
@@ -284,8 +312,9 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     [NotifyPropertyChangedFor(nameof(VisibleFiles))]
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
     private string _fileFilter = "";
+    public ObservableCollection<FileTreeSectionViewModel> FileTreeSections { get; } = new();
     public IEnumerable<WorkspacePanelFileItemViewModel> VisibleFiles =>
-        string.IsNullOrWhiteSpace(FileFilter) ? Flatten(Files) : _searchResults;
+        FileTreeSections.SelectMany(section => section.Rows);
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsFileOperationLoading))]
     [NotifyPropertyChangedFor(nameof(IsFilesEmpty))]
@@ -755,6 +784,8 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     partial void OnSelectedFileChanged(WorkspacePanelFileItemViewModel? value)
     {
         CopyFeedback = string.Empty;
+        foreach (var row in FileTreeSections.SelectMany(section => section.Rows))
+            row.IsSelected = ReferenceEquals(row, value);
         OnPropertyChanged(nameof(HasSelectedFile));
         OnPropertyChanged(nameof(CanPreviewSelectedFile));
         OnPropertyChanged(nameof(FileSelectionText));
@@ -1029,11 +1060,38 @@ public sealed partial class WorkspacePanelViewModel : ViewModelBase, IDisposable
     }
     private void NotifyFileRows()
     {
+        RebuildFileTreeSections();
         OnPropertyChanged(nameof(VisibleFiles));
         OnPropertyChanged(nameof(IsFilesEmpty));
         OnPropertyChanged(nameof(FileCountText));
         OnPropertyChanged(nameof(FileStatusText));
     }
+    private void RebuildFileTreeSections()
+    {
+        FileTreeSections.Clear();
+        if (!string.IsNullOrWhiteSpace(FileFilter))
+        {
+            if (_searchResults.Count > 0) FileTreeSections.Add(new(null, _searchResults));
+        }
+        else
+        {
+            foreach (var folder in Files.Where(item => item.IsDirectory))
+                FileTreeSections.Add(new(folder, SectionRows(folder)));
+            var rootFiles = Files.Where(item => !item.IsDirectory).ToArray();
+            if (rootFiles.Length > 0) FileTreeSections.Add(new(null, rootFiles));
+        }
+        foreach (var row in FileTreeSections.SelectMany(section => section.Rows))
+            row.IsSelected = ReferenceEquals(row, SelectedFile);
+    }
+
+    /// <summary>一级分组的行：文件夹自身 + 展开后的全部子孙（子孙不再另起卡片）。</summary>
+    private static IEnumerable<WorkspacePanelFileItemViewModel> SectionRows(WorkspacePanelFileItemViewModel folder)
+    {
+        yield return folder;
+        if (!folder.IsExpanded) yield break;
+        foreach (var child in Flatten(folder.Children)) yield return child;
+    }
+
     private static bool PathEquals(string? a, string? b) => string.Equals(a, b,
         OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
     private static bool IsUnderRoot(string path, string root) => PathEquals(path, root) || path.StartsWith(

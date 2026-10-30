@@ -175,12 +175,9 @@ public static class Wave5D6SelfTest
 
     /// <summary>取文件/目录行内的点击按钮（真实 Click 路由的发起者）。</summary>
     private static Button? RowOf(WorkspacePanelView view, WorkspacePanelViewModel vm,
-        WorkspacePanelFileItemViewModel item)
-    {
-        var list = view.FindControl<ListBox>("FilesList");
-        var container = list?.ContainerFromIndex(vm.Files.IndexOf(item)) as Visual;
-        return container?.GetVisualDescendants().OfType<Button>().FirstOrDefault();
-    }
+        WorkspacePanelFileItemViewModel item) =>
+        view.GetVisualDescendants().OfType<Button>()
+            .FirstOrDefault(button => ReferenceEquals(button.DataContext, item));
 
     private static void Click(Button row) => row.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
 

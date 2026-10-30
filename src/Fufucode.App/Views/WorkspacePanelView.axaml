@@ -124,31 +124,7 @@
     <!-- Both content instances stay alive, keeping independent list scrolling and selection. -->
     <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}" Background="{DynamicResource AppMicaPageBackground}">
       <Grid.Styles>
-        <Style Selector="ListBox.fileTree > ListBoxItem">
-          <Setter Property="Padding" Value="0"/>
-          <Setter Property="Margin" Value="0,1"/>
-          <Setter Property="MinHeight" Value="32"/>
-          <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-          <Setter Property="Template">
-            <ControlTemplate>
-              <Border x:Name="FileRowSurface" Background="{TemplateBinding Background}" CornerRadius="{DynamicResource ControlCornerRadius}">
-                <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
-                                  HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
-              </Border>
-            </ControlTemplate>
-          </Setter>
-          <Setter Property="Background" Value="Transparent"/>
-        </Style>
-        <Style Selector="ListBox.fileTree > ListBoxItem:pointerover">
-          <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-        </Style>
-        <Style Selector="ListBox.fileTree > ListBoxItem:selected">
-          <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
-        </Style>
-        <Style Selector="ListBox.fileTree > ListBoxItem:focus-visible /template/ Border#FileRowSurface">
-          <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
-          <Setter Property="BorderThickness" Value="1"/>
-        </Style>
+        <!-- 行底色由按钮自身承载：一级卡片是 AppCardBackground，行只有悬停/选中反馈。 -->
         <Style Selector="Button.fileTreeRow">
           <Setter Property="Background" Value="Transparent"/>
           <Setter Property="BorderThickness" Value="0"/>
@@ -158,10 +134,23 @@
           <Setter Property="Cursor" Value="Hand"/>
           <Setter Property="Template">
             <ControlTemplate>
-              <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
-                                HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
+              <Border x:Name="FileRowSurface" Background="{TemplateBinding Background}"
+                      BorderThickness="0" CornerRadius="{DynamicResource ControlCornerRadius}">
+                <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
+                                  HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
+              </Border>
             </ControlTemplate>
           </Setter>
+        </Style>
+        <Style Selector="Button.fileTreeRow:pointerover">
+          <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+        </Style>
+        <Style Selector="Button.fileTreeRow.selected">
+          <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+        </Style>
+        <Style Selector="Button.fileTreeRow:focus-visible /template/ Border#FileRowSurface">
+          <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+          <Setter Property="BorderThickness" Value="1"/>
         </Style>
       </Grid.Styles>
       <!-- 列表态：文件目录浏览 -->
@@ -178,25 +167,36 @@
         <TextBlock Classes="caption" Text="没有匹配文件" IsVisible="{Binding IsFilesEmpty}" Margin="0,8"/>
         <TextBlock Classes="caption" Text="{Binding FileLimitText}" IsVisible="{Binding HasFileLimit}" TextWrapping="Wrap"/>
       </StackPanel>
-      <Border Grid.Row="1" Background="{DynamicResource AppCardBackground}" CornerRadius="{DynamicResource ControlCornerRadius}" Margin="8,0,8,4" Padding="4">
-        <ListBox x:Name="FilesList" Classes="fileTree" ItemsSource="{Binding VisibleFiles}" SelectedItem="{Binding SelectedFile}"
-                 KeyDown="FilesList_KeyDown" BorderThickness="0" Background="Transparent" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                 AutomationProperties.Name="项目文件树">
-          <ListBox.ItemTemplate>
-            <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
-              <Button Classes="fileTreeRow" Click="FileRow_Click" ToolTip.Tip="{Binding FullPath}">
-                <Grid Margin="{Binding Indent}" ColumnDefinitions="16,18,*,Auto" ColumnSpacing="6" Height="32" Background="Transparent">
-                  <TextBlock Text="{Binding Glyph}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                  <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
-                  <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Document}" Width="13" Height="13" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
-                  <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
-                  <TextBlock Grid.Column="3" Classes="caption" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                </Grid>
-              </Button>
+      <!-- 一级分组：每个顶层文件夹一张二级色卡片，卡片间留空隙；子孙行留在本卡内，不再套框。 -->
+      <ScrollViewer Grid.Row="1" x:Name="FilesTreeScroll" HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollBarVisibility="Auto" Margin="8,0,8,4">
+        <ItemsControl x:Name="FilesTree" ItemsSource="{Binding FileTreeSections}" KeyDown="FilesList_KeyDown"
+                      Focusable="True" AutomationProperties.Name="项目文件树">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="vm:FileTreeSectionViewModel">
+              <Border Background="{DynamicResource AppCardBackground}" CornerRadius="{DynamicResource ControlCornerRadius}"
+                      Padding="4" Margin="0,0,0,6">
+                <ItemsControl ItemsSource="{Binding Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
+                      <Button Classes="fileTreeRow" Classes.selected="{Binding IsSelected}" Click="FileRow_Click"
+                              ToolTip.Tip="{Binding FullPath}">
+                        <Grid Margin="{Binding Indent}" ColumnDefinitions="16,18,*,Auto" ColumnSpacing="6" Height="32" Background="Transparent">
+                          <TextBlock Text="{Binding Glyph}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                          <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
+                          <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Document}" Width="13" Height="13" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
+                          <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>
+                          <TextBlock Grid.Column="3" Classes="caption" Text="{Binding Detail}" IsVisible="{Binding HasDetail}" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        </Grid>
+                      </Button>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </Border>
             </DataTemplate>
-          </ListBox.ItemTemplate>
-        </ListBox>
-      </Border>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
       <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="12,2,8,6" ColumnSpacing="6">
         <TextBlock Classes="caption" Text="{Binding FileStatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" ToolTip.Tip="{Binding FileSelectionText}"/>
         <Button Grid.Column="1" Classes="subtle" Content="复制路径" Command="{Binding CopyFilePathCommand}" IsEnabled="{Binding HasSelectedFile}" Padding="6,3"/>
