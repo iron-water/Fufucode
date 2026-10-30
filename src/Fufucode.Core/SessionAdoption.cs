@@ -115,20 +115,52 @@ public static class SessionAdoption
                 }
 
                 var fumoDirectory = Path.Combine(directory, "fumo");
+                var sameProject = string.Equals(targetId, directoryId, StringComparison.Ordinal);
+                // 目标项目与目录 id 不一致时，文件要搬到目标目录，索引里的 file_path 必须一起改；
+                // 只在原目录登记而把文件搬走，会让会话行指向不存在的路径——侧栏看不到、点开也失败。
+                var targetFumo = sameProject
+                    ? fumoDirectory
+                    : Path.Combine(layout.ProjectSessionsDirectory(targetId), "fumo");
+                if (!sameProject && Directory.Exists(fumoDirectory))
+                {
+                    Directory.CreateDirectory(targetFumo);
+                    relocated++;
+                }
+
                 if (Directory.Exists(fumoDirectory))
                 {
                     foreach (var file in Directory.EnumerateFiles(fumoDirectory, "*.json"))
                     {
                         var sessionId = Path.GetFileNameWithoutExtension(file);
-                        if (metadata.AdoptSession(sessionId, targetId, file)) sessions++;
+                        var finalPath = file;
+                        if (!sameProject)
+                        {
+                            var destination = Path.Combine(targetFumo, Path.GetFileName(file));
+                            if (!File.Exists(destination))
+                            {
+                                try { File.Move(file, destination); finalPath = destination; }
+                                catch (IOException) { finalPath = file; } // 搬不动就留在原地，索引仍指向真实文件
+                            }
+                            else
+                            {
+                                finalPath = destination; // 目标已有同名文件：以它为准，不覆盖
+                            }
+                        }
+
+                        if (sameProject)
+                        {
+                            // 目录与项目一致：只补缺失行，已有一律不动（启动期不产生无谓写盘）。
+                            if (metadata.AdoptSession(sessionId, targetId, finalPath)) sessions++;
+                            continue;
+                        }
+
+                        // 已有行随文件一起改挂，而不是只更新文件、留下指向旧路径的孤立行。
+                        if (metadata.TryRepointSession(sessionId, targetId, finalPath)) continue;
+                        if (metadata.AdoptSession(sessionId, targetId, finalPath)) sessions++;
                     }
                 }
 
-                if (!string.Equals(targetId, directoryId, StringComparison.Ordinal))
-                {
-                    RelocateFiles(fumoDirectory, layout, targetId);
-                    relocated++;
-                }
+                if (!sameProject) TryRemoveEmptyOrphan(fumoDirectory);
             }
         }
         catch
@@ -139,23 +171,18 @@ public static class SessionAdoption
         return new Result(projects, sessions, relocated, unreadable);
     }
 
-    private static void RelocateFiles(string fromFumo, AppDataLayout layout, string targetId)
+    /// <summary>
+    /// 搬空后的孤儿项目目录收掉。只剩标记与 .locks 时才删；还有别的东西说明它有别的用途，留着。
+    /// 删除失败不影响索引状态，下次启动再试。
+    /// </summary>
+    private static void TryRemoveEmptyOrphan(string fromFumo)
     {
         try
         {
             if (!Directory.Exists(fromFumo)) return;
-            var toFumo = Path.Combine(layout.ProjectSessionsDirectory(targetId), "fumo");
-            Directory.CreateDirectory(toFumo);
-            foreach (var file in Directory.EnumerateFiles(fromFumo, "*.json"))
-            {
-                var destination = Path.Combine(toFumo, Path.GetFileName(file));
-                if (File.Exists(destination)) continue; // 目标已有同名会话，不覆盖
-                File.Move(file, destination);
-            }
             if (Directory.GetFiles(fromFumo, "*.json").Length == 0) Directory.Delete(fromFumo, recursive: false);
             var orphan = Path.GetDirectoryName(fromFumo);
             if (orphan is null || !Directory.Exists(orphan)) return;
-            // 只剩标记与 .locks 时才收掉；还有别的东西说明它有别的用途，留着。
             foreach (var entry in Directory.GetFileSystemEntries(orphan))
             {
                 var name = Path.GetFileName(entry);
@@ -165,7 +192,7 @@ public static class SessionAdoption
         }
         catch
         {
-            // 搬不动就留在原地：索引已修好，下次启动再搬。
+            // 搬不动/删不掉就留在原地：索引已修好，下次启动再试。
         }
     }
 }

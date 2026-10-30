@@ -143,5 +143,34 @@ internal static class SessionAdoptionTests
               File.Exists(marker) &&
               File.ReadAllText(marker).Contains("project-g", StringComparison.OrdinalIgnoreCase),
             "收养时把目录标记回填给已登记项目，丢行后才救得回来");
+
+        // ── 8) 索引行还在、文件已被搬到另一个目录：搬回后索引必须指向真实文件 ──
+        // 这正是数据库被旧副本覆盖后的形状：行指向 664c5b 的路径，文件却躺在另一个 id 的目录里。
+        // 只搬文件不改行，会话在侧栏里就是“文件不存在”——看不到也点不开。
+        var eight = Scratch(root, "repoint");
+        var layoutEight = new AppDataLayout(eight);
+        var canonicalPath = Path.Combine(eight, "project-h");
+        Directory.CreateDirectory(canonicalPath);
+        var metadataEight = new DesktopMetadataStore(layoutEight);
+        var canonical = metadataEight.GetOrCreateProject(canonicalPath);
+        const string movedSession = "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh";
+        const string movedFromId = "iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii";
+        WriteSession(layoutEight, movedFromId, movedSession, (1, "文件被搬走但仍可救回"));
+        var staleFile = Path.Combine(layoutEight.ProjectSessionsDirectory(movedFromId), "fumo",
+            movedSession + ".json");
+        Check(metadataEight.AdoptSession(movedSession, canonical.Id, staleFile),
+            "前置：索引行挂在规范项目下，但 file_path 指向另一目录里的真实文件");
+        SessionAdoption.WriteMarker(layoutEight, movedFromId, canonicalPath);
+
+        var resultEight = SessionAdoption.Reconcile(layoutEight, metadataEight);
+        var repointed = metadataEight.ListSessions(canonical.Id).SingleOrDefault(s => s.Id == movedSession);
+        Check(resultEight.Relocated == 1 && repointed is not null && repointed.FilePath is { } movedPath &&
+              File.Exists(movedPath) &&
+              string.Equals(Path.GetDirectoryName(movedPath),
+                  Path.Combine(layoutEight.ProjectSessionsDirectory(canonical.Id), "fumo"),
+                  StringComparison.OrdinalIgnoreCase),
+            "文件搬回规范目录后索引行同步改挂，不会留下指向旧路径的孤立行");
+        Check(!File.Exists(staleFile),
+            "旧目录里的文件确实搬走了（没有两份互相矛盾的副本）");
     }
 }

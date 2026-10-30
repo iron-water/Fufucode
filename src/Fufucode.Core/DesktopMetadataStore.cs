@@ -169,6 +169,33 @@ public sealed class DesktopMetadataStore
         return command.ExecuteNonQuery() == 1;
     }
 
+    /// <summary>
+    /// 把已有会话行改挂到另一个项目并更新其文件路径（收养搬迁用）。
+    /// 目标路径已被另一行占用时不做改动并返回 false：宁可留着旧行，也不制造两条指向同一文件的记录。
+    /// 返回该 id 是否存在（false 表示调用方应改用 <see cref="AdoptSession"/> 新建）。
+    /// </summary>
+    public bool TryRepointSession(string sessionId, string projectId, string filePath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        var full = Path.GetFullPath(filePath);
+        using var connection = Open();
+        using (var owner = connection.CreateCommand())
+        {
+            owner.CommandText = "SELECT id FROM sessions WHERE file_path=$file AND id<>$id LIMIT 1";
+            owner.Parameters.AddWithValue("$file", full);
+            owner.Parameters.AddWithValue("$id", sessionId);
+            if (owner.ExecuteScalar() is not null) return true; // 已由另一行持有：保持原样
+        }
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE sessions SET project_id=$project, file_path=$file WHERE id=$id";
+        command.Parameters.AddWithValue("$project", projectId);
+        command.Parameters.AddWithValue("$file", full);
+        command.Parameters.AddWithValue("$id", sessionId);
+        return command.ExecuteNonQuery() == 1;
+    }
+
     /// <summary>收养一条会话：索引里没有同 id 的行时补一条。已存在时不动它（幂等）。</summary>
     public bool AdoptSession(string sessionId, string projectId, string filePath)
     {
