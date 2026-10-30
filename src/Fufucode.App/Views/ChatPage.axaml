@@ -647,41 +647,54 @@
           <!-- 内层圆角钳 0，与 8px 的 composerCard 同心。 -->
           <Border Classes="queueStrip" CornerRadius="0" IsVisible="{Binding Input.HasQueue}" Margin="0,0,0,8">
             <StackPanel Spacing="3">
-              <StackPanel Orientation="Horizontal" Spacing="6">
-                <PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"
-                          VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
-                <TextBlock Classes="caption" Text="{Binding Input.QueueSummary}" VerticalAlignment="Center"/>
-              </StackPanel>
-              <ItemsControl ItemsSource="{Binding Input.QueuedPreview}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="{x:Type vm:QueuedItemViewModel}">
-                    <StackPanel Orientation="Horizontal" Spacing="6" Margin="19,0,0,0">
-                      <Border Classes="badge" VerticalAlignment="Center"
-                              Classes.attention="{Binding IsSteer}">
-                        <TextBlock Classes="caption" Text="{Binding BadgeText}"/>
-                      </Border>
-                      <TextBlock Text="{Binding Text}" Classes="caption" VerticalAlignment="Center"/>
-                      <!-- 统一字阶：队列操作 11 归入 12。 -->
-                      <Button Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
-                              Content="编辑" VerticalAlignment="Center"
-                              IsEnabled="{Binding CanEdit}"
-                              ToolTip.Tip="{Binding BlockedReason}"
-                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.EditQueuedCommand}"
-                              CommandParameter="{Binding}"/>
-                      <Button Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
-                              Content="删除" VerticalAlignment="Center"
-                              IsEnabled="{Binding CanDelete}"
-                              ToolTip.Tip="{Binding BlockedReason}"
-                              Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.DeleteQueuedCommand}"
-                              CommandParameter="{Binding}"/>
-                    </StackPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-              <TextBlock Classes="caption" Text="{Binding Input.QueuedOverflowText}"
-                         IsVisible="{Binding Input.HasQueuedOverflow}" Margin="19,0,0,0"/>
+              <!-- 汇总行兼折叠开关：折叠后只剩这一行，输入框上方不占地方。 -->
+              <Button Classes="subtle" Padding="4,0" MinHeight="20" HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left" Background="Transparent"
+                      Command="{Binding Input.ToggleQueueCommand}"
+                      AutomationProperties.Name="展开或折叠排队消息">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="11" Height="11" VerticalAlignment="Center"
+                            IsVisible="{Binding Input.IsQueueExpanded}" Foreground="{DynamicResource AppTextDim}"/>
+                  <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="11" Height="11" VerticalAlignment="Center"
+                            IsVisible="{Binding !Input.IsQueueExpanded}" Foreground="{DynamicResource AppTextDim}"/>
+                  <TextBlock Classes="caption" Text="{Binding Input.QueueSummary}" VerticalAlignment="Center"/>
+                </StackPanel>
+              </Button>
+              <!-- 排队项逐条一行（超长省略），条数多时在固定高度内滚动。 -->
+              <ScrollViewer MaxHeight="168" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                            IsVisible="{Binding Input.IsQueueExpanded}">
+                <ItemsControl ItemsSource="{Binding Input.QueuedPreview}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="{x:Type vm:QueuedItemViewModel}">
+                      <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="19,0,0,0">
+                        <Border Classes="badge" VerticalAlignment="Center"
+                                Classes.attention="{Binding IsSteer}">
+                          <TextBlock Classes="caption" Text="{Binding BadgeText}"/>
+                        </Border>
+                        <TextBlock Grid.Column="1" Text="{Binding Text}" Classes="caption" Margin="6,0"
+                                   VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                                   MaxLines="1" TextWrapping="NoWrap"/>
+                        <!-- 界面仍持有的项才能改写/删除；后端队列里的项按钮禁用并给出受阻原因。 -->
+                        <Button Grid.Column="2" Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
+                                Content="编辑" VerticalAlignment="Center"
+                                IsEnabled="{Binding CanEdit}"
+                                ToolTip.Tip="{Binding BlockedReason}"
+                                Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.EditQueuedCommand}"
+                                CommandParameter="{Binding}"/>
+                        <Button Grid.Column="3" Classes="subtle" Padding="6,0" MinHeight="18" FontSize="12"
+                                Content="删除" VerticalAlignment="Center"
+                                IsEnabled="{Binding CanDelete}"
+                                ToolTip.Tip="{Binding BlockedReason}"
+                                Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Input.DeleteQueuedCommand}"
+                                CommandParameter="{Binding}"/>
+                      </Grid>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
             </StackPanel>
           </Border>
+
 
           <!-- 待恢复草稿提示 -->
           <!-- 内层圆角钳 0，与 8px 的 composerCard 同心。 -->
@@ -870,16 +883,6 @@
               </Button>
             </WrapPanel>
             <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
-              <!-- 插入（steer）：仅运行中出现 -->
-              <Button Classes="subtle" Command="{Binding Input.SteerCommand}"
-                      IsVisible="{Binding Input.IsTurnActive}" Height="32"
-                      ToolTip.Tip="插入：当前步骤结束后、下一次模型调用前送达">
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <PathIcon Data="{DynamicResource Icon.ArrowEnterLeft}" Width="13" Height="13"
-                            VerticalAlignment="Center"/>
-                  <TextBlock Text="插入" VerticalAlignment="Center"/>
-                </StackPanel>
-              </Button>
               <!-- 发送/停止/重启共用同一个位置：运行中=停止，中断后=重启，其余=发送。 -->
               <Grid VerticalAlignment="Center">
                 <Button x:Name="StopButton" Classes="iconButton" Width="32" Height="32"

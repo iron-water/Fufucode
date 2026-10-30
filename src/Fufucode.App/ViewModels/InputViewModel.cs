@@ -129,12 +129,15 @@ public sealed partial class InputViewModel : ViewModelBase
 
     public string QueueSummary => HasQueue ? $"已排队 {QueuedTexts.Count} 条 · 当前回合结束后依次发送" : string.Empty;
 
-    /// <summary>排队条里至多展示前 3 条预览（含投递方式徽章）。</summary>
+    /// <summary>排队条展示全部排队项（含投递方式徽章）；每项在界面上只占一行。</summary>
     public ObservableCollection<QueuedItemViewModel> QueuedPreview { get; } = new();
 
-    public string QueuedOverflowText => QueuedTexts.Count > 3 ? $"…还有 {QueuedTexts.Count - 3} 条" : string.Empty;
+    /// <summary>排队消息列是否展开；折叠后只留一条汇总，输入框上方不占地方。</summary>
+    [ObservableProperty]
+    private bool _isQueueExpanded = true;
 
-    public bool HasQueuedOverflow => QueuedTexts.Count > 3;
+    [RelayCommand]
+    private void ToggleQueue() => IsQueueExpanded = !IsQueueExpanded;
 
     /// <summary>回合活跃（运行/压缩/重试）：此时发送实际进入队列。</summary>
     public bool IsTurnActive
@@ -434,8 +437,6 @@ public sealed partial class InputViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasQueue));
         OnPropertyChanged(nameof(QueueSummary));
-        OnPropertyChanged(nameof(QueuedOverflowText));
-        OnPropertyChanged(nameof(HasQueuedOverflow));
     }
 
     /// <summary>
@@ -510,11 +511,8 @@ public sealed partial class InputViewModel : ViewModelBase
                 remaining[text] = count - 1;
             }
 
-            if (QueuedPreview.Count < 3)
-            {
-                // 预览项一律来自 Core 的 QueueChanged 镜像，界面不拥有它们，故 IsLocallyOwned 恒为 false。
-                QueuedPreview.Add(new QueuedItemViewModel(text, steered ? "插入" : "排队"));
-            }
+            // 队列项一律来自 Core 的 QueueChanged 镜像，界面不拥有它们，故 IsLocallyOwned 恒为 false。
+            QueuedPreview.Add(new QueuedItemViewModel(text, steered ? "插入" : "排队"));
         }
     }
 
