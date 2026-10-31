@@ -38,6 +38,9 @@ public partial class ChatPage : UserControl
     /// <summary>滚轮停止后的兜底判定：最后一次 ScrollChanged 可能落在用户输入的忽略窗口内。</summary>
     private IDisposable? _atBottomTimer;
 
+    /// <summary>用户主动上滚后暂停自动跟随；只有用户自己滚回底部才恢复。</summary>
+    private bool _followSuspended;
+
     /// <summary>已经播放过进入动画的条目。虚拟化在滚动时会重建容器，不能重复播放。</summary>
     private readonly System.Collections.Generic.HashSet<string> _animatedEntries = new(StringComparer.Ordinal);
 
@@ -95,19 +98,31 @@ public partial class ChatPage : UserControl
         AddHandler(PointerReleasedEvent, SelectionReleased, RoutingStrategies.Bubble, handledEventsToo: true);
 
         // 滚动跟随：用户一操作就标记时间，150ms 内不抢滚动；程序化滚动有短暂 latch。
-        TimelineScroller.PointerWheelChanged += (_, _) =>
-        {
-            MarkUserScrollInput();
-            // 滚轮一动就交出控制权：否则流式输出每来一段都会把视图拉回底部，
-            // 触控板双指上滑会表现为反复回弹的抖动。
-            if (DataContext is MainViewModel vm) vm.Timeline.SetAutoScrollAtBottom(false);
-            ScheduleAtBottomRecompute();
-        };
+        // 必须走隧道并接收已处理事件：ScrollViewer 自己在类处理器里就把滚轮标成 Handled，
+        // 普通的 += 订阅收不到，之前的“暂停自动跟随”因此从未生效。
+        TimelineScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnTimelineWheel,
+            RoutingStrategies.Tunnel, handledEventsToo: true);
         TimelineScroller.PointerPressed += (_, _) => MarkUserScrollInput();
         TimelineScroller.KeyDown += (_, _) => MarkUserScrollInput();
     }
 
     private void MarkUserScrollInput() => _lastUserInputTicks = Stopwatch.GetTimestamp();
+
+    /// <summary>
+    /// 用户一旦滚动就交出自动跟随权。流式输出时若继续跟随，
+    /// 触控板双指上滑会被每一段增量反复拉回底部，表现为抖动。
+    /// </summary>
+    private void OnTimelineWheel(object? sender, PointerWheelEventArgs e)
+    {
+        MarkUserScrollInput();
+        _followSuspended = true;
+        if (DataContext is MainViewModel vm)
+        {
+            vm.Timeline.SetAutoScrollAtBottom(false);
+            vm.Timeline.SetBackToLatestVisible(true);
+        }
+        ScheduleAtBottomRecompute();
+    }
 
     /// <summary>消息/回合首次挂到可视树时播放进入动画；流式刷新不会重播。</summary>
     private void OnMessageEntryLoaded(object? sender, RoutedEventArgs e)
@@ -273,6 +288,17 @@ public partial class ChatPage : UserControl
             if (DataContext is not MainViewModel vm) return;
             var distance = Math.Max(0,
                 TimelineScroller.Extent.Height - TimelineScroller.Viewport.Height - TimelineScroller.Offset.Y);
+            if (_followSuspended)
+            {
+                var userActive = Stopwatch.GetTimestamp() - _lastUserInputTicks < Stopwatch.Frequency * 0.3;
+                if (userActive && distance <= 8)
+                {
+                    _followSuspended = false;
+                    vm.Timeline.SetAutoScrollAtBottom(true);
+                    vm.Timeline.SetBackToLatestVisible(false);
+                }
+                return;
+            }
             vm.Timeline.SetAutoScrollAtBottom(distance <= 40);
             vm.Timeline.SetBackToLatestVisible(distance > 120);
         }, TimeSpan.FromMilliseconds(180));
@@ -362,8 +388,11 @@ public partial class ChatPage : UserControl
     /// 显式"回到最新"：220ms 缓出滚动，比瞬移更容易看清落点。
     /// 流式自动跟随仍走 <see cref="ScrollToEnd"/> 的瞬时滚动，两者互不打断。
     /// </summary>
-    private void AnimateScrollToEnd() =>
+    private void AnimateScrollToEnd()
+    {
+        _followSuspended = false;
         AnimateScrollTo(Math.Max(0, TimelineScroller.Extent.Height - TimelineScroller.Viewport.Height));
+    }
 
     /// <summary>
     /// 缓出滚动到目标偏移。滚动期间标记为程序化滚动，
@@ -430,16 +459,34 @@ public partial class ChatPage : UserControl
 
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
-        if (_programmaticScroll ||
-            Stopwatch.GetTimestamp() < _programmaticUntilTicks ||
-            Stopwatch.GetTimestamp() - _lastUserInputTicks < Stopwatch.Frequency * 0.15 ||
-            DataContext is not MainViewModel vm)
+        var now = Stopwatch.GetTimestamp();
+        if (_programmaticScroll || now < _programmaticUntilTicks || DataContext is not MainViewModel vm)
         {
             return;
         }
 
         var scroller = (ScrollViewer)sender!;
         var distanceToBottom = scroller.Extent.Height - scroller.Viewport.Height - scroller.Offset.Y;
+        var userActive = now - _lastUserInputTicks < Stopwatch.Frequency * 0.3;
+
+        if (_followSuspended)
+        {
+            // 只有"用户自己"滚回底部才恢复跟随；内容增长造成的位置变化不算。
+            if (userActive && distanceToBottom <= 8)
+            {
+                _followSuspended = false;
+                vm.Timeline.SetAutoScrollAtBottom(true);
+                vm.Timeline.SetBackToLatestVisible(false);
+            }
+            else
+            {
+                vm.Timeline.SetAutoScrollAtBottom(false);
+                vm.Timeline.SetBackToLatestVisible(distanceToBottom > 120);
+            }
+            return;
+        }
+
+        if (now - _lastUserInputTicks < Stopwatch.Frequency * 0.15) return;
         vm.Timeline.SetAutoScrollAtBottom(distanceToBottom <= 40);
         vm.Timeline.SetBackToLatestVisible(distanceToBottom > 120);
     }

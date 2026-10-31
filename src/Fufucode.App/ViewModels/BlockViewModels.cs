@@ -109,7 +109,7 @@ public sealed class TextBlockViewModel : BlockViewModel
 public sealed partial class ThinkingBlockViewModel : BlockViewModel
 {
     private string _text = string.Empty;
-    private bool _userExpanded = true;
+    private bool _userExpanded;
     private bool _isLive = true;
 
     public string Text
@@ -118,7 +118,7 @@ public sealed partial class ThinkingBlockViewModel : BlockViewModel
         set => SetProperty(ref _text, value);
     }
 
-    /// <summary>思考仍在生成：强制展开，且不允许折叠（与 Claude Desktop 一致）。</summary>
+    /// <summary>思考仍在生成：用于状态提示；展开与否完全由用户决定。</summary>
     public bool IsLive
     {
         get => _isLive;
@@ -131,24 +131,22 @@ public sealed partial class ThinkingBlockViewModel : BlockViewModel
         }
     }
 
-    /// <summary>运行中强制展开；结束后回到用户选择（默认折叠）。</summary>
-    public bool IsExpanded => _isLive || _userExpanded;
+    /// <summary>默认折叠；只有用户点开才展开。</summary>
+    public bool IsExpanded => _userExpanded;
 
-    /// <summary>生成过程中不允许折叠，避免把正在输出的推理藏起来。</summary>
-    public bool CanToggle => !_isLive;
+    public bool CanToggle => true;
 
     public bool IsCollapsed => !IsExpanded;
 
     [RelayCommand]
     private void ToggleExpanded()
     {
-        if (!CanToggle) return;
         _userExpanded = !_userExpanded;
         OnPropertyChanged(nameof(IsExpanded));
         OnPropertyChanged(nameof(IsCollapsed));
     }
 
-    /// <summary>回合结束：停止 live，并按默认折叠（除非用户之前手动展开过）。</summary>
+    /// <summary>回合结束：只停 live 标记，不改变用户当前的展开状态。</summary>
     public void Settle() => IsLive = false;
 }
 

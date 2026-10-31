@@ -100,14 +100,16 @@ public sealed class CollapsiblePanel : ContentControl
             return;
         }
 
+        // 收起：先把高度固定成当前值，等一帧让过渡有起点，再降到 0。
+        // 若在同一批调度里直接写 0，过渡看不到起始值，表现就是瞬间消失。
         var current = Math.Max(Bounds.Height, MeasureContentHeight());
         MaxHeight = current;
         Opacity = 1;
-        Dispatcher.UIThread.Post(() =>
+        _settleTimer = DispatcherTimer.RunOnce(() =>
         {
             MaxHeight = 0;
             Opacity = 0;
-        }, DispatcherPriority.Background);
+        }, TimeSpan.FromMilliseconds(16));
     }
 
     /// <summary>直接量内容，不受当前 MaxHeight 影响。</summary>
