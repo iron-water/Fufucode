@@ -20,6 +20,10 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(EnableEnhancedPreview)' == 'true'">
+    <!-- Charts 12.3.1 声明依赖 SkiaSharp 3.119.3-preview.1.1（预览版，缓存常缺，restore 会卡在下载）。
+     显式引用正式版 3.119.4，让 NuGet 直接取高版本，跳过预览版下载。 -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+
     <PackageReference Include="Avalonia.Controls.Charts" Version="12.3.1">
       <Private>false</Private>
       <ExcludeAssets>runtime</ExcludeAssets>
