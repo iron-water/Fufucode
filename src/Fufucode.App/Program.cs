@@ -56,12 +56,15 @@ internal static class Program
         var probeRun = args.Contains("--speech-probe") || args.Contains("--windows-toast-probe");
         if (!isolatedRun && !probeRun)
         {
-            var singleInstance = SingleInstanceGuard.TryAcquire(null, out var guard);
+            // --data-root 不写环境变量：必须显式传入，否则隔离实例会算出默认根的名字，
+            // 把用户安装版的单实例槽位占住（表现就是点任务栏没反应）。
+            var singleInstance = SingleInstanceGuard.TryAcquire(null, out var guard,
+                startupOptions.AppDataRootOverride);
             if (singleInstance == SingleInstanceAcquireResult.AlreadyRunning)
             {
                 // 系统通知按钮以协议激活启动第二个进程：先留下负载，已运行实例取走后再应答审批。
                 if (startupOptions.ActivationPayload is { } payload) Integration.ActivationInbox.Enqueue(payload);
-                SingleInstanceGuard.SignalExisting(null);
+                SingleInstanceGuard.SignalExisting(null, startupOptions.AppDataRootOverride);
                 return;
             }
             if (singleInstance == SingleInstanceAcquireResult.Acquired) SingleInstance = guard;

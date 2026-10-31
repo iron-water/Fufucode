@@ -35,21 +35,24 @@ internal sealed class SingleInstanceGuard : IDisposable
     /// （<c>%LOCALAPPDATA%\FufucodeTest</c>），因此也必须拥有独立的单实例对象：
     /// 两个安装同时运行是合法场景，不能被对方的 Mutex 当成"已有实例"而提前退出。
     /// 正式构建的数据根是默认值，名字与历史保持不变。
+    ///
+    /// <paramref name="dataRootOverride"/> 必须传入命令行解析出的数据根：
+    /// <c>--data-root</c> 不写环境变量，只读 DefaultRoot() 会把它当成默认根，
+    /// 结果就是隔离实例照样抢占安装版的槽位（用户点任务栏时静默退出）。
     /// </summary>
-    private static string BaseName
+    private static string BaseName(string? dataRootOverride)
     {
-        get
-        {
-            var root = Fufucode.Core.AppDataLayout.DefaultRoot();
-            var defaultRoot = System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode");
-            if (string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase)) return DefaultBaseName;
-            // string.GetHashCode 在 .NET 每次进程启动都随机化，两个进程会算出不同的名字；
-            // 这里必须用稳定摘要，两个进程才能互相看见同一个命名对象。
-            var digest = System.Security.Cryptography.SHA256.HashData(
-                System.Text.Encoding.UTF8.GetBytes(root.ToUpperInvariant()));
-            return DefaultBaseName + "." + Convert.ToHexString(digest, 0, 4).ToLowerInvariant();
-        }
+        var root = string.IsNullOrWhiteSpace(dataRootOverride)
+            ? Fufucode.Core.AppDataLayout.DefaultRoot()
+            : System.IO.Path.GetFullPath(dataRootOverride);
+        var defaultRoot = System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode");
+        if (string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase)) return DefaultBaseName;
+        // string.GetHashCode 在 .NET 每次进程启动都随机化，两个进程会算出不同的名字；
+        // 这里必须用稳定摘要，两个进程才能互相看见同一个命名对象。
+        var digest = System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(root.ToUpperInvariant()));
+        return DefaultBaseName + "." + Convert.ToHexString(digest, 0, 4).ToLowerInvariant();
     }
 
     private readonly Mutex _mutex;
@@ -100,10 +103,11 @@ internal sealed class SingleInstanceGuard : IDisposable
     /// <summary>
     /// 尝试成为唯一实例。<paramref name="nameOverride"/> 只供自测隔离使用，产品路径传 null。
     /// </summary>
-    public static SingleInstanceAcquireResult TryAcquire(string? nameOverride, out SingleInstanceGuard? guard)
+    public static SingleInstanceAcquireResult TryAcquire(string? nameOverride, out SingleInstanceGuard? guard,
+        string? dataRootOverride = null)
     {
         guard = null;
-        var baseName = nameOverride ?? BaseName;
+        var baseName = nameOverride ?? BaseName(dataRootOverride);
         if (nameOverride is null) baseName += "." + UserScope();
         var activationName = baseName + ".activate";
         var shutdownName = baseName + ".shutdown";
@@ -145,11 +149,11 @@ internal sealed class SingleInstanceGuard : IDisposable
     /// 通知已运行实例恢复窗口。首个实例可能还在启动，事件尚未创建：短暂重试。
     /// 返回是否成功送达（未送达不阻止第二个实例退出）。
     /// </summary>
-    public static bool SignalExisting(string? nameOverride)
+    public static bool SignalExisting(string? nameOverride, string? dataRootOverride = null)
     {
         // OpenExisting 只在 Windows 提供；其他平台没有单实例入口，直接报告未送达。
         if (!OperatingSystem.IsWindows()) return false;
-        var baseName = nameOverride ?? BaseName;
+        var baseName = nameOverride ?? BaseName(dataRootOverride);
         if (nameOverride is null) baseName += "." + UserScope();
         var activationName = baseName + ".activate";
 
