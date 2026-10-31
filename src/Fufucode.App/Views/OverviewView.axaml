@@ -1,25 +1,22 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fufucode.App.ViewModels" x:Class="Fufucode.App.Views.OverviewView" x:DataType="vm:MainViewModel">
   <Grid RowDefinitions="Auto,Auto,*" Margin="8">
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" ColumnSpacing="4" Margin="2,4,2,8">
-      <!-- 新建会话：整行一个按钮，按当前默认后端直接创建。 -->
-      <Button Grid.Column="0" Classes="subtle" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
-              Command="{Binding Sidebar.NewSessionCommand}">
+    <Grid Grid.Row="0" Margin="2,4,2,8">
+      <!-- 一条“新建会话 · 当前后端”：只有一个可用后端时点击直接新建；
+           多个后端时点击展开下拉，选哪个就用哪个新建。 -->
+      <Button x:Name="NewSessionBar" Classes="subtle" HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Left" Click="NewSessionBar_Click"
+              AutomationProperties.Name="新建会话">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/>
           <TextBlock Text="新建会话" FontSize="12" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Button>
-      <!-- 当前后端：一个条，点击展开下拉自选；只有一个可用后端时不显示（不留死按钮）。 -->
-      <Button Grid.Column="1" Classes="subtle" Height="28" Padding="8,0"
-              IsVisible="{Binding Sidebar.HasBackendChoice}"
-              AutomationProperties.Name="新建会话使用的后端"
-              AutomationProperties.HelpText="选择新建会话使用的后端"
-              PointerPressed="BackendChip_PointerPressed">
-        <StackPanel Orientation="Horizontal" Spacing="4">
-          <TextBlock Text="{Binding Sidebar.DefaultBackendLabel}" FontSize="12" VerticalAlignment="Center"/>
+          <TextBlock Text="·" FontSize="12" VerticalAlignment="Center"
+                     Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding Sidebar.HasBackendChoice}"/>
+          <TextBlock Text="{Binding Sidebar.DefaultBackendLabel}" FontSize="12" VerticalAlignment="Center"
+                     IsVisible="{Binding Sidebar.HasBackendChoice}"/>
           <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"/>
+                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                    IsVisible="{Binding Sidebar.HasBackendChoice}"/>
         </StackPanel>
       </Button>
     </Grid>

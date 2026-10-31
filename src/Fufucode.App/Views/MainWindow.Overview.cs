@@ -116,7 +116,7 @@ public partial class MainWindow
                 var presentation = SessionPresentation.Load(_host!.Manager.Metadata, session.Id);
                 SessionPresentation.Save(_host.Manager.Metadata, session.Id, presentation with { Unread = false });
             }
-            RefreshSessionList(); return Task.CompletedTask;
+            NotifySessionChanged(); return Task.CompletedTask;
         }, _host is not null));
         menu.Items.Add(OverviewMenu("管理已归档…", ShowArchivesAsync, _host is not null));
         options.ContextMenu = menu;
@@ -379,6 +379,16 @@ public partial class MainWindow
             { organization.EditProject(project, settings.Name, settings.Folder, section.Id); RenderOverview(); return Task.CompletedTask; }));
         var menu = OverviewContextMenu();
         menu.Items.Add(OverviewMenu("打开项目", () => SwitchProjectAsync(settings.Folder)));
+        menu.Items.Add(OverviewMenu("在新窗口中打开项目", () =>
+        {
+            new MainWindow(_options with
+            {
+                ProjectPath = settings.Folder,
+                SessionId = null,
+                NewSession = true,
+            }).Show();
+            return Task.CompletedTask;
+        }));
         menu.Items.Add(OverviewMenu("新建会话", async () =>
         {
             await SwitchProjectAsync(settings.Folder);
@@ -538,7 +548,7 @@ public partial class MainWindow
         menu.Items.Add(copies);
         menu.Items.Add(QuickActionsMenu(session, presentation));
         menu.Items.Add(new Separator());
-        menu.Items.Add(OverviewMenu("在新窗口中打开", async () => { await ActivateOverviewSessionAsync(session); await MoveSessionToWindowAsync(); }));
+        menu.Items.Add(OverviewMenu("在新窗口中打开", async () => { await ActivateOverviewSessionAsync(session); await OpenSessionInSharedWindowAsync(); }));
         menu.Items.Add(OverviewMenu("打开方式", async () => { await ActivateOverviewSessionAsync(session); await ShowOpenWithAsync(); }));
         menu.Items.Add(OverviewMenu("归档", () => ArchiveOverviewSessionAsync(session)));
         menu.Items.Add(OverviewMenu("永久删除", () => DeleteOverviewSessionAsync(session),
@@ -617,7 +627,7 @@ public partial class MainWindow
                 () => CopyAsync(SessionDeepLink.Create(session.Id,
                     _host!.Manager.Metadata.GetProject(session.ProjectId).Path))),
             "openWindow" => OverviewIcon("WindowNew", "在新窗口中打开", async () =>
-            { await ActivateOverviewSessionAsync(session); await MoveSessionToWindowAsync(); }),
+            { await ActivateOverviewSessionAsync(session); await OpenSessionInSharedWindowAsync(); }),
             "openWith" => OverviewIcon("Open", "打开方式", async () =>
             { await ActivateOverviewSessionAsync(session); await ShowOpenWithAsync(); }),
             "delete" => OverviewIcon("DismissCircle", "永久删除", () => DeleteOverviewSessionAsync(session)),
@@ -667,12 +677,12 @@ public partial class MainWindow
         var project = _host.Manager.Metadata.GetProject(session.ProjectId);
         SessionDeletion.Delete(_host.Manager.Layout, _host.Manager.Metadata, project.Path, session.Id);
         _archivePage?.Refresh();
-        RefreshSessionList();
+        NotifySessionChanged();
     }
     private void SetOverviewPresentation(string id, Func<SessionPresentation, SessionPresentation> change)
     {
         var store = _host!.Manager.Metadata;
-        SessionPresentation.Save(store, id, change(SessionPresentation.Load(store, id))); RefreshSessionList();
+        SessionPresentation.Save(store, id, change(SessionPresentation.Load(store, id))); NotifySessionChanged();
     }
     private async Task ActivateOverviewSessionAsync(SessionRecord session)
     {
@@ -717,7 +727,7 @@ public partial class MainWindow
             else _vm?.Timeline.AddNotification("当前项目已归档；关闭应用后不会再自动打开。可在 设置 › 已归档 恢复。");
         }
         _archivePage?.Refresh();
-        RefreshSessionList();
+        NotifySessionChanged();
     }
     private async Task EditSectionAsync(SessionSection? section)
     {

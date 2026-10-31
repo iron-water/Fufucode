@@ -29,7 +29,9 @@ public partial class MainWindow
     private double _zoom = 1;
     internal string? CurrentSessionId => _host?.Current.Session.Id;
     private string? Ready() => _vm is null ? "会话尚未就绪" : null;
-    private string? IdleReal() => _host is null ? "Mock 没有持久 Pi 会话" : _switching || _vm?.Input.IsTurnActive == true ? "请等待当前回合结束" : null;
+    private string? IdleReal() => _host is null ? "Mock 没有持久 Pi 会话"
+        : _borrowedHost ? "此窗口是同一会话的同步视图；请在主窗口操作"
+        : _switching || _vm?.Input.IsTurnActive == true ? "请等待当前回合结束" : null;
 
     private void RegisterWorkbenchActions()
     {
@@ -54,8 +56,19 @@ public partial class MainWindow
         Action("session.previous", "上一个会话", "导航", () => AdjacentSessionAsync(-1), IdleReal);
         Action("session.next", "下一个会话", "导航", () => AdjacentSessionAsync(1), IdleReal);
         Action("session.new", "新聊天", "会话", NewChatAsync, Ready);
-        Now("window.new", "新建窗口", "窗口", () => new MainWindow(_options with { SessionId = null }).Show());
-        Action("window.session", "在新窗口中打开当前会话", "窗口", MoveSessionToWindowAsync, IdleReal);
+        // 多窗口：新窗口从一条新会话开始，不抢占当前窗口正在使用的会话租约；
+        // 当前窗口即使在忙碌也不受影响。
+        Now("window.new", "新建窗口", "窗口", () => new MainWindow(_options with
+        {
+            ProjectPath = _host?.ProjectPath ?? _options.ProjectPath,
+            SessionId = null,
+            NewSession = true,
+        }).Show());
+        Now("window.newProject", "在新窗口中打开项目…", "窗口", () => _ = OpenProjectInNewWindowAsync());
+        // 同一会话的同步视图：共享同一宿主与事件流，保持单写者。
+        Now("window.session", "在新窗口中打开当前会话（同步）", "窗口",
+            () => _ = OpenSessionInSharedWindowAsync(),
+            () => _host is null ? "会话尚未就绪" : _borrowedHost ? "此窗口已是同步视图" : null);
         // 朗读只在 service.speech-synthesis 插件激活时存在：未安装时播放类动作整条从菜单消失，
         // 不留一排灰色条目；设置动作始终保留，作为未安装时的说明与安装入口。
         string? SpeechReady() => SpeechInstalled ? null : "未安装或未启用语音朗读插件，请在插件市场安装 service.speech-synthesis";
@@ -140,13 +153,35 @@ public partial class MainWindow
         }
         return _options with { AppDataRootOverride = root, SessionId = null, ProjectPath = _host?.ProjectPath ?? _options.ProjectPath };
     }
-    private async Task MoveSessionToWindowAsync()
+    /// <summary>同一会话的同步视图：新窗口借用当前窗口的宿主，事件流与单写者都保持不变。</summary>
+    private Task OpenSessionInSharedWindowAsync()
     {
-        if (_host is null) return;
-        var id = _host.Current.Session.Id;
-        var options = _options with { ProjectPath = _host.ProjectPath, SessionId = id };
-        await SwitchSessionAsync(null);
-        if (CurrentSessionId != id) new MainWindow(options).Show();
+        if (_host is null || _borrowedHost) return Task.CompletedTask;
+        new MainWindow(_options with
+        {
+            ProjectPath = _host.ProjectPath,
+            SessionId = _host.Current.Session.Id,
+            NewSession = false,
+            ShareSession = true,
+        }).Show();
+        return Task.CompletedTask;
+    }
+
+    /// <summary>在新窗口打开另一个项目：当前窗口的忙碌回合不受影响。</summary>
+    private async Task OpenProjectInNewWindowAsync()
+    {
+        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
+        {
+            Title = "在新窗口中打开项目",
+            AllowMultiple = false,
+        });
+        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
+        new MainWindow(_options with
+        {
+            ProjectPath = path,
+            SessionId = null,
+            NewSession = true,
+        }).Show();
     }
     private Task SwitchChatTabFocusAsync()
     {

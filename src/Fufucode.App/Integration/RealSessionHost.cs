@@ -80,6 +80,17 @@ public sealed class RealSessionHost : IAsyncDisposable
                 throw new InvalidOperationException("会话与指定工作目录不匹配。");
             session = await manager.ResumeAsync(sessionId, cancellationToken);
         }
+        else if (options.NewSession)
+        {
+            // 新窗口固定从一条新会话开始，不抢占其它窗口正在使用的最近会话租约。
+            var preferredBackend = options.Backend ?? manager.PreferredBackend;
+            if (!manager.IsBackendAvailable(preferredBackend))
+            {
+                diagnostic = $"默认后端 {BackendCapabilities.For(preferredBackend).Name} 不可用，已回退到 FUMO 原生内核。";
+                preferredBackend = BackendId.NativeCSharp;
+            }
+            session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: preferredBackend);
+        }
         else
         {
             var existing = manager.Metadata.ListSessions(project.Id).Where(s => options.Backend is null || s.Backend == options.Backend).ToArray();

@@ -26,7 +26,11 @@ public sealed record AppOptions(
     bool ParallelReview = false,
     string? ReviewLabel = null,
     // 系统通知按钮的协议激活负载（fufucode-approval://...）；普通启动为 null。
-    string? ActivationPayload = null)
+    string? ActivationPayload = null,
+    // 新窗口专用：忽略该项目最近会话，直接新建一条会话（避免与已打开窗口争用同一会话租约）。
+    bool NewSession = false,
+    // 新窗口专用：同一会话在多个窗口共享同一宿主，作为同步视图（单写者不变）。
+    bool ShareSession = false)
 {
     public static readonly AppOptions Mock = new(AppSessionMode.Mock, null, null, null, null);
 
@@ -46,6 +50,7 @@ public sealed record AppOptions(
         string? project = null, session = null, node = null, cli = null, dataRoot = null;
         BackendId? backend = null;
         var parallelReview = false;
+        var newSession = false;
         string? reviewLabel = null;
         string? omp = null;
         string? claude = null;
@@ -102,6 +107,9 @@ public sealed record AppOptions(
                 case "--data-root" when i + 1 < args.Length:
                     dataRoot = System.IO.Path.GetFullPath(args[++i]);
                     break;
+                case "--new-session":
+                    newSession = true;
+                    break;
                 case "--parallel-review":
                     parallelReview = true;
                     break;
@@ -113,6 +121,6 @@ public sealed record AppOptions(
         }
 
         return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp, claude, codex, dsh,
-            parallelReview, reviewLabel, activation);
+            parallelReview, reviewLabel, activation, newSession);
     }
 }

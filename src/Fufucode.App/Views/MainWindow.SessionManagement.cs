@@ -66,7 +66,7 @@ public partial class MainWindow : ISessionManagement
         if (_host is null || ManagedSession?.Id is not { } id) return;
         var current = SessionPresentation.Load(_host.Manager.Metadata, id);
         SessionPresentation.Save(_host.Manager.Metadata, id, current with { Pinned = !current.Pinned });
-        RefreshSessionList();
+        NotifySessionChanged();
     }
 
     private async Task RenameManagedSessionAsync()
@@ -121,7 +121,7 @@ public partial class MainWindow : ISessionManagement
             // 用户亲手改的名字是最高准则：自动取名永远不再覆盖它。
             SessionPresentation.Save(_host.Manager.Metadata, id,
                 SessionPresentation.Load(_host.Manager.Metadata, id) with { NameUserSet = true, NameAutoAttempted = true });
-            RefreshSessionList();
+            NotifySessionChanged();
         }
         catch (Exception error) { _vm?.Timeline.AddNotification("重命名失败：" + error.Message); }
     }
@@ -139,7 +139,14 @@ public partial class MainWindow : ISessionManagement
             if (next is null) await SwitchSessionAsync(null); else await SwitchSessionAsync(next.Id);
         }
         _archivePage?.Refresh();
+        NotifySessionChanged();
+    }
+
+    /// <summary>会话元数据变化后刷新本窗口，并通知同进程其它窗口刷新。</summary>
+    private void NotifySessionChanged()
+    {
         RefreshSessionList();
+        Integration.SessionChangeBus.Publish(this);
     }
 
     private void RefreshSessionList()

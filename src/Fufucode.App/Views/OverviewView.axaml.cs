@@ -1,6 +1,5 @@
 using System.Linq;
 using Avalonia.Controls;
-using Avalonia.Input;
 using Avalonia.Interactivity;
 using Fufucode.App.ViewModels;
 
@@ -12,11 +11,18 @@ public partial class OverviewView : UserControl
     public StackPanel Toolbar => ManagementToolbar;
     public StackPanel Body => ManagementBody;
 
-    /// <summary>后端条：点击展开下拉，选哪个后端就用哪个新建会话。</summary>
-    private void BackendChip_PointerPressed(object? sender, PointerPressedEventArgs e)
+    /// <summary>
+    /// 一条“新建会话 · 当前后端”：只有一个可用后端时点击直接新建；
+    /// 多个后端时点击展开下拉，选哪个就用哪个新建。
+    /// </summary>
+    private void NewSessionBar_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button button || DataContext is not MainViewModel viewModel) return;
-        if (!viewModel.Sidebar.HasBackendChoice) return;
+        if (!viewModel.Sidebar.HasBackendChoice)
+        {
+            viewModel.Sidebar.NewSessionCommand.Execute(null);
+            return;
+        }
         var flyout = new MenuFlyout();
         foreach (var option in viewModel.Sidebar.NewSessionBackends)
         {
@@ -29,6 +35,5 @@ public partial class OverviewView : UserControl
             });
         }
         flyout.ShowAt(button);
-        e.Handled = true;
     }
 }

@@ -27,16 +27,20 @@ internal static class ForkSelfTest
             var session = store.CreateSession(project, null, BackendId.NativeCSharp);
             var file = NativeSessionFactory.SessionFilePath(layout, project.Id, session.Id);
             Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+            var seeded = new[]
+            {
+                new PureAgentMessage(PureAgentRole.User, "第一条用户消息"),
+                new PureAgentMessage(PureAgentRole.Assistant, "第一条回复"),
+                new PureAgentMessage(PureAgentRole.User, "第二条用户消息"),
+                new PureAgentMessage(PureAgentRole.Assistant, "第二条回复"),
+            };
+            // 分叉点使用持久消息身份（native_<EntryId>），不是位置下标。
+            var forkEntry = "native_" + seeded[2].EntryId;
+            var assistantEntry = "native_" + seeded[1].EntryId;
             File.WriteAllText(file, JsonSerializer.Serialize(new
             {
                 version = 2,
-                messages = new[]
-                {
-                    new PureAgentMessage(PureAgentRole.User, "第一条用户消息"),
-                    new PureAgentMessage(PureAgentRole.Assistant, "第一条回复"),
-                    new PureAgentMessage(PureAgentRole.User, "第二条用户消息"),
-                    new PureAgentMessage(PureAgentRole.Assistant, "第二条回复"),
-                },
+                messages = seeded,
                 thinkingLevel = "off",
             }));
             store.UpdateSessionFile(session.Id, file);
@@ -46,9 +50,9 @@ internal static class ForkSelfTest
             var opened = await manager.ResumeAsync(session.Id);
             try
             {
-                var result = await manager.ForkAsync(opened, "entry_2");
+                var result = await manager.ForkAsync(opened, forkEntry);
                 var child = result.Session.Session;
-                Check(child.ParentSessionId == session.Id && child.ForkEntryId == "entry_2" && child.IsFork,
+                Check(child.ParentSessionId == session.Id && child.ForkEntryId == forkEntry && child.IsFork,
                     "fork row records parent and entry");
                 Check(child.Id != session.Id && child.ProjectId == project.Id, "fork gets its own session id in the same project");
                 Check(child.FilePath is { Length: > 0 } childFile && File.Exists(childFile) && childFile != file,
@@ -69,7 +73,7 @@ internal static class ForkSelfTest
             {
                 try
                 {
-                    await manager.ForkAsync(reopened, "entry_1");
+                    await manager.ForkAsync(reopened, assistantEntry);
                     Check(false, "fork at an assistant message is rejected");
                 }
                 catch (InvalidOperationException)
@@ -78,7 +82,7 @@ internal static class ForkSelfTest
                 }
                 try
                 {
-                    await manager.ForkAsync(reopened, "entry_99");
+                    await manager.ForkAsync(reopened, "native_" + Guid.NewGuid().ToString("N"));
                     Check(false, "fork at an out-of-range entry is rejected");
                 }
                 catch (ArgumentOutOfRangeException)

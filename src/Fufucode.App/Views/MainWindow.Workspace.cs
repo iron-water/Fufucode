@@ -417,7 +417,7 @@ public partial class MainWindow
         // 切换项目会恢复该项目最近的会话；这里再切回刚才移动的会话。
         if (_host.Current.Session.Id != session.Id)
             await _host.SwitchToAsync(session.Id, _bootstrapCts.Token);
-        RefreshSessionList();
+        NotifySessionChanged();
     }
 
     private static string BackendFolder(Fufucode.Core.BackendId backend) => backend switch
@@ -523,7 +523,7 @@ public partial class MainWindow
                 metadata,
                 record => ActivateOverviewSessionAsync(record),
                 path => SwitchProjectAsync(path),
-                RefreshSessionList));
+                NotifySessionChanged));
             _archiveStorePath = metadata.DatabasePath;
         }
         vm.Settings.ArchiveContent = _archivePage;

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Media.Imaging;
@@ -450,7 +451,11 @@ internal static class WorkbenchDemoSelfTest
                     "Tabs: side-chat rename updates its real identity without renaming the primary session");
                 real.OpenDockPage("overview", DockZone.Left); await Ready();
                 var overview = real.PageForTesting("overview");
-                ClickNative(overview.GetVisualDescendants().OfType<Button>().Single(b => ReferenceEquals(b.Command, vm.Sidebar.NewSessionCommand)));
+                var newSessionBar = overview.GetVisualDescendants().OfType<Button>()
+                    .Single(b => AutomationProperties.GetName(b) == "新建会话");
+                Check(newSessionBar.IsVisible, "Tabs: overview exposes the unified new-session bar");
+                // 合并成一条后，主按钮在有多个后端时打开下拉；这里直接执行同一命令走创建路径。
+                vm.Sidebar.NewSessionCommand.Execute(null);
                 deadline = DateTime.UtcNow.AddSeconds(40);
                 while ((real.CurrentSessionId == parentBeforeCancel || ReferenceEquals(real.DataContext, vm)) && DateTime.UtcNow < deadline) await Task.Delay(100);
                 Check(real.CurrentSessionId != parentBeforeCancel && real.DataContext is MainViewModel,
