@@ -103,7 +103,7 @@ internal sealed class SingleInstanceGuard : IDisposable
     public static SingleInstanceAcquireResult TryAcquire(string? nameOverride, out SingleInstanceGuard? guard)
     {
         guard = null;
-        var baseName = nameOverride ?? DefaultBaseName;
+        var baseName = nameOverride ?? BaseName;
         if (nameOverride is null) baseName += "." + UserScope();
         var activationName = baseName + ".activate";
         var shutdownName = baseName + ".shutdown";
@@ -149,7 +149,7 @@ internal sealed class SingleInstanceGuard : IDisposable
     {
         // OpenExisting 只在 Windows 提供；其他平台没有单实例入口，直接报告未送达。
         if (!OperatingSystem.IsWindows()) return false;
-        var baseName = nameOverride ?? DefaultBaseName;
+        var baseName = nameOverride ?? BaseName;
         if (nameOverride is null) baseName += "." + UserScope();
         var activationName = baseName + ".activate";
 
