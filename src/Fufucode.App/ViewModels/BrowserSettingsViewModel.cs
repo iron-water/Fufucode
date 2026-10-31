@@ -108,6 +108,36 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
         set => Set(value, _ => { }, v => Persist(s => s with { EnablePasswordAutosave = v }));
     }
 
+    public int BrowserMemoryBudgetMb
+    {
+        get => Current.BrowserMemoryBudgetMb;
+        set => Set(value, _ => { }, v => Persist(s => s with { BrowserMemoryBudgetMb = v }));
+    }
+
+    public int BrowserHotTabLimit
+    {
+        get => Current.BrowserHotTabLimit;
+        set => Set(value, _ => { }, v => Persist(s => s with { BrowserHotTabLimit = v }));
+    }
+
+    public int BrowserBackgroundSuspendMinutes
+    {
+        get => Current.BrowserBackgroundSuspendMinutes;
+        set => Set(value, _ => { }, v => Persist(s => s with { BrowserBackgroundSuspendMinutes = v }));
+    }
+
+    public int BrowserBackgroundDiscardMinutes
+    {
+        get => Current.BrowserBackgroundDiscardMinutes;
+        set => Set(value, _ => { }, v => Persist(s => s with { BrowserBackgroundDiscardMinutes = v }));
+    }
+
+    public int BrowserBackgroundDiscardAllMinutes
+    {
+        get => Current.BrowserBackgroundDiscardAllMinutes;
+        set => Set(value, _ => { }, v => Persist(s => s with { BrowserBackgroundDiscardAllMinutes = v }));
+    }
+
     // ── 设备自带浏览器扩展 ──
 
     public bool ExternalBrowserEnabled
@@ -373,6 +403,9 @@ public sealed partial class BrowserSettingsViewModel : ViewModelBase
             nameof(BrowserUseEnabled), nameof(WebUrlOpenTargetIndex), nameof(LocalUrlOpenTargetIndex), nameof(ShowFullUrl),
             nameof(SearchUrlTemplate), nameof(UserAgent), nameof(AnnotationIncludeScreenshot),
             nameof(EnableAutofill), nameof(EnablePasswordAutosave),
+            nameof(BrowserMemoryBudgetMb), nameof(BrowserHotTabLimit),
+            nameof(BrowserBackgroundSuspendMinutes), nameof(BrowserBackgroundDiscardMinutes),
+            nameof(BrowserBackgroundDiscardAllMinutes),
             nameof(ExternalBrowserEnabled), nameof(ExternalBrowserPort), nameof(ExternalBrowserPin),
             nameof(ScreenshotModeIndex), nameof(PromptDownloadLocation), nameof(DownloadHistoryEnabled),
             nameof(DefaultDownloadDirectory), nameof(EnableSiteTools), nameof(DefaultBrowsePermissionIndex),

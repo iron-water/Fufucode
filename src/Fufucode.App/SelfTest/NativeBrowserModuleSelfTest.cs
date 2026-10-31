@@ -73,6 +73,7 @@ internal static class NativeBrowserModuleSelfTest
         browser.ViewModel.AddressText = loopback.Url;
         browser.ViewModel.NavigateCommand.Execute(null);
         await Until(() => browser.ViewModel.DocumentTitle == "LOOPBACK_TAB_OK");
+        await Task.Delay(200);   // 让两个 renderer 的标题回写收敛，避免采样瞬间的假失败
         var hostA = browser.HostForTabForTesting(tabA);
         var hostB = browser.HostForTabForTesting(tabB);
         Check(browser.HostCountForTesting == 2 && !ReferenceEquals(hostA, hostB), "Each tab owns its own native host instance");
@@ -299,6 +300,50 @@ internal static class NativeBrowserModuleSelfTest
         Check(File.Exists(historyFile), "Download history is written to browser-downloads.json");
         browser.ViewModel.CloseTabByIdCommand.Execute(downloadTab);
         await Task.Delay(400);
+
+        // ---- 6c. 内存生命周期：丢弃 controller 后按需重建；挂起可恢复；进程采样真实 ----
+        browser.ViewModel.SelectTab(tabA);
+        await browser.ActivateTabForTestingAsync(tabA);
+        await Until(() => hostA.IsReady);
+        var scrollBefore = await hostA.CaptureScrollAsync();
+        Note("memory: scroll before discard=" + (scrollBefore is null ? "null" : $"{scrollBefore.Value.X},{scrollBefore.Value.Y}"));
+        await browser.DiscardTabForTestingAsync(tabA);
+        Check(!hostA.HasController && tabA.IsDiscarded, "丢弃页签释放 controller 并进入 Discarded");
+        Check(tabA.NavigationAddress == tabAAddress, "丢弃后保留真实 URL 供恢复");
+        await browser.ActivateTabForTestingAsync(tabA);
+        await Until(() => hostA.IsReady && tabA.Lifecycle == BrowserTabLifecycle.Active);
+        Check(hostA.HasController && hostA.ControllerCreateCountForTesting >= 2,
+            "重新激活被丢弃页签会重建 controller");
+        Check(await TitleAsync(hostA) == "NATIVE_MODULE_OK", "重建后导航回原页面");
+
+        await browser.SuspendTabForTestingAsync(tabA);
+        Check(hostA.IsSuspended || tabA.Lifecycle == BrowserTabLifecycle.Warm,
+            "挂起成功进入 Suspended；运行时拒绝时降级 Warm");
+        await browser.ActivateTabForTestingAsync(tabA);
+        Check(!hostA.IsSuspended && tabA.Lifecycle == BrowserTabLifecycle.Active, "激活后恢复挂起页签");
+
+        var mainBytes = System.Diagnostics.Process.GetCurrentProcess().PrivateMemorySize64;
+        var memory = browser.SampleProcessesForTesting();
+        Note($"memory: processes={memory.ProcessCount} total={memory.TotalPrivateBytes / 1024 / 1024}MB " +
+             $"browser={memory.BrowserBytes / 1024 / 1024}MB renderer={memory.RendererBytes / 1024 / 1024}MB " +
+             $"gpu={memory.GpuBytes / 1024 / 1024}MB main={mainBytes / 1024 / 1024}MB exact={memory.IsExact} " +
+             $"pids={string.Join(",", memory.ProcessIds)}");
+        Check(memory.ProcessCount > 0 && memory.TotalPrivateBytes > 0, "进程预算采样读取真实 WebView2 子进程");
+
+        var originalBudget = browser.MemoryGovernorForTesting.BudgetBytes;
+        browser.MemoryGovernorForTesting.BudgetBytes = 1;
+        await browser.RunLifecycleForTestingAsync();
+        Check(browser.ViewModel.Tabs.Any(tab => tab.IsDiscarded), "超预算触发非活动页签丢弃");
+        browser.MemoryGovernorForTesting.BudgetBytes = originalBudget;
+        await browser.ActivateTabForTestingAsync(tabA);
+
+        browser.MemoryGovernorForTesting.HotLimit = 1;
+        await browser.ActivateTabForTestingAsync(tabB);
+        await browser.ActivateTabForTestingAsync(tabA);
+        Check(browser.ViewModel.Tabs.Count(tab => !tab.IsDiscarded) <= 1,
+            "热池上限 1 时其它页签按 LRU 休眠");
+        browser.MemoryGovernorForTesting.HotLimit = 3;
+        await browser.ActivateTabForTestingAsync(tabA);
 
         // ---- 7. 关闭页签只释放对应 controller ----
         browser.ViewModel.SelectTab(tabB);

@@ -74,12 +74,14 @@ internal static class Program
             var tab1 = vm.ActiveTab!;
             tab1.ApplyNavigationState(false, false, false, "https://one.example/");
             tab1.AddressText = "draft-one";   // 用户在导航完成后输入、未提交的草稿
+            tab1.ScrollX = 12;
+            tab1.ScrollY = 34;
             vm.NewTabCommand.Execute(null);
             var tab2 = vm.ActiveTab!;
             tab2.ApplyNavigationState(false, false, false, "https://two.example/");
             tab2.AddressText = "draft-two";
             var captured = view.CaptureState();
-            Check(captured.Version == 2 && captured.Tabs is { Count: 2 }, "捕获状态为 v2 且包含两个页签");
+            Check(captured.Version == 3 && captured.Tabs is { Count: 2 }, "捕获状态为 v3 且包含两个页签");
 
             var view2 = new BrowserView();
             view2.RestoreState(captured);
@@ -89,6 +91,8 @@ internal static class Program
                 "恢复后两个页签各自保留真实导航地址");
             Check(view2.ViewModel.Tabs[0].AddressText == "draft-one" && view2.ViewModel.Tabs[1].AddressText == "draft-two",
                 "恢复后地址草稿保真");
+            Check(Math.Abs(view2.ViewModel.Tabs[0].ScrollY - 34) < 0.01,
+                "恢复后保留页签滚动位置");
             Check(ReferenceEquals(view2.ViewModel.ActiveTab, view2.ViewModel.Tabs[1]), "恢复后活动页签为捕获时的页签");
 
             // ---- v1 旧状态继续可读 ----
@@ -181,6 +185,7 @@ internal static class Program
             BrowserSettingsUi.Run(Check);
             BrowserUsabilityTests.Run(Check);
             ExternalBrowserBridgeTests.Run(Check);
+            BrowserMemoryGovernorTests.Run(Check);
 
             // ---- 320 DIP / 浅深主题入口可达（真实控件布局） ----
             UiSmoke.Run(Check);

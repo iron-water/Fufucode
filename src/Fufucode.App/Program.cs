@@ -159,6 +159,31 @@ internal static class Program
                 .StartWithClassicDesktopLifetime(Array.Empty<string>());
             Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
         }
+        if (args.Contains("--browser-memory-probe"))
+        {
+            SelfTestMode = NativeModuleSelfTest = true;
+            SelfTestDataRoot = System.IO.Path.GetFullPath("tmp/memory-probe-" + Guid.NewGuid().ToString("N"));
+            var completion = new TaskCompletionSource<int>();
+            Dispatcher.UIThread.Post(async () =>
+            {
+                var lifetime = (IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
+                lifetime.ShutdownMode = ShutdownMode.OnExplicitShutdown;
+                var window = (MainWindow)lifetime.MainWindow!;
+                var code = 1;
+                try { code = await SelfTest.BrowserMemoryProbe.RunAsync(window); }
+                catch (Exception error) { Console.WriteLine("Memory probe failed: " + error); }
+                finally
+                {
+                    window.Close();
+                    await Task.Delay(1000);
+                    completion.TrySetResult(code);
+                    lifetime.Shutdown(code);
+                }
+            }, DispatcherPriority.Background);
+            BuildAvaloniaApp(AppOptions.Mock with { AppDataRootOverride = SelfTestDataRoot })
+                .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
+        }
         if (args.Contains("--native-module-selftest"))
         {
             SelfTestMode = NativeModuleSelfTest = true;

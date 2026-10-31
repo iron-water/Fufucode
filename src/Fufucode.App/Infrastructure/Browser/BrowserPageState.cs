@@ -8,7 +8,9 @@ internal sealed record BrowserTabState(
     string AddressDraft,
     string? NavigationAddress,
     string? FilePath,
-    string Title);
+    string Title,
+    double ScrollX = 0,
+    double ScrollY = 0);
 
 /// <summary>
 /// 版本化浏览器页面状态。
@@ -23,5 +25,5 @@ internal sealed record BrowserPageState(
     string? ActiveTabId = null,
     IReadOnlyList<BrowserTabState>? Tabs = null)
 {
-    internal const int CurrentVersion = 2;
+    internal const int CurrentVersion = 3;
 }

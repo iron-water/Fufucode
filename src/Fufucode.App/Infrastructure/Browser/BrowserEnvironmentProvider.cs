@@ -25,7 +25,6 @@ internal static class BrowserEnvironmentProvider
                 return await existing.ConfigureAwait(false);
 
             // 扩展能力是 WebView2 的环境级选项，必须与 user data folder 一起保持一致。
-            // 扩展能力是 WebView2 的环境级选项，必须与 user data folder 一起保持一致。
             var options = new CoreWebView2EnvironmentOptions
             {
                 AreBrowserExtensionsEnabled = true,
@@ -47,6 +46,15 @@ internal static class BrowserEnvironmentProvider
         {
             Gate.Release();
         }
+    }
+
+    /// <summary>已完成创建的环境；供进程采样使用，不触发新的创建。</summary>
+    public static bool TryGetCompleted(string userDataFolder, out CoreWebView2Environment environment)
+    {
+        environment = null!;
+        if (!Cache.TryGetValue(userDataFolder, out var task) || !task.IsCompletedSuccessfully) return false;
+        environment = task.Result;
+        return true;
     }
 
     /// <summary>测试用：丢弃缓存，让下一次重新创建环境。</summary>

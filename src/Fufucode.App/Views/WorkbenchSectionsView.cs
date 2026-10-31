@@ -509,6 +509,34 @@ public sealed class WorkbenchSectionsView : UserControl
             BuildBrowserClearRow(browser),
             BuildBrowserHistoryRow(browser));
 
+        // ── 内存与后台 ──
+        Group(rows, "内存与后台",
+            HostTextFieldRow("WebView2 内存预算 (MB)", "全部 browser/renderer/GPU 子进程 PrivateMemorySize64 总和上限；超预算先丢后台页签",
+                () => browser.BrowserMemoryBudgetMb.ToString(), value =>
+                {
+                    if (int.TryParse(value, out var mb)) browser.BrowserMemoryBudgetMb = mb;
+                }),
+            HostTextFieldRow("热页签上限", "同时保留 controller 的页签数（含当前页签）；超出的按 LRU 休眠",
+                () => browser.BrowserHotTabLimit.ToString(), value =>
+                {
+                    if (int.TryParse(value, out var count)) browser.BrowserHotTabLimit = count;
+                }),
+            HostTextFieldRow("后台挂起（分钟）", "窗口最小化/隐藏后，非当前页签进入挂起",
+                () => browser.BrowserBackgroundSuspendMinutes.ToString(), value =>
+                {
+                    if (int.TryParse(value, out var minutes)) browser.BrowserBackgroundSuspendMinutes = minutes;
+                }),
+            HostTextFieldRow("后台丢弃（分钟）", "后台超过该时长后丢弃非当前页签的 controller",
+                () => browser.BrowserBackgroundDiscardMinutes.ToString(), value =>
+                {
+                    if (int.TryParse(value, out var minutes)) browser.BrowserBackgroundDiscardMinutes = minutes;
+                }),
+            HostTextFieldRow("后台全部丢弃（分钟）", "后台超过该时长后连当前页签一起丢弃，恢复窗口时按需重建",
+                () => browser.BrowserBackgroundDiscardAllMinutes.ToString(), value =>
+                {
+                    if (int.TryParse(value, out var minutes)) browser.BrowserBackgroundDiscardAllMinutes = minutes;
+                }));
+
         // ── 下载 ──
         Group(rows, "下载",
             HostTextFieldRow("默认下载位置", "留空时沿用 WebView2 默认下载目录；输入绝对路径即写入配置",

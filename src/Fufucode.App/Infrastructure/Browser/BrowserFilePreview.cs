@@ -48,7 +48,8 @@ public sealed record BrowserFilePreviewTarget(
 internal static class BrowserFilePreview
 {
     public const long MaxTextBytes = 512 * 1024;
-    public const long MaxInlineImageBytes = 4 * 1024 * 1024;
+    /// <summary>超过 1 MB 的图片不再转 data URI（避免大字符串/大对象），直接走 file URI。</summary>
+    public const long MaxInlineImageBytes = 1024 * 1024;
 
     private static readonly HashSet<string> HtmlExtensions = new(StringComparer.OrdinalIgnoreCase)
         { ".html", ".htm" };

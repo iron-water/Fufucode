@@ -74,7 +74,38 @@ public sealed partial class BrowserTab : ObservableObject
     [ObservableProperty] private Bitmap? _faviconSource;
     [ObservableProperty] private bool _isPlayingAudio;
     [ObservableProperty] private bool _isMuted;
+    [ObservableProperty] private BrowserTabLifecycle _lifecycle = BrowserTabLifecycle.Discarded;
+    [ObservableProperty] private double _scrollX;
+    [ObservableProperty] private double _scrollY;
+    /// <summary>LRU/后台策略使用；每次用户或智能体操作页签时更新。</summary>
+    public DateTimeOffset LastAccessUtc { get; private set; } = DateTimeOffset.UtcNow;
     private byte[]? _faviconBytes;
+
+    public bool IsDiscarded => Lifecycle is BrowserTabLifecycle.Discarded or BrowserTabLifecycle.Closed;
+    public string LifecycleText => Lifecycle switch
+    {
+        BrowserTabLifecycle.Active => "活跃",
+        BrowserTabLifecycle.Warm => "后台",
+        BrowserTabLifecycle.Suspended => "已挂起",
+        BrowserTabLifecycle.Discarded => "已休眠",
+        _ => "已关闭",
+    };
+
+    public void Touch() => LastAccessUtc = DateTimeOffset.UtcNow;
+
+    public void ApplyLifecycle(BrowserTabLifecycle lifecycle)
+    {
+        if (Lifecycle == lifecycle) return;
+        Lifecycle = lifecycle;
+        OnPropertyChanged(nameof(IsDiscarded));
+        OnPropertyChanged(nameof(LifecycleText));
+    }
+
+    partial void OnLifecycleChanged(BrowserTabLifecycle value)
+    {
+        OnPropertyChanged(nameof(IsDiscarded));
+        OnPropertyChanged(nameof(LifecycleText));
+    }
     /// <summary>地址栏来源的安全态：null/空 = 不显示锁图标（文件预览、about:blank 与新页签）。</summary>
     [ObservableProperty] private BrowserSecurityState _security = BrowserSecurityState.None;
     /// <summary>当前页签的地址显示文本：显示完整网址关闭时只显示主机名。</summary>
@@ -284,7 +315,15 @@ public sealed partial class BrowserTab : ObservableObject
         OnPropertyChanged(nameof(SecurityToolTip));
     }
 
-    internal BrowserTabState CaptureState() => new(Id, AddressText, NavigationAddress, CurrentFilePath, DocumentTitle);
+    internal BrowserTabState CaptureState() => new(Id, AddressText, NavigationAddress, CurrentFilePath, DocumentTitle, ScrollX, ScrollY);
+
+    /// <summary>关闭页签时释放 favicon 位图；页签对象随后由集合移除。</summary>
+    public void DisposeFavicon()
+    {
+        FaviconSource?.Dispose();
+        FaviconSource = null;
+        _faviconBytes = null;
+    }
 
     private static string Shorten(string value) => value.Length <= 24 ? value : value[..23] + "…";
 }

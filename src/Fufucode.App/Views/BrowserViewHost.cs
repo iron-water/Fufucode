@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
@@ -359,7 +360,7 @@ public sealed class BrowserViewHost : Control, IDisposable
             var folderError = BrowserUserDataLayout.TryEnsure(folder);
             if (folderError is not null) { StatusChanged?.Invoke(this, "浏览器数据目录不可写：" + folderError); return; }
 
-            var environment = await BrowserEnvironmentProvider.GetAsync(folder);
+            var environment = await BrowserRuntime.GetEnvironmentAsync(folder);
             if (Abandon(token)) return;
             _environment = environment;
 
@@ -438,6 +439,107 @@ public sealed class BrowserViewHost : Control, IDisposable
         {
             FaviconChanged?.Invoke(this, null);
         }
+    }
+
+    /// <summary>当前 controller 是否真的持有一个 CoreWebView2（Discarded 后为 false）。</summary>
+    public bool HasController => _core is not null;
+    public bool IsSuspended
+    {
+        get { try { return _core?.IsSuspended ?? false; } catch (Exception e) when (IsControllerGone(e)) { return false; } }
+    }
+
+    /// <summary>低内存目标：页面继续运行，但 renderer 主动收缩缓存。</summary>
+    public void SetMemoryTargetLow(bool low)
+    {
+        if (_core is not { } core) return;
+        try { core.MemoryUsageTargetLevel = low ? CoreWebView2MemoryUsageTargetLevel.Low : CoreWebView2MemoryUsageTargetLevel.Normal; }
+        catch (Exception error) when (IsControllerGone(error) || error is NotSupportedException) { }
+    }
+
+    /// <summary>进入 Active：恢复挂起、可见、正常内存目标。</summary>
+    public void SetActive()
+    {
+        if (_core is { } core)
+        {
+            try { if (core.IsSuspended) core.Resume(); } catch (Exception e) when (IsControllerGone(e)) { }
+            SetMemoryTargetLow(false);
+        }
+        _occluded = false;
+        UpdateVisibility();
+    }
+
+    /// <summary>进入 Warm：隐藏并降低内存目标，但保留 DOM/脚本状态。</summary>
+    public void SetWarm()
+    {
+        _occluded = true;
+        UpdateVisibility();
+        SetMemoryTargetLow(true);
+    }
+
+    /// <summary>进入 Suspended：隐藏后调用 WebView2 挂起；DevTools 打开等原因失败时退回 Low。</summary>
+    public async Task<bool> TrySuspendAsync()
+    {
+        if (_core is not { } core) return false;
+        try
+        {
+            _occluded = true;
+            UpdateVisibility();
+            if (core.IsSuspended) return true;
+            // 同一 controller 不混用 Low 与 TrySuspend：挂起前先恢复正常目标。
+            SetMemoryTargetLow(false);
+            var suspended = await core.TrySuspendAsync().ConfigureAwait(true);
+            if (!suspended) SetMemoryTargetLow(true);
+            return suspended;
+        }
+        catch (Exception error) when (IsControllerGone(error) || error is NotSupportedException)
+        {
+            SetMemoryTargetLow(true);
+            return false;
+        }
+    }
+
+    /// <summary>丢弃 controller，保留 host 控件本身；下次激活时重新创建并导航回保存的 URL。</summary>
+    public void DiscardController()
+    {
+        _occluded = true;
+        ReleaseController();
+        UpdateVisibility();
+    }
+
+    /// <summary>丢弃前保存滚动位置；无 controller 时返回 null。</summary>
+    public async Task<(double X, double Y)?> CaptureScrollAsync()
+    {
+        if (_core is not { } core) return null;
+        try
+        {
+            if (core.IsSuspended) core.Resume();
+            var raw = await core.ExecuteScriptAsync("JSON.stringify({x:window.scrollX||0,y:window.scrollY||0})")
+                .ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            var text = raw.Trim();
+            if (text.Length >= 2 && text[0] == '"' && text[^1] == '"')
+                text = JsonSerializer.Deserialize<string>(text) ?? text;
+            using var doc = JsonDocument.Parse(text);
+            var x = doc.RootElement.TryGetProperty("x", out var xe) ? xe.GetDouble() : 0;
+            var y = doc.RootElement.TryGetProperty("y", out var ye) ? ye.GetDouble() : 0;
+            return (x, y);
+        }
+        catch (Exception error) when (IsControllerGone(error) || error is JsonException)
+        {
+            return null;
+        }
+    }
+
+    public async Task RestoreScrollAsync(double x, double y)
+    {
+        if (_core is not { } core) return;
+        try
+        {
+            if (core.IsSuspended) core.Resume();
+            await core.ExecuteScriptAsync($"window.scrollTo({x.ToString(System.Globalization.CultureInfo.InvariantCulture)},{y.ToString(System.Globalization.CultureInfo.InvariantCulture)})")
+                .ConfigureAwait(true);
+        }
+        catch (Exception error) when (IsControllerGone(error)) { }
     }
 
     /// <summary>静音/取消静音当前页签。</summary>

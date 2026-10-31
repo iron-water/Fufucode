@@ -13,6 +13,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform.Storage;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Fufucode.App.Features.BrowserExperience;
 using Fufucode.App.Infrastructure;
@@ -47,6 +48,15 @@ public partial class BrowserView : UserControl, IDisposable
     private readonly HashSet<string> _recordedDownloads = new(StringComparer.Ordinal);
     private BrowserViewHost? _lastHost;
     private bool _disposed;
+
+    // ---- 内存生命周期（热池 / 后台挂起 / 进程预算） ----
+    private readonly BrowserMemoryGovernor _memoryGovernor = new();
+    private DispatcherTimer? _lifecycleTimer;
+    private Window? _lifecycleWindow;
+    private DateTimeOffset? _backgroundSince;
+    private bool _lifecycleBusy;
+    private bool _forceBackgroundForTesting;
+    private string? _userDataFolder;
 
     /// <summary>BRW-1：Agent 控制与 CDP 门禁快照；设置变化时由组合根更新。</summary>
     private BrowserSettingsGate _agentGate = BrowserSettingsGate.Disabled;
@@ -93,7 +103,227 @@ public partial class BrowserView : UserControl, IDisposable
         // 首个页签的宿主先建好，保持与旧行为一致（构造完成即返回，不触碰运行时）。
         HostFor(_viewModel.ActiveTab);
         UpdateHostVisibility();
+
+        AttachedToVisualTree += (_, _) => AttachLifecycle();
+        DetachedFromVisualTree += (_, _) => DetachLifecycle(stopTimer: false);
     }
+
+    private void AttachLifecycle()
+    {
+        if (_lifecycleTimer is null)
+        {
+            _lifecycleTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(5) };
+            _lifecycleTimer.Tick += (_, _) => _ = RunLifecycleAsync();
+            _lifecycleTimer.Start();
+        }
+        _lifecycleWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_lifecycleWindow is not null)
+            _lifecycleWindow.PropertyChanged += OnLifecycleWindowPropertyChanged;
+        UpdateBackgroundState();
+    }
+
+    private void DetachLifecycle(bool stopTimer = true)
+    {
+        if (stopTimer)
+        {
+            _lifecycleTimer?.Stop();
+            _lifecycleTimer = null;
+        }
+        if (_lifecycleWindow is not null)
+            _lifecycleWindow.PropertyChanged -= OnLifecycleWindowPropertyChanged;
+        _lifecycleWindow = null;
+        // 页面被停靠区收起/浮动窗隐藏时没有 Window 可观察，按后台处理，定时器继续跑。
+        if (!stopTimer) _backgroundSince ??= DateTimeOffset.UtcNow;
+    }
+
+    private void OnLifecycleWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
+    {
+        if (e.Property == Window.WindowStateProperty || e.Property == Visual.IsVisibleProperty)
+            UpdateBackgroundState();
+    }
+
+    private void UpdateBackgroundState()
+    {
+        var background = _lifecycleWindow is null || !_lifecycleWindow.IsVisible ||
+                         _lifecycleWindow.WindowState == WindowState.Minimized;
+        if (background)
+        {
+            _backgroundSince ??= DateTimeOffset.UtcNow;
+        }
+        else if (_backgroundSince is not null)
+        {
+            _backgroundSince = null;
+            _ = RestoreActiveAfterBackgroundAsync();
+        }
+    }
+
+    private string UserDataFolder => _userDataFolder ??=
+        BrowserUserDataLayout.Resolve(Program.SelfTestMode ? Program.SelfTestDataRoot : null);
+
+    private async Task RestoreActiveAfterBackgroundAsync()
+    {
+        var active = _viewModel.ActiveTab;
+        if (active is null || !active.IsDiscarded) return;
+        await ActivateTabAsync(active);
+    }
+
+    /// <summary>选中页签：只有当前页签允许创建 controller；被丢弃的页签按需重建并恢复滚动位置。</summary>
+    private async Task ActivateTabAsync(BrowserTab tab)
+    {
+        if (_disposed || !_viewModel.Tabs.Contains(tab)) return;
+        tab.Touch();
+        var host = HostFor(tab);
+        UpdateHostVisibility();
+        if (!host.HasController)
+        {
+            if (!string.IsNullOrWhiteSpace(tab.NavigationAddress)) host.Navigate(tab.NavigationAddress);
+            try
+            {
+                var core = await host.EnsureCoreAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                if (_disposed) return;
+                if (core is not null && tab.IsLoading) await WaitForNavigationAsync(host);
+                if (core is not null && (Math.Abs(tab.ScrollX) > 0.5 || Math.Abs(tab.ScrollY) > 0.5))
+                    await host.RestoreScrollAsync(tab.ScrollX, tab.ScrollY);
+            }
+            catch (TimeoutException)
+            {
+                _viewModel.ReportStatusTo(tab, "页面恢复超时，保留休眠状态。");
+                tab.ApplyLifecycle(BrowserTabLifecycle.Discarded);
+                return;
+            }
+        }
+        else host.SetActive();
+        tab.ApplyLifecycle(BrowserTabLifecycle.Active);
+
+        foreach (var other in _viewModel.Tabs)
+        {
+            if (ReferenceEquals(other, tab)) continue;
+            if (_hosts.TryGetValue(other.Id, out var otherHost) && otherHost.HasController)
+            {
+                otherHost.SetWarm();
+                other.ApplyLifecycle(BrowserTabLifecycle.Warm);
+            }
+        }
+        await EnforceHotPoolAsync(tab);
+    }
+
+    private static async Task WaitForNavigationAsync(BrowserViewHost host)
+    {
+        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnCompleted(object? sender, BrowserHostNavigationCompleted state)
+        {
+            if (state.IsSuccess) completion.TrySetResult();
+        }
+        host.NavigationCompleted += OnCompleted;
+        try { await Task.WhenAny(completion.Task, Task.Delay(8000)); }
+        finally { host.NavigationCompleted -= OnCompleted; }
+    }
+
+    private async Task EnforceHotPoolAsync(BrowserTab active)
+    {
+        var loaded = _hosts
+            .Select(entry => (Tab: _viewModel.Tabs.FirstOrDefault(tab => tab.Id == entry.Key), Host: entry.Value))
+            .Where(item => item.Tab is not null && item.Host.HasController)
+            .OrderBy(item => item.Tab!.LastAccessUtc)
+            .ToList();
+        var over = loaded.Count - Math.Max(1, _memoryGovernor.HotLimit);
+        if (over <= 0) return;
+        foreach (var item in loaded)
+        {
+            if (over <= 0) break;
+            if (ReferenceEquals(item.Tab, active)) continue;
+            await DiscardTabAsync(item.Tab!);
+            over--;
+        }
+    }
+
+    private async Task DiscardTabAsync(BrowserTab tab)
+    {
+        if (!_hosts.TryGetValue(tab.Id, out var host)) { tab.ApplyLifecycle(BrowserTabLifecycle.Discarded); return; }
+        if (host.HasController)
+        {
+            var scroll = await host.CaptureScrollAsync();
+            if (scroll is { } position) { tab.ScrollX = position.X; tab.ScrollY = position.Y; }
+            host.DiscardController();
+        }
+        tab.ApplyLifecycle(BrowserTabLifecycle.Discarded);
+    }
+
+    private async Task SuspendTabAsync(BrowserTab tab)
+    {
+        if (!_hosts.TryGetValue(tab.Id, out var host)) return;
+        var suspended = await host.TrySuspendAsync();
+        tab.ApplyLifecycle(suspended ? BrowserTabLifecycle.Suspended : BrowserTabLifecycle.Warm);
+    }
+
+    /// <summary>每 30 秒执行一次：后台挂起/丢弃 + 热池 LRU + 进程预算；采样在后台线程。</summary>
+    private async Task RunLifecycleAsync()
+    {
+        if (_disposed || _lifecycleBusy) return;
+        _lifecycleBusy = true;
+        try
+        {
+            var now = DateTimeOffset.UtcNow;
+            var background = _forceBackgroundForTesting ||
+                             (_lifecycleWindow is not null &&
+                              (!_lifecycleWindow.IsVisible || _lifecycleWindow.WindowState == WindowState.Minimized));
+            if (background) _backgroundSince ??= now; else _backgroundSince = null;
+
+            var tabs = _viewModel.Tabs
+                .Select(tab => new BrowserTabMemoryInfo(tab.Id, tab.Lifecycle, tab.LastAccessUtc,
+                    ReferenceEquals(tab, _viewModel.ActiveTab)))
+                .ToArray();
+            BrowserProcessSnapshot snapshot;
+            try
+            {
+                // GetProcessInfos 必须在 UI 线程；逐进程内存读取放到后台。
+                var infos = BrowserRuntime.GetProcessInfos(UserDataFolder);
+                snapshot = infos.Count > 0
+                    ? await Task.Run(() => BrowserRuntime.SampleProcesses(infos)).WaitAsync(TimeSpan.FromSeconds(3))
+                    : BrowserRuntime.SnapshotAfterEnvironmentTeardown();
+            }
+            catch (Exception error) when (error is TimeoutException or InvalidOperationException)
+            {
+                snapshot = BrowserProcessSnapshot.Empty;
+            }
+            if (_disposed) return;
+
+            var decision = _memoryGovernor.Evaluate(tabs, snapshot.TotalPrivateBytes, now, background, _backgroundSince);
+            if (decision.IsEmpty) return;
+
+            foreach (var id in decision.Discard)
+            {
+                var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == id);
+                if (tab is not null) await DiscardTabAsync(tab);
+            }
+            foreach (var id in decision.Suspend)
+            {
+                var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == id);
+                if (tab is not null) await SuspendTabAsync(tab);
+            }
+            if (decision.DiscardActive && _viewModel.ActiveTab is { } active)
+                await DiscardTabAsync(active);
+            MemorySnapshotForTesting = snapshot;
+            LastDecisionForTesting = decision;
+        }
+        finally { _lifecycleBusy = false; }
+    }
+
+    internal BrowserProcessSnapshot MemorySnapshotForTesting { get; private set; } = BrowserProcessSnapshot.Empty;
+    internal BrowserMemoryDecision LastDecisionForTesting { get; private set; } = BrowserMemoryDecision.Empty;
+    internal Task RunLifecycleForTestingAsync() => RunLifecycleAsync();
+    internal async Task RunLifecycleForTestingAsync(DateTimeOffset? backgroundSince)
+    {
+        _forceBackgroundForTesting = backgroundSince is not null;
+        _backgroundSince = backgroundSince;
+        try { await RunLifecycleAsync(); }
+        finally { _forceBackgroundForTesting = false; }
+    }
+    internal Task ActivateTabForTestingAsync(BrowserTab tab) => ActivateTabAsync(tab);
+    internal Task DiscardTabForTestingAsync(BrowserTab tab) => DiscardTabAsync(tab);
+    internal Task SuspendTabForTestingAsync(BrowserTab tab) => SuspendTabAsync(tab);
+    internal BrowserProcessSnapshot SampleProcessesForTesting() => BrowserRuntime.Sample(UserDataFolder);
+    internal BrowserMemoryGovernor MemoryGovernorForTesting => _memoryGovernor;
 
     public BrowserViewModel ViewModel => _viewModel;
 
@@ -112,6 +342,11 @@ public partial class BrowserView : UserControl, IDisposable
         _viewModel.ApplySiteRules(_siteRules);
         _viewModel.ApplyShowFullUrl(_settings.ShowFullUrl);
         _viewModel.ApplySearchUrlTemplate(_settings.SearchUrlTemplate);
+        _memoryGovernor.BudgetBytes = Math.Max(128L, _settings.BrowserMemoryBudgetMb) * 1024 * 1024;
+        _memoryGovernor.HotLimit = _settings.BrowserHotTabLimit;
+        _memoryGovernor.BackgroundSuspendAfter = TimeSpan.FromMinutes(_settings.BrowserBackgroundSuspendMinutes);
+        _memoryGovernor.BackgroundDiscardAfter = TimeSpan.FromMinutes(_settings.BrowserBackgroundDiscardMinutes);
+        _memoryGovernor.BackgroundDiscardAllAfter = TimeSpan.FromMinutes(_settings.BrowserBackgroundDiscardAllMinutes);
         _agentGate = new BrowserSettingsGate(_settings.BrowserUseEnabled, _settings.EnableFullCdpAccess);
         foreach (var host in _hosts.Values)
         {
@@ -791,6 +1026,7 @@ public partial class BrowserView : UserControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        DetachLifecycle(stopTimer: true);
         _viewModel.TabNavigationRequested -= OnNavigationRequested;
         _viewModel.TabActionRequested -= OnActionRequested;
         _viewModel.ZoomRequested -= OnZoomRequested;
@@ -819,7 +1055,7 @@ public partial class BrowserView : UserControl, IDisposable
     internal void RestoreState(BrowserPageState? state)
     {
         if (state is null) return;
-        if (state.Version is not (1 or 2))
+        if (state.Version is not (1 or 2 or 3))
         {
             _viewModel.ResetTabs(new[] { _viewModel.ActiveTab.Id });
             _viewModel.AddressText = "";
@@ -838,10 +1074,12 @@ public partial class BrowserView : UserControl, IDisposable
         // 整体重建页签：旧页签的宿主被释放，新页签按保存的 id 建独立宿主。
         var restored = _viewModel.ResetTabs(savedTabs.Select(tab => tab.Id).ToArray());
         for (var index = 0; index < savedTabs.Count; index++)
-            RestoreIntoTab(restored[index], savedTabs[index].FilePath, savedTabs[index].NavigationAddress, savedTabs[index].AddressDraft);
+            RestoreIntoTab(restored[index], savedTabs[index].FilePath, savedTabs[index].NavigationAddress,
+                savedTabs[index].AddressDraft, savedTabs[index].ScrollX, savedTabs[index].ScrollY);
         var active = restored.FirstOrDefault(tab => tab.Id == state.ActiveTabId) ?? restored[0];
         _viewModel.SelectTab(active);
         UpdateHostVisibility();
+        _ = ActivateTabAsync(active);
     }
 
     /// <summary>
@@ -877,8 +1115,11 @@ public partial class BrowserView : UserControl, IDisposable
         return result;
     }
 
-    private static void RestoreIntoTab(BrowserTab tab, string? filePath, string? navigationAddress, string addressDraft)
+    private static void RestoreIntoTab(BrowserTab tab, string? filePath, string? navigationAddress,
+        string addressDraft, double scrollX = 0, double scrollY = 0)
     {
+        tab.ScrollX = scrollX;
+        tab.ScrollY = scrollY;
         if (!string.IsNullOrWhiteSpace(filePath)) tab.PreviewFile(filePath);
         else if (!string.IsNullOrWhiteSpace(navigationAddress))
         {
@@ -973,28 +1214,49 @@ public partial class BrowserView : UserControl, IDisposable
     {
         _viewModel.RefreshFacade();
         foreach (var entry in _hosts)
-            entry.Value.SetOccluded(!ReferenceEquals(entry.Key, _viewModel.ActiveTab.Id));
+        {
+            var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == entry.Key);
+            var active = ReferenceEquals(entry.Key, _viewModel.ActiveTab.Id);
+            entry.Value.SetOccluded(!active);
+            if (!active && entry.Value.HasController)
+            {
+                entry.Value.SetMemoryTargetLow(true);
+                if (tab?.Lifecycle == BrowserTabLifecycle.Active) tab.ApplyLifecycle(BrowserTabLifecycle.Warm);
+            }
+            else if (active && entry.Value.HasController)
+            {
+                entry.Value.SetMemoryTargetLow(false);
+            }
+        }
     }
 
     private void OnTabSelectionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName != nameof(BrowserViewModel.ActiveTab)) return;
         var tab = _viewModel.ActiveTab;
-        Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        _viewModel.Tabs.FirstOrDefault(candidate => ReferenceEquals(candidate, tab))?.Touch();
+        Dispatcher.UIThread.Post(() =>
         {
             if (_disposed || !ReferenceEquals(tab, _viewModel.ActiveTab)) return;
             var selected = this.GetVisualDescendants().OfType<Button>().FirstOrDefault(button => button.Classes.Contains("browserTab") && ReferenceEquals(button.DataContext, tab));
             if (selected?.Parent is Control row) row.BringIntoView();
-        }, Avalonia.Threading.DispatcherPriority.Loaded);
+        }, DispatcherPriority.Loaded);
+        _ = ActivateTabAsync(tab);
     }
 
     private void OnTabCreated(object? sender, BrowserTab tab)
     {
         HostFor(tab);
+        if (!ReferenceEquals(tab, _viewModel.ActiveTab)) tab.ApplyLifecycle(BrowserTabLifecycle.Discarded);
         UpdateHostVisibility();
     }
 
-    private void OnTabClosed(object? sender, BrowserTab tab) => ReleaseHost(tab);
+    private void OnTabClosed(object? sender, BrowserTab tab)
+    {
+        tab.ApplyLifecycle(BrowserTabLifecycle.Closed);
+        tab.DisposeFavicon();
+        ReleaseHost(tab);
+    }
 
     private void OnNavigationRequested(object? sender, (BrowserTab Tab, BrowserNavigationRequest Request) e)
     {

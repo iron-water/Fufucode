@@ -33,6 +33,15 @@ public sealed record BrowserSettings
     /// <summary>密码自动保存（WebView2 内置密码管理）。</summary>
     public bool EnablePasswordAutosave { get; init; } = true;
 
+    // ── 内存生命周期 ──
+    /// <summary>WebView2 子进程 PrivateMemorySize64 总预算（MB）。</summary>
+    public int BrowserMemoryBudgetMb { get; init; } = 500;
+    /// <summary>同时保留 controller 的页签上限（含当前页签）。</summary>
+    public int BrowserHotTabLimit { get; init; } = 3;
+    public int BrowserBackgroundSuspendMinutes { get; init; } = 2;
+    public int BrowserBackgroundDiscardMinutes { get; init; } = 5;
+    public int BrowserBackgroundDiscardAllMinutes { get; init; } = 10;
+
     // ── 标注 ──
     /// <summary>标注回传聊天时是否一并附上整页截图（截图模式为 never 时不附）。</summary>
     public bool AnnotationIncludeScreenshot { get; init; } = true;
@@ -75,6 +84,11 @@ public sealed record BrowserSettings
         SearchUrlTemplate = NormalizeTemplate(SearchUrlTemplate),
         UserAgent = (UserAgent ?? string.Empty).Trim(),
         ExternalBrowserPort = ExternalBrowserPort is >= 1024 and <= 65535 ? ExternalBrowserPort : 54321,
+        BrowserMemoryBudgetMb = Math.Clamp(BrowserMemoryBudgetMb, 128, 8192),
+        BrowserHotTabLimit = Math.Clamp(BrowserHotTabLimit, 1, 12),
+        BrowserBackgroundSuspendMinutes = Math.Clamp(BrowserBackgroundSuspendMinutes, 1, 60),
+        BrowserBackgroundDiscardMinutes = Math.Clamp(BrowserBackgroundDiscardMinutes, 2, 180),
+        BrowserBackgroundDiscardAllMinutes = Math.Clamp(BrowserBackgroundDiscardAllMinutes, 3, 360),
         ExternalBrowserPin = NormalizePin(ExternalBrowserPin),
         ExternalBrowserToken = (ExternalBrowserToken ?? string.Empty).Trim(),
         AllowedSites = NormalizeSites(AllowedSites),
