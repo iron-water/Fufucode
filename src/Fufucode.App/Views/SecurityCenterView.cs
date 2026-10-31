@@ -178,7 +178,7 @@ public sealed class SecurityCenterView : UserControl
     {
         var s = _model!.Settings;
         Group("执行保护",
-            Toggle("启用安全策略", "在 FUMO 工具执行前检查规则；明确拒绝不受完全授权模式覆盖。", s.Enabled,
+            Toggle("启用安全策略", "完全访问不弹询问；人工和自动模式按规则确认，显式拒绝规则始终生效。", s.Enabled,
                 (x, v) => x with { Enabled = v }, "security-enabled"),
             SettingsLayout.Row("保护范围", "FUMO 原生会话与其工具调用链。外部后端、后台自动开发及子进程内部操作不保证受本中心规则控制。", null, "ShieldCheckmark"),
             SettingsLayout.Row("执行隔离", "当前使用工具策略与工作区写入边界。Shell 和插件不在操作系统沙箱中运行。", null),

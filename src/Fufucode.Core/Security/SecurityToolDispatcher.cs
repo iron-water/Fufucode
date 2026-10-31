@@ -16,6 +16,9 @@ public sealed class SecurityToolDispatcher : IPureToolDispatcher
     public SecurityToolDispatcher(IPureToolDispatcher inner, SecurityPolicyEvaluator evaluator, SecurityAuditStore audit)
     { Inner = inner; Evaluator = evaluator; _audit = audit; }
 
+    public SecurityToolDispatcher Wrap(IPureToolDispatcher dispatcher, string? workspaceRoot = null) =>
+        new(dispatcher, workspaceRoot is null ? Evaluator : new SecurityPolicyEvaluator(Evaluator.Store, workspaceRoot), _audit);
+
     public async Task<PureToolResult> ExecuteCheckedAsync(PureToolCall call,
         Func<PureToolCall, CancellationToken, Task<bool>>? approvalGate, bool ordinaryApproval,
         Func<PureToolResult?> recheckMode, CancellationToken ct)

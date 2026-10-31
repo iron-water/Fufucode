@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
+    <ProjectReference Include="../../src/Fufucode.Plugins.Subagents/Fufucode.Plugins.Subagents.csproj" />
   </ItemGroup>
 </Project>

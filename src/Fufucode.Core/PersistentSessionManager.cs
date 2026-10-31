@@ -663,9 +663,6 @@ public sealed class PersistentSessionManager
                     // 恢复会话级选择：模型、思考等级与执行模式。
                     if (!string.IsNullOrWhiteSpace(saved.ModelId)) chat.SetModel(saved.ModelId);
                     chat.SetThinkingLevel(saved.ThinkingLevel ?? "off");
-                    if (saved.ExecutionMode is "manual" or "auto" or "full" or "plan")
-                        await chat.SetExecutionModeAsync(saved.ExecutionMode, cancellationToken).ConfigureAwait(false);
-
                     if (saved.Messages.Count > 0)
                     {
                         chat.RestoreHistory(saved.Messages);
@@ -673,6 +670,9 @@ public sealed class PersistentSessionManager
                         interrupted |= saved.Messages[^1].Role == PureAgentRole.User;
                         if (interrupted) chat.MarkInterrupted();
                     }
+                    // 模式修改会立即落盘；先恢复历史，避免用空历史覆盖原文件。
+                    if (saved.ExecutionMode is "manual" or "auto" or "full" or "plan")
+                        await chat.SetExecutionModeAsync(saved.ExecutionMode, cancellationToken).ConfigureAwait(false);
                 }
             }
 

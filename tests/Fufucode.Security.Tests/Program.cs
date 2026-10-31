@@ -14,6 +14,9 @@ try
     var data = Path.Combine(root, "data"); var workspace = Path.Combine(root, "workspace"); Directory.CreateDirectory(workspace);
     var store = new SecurityPolicyStore(data); var second = new SecurityPolicyStore(data);
     var evaluator = new SecurityPolicyEvaluator(store, workspace);
+    Check(evaluator.Evaluate(Call("read_file", new { path = 123 })).Action == SecurityAction.Deny &&
+        evaluator.Evaluate(Call("run_command", new { command = new[] { "bad" } })).Action == SecurityAction.Deny,
+        "malformed tool arguments return denial instead of crashing the turn");
     Check(store.Current.Enabled && store.Current.BackupEnabled && store.Current.SecretRules.Count >= 5, "enabled defaults");
     Check(evaluator.Evaluate(Call("read_file", new { path = "safe.txt" })).Action == SecurityAction.Allow, "ordinary file allow");
     Check(evaluator.Evaluate(Call("read_file", new { path = ".ssh/id_rsa" })).Action == SecurityAction.Ask, "sensitive directory ask");
@@ -64,9 +67,63 @@ try
     var approval = typeof(NativeCSharpChatSession).GetMethod("RequestApprovalAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
     async Task<bool> SessionApproval(PureToolCall call, CancellationToken ct) => await (Task<bool>)approval.Invoke(session, [call, ct])!;
     await session.SetExecutionModeAsync("full");
-    Check(!(await guard.ExecuteCheckedAsync(ask, SessionApproval, false, () => null, default)).Success, "full mode cannot bypass security ask without listener");
+    Check((await guard.ExecuteCheckedAsync(ask, SessionApproval, false, () => null, default)).Success, "full access honors user authorization without security prompt");
+    Check(!(await guard.ExecuteCheckedAsync(Call("read_file", new { path = "blocked.txt" }), SessionApproval, false, () => null, default)).Success, "full access retains explicit deny rules");
+    var commandCall = Call("run_command", new { command = "gh auth status --show-token", timeout_seconds = 10 });
+    var commandModel = new TestModel(commandCall);
+    using (var fullSession = new NativeCSharpChatSession(new PureCSharpAgentEngine(guard, commandModel)))
+    {
+        await fullSession.SetExecutionModeAsync("full");
+        var dialogs = 0;
+        fullSession.ExtensionUiRequestReceived += _ => dialogs++;
+        var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        fullSession.Event += (_, e) => { if (e is Fufucode.App.Abstractions.SessionEvent.TurnSettled) completed.TrySetResult(); };
+        var originalCalls = fake.Calls;
+        await fullSession.SendAsync("test full access");
+        await completed.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Check(dialogs == 0 && fake.Calls == originalCalls + 1, "real full-access session executes screenshot command without a dialog (fake executor)");
+    }
     await session.SetExecutionModeAsync("auto");
     Check(!(await guard.ExecuteCheckedAsync(ask, SessionApproval, false, () => null, default)).Success, "auto mode cannot bypass security ask");
+    var sessionFile = Path.Combine(root, "mode-session.json");
+    using (var persisted = new NativeCSharpChatSession(new PureCSharpAgentEngine(), persistFilePath: sessionFile))
+    {
+        await persisted.SetExecutionModeAsync("full");
+        var emptySaved = PersistentSessionManager.LoadNativeMessages(sessionFile)!;
+        Check(emptySaved.ExecutionMode == "full" && emptySaved.Messages.Count == 0, "mode persists immediately before first prompt");
+        persisted.RestoreHistory([new(PureAgentRole.User, "preserved user prompt"), new(PureAgentRole.Assistant, "preserved response")]);
+        await persisted.SetExecutionModeAsync("auto");
+        await persisted.SetExecutionModeAsync("full");
+        var savedMode = PersistentSessionManager.LoadNativeMessages(sessionFile)!;
+        Check(savedMode.ExecutionMode == "full" && savedMode.Messages.Count == 2, "switching back to full persists without losing messages");
+    }
+    using (var reopened = new NativeCSharpChatSession(new PureCSharpAgentEngine(), persistFilePath: sessionFile))
+    {
+        var savedMode = PersistentSessionManager.LoadNativeMessages(sessionFile)!;
+        reopened.RestoreHistory(savedMode.Messages);
+        await reopened.SetExecutionModeAsync(savedMode.ExecutionMode!);
+        Check(reopened.ExecutionMode == "full" && reopened.GetHistoryMessages().Count == 2, "reopen restores full access and history");
+    }
+    var managedRoot = Path.Combine(root, "managed-mode");
+    var manager = new PersistentSessionManager("", "", new AppDataLayout(managedRoot));
+    string managedId;
+    await using (var created = await manager.CreateAsync(workspace, backend: BackendId.NativeCSharp))
+    {
+        managedId = created.Session.Id;
+        var managedChat = (NativeCSharpChatSession)created.Chat;
+        managedChat.RestoreHistory([new(PureAgentRole.User, "existing history")]);
+        await managedChat.SetExecutionModeAsync("full");
+        var settled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        managedChat.Event += (_, e) => { if (e is Fufucode.App.Abstractions.SessionEvent.TurnSettled) settled.TrySetResult(); };
+        await managedChat.SendAsync("trigger unconfigured model failure");
+        await settled.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        Check(managedChat.LastOutcome == Fufucode.App.Abstractions.SessionOutcome.Failed && managedChat.ExecutionMode == "full", "model failure does not reset full access");
+    }
+    await using (var resumed = await manager.ResumeAsync(managedId))
+    {
+        var restoredChat = (NativeCSharpChatSession)resumed.Chat;
+        Check(restoredChat.ExecutionMode == "full" && restoredChat.GetHistoryMessages().Any(m => m.Content == "existing history"), "real session manager resumes failed full-access session without history loss");
+    }
     var path = Path.Combine(workspace, "restore.txt"); File.WriteAllText(path, "original");
     var backups = new SecurityBackupStore(data); var manifest = backups.Capture(path, store.Current);
     File.WriteAllText(path, "changed"); backups.Restore(manifest);
@@ -118,6 +175,20 @@ try
     model = new TestModel(readAsk); loop = new NativeAgentLoop(model, guard);
     await loop.ExecuteLoopAsync([], ["read_file"], null, null, null, approvalGate: (_, _) => { second.Update(s => s with { FileRules = [new("**/read-ask.txt", SecurityAction.Deny)] }); return Task.FromResult(true); });
     Check(fake.Calls == callsBefore, "actual agent loop rechecks policy after approval");
+    second.Update(s => s with { FileRules = [new("**/read-ask.txt", SecurityAction.Ask)] });
+    var childGuard = new SecurityToolDispatcher(fake, evaluator, audit);
+    var childApprovals = 0;
+    var childCalls = fake.Calls;
+    var runner = new SubagentRunner(AgentRegistry.Discover(workspace, Path.Combine(root, "empty-home")),
+        new TestModel(readAsk), childGuard, null, workspace)
+    { ApprovalGate = (_, _) => { childApprovals++; return Task.FromResult(true); } };
+    await runner.RunAsync("explore", "read a protected file", null, default);
+    Check(childApprovals == 1 && fake.Calls == childCalls + 1, "wrapped read subagent obtains its own security approval");
+    childCalls = fake.Calls;
+    runner = new SubagentRunner(AgentRegistry.Discover(workspace, Path.Combine(root, "empty-home")),
+        new TestModel(readAsk), childGuard, null, workspace);
+    await runner.RunAsync("explore", "read a protected file", null, default);
+    Check(fake.Calls == childCalls, "wrapped read subagent without approval still denies ask");
     File.WriteAllText(store.FilePath, "{broken");
     Check(evaluator.Evaluate(Call("read_file", new { path = "safe.txt" })).Action == SecurityAction.Deny, "malformed policy fail closed");
     second.Update(_ => new SecuritySettings());

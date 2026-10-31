@@ -240,7 +240,11 @@ public sealed class SubagentRunner
         messages.Add(new PureAgentMessage(PureAgentRole.User, prompt));
 
         // 未声明 maxTurns 时不设置轮次预算；模式层不截断子代理。
-        var engine = new PureCSharpAgentEngine(childDispatcher, _modelClient, agent.MaxTurns)
+        // 白名单与缓存包装后仍把审批守卫放在最外层，子调用才能获得自己的授权租约。
+        IPureToolDispatcher executionDispatcher = _capabilities is Security.SecurityToolDispatcher security
+            ? security.Wrap(childDispatcher, mode == SubagentMode.Patch ? ((ProductionToolDispatcher)baseDispatcher).WorkspaceRoot : null)
+            : childDispatcher;
+        var engine = new PureCSharpAgentEngine(executionDispatcher, _modelClient, agent.MaxTurns)
         {
             ApprovalGate = ApprovalGate
         };
@@ -332,6 +336,11 @@ public sealed class SubagentRunner
             var (dirty, _) = await RunGitAsync(_workspaceRoot!, ["status", "--porcelain"],
                 cancellationToken).ConfigureAwait(false);
             var dispatcher = new ProductionToolDispatcher(path);
+            if (_capabilities is Security.SecurityToolDispatcher security)
+            {
+                dispatcher.SecurityEvaluator = new Security.SecurityPolicyEvaluator(security.Evaluator.Store, path);
+                dispatcher.SecurityBackups = new Security.SecurityBackupStore(Path.GetDirectoryName(security.Evaluator.Store.FilePath)!);
+            }
             var result = await RunCoreAsync(agent, prompt, modelOverride, fork, dispatcher,
                 SubagentMode.Patch, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(dirty))

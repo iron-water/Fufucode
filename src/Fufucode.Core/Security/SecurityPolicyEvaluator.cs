@@ -14,7 +14,7 @@ public sealed class SecurityPolicyEvaluator(SecurityPolicyStore store, string wo
     public SecurityDecision Evaluate(PureToolCall call)
     {
         try { return Evaluate(call, store.Current); }
-        catch (Exception ex) when (ex is SecurityPolicyException or JsonException or ArgumentException or IOException or UnauthorizedAccessException or RegexMatchTimeoutException)
+        catch (Exception ex) when (ex is SecurityPolicyException or JsonException or ArgumentException or IOException or UnauthorizedAccessException or RegexMatchTimeoutException or InvalidOperationException)
         { return new(SecurityAction.Deny, "policy", "安全策略或工具参数无效，已拒绝执行。"); }
     }
     private SecurityDecision Evaluate(PureToolCall call, SecuritySettings s)

@@ -54,6 +54,18 @@ public static class NativeSessionFactory
             ?? (pluginProviders is null ? builtin : new NativeToolComposite(builtin, pluginProviders));
         var pluginCatalog = toolRegistry as Plugins.IPluginToolCatalog
                             ?? baseDispatcher as Plugins.IPluginToolCatalog;
+        // 兼容调用方提供的插件注册表：实际 fallback 调度器也必须拿到资源守卫。
+        var resourceDispatcher = baseDispatcher switch
+        {
+            ProductionToolDispatcher production => production,
+            Plugins.PluginToolRegistry { InnerDispatcher: ProductionToolDispatcher production } => production,
+            _ => null,
+        };
+        if (resourceDispatcher is not null)
+        {
+            resourceDispatcher.SecurityEvaluator = securityEvaluator;
+            resourceDispatcher.SecurityBackups = builtin.SecurityBackups;
+        }
         securityEvaluator.IsExternalTool = name => pluginCatalog?.ActiveToolNames.Contains(name, StringComparer.Ordinal) == true ||
             (toolRegistry is not null && toolRegistry is not ProductionToolDispatcher && pluginCatalog is null);
 
@@ -84,8 +96,8 @@ public static class NativeSessionFactory
             subagents = factory.Create(client, capabilities, modelId, workspaceRoot, capabilityDefinitions);
 
         // 调度链：可选 Subagent → MCP → Skill → 插件/内置。
-        IPureToolDispatcher dispatcher = subagents?.Wrap(capabilities) ?? capabilities;
-        dispatcher = new Security.SecurityToolDispatcher(dispatcher, securityEvaluator, securityAudit);
+        IPureToolDispatcher dispatcher = subagents is null ? capabilities :
+            new Security.SecurityToolDispatcher(subagents.Wrap(capabilities), securityEvaluator, securityAudit);
 
         // 主会话默认不设置轮次预算。CLI/无人值守调用方如需预算，显式传入 maxIterations。
         var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations);

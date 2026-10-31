@@ -91,13 +91,13 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
 
     /// <summary>
     /// 工具执行前审批：manual 询问所有变更工具；auto 仅询问 Shell；
-    /// full 直接放行；非交互（无订阅者）时放行以保持 CLI 可用。
+    /// full 不弹确认；安全中心显式拒绝在调用此审批门之前处理。
     /// </summary>
     private async Task<bool> RequestApprovalAsync(PureToolCall call, CancellationToken cancellationToken)
     {
         var mode = ExecutionMode;
         var securityRequired = Security.SecurityToolDispatcher.SecurityApprovalRequired;
-        if (!securityRequired && mode == "full") return true;
+        if (mode == "full") return true;
         if (!securityRequired && mode == "auto" && !string.Equals(call.Name, "run_command", StringComparison.Ordinal)) return true;
 
         Action<ExtensionUiRequest>? notify;
@@ -169,6 +169,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             pureEngine.Mode = permMode;
         }
 
+        PersistHistory(persistEmpty: true);
         ExecutionModeChanged?.Invoke(mode);
         return Task.CompletedTask;
     }
@@ -778,20 +779,21 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         return history;
     }
 
-    private void PersistHistory()
+    private void PersistHistory(bool persistEmpty = false)
     {
         if (string.IsNullOrEmpty(_persistFilePath)) return;
         var history = _engine.GetState().History;
-        if (history is not { Count: > 0 }) return;
+        if (!persistEmpty && history is not { Count: > 0 }) return;
+        history ??= Array.Empty<PureAgentMessage>();
 
         var modelId = _modelId;
         var thinkingLevel = _thinkingLevel;
-        var executionMode = ExecutionMode;
         using var span = PerfTracer.Step("persist.history", "messages", PerfTracer.Invariant(history.Count));
         try
         {
             lock (_persistGate)
             {
+                var executionMode = ExecutionMode;
                 AtomicJsonFile.Write(_persistFilePath, writer =>
                 {
                     writer.WriteStartObject();
