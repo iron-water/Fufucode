@@ -138,9 +138,6 @@
                                 Foreground="{DynamicResource AppAccentText}"/>
                     </Border>
                   </Grid>
-                  <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,4,32,0">
-                    <TextBlock Text="{DynamicResource UiUserName}" Classes="metaName" IsVisible="{DynamicResource UiShowUserNames}"/>
-                  </StackPanel>
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6" Margin="0,2,32,0">
                     <TextBlock Classes="meta" Text="发送中…" IsVisible="{Binding ShowAckHint}"/>
                     <TextBlock Classes="meta" Text="发送失败" IsVisible="{Binding IsFailed}"
