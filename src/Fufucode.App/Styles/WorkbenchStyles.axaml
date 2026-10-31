@@ -1400,6 +1400,13 @@
     <Setter Property="FontFamily" Value="{DynamicResource AppMonoFont}"/>
   </Style>
 
+  <!-- 行内片段由库异步生成：在逻辑树样式层注入，首屏与流式追加都不能回落到库的叠黑底。 -->
+  <Style Selector="views|RichMarkdownView md|MarkdownRenderer md|CodeInline">
+    <Setter Property="Foreground" Value="{DynamicResource AppEmphasis}"/>
+    <Setter Property="Background" Value="{DynamicResource AppInlineCodeBackground}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+
   <Style Selector="views|RichMarkdownView md|MarkdownRenderer md|Link">
     <Setter Property="Foreground" Value="{DynamicResource AppEmphasis}"/>
   </Style>

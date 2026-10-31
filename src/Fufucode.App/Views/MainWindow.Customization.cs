@@ -447,8 +447,8 @@ public partial class MainWindow
             Resources[key] = brush;
         }
 
-        var emphasis = settings.Emphasis == "#B4BFAF" && ActualThemeVariant == ThemeVariant.Light
-            ? Color.Parse("#52654D") : Color.Parse(settings.Emphasis);
+        var emphasis = settings.Emphasis == "#E8B86A" && ActualThemeVariant == ThemeVariant.Light
+            ? Color.Parse("#8A570F") : Color.Parse(settings.Emphasis);
         Set("AppEmphasis", new SolidColorBrush(emphasis));
         Set("SecondaryCardBackgroundColor", ActualThemeVariant == ThemeVariant.Dark
             ? Color.Parse(settings.BaseBackground) : Color.Parse("#F3F3F3"));

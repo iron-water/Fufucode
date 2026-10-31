@@ -3,9 +3,9 @@ using System.Collections.Generic;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Styling;
 using Avalonia.VisualTree;
@@ -29,6 +29,8 @@ public sealed class RichMarkdownView : ContentControl
     private readonly ObservableStringBuilder _builder = new();
     private string _markdown = string.Empty;
     private bool _attached;
+    private bool _guardScheduled;
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<CodeInline, object> _styledInlines = new();
 
     public RichMarkdownView()
     {
@@ -41,6 +43,10 @@ public sealed class RichMarkdownView : ContentControl
         HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         _renderer.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         Content = _renderer;
+        _renderer.PropertyChanged += (_, change) =>
+        {
+            if (change.Property == MarkdownRenderer.DocumentUpdateProperty) ScheduleDiagramGuard();
+        };
         TextOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
         ApplyCodeTheme();
 
@@ -56,8 +62,6 @@ public sealed class RichMarkdownView : ContentControl
             _attached = true;
             RenderCurrent();
         };
-        // 设置页改强调色 / 切换明暗主题会替换窗口资源，行内代码颜色要跟着重刷。
-        ResourcesChanged += (_, _) => ScheduleDiagramGuard();
         ActualThemeVariantChanged += (_, _) =>
         {
             ApplyCodeTheme();
@@ -158,64 +162,39 @@ public sealed class RichMarkdownView : ContentControl
         }
     }
 
-    /// <summary>
-    /// 行内代码（反引号内容）的配色。库默认给的是偏暗的金色，这里统一改成
-    /// 可配置的强调色 AppEmphasis，跟随设置页「强调色」。
-    /// </summary>
-    private void ApplyInlineCodeColor()
+    /// <summary>数据模板里的行内 Run 不一定参与祖先样式匹配；完成解析后只绑定新片段一次。</summary>
+    private void BindInlineColors()
     {
-        var brush = ResolveEmphasisBrush();
-        if (brush is null) return;
-        var background = this.TryFindResource("AppInlineCodeBackground", ActualThemeVariant, out var value)
-            ? value as IBrush : null;
         foreach (var block in this.GetVisualDescendants().OfType<TextBlock>())
-        {
-            if (block.Inlines is { } inlines) Paint(inlines, brush, background);
-        }
+            if (block.Inlines is { } inlines) Bind(inlines);
 
-        static void Paint(InlineCollection inlines, IBrush brush, IBrush? background)
+        void Bind(Avalonia.Controls.Documents.InlineCollection inlines)
         {
             foreach (var inline in inlines)
             {
-                switch (inline)
+                if (inline is CodeInline code && !_styledInlines.TryGetValue(code, out _))
                 {
-                    case CodeInline code:
-                        code.Foreground = brush;
-                        code.Background = background;
-                        code.BorderThickness = 0;
-                        break;
-                    case Bold bold:
-                        Paint(bold.Inlines, brush, background);
-                        break;
-                    case Italic italic:
-                        Paint(italic.Inlines, brush, background);
-                        break;
-                    case Span span:
-                        Paint(span.Inlines, brush, background);
-                        break;
+                    _styledInlines.Add(code, new object());
+                    code.Bind(Avalonia.Controls.Documents.TextElement.ForegroundProperty, new DynamicResourceExtension("AppEmphasis"));
+                    code.Bind(Avalonia.Controls.Documents.Inline.BackgroundProperty, new DynamicResourceExtension("AppInlineCodeBackground"));
+                    code.BorderThickness = 0;
                 }
+                if (inline is Avalonia.Controls.Documents.Span span) Bind(span.Inlines);
             }
         }
     }
 
-    private IBrush? ResolveEmphasisBrush()
+    private void ScheduleDiagramGuard()
     {
-        if (this.TryGetResource("AppEmphasis", ActualThemeVariant, out var value) && value is IBrush brush)
-            return brush;
-        var app = Application.Current;
-        return app is not null && app.TryGetResource("AppEmphasis", app.ActualThemeVariant, out var appValue) &&
-               appValue is IBrush appBrush
-            ? appBrush
-            : null;
-    }
-
-    /// <summary>渲染器增量更新后统一收尾：图表守卫 + 行内代码配色。改色/换肤后也要重刷。</summary>
-    private void ScheduleDiagramGuard() =>
+        if (_guardScheduled) return;
+        _guardScheduled = true;
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            _guardScheduled = false;
             ApplyDiagramGuard();
-            ApplyInlineCodeColor();
+            BindInlineColors();
         }, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
 
     /// <summary>把当前 Markdown 交给渲染器。属性可能在构造完成前被赋值，因此要能安全地延后渲染。</summary>
     private void RenderCurrent()

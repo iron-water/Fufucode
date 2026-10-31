@@ -29,8 +29,8 @@ public sealed record WorkbenchAppearance
     public string BaseBar { get; init; } = "#2C2C2C";
     /// <summary>底色三：悬停、选中与高亮。</summary>
     public string BaseHighlight { get; init; } = "#3A3A3A";
-    /// <summary>强调色：只用于模型输出中的 Markdown 标记，默认低饱和灰绿。</summary>
-    public string Emphasis { get; init; } = "#B4BFAF";
+    /// <summary>强调色：只用于模型输出中的 Markdown 标记，暖琥珀色与绿色操作色区分。</summary>
+    public string Emphasis { get; init; } = "#E8B86A";
     /// <summary>三档底色各自只提供三个备选，避免用户把层级关系选反。</summary>
     public static readonly IReadOnlyList<string> BaseBackgroundChoices = ["#1C1C1C", "#161616", "#101010"];
     public static readonly IReadOnlyList<string> BaseBackgroundLabels = ["深灰", "更深", "最深"];
@@ -131,11 +131,11 @@ public sealed record WorkbenchAppearance
             BaseBackground = BaseColor(BaseBackground, BaseBackgroundChoices, "#1C1C1C"),
             BaseBar = BaseColor(BaseBar, BaseBarChoices, "#2C2C2C"),
             BaseHighlight = BaseColor(BaseHighlight, BaseHighlightChoices, "#3A3A3A"),
-            Emphasis = Emphasis.Trim().ToUpperInvariant() switch
+            Emphasis = Emphasis?.Trim().ToUpperInvariant() switch
             {
-                // 旧默认黄色/橙色收敛到灰绿，其余自定义颜色保持。
-                "#FFD400" or "#FFEB8A" or "#FFF3B0" or "#FFFFE0" or "#9A6700" or "#FFE45C" or "#FFEE58" or "#D97757" => "#B4BFAF",
-                _ => Color(Emphasis, "#B4BFAF"),
+                // 只迁移历代默认值，其余自定义颜色保持。
+                "#FFD400" or "#FFEB8A" or "#FFF3B0" or "#FFFFE0" or "#9A6700" or "#FFE45C" or "#FFEE58" or "#D97757" or "#B4BFAF" => "#E8B86A",
+                _ => Color(Emphasis, "#E8B86A"),
             },
             Surface = Choose(Surface, "fluent", "fluent", "glass", "flat", "classic"),
             FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 12, 24) : 14,

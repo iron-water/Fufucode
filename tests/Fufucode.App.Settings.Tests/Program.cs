@@ -227,11 +227,13 @@ try
     // ================= 4.2 Fluent 暗色三档底色 =================
     var appearance = new WorkbenchAppearance();
     Check(appearance.BaseBackground == "#1C1C1C" && appearance.BaseBar == "#2C2C2C" &&
-          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#B4BFAF",
+          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#E8B86A",
         "Fluent 暗色默认三档底色与模型输出强调色");
-    Check(new WorkbenchAppearance { Emphasis = "#FFEE58" }.Normalize().Emphasis == "#B4BFAF" &&
-          new WorkbenchAppearance { Emphasis = "#D97757" }.Normalize().Emphasis == "#B4BFAF",
-        "旧黄色和橙色默认强调色迁移到柔和灰绿");
+    Check(new WorkbenchAppearance { Emphasis = "#FFEE58" }.Normalize().Emphasis == "#E8B86A" &&
+          new WorkbenchAppearance { Emphasis = "#D97757" }.Normalize().Emphasis == "#E8B86A" &&
+          new WorkbenchAppearance { Emphasis = "#B4BFAF" }.Normalize().Emphasis == "#E8B86A" &&
+          new WorkbenchAppearance { Emphasis = "#C98742" }.Normalize().Emphasis == "#C98742",
+        "历代默认强调色迁移到暖琥珀色，其余自定义颜色保留");
     Check(WorkbenchAppearance.BaseBackgroundChoices.Count == 3 &&
           WorkbenchAppearance.BaseBarChoices.Count == 3 &&
           WorkbenchAppearance.BaseHighlightChoices.Count == 3,

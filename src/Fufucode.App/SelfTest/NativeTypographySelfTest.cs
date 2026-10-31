@@ -45,7 +45,7 @@ internal static class NativeTypographySelfTest
         window.Height = 1050;
         window.CustomizationForTesting.Change(current => current with
         {
-            Theme = "dark", Skin = "fluent", Accent = "#26FF8E", Emphasis = "#B4BFAF", FontSize = 15,
+            Theme = "dark", Skin = "fluent", Accent = "#26FF8E", Emphasis = "#E8B86A", FontSize = 15,
             EnglishFont = "system", ChineseFont = "system",
             BaseBackground = "#1C1C1C", BaseBar = "#2C2C2C", BaseHighlight = "#3A3A3A",
         });
@@ -93,8 +93,12 @@ internal static class NativeTypographySelfTest
         Check(TextOptions.GetTextRenderingMode(window) == TextRenderingMode.Antialias &&
               TextOptions.GetTextRenderingMode(view) == TextRenderingMode.Antialias,
             "window and Markdown explicitly use grayscale antialiasing");
-        Check(body.Foreground is ISolidColorBrush { Color: var foreground } && foreground == Color.Parse("#C9C9C9"),
-            "actual Markdown body resolves to soft gray instead of pure white");
+        Check(body.Foreground is ISolidColorBrush { Color: var foreground } && foreground == Color.Parse("#E4E4E4"),
+            "actual Markdown body restores readable near-white with grayscale edges");
+        var firstCodes = blocks.SelectMany(block => Flatten(block.Inlines)).OfType<CodeInline>().ToArray();
+        Check(firstCodes.Length >= 3 && firstCodes.All(code => code.Foreground is ISolidColorBrush front && front.Color == Color.Parse("#E8B86A") &&
+            code.Background is ISolidColorBrush back && back.Color == Color.Parse("#1C1C1C")),
+            "chat data-template inline colors are correct before any appearance refresh");
         Console.WriteLine("BODY family=" + body.FontFamily + " foreground=" + body.Foreground);
         Check(body.FontFamily.Equals(window.FontFamily) && !body.FontFamily.ToString().Contains("Noto", StringComparison.Ordinal),
             "Markdown follows the restored default UI family");
@@ -125,8 +129,12 @@ internal static class NativeTypographySelfTest
         Check(Shape("English 汉字", body.FontFamily).Any(run => run.Text.Contains("English", StringComparison.Ordinal) && run.Face.FamilyName.Contains("Inter", StringComparison.Ordinal)),
             "changing Chinese font preserves the selected English face");
         var codes = blocks.SelectMany(block => Flatten(block.Inlines)).OfType<CodeInline>().ToArray();
-        Check(codes.Length >= 3 && codes.All(code => code.Foreground is ISolidColorBrush { Color: var c } && c == Color.Parse("#B4BFAF")),
-            "inline emphasis uses the subdued sage palette");
+        foreach (var code in codes) Console.WriteLine("INLINE COLORS " + code.Text + " front=" + code.Foreground + " back=" + code.Background +
+            " parent=" + code.Parent?.GetType().Name + " theme=" + code.ActualThemeVariant);
+        Console.WriteLine("MAIN EMPHASIS " + window.Resources["AppEmphasis"] + " renderer=" +
+            (view.TryFindResource("AppEmphasis", view.ActualThemeVariant, out var resolvedEmphasis) ? resolvedEmphasis : "missing"));
+        Check(codes.Length >= 3 && codes.All(code => code.Foreground is ISolidColorBrush { Color: var c } && c == Color.Parse("#E8B86A")),
+            "inline emphasis uses the warm amber palette");
         Check(codes.All(code => code.Background is ISolidColorBrush { Color: var c } && c == Color.Parse("#1C1C1C") && code.BorderThickness == 0),
             "inline boxes match the actual first background tier and have no outline");
         page.FindControl<ScrollViewer>("TimelineScroller")!.Offset = default;
@@ -137,16 +145,20 @@ internal static class NativeTypographySelfTest
         Console.WriteLine("CODE FONTS " + string.Join(" | ", monoBlocks.Select(block => block.GetType().FullName + "=" + block.FontFamily)));
         Check(monoBlocks.Length > 0 && monoBlocks.All(block => new Typeface(block.FontFamily).GlyphTypeface.Metrics.IsFixedPitch),
             "code blocks keep their monospace fonts");
+        Check(monoBlocks.SelectMany(block => Flatten(block.Inlines)).OfType<Run>()
+            .All(run => run.Background is ISolidColorBrush brush && brush.Color.A == 0),
+            "syntax highlight tokens no longer paint a separate black background");
         var textControl = new TextBlock
         {
             Text = "清晰正文 Open source 0123456789", FontFamily = body.FontFamily, FontSize = 20,
-            Foreground = new SolidColorBrush(Color.Parse("#C9C9C9")), Background = new SolidColorBrush(Color.Parse("#1C1C1C")),
+            Foreground = new SolidColorBrush(Color.Parse("#E4E4E4")), Background = new SolidColorBrush(Color.Parse("#1C1C1C")),
             Padding = new Thickness(10),
         };
         TextOptions.SetTextRenderingMode(textControl, TextRenderingMode.Antialias);
         textControl.Measure(new Size(900, 100));
         textControl.Arrange(new Rect(textControl.DesiredSize));
         Save(textControl, "glyph-grayscale.png");
+        await CheckFreshInlineRendering();
         window.CustomizationForTesting.Change(current => current with { BaseBackground = "#161616" });
         await Settle();
         Check(codes.All(code => code.Background is ISolidColorBrush { Color: var c } && c == Color.Parse("#161616")),
@@ -155,8 +167,11 @@ internal static class NativeTypographySelfTest
         await Settle();
         Check(body.Foreground is ISolidColorBrush { Color: var lightText } && lightText == Color.Parse("#343434"),
             "light theme retains a readable dark body color");
-        Check(codes.All(code => code.Foreground is ISolidColorBrush { Color: var c } && c == Color.Parse("#52654D")),
+        Check(codes.All(code => code.Foreground is ISolidColorBrush { Color: var c } && c == Color.Parse("#8A570F")),
             "light emphasis uses its darker readable counterpart");
+        Check(monoBlocks.SelectMany(block => Flatten(block.Inlines)).OfType<Run>()
+            .All(run => run.Background is ISolidColorBrush brush && brush.Color.A == 0),
+            "syntax token backgrounds stay transparent after changing theme");
         Save(window, "typography-light.png");
         window.CustomizationForTesting.Change(current => current with { Theme = "dark" });
         await window.NavigateForTestingAsync(AppPage.Settings);
@@ -233,6 +248,87 @@ internal static class NativeTypographySelfTest
         File.WriteAllLines(Path.Combine(evidence, "failures.txt"), failures);
         Console.WriteLine("Native typography failures: " + failures.Count + "; evidence: " + evidence);
         return failures.Count == 0 ? 0 : 1;
+
+        async Task CheckFreshInlineRendering()
+        {
+            var fresh = new RichMarkdownView { Markdown = "首屏强调 `FIRST_FRAME_01`，普通正文保持清楚。" };
+            var sample = new Window
+            {
+                Width = 720, Height = 220, RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark,
+                Content = new Border { Background = new SolidColorBrush(Color.Parse("#1C1C1C")), Padding = new Thickness(20), Child = fresh },
+            };
+            AppTypography.Apply(sample, window.CustomizationForTesting.Current);
+            sample.Resources["AppInlineCodeBackground"] = new SolidColorBrush(Color.Parse("#1C1C1C"));
+            sample.Resources["AppEmphasis"] = new SolidColorBrush(Color.Parse("#E8B86A"));
+            sample.Show(window);
+            try
+            {
+                var first = await WaitForCode("FIRST_FRAME_01");
+                Check(CodePaint(first.Code, "#1C1C1C", "#E8B86A"), "fresh Markdown inline starts with amber and the first background tier without a settings refresh");
+                Save(sample, "inline-first-frame.png");
+                CheckPixels(first.Block, first.Code, "#1C1C1C", "initial");
+                fresh.Markdown += "\n\n流式追加 `STREAMED_02`，新片段保持同一背景。";
+                var streamed = await WaitForCode("STREAMED_02");
+                Check(CodePaint(streamed.Code, "#1C1C1C", "#E8B86A"), "streamed inline code receives the same colors when created asynchronously");
+                CheckPixels(streamed.Block, streamed.Code, "#1C1C1C", "streamed");
+                sample.Resources["AppInlineCodeBackground"] = new SolidColorBrush(Color.Parse("#161616"));
+                ((Border)sample.Content!).Background = new SolidColorBrush(Color.Parse("#161616"));
+                await Task.Delay(150);
+                Check(CodePaint(first.Code, "#161616", "#E8B86A") && CodePaint(streamed.Code, "#161616", "#E8B86A"),
+                    "existing and appended inline colors track changed dynamic resources");
+                CheckPixels(streamed.Block, streamed.Code, "#161616", "changed-background");
+                Save(sample, "inline-streamed.png");
+            }
+            finally { sample.Close(); }
+
+            async Task<(MarkdownTextBlock Block, CodeInline Code)> WaitForCode(string text)
+            {
+                for (var attempt = 0; attempt < 60; attempt++)
+                {
+                    await Task.Delay(30);
+                    sample.UpdateLayout();
+                    foreach (var block in fresh.GetVisualDescendants().OfType<MarkdownTextBlock>())
+                    {
+                        var code = Flatten(block.Inlines).OfType<CodeInline>().FirstOrDefault(code => code.Text == text);
+                        if (code is null) continue;
+                        await Dispatcher.Yield(DispatcherPriority.Render);
+                        return (block, code);
+                    }
+                }
+                throw new InvalidOperationException("Missing asynchronously rendered inline: " + text);
+            }
+            static bool CodePaint(CodeInline code, string background, string foreground) =>
+                code.Background is ISolidColorBrush back && back.Color == Color.Parse(background) &&
+                code.Foreground is ISolidColorBrush front && front.Color == Color.Parse(foreground);
+            void CheckPixels(MarkdownTextBlock block, CodeInline code, string background, string phase)
+            {
+                var rects = block.GetCodeInlineRects(code);
+                Check(rects.Count > 0, phase + " inline painted bounds are available");
+                var scale = sample.RenderScaling;
+                using var bitmap = new RenderTargetBitmap(new PixelSize((int)Math.Ceiling(sample.Bounds.Width * scale),
+                    (int)Math.Ceiling(sample.Bounds.Height * scale)), new Vector(96 * scale, 96 * scale));
+                bitmap.Render(sample);
+                using var readable = new WriteableBitmap(bitmap.PixelSize, bitmap.Dpi, Avalonia.Platform.PixelFormat.Bgra8888, Avalonia.Platform.AlphaFormat.Premul);
+                using var pixels = readable.Lock();
+                bitmap.CopyPixels(pixels);
+                var backgroundColor = Color.Parse(background);
+                var darker = 0; var inspected = 0;
+                foreach (var rect in rects)
+                {
+                    var origin = block.TranslatePoint(rect.Position, sample)!.Value;
+                    for (var y = Math.Max(0, (int)Math.Ceiling(origin.Y * scale)); y < Math.Min(bitmap.PixelSize.Height, (int)Math.Floor((origin.Y + rect.Height) * scale)); y++)
+                    for (var x = Math.Max(0, (int)Math.Ceiling(origin.X * scale)); x < Math.Min(bitmap.PixelSize.Width, (int)Math.Floor((origin.X + rect.Width) * scale)); x++)
+                    {
+                        var pixel = Marshal.ReadInt32(pixels.Address, y * pixels.RowBytes + x * 4);
+                        var blue = pixel & 255; var green = (pixel >> 8) & 255; var red = (pixel >> 16) & 255;
+                        inspected++;
+                        if (red < backgroundColor.R - 1 || green < backgroundColor.G - 1 || blue < backgroundColor.B - 1) darker++;
+                    }
+                }
+                Console.WriteLine($"INLINE PIXELS {phase} samples={inspected} darkerThanBackground={darker} scale={scale}");
+                Check(inspected > 20 && darker == 0, phase + " rendered inline has no darker black backing pixels");
+            }
+        }
 
         async Task Settle() { await Task.Delay(500); await Dispatcher.Yield(DispatcherPriority.Background); window.UpdateLayout(); }
         void Save(Visual visual, string file)

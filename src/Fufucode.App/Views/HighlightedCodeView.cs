@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Styling;
@@ -110,10 +111,12 @@ public sealed class HighlightedCodeView : ContentControl
         if (change.Property == CodeProperty)
         {
             _block.Code = change.NewValue as string ?? string.Empty;
+            ClearTokenBackgrounds();
         }
         else if (change.Property == LanguageProperty)
         {
             _block.Language = Normalize(change.NewValue as string);
+            ClearTokenBackgrounds();
         }
         else if (change.Property == IsExpandedProperty || change.Property == CollapsedHeightProperty)
         {
@@ -187,10 +190,25 @@ public sealed class HighlightedCodeView : ContentControl
         if (root.Children.OfType<Border>().FirstOrDefault() is { } header) header.IsVisible = false;
     }
 
-    private void ApplyTheme() =>
-        _block.ColorTheme = ActualThemeVariant == ThemeVariant.Light
-            ? ThemeName.LightPlus
-            : ThemeName.DarkPlus;
+    private void ApplyTheme()
+    {
+        _block.ColorTheme = ActualThemeVariant == ThemeVariant.Light ? ThemeName.LightPlus : ThemeName.DarkPlus;
+        ClearTokenBackgrounds();
+    }
+
+    private void ClearTokenBackgrounds()
+    {
+        Clear(_block.Inlines);
+        static void Clear(InlineCollection inlines)
+        {
+            foreach (var inline in inlines)
+            {
+                // TextMate 会给每个 token 复制主题黑底；统一让代码面板提供背景。
+                inline.Background = Avalonia.Media.Brushes.Transparent;
+                if (inline is Span span) Clear(span.Inlines);
+            }
+        }
+    }
 
     /// <summary>把围栏里常见的短写/别名映射到 TextMate 的语法名。</summary>
     private static string Normalize(string? language)

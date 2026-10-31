@@ -15,7 +15,7 @@
                 <ResourceDictionary x:Key="Light">
                     <!-- App* 语义键：值统一派生自 Fluent v2 令牌；
                          浅色侧栏用纯白浮于页面底(#F3F3F3)之上（Win11 浅色设置的 NavigationView 面）。 -->
-                    <SolidColorBrush x:Key="AppEmphasis" Color="#52654D"/>
+                    <SolidColorBrush x:Key="AppEmphasis" Color="#8A570F"/>
                     <SolidColorBrush x:Key="AppCardHover" Color="#E9E9E9"/>
                     <!-- 一般栏（标题栏、侧栏、停靠区、启动卡）浅色基准；深色分支有自己的 #2C2C2C。 -->
                     <SolidColorBrush x:Key="AppBaseBar" Color="#FFFFFF"/>
@@ -135,7 +135,7 @@
                     </LinearGradientBrush>
                     <SolidColorBrush x:Key="AppBaseHighlight" Color="#3A3A3A"/>
                     <SolidColorBrush x:Key="AppCardHover" Color="#454545"/>
-                    <SolidColorBrush x:Key="AppEmphasis" Color="#B4BFAF"/>
+                    <SolidColorBrush x:Key="AppEmphasis" Color="#E8B86A"/>
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="AppBaseDeep"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppSidebarBackground"  ResourceKey="AppBaseDeep"/>
@@ -155,11 +155,11 @@
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
                     <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线（深色 = 6% 白）。 -->
                     <SolidColorBrush x:Key="AppDividerSubtle" Color="#0FFFFFFF"/>
-                    <SolidColorBrush x:Key="AppTextBody" Color="#C9C9C9"/>
+                    <SolidColorBrush x:Key="AppTextBody" Color="#E4E4E4"/>
                     <StaticResource x:Key="AppInlineCodeBackground" ResourceKey="AppBaseDeep"/>
-                    <SolidColorBrush x:Key="AppTextPrimary" Color="#DDDDDD"/>
-                    <SolidColorBrush x:Key="AppTextSecondary" Color="#A5A5A5"/>
-                    <SolidColorBrush x:Key="AppTextDim" Color="#858585"/>
+                    <SolidColorBrush x:Key="AppTextPrimary" Color="#F0F0F0"/>
+                    <StaticResource x:Key="AppTextSecondary" ResourceKey="TextFillColorSecondaryBrush"/>
+                    <StaticResource x:Key="AppTextDim" ResourceKey="TextFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppAccent"             ResourceKey="AccentFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppAccentForeground"   ResourceKey="TextOnAccentFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppAccentText"         ResourceKey="AccentTextFillColorPrimaryBrush"/>

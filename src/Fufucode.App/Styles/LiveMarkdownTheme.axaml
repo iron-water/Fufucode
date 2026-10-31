@@ -6,15 +6,15 @@
             <Color x:Key="SecondaryCardBackgroundColor">#F3F3F3</Color>
             <Color x:Key="BorderColor">#1A000000</Color>
             <Color x:Key="ForegroundColor">#343434</Color>
-            <Color x:Key="CodeInlineColor">#52654D</Color>
-            <Color x:Key="QuoteBorderColor">#52654D</Color>
+            <Color x:Key="CodeInlineColor">#8A570F</Color>
+            <Color x:Key="QuoteBorderColor">#8A570F</Color>
         </ResourceDictionary>
         <ResourceDictionary x:Key="Dark">
             <Color x:Key="SecondaryCardBackgroundColor">#1C1C1C</Color>
             <Color x:Key="BorderColor">#20FFFFFF</Color>
-            <Color x:Key="ForegroundColor">#C9C9C9</Color>
-            <Color x:Key="CodeInlineColor">#B4BFAF</Color>
-            <Color x:Key="QuoteBorderColor">#B4BFAF</Color>
+            <Color x:Key="ForegroundColor">#E4E4E4</Color>
+            <Color x:Key="CodeInlineColor">#E8B86A</Color>
+            <Color x:Key="QuoteBorderColor">#E8B86A</Color>
         </ResourceDictionary>
     </ResourceDictionary.ThemeDictionaries>
 </ResourceDictionary>
