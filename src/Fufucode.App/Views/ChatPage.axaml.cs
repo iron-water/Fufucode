@@ -102,11 +102,26 @@ public partial class ChatPage : UserControl
         // 普通的 += 订阅收不到，之前的“暂停自动跟随”因此从未生效。
         TimelineScroller.AddHandler(InputElement.PointerWheelChangedEvent, OnTimelineWheel,
             RoutingStrategies.Tunnel, handledEventsToo: true);
+        ConversationBody.AddHandler(InputElement.PointerWheelChangedEvent, OnConversationMarginWheel,
+            RoutingStrategies.Bubble);
         TimelineScroller.PointerPressed += (_, _) => MarkUserScrollInput();
         TimelineScroller.KeyDown += (_, _) => MarkUserScrollInput();
     }
 
     private void MarkUserScrollInput() => _lastUserInputTicks = Stopwatch.GetTimestamp();
+
+    private void OnConversationMarginWheel(object? sender, PointerWheelEventArgs e)
+    {
+        if (e.Handled || e.Delta.Y == 0 || e.Source is not Visual source) return;
+        for (var current = source; current is not null && !ReferenceEquals(current, ConversationBody); current = current.GetVisualParent())
+            if (current is ScrollViewer || ReferenceEquals(current, ComposerCard)) return;
+
+        OnTimelineWheel(sender, e);
+        TimelineScroller.Offset = new Vector(TimelineScroller.Offset.X,
+            Math.Clamp(TimelineScroller.Offset.Y - e.Delta.Y * 50, 0,
+                Math.Max(0, TimelineScroller.Extent.Height - TimelineScroller.Viewport.Height)));
+        e.Handled = true;
+    }
 
     /// <summary>
     /// 用户一旦滚动就交出自动跟随权。流式输出时若继续跟随，

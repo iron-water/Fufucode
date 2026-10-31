@@ -76,7 +76,7 @@
     </Border>
 
     <!-- 时间线 + 输入区（x:Name 供抽屉避让带度量：输入区上沿相对本页顶端） -->
-    <Grid x:Name="ConversationBody" Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ClipToBounds="True">
+    <Grid x:Name="ConversationBody" Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ClipToBounds="True" Background="Transparent">
       <StackPanel x:Name="MessageRuler" Width="34" Spacing="2" IsVisible="False"
                   VerticalAlignment="Center" Margin="4,0,4,0"/>
       <!-- 正文与输入框共用阅读列；两侧为等宽的刻度留白，滚动条放在列外。 -->
@@ -909,7 +909,7 @@
                         AutomationProperties.Name="重发上一条">
                   <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
                 </Button>
-                <Button x:Name="SendButton" Classes="accent" Height="32" Padding="12,0"
+                <Button x:Name="SendButton" Classes="accent composerSend" Height="32" Padding="12,0"
                         Command="{Binding Input.SendCommand}"
                         IsVisible="{Binding Input.ShowSendButton}"
                         AutomationProperties.Name="发送">

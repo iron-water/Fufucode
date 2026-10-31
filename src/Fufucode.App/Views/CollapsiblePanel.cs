@@ -1,8 +1,6 @@
 using System;
 using Avalonia;
-using Avalonia.Animation;
 using Avalonia.Controls;
-using Avalonia.Threading;
 using Fufucode.App.Infrastructure;
 
 namespace Fufucode.App.Views;
@@ -17,9 +15,9 @@ namespace Fufucode.App.Views;
 public sealed class CollapsiblePanel : ContentControl
 {
     public static readonly StyledProperty<bool> IsExpandedProperty =
-        AvaloniaProperty.Register<CollapsiblePanel, bool>(nameof(IsExpanded), true);
+        AvaloniaProperty.Register<CollapsiblePanel, bool>(nameof(IsExpanded));
 
-    private IDisposable? _settleTimer;
+    private IDisposable? _animation;
     private bool _attached;
 
     public bool IsExpanded
@@ -31,21 +29,8 @@ public sealed class CollapsiblePanel : ContentControl
     public CollapsiblePanel()
     {
         ClipToBounds = true;
-        Transitions = new Transitions
-        {
-            new DoubleTransition
-            {
-                Property = MaxHeightProperty,
-                Duration = Motion.StandardDuration,
-                Easing = Motion.FluentEasing,
-            },
-            new DoubleTransition
-            {
-                Property = OpacityProperty,
-                Duration = Motion.FastDuration,
-                Easing = Motion.FluentEasing,
-            },
-        };
+        MaxHeight = 0;
+        Opacity = 0;
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -57,8 +42,8 @@ public sealed class CollapsiblePanel : ContentControl
 
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        _settleTimer?.Dispose();
-        _settleTimer = null;
+        _animation?.Dispose();
+        _animation = null;
         _attached = false;
         base.OnDetachedFromVisualTree(e);
     }
@@ -67,49 +52,38 @@ public sealed class CollapsiblePanel : ContentControl
     {
         base.OnPropertyChanged(change);
         if (change.Property != IsExpandedProperty || !_attached) return;
-        Apply(IsExpanded, animate: !Motion.Reduced);
+        Apply(IsExpanded, animate: Bounds.Height > 0 || IsExpanded);
     }
 
     private void Apply(bool expanded, bool animate)
     {
-        _settleTimer?.Dispose();
-        _settleTimer = null;
+        _animation?.Dispose();
+        _animation = null;
 
-        if (!animate)
+        if (!animate || Motion.Reduced)
         {
             MaxHeight = expanded ? double.PositiveInfinity : 0;
             Opacity = expanded ? 1 : 0;
             return;
         }
 
-        if (expanded)
-        {
-            var target = MeasureContentHeight();
-            MaxHeight = 0;
-            Opacity = 0;
-            Dispatcher.UIThread.Post(() =>
+        // 从当前可见高度反向，不先抬到完整内容高度；首帧折叠也不会撑开页面。
+        var from = double.IsFinite(MaxHeight) ? Math.Min(Bounds.Height, MaxHeight) : Bounds.Height;
+        var target = expanded ? MeasureContentHeight() : 0;
+        var opacity = Opacity;
+        MaxHeight = from;
+        _animation = Motion.AnimateValue(from, target, Motion.StandardDuration,
+            value =>
             {
-                MaxHeight = target;
-                Opacity = 1;
-            }, DispatcherPriority.Background);
-
-            // 过渡结束后解除高度限制，后续内容增长不会被裁掉。
-            _settleTimer = DispatcherTimer.RunOnce(
-                () => MaxHeight = double.PositiveInfinity,
-                Motion.StandardDuration + TimeSpan.FromMilliseconds(30));
-            return;
-        }
-
-        // 收起：先把高度固定成当前值，等一帧让过渡有起点，再降到 0。
-        // 若在同一批调度里直接写 0，过渡看不到起始值，表现就是瞬间消失。
-        var current = Math.Max(Bounds.Height, MeasureContentHeight());
-        MaxHeight = current;
-        Opacity = 1;
-        _settleTimer = DispatcherTimer.RunOnce(() =>
-        {
-            MaxHeight = 0;
-            Opacity = 0;
-        }, TimeSpan.FromMilliseconds(16));
+                MaxHeight = value;
+                var progress = Math.Abs(target - from) < .01 ? 1 : (value - from) / (target - from);
+                Opacity = opacity + ((expanded ? 1 : 0) - opacity) * progress;
+            },
+            () =>
+            {
+                MaxHeight = expanded ? double.PositiveInfinity : 0;
+                Opacity = expanded ? 1 : 0;
+            });
     }
 
     /// <summary>直接量内容，不受当前 MaxHeight 影响。</summary>

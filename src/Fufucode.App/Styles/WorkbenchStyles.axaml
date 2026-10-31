@@ -1147,6 +1147,20 @@
   <Style Selector="Grid#ComposerToolbar Button.iconButton">
     <Setter Property="Margin" Value="0,0,4,0"/>
   </Style>
+  <Style Selector="Window.fluentWorkbench Button.composerSend:not(:disabled)">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Foreground" Value="Black"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Button.composerSend:not(:disabled) /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Foreground" Value="Black"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Button.composerSend:not(:disabled) PathIcon">
+    <Setter Property="Foreground" Value="Black"/>
+  </Style>
+  <Style Selector="Window.fluentWorkbench Button.composerSend:not(:disabled) TextBlock">
+    <Setter Property="Foreground" Value="Black"/>
+  </Style>
   <!-- 透明遮罩按钮（岛/抽屉/全局浮层）：不允许任何 hover/pressed 底色，
        否则指针落上去会把整个窗口刷成高亮色，表现为“离开图标时闪一下”。 -->
   <Style Selector="Button#IslandScrim, Button#RightDrawerScrim, Grid#GlobalOverlay > Button">

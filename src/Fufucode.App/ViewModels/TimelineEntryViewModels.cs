@@ -503,8 +503,14 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         }
 
         if (DisplayBlocks.SequenceEqual(next)) return;
-        DisplayBlocks.Clear();
-        foreach (var item in next) DisplayBlocks.Add(item);
+        for (var index = 0; index < next.Count; index++)
+        {
+            if (index < DisplayBlocks.Count && ReferenceEquals(DisplayBlocks[index], next[index])) continue;
+            var existing = DisplayBlocks.IndexOf(next[index]);
+            if (existing >= 0) DisplayBlocks.Move(existing, index);
+            else DisplayBlocks.Insert(index, next[index]);
+        }
+        while (DisplayBlocks.Count > next.Count) DisplayBlocks.RemoveAt(DisplayBlocks.Count - 1);
         OnPropertyChanged(nameof(HeaderStatusText));
     }
 

@@ -103,6 +103,26 @@ public static class TimelineHistorySelfTest
                 "跳转到窗口外条目时按需展开");
         }
 
+        var stableTurn = new AssistantMessageViewModel(new RecordingClipboardService()) { Id = "stable" };
+        var stableBlocks = new System.Collections.Generic.List<MessageBlock> { new TextBlock("原有正文") };
+        stableTurn.MergeMessage(new ChatMessage("stable-assistant", MessageRole.Assistant, "fixture-model", stableBlocks.ToArray(), null, false));
+        var firstBlock = stableTurn.DisplayBlocks[0];
+        var projectionResets = 0;
+        stableTurn.DisplayBlocks.CollectionChanged += (_, change) =>
+        {
+            if (change.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset) projectionResets++;
+        };
+        stableBlocks.Add(new ThinkingBlock("思考内容"));
+        stableTurn.MergeMessage(new ChatMessage("stable-assistant", MessageRole.Assistant, "fixture-model", stableBlocks.ToArray(), null, false));
+        stableBlocks.Add(new ToolCallBlock("stable-tool", "read_file", "{}", ToolCallStatus.Running, null, null, false));
+        stableTurn.MergeMessage(new ChatMessage("stable-assistant", MessageRole.Assistant, "fixture-model", stableBlocks.ToArray(), null, false));
+        Check(projectionResets == 0 && ReferenceEquals(firstBlock, stableTurn.DisplayBlocks[0]) && stableTurn.DisplayBlocks.Count == 3,
+            "新增思考和工具组不重置已有正文的展示列表");
+        stableBlocks.RemoveAt(stableBlocks.Count - 1);
+        stableTurn.MergeMessage(new ChatMessage("stable-assistant", MessageRole.Assistant, "fixture-model", stableBlocks.ToArray(), null, false));
+        Check(projectionResets == 0 && ReferenceEquals(firstBlock, stableTurn.DisplayBlocks[0]) && stableTurn.DisplayBlocks.Count == 2,
+            "后端快照移除块也保留其余展示实例");
+
         var group = new ToolGroupViewModel("group");
         group.Add(new ToolCallBlockViewModel { ToolName = "read_file", Status = ToolCallStatus.Completed });
         Check(group.VisibleTools.Count == 0, "折叠工具组不实例化子卡片");
