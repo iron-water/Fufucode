@@ -1319,9 +1319,8 @@
   <Style Selector="Border.toolCard:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppCardHover}"/>
   </Style>
-  <!-- 同心圆角：工具组卡外圆角 8、工具卡内缩 10，内层卡与输出区圆角钳到 0。 -->
-  <Style Selector="Border.toolGroupCard Border.toolCard,
-                   Border.toolCard Border.nestedFill,
+  <!-- 工具卡是独立的交互卡，沿用普通卡片圆角；输出区只作卡内填充。 -->
+  <Style Selector="Border.toolCard Border.nestedFill,
                    Border.toolCard Border.innerWell">
     <Setter Property="CornerRadius" Value="0"/>
   </Style>
@@ -1392,6 +1391,19 @@
     <Setter Property="FontStyle" Value="Italic"/>
   </Style>
 
+  <!-- 覆盖 Markdown 库自带的 Arial/Segoe UI，正文和列表标记跟随外观字体设置。 -->
+  <Style Selector="views|RichMarkdownView md|MarkdownTextBlock, views|RichMarkdownView TextBlock.ListBlockNumber, views|RichMarkdownView TextBlock.ListBlockBullet">
+    <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextBody}"/>
+  </Style>
+  <Style Selector="views|RichMarkdownView md|CodeBlock md|MarkdownTextBlock">
+    <Setter Property="FontFamily" Value="{DynamicResource AppMonoFont}"/>
+  </Style>
+
+  <Style Selector="views|RichMarkdownView md|MarkdownRenderer md|Link">
+    <Setter Property="Foreground" Value="{DynamicResource AppEmphasis}"/>
+  </Style>
+
   <!-- 表格：去掉全网格竖线，只保留行分隔与表头强调，贴近正文排版而不是电子表格。 -->
   <!-- LiveMarkdown 的 PanAndZoom 在点击时会递归到栈溢出（Windows 报
        “无法创建新的堆栈防护页面”）。图表只显示不交互，从样式层统一禁用命中测试，
@@ -1408,7 +1420,7 @@
     <Setter Property="Padding" Value="12,8"/>
   </Style>
   <Style Selector="md|MarkdownTableGrid > Border > StackPanel > md|MarkdownTextBlock">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextBody}"/>
   </Style>
 
   <!-- 回合变更总结卡：与工具卡同一层级，但更强调"这一轮改了什么"。 -->

@@ -8,6 +8,7 @@ using Avalonia.Headless;
 using Avalonia.Threading;
 using Fufucode.App.Features.Performance;
 using Fufucode.App.Integration;
+using Fufucode.App.Infrastructure;
 
 namespace Fufucode.App;
 
@@ -125,9 +126,11 @@ internal static class Program
                 try
                 {
                     var window = (MainWindow)lifetime.MainWindow!;
-                    code = args.Contains("--chat-feedback-only")
-                        ? await SelfTest.NativeChatFeedbackSelfTest.RunAsync(window)
-                        : await SelfTest.NativeDockMotionSelfTest.RunAsync(window);
+                    code = args.Contains("--typography-only")
+                        ? await SelfTest.NativeTypographySelfTest.RunAsync(window)
+                        : args.Contains("--chat-feedback-only")
+                            ? await SelfTest.NativeChatFeedbackSelfTest.RunAsync(window)
+                            : await SelfTest.NativeDockMotionSelfTest.RunAsync(window);
                 }
                 catch (Exception error) { Console.WriteLine("Native motion test failed: " + error); }
                 finally { completion.TrySetResult(code); lifetime.Shutdown(code); }
@@ -266,6 +269,7 @@ internal static class Program
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions())
                 .UseSkia()
                 .WithInterFont()
+                .WithAppTypography()
                 .LogToTrace()
                 .StartWithClassicDesktopLifetime(Array.Empty<string>());
         }
@@ -290,6 +294,7 @@ internal static class Program
         var builder = AppBuilder.Configure(() => new App(options))
             .UsePlatformDetect()
             .WithInterFont()
+            .WithAppTypography()
             .LogToTrace();
         // 低内存模式：不初始化 ANGLE/D3D，不加载显卡驱动的大块模块。
         if (MemoryProfile.SoftwareRendering)

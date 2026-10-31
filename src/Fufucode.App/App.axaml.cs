@@ -33,6 +33,7 @@ public partial class App : Application
     public override void Initialize()
     {
         Fufucode.Core.Diagnostics.StartupProbe.Mark("app.xaml", "Avalonia XAML load begins");
+        Infrastructure.AppTypography.Initialize();
         AvaloniaXamlLoader.Load(this);
         Fufucode.Core.Diagnostics.StartupProbe.Mark("app.xaml", "Avalonia XAML loaded");
 

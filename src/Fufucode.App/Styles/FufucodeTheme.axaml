@@ -15,7 +15,7 @@
                 <ResourceDictionary x:Key="Light">
                     <!-- App* 语义键：值统一派生自 Fluent v2 令牌；
                          浅色侧栏用纯白浮于页面底(#F3F3F3)之上（Win11 浅色设置的 NavigationView 面）。 -->
-                    <SolidColorBrush x:Key="AppEmphasis" Color="#9A6700"/>
+                    <SolidColorBrush x:Key="AppEmphasis" Color="#52654D"/>
                     <SolidColorBrush x:Key="AppCardHover" Color="#E9E9E9"/>
                     <!-- 一般栏（标题栏、侧栏、停靠区、启动卡）浅色基准；深色分支有自己的 #2C2C2C。 -->
                     <SolidColorBrush x:Key="AppBaseBar" Color="#FFFFFF"/>
@@ -45,6 +45,8 @@
                          浅色 = 6% 黑，深色 = 6% 白（见 Dark 分支），比 AppBorderBrush 更轻，
                          用于已带闭合卡片边框的容器内部，避免边框套娃的粗糙感。 -->
                     <SolidColorBrush x:Key="AppDividerSubtle" Color="#0F000000"/>
+                    <SolidColorBrush x:Key="AppTextBody" Color="#343434"/>
+                    <StaticResource x:Key="AppInlineCodeBackground" ResourceKey="AppWindowBackground"/>
                     <StaticResource x:Key="AppTextPrimary"        ResourceKey="TextFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppTextSecondary"      ResourceKey="TextFillColorSecondaryBrush"/>
                     <StaticResource x:Key="AppTextDim"            ResourceKey="TextFillColorTertiaryBrush"/>
@@ -133,7 +135,7 @@
                     </LinearGradientBrush>
                     <SolidColorBrush x:Key="AppBaseHighlight" Color="#3A3A3A"/>
                     <SolidColorBrush x:Key="AppCardHover" Color="#454545"/>
-                    <SolidColorBrush x:Key="AppEmphasis" Color="#D97757"/>
+                    <SolidColorBrush x:Key="AppEmphasis" Color="#B4BFAF"/>
                     <StaticResource x:Key="AppWindowBackground"   ResourceKey="AppBaseDeep"/>
                     <StaticResource x:Key="AppTitleBarBackground" ResourceKey="AppBaseBar"/>
                     <StaticResource x:Key="AppSidebarBackground"  ResourceKey="AppBaseDeep"/>
@@ -153,9 +155,11 @@
                     <StaticResource x:Key="AppBorderBrush"        ResourceKey="DividerStrokeColorDefaultBrush"/>
                     <!-- UI-1 单闭合边框原则：容器内结构划分只用单向 1px 发丝细线（深色 = 6% 白）。 -->
                     <SolidColorBrush x:Key="AppDividerSubtle" Color="#0FFFFFFF"/>
-                    <StaticResource x:Key="AppTextPrimary"        ResourceKey="TextFillColorPrimaryBrush"/>
-                    <StaticResource x:Key="AppTextSecondary"      ResourceKey="TextFillColorSecondaryBrush"/>
-                    <StaticResource x:Key="AppTextDim"            ResourceKey="TextFillColorTertiaryBrush"/>
+                    <SolidColorBrush x:Key="AppTextBody" Color="#C9C9C9"/>
+                    <StaticResource x:Key="AppInlineCodeBackground" ResourceKey="AppBaseDeep"/>
+                    <SolidColorBrush x:Key="AppTextPrimary" Color="#DDDDDD"/>
+                    <SolidColorBrush x:Key="AppTextSecondary" Color="#A5A5A5"/>
+                    <SolidColorBrush x:Key="AppTextDim" Color="#858585"/>
                     <StaticResource x:Key="AppAccent"             ResourceKey="AccentFillColorDefaultBrush"/>
                     <StaticResource x:Key="AppAccentForeground"   ResourceKey="TextOnAccentFillColorPrimaryBrush"/>
                     <StaticResource x:Key="AppAccentText"         ResourceKey="AccentTextFillColorPrimaryBrush"/>
@@ -227,7 +231,7 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
-            <FontFamily x:Key="AppFontFamily">Segoe UI Variable Text, Segoe UI, Microsoft YaHei UI, Inter</FontFamily>
+            <FontFamily x:Key="AppFontFamily">fonts:FufucodeLatin#Segoe UI Variable Text, fonts:FufucodeLatin#Segoe UI, fonts:FufucodeLatin#Inter, Microsoft YaHei UI</FontFamily>
             <FontFamily x:Key="AppMonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
             <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
             <CornerRadius x:Key="AppCornerCard">6</CornerRadius>
@@ -247,7 +251,7 @@
 
     <!-- ================= 全局基线 ================= -->
     <Style Selector="Window">
-        <Setter Property="FontFamily" Value="{StaticResource AppFontFamily}"/>
+        <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
         <Setter Property="FontSize" Value="14"/>
         <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
@@ -440,7 +444,7 @@
         <Setter Property="HorizontalAlignment" Value="Stretch"/>
         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
         <Setter Property="Transitions">
             <Transitions>
                 <BrushTransition Property="Background" Duration="0:0:0.1" Easing="CubicEaseOut"/>
@@ -465,10 +469,10 @@
         <Setter Property="BorderBrush" Value="{DynamicResource FocusStrokeColorOuterBrush}"/>
     </Style>
     <Style Selector="Button.navItem PathIcon">
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
     <Style Selector="Button.navItem TextBlock">
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
     <Style Selector="Button.navItem:disabled PathIcon">
         <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
@@ -860,20 +864,20 @@
         <Setter Property="MinHeight" Value="32"/>
         <Setter Property="CornerRadius" Value="4"/>
         <Setter Property="VerticalContentAlignment" Value="Center"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
     <Style Selector="ComboBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter,
                      ComboBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter,
                      ComboBoxItem:selected:pointerover /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
     <Style Selector="ComboBoxItem:pressed /template/ ContentPresenter#PART_ContentPresenter,
                      ComboBoxItem:selected:pressed /template/ ContentPresenter#PART_ContentPresenter">
         <Setter Property="Background" Value="{DynamicResource SubtleFillColorTertiaryBrush}"/>
         <Setter Property="BorderBrush" Value="Transparent"/>
-        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}"/>
+        <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
     </Style>
 
     <!-- WinUI 菜单几何：项内缩、分隔线跨整宽 -->

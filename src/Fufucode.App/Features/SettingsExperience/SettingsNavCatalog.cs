@@ -45,7 +45,7 @@ public static class SettingsNavCatalog
     [
         // ── 基础类 ──
         new("appearance", "外观", SettingsNavTier.Basic,
-            "主题 皮肤 skin Fluent Metro Material3 Material 3 亮色 暗色 强调色 字号 密度 圆角 阅读宽度 停靠区 页面位置 显隐 入口位置 appearance theme layout dock",
+            "主题 皮肤 skin Fluent Metro Material3 Material 3 亮色 暗色 强调色 字体 英文 中文 font 字号 密度 圆角 阅读宽度 停靠区 页面位置 显隐 入口位置 appearance theme layout dock",
             "Color", "#4CC2FF"),
         new("about", "关于", SettingsNavTier.Basic,
             "版本 数据目录 配置目录 日志 诊断 runtime about", "Info", "#8A8A8E"),

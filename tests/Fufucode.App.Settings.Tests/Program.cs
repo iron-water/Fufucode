@@ -227,10 +227,11 @@ try
     // ================= 4.2 Fluent 暗色三档底色 =================
     var appearance = new WorkbenchAppearance();
     Check(appearance.BaseBackground == "#1C1C1C" && appearance.BaseBar == "#2C2C2C" &&
-          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#D97757",
+          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#B4BFAF",
         "Fluent 暗色默认三档底色与模型输出强调色");
-    Check(new WorkbenchAppearance { Emphasis = "#FFEE58" }.Normalize().Emphasis == "#D97757",
-        "旧黄色强调色迁移到默认橙");
+    Check(new WorkbenchAppearance { Emphasis = "#FFEE58" }.Normalize().Emphasis == "#B4BFAF" &&
+          new WorkbenchAppearance { Emphasis = "#D97757" }.Normalize().Emphasis == "#B4BFAF",
+        "旧黄色和橙色默认强调色迁移到柔和灰绿");
     Check(WorkbenchAppearance.BaseBackgroundChoices.Count == 3 &&
           WorkbenchAppearance.BaseBarChoices.Count == 3 &&
           WorkbenchAppearance.BaseHighlightChoices.Count == 3,
@@ -243,6 +244,35 @@ try
         "非法底色回退到默认，不接受任意第四种底色");
     Check(appearance.Accent != appearance.Emphasis,
         "主题色与模型输出强调色是两个独立字段");
+
+    // 中英文字体独立保存；项目只覆盖所改的字段，保留全局另一种字体。
+    Check(WorkbenchAppearance.Parse("{}").EnglishFont == "system" && WorkbenchAppearance.Parse("{}").ChineseFont == "system",
+        "旧配置缺少字体字段时恢复系统字体");
+    var fontRoot = Path.Combine(root, "fonts");
+    var fontProject = Path.Combine(root, "font-project");
+    var fontStore = new WorkbenchAppearanceStore(fontRoot);
+    var fontVm = new WorkbenchCustomizationViewModel(fontStore);
+    fontVm.Change(current => current with { EnglishFont = "Inter", ChineseFont = "Microsoft YaHei UI" });
+    var fontReload = new WorkbenchAppearanceStore(fontRoot);
+    Check(fontReload.Current.EnglishFont == "Inter" && fontReload.Current.ChineseFont == "Microsoft YaHei UI",
+        "新实例恢复两种字体选择");
+    fontVm.AttachProject(fontProject);
+    fontVm.ProjectScope = true;
+    fontVm.Change(current => current with { ChineseFont = "SimSun" });
+    Check(fontStore.Current.EnglishFont == "Inter" && fontStore.Current.ChineseFont == "SimSun" &&
+        !File.ReadAllText(fontStore.ProjectPath!).Contains("englishFont", StringComparison.Ordinal),
+        "项目中文字体覆盖不复制或修改全局英文字体");
+    fontVm.Undo();
+    Check(fontStore.Current.ChineseFont == "Microsoft YaHei UI" && fontStore.Current.EnglishFont == "Inter",
+        "撤销中文字体不改变英文字体");
+    fontVm.Redo();
+    Check(fontStore.Current.ChineseFont == "SimSun", "重做恢复字体选择");
+    fontVm.ClearOverrides();
+    Check(fontStore.Current.ChineseFont == "Microsoft YaHei UI", "清除项目覆盖恢复全局字体");
+    Check(WorkbenchAppearance.Parse("{\"englishFont\":null,\"chineseFont\":\"  \"}").EnglishFont == "system" &&
+        new WorkbenchAppearance { ChineseFont = "file:///invalid.ttf#Face" }.Normalize().ChineseFont == "system" &&
+        new WorkbenchAppearance { ChineseFont = "未安装的字体" }.Normalize().ChineseFont == "未安装的字体",
+        "无效字体值回退默认，未安装的字体名称保留供其它设备恢复");
 
     // ================= 5. 设置页纪律守卫（规范 §10） =================
     // 放在能力门禁之前：门禁测试依赖本机插件目录，属于既有环境用例；

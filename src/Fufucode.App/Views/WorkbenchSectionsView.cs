@@ -309,6 +309,10 @@ public sealed class WorkbenchSectionsView : UserControl
         });
 
         Group(rows, "字体与密度",
+            FontRow(vm, "英文字体", "英文、数字和界面文字", AppTypography.EnglishChoices,
+                s => s.EnglishFont, (s, v) => s with { EnglishFont = v }, "appearance-english-font"),
+            FontRow(vm, "中文字体", "汉字与中文标点；选择本机已安装字体", AppTypography.ChineseChoices,
+                s => s.ChineseFont, (s, v) => s with { ChineseFont = v }, "appearance-chinese-font"),
             ChoiceRow(vm, "字号", null, new[] { "11", "12", "13", "14", "16", "18", "20", "24" },
                 s => ((int)Math.Round(s.FontSize)).ToString(), (s, v) => s with { FontSize = double.Parse(v) }, "Document", "11", "12", "13", "14", "16", "18", "20", "24"),
             ChoiceRow(vm, "密度", "行高与列表间距", new[] { "紧凑", "舒适", "宽松" }, s => s.Density, (s, v) => s with { Density = v }, "AppsList", "compact", "cozy", "airy"),
@@ -706,6 +710,76 @@ public sealed class WorkbenchSectionsView : UserControl
         rows.Children.Add(SettingsLayout.Group(groupRows));
     }
 
+    private Control FontRow(WorkbenchCustomizationViewModel vm, string label, string description,
+        IReadOnlyList<AppFontChoice> available, Func<WorkbenchAppearance, string> get,
+        Func<WorkbenchAppearance, string, WorkbenchAppearance> set, string automationId)
+    {
+        var choices = available.ToList();
+        var saved = get(vm.Current);
+        if (!choices.Any(choice => choice.Value.Equals(saved, StringComparison.OrdinalIgnoreCase)))
+            choices.Add(new(saved, saved + "（未安装）"));
+        var input = new AutoCompleteBox
+        {
+            ItemsSource = choices.Select(choice => choice.Label).ToArray(), Width = 220,
+            MinimumPrefixLength = 0, FilterMode = AutoCompleteFilterMode.ContainsOrdinal,
+            IsTextCompletionEnabled = false, PlaceholderText = "搜索字体", ClearSelectionOnLostFocus = false,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        AutomationProperties.SetAutomationId(input, automationId);
+        AutomationProperties.SetName(input, label);
+        var applying = false;
+        input.DropDownClosed += (_, _) => Commit();
+        input.KeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Enter) return;
+            Commit();
+            input.IsDropDownOpen = false;
+            args.Handled = true;
+        };
+        input.LostFocus += (_, _) =>
+        {
+            if (!input.IsKeyboardFocusWithin && !input.IsDropDownOpen) Commit();
+        };
+        var browse = WorkbenchUi.IconButton("ChevronDown", "展开" + label, 30, false);
+        browse.Click += (_, _) =>
+        {
+            if (input.IsDropDownOpen) { input.IsDropDownOpen = false; return; }
+            input.Focus();
+            input.Text = "";
+            input.IsDropDownOpen = true;
+        };
+        var field = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
+        field.Children.Add(input); field.Children.Add(browse);
+        _bindings.Add(current =>
+        {
+            applying = true;
+            try
+            {
+                var value = get(current);
+                input.Text = choices.FirstOrDefault(choice => choice.Value.Equals(value, StringComparison.OrdinalIgnoreCase))?.Label
+                    ?? value + "（未安装）";
+            }
+            finally { applying = false; }
+        });
+        return SettingsLayout.Row(label, description, field, "Document");
+
+        void Commit()
+        {
+            if (_refreshing || applying) return;
+            var choice = choices.FirstOrDefault(choice => choice.Label.Equals(input.Text?.Trim(), StringComparison.OrdinalIgnoreCase));
+            if (choice is null)
+            {
+                input.Text = choices.FirstOrDefault(item => item.Value.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase))?.Label
+                    ?? get(vm.Current) + "（未安装）";
+                return;
+            }
+            if (choice.Value.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase)) return;
+            applying = true;
+            try { vm.Change(current => set(current, choice.Value)); }
+            finally { applying = false; }
+        }
+    }
+
     /// <summary>下拉行：改动写入外观配置。icon 为行首图标键，null 表示不显示。</summary>
     private Control ChoiceRow(WorkbenchCustomizationViewModel vm, string label, string? description, string[] labels,
         Func<WorkbenchAppearance, string> get, Func<WorkbenchAppearance, string, WorkbenchAppearance> set,
@@ -818,7 +892,7 @@ public sealed class WorkbenchSectionsView : UserControl
     private Control EmphasisPickerRow(WorkbenchCustomizationViewModel vm) =>
         ColorPickerRow(vm,
             "强调色",
-            "只用于模型输出中的 Markdown 粗体/标记，默认橙色（#D97757）；格式 #RRGGBB",
+            "用于正文中的 Markdown 标记，默认柔和灰绿（#B4BFAF）；格式 #RRGGBB",
             s => s.Emphasis,
             (s, value) => s with { Emphasis = value });
 

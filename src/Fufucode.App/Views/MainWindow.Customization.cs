@@ -124,6 +124,7 @@ public partial class MainWindow
             return;
         }
         _appliedCustomization = signature;
+        AppTypography.Apply(this, settings);
         RestoreFluentColorOverrides();
         Fufucode.Core.Diagnostics.StartupProbe.Mark("custom.release-skin.begin", "release previous skin");
         ReleaseWindowSkin(this);
@@ -439,14 +440,18 @@ public partial class MainWindow
     {
         if (settings.SkinResolution.Skin != Features.Skins.SkinId.Fluent) return;
 
-        void Set(string key, IBrush brush)
+        void Set(string key, object brush)
         {
             if (!_fluentColorOverrides.ContainsKey(key))
                 _fluentColorOverrides[key] = Resources.TryGetResource(key, ActualThemeVariant, out var original) ? original : null;
             Resources[key] = brush;
         }
 
-        Set("AppEmphasis", new SolidColorBrush(Color.Parse(settings.Emphasis)));
+        var emphasis = settings.Emphasis == "#B4BFAF" && ActualThemeVariant == ThemeVariant.Light
+            ? Color.Parse("#52654D") : Color.Parse(settings.Emphasis);
+        Set("AppEmphasis", new SolidColorBrush(emphasis));
+        Set("SecondaryCardBackgroundColor", ActualThemeVariant == ThemeVariant.Dark
+            ? Color.Parse(settings.BaseBackground) : Color.Parse("#F3F3F3"));
         if (ActualThemeVariant != ThemeVariant.Dark) return;
 
         var deep = new SolidColorBrush(Color.Parse(settings.BaseBackground));
@@ -456,6 +461,7 @@ public partial class MainWindow
         var bar = new SolidColorBrush(barColor);
         var highlight = new SolidColorBrush(highlightColor);
         Set("AppBaseDeep", deep);
+        Set("AppInlineCodeBackground", deep);
         Set("AppBaseBar", bar);
         Set("AppBaseHighlight", highlight);
         foreach (var key in FluentDeepKeys) Set(key, deep);

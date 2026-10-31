@@ -7,7 +7,7 @@
                    Window.fluentWorkbench Border.navFill,
                    Window.fluentWorkbench Border.card,
                    Window.fluentWorkbench Border.toolGroupCard,
-                   Window.fluentWorkbench Border.toolCard,
+                   Window.fluentWorkbench Border.toolCard:not(.success):not(.failed):not(.running),
                    Window.fluentWorkbench Border.changeCard">
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
@@ -19,13 +19,13 @@
                    Window.fluentWorkbench Border.navFill:pointerover,
                    Window.fluentWorkbench Border.card:pointerover,
                    Window.fluentWorkbench Border.toolGroupCard:pointerover,
-                   Window.fluentWorkbench Border.toolCard:pointerover,
+                   Window.fluentWorkbench Border.toolCard:not(.success):not(.failed):not(.running):pointerover,
                    Window.fluentWorkbench Border.changeCard:pointerover">
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
   </Style>
   <Style Selector="Window.fluentWorkbench Border.settingsRow.pointerHover,
                    Window.fluentWorkbench Border.navFill.pointerHover,
-                   Window.fluentWorkbench Border.toolCard.pointerHover">
+                   Window.fluentWorkbench Border.toolCard:not(.success):not(.failed):not(.running).pointerHover">
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
   </Style>
   <Style Selector="Window.fluentWorkbench Border.overviewGroup:pointerover,

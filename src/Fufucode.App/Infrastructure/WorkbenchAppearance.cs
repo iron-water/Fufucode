@@ -29,8 +29,8 @@ public sealed record WorkbenchAppearance
     public string BaseBar { get; init; } = "#2C2C2C";
     /// <summary>底色三：悬停、选中与高亮。</summary>
     public string BaseHighlight { get; init; } = "#3A3A3A";
-    /// <summary>强调色：只用于模型输出中的 Markdown 强调标记，默认 Anthropic 橙（Claude clay）。</summary>
-    public string Emphasis { get; init; } = "#D97757";
+    /// <summary>强调色：只用于模型输出中的 Markdown 标记，默认低饱和灰绿。</summary>
+    public string Emphasis { get; init; } = "#B4BFAF";
     /// <summary>三档底色各自只提供三个备选，避免用户把层级关系选反。</summary>
     public static readonly IReadOnlyList<string> BaseBackgroundChoices = ["#1C1C1C", "#161616", "#101010"];
     public static readonly IReadOnlyList<string> BaseBackgroundLabels = ["深灰", "更深", "最深"];
@@ -43,6 +43,8 @@ public sealed record WorkbenchAppearance
     public string Skin { get; init; } = "fluent";
     [JsonIgnore] public SkinResolution SkinResolution => SkinCatalog.Resolve(Skin);
     public double FontSize { get; init; } = 14;
+    public string EnglishFont { get; init; } = "system";
+    public string ChineseFont { get; init; } = "system";
     public string Density { get; init; } = "cozy";
     public string Radius { get; init; } = "mid";
     public string ReadingWidth { get; init; } = "standard";
@@ -113,6 +115,8 @@ public sealed record WorkbenchAppearance
     {
         static string Choose(string? value, string fallback, params string[] values) => values.Contains(value) ? value! : fallback;
         static string Name(string? value, string fallback) => string.IsNullOrWhiteSpace(value) ? fallback : value.Trim()[..Math.Min(value.Trim().Length, 80)];
+        static string Font(string? value) => string.IsNullOrWhiteSpace(value) || value.Length > 160 ||
+            value.Any(c => char.IsControl(c) || c is ',' or '#' or '/' or '\\' or ':') ? "system" : value.Trim();
         static string Color(string? value, string fallback) =>
             value is { Length: 7 } && value[0] == '#' && value.Skip(1).All(Uri.IsHexDigit)
                 ? value.ToUpperInvariant() : fallback;
@@ -129,12 +133,13 @@ public sealed record WorkbenchAppearance
             BaseHighlight = BaseColor(BaseHighlight, BaseHighlightChoices, "#3A3A3A"),
             Emphasis = Emphasis.Trim().ToUpperInvariant() switch
             {
-                // 旧默认（黄色系）统一迁移到当前默认橙；用户自定义的其它值保持不变。
-                "#FFD400" or "#FFEB8A" or "#FFF3B0" or "#FFFFE0" or "#9A6700" or "#FFE45C" or "#FFEE58" => "#D97757",
-                _ => Color(Emphasis, "#D97757"),
+                // 旧默认黄色/橙色收敛到灰绿，其余自定义颜色保持。
+                "#FFD400" or "#FFEB8A" or "#FFF3B0" or "#FFFFE0" or "#9A6700" or "#FFE45C" or "#FFEE58" or "#D97757" => "#B4BFAF",
+                _ => Color(Emphasis, "#B4BFAF"),
             },
             Surface = Choose(Surface, "fluent", "fluent", "glass", "flat", "classic"),
             FontSize = double.IsFinite(FontSize) ? Math.Clamp(FontSize, 12, 24) : 14,
+            EnglishFont = Font(EnglishFont), ChineseFont = Font(ChineseFont),
             Density = Choose(Density, "cozy", "compact", "cozy", "airy"),
             Radius = Choose(Radius, "mid", "none", "mid", "high"),
             ReadingWidth = Choose(ReadingWidth, "standard", "narrow", "standard", "wide", "free"),

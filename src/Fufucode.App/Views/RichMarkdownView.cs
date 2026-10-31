@@ -41,6 +41,7 @@ public sealed class RichMarkdownView : ContentControl
         HorizontalContentAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         _renderer.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
         Content = _renderer;
+        TextOptions.SetTextRenderingMode(this, TextRenderingMode.Antialias);
         ApplyCodeTheme();
 
         // 图表交互统一在 ApplyDiagramGuard 里禁用：LiveMarkdown 的 PanAndZoom
@@ -165,12 +166,14 @@ public sealed class RichMarkdownView : ContentControl
     {
         var brush = ResolveEmphasisBrush();
         if (brush is null) return;
+        var background = this.TryFindResource("AppInlineCodeBackground", ActualThemeVariant, out var value)
+            ? value as IBrush : null;
         foreach (var block in this.GetVisualDescendants().OfType<TextBlock>())
         {
-            if (block.Inlines is { } inlines) Paint(inlines, brush);
+            if (block.Inlines is { } inlines) Paint(inlines, brush, background);
         }
 
-        static void Paint(InlineCollection inlines, IBrush brush)
+        static void Paint(InlineCollection inlines, IBrush brush, IBrush? background)
         {
             foreach (var inline in inlines)
             {
@@ -178,15 +181,17 @@ public sealed class RichMarkdownView : ContentControl
                 {
                     case CodeInline code:
                         code.Foreground = brush;
+                        code.Background = background;
+                        code.BorderThickness = 0;
                         break;
                     case Bold bold:
-                        Paint(bold.Inlines, brush);
+                        Paint(bold.Inlines, brush, background);
                         break;
                     case Italic italic:
-                        Paint(italic.Inlines, brush);
+                        Paint(italic.Inlines, brush, background);
                         break;
                     case Span span:
-                        Paint(span.Inlines, brush);
+                        Paint(span.Inlines, brush, background);
                         break;
                 }
             }

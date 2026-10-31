@@ -19,6 +19,7 @@ using Avalonia.Threading;
 using Avalonia.VisualTree;
 using Fufucode.App.Abstractions;
 using Fufucode.App.Integration;
+using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 
 namespace Fufucode.App.SelfTest;
@@ -66,7 +67,7 @@ public static class HeadlessUiRunner
         {
             AppBuilder.Configure(() => new App(AppOptions.Mock with { AppDataRootOverride = data }))
                 .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
-                .UseSkia().WithInterFont().StartWithClassicDesktopLifetime([]);
+                .UseSkia().WithInterFont().WithAppTypography().StartWithClassicDesktopLifetime([]);
             return completed.Task.IsCompleted ? completed.Task.Result : 3;
         }
         catch (Exception error) { Console.Error.WriteLine(error.GetBaseException().Message); return 3; }
