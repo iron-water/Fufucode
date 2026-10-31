@@ -557,7 +557,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         Func<Task>? RestartSession = null,
         Action<string, string>? SaveCredential = null,
         Func<string, ValueTask<string?>>? ResolveCredential = null,
-        Action<string?>? ModelApplied = null);
+        Action<string?>? ModelApplied = null,
+        bool UsesEndpointModelIds = false);
 
     private Context? _context;
     /// <summary>自测接缝：读取当前注入的运行上下文（如 get_state 核对）。</summary>
@@ -658,6 +659,11 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     [ObservableProperty]
     private string _currentModelText = "—";
+    [ObservableProperty] private string? _confirmedModel;
+    partial void OnConfirmedModelChanged(string? value)
+    {
+        foreach (var item in FilteredModelChoices) item.IsConfirmed = item.Value == value;
+    }
     public string? DataRoot => _context?.DataRoot ?? Program.SelfTestDataRoot;
 
     public ObservableCollection<string> ModelRows { get; } = new();
@@ -711,7 +717,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// <summary>模型变更：空闲且有活会话 → 先 RPC 后保存；进行中 → 仅保存给新建会话。</summary>
     private async Task ApplyModelAsync(string? value)
     {
-        if (_context is not { } ctx)
+        if (_context is not { } ctx || IsModelApplying)
         {
             return;
         }
@@ -721,7 +727,12 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         ModelsStateText = null;
         if (ctx.IsTurnActive?.Invoke() == true || value is null || ctx.SetModel is null)
         {
-            if (TryUpdateStore(s => s with { SelectedModel = value }, out var saveError))
+            if (TryUpdateStore(s => s with
+                {
+                    SelectedModel = value,
+                    Endpoint = ctx.UsesEndpointModelIds && value is not null && s.Endpoint is { } endpoint
+                        ? endpoint with { ModelId = value } : s.Endpoint,
+                }, out var saveError))
             {
                 ModelsInfo = value is null
                     ? "已保存：新建会话将使用默认模型"
@@ -743,7 +754,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         }
 
         var separator = value.IndexOf('/');
-        if (separator <= 0 || separator == value.Length - 1)
+        if (!ctx.UsesEndpointModelIds && (separator <= 0 || separator == value.Length - 1))
         {
             ModelsError = "模型缺少提供方身份，无法切换。";
             ModelsState = SettingSaveState.Failed;
@@ -751,13 +762,14 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             RevertModelSelection(ctx.Store.Current.SelectedModel);
             return;
         }
-        var provider = value[..separator];
-        var modelId = value[(separator + 1)..];
+        var provider = ctx.UsesEndpointModelIds ? ctx.Store.Current.Endpoint?.ProviderName ?? "fumo" : value[..separator];
+        var modelId = ctx.UsesEndpointModelIds ? value : value[(separator + 1)..];
         var generation = _attachmentGeneration;
         IsModelApplying = true;
         var previousRuntime = await QueryCurrentModelAsync(ctx) ?? ctx.CurrentModel();
         try
         {
+            if (generation != _attachmentGeneration) return;
             var response = await ctx.SetModel(provider, modelId, CancellationToken.None);
             if (generation != _attachmentGeneration) return;
             if (!response.Success)
@@ -769,7 +781,27 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
                 return;
             }
 
-            if (!TryUpdateStore(s => s with { SelectedModel = value }, out var saveError))
+            var applied = ctx.QueryState is null ? ctx.CurrentModel() : await QueryCurrentModelAsync(ctx);
+            if (generation != _attachmentGeneration) return;
+            if (applied is null || !string.Equals(applied, value, StringComparison.Ordinal))
+            {
+                ConfirmedModel = applied;
+                if (applied is not null)
+                {
+                    CurrentModelText = applied;
+                    ctx.ModelApplied?.Invoke(applied);
+                }
+                ModelsError = applied is null ? "无法确认当前模型，未保存此次选择。" : $"模型未切换：后端仍在使用 {applied}";
+                ModelsState = SettingSaveState.Failed;
+                ModelsStateText = "切换未确认 · 默认模型未改写";
+                RevertModelSelection(ctx.Store.Current.SelectedModel);
+                return;
+            }
+            if (!TryUpdateStore(s => s with
+                {
+                    SelectedModel = value,
+                    Endpoint = ctx.UsesEndpointModelIds && s.Endpoint is { } endpoint ? endpoint with { ModelId = value } : s.Endpoint,
+                }, out var saveError))
             {
                 ModelsError = saveError;
                 ModelsState = SettingSaveState.Failed;
@@ -778,8 +810,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
                 return;
             }
 
-            var applied = await QueryCurrentModelAsync(ctx) ?? value;
             CurrentModelText = applied;
+            ConfirmedModel = applied;
             ctx.ModelApplied?.Invoke(applied);
             ModelsState = SettingSaveState.Applied;
             ModelsStateText = "已保存 · 当前已应用：" + applied;
@@ -882,16 +914,21 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
     private async Task<string> RestoreRuntimeModelAsync(Context ctx, string? previous)
     {
+        var generation = _attachmentGeneration;
+        ConfirmedModel = null;
         var separator = previous?.IndexOf('/') ?? -1;
-        if (previous is null || separator <= 0 || separator == previous.Length - 1 || ctx.SetModel is null)
+        if (previous is null || (!ctx.UsesEndpointModelIds && (separator <= 0 || separator == previous.Length - 1)) || ctx.SetModel is null)
             return "保存失败 · 当前模型已改变，旧运行值不可用，未执行回退";
         try
         {
-            var restored = await ctx.SetModel(previous[..separator], previous[(separator + 1)..], CancellationToken.None);
+            var provider = ctx.UsesEndpointModelIds ? ctx.Store.Current.Endpoint?.ProviderName ?? "fumo" : previous[..separator];
+            var id = ctx.UsesEndpointModelIds ? previous : previous[(separator + 1)..];
+            var restored = await ctx.SetModel(provider, id, CancellationToken.None);
             if (!restored.Success) return "保存失败 · 当前模型已改变，运行值回退失败";
             var actual = await QueryCurrentModelAsync(ctx);
-            if (actual != previous) return "保存失败 · 已请求回退，当前运行值未核实";
+            if (generation != _attachmentGeneration || actual != previous) return "保存失败 · 已请求回退，当前运行值未核实";
             CurrentModelText = actual;
+            ConfirmedModel = actual;
             ctx.ModelApplied?.Invoke(actual);
             return "失败回退 · 当前模型已恢复，默认值未改写";
         }
@@ -940,7 +977,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 
             var provider = ReadString(model, "provider");
             var id = ReadString(model, "id");
-            return id is null ? null : provider is null ? id : $"{provider}/{id}";
+            return id is null ? null : ctx.UsesEndpointModelIds || provider is null ? id : $"{provider}/{id}";
         }
         catch (Exception)
         {
@@ -1786,7 +1823,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
                 !choice.Value.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 continue;
             items.Add(new ModelPickerItem(choice.Value, choice.Label,
-                pinned.Contains(choice.Value, StringComparer.Ordinal)));
+                pinned.Contains(choice.Value, StringComparer.Ordinal)) { IsConfirmed = choice.Value == ConfirmedModel });
         }
 
         FilteredModelChoices.Clear();
@@ -1799,13 +1836,15 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         OnPropertyChanged(nameof(ModelPickerSummary));
     }
 
-    /// <summary>选择模型并关闭选择器。</summary>
+    /// <summary>选择模型；选择器保留显示后端确认状态与错误。</summary>
     [RelayCommand]
     private void ChooseModel(ModelPickerItem? item)
     {
-        if (item is null) return;
+        if (item is null || IsModelApplying) return;
         var choice = ModelChoices.FirstOrDefault(c => string.Equals(c.Value, item.Value, StringComparison.Ordinal));
-        if (choice is not null) SelectedModel = choice;
+        if (choice is null) return;
+        if (Equals(SelectedModel, choice)) _ = ApplyModelAsync(choice.Value);
+        else SelectedModel = choice;
     }
 
     /// <summary>快捷关键字：填入搜索框并立即筛选。</summary>
@@ -1873,6 +1912,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         _queryCts?.Cancel();
         _thinkingCts?.Cancel();
         _context = context;
+        ConfirmedModel = context.IsMock ? null : context.CurrentModel();
         Security.Navigate = OpenPage;
         Security.Attach(context.DataRoot ?? context.Store.DataRoot, path => _ = context.OpenFolder(path));
         // 侧栏三级架构的升降级偏好随数据根目录持久化（mock 无 dataRoot 时仅内存态）。

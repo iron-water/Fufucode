@@ -615,7 +615,7 @@ public partial class MainWindow
             return;
         }
         // Hidden 表达开关意图；关闭动画结束前面板仍可见，不能把它当作仍需关闭。
-        // 不可见的空右栏仍按关闭处理，保留一次点击回填默认页的恢复路径。
+        // 空右栏直接显示添加页面入口，不恢复用户已经关闭的页签。
         // 插件直接挂载的可见空面板则仍可正常收起。
         var border = zone switch
         {
@@ -648,12 +648,10 @@ public partial class MainWindow
         SaveWorkspaceDimensions();
     }
 
-    /// <summary>区域的页签被逐一关空后，开关只能翻转 Hidden、面板仍不可见（空区不收起规则），
-    /// 形成无法恢复的死状态。打开空区时回填该区默认页（视图只是被移回暂存区，重挂即可）。
-    /// 返回是否发生了回填。</summary>
+    /// <summary>左栏与底栏保留默认页恢复；右栏保持用户关闭后的空状态。</summary>
     private bool EnsureDockHasPages(DockZone zone)
     {
-        if (_dockLayout.Pages[zone].Count > 0) return false;
+        if (zone == DockZone.Right || _dockLayout.Pages[zone].Count > 0) return false;
         // 一个页面只能有一个视觉宿主：已在其它停靠区或浮窗中的页面不能再作为默认页塞进来，
         // 否则 Avalonia 会报“控件已有视觉父级”。
         var occupied = _dockLayout.Pages.Where(pair => pair.Key != zone)
@@ -760,8 +758,7 @@ public partial class MainWindow
             Grid.SetColumnSpan(WorkspaceShell, 1);
 
             var available = width - (left && !narrow ? leftWidth + DockSplitterSize : 0);
-            var rightHasPages = _dockLayout.Pages.TryGetValue(DockZone.Right, out var rPages) && rPages.Count > 0;
-            var right = !settings && (narrow ? _rightDrawerOpen : (!_dockLayout.Hidden[DockZone.Right] && rightHasPages));
+            var right = !settings && (narrow ? _rightDrawerOpen : !_dockLayout.Hidden[DockZone.Right]);
             IsRightDrawerForTesting = narrow;
             var rightWidth = Math.Clamp(_dockLayout.RightWidth, 32, Math.Max(32, available - 32));
 

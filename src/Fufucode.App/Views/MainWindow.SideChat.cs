@@ -108,7 +108,8 @@ public partial class MainWindow
                 QueryThinkingLevels = ct => session.Coordinator.QueryThinkingLevelsAsync(ct),
                 QueryState = ct => session.Coordinator.QueryStateAsync(ct),
                 RestartSession = null,
-                ModelApplied = model => vm.StatusBar.SetModelOverride(model)
+                ModelApplied = model => vm.StatusBar.SetModelOverride(model),
+                UsesEndpointModelIds = session.Chat is Fufucode.Core.Backend.NativeCSharpChatSession
             });
         _sideChatPage.DataContext = vm;
         _sideEmpty.IsVisible = false; _sideChatPage.IsVisible = true;

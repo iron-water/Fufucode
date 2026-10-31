@@ -789,6 +789,13 @@
                         <Style Selector="Button.modelChoiceRow:pointerover /template/ ContentPresenter#PART_ContentPresenter, Button.modelChoiceRow.pointerHover /template/ ContentPresenter#PART_ContentPresenter, Button.modelChoiceRow:focus-visible /template/ ContentPresenter#PART_ContentPresenter">
                           <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
                         </Style>
+                        <Style Selector="Border.modelChoiceOutline">
+                          <Setter Property="BorderBrush" Value="Transparent"/>
+                          <Setter Property="CornerRadius" Value="4"/>
+                        </Style>
+                        <Style Selector="Border.modelChoiceOutline.confirmed">
+                          <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+                        </Style>
                         <Style Selector="Border.keywordChip">
                           <Setter Property="Background" Value="Transparent"/>
                           <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
@@ -834,6 +841,7 @@
                         <TextBlock Classes="meta" Text="正在加载模型…"
                                    IsVisible="{Binding Settings.IsModelsLoading}"/>
                         <TextBlock Classes="meta" Text="{Binding Settings.ModelsError}"
+                                   Foreground="{DynamicResource AppCriticalForeground}"
                                    IsVisible="{Binding Settings.HasModelsError}" TextWrapping="Wrap"/>
                         <Button Classes="subtle" Content="刷新模型" FontSize="12" Padding="8,2" MinHeight="24"
                                 HorizontalAlignment="Left"
@@ -844,29 +852,31 @@
                           <ItemsControl ItemsSource="{Binding Settings.FilteredModelChoices}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ModelPickerItem">
-                                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
-                                  <Button Grid.Column="0" Classes="commandFlyoutItem modelChoiceRow" Padding="8,5"
-                                          HorizontalContentAlignment="Stretch"
-                                          HorizontalAlignment="Stretch"
-                                          Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ChooseModelCommand}"
-                                          CommandParameter="{Binding}"
-                                          Click="ModelPickerItem_Click">
-                                    <!-- 统一字阶：模型名 11 归入 12。 -->
-                                    <TextBlock Text="{Binding Label}" FontSize="12" TextTrimming="CharacterEllipsis"/>
-                                  </Button>
-                                  <!-- 纯图形不靠字号撑大小：置顶状态改用 12×12 的 PathIcon，不再用 ★/☆ 字号表达。 -->
-                                  <Button Grid.Column="1" Classes="iconButton" Width="26" Height="26"
-                                          AutomationProperties.Name="置顶模型"
-                                          Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ToggleModelPinCommand}"
-                                          CommandParameter="{Binding}">
-                                    <Panel>
-                                      <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
-                                                Foreground="{DynamicResource AppAccentText}" IsVisible="{Binding IsPinned}"/>
-                                      <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
-                                                Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsPinned}"/>
-                                    </Panel>
-                                  </Button>
-                                </Grid>
+                                <views:ModelChoiceBorder Classes="modelChoiceOutline" Classes.confirmed="{Binding IsConfirmed}" Margin="0,1">
+                                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+                                    <Button Grid.Column="0" Classes="commandFlyoutItem modelChoiceRow" Padding="8,5"
+                                            HorizontalContentAlignment="Stretch"
+                                            HorizontalAlignment="Stretch"
+                                            IsEnabled="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.CanChangeModel}"
+                                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ChooseModelCommand}"
+                                            CommandParameter="{Binding}">
+                                      <!-- 统一字阶：模型名 11 归入 12。 -->
+                                      <TextBlock Text="{Binding Label}" FontSize="12" TextTrimming="CharacterEllipsis"/>
+                                    </Button>
+                                    <!-- 纯图形不靠字号撑大小：置顶状态改用 12×12 的 PathIcon，不再用 ★/☆ 字号表达。 -->
+                                    <Button Grid.Column="1" Classes="iconButton" Width="26" Height="26"
+                                            AutomationProperties.Name="置顶模型"
+                                            Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ToggleModelPinCommand}"
+                                            CommandParameter="{Binding}">
+                                      <Panel>
+                                        <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
+                                                  Foreground="{DynamicResource AppAccentText}" IsVisible="{Binding IsPinned}"/>
+                                        <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
+                                                  Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsPinned}"/>
+                                      </Panel>
+                                    </Button>
+                                  </Grid>
+                                </views:ModelChoiceBorder>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>

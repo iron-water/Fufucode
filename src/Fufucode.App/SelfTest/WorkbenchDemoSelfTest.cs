@@ -272,20 +272,16 @@ internal static class WorkbenchDemoSelfTest
             window.ResetDockLayout(); await Ready();
             Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") is null && window.DockLayoutForTesting.Hidden[DockZone.Bottom],
                 "L16: reset restores default positions without optional browser/terminal pages");
-            // L17: 关空右侧页签后 Hidden 仍可能被用户切回 false，空区不可见（不收起规则）形成死区；
-            // 打开操作必须回填默认页签，否则右栏永远打不开（真实缺陷：关空后「右区」按钮失效）。
+            // L17: 用户关闭右侧页签后，区域开关只恢复空栏与添加入口。
             window.CloseDockPageForTesting("changes");
             window.CloseDockPageForTesting("browser"); await Ready();
             Check(window.DockLayoutForTesting.Pages[DockZone.Right].Count == 0 &&
                 window.DockLayoutForTesting.Hidden[DockZone.Right],
                 "L17: closing every right tab empties and hides the zone");
-            // 持久化里真实的死态是 Pages.Right 空且 Hidden.Right=false（用户关空后又点过开关，
-            // 但空区不收起规则把面板按住）。一次点击必须恢复：按有效开态（未隐藏且有页签）切换。
-            window.DockLayoutForTesting.Hidden[DockZone.Right] = false;
             window.ToggleDockForTesting(DockZone.Right); await Ready();
             var rightPanel = window.FindControl<Border>("RightPanelBorder")!;
-            Check(window.DockLayoutForTesting.Pages[DockZone.Right].Count > 0 && rightPanel.IsEffectivelyVisible,
-                "L17: reopening an emptied right zone reseeds default pages and shows the panel");
+            Check(window.DockLayoutForTesting.Pages[DockZone.Right].Count == 0 && rightPanel.IsEffectivelyVisible,
+                "L17: reopening an emptied right zone shows its add-page entry without restoring closed pages");
             window.ResetDockLayout(); await Ready();
             var splitter = window.FindControl<GridSplitter>("RightPanelSplitter")!;
             var priorWidth = window.RightPreferenceForTesting;

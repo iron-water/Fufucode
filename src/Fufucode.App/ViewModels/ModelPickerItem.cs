@@ -10,6 +10,7 @@ namespace Fufucode.App.ViewModels;
 public sealed partial class ModelPickerItem : ObservableObject
 {
     private bool _isPinned;
+    [ObservableProperty] private bool _isConfirmed;
 
     public ModelPickerItem(string value, string label, bool isPinned)
     {

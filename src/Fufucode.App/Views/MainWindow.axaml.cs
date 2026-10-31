@@ -301,7 +301,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 ? Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text)
                 : Task.CompletedTask,
             PiVersion: () => DiagnosticsSummary.ResolvePiVersion(cliHint),
-            NodeVersion: () => DiagnosticsSummary.ResolveNodeVersion(nodeHint));
+            NodeVersion: () => DiagnosticsSummary.ResolveNodeVersion(nodeHint),
+            UsesEndpointModelIds: host?.Chat is Fufucode.Core.Backend.NativeCSharpChatSession);
         vm.Settings.Attach(context);
         // 后台常驻跟随真实设置存储（host.Manager.Settings）；设置页保存后立即生效。
         AttachBackgroundMode(context.Store);
@@ -343,15 +344,14 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         {
             if (!_syncingDockState && _vm is { } viewModel)
             {
-                // 页签被关空的区域重开时回填默认页，否则面板永远打不开（Pages 空+Hidden=false 的死态）。
+                // 右栏即使没有页签也可打开，使用栏头的添加入口，不能自动恢复已关闭页面。
                 _dockLayout.Hidden[DockZone.Right] = !viewModel.IsRightPanelOpen;
                 if (Bounds.Width < 1100)
                 {
                     _rightDrawerOpen = viewModel.IsRightPanelOpen;
                     if (_rightDrawerOpen) _leftDrawerOpen = false;
                 }
-                if (viewModel.IsRightPanelOpen && EnsureDockHasPages(DockZone.Right))
-                { RenderDockPages(); SaveWorkspaceDimensions(); }
+                SaveWorkspaceDimensions();
             }
             if (_vm?.IsRightPanelOpen == true)
             {

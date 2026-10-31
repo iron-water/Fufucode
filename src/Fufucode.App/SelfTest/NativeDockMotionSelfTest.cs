@@ -85,14 +85,28 @@ internal static class NativeDockMotionSelfTest
         }
         Save("wide-docks.png");
 
-        // 最后一页关空且 Hidden=false 的持久化死态，一次操作仍能回填恢复。
+        // 关闭最后一个页签后再开右栏，只显示空栏和添加入口，不能复活变更页。
         foreach (var id in window.DockLayoutForTesting.Pages[DockZone.Right].ToArray()) window.CloseDockPageForTesting(id);
         await Settle();
-        window.DockLayoutForTesting.Hidden[DockZone.Right] = false;
+        Check(window.DockLayoutForTesting.Hidden[DockZone.Right], "closing the last right tab hides the region");
         await Toggle(DockZone.Right);
         await Settle();
-        Check(Panel(DockZone.Right).IsVisible && window.DockLayoutForTesting.Pages[DockZone.Right].Count > 0,
-            "an empty right region still recovers in one click");
+        Check(Panel(DockZone.Right).IsVisible && window.DockLayoutForTesting.Pages[DockZone.Right].Count == 0 &&
+            !window.GetVisualDescendants().OfType<Button>().Any(button => AutomationProperties.GetAutomationId(button) == "dock-tab-changes"),
+            "reopening the empty right region does not resurrect Changes");
+        var restored = WorkbenchLayoutState.Restore(window.DockLayoutForTesting.Serialize());
+        Check(!restored.Hidden[DockZone.Right] && restored.Pages[DockZone.Right].Count == 0,
+            "empty open right region survives layout serialization");
+        Save("empty-right-region.png");
+        window.CustomizationForTesting.SetZoneVisible(DockZone.Right, false);
+        window.CustomizationForTesting.SetZoneVisible(DockZone.Right, true);
+        await Settle();
+        Check(Panel(DockZone.Right).IsVisible && window.DockLayoutForTesting.Pages[DockZone.Right].Count == 0,
+            "settings visibility toggle preserves the empty right region");
+        vm.SetRightPanelOpen(false); await Settle();
+        vm.SetRightPanelOpen(true); await Settle();
+        Check(Panel(DockZone.Right).IsVisible && window.DockLayoutForTesting.Pages[DockZone.Right].Count == 0,
+            "view model visibility toggle cannot repopulate Changes");
 
         window.Width = 1024;
         await Settle();

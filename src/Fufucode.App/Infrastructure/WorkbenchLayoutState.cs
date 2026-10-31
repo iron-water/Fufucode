@@ -180,7 +180,7 @@ public sealed class WorkbenchLayoutState
             if (!state.Selected.TryGetValue(zone, out var selected) || selected is null || !state.Pages[zone].Contains(selected))
                 state.Selected[zone] = state.Pages[zone].FirstOrDefault();
             state.Hidden.TryAdd(zone, false);
-            if (state.Pages[zone].Count == 0) state.Hidden[zone] = true;
+            if (zone != DockZone.Right && state.Pages[zone].Count == 0) state.Hidden[zone] = true;
         }
         var windowIds = new HashSet<string>(StringComparer.Ordinal);
         state.Floating = (state.Floating ?? []).Where(item => item is not null &&
@@ -213,7 +213,7 @@ public sealed class WorkbenchLayoutState
             pages.RemoveAll(id => id is null || !known.Contains(id) || id == "preview");
             if (Selected.TryGetValue(zone, out var sel) && (sel is null || !pages.Contains(sel) || sel == "preview"))
                 Selected[zone] = pages.FirstOrDefault();
-            if (pages.Count == 0) Hidden[zone] = true;
+            if (zone != DockZone.Right && pages.Count == 0) Hidden[zone] = true;
         }
         foreach (var fl in Floating)
         {

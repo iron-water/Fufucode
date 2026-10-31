@@ -3089,6 +3089,7 @@ public static class SelfTestRunner
             var turnActive = false;
             var restartCalls = 0;
             string? appliedHeader = null;
+            var settingsRuntimeModel = "openai/gpt-x";
             string? resolveResult = "resolved";
 
             var vm = new SettingsPageViewModel();
@@ -3099,6 +3100,7 @@ public static class SelfTestRunner
                 SetModel = (p, m, _) =>
                 {
                     setModelCalls.Add($"{p}/{m}");
+                    settingsRuntimeModel = $"{p}/{m}";
                     return Task.FromResult(new RpcResponse("1", "set_model", true, null, null));
                 },
                 SetThinkingLevel = (l, _) =>
@@ -3107,7 +3109,7 @@ public static class SelfTestRunner
                     return Task.FromResult(new RpcResponse("1", "set_thinking_level", true, null, null));
                 },
                 QueryState = _ => Task.FromResult(new RpcResponse("1", "get_state", true,
-                    JsonDocument.Parse("""{"model":{"provider":"openai","id":"gpt-x"}}""").RootElement, null)),
+                    JsonSerializer.SerializeToElement(new { model = new { provider = settingsRuntimeModel.Split('/', 2)[0], id = settingsRuntimeModel.Split('/', 2)[1] } }), null)),
                 SaveCredential = (n, k) => savedCredentials.Add((n, k)),
                 ResolveCredential = _ => ValueTask.FromResult<string?>(resolveResult),
                 ModelApplied = m => appliedHeader = m,
@@ -3300,8 +3302,8 @@ public static class SelfTestRunner
             await Task.Delay(20);
             if (setModelCalls.Contains("openai/gpt-y") &&
                 store.Current.SelectedModel == "openai/gpt-y" &&
-                appliedHeader == "openai/gpt-x" /* QueryState 假数据返回 gpt-x */ &&
-                vm.CurrentModelText == "openai/gpt-x")
+                appliedHeader == "openai/gpt-y" && vm.CurrentModelText == "openai/gpt-y" &&
+                vm.ConfirmedModel == "openai/gpt-y")
             {
                 Pass("空闲改模型：RPC 成功后保存并刷新页头");
             }

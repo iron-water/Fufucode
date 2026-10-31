@@ -126,11 +126,13 @@ internal static class Program
                 try
                 {
                     var window = (MainWindow)lifetime.MainWindow!;
-                    code = args.Contains("--typography-only")
-                        ? await SelfTest.NativeTypographySelfTest.RunAsync(window)
-                        : args.Contains("--chat-feedback-only")
-                            ? await SelfTest.NativeChatFeedbackSelfTest.RunAsync(window)
-                            : await SelfTest.NativeDockMotionSelfTest.RunAsync(window);
+                    code = args.Contains("--model-switch-only")
+                        ? await SelfTest.NativeModelSwitchSelfTest.RunAsync(window)
+                        : args.Contains("--typography-only")
+                            ? await SelfTest.NativeTypographySelfTest.RunAsync(window)
+                            : args.Contains("--chat-feedback-only")
+                                ? await SelfTest.NativeChatFeedbackSelfTest.RunAsync(window)
+                                : await SelfTest.NativeDockMotionSelfTest.RunAsync(window);
                 }
                 catch (Exception error) { Console.WriteLine("Native motion test failed: " + error); }
                 finally { completion.TrySetResult(code); lifetime.Shutdown(code); }

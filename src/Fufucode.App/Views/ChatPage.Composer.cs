@@ -280,12 +280,6 @@ public partial class ChatPage
         var files = await owner.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions { Title = "添加" + filter.Name, AllowMultiple = true, FileTypeFilter = [filter] });
         await AttachFilesAsync(files.Select(f => f.TryGetLocalPath()).OfType<string>());
     }
-    /// <summary>模型选择器条目：选中后关闭浮层。</summary>
-    private void ModelPickerItem_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
-    {
-        (sender as Button)?.Flyout?.Hide();
-    }
-
     /// <summary>每次打开模型选择器都从空搜索开始，避免上次的关键字把新提供商的模型全部过滤掉。</summary>
     private void ModelPicker_Opened(object? sender, EventArgs e)
     {

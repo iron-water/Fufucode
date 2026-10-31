@@ -49,14 +49,11 @@ public sealed class WorkbenchCustomizationViewModel : ViewModelBase
         var layout = Layout; edit(layout); Change(s => s with { Layout = layout });
     }
 
-    /// <summary>
-    /// 显示/隐藏停靠区。显示空区时补一个该区默认页；否则布局会被“空区不收起”
-    /// 规范化重新隐藏，用户表现为开关无效。
-    /// </summary>
+    /// <summary>显示/隐藏停靠区；空右栏保留添加页面入口，不恢复已关闭的页签。</summary>
     public void SetZoneVisible(DockZone zone, bool visible) => EditLayout(layout =>
     {
         layout.Hidden[zone] = !visible;
-        if (!visible || layout.Pages[zone].Count > 0) return;
+        if (!visible || zone == DockZone.Right || layout.Pages[zone].Count > 0) return;
         var available = Pages.Select(page => page.Id).ToHashSet(StringComparer.Ordinal);
         var occupied = layout.Pages.Where(pair => pair.Key != zone).SelectMany(pair => pair.Value)
             .Concat(layout.Floating.SelectMany(floating => floating.Pages))
