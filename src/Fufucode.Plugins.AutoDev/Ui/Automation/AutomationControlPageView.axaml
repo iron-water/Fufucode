@@ -137,10 +137,13 @@
                 </DataTemplate>
               </ListBox.ItemTemplate>
             </ListBox>
-            <StackPanel Orientation="Horizontal" Spacing="8">
-              <Button Content="停止选中工单" Command="{Binding Kernel.StopSelectedCommand}"/>
-              <Button Content="接管选中工单" Command="{Binding Kernel.TakeoverSelectedCommand}"/>
-            </StackPanel>
+            <WrapPanel>
+              <Button Content="停止选中工单" Command="{Binding Kernel.StopSelectedCommand}" Margin="0,0,8,4"/>
+              <Button Content="接管选中工单" Command="{Binding Kernel.TakeoverSelectedCommand}" Margin="0,0,8,4"/>
+              <Button Content="批准 Gate" Command="{Binding Kernel.DecideGateCommand}" CommandParameter="Approve" Margin="0,0,8,4"/>
+              <Button Content="拒绝 Gate" Command="{Binding Kernel.DecideGateCommand}" CommandParameter="Reject" Margin="0,0,8,4"/>
+              <Button Content="暂缓 Gate" Command="{Binding Kernel.DecideGateCommand}" CommandParameter="Defer" Margin="0,0,8,4"/>
+            </WrapPanel>
           </StackPanel>
         </Border>
 

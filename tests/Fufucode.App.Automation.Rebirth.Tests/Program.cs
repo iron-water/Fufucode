@@ -186,6 +186,64 @@ catch (Exception error)
     Console.WriteLine("FAIL uncaught exception: " + error);
 }
 
+    // ---- LoopX 语义：任务类型、优先级、准入、租约、resume_when、Gate、quota ----
+    try
+    {
+        using var kernel = new RebirthKernel(TempDb());
+        var now = Now();
+        var zeroQuota = new RebirthBrief("零配额项目", ["目标"], [], [], ["完成"], [], 60,
+            RebirthAutonomy.WithinMandate) { ComputeQuota = 0 };
+        kernel.CreateProject("lx-project", "零配额项目", zeroQuota, "human", now, "lx-project");
+        var gate = kernel.CreateTicket("lx-gate", "lx-project", "需要人决定", "是否采用方案 A",
+            ["机主批准"], "route-a", "owner-a", now, taskClass: RebirthTaskClass.UserGate);
+        Check(gate.Status == RebirthTicketStatus.WaitingPerson && gate.Priority == RebirthPriority.P0
+              && gate.AcceptanceDigest.Length == 64, "user_gate 默认等待人、P0，并记录验收摘要");
+        Check(kernel.InspectAdmission(gate.Id, "owner-a", now).Route == RebirthTurnRoute.Blocked,
+            "compute quota 为 0 时确定性准入返回 Blocked");
+        Throws<InvalidOperationException>(() => kernel.StartRun("lx-gate-run", gate.Id, "manual", "manual", "C:/wt", now),
+            "quota 为 0 时不能启动 Run");
+        kernel.UpdateBrief("lx-brief-1", "lx-project", 1,
+            new RebirthBrief("零配额项目", ["目标"], [], [], ["完成"], [], 60, RebirthAutonomy.WithinMandate)
+                { ComputeQuota = 1 }, "human", now);
+        Check(kernel.InspectAdmission(gate.Id, "owner-a", now).Route == RebirthTurnRoute.UserActionRequired,
+            "配额恢复后仍需 Gate 决定");
+        var approved = kernel.RecordGateDecision("lx-gate-approve", "lx-project", gate.Id,
+            RebirthGateDecision.Approve, "只批准方案 A", "允许一次", "human", now);
+        Check(approved.TicketStatus == RebirthTicketStatus.Authorized &&
+              approved.Decision.Kind == RebirthDecisionKind.Gate, "Gate 批准有作用域地授权工单");
+        Check(kernel.InspectAdmission(gate.Id, "owner-a", now).ShouldRun,
+            "批准后的 user_gate 可以准入");
+        var gateRun = kernel.StartRun("lx-gate-run-2", gate.Id, "manual", "manual", "C:/wt", now);
+        Check(kernel.InspectAdmission(gate.Id, "owner-b", now).Route == RebirthTurnRoute.Blocked,
+            "Run 持有租约时其他 owner 被 Blocked");
+        Check(kernel.ReadSnapshot("lx-project").Leases.Any(l => l.TicketId == gate.Id && l.Status == "Active"),
+            "开始 Run 会写入 Active lease");
+        kernel.CompleteRun("lx-gate-complete", gateRun.Id, RebirthRunOutcome.Completed, "exit-0", "done", now);
+        Check(kernel.ReadSnapshot("lx-project").Leases.All(l => l.Status != "Active"),
+            "Run 结算后释放租约");
+
+        var future = DateTimeOffset.UtcNow.AddHours(1).ToString("O");
+        var waiting = kernel.CreateTicket("lx-wait", "lx-project", "等待恢复", "等待条件", ["恢复"],
+            "route-wait", "owner-a", now, resumeWhen: "resume_at:" + future);
+        Check(kernel.InspectAdmission(waiting.Id, "owner-a", now).Route == RebirthTurnRoute.Wait,
+            "resume_at 未到期时准入返回 Wait");
+        Throws<InvalidOperationException>(() => kernel.StartRun("lx-wait-run", waiting.Id, "manual", "manual", "C:/wt", now),
+            "未到期的 resume_when 不能启动 Run");
+
+        var userAction = kernel.CreateTicket("lx-action", "lx-project", "通知人", "非阻塞提醒", ["看到"],
+            "route-action", "owner-a", now, taskClass: RebirthTaskClass.UserAction);
+        Check(kernel.InspectAdmission(userAction.Id, "owner-a", now).Route == RebirthTurnRoute.UserActionRequired,
+            "user_action 不会阻塞其他推进，但不会被模型执行");
+        var monitor = kernel.CreateTicket("lx-monitor", "lx-project", "监控", "静默观察", ["有变化"],
+            "route-monitor", "owner-a", now, taskClass: RebirthTaskClass.ContinuousMonitor);
+        Check(monitor.Priority == RebirthPriority.P1, "普通监控默认 P1");
+    }
+    catch (Exception error)
+    {
+        failures.Add("loopx semantics: " + error);
+        Console.WriteLine("FAIL loopx semantics: " + error);
+    }
+
     // ---- 工具接口：AutoDevToolHandler 走真实内核，不返回假“已完成” ----
     try
     {
@@ -204,6 +262,19 @@ catch (Exception error)
             "autodev_plan 通过工具写入真实项目与工单");
         using var planDoc = JsonDocument.Parse(plan.Content);
         var ticketId = planDoc.RootElement.GetProperty("tickets")[0].GetProperty("id").GetString()!;
+        var preflight = await tools.ExecuteAsync(new PureToolCall("tool-preflight", "autodev_preflight",
+            "{\"ticketId\":\"" + ticketId + "\",\"owner\":\"auto-dev\"}"));
+        Check(preflight.Success && preflight.Content.Contains("ReadyForHost", StringComparison.Ordinal),
+            "autodev_preflight 返回确定性准入");
+        var gatePlan = await tools.ExecuteAsync(new PureToolCall("tool-gate-plan", "autodev_plan",
+            "{\"goal\":\"Gate 工具\",\"steps\":[\"需要机主批准\"],\"taskClass\":\"UserGate\"}"));
+        using var gateDoc = JsonDocument.Parse(gatePlan.Content);
+        var gateTicket = gateDoc.RootElement.GetProperty("tickets").EnumerateArray()
+            .First(item => item.GetProperty("title").GetString() == "需要机主批准").GetProperty("id").GetString()!;
+        var gateResult = await tools.ExecuteAsync(new PureToolCall("tool-gate", "autodev_gate",
+            "{\"ticketId\":\"" + gateTicket + "\",\"decision\":\"approve\",\"scope\":\"一次\",\"text\":\"批准\"}"));
+        Check(gateResult.Success && gateResult.Content.Contains("Authorized", StringComparison.Ordinal),
+            "autodev_gate 批准 user_gate");
 
         var veto = await tools.ExecuteAsync(new PureToolCall("tool-veto", "autodev_veto",
             "{\"target\":\"route:default\",\"scope\":\"路线\",\"text\":\"不要默认路线\"}"));

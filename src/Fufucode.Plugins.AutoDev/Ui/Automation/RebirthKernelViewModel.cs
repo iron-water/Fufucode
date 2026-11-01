@@ -10,10 +10,12 @@ using Fufucode.Plugins.AutoDev;
 namespace Fufucode.App.Features.Automation;
 
 public sealed record RebirthKernelTicketRow(
-    string Id, string Title, string Status, string Owner, string Acceptance, string Route)
+    string Id, string Title, string Status, string Owner, string Acceptance, string Route,
+    string TaskClass, string Priority, string? ResumeWhen)
 {
-    public string TitleLine => Status + " · " + Title;
-    public string DetailLine => "验收：" + Acceptance + " · 路线：" + Route + " · 负责人：" + Owner;
+    public string TitleLine => "[" + Priority + "] " + TaskClass + " · " + Status + " · " + Title;
+    public string DetailLine => "验收：" + Acceptance + " · 路线：" + Route + " · 负责人：" + Owner +
+        (string.IsNullOrWhiteSpace(ResumeWhen) ? "" : " · 等待：" + ResumeWhen);
 }
 
 public sealed record RebirthKernelAttentionRow(string Id, string TicketId, string Question, string Status)
@@ -136,7 +138,8 @@ public sealed partial class RebirthKernelViewModel : ObservableObject
                           snapshot.Decisions.Count(item => item.Kind == RebirthDecisionKind.Veto && item.Status == "Active") + " 条有效否决";
             foreach (var ticket in snapshot.Tickets.OrderBy(item => item.CreatedUtc))
                 Tickets.Add(new RebirthKernelTicketRow(ticket.Id, ticket.Title, ticket.Status.ToString(), ticket.Owner,
-                    string.Join("；", ticket.Acceptance), ticket.Route));
+                    string.Join("；", ticket.Acceptance), ticket.Route, ticket.TaskClass.ToString(),
+                    ticket.Priority.ToString(), ticket.ResumeWhen));
             foreach (var item in snapshot.Attention.OrderBy(item => item.CreatedUtc))
                 Attention.Add(new RebirthKernelAttentionRow(item.Id, item.TicketId ?? "", item.Question, item.Status.ToString()));
             foreach (var item in snapshot.Decisions.Where(item => item.Kind == RebirthDecisionKind.Veto).OrderBy(item => item.CreatedUtc))
@@ -236,6 +239,23 @@ public sealed partial class RebirthKernelViewModel : ObservableObject
             Refresh();
         }
         catch (Exception error) { StatusText = "接管失败：" + error.Message; }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanMutateSelected))]
+    public void DecideGate(string decision)
+    {
+        if (SelectedTicket is not { } selected) return;
+        if (!Enum.TryParse<RebirthGateDecision>(decision, true, out var gate))
+        { StatusText = "未知的 Gate 决定。"; return; }
+        try
+        {
+            using var kernel = new RebirthKernel(DatabasePath);
+            kernel.RecordGateDecision("ui:gate:" + selected.Id + ":" + decision, RebirthPaths.ProjectId(_projectPath!),
+                selected.Id, gate, "selected user_gate", "kernel view decision", "human",
+                DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+            Refresh();
+        }
+        catch (Exception error) { StatusText = "Gate 决定失败：" + error.Message; }
     }
 
     [RelayCommand(CanExecute = nameof(CanAnswer))]

@@ -38,12 +38,18 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
         new("autodev_status", "读取当前工作区的项目内核状态、工单、运行、证据与待处理事项。",
             "{\"type\":\"object\",\"properties\":{}}", PluginCapability.AutoDevelopment),
         new("autodev_plan", "在项目委托内登记目标和工单；不启动执行，不伪造完成。",
-            "{\"type\":\"object\",\"properties\":{\"goal\":{\"type\":\"string\"},\"steps\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}},\"required\":[\"goal\"]}",
+            "{\"type\":\"object\",\"properties\":{\"goal\":{\"type\":\"string\"},\"steps\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}},\"taskClass\":{\"type\":\"string\",\"enum\":[\"advancementTask\",\"continuousMonitor\",\"userGate\",\"userAction\",\"blocker\"]},\"priority\":{\"type\":\"string\",\"enum\":[\"P0\",\"P1\",\"P2\",\"P3\",\"P4\"]},\"resumeWhen\":{\"type\":\"string\"},\"validationCommand\":{\"type\":\"string\"}},\"required\":[\"goal\"]}",
             PluginCapability.AutoDevelopment),
         new("autodev_advance", "返回当前需要推进的工单；本工具本身不执行、不标记成功。",
             "{\"type\":\"object\",\"properties\":{}}", PluginCapability.AutoDevelopment),
         new("autodev_authorize", "在项目委托内显式授权一个 Proposed 工单。",
             "{\"type\":\"object\",\"properties\":{\"ticketId\":{\"type\":\"string\"}},\"required\":[\"ticketId\"]}",
+            PluginCapability.AutoDevelopment),
+        new("autodev_preflight", "读取工单的确定性准入：是否该跑、等待什么、当前租约。",
+            "{\"type\":\"object\",\"properties\":{\"ticketId\":{\"type\":\"string\"},\"owner\":{\"type\":\"string\"}},\"required\":[\"ticketId\"]}",
+            PluginCapability.AutoDevelopment),
+        new("autodev_gate", "对 user_gate 工单做批准/拒绝/暂缓；决定有作用域，不等于全局写权限。",
+            "{\"type\":\"object\",\"properties\":{\"ticketId\":{\"type\":\"string\"},\"decision\":{\"type\":\"string\",\"enum\":[\"approve\",\"reject\",\"defer\"]},\"scope\":{\"type\":\"string\"},\"text\":{\"type\":\"string\"}},\"required\":[\"ticketId\",\"decision\",\"scope\",\"text\"]}",
             PluginCapability.AutoDevelopment),
         new("autodev_run_start", "为一个已授权工单登记一次由外部执行器负责的 Run；本工具不启动进程。",
             "{\"type\":\"object\",\"properties\":{\"ticketId\":{\"type\":\"string\"},\"executor\":{\"type\":\"string\"},\"model\":{\"type\":\"string\"},\"workspace\":{\"type\":\"string\"}},\"required\":[\"ticketId\"]}",
@@ -101,6 +107,11 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
                 "autodev_plan" => Plan(kernel, call),
                 "autodev_advance" => Advance(kernel),
                 "autodev_authorize" => kernel.AuthorizeTicket(Command(call), Required(call, "ticketId"), "agent", Now()),
+                "autodev_preflight" => kernel.InspectAdmission(Required(call, "ticketId"),
+                    Text(call, "owner") ?? "auto-dev", Now()),
+                "autodev_gate" => kernel.RecordGateDecision(Command(call), ProjectId, Required(call, "ticketId"),
+                    ParseGateDecision(Required(call, "decision")), Required(call, "scope"), Required(call, "text"),
+                    "human", Now()),
                 "autodev_run_start" => StartRun(kernel, call),
                 "autodev_run_finish" => kernel.CompleteRun(Command(call), Required(call, "runId"),
                     ParseOutcome(Required(call, "outcome")), Text(call, "terminalCode"), Text(call, "detail"), Now()),
@@ -242,7 +253,10 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
             var ticketId = "ticket-" + RebirthPaths.Stable(title);
             if (known.Contains(ticketId)) continue;
             created.Add(kernel.CreateTicket(Command(call) + ":ticket:" + index, ProjectId,
-                title, title, new[] { title }, "default", "auto-dev", Now(), ticketId: ticketId));
+                title, title, new[] { title }, "default", "auto-dev", Now(), ticketId: ticketId,
+                taskClass: ParseTaskClass(Text(call, "taskClass") ?? "advancementTask"),
+                priority: ParsePriority(Text(call, "priority")), resumeWhen: Text(call, "resumeWhen"),
+                validationCommand: Text(call, "validationCommand")));
             known.Add(ticketId);
         }
         var snapshot = kernel.ReadSnapshot(ProjectId);
@@ -317,6 +331,28 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
         }
         catch (JsonException) { return false; }
     }
+
+    private static RebirthTaskClass ParseTaskClass(string value) => value.ToLowerInvariant() switch
+    {
+        "advancementtask" or "advancement" => RebirthTaskClass.AdvancementTask,
+        "continuousmonitor" or "monitor" => RebirthTaskClass.ContinuousMonitor,
+        "usergate" or "gate" => RebirthTaskClass.UserGate,
+        "useraction" or "action" => RebirthTaskClass.UserAction,
+        "blocker" => RebirthTaskClass.Blocker,
+        _ => throw new ArgumentException("未知的任务类型：" + value)
+    };
+
+    private static RebirthPriority? ParsePriority(string? value) => string.IsNullOrWhiteSpace(value)
+        ? null : Enum.TryParse<RebirthPriority>(value, true, out var priority) ? priority
+        : throw new ArgumentException("未知的优先级：" + value);
+
+    private static RebirthGateDecision ParseGateDecision(string value) => value.ToLowerInvariant() switch
+    {
+        "approve" => RebirthGateDecision.Approve,
+        "reject" => RebirthGateDecision.Reject,
+        "defer" => RebirthGateDecision.Defer,
+        _ => throw new ArgumentException("未知的 Gate 决定：" + value)
+    };
 
     private static RebirthRunOutcome ParseOutcome(string value) => value.ToLowerInvariant() switch
     {

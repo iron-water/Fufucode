@@ -14,10 +14,17 @@ public enum RebirthTicketStatus
 public enum RebirthRunStatus { Queued, Running, Completed, Failed, Interrupted, Unknown }
 public enum RebirthRunOutcome { Completed, Failed, Interrupted, Unknown }
 public enum RebirthEvidenceKind { Artifact, Test, Review, HumanAcceptance, Note }
-public enum RebirthDecisionKind { Veto, Constraint, Plan, Stop, Takeover, Acceptance, Replan }
+public enum RebirthDecisionKind { Veto, Constraint, Plan, Stop, Takeover, Acceptance, Replan, Gate }
 public enum RebirthInputKind { Query, Suggestion, Evidence, Veto, ScopeChange, Stop, Takeover, Answer, NewGoal }
 public enum RebirthInputState { Received, Delivered, Read, Applied, Failed, Unknown }
 public enum RebirthAttentionStatus { Open, Answered, Withdrawn, Expired }
+
+public enum RebirthTaskClass { AdvancementTask, ContinuousMonitor, UserGate, UserAction, Blocker }
+public enum RebirthPriority { P0, P1, P2, P3, P4 }
+public enum RebirthTurnRoute { ReadyForHost, UserActionRequired, Wait, Blocked, ReplanRequired, RepairRequired, ContractError }
+public enum RebirthTurnResultKind { Progress, ValidatedProgress, ValidatedCompletion, RepairRequired, ReplanRequired, UserActionRequired, Wait, Failed, Unknown }
+public enum RebirthLeaseMode { SoftClaim, HardLease }
+public enum RebirthGateDecision { Approve, Reject, Defer }
 
 /// <summary>The human-owned, versioned basis of a project. It is never edited in place.</summary>
 public sealed record RebirthBrief(
@@ -30,6 +37,8 @@ public sealed record RebirthBrief(
     int BudgetMinutes,
     RebirthAutonomy Autonomy)
 {
+    /// <summary>0..1 automatic compute duty cycle. Zero is a project-level hard pause.</summary>
+    public double ComputeQuota { get; init; } = 1.0;
     public static RebirthBrief Empty { get; } = new("", [], [], [], [], [], 0, RebirthAutonomy.Propose);
 }
 
@@ -56,7 +65,14 @@ public sealed record RebirthTicket(
     long PlanVersion,
     string? MandateJson,
     long CreatedUtc,
-    long UpdatedUtc);
+    long UpdatedUtc)
+{
+    public RebirthTaskClass TaskClass { get; init; } = RebirthTaskClass.AdvancementTask;
+    public RebirthPriority Priority { get; init; } = RebirthPriority.P1;
+    public string? ResumeWhen { get; init; }
+    public string? ValidationCommand { get; init; }
+    public string AcceptanceDigest { get; init; } = "";
+}
 
 public sealed record RebirthRun(
     string Id,
@@ -68,7 +84,11 @@ public sealed record RebirthRun(
     long StartedUtc,
     long? EndedUtc,
     string? TerminalCode,
-    string? Detail);
+    string? Detail)
+{
+    public RebirthTurnResultKind? ResultKind { get; init; }
+    public bool Settled { get; init; }
+}
 
 public sealed record RebirthEvidence(
     string Id,
@@ -80,7 +100,10 @@ public sealed record RebirthEvidence(
     bool Passed,
     string Verifier,
     long CreatedUtc,
-    bool Valid);
+    bool Valid)
+{
+    public string AcceptanceDigest { get; init; } = "";
+}
 
 public sealed record RebirthDecision(
     string Id,
@@ -125,7 +148,24 @@ public sealed record RebirthSnapshot(
     IReadOnlyList<RebirthEvidence> Evidence,
     IReadOnlyList<RebirthDecision> Decisions,
     IReadOnlyList<RebirthInput> Inputs,
-    IReadOnlyList<RebirthAttention> Attention);
+    IReadOnlyList<RebirthAttention> Attention)
+{
+    public RebirthQuotaState Quota { get; init; } = new(1.0, 0, false);
+    public IReadOnlyList<RebirthLease> Leases { get; init; } = [];
+}
+
+public sealed record RebirthLease(
+    string Id, string TicketId, string Owner, RebirthLeaseMode Mode,
+    long Epoch, long ExpiresUtc, string Status);
+
+public sealed record RebirthQuotaState(double ComputeQuota, long SpentSlots, bool Paused);
+
+/// <summary>Deterministic admission for one ticket. It is a decision, not execution.</summary>
+public sealed record RebirthTurnAdmission(
+    bool ShouldRun, RebirthTurnRoute Route, string Reason,
+    string? LeaseId = null, long? LeaseExpiresUtc = null);
+
+public sealed record RebirthGateResult(RebirthDecision Decision, RebirthTicketStatus TicketStatus);
 
 /// <summary>Input state returned by every mutation. A receipt is an acknowledgement, not proof of work.</summary>
 public sealed record RebirthReceipt(string CommandId, long ProjectRevision, string ObjectId, string Status);
