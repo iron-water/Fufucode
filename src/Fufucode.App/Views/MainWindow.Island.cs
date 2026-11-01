@@ -7,6 +7,7 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
+using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.ViewModels;
 
@@ -31,7 +32,7 @@ public partial class MainWindow
     private TextBlock? _islandLiveText;
     private Button? _islandStopButton;
     private Button? _islandSteerButton;
-    private Border? _islandLiveBar;
+    private Panel? _statusVisualHost;
     private TextBlock? _islandPanelTitle;
     private TextBlock? _islandPanelSubtitle;
 
@@ -74,7 +75,8 @@ public partial class MainWindow
         _islandBackend = null;
         _islandBackendCircle = null;
         _islandLiveMeta = _islandLiveText = _islandPanelTitle = _islandPanelSubtitle = null;
-        _islandLiveBar = null; _islandStopButton = _islandSteerButton = null;
+        _statusVisualHost = null;
+        _islandStopButton = _islandSteerButton = null;
 
         if (!UseSessionIsland(settings))
         {
@@ -149,7 +151,7 @@ public partial class MainWindow
         var compact = new StackPanel { Orientation = Orientation.Horizontal, Children = { _islandPill, _islandSatellite } };
         IslandHost.Children.Add(compact);
 
-        IslandOverlayHost.Content = BuildIslandPanel(settings, actions);
+        IslandOverlayHost.Content = BuildIslandPanel();
 
         RefreshIsland();
     }
@@ -200,68 +202,101 @@ public partial class MainWindow
         RequestAnimationFrame(Frame);
     }
 
-    private Control BuildIslandPanel(WorkbenchAppearance settings, IEnumerable<Infrastructure.AppActionDefinition> actions)
+    private Control BuildIslandPanel()
     {
-        // 头部：后端块 + 标题 + 副标（模型 · 项目 · 分支），右侧实时元信息。
-        var backendTile = new Border { Width = 30, Height = 30, CornerRadius = new CornerRadius(7), VerticalAlignment = VerticalAlignment.Center };
-        backendTile.Classes.Add("islandBackendTile");
-        var backendIcon = new PathIcon { Width = 15, Height = 15, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        backendIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.Sparkle"));
-        backendTile.Child = backendIcon;
-
-        _islandPanelTitle = new TextBlock { FontSize = 13, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
+        // ── 卡 1：状态卡（默认卡，永远存在）──────────────────────────
+        // 标题 + 副标（模型 · 项目 · 分支）常驻；右侧是实时元信息。
+        _islandPanelTitle = new TextBlock { FontSize = 14, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandPanelSubtitle = new TextBlock { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandPanelSubtitle.Classes.Add("meta");
         var who = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        who.Children.Add(_islandPanelTitle); who.Children.Add(_islandPanelSubtitle);
+        who.Children.Add(_islandPanelTitle);
+        who.Children.Add(_islandPanelSubtitle);
 
         _islandLiveMeta = new TextBlock { FontSize = 11, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         _islandLiveMeta.Classes.Add("meta");
 
-        var header = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto"), ColumnSpacing = 10 };
-        header.Children.Add(backendTile);
-        Grid.SetColumn(who, 1); header.Children.Add(who);
-        Grid.SetColumn(_islandLiveMeta, 2); header.Children.Add(_islandLiveMeta);
+        var statusHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
+        statusHeader.Children.Add(who);
+        Grid.SetColumn(_islandLiveMeta, 1); statusHeader.Children.Add(_islandLiveMeta);
 
-        // 磁贴网格：UniformGrid 4 列等大矩阵（Win10 磁贴语义）。
-        var tiles = new Avalonia.Controls.Primitives.UniformGrid
-        {
-            Columns = 4,
-            Margin = new Thickness(0, 14, 0, 12),
-        };
-        // 磁贴由用户配置决定：位置为 SessionIsland 的动作按 Order 排序渲染；
-        // Hidden 的动作不出现，任何动作（不只 session.*）都可以被放进岛。
-        var islandActions = actions
-            .Select(action => (Action: action,
-                Placement: settings.Actions.GetValueOrDefault(action.Id, WorkbenchActionDefaults.Placement(action.Id))))
-            .Where(pair => pair.Placement.Position == UiActionPosition.SessionIsland)
-            .OrderBy(pair => pair.Placement.Order)
-            .ThenBy(pair => WorkbenchActionDefaults.SubMenuOrder(pair.Action.Id))
-            .Select(pair => pair.Action)
-            .ToArray();
-        foreach (var action in islandActions) tiles.Children.Add(BuildIslandTile(action));
-        tiles.IsVisible = islandActions.Length > 0;
-
-        // 实时活动条：仅在真实活动（运行/失败/有排队/有用量）时出现；空闲整条隐藏。
+        // 状态可视区：暂时只放"状态点 + 一句话状态"，后续替换为动画/图表。
         _islandLiveDot = new Border { Width = 8, Height = 8, CornerRadius = new CornerRadius(4), VerticalAlignment = VerticalAlignment.Center };
-        _islandLiveText = new TextBlock { FontSize = 11.5, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
+        _islandLiveDot.Classes.Add("islandStatusDot");
+        _islandLiveText = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandLiveText.Classes.Add("meta");
-        _islandSteerButton = new Button { Content = "插入", FontSize = 11, Padding = new Thickness(10, 4), MinHeight = 0 };
-        _islandSteerButton.Classes.Add("islandBarButton");
-        _islandStopButton = new Button { Content = "停止", FontSize = 11, Padding = new Thickness(10, 4), MinHeight = 0 };
-        _islandStopButton.Classes.Add("islandBarButton");
-        var liveRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto"), ColumnSpacing = 8 };
-        liveRow.Children.Add(_islandLiveDot);
-        Grid.SetColumn(_islandLiveText, 1); liveRow.Children.Add(_islandLiveText);
-        Grid.SetColumn(_islandSteerButton, 2); liveRow.Children.Add(_islandSteerButton);
-        Grid.SetColumn(_islandStopButton, 3); liveRow.Children.Add(_islandStopButton);
-        _islandLiveBar = new Border { Child = liveRow };
-        _islandLiveBar.Classes.Add("islandLiveBar");
+        var statusPlaceholder = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 8, VerticalAlignment = VerticalAlignment.Center };
+        statusPlaceholder.Children.Add(_islandLiveDot);
+        Grid.SetColumn(_islandLiveText, 1); statusPlaceholder.Children.Add(_islandLiveText);
 
-        var body = new StackPanel();
-        body.Children.Add(header);
-        body.Children.Add(tiles);
-        body.Children.Add(_islandLiveBar);
+        _statusVisualHost = new Panel { Height = 64, Children = { statusPlaceholder } };
+        // TODO(状态卡设计)：这里放动画/图表，见后续讨论
+
+        var statusBody = new StackPanel { Spacing = 8 };
+        statusBody.Children.Add(statusHeader);
+        statusBody.Children.Add(_statusVisualHost);
+        var statusCard = new Border { Child = statusBody };
+        statusCard.Classes.Add("islandWidget");
+
+        // ── 卡 2：会话管理卡（整卡可点，箭头仅装饰）──────────────────
+        var manageTitle = new TextBlock { Text = "会话", FontSize = 13, FontWeight = FontWeight.SemiBold, VerticalAlignment = VerticalAlignment.Center };
+        var manageChevron = new PathIcon { Width = 12, Height = 12, VerticalAlignment = VerticalAlignment.Center };
+        manageChevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.ChevronRight"));
+        manageChevron.Bind(PathIcon.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
+        var manageHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        manageHeader.Children.Add(manageTitle);
+        Grid.SetColumn(manageChevron, 1); manageHeader.Children.Add(manageChevron);
+
+        var manageButtons = new WrapPanel { Orientation = Orientation.Horizontal };
+        foreach (var (id, icon, tip) in new[]
+                 {
+                     ("session.rename", "Icon.Edit", "重命名"),
+                     ("session.pin", "Icon.Pin", "置顶"),
+                     ("session.side", "Icon.Chat", "新建侧边聊天"),
+                     ("session.fork", "Icon.Branch", "分叉"),
+                     ("session.schedule", "Icon.Calendar", "添加计划任务"),
+                     ("toggle.left", "Icon.PanelLeft", "打开侧栏"),
+                 })
+            manageButtons.Children.Add(BuildIslandManagementButton(id, icon, tip));
+
+        var manageBody = new StackPanel { Spacing = 8 };
+        manageBody.Children.Add(manageHeader);
+        manageBody.Children.Add(manageButtons);
+        var manageCard = new Border
+        {
+            Child = manageBody,
+            Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
+        };
+        manageCard.Classes.Add("islandWidget");
+        // 整卡作为"会话"入口；点击落在内部图标按钮上时由按钮自己处理。
+        manageCard.PointerReleased += (_, e) =>
+        {
+            if (e.InitialPressMouseButton != Avalonia.Input.MouseButton.Left) return;
+            if (e.Source is Visual source && source.FindAncestorOfType<Button>(includeSelf: true) is not null) return;
+            _actions.GetCommand("toggle.left").Execute(null);
+            e.Handled = true;
+        };
+
+        // ── 卡 3：快捷磁贴行（插入 / 停止 / 新建会话 / 更多 + 设置）──
+        _islandSteerButton = BuildIslandTileButton("Icon.Send", "插入");
+        _islandStopButton = BuildIslandTileButton("Icon.RecordStop", "停止");
+        var newSessionTile = BuildIslandTileButton("Icon.Add", "新建会话", "session.new");
+        var moreTile = BuildIslandTileButton("Icon.More", "更多", "commands");
+        var settingsTile = BuildIslandTileButton("Icon.Settings", "设置", "settings", 36);
+        var quickRow = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,Auto,Auto,Auto,*,Auto"), ColumnSpacing = 8 };
+        quickRow.Children.Add(_islandSteerButton);
+        Grid.SetColumn(_islandStopButton, 1); quickRow.Children.Add(_islandStopButton);
+        Grid.SetColumn(newSessionTile, 2); quickRow.Children.Add(newSessionTile);
+        Grid.SetColumn(moreTile, 3); quickRow.Children.Add(moreTile);
+        Grid.SetColumn(settingsTile, 5); quickRow.Children.Add(settingsTile);
+        var quickCard = new Border { Child = quickRow };
+        quickCard.Classes.Add("islandWidget");
+
+        // ── 竖向堆叠：同宽同边距，卡片间距 10 ───────────────────────
+        var widgets = new StackPanel { Spacing = 10 };
+        widgets.Children.Add(statusCard);
+        widgets.Children.Add(manageCard);
+        widgets.Children.Add(quickCard);
 
         // 尾指：旋转菱形指向胶囊，与卡片同底色同描边。
         var tail = new Border
@@ -274,7 +309,7 @@ public partial class MainWindow
         };
         tail.Classes.Add("islandPanelTail");
 
-        var card = new Border { Width = 396, Padding = new Thickness(16, 14), Child = body };
+        var card = new Border { Width = 396, Padding = new Thickness(12), Child = widgets };
         card.Classes.Add("islandPanel");
 
         var stack = new StackPanel { Margin = new Thickness(0, 6, 0, 0) };
@@ -283,33 +318,56 @@ public partial class MainWindow
         return stack;
     }
 
-    private Control BuildIslandTile(Infrastructure.AppActionDefinition action)
+    /// <summary>会话管理卡里的纯图标按钮：命令复用动作注册表，文字只进 ToolTip。</summary>
+    private Button BuildIslandManagementButton(string actionId, string iconKey, string toolTip)
     {
-        // 图标与短名称直接放在磁贴里，不依赖悬浮说明识别动作。
-        var icon = new PathIcon { Width = 18, Height = 18, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon." + WorkbenchActionDefaults.Icon(action.Id)));
-        var tileContent = new StackPanel { Spacing = 5, VerticalAlignment = VerticalAlignment.Center };
-        tileContent.Children.Add(icon);
-        tileContent.Children.Add(new TextBlock
-        {
-            Text = action.Title, FontSize = 11, HorizontalAlignment = HorizontalAlignment.Center,
-            TextTrimming = TextTrimming.CharacterEllipsis, MaxWidth = 82,
-        });
+        var icon = new PathIcon { Width = 16, Height = 16, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension(iconKey));
         var button = new Button
         {
-            Content = tileContent,
-            Height = 58,
-            Margin = new Thickness(3),
+            Content = icon,
+            Width = 38,
+            Height = 36,
+            Margin = new Thickness(2),
             Padding = new Thickness(0),
             HorizontalContentAlignment = HorizontalAlignment.Center,
             VerticalContentAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Stretch,
-            Command = _actions.GetCommand(action.Id),
+            Command = _actions.GetCommand(actionId),
+            FocusAdorner = null,
         };
         button.Classes.Add("islandTile");
-        button.FocusAdorner = null;
-        Avalonia.Automation.AutomationProperties.SetAutomationId(button, "island-" + action.Id);
-        Avalonia.Automation.AutomationProperties.SetName(button, action.Title);
+        ToolTip.SetTip(button, toolTip);
+        Avalonia.Automation.AutomationProperties.SetAutomationId(button, "island-action-" + actionId);
+        Avalonia.Automation.AutomationProperties.SetName(button, toolTip);
+        return button;
+    }
+
+    /// <summary>快捷磁贴：56×56 纯图标方块；命令可为空（插入/停止由 RefreshIsland 绑定）。</summary>
+    private Button BuildIslandTileButton(string iconKey, string toolTip, string? actionId = null, double size = 56)
+    {
+        var icon = new PathIcon
+        {
+            Width = size >= 56 ? 20 : 16,
+            Height = size >= 56 ? 20 : 16,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension(iconKey));
+        var button = new Button
+        {
+            Content = icon,
+            Width = size,
+            Height = size,
+            Padding = new Thickness(0),
+            HorizontalContentAlignment = HorizontalAlignment.Center,
+            VerticalContentAlignment = VerticalAlignment.Center,
+            FocusAdorner = null,
+        };
+        if (actionId is not null) button.Command = _actions.GetCommand(actionId);
+        button.Classes.Add("islandTileSmall");
+        ToolTip.SetTip(button, toolTip);
+        Avalonia.Automation.AutomationProperties.SetAutomationId(button, "island-tile-" + toolTip);
+        Avalonia.Automation.AutomationProperties.SetName(button, toolTip);
         return button;
     }
 
@@ -365,24 +423,24 @@ public partial class MainWindow
         _islandLiveText?.SetValue(TextBlock.TextProperty,
             running ? $"{activity} · {queued ?? "执行中"}"
             : failed ? outcome
-            : string.IsNullOrEmpty(usage) ? ""
+            : string.IsNullOrEmpty(usage) ? activity
             : "上次回合 " + usage.Replace("会话累计：", ""));
         if (_islandLiveDot is not null)
         {
             _islandLiveDot.Classes.Remove("running"); _islandLiveDot.Classes.Remove("failed"); _islandLiveDot.Classes.Remove("idle");
             _islandLiveDot.Classes.Add(running ? "running" : failed ? "failed" : "idle");
         }
-        _islandLiveBar?.Classes.Remove("failed");
-        if (failed) _islandLiveBar?.Classes.Add("failed");
-        var liveBarVisible = running || failed || hasQueue || !string.IsNullOrEmpty(usage);
-        _islandLiveBar?.SetValue(Visual.IsVisibleProperty, liveBarVisible);
-        _islandStopButton?.SetValue(Visual.IsVisibleProperty, running);
-        _islandSteerButton?.SetValue(Visual.IsVisibleProperty, running);
+        // 磁贴常驻：停止只在运行中可用；插入沿用现有"运行中 + 可插入"门控。
+        _islandStopButton?.SetValue(InputElement.IsEnabledProperty, running);
         if (vm is not null)
         {
             _islandStopButton?.SetValue(Button.CommandProperty, vm.Input.StopCommand);
             _islandSteerButton?.SetValue(Button.CommandProperty, vm.Input.SteerCommand);
-            _islandSteerButton?.SetValue(InputElement.IsEnabledProperty, vm.Input.CanSteer);
+            _islandSteerButton?.SetValue(InputElement.IsEnabledProperty, running && vm.Input.CanSteer);
+        }
+        else
+        {
+            _islandSteerButton?.SetValue(InputElement.IsEnabledProperty, false);
         }
     }
 
