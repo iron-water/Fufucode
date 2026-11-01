@@ -144,7 +144,8 @@ internal static class AppTypography
     {
         Grayscale(popup);
         if (popup.Child is not { } child) return;
-        var family = popup.PlacementTarget is { } target ? TextElement.GetFontFamily(target) : CurrentFamily;
+        var family = popup.PlacementTarget is { } target
+            ? TextElement.GetFontFamily(TopLevel.GetTopLevel(target) ?? target) : CurrentFamily;
         var mono = popup.PlacementTarget?.TryFindResource("AppMonoFont", out var code) == true && code is FontFamily codeFamily
             ? codeFamily : MonoFamily;
         child.Resources["AppFontFamily"] = family;
