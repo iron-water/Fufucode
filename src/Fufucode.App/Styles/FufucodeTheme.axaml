@@ -7,6 +7,11 @@
         <ResourceDictionary>
             <x:Boolean x:Key="AppSkinIconMonochrome">False</x:Boolean>
             <SolidColorBrush x:Key="AppTerminalSelection" Color="#5A61AFEF"/>
+            <!-- 微软四色：红绿蓝黄，用于对话主页及特色界面的彩色图标 -->
+            <SolidColorBrush x:Key="MsRed" Color="#F25022"/>
+            <SolidColorBrush x:Key="MsGreen" Color="#7FBA00"/>
+            <SolidColorBrush x:Key="MsBlue" Color="#00A4EF"/>
+            <SolidColorBrush x:Key="MsYellow" Color="#FFB900"/>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceInclude Source="avares://Fufucode.App/Styles/FluentTokens.axaml"/>
                 <ResourceInclude Source="avares://Fufucode.App/Styles/Icons.axaml"/>
@@ -738,21 +743,21 @@
         <Setter Property="Padding" Value="12,10"/>
     </Style>
     <Style Selector="Border.errorCard PathIcon">
-        <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
     </Style>
     <Style Selector="Border.errorCard.neutral">
         <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
     </Style>
     <Style Selector="Border.errorCard.neutral PathIcon">
-        <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+        <Setter Property="Foreground" Value="{DynamicResource MsYellow}"/>
     </Style>
     <Style Selector="Border.errorCard.info">
         <Setter Property="Background" Value="{DynamicResource AppInfoBackground}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource AppInfoForeground}"/>
     </Style>
     <Style Selector="Border.errorCard.info PathIcon">
-        <Setter Property="Foreground" Value="{DynamicResource AppInfoForeground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource MsBlue}"/>
     </Style>
 
     <!-- ================= 输入区（composer） ================= -->

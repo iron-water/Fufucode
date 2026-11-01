@@ -126,7 +126,9 @@ internal static class Program
                 try
                 {
                     var window = (MainWindow)lifetime.MainWindow!;
-                    code = args.Contains("--markdown-table-only")
+                    code = args.Contains("--chat-icons-only")
+                        ? await SelfTest.NativeChatIconsSelfTest.RunAsync(window)
+                        : args.Contains("--markdown-table-only")
                         ? await SelfTest.NativeMarkdownTableSelfTest.RunAsync(window)
                         : args.Contains("--model-switch-only")
                             ? await SelfTest.NativeModelSwitchSelfTest.RunAsync(window)

@@ -43,6 +43,7 @@ public sealed class TableLightboxOverlay : Grid
         Children.Add(scrim);
         var closeIcon = new PathIcon { Width = 14, Height = 14 };
         closeIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.Dismiss"));
+        closeIcon.Bind(PathIcon.ForegroundProperty, new DynamicResourceExtension("MsRed"));
         _close = new Button
         {
             Name = "CloseTableLightbox", Content = closeIcon,

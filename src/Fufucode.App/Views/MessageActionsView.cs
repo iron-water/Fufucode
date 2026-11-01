@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Layout;
+using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
@@ -65,6 +66,14 @@ public sealed class MessageActionsView : UserControl
         _fork = WorkbenchUi.IconButton("Branch", "从此消息分叉");
         _retry = WorkbenchUi.IconButton("ArrowClockwise", "分叉并重试");
         _ask = WorkbenchUi.IconButton("Chat", "在侧边聊天中提问");
+
+        SetColor(_copy, "MsBlue");
+        SetColor(_speak, "MsYellow");
+        SetColor(_quote, "MsBlue");
+        SetColor(_fork, "MsGreen");
+        SetColor(_retry, "MsYellow");
+        SetColor(_ask, "MsBlue");
+        SetColor(_edit, "MsGreen");
 
         _usage = new TextBlock { Classes = { "meta", "tabularNumeric" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
         _model = new TextBlock { Classes = { "meta" }, VerticalAlignment = VerticalAlignment.Center, IsVisible = false };
@@ -253,4 +262,10 @@ public sealed class MessageActionsView : UserControl
             assistant.Blocks.OfType<TextBlockViewModel>().Select(block => block.Text)),
         _ => string.Empty,
     };
+
+    private static void SetColor(Button button, string resourceKey)
+    {
+        if (button.Content is PathIcon icon)
+            icon.Bind(PathIcon.ForegroundProperty, new DynamicResourceExtension(resourceKey));
+    }
 }
