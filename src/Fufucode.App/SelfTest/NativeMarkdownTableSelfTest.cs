@@ -107,27 +107,49 @@ internal static class NativeMarkdownTableSelfTest
             Check(scroll.Offset.Y > 0, "last rows remain reachable inside the bounded viewport");
             var expand = Find<Button>(rendered, "ExpandMarkdownTable");
             await Click(expand, host);
-            var preview = host.OwnedWindows.OfType<TableLightboxWindow>().Single();
+            var preview = host.GetVisualDescendants().OfType<TableLightboxOverlay>().Single();
             await Ready();
-            Check(preview.WindowState == WindowState.FullScreen, "upper right button opens a real fullscreen window");
+            Check(TopLevel.GetTopLevel(preview) == host && !host.OwnedWindows.Any(),
+                "upper right button opens an overlay inside the original window without a new window");
+            Check(ReferenceEquals(host.Content, view) && view.IsEffectivelyVisible,
+                "original page stays attached and visible behind the overlay");
+            var scrim = Find<Border>(preview, "TableLightboxScrim");
+            Check(scrim.Background is ISolidColorBrush brush && brush.Color.A is > 0 and < 255,
+                "overlay uses a translucent scrim that keeps the original page visible");
+            Check(Math.Abs(preview.Bounds.Width - host.ClientSize.Width) < 1 && Math.Abs(preview.Bounds.Height - host.ClientSize.Height) < 1,
+                "overlay covers the original client area");
             var fullScroll = Find<ScrollViewer>(preview, "FullScreenTableScroll");
             var fullTable = preview.GetVisualDescendants().OfType<MarkdownTableView>().Single();
             Check(fullScroll.Bounds.Height > MarkdownTableView.InlineMaxHeight,
-                "fullscreen uses the available screen height instead of the inline cap");
-            Check(!Find<Button>(fullTable, "ExpandMarkdownTable").IsVisible, "fullscreen does not create another expand button");
+                "expanded overlay uses the available window height instead of the inline cap");
+            Check(!Find<Button>(fullTable, "ExpandMarkdownTable").IsVisible, "expanded table does not create another expand button");
             Check(fullTable.Table.GetVisualDescendants().OfType<MarkdownTextBlock>().Any(text => text.ActualText.Contains("第59行", StringComparison.Ordinal)),
-                "fullscreen contains the complete last row");
-            Check(fullScroll.Extent.Width <= fullScroll.Viewport.Width + 1, "fullscreen table fits screen width");
-            Save(preview, "table-fullscreen.png");
-            ForceForeground(preview.TryGetPlatformHandle()!.Handle);
+                "expanded overlay contains the complete last row");
+            Check(fullScroll.Extent.Width <= fullScroll.Viewport.Width + 1, "expanded table fits the overlay width");
+            host.Width = 660;
+            host.Height = 680;
+            await Ready();
+            Check(Math.Abs(preview.Bounds.Width - host.ClientSize.Width) < 1 && Math.Abs(preview.Bounds.Height - host.ClientSize.Height) < 1,
+                "overlay follows resizing of the original window");
+            var priorOffset = scroll.Offset;
+            expand.Focus();
+            Check(preview.IsVisualAncestorOf(host.FocusManager!.GetFocusedElement() as Visual),
+                "background cannot steal keyboard focus while the overlay is open");
+            Save(host, "table-overlay.png");
+            ForceForeground(host.TryGetPlatformHandle()!.Handle);
             keybd_event(0x1B, 0, 0, 0); keybd_event(0x1B, 0, 2, 0);
             await Ready();
-            Check(!preview.IsVisible && expand.IsFocused, "Escape closes fullscreen and returns focus to the expand button");
+            Check(!TableLightboxOverlay.IsOpen(host) && expand.IsFocused, "Escape closes overlay and returns focus to the expand button");
+            Check(scroll.Offset == priorOffset, "closing the overlay preserves the original table scroll position");
             await Click(expand, host);
-            preview = host.OwnedWindows.OfType<TableLightboxWindow>().Single();
-            await Ready();
-            await Click(Find<Button>(preview, "CloseTableLightbox"), preview);
-            Check(!preview.IsVisible, "fullscreen close button works with a native pointer");
+            preview = host.GetVisualDescendants().OfType<TableLightboxOverlay>().Single();
+            await Click(Find<Button>(preview, "CloseTableLightbox"), host);
+            Check(!TableLightboxOverlay.IsOpen(host), "overlay close button works with a native pointer");
+            await Click(expand, host);
+            preview = host.GetVisualDescendants().OfType<TableLightboxOverlay>().Single();
+            await ClickAt(preview, new Point(5, 5), host);
+            Check(!TableLightboxOverlay.IsOpen(host), "clicking the translucent scrim closes the overlay");
+            host.Height = 760;
 
             view.Markdown = "表格前文不应进入预览。\n\n" + table + "\n\n中间段落\n\n| 第二张 | 内容 |\n| --- | --- |\n| 独立标记 | 只显示第二张表格 |\n\n表格后文不应进入预览。";
             host.Width = 800;
@@ -135,7 +157,7 @@ internal static class NativeMarkdownTableSelfTest
             var tables = view.GetVisualDescendants().OfType<MarkdownTableView>().ToArray();
             Check(tables.Length == 2, "a message can render two independent tables");
             await Click(Find<Button>(tables[1], "ExpandMarkdownTable"), host);
-            preview = host.OwnedWindows.OfType<TableLightboxWindow>().Single();
+            preview = host.GetVisualDescendants().OfType<TableLightboxOverlay>().Single();
             await Ready();
             var fullView = Find<RichMarkdownView>(preview, "FullScreenTable");
             Check(fullView.Markdown.Contains("独立标记", StringComparison.Ordinal)
@@ -172,10 +194,34 @@ internal static class NativeMarkdownTableSelfTest
             Check(Find<ScrollViewer>(chatTable, "MarkdownTableScroll").Extent.Width <= chatTable.Bounds.Width + 1,
                 "completed table fits actual chat width");
             Save(main, "chat-table-completed.png");
+            host.Topmost = false;
+            main.Activate();
+            var pageBefore = vm.CurrentPage;
+            var chatExpand = Find<Button>(chatTable, "ExpandMarkdownTable");
+            await Click(chatExpand, main);
+            var chatPreview = main.GetVisualDescendants().OfType<TableLightboxOverlay>().Single();
+            Check(TopLevel.GetTopLevel(chatPreview) == main && vm.CurrentPage == pageBefore,
+                "real ChatPage expands over the current page without navigating");
+            var overlayCount = main.OwnedWindows.Count;
+            ForceForeground(main.TryGetPlatformHandle()!.Handle);
+            keybd_event(0x11, 0, 0, 0);
+            await Task.Delay(100);
+            keybd_event(0x4B, 0, 0, 0); keybd_event(0x4B, 0, 2, 0);
+            await Task.Delay(100);
+            keybd_event(0x11, 0, 2, 0);
+            await Ready();
+            Check(!main.FindControl<Grid>("GlobalOverlay")!.IsVisible && main.OwnedWindows.Count == overlayCount,
+                "background command shortcut stays inactive while the table overlay is open");
+            Save(main, "chat-table-overlay.png");
+            keybd_event(0x1B, 0, 0, 0); keybd_event(0x1B, 0, 2, 0);
+            await Ready();
+            Check(!TableLightboxOverlay.IsOpen(main) && vm.CurrentPage == pageBefore && chatExpand.IsFocused,
+                "real window Escape closes only the table overlay and restores the original page focus");
         }
         finally
         {
-            foreach (var window in host.OwnedWindows.ToArray()) window.Close();
+            foreach (var overlay in host.GetVisualDescendants().OfType<TableLightboxOverlay>().ToArray()) overlay.Close();
+            foreach (var overlay in main.GetVisualDescendants().OfType<TableLightboxOverlay>().ToArray()) overlay.Close();
             host.Close();
             SetPhysicalCursorPos(previousCursor.X, previousCursor.Y);
         }
@@ -185,10 +231,11 @@ internal static class NativeMarkdownTableSelfTest
 
         static T Find<T>(Visual root, string name) where T : Control => root.GetVisualDescendants().OfType<T>().Single(control => control.Name == name);
         async Task Ready() { await Task.Delay(350); await Dispatcher.Yield(DispatcherPriority.Background); host.UpdateLayout(); main.UpdateLayout(); }
-        async Task Click(Control target, Window window)
+        Task Click(Control target, Window window) => ClickAt(target, new Point(target.Bounds.Width / 2, target.Bounds.Height / 2), window);
+        async Task ClickAt(Control target, Point offset, Window window)
         {
             ForceForeground(window.TryGetPlatformHandle()!.Handle); window.Activate();
-            var point = target.PointToScreen(new Point(target.Bounds.Width / 2, target.Bounds.Height / 2));
+            var point = target.PointToScreen(offset);
             SetPhysicalCursorPos(point.X, point.Y);
             mouse_event(2, 0, 0, 0, 0); mouse_event(4, 0, 0, 0, 0);
             await Ready();

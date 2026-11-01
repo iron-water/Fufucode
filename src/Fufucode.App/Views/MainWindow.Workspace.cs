@@ -862,6 +862,7 @@ public partial class MainWindow
 
     private void OnWorkspaceKeyDown(object? sender, KeyEventArgs e)
     {
+        if (Views.TableLightboxOverlay.IsOpen(this)) return;
         if (e.Key == Key.Escape && Docks().Select(dock => dock.CancelDrag()).ToArray().Any(canceled => canceled))
         { UpdateDockDropTarget(null); e.Handled = true; return; }
         if (HandleGlobalShortcut(e)) { e.Handled = true; return; }

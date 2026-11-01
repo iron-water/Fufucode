@@ -13,6 +13,17 @@
     <Setter Property="Padding" Value="6"/>
     <Setter Property="Margin" Value="0,0,4,4"/>
   </Style>
+  <Style Selector="Border.tableLightboxScrim">
+    <Setter Property="Background" Value="{DynamicResource AppScrimBackground}"/>
+  </Style>
+  <Style Selector="Border.tableLightboxSurface">
+    <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+    <Setter Property="Margin" Value="24"/>
+    <Setter Property="Padding" Value="12"/>
+  </Style>
   <Style Selector="views|ResponsiveTablePanel > Border.TableCell">
     <Setter Property="Padding" Value="12,8"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
