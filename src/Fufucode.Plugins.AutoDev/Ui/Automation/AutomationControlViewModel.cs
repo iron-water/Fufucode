@@ -61,7 +61,9 @@ public sealed partial class AutomationControlViewModel : ViewModelBase, Fufucode
         if (ProjectContext == context) return;
         // 每个项目保留自己的主控输入草稿；切回时恢复未发送文本。
         if (ProjectContext is not null) _goalDraftByProject[ProjectContext] = GoalDraft;
-        ProjectContext = context; Disconnect();
+        ProjectContext = context;
+        Kernel.Configure(context);
+        Disconnect();
         GoalDraft = context is not null && _goalDraftByProject.TryGetValue(context, out var draft) ? draft : "";
     }
     private readonly System.Collections.Generic.Dictionary<string, string> _goalDraftByProject = new(StringComparer.OrdinalIgnoreCase);

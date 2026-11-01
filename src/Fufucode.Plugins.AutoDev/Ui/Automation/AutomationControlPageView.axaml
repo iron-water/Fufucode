@@ -35,7 +35,6 @@
       <!-- 窄于 1000DIP 时主操作行下移到整行（第 2 行），避免与标题重叠。 -->
       <WrapPanel x:Name="HeaderActions" Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Right">
         <Button Content="连接工作台…" Click="Connect_Click" Margin="0,0,8,4" AutomationProperties.Name="连接现有工作台数据库"/>
-        <Button Content="项目内核" Click="RebirthKernel_Click" Margin="0,0,8,4" AutomationProperties.Name="打开项目内核"/>
         <Button Content="刷新" Command="{Binding RefreshCommand}" Margin="0,0,8,4"/>
         <Button x:Name="ResumeAutomatic" Content="暂停新任务/继续（自动模式）" Command="{Binding ResumeAutomaticCommand}" Margin="0,0,8,4"
                 AutomationProperties.HelpText="向核心提交自动开发模式；未启用时保留核心拒绝的真实原因，不伪造切换成功。"/>
@@ -50,7 +49,8 @@
         <TextBlock Text="{Binding OfflineNotice}" TextWrapping="Wrap"/>
       </Border>
       <StackPanel Orientation="Horizontal" Spacing="4">
-        <Button x:Name="OverviewTab" Classes="automationTab" Content="总览" Command="{Binding SelectTabCommand}" CommandParameter="overview" AutomationProperties.Name="总览页签"/>
+        <Button x:Name="KernelTab" Classes="automationTab" Content="项目内核" Command="{Binding SelectTabCommand}" CommandParameter="kernel" AutomationProperties.Name="项目内核页签"/>
+        <Button x:Name="OverviewTab" Classes="automationTab" Content="旧总览" Command="{Binding SelectTabCommand}" CommandParameter="overview" AutomationProperties.Name="旧总览页签"/>
         <Button x:Name="ThreadsTab" Classes="automationTab" Content="执行线程" Command="{Binding SelectTabCommand}" CommandParameter="threads" AutomationProperties.Name="执行线程页签"/>
         <Button x:Name="DeliveriesTab" Classes="automationTab" Content="成果与验收" Command="{Binding SelectTabCommand}" CommandParameter="deliveries" AutomationProperties.Name="成果与验收页签"/>
         <Button x:Name="ActivityTab" Classes="automationTab" Content="活动记录" Command="{Binding SelectTabCommand}" CommandParameter="activity" AutomationProperties.Name="活动记录页签"/>
@@ -99,6 +99,81 @@
         <TextBlock Classes="caption" Text="提交目标与点击开始是一次委托；不再逐项要求批准。危险工具审批单独标明，不被自动模式免除。" TextWrapping="Wrap"/>
       </StackPanel>
     </Border>
+
+    <!-- 0. 项目内核：新主入口，直接读写 rebirth 内核，不复用旧 AutomationStore -->
+    <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsKernelTab}">
+      <StackPanel Spacing="8">
+        <Border Classes="automationCard">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <StackPanel Spacing="3">
+              <TextBlock Text="项目内核" FontWeight="SemiBold"/>
+              <TextBlock Text="{Binding Kernel.StatusText}" TextWrapping="Wrap" AutomationProperties.Name="内核状态"/>
+              <TextBlock Classes="caption" Text="{Binding Kernel.SummaryText}" TextWrapping="Wrap"/>
+              <SelectableTextBlock Classes="caption" Text="{Binding Kernel.DatabasePath}" TextWrapping="Wrap"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="刷新内核" Command="{Binding Kernel.RefreshCommand}" VerticalAlignment="Top"/>
+          </Grid>
+        </Border>
+
+        <Border Classes="automationCard">
+          <StackPanel Spacing="5">
+            <TextBlock Text="在 Project Brief 内建立工单" FontWeight="SemiBold"/>
+            <TextBox Text="{Binding Kernel.GoalDraft, Mode=TwoWay}" PlaceholderText="项目目标，例如：修复会话切换白屏" AcceptsReturn="True" MinHeight="52" TextWrapping="Wrap" AutomationProperties.Name="内核目标"/>
+            <Button Content="建立项目 / 添加工单" Command="{Binding Kernel.CreatePlanCommand}" HorizontalAlignment="Left"/>
+            <TextBlock Classes="caption" Text="模型可在 Brief 内创建工单；这里不逐项要求批准，否决、停止和接管仍是人的直接控制。" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="automationCard">
+          <StackPanel Spacing="5">
+            <TextBlock Text="工单" FontWeight="SemiBold"/>
+            <ListBox ItemsSource="{Binding Kernel.Tickets}" SelectedItem="{Binding Kernel.SelectedTicket, Mode=TwoWay}" MaxHeight="220" MinHeight="80">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="a:RebirthKernelTicketRow">
+                  <StackPanel Spacing="1">
+                    <TextBlock Text="{Binding TitleLine}" TextWrapping="Wrap"/>
+                    <TextBlock Classes="caption" Text="{Binding DetailLine}" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="停止选中工单" Command="{Binding Kernel.StopSelectedCommand}"/>
+              <Button Content="接管选中工单" Command="{Binding Kernel.TakeoverSelectedCommand}"/>
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="automationCard">
+          <StackPanel Spacing="5">
+            <TextBlock Text="需要人回答" FontWeight="SemiBold"/>
+            <ListBox ItemsSource="{Binding Kernel.Attention}" SelectedItem="{Binding Kernel.SelectedAttention, Mode=TwoWay}" MaxHeight="140" MinHeight="48">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="a:RebirthKernelAttentionRow">
+                  <StackPanel><TextBlock Text="{Binding TitleLine}" TextWrapping="Wrap"/><TextBlock Classes="caption" Text="{Binding DetailLine}" TextWrapping="Wrap"/></StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBox Text="{Binding Kernel.AnswerDraft, Mode=TwoWay}" PlaceholderText="回答选中的问题" AcceptsReturn="True" MinHeight="52" TextWrapping="Wrap" AutomationProperties.Name="内核回答"/>
+            <Button Content="回答选中问题" Command="{Binding Kernel.AnswerSelectedCommand}" HorizontalAlignment="Left"/>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="automationCard">
+          <StackPanel Spacing="5">
+            <TextBlock Text="有效否决与历史" FontWeight="SemiBold"/>
+            <ListBox ItemsSource="{Binding Kernel.Vetoes}" MaxHeight="150" MinHeight="48">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="a:RebirthKernelVetoRow">
+                  <StackPanel><TextBlock Text="{Binding TitleLine}" TextWrapping="Wrap"/><TextBlock Classes="caption" Text="{Binding DetailLine}" TextWrapping="Wrap"/></StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            <TextBlock Classes="caption" Text="否决由工具或内核记录；模型不能覆盖。解除否决会保留历史。" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
 
     <!-- A. 总览：主控对话 + 执行概况 / 需要你决定 / 最近成果 -->
     <ScrollViewer Grid.Row="3" HorizontalScrollBarVisibility="Disabled" IsVisible="{Binding IsOverviewTab}">

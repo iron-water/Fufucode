@@ -12,7 +12,7 @@ using Fufucode.Core.Automation;
 namespace Fufucode.App.Features.Automation;
 
 /// <summary>工作台二级页签。总览为默认入口。</summary>
-public enum AutomationWorkbenchTab { Overview, Threads, Deliveries, Activity }
+public enum AutomationWorkbenchTab { Kernel, Overview, Threads, Deliveries, Activity }
 
 /// <summary>执行线程页的视角。列表为默认。</summary>
 public enum AutomationThreadViewMode { List, DependencyGraph }
@@ -72,7 +72,7 @@ public sealed partial class AutomationDelegationSettings : ObservableObject
 public sealed partial class AutomationControlViewModel
 {
     private const string DelegationSettingsFile = "automation-v4-delegation.json";
-    private AutomationWorkbenchTab _activeTab = AutomationWorkbenchTab.Overview;
+    private AutomationWorkbenchTab _activeTab = AutomationWorkbenchTab.Kernel;
     private AutomationThreadViewMode _threadView = AutomationThreadViewMode.List;
     private AutomationV4ThreadRow? _selectedThreadRow;
     private AutomationV4DeliveryPartRow? _selectedDeliveryRow;
@@ -169,6 +169,7 @@ public sealed partial class AutomationControlViewModel
         }
     }
 
+    public bool IsKernelTab => ActiveTab == AutomationWorkbenchTab.Kernel;
     public bool IsOverviewTab => ActiveTab == AutomationWorkbenchTab.Overview;
     public bool IsThreadsTab => ActiveTab == AutomationWorkbenchTab.Threads;
     public bool IsDeliveriesTab => ActiveTab == AutomationWorkbenchTab.Deliveries;
@@ -241,6 +242,7 @@ public sealed partial class AutomationControlViewModel
     {
         ActiveTab = tab switch
         {
+            "kernel" => AutomationWorkbenchTab.Kernel,
             "threads" => AutomationWorkbenchTab.Threads,
             "deliveries" => AutomationWorkbenchTab.Deliveries,
             "activity" => AutomationWorkbenchTab.Activity,
@@ -385,7 +387,7 @@ public sealed partial class AutomationControlViewModel
 
     private void NotifyV4()
     {
-        OnPropertyChanged(nameof(IsOverviewTab)); OnPropertyChanged(nameof(IsThreadsTab));
+        OnPropertyChanged(nameof(IsKernelTab)); OnPropertyChanged(nameof(IsOverviewTab)); OnPropertyChanged(nameof(IsThreadsTab));
         OnPropertyChanged(nameof(IsDeliveriesTab)); OnPropertyChanged(nameof(IsActivityTab));
         OnPropertyChanged(nameof(IsThreadListVisible)); OnPropertyChanged(nameof(IsThreadGraphVisible));
         OnPropertyChanged(nameof(HostConnectionText)); OnPropertyChanged(nameof(OfflineNotice));

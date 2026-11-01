@@ -29,6 +29,7 @@ public sealed partial class AutomationControlViewModel
     public AutomationControlViewModel(string? persistenceDataRoot = null, IAutomationPersistenceFileIo? persistenceIo = null)
     {
         _dataRoot = persistenceDataRoot ?? Fufucode.Core.AppDataLayout.DefaultRoot();
+        Kernel = new RebirthKernelViewModel(_dataRoot);
         _draftStore = new(_dataRoot, fileIo: persistenceIo); _requestJournal = new(_dataRoot, fileIo: persistenceIo);
     }
 
@@ -37,6 +38,9 @@ public sealed partial class AutomationControlViewModel
 
     /// <summary>供同一插件的项目内核窗口复用同一宿主数据根。</summary>
     public string DataRoot => _dataRoot;
+
+    /// <summary>新内核主视图；与旧 AutomationStore 视图并存，不共享事实源。</summary>
+    public RebirthKernelViewModel Kernel { get; }
     private sealed record NativeControlAttempt(AutomationRequestRecord Request, Func<object> Execute);
     private NativeControlAttempt Prepare(object command, long now)
     {

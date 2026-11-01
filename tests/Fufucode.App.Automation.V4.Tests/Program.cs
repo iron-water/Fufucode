@@ -124,7 +124,7 @@ try
         Check(disconnected.ThreadRows.Count == 0 && disconnected.DeliveryRows.Count == 0, "未连接时投影为空，不伪造线程或成果");
         Check(disconnected.ProjectStateText == "未连接" && disconnected.DecisionCountText == "0", "未连接时项目状态与计数明确为未连接/0");
         Check(disconnected.HostConnectionText.Contains("未连接", StringComparison.Ordinal), "未连接时后台连接状态如实显示未连接");
-        Check(disconnected.IsOverviewTab && !disconnected.IsThreadsTab, "总览是默认二级页签");
+        Check(disconnected.IsKernelTab && !disconnected.IsThreadsTab, "项目内核是默认二级页签");
         Check(disconnected.ThreadView == AutomationThreadViewMode.List, "执行线程默认视角是列表");
         Check(disconnected.Delegation.Concurrency == AutomationV4Projection.DefaultConcurrency, "委托默认并发是 2");
         Check(!disconnected.DrawerOpen, "委托抽屉默认收起");
@@ -145,7 +145,7 @@ try
     Check(model.BackendReady, "有已注册执行身份时后端就绪按真实观测判定");
 
     // 3) 双视角切换：不变量与状态都真实变化。
-    Check(model.IsOverviewTab, "连接后仍在默认总览页签");
+    Check(model.IsKernelTab, "连接后仍在内核默认页签");
     model.SelectTab("threads");
     Check(model.IsThreadsTab && model.IsThreadListVisible && !model.IsThreadGraphVisible, "切到执行线程后默认是列表视角");
     model.SetThreadView("graph");
@@ -160,7 +160,9 @@ try
     model.SelectTab("activity");
     Check(model.IsActivityTab && !model.IsDeliveriesTab, "活动记录页签可切换");
     model.SelectTab("overview");
-    Check(model.IsOverviewTab, "返回总览页签");
+    Check(model.IsOverviewTab, "旧总览页签仍可返回");
+    model.SelectTab("kernel");
+    Check(model.IsKernelTab, "切回项目内核页签");
 
     // 4) 自动委托抽屉：默认值、范围与显式预算文本、真实落盘与读回。
     model.OpenDelegationDrawer();

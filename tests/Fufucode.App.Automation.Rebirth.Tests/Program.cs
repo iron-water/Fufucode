@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Fufucode.App.Abstractions.Automation;
+using Fufucode.App.Features.Automation;
 using Fufucode.Core.Automation.Rebirth;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
@@ -286,6 +287,36 @@ catch (Exception error)
     {
         failures.Add("execution bridge: " + error);
         Console.WriteLine("FAIL execution bridge: " + error);
+    }
+
+    // ---- 内核主页签视图模型：建立工单、停止、接管都走真实内核 ----
+    try
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fufucode-rebirth-vm-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var projectPath = Path.Combine(root, "project");
+        var vm = new RebirthKernelViewModel(root);
+        vm.Configure(projectPath);
+        Check(!vm.HasProject && vm.StatusText.Contains("尚未建立", StringComparison.Ordinal),
+            "内核视图模型在未建项目时明确未初始化");
+        vm.GoalDraft = "稳定切换焦点";
+        vm.CreatePlan();
+        Check(vm.HasProject && vm.Tickets.Count == 1 && vm.StatusText.Contains("Active", StringComparison.Ordinal),
+            "内核视图模型建立项目和工单并读到 Active");
+        vm.SelectedTicket = vm.Tickets[0];
+        vm.StopSelected();
+        Check(vm.Tickets[0].Status == "Cancelled", "内核视图模型停止工单写入 Cancelled");
+        vm.GoalDraft = "人工接管任务";
+        vm.CreatePlan();
+        vm.SelectedTicket = vm.Tickets.First(item => item.Title == "人工接管任务");
+        vm.TakeoverSelected();
+        Check(vm.Tickets.First(item => item.Title == "人工接管任务").Status == "HumanOwned",
+            "内核视图模型接管工单写入 HumanOwned");
+    }
+    catch (Exception error)
+    {
+        failures.Add("kernel view model: " + error);
+        Console.WriteLine("FAIL kernel view model: " + error);
     }
 
 Console.WriteLine($"\n通过 {passed} 项，失败 {failures.Count} 项。");
