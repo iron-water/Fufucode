@@ -121,12 +121,15 @@ internal static class NativeChatIconsSelfTest
             var asstAvatar = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-ASSISTANT-AVATAR");
             AssertIconColor(FindIcon(asstAvatar), MsGreen, "AI助手头像图标");
 
-            // 3. 正文块内图标：思考（黄）、工具（黄）、代码复制（蓝）、相关文件（黄）、变更卡（绿）、跳转打开（蓝）
+            // 3. 正文块内图标：思考（黄）、工具（蓝）、代码复制（蓝）、相关文件（黄）、变更卡（绿）、跳转打开（蓝）
             var thinkingPanel = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("thinkingBlock"));
-            AssertIconColor(thinkingPanel.GetVisualDescendants().OfType<PathIcon>().First(), MsYellow, "思考过程大脑图标");
+            var brainIcon = thinkingPanel.GetVisualDescendants().OfType<PathIcon>().First();
+            AssertIconColor(brainIcon, MsYellow, "思考过程大脑图标");
 
             var toolCard = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("toolGroupCard"));
-            AssertIconColor(toolCard.GetVisualDescendants().OfType<PathIcon>().First(), MsYellow, "工具组扳手图标");
+            var wrenchIcon = toolCard.GetVisualDescendants().OfType<PathIcon>().First();
+            AssertIconColor(wrenchIcon, MsBlue, "工具组扳手图标");
+            Check((brainIcon.Foreground as ISolidColorBrush)?.Color != (wrenchIcon.Foreground as ISolidColorBrush)?.Color, "输出中的思考与工具图标颜色不能相同");
 
             var relatedCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-RELATED-FILES-CARD");
             AssertIconColor(relatedCard.GetVisualDescendants().OfType<PathIcon>().First(), MsYellow, "相关文件文档图标");

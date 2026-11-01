@@ -256,7 +256,7 @@
                                       Padding="10,7">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                                   <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
-                                            VerticalAlignment="Center" Foreground="{DynamicResource MsYellow}"/>
+                                            VerticalAlignment="Center" Foreground="{DynamicResource MsBlue}"/>
                                   <views:ActivityDots Grid.Column="1" Width="18" VerticalAlignment="Center"
                                                       IsVisible="{Binding IsActive}"/>
                                   <TextBlock Grid.Column="2" Classes="caption" Text="{Binding SummaryText}"
@@ -331,7 +331,7 @@
                               <!-- 头部行：wrench + 工具名 + 耗时 + 展开箭头 -->
                               <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8,12,4">
                                 <PathIcon Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
-                                          VerticalAlignment="Center" Foreground="{DynamicResource MsYellow}"/>
+                                          VerticalAlignment="Center" Foreground="{DynamicResource MsBlue}"/>
                                 <!-- 统一字阶：工具名 12.5 收敛到 12，与工具组头一致。 -->
                                 <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold" Text="{Binding ToolName}" VerticalAlignment="Center"/>
                                 <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
