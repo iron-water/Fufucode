@@ -221,17 +221,20 @@ public partial class MainWindow
         statusPlaceholder.Children.Add(_islandLiveDot);
         Grid.SetColumn(_islandLiveText, 1); statusPlaceholder.Children.Add(_islandLiveText);
 
-        var statusBody = new Grid { RowDefinitions = new RowDefinitions("Auto,*"), RowSpacing = 8 };
-        statusBody.Children.Add(statusHeader);
-        Grid.SetRow(statusPlaceholder, 1); statusBody.Children.Add(statusPlaceholder);
-        // TODO(状态卡)：波形/图表占位
+        var waveform = new Views.IslandWaveform { Height = 48 };
+        Avalonia.Automation.AutomationProperties.SetAutomationId(waveform, "island-waveform");
+        // TODO(真实吞吐)：当前用运行活跃度驱动，接 PerfTracer 后改为 token/s
         _statusVisualHost = new Panel
         {
+            Height = 48,
             HorizontalAlignment = HorizontalAlignment.Stretch,
-            VerticalAlignment = VerticalAlignment.Stretch,
-            Children = { statusBody },
+            Children = { waveform },
         };
-        var statusCard = new Border { Height = 96, Tag = "状态", Child = _statusVisualHost };
+        var statusBody = new Grid { RowDefinitions = new RowDefinitions("Auto,48,Auto"), RowSpacing = 8 };
+        statusBody.Children.Add(statusHeader);
+        Grid.SetRow(_statusVisualHost, 1); statusBody.Children.Add(_statusVisualHost);
+        Grid.SetRow(statusPlaceholder, 2); statusBody.Children.Add(statusPlaceholder);
+        var statusCard = new Border { Tag = "状态", Child = statusBody };
         statusCard.Classes.Add("islandWidget");
 
         // ── 卡 2：会话占位 ──────────────────────────────────────
@@ -376,6 +379,21 @@ public partial class MainWindow
         {
             _islandLiveDot.Classes.Remove("running"); _islandLiveDot.Classes.Remove("failed"); _islandLiveDot.Classes.Remove("idle");
             _islandLiveDot.Classes.Add(running ? "running" : failed ? "failed" : "idle");
+        }
+        if (_statusVisualHost?.Children is { Count: > 0 } visuals && visuals[0] is Views.IslandWaveform waveform)
+        {
+            var waiting = activity.Contains("等待审批", StringComparison.Ordinal) ||
+                activity.Contains("等待授权", StringComparison.Ordinal) ||
+                activity.Contains("等待确认", StringComparison.Ordinal) ||
+                activity.Contains("审批中", StringComparison.Ordinal);
+            waveform.State = waiting ? Views.IslandWaveformState.Waiting
+                : running ? Views.IslandWaveformState.Running
+                : failed ? Views.IslandWaveformState.Failed
+                : Views.IslandWaveformState.Idle;
+            if (waveform.State == Views.IslandWaveformState.Running)
+                waveform.Push(0.55 + (Random.Shared.NextDouble() - 0.5) * 0.1);
+            else if (waveform.State == Views.IslandWaveformState.Idle)
+                waveform.Push(0);
         }
     }
 

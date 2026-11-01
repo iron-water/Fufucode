@@ -1529,4 +1529,11 @@
     <Setter Property="BorderThickness" Value="2"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
   </Style>
+  <!-- 会话岛波形：绘制与状态过渡由控件负责，仅在此提供可随主题更新的语义画刷。 -->
+  <Style Selector="views|IslandWaveform.islandWave">
+    <Setter Property="IdleBrush" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="RunningBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="FailedBrush" Value="{DynamicResource AppCriticalForeground}"/>
+    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+  </Style>
 </Styles>
