@@ -59,6 +59,7 @@ public partial class ChatPage : UserControl
         // F06：AcceptsReturn 的 TextBox 在自身 OnKeyDown 里处理 Enter 并标记 Handled，
         // XAML 挂的 bubble 处理器根本收不到；必须在 Tunnel 阶段拦截。
         InputBox.AddHandler(InputElement.KeyDownEvent, InputBox_KeyDown, RoutingStrategies.Tunnel);
+        InputBox.AddHandler(InputElement.KeyDownEvent, InputBox_KeyDownFallback, RoutingStrategies.Bubble);
         InputBox.TemplateApplied += (_, _) => HookInputPreedit();
 
         Loaded += (_, _) => { HookInputPreedit(); RefreshSessionContext(); };
@@ -597,6 +598,18 @@ public partial class ChatPage : UserControl
 
             e.Handled = true;
         }
+    }
+
+    private void InputBox_KeyDownFallback(object? sender, KeyEventArgs e)
+    {
+        // 原生向下移动优先；末行无处可移时才跳到文尾，自动折行也由 TextBox 判断。
+        if (e.Handled || e.Key != Key.Down || e.KeyModifiers != KeyModifiers.None
+            || _inputPresenter is null || _imeGuard.ShouldSwallowEnter()) return;
+
+        var end = InputBox.Text?.Length ?? 0;
+        InputBox.CaretIndex = end;
+        InputBox.ClearSelection();
+        e.Handled = true;
     }
 
     /// <summary>
