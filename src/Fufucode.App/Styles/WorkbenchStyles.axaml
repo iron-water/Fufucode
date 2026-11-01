@@ -279,6 +279,16 @@
   <Style Selector="Border.settingsRow ComboBox:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
+  <Style Selector="Button.fontPickerButton">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource ControlStrokeColorDefaultBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.fontPickerButton:pointerover, Button.fontPickerButton.open">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
   <!-- 行内开关：Fluent 默认 40×20 偏大，Win11 设置里为 36×18。 -->
   <Style Selector="Border.settingsRow ToggleSwitch">
     <Setter Property="MinHeight" Value="20"/>
@@ -1030,66 +1040,6 @@
   <Style Selector="Border.islandBackendTile PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
   </Style>
-  <!-- 磁贴：岛面本身已是"第 2 层"（卡片色），磁贴再用 subtle 会糊成一片；
-       底降到透明 + 悬停才给填充，图标升到"第 3 层"并直接用强调色（对齐 Win11
-       设置里"卡内图标用主题色"的做法），按下有短延迟 + 微形变。 -->
-  <Style Selector="Button.islandTile">
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
-    <Setter Property="Cursor" Value="Hand"/>
-    <!-- 不做任何背景/形变过渡：悬停与离开都是瞬时切换，杜绝残留帧。 -->
-  </Style>
-  <Style Selector="Button.islandTile:pointerover">
-    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-  </Style>
-  <!-- 磁贴不用描边表达任何状态：鼠标移出窗口/无命中区时 :pointerover 可能残留，
-       留下一条"白边"。模板描边恒为 0，hover/pressed 只改底色。 -->
-  <Style Selector="Button.islandTile /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="BorderThickness" Value="0"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-    <Setter Property="Background" Value="Transparent"/>
-  </Style>
-  <Style Selector="Button.islandTile:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-  </Style>
-  <Style Selector="Button.islandTile:pressed /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
-  </Style>
-  <Style Selector="Button.islandTile:pressed">
-    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
-    <Setter Property="RenderTransform" Value="scale(0.94)"/>
-  </Style>
-  <!-- 禁用态：Fluent 模板会给禁用按钮刷灰底，在岛面里像一块块补丁；
-       压回透明，只用低透明度图标表达不可用。 -->
-  <Style Selector="Button.islandTile:disabled">
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-  </Style>
-  <Style Selector="Button.islandTile:disabled /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-  </Style>
-  <Style Selector="Button.islandTile:disabled PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
-    <Setter Property="Opacity" Value="0.45"/>
-  </Style>
-  <!-- 图标=第 3 层：强调色常驻、满不透明；悬停再提亮一档。 -->
-  <Style Selector="Button.islandTile PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
-    <Setter Property="Opacity" Value="0.92"/>
-  </Style>
-  <Style Selector="Button.islandTile:pointerover PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
-    <Setter Property="Opacity" Value="1"/>
-  </Style>
-  <!-- 焦点描边只给键盘导航（focus-visible）；鼠标点完移开不留白边。 -->
-  <Style Selector="Button.islandTile:focus:not(:focus-visible) /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="BorderBrush" Value="Transparent"/>
-    <Setter Property="BorderThickness" Value="0"/>
-  </Style>
   <!-- 实时活动条：Subtle 浅底，失败时转 critical 边框/文字。 -->
   <Style Selector="Border.islandLiveBar">
     <Setter Property="Background" Value="{DynamicResource AppSubtleBackground}"/>
@@ -1142,61 +1092,49 @@
   <Style Selector="Border.islandStatusDot.failed">
     <Setter Property="Background" Value="{DynamicResource AppCriticalForeground}"/>
   </Style>
-  <!-- 快捷磁贴：56×56 纯图标方块；底透明，hover 才铺 AppHover。 -->
+  <!-- 候选卡片占位：56×56 纯色块 + 灰色加号。 -->
   <Style Selector="Button.islandTileSmall">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Width" Value="56"/>
+    <Setter Property="Height" Value="56"/>
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="12"/>
     <Setter Property="Padding" Value="0"/>
     <Setter Property="HorizontalContentAlignment" Value="Center"/>
     <Setter Property="VerticalContentAlignment" Value="Center"/>
-    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
-    <Setter Property="Cursor" Value="Hand"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
   </Style>
-  <Style Selector="Button.islandTileSmall:pointerover">
-    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  <Style Selector="Button.islandTileSmall PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
   </Style>
-  <Style Selector="Button.islandTileSmall:pressed">
-    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
-    <Setter Property="RenderTransform" Value="scale(0.94)"/>
-  </Style>
-  <!-- Fluent 模板的 ContentPresenter 自带 hover/pressed 底色，这里统一压回透明并按状态重铺。 -->
   <Style Selector="Button.islandTileSmall /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="12"/>
   </Style>
-  <Style Selector="Button.islandTileSmall:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall:pressed /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall:disabled">
+  <!-- 岛设置占位：磁贴行右下角的独立齿轮。 -->
+  <Style Selector="Button.islandGear">
+    <Setter Property="Width" Value="36"/>
+    <Setter Property="Height" Value="36"/>
     <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall:disabled /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent"/>
-    <Setter Property="BorderBrush" Value="Transparent"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
-    <Setter Property="Opacity" Value="0.92"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall:pointerover PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
-    <Setter Property="Opacity" Value="1"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall:disabled PathIcon">
-    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
-    <Setter Property="Opacity" Value="0.45"/>
-  </Style>
-  <Style Selector="Button.islandTileSmall:focus:not(:focus-visible) /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="18"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="Button.islandGear PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="Button.islandGear /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="18"/>
   </Style>
   <!-- 辅助菜单和上下文菜单不显示项末尾的 >；模板仍负责子菜单展开与键盘导航。 -->
   <Style Selector="MenuItem /template/ Path#PART_ChevronPath">
