@@ -19,9 +19,13 @@ internal sealed class LatinFontCollection : IFontCollection
 
     public bool TryGetGlyphTypeface(string familyName, FontStyle style, FontWeight weight, FontStretch stretch, out GlyphTypeface glyphTypeface)
     {
-        if (familyName == "Inter")
-            return FontManager.Current.TryGetGlyphTypeface(new Typeface(new FontFamily("fonts:Inter#Inter"), style, weight, stretch), out glyphTypeface!);
-        return SystemFonts.TryGetGlyphTypeface(familyName, style, weight, stretch, out glyphTypeface!);
+        if (AppFontCollection.TryFace(familyName, style, weight, stretch, out var face))
+        {
+            glyphTypeface = face;
+            return true;
+        }
+        glyphTypeface = null!;
+        return false;
     }
 
     public bool TryMatchCharacter(int codepoint, FontStyle style, FontWeight weight, FontStretch stretch,

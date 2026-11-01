@@ -226,6 +226,7 @@ public partial class MainWindow
             host.Window.Topmost = floating.Topmost;
             var appearance = _customization?.Current ?? new();
             host.Window.FontSize = appearance.FontSize;
+            host.Window.FontFamily = FontFamily;
             foreach (var resource in Resources) host.Window.Resources[resource.Key] = resource.Value;
             ApplyWindowSkin(host.Window, appearance);
             host.Dock.ApplyAppearance(appearance);

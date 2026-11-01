@@ -31,6 +31,7 @@ public sealed class RichMarkdownView : ContentControl
     private bool _attached;
     private bool _guardScheduled;
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<CodeInline, object> _styledInlines = new();
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<TextBlock, object> _styledCodeBlocks = new();
 
     public RichMarkdownView()
     {
@@ -166,7 +167,14 @@ public sealed class RichMarkdownView : ContentControl
     private void BindInlineColors()
     {
         foreach (var block in this.GetVisualDescendants().OfType<TextBlock>())
+        {
+            if (block.Name == "PART_CodeTextBlock" && !_styledCodeBlocks.TryGetValue(block, out _))
+            {
+                _styledCodeBlocks.Add(block, new object());
+                block.Bind(TextBlock.FontFamilyProperty, new DynamicResourceExtension("AppMonoFont"));
+            }
             if (block.Inlines is { } inlines) Bind(inlines);
+        }
 
         void Bind(Avalonia.Controls.Documents.InlineCollection inlines)
         {
@@ -175,6 +183,7 @@ public sealed class RichMarkdownView : ContentControl
                 if (inline is CodeInline code && !_styledInlines.TryGetValue(code, out _))
                 {
                     _styledInlines.Add(code, new object());
+                    code.Bind(Avalonia.Controls.Documents.TextElement.FontFamilyProperty, new DynamicResourceExtension("AppMonoFont"));
                     code.Bind(Avalonia.Controls.Documents.TextElement.ForegroundProperty, new DynamicResourceExtension("AppEmphasis"));
                     code.Bind(Avalonia.Controls.Documents.Inline.BackgroundProperty, new DynamicResourceExtension("AppInlineCodeBackground"));
                     code.BorderThickness = 0;

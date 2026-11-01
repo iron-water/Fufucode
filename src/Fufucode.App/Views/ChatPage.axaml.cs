@@ -31,7 +31,7 @@ public partial class ChatPage : UserControl
         });
 
     private readonly ImeEnterGuard _imeGuard = new();
-    private bool _preeditHooked;
+    private Avalonia.Controls.Presenters.TextPresenter? _inputPresenter;
     private bool _programmaticScroll;
     private Avalonia.Threading.DispatcherTimer? _scrollTimer;
 
@@ -509,28 +509,20 @@ public partial class ChatPage : UserControl
     /// <summary>把输入框模板内 TextPresenter 的真实组合状态（PreeditText）接入回车守卫。</summary>
     private void HookInputPreedit()
     {
-        if (_preeditHooked)
-        {
-            return;
-        }
-
         var presenter = InputBox.GetVisualDescendants()
             .OfType<Avalonia.Controls.Presenters.TextPresenter>()
             .FirstOrDefault();
-        if (presenter is null)
-        {
-            return;
-        }
+        if (ReferenceEquals(presenter, _inputPresenter)) return;
+        if (_inputPresenter is not null) _inputPresenter.PropertyChanged -= InputPreeditChanged;
+        _inputPresenter = presenter;
+        _imeGuard.OnPreeditChanged(presenter?.PreeditText);
+        if (presenter is not null) presenter.PropertyChanged += InputPreeditChanged;
+    }
 
-        _preeditHooked = true;
-        _imeGuard.OnPreeditChanged(presenter.PreeditText);
-        presenter.PropertyChanged += (_, args) =>
-        {
-            if (args.Property == Avalonia.Controls.Presenters.TextPresenter.PreeditTextProperty)
-            {
-                _imeGuard.OnPreeditChanged(args.NewValue as string);
-            }
-        };
+    private void InputPreeditChanged(object? sender, AvaloniaPropertyChangedEventArgs args)
+    {
+        if (args.Property == Avalonia.Controls.Presenters.TextPresenter.PreeditTextProperty)
+            _imeGuard.OnPreeditChanged(args.NewValue as string);
     }
 
     /// <summary>超过该字符数的粘贴转为会话临时附件，避免长文本挤占输入框。</summary>
@@ -551,14 +543,8 @@ public partial class ChatPage : UserControl
             return;
         }
 
-        // UI-1 CJK 输入法双重互锁，第二重：VK 229 在 Avalonia 里映射为 Key.ImeProcessed
-        // （对齐 Web 侧 keyCode === 229）。合成键不进入发送分支，直接吞掉——即使它一旦
-        // 被归一化成 Enter 也不会误发。
-        if (e.Key == Key.ImeProcessed)
-        {
-            e.Handled = true;
-            return;
-        }
+        // 输入法拥有合成键；这里只跳过发送，不能阻止平台继续组合与选字。
+        if (e.Key == Key.ImeProcessed) return;
 
         if (e.Key != Key.Enter)
         {

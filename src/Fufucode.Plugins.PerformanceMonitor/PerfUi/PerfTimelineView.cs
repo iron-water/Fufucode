@@ -18,8 +18,12 @@ internal sealed class PerfTimelineView : Control
     private const double RulerHeight = 18;
     private const double TrackHeight = 27;
     private const double Padding = 8;
-    private static readonly Typeface Face = new(FontFamily.Default);
-    private static readonly Typeface MonoFace = new(FontFamily.Parse("Cascadia Mono, Consolas"));
+    public static readonly StyledProperty<FontFamily> FontFamilyProperty =
+        AvaloniaProperty.Register<PerfTimelineView, FontFamily>(nameof(FontFamily), FontFamily.Default);
+    public static readonly StyledProperty<FontFamily> MonoFontFamilyProperty =
+        AvaloniaProperty.Register<PerfTimelineView, FontFamily>(nameof(MonoFontFamily), FontFamily.Default);
+    public FontFamily FontFamily { get => GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
+    public FontFamily MonoFontFamily { get => GetValue(MonoFontFamilyProperty); set => SetValue(MonoFontFamilyProperty, value); }
 
     public static readonly StyledProperty<IBrush?> TextBrushProperty =
         AvaloniaProperty.Register<PerfTimelineView, IBrush?>(nameof(TextBrush));
@@ -41,12 +45,20 @@ internal sealed class PerfTimelineView : Control
     {
         ClipToBounds = true;
         Height = RulerHeight + TrackHeight * 8 + Padding * 2;
+        this.Bind(FontFamilyProperty, new DynamicResourceExtension("AppFontFamily"));
+        this.Bind(MonoFontFamilyProperty, new DynamicResourceExtension("AppMonoFont"));
         this.Bind(TextBrushProperty, new DynamicResourceExtension("AppTextSecondary"));
         this.Bind(MutedBrushProperty, new DynamicResourceExtension("AppTextDim"));
         this.Bind(GridBrushProperty, new DynamicResourceExtension("AppDividerSubtle"));
         this.Bind(AccentBrushProperty, new DynamicResourceExtension("AppAccentText"));
         PointerPressed += OnPointerPressed;
         PointerWheelChanged += OnPointerWheel;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        base.OnPropertyChanged(change);
+        if (change.Property == FontFamilyProperty || change.Property == MonoFontFamilyProperty) InvalidateVisual();
     }
 
     public IBrush? TextBrush { get => GetValue(TextBrushProperty); set => SetValue(TextBrushProperty, value); }
@@ -359,7 +371,7 @@ internal sealed class PerfTimelineView : Control
     {
         if (string.IsNullOrEmpty(text)) return;
         var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-            mono ? MonoFace : Face, size, brush ?? Brushes.Gray);
+            new Typeface(mono ? MonoFontFamily : FontFamily), size, brush ?? Brushes.Gray);
         context.DrawText(formatted, new Point(x, y));
     }
 }

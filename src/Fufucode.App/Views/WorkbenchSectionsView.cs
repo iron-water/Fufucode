@@ -257,18 +257,18 @@ public sealed class WorkbenchSectionsView : UserControl
 
         Group(rows, "主题与风格",
             ChoiceRow(vm, "主题", null, new[] { "跟随系统", "浅色", "深色" }, s => s.Theme, (s, v) => s with { Theme = v }, "Color", "system", "light", "dark"),
-            ChoiceRow(vm, "皮肤", "Fluent 为默认；其他皮肤由插件市场安装，使用各自的颜色与控件形状。", Features.Skins.SkinCatalog.All.Select(s => s.DisplayName).ToArray(), s => s.SkinResolution.Definition.StorageKey, (s, v) => s with { Skin = v }, "Color", Features.Skins.SkinCatalog.All.Select(s => s.StorageKey).ToArray()),
+            ChoiceRow(vm, "皮肤", null, Features.Skins.SkinCatalog.All.Select(s => s.DisplayName).ToArray(), s => s.SkinResolution.Definition.StorageKey, (s, v) => s with { Skin = v }, "Color", Features.Skins.SkinCatalog.All.Select(s => s.StorageKey).ToArray()),
             skinNote,
             // “视觉风格”旧轴已下线：flat/classic 由 Metro/Luna 真皮肤覆盖，glass（iOS 液态玻璃）是未做的新皮肤，
             // 不再以半成品占位。Surface 字段保留读取以兼容旧配置。
-            CustomChoiceRow("预设", "一次性套用一组取值，之后仍可单独微调", new[] { "标准", "紧凑", "阅读" }, PresetOf, value => vm.Preset(value), "ArrowClockwise", "standard", "compact", "reading"));
+            CustomChoiceRow("预设", null, new[] { "标准", "紧凑", "阅读" }, PresetOf, value => vm.Preset(value), "ArrowClockwise", "standard", "compact", "reading"));
 
         var colorGroupStart = rows.Children.Count;
         Group(rows, "主题色与强调色",
-            FluentOnly(ToggleRow("跟随系统主题色", "Fluent 使用此选项；Metro 与 Material 3 使用各自固定主题色。", s => s.Accent == "system",
+            FluentOnly(ToggleRow("跟随系统主题色", null, s => s.Accent == "system",
                 value => vm.Change(s => s with { Accent = value ? "system" : Hex(s.EffectiveAccent) }))),
             FluentOnly(ColorPickerRow(vm,
-                "自定义主题色", "UI 通用颜色：选中、链接、主按钮；格式 #RRGGBB",
+                "自定义主题色", null,
                 s => s.Accent == "system" ? Hex(s.EffectiveAccent) : s.Accent,
                 (s, value) => s with { Accent = value })),
             EmphasisPickerRow(vm));
@@ -281,19 +281,18 @@ public sealed class WorkbenchSectionsView : UserControl
 
         var baseGroupStart = rows.Children.Count;
         Group(rows, "底色（Fluent 暗色）",
-            CustomChoiceRow("窗口底色", "最底层的深灰背景",
+            CustomChoiceRow("窗口底色", null,
                 WorkbenchAppearance.BaseBackgroundLabels.ToArray(), s => s.BaseBackground,
                 value => vm.Change(s => s with { BaseBackground = value }), "Color",
                 WorkbenchAppearance.BaseBackgroundChoices.ToArray()),
-            CustomChoiceRow("一般栏", "标题栏、侧栏、停靠区等常用栏的浅灰",
+            CustomChoiceRow("一般栏", null,
                 WorkbenchAppearance.BaseBarLabels.ToArray(), s => s.BaseBar,
                 value => vm.Change(s => s with { BaseBar = value }), "Color",
                 WorkbenchAppearance.BaseBarChoices.ToArray()),
-            CustomChoiceRow("高亮", "悬停与选中态；从不太亮到更亮",
+            CustomChoiceRow("高亮", null,
                 WorkbenchAppearance.BaseHighlightLabels.ToArray(), s => s.BaseHighlight,
                 value => vm.Change(s => s with { BaseHighlight = value }), "Color",
-                WorkbenchAppearance.BaseHighlightChoices.ToArray()),
-            SettingsLayout.Note("仅 Fluent 暗色生效；每一档只给三个备选，避免把层级关系选反。"));
+                WorkbenchAppearance.BaseHighlightChoices.ToArray()));
         var baseGroup = rows.Children.Skip(baseGroupStart).ToArray();
         _bindings.Add(current =>
         {
@@ -309,16 +308,16 @@ public sealed class WorkbenchSectionsView : UserControl
         });
 
         Group(rows, "字体与密度",
-            FontRow(vm, "英文字体", "英文、数字和界面文字", AppTypography.EnglishChoices,
+            FontRow(vm, "英文字体", AppTypography.EnglishChoices,
                 s => s.EnglishFont, (s, v) => s with { EnglishFont = v }, "appearance-english-font"),
-            FontRow(vm, "中文字体", "汉字与中文标点；选择本机已安装字体", AppTypography.ChineseChoices,
+            FontRow(vm, "中文字体", AppTypography.ChineseChoices,
                 s => s.ChineseFont, (s, v) => s with { ChineseFont = v }, "appearance-chinese-font"),
             ChoiceRow(vm, "字号", null, new[] { "11", "12", "13", "14", "16", "18", "20", "24" },
                 s => ((int)Math.Round(s.FontSize)).ToString(), (s, v) => s with { FontSize = double.Parse(v) }, "Document", "11", "12", "13", "14", "16", "18", "20", "24"),
-            ChoiceRow(vm, "密度", "行高与列表间距", new[] { "紧凑", "舒适", "宽松" }, s => s.Density, (s, v) => s with { Density = v }, "AppsList", "compact", "cozy", "airy"),
+            ChoiceRow(vm, "密度", null, new[] { "紧凑", "舒适", "宽松" }, s => s.Density, (s, v) => s with { Density = v }, "AppsList", "compact", "cozy", "airy"),
             FluentOnly(ChoiceRow(vm, "圆角", null, new[] { "无", "中", "大" }, s => s.Radius, (s, v) => s with { Radius = v }, "PanelRight", "none", "mid", "high")),
-            ChoiceRow(vm, "阅读宽度", "正文的最大阅读宽度；代码与表格不受限", new[] { "窄", "标准", "宽", "自由" }, s => s.ReadingWidth, (s, v) => s with { ReadingWidth = v }, "Document", "narrow", "standard", "wide", "free"));
-        var arrangeEntry = SettingsLayout.ChevronRow("前端功能排布", "区域显隐、页面位置、辅助栏与入口位置",
+            ChoiceRow(vm, "阅读宽度", null, new[] { "窄", "标准", "宽", "自由" }, s => s.ReadingWidth, (s, v) => s with { ReadingWidth = v }, "Document", "narrow", "standard", "wide", "free"));
+        var arrangeEntry = SettingsLayout.ChevronRow("前端功能排布", null,
             () => PageRequested?.Invoke("appearance.arrange"), "PanelLeft");
         // 跨组下钻入口也沿用 8px 行距。不要再加组级 top margin：
         // 那会让同一页出现两套节奏（2026-10-21 截图指出的间距不一致）。
@@ -695,7 +694,7 @@ public sealed class WorkbenchSectionsView : UserControl
         var json = new TextBox
         {
             AcceptsReturn = true, TextWrapping = TextWrapping.NoWrap, MinHeight = 240, MaxHeight = 420,
-            FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
+            [!TextBox.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"),
             HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new Thickness(0, 8, 0, 8)
         };
         json.Bind(TextBox.TextProperty, new Avalonia.Data.Binding(nameof(vm.Json)) { Mode = Avalonia.Data.BindingMode.TwoWay });
@@ -738,74 +737,19 @@ public sealed class WorkbenchSectionsView : UserControl
         rows.Children.Add(SettingsLayout.Group(groupRows));
     }
 
-    private Control FontRow(WorkbenchCustomizationViewModel vm, string label, string description,
+    private Control FontRow(WorkbenchCustomizationViewModel vm, string label,
         IReadOnlyList<AppFontChoice> available, Func<WorkbenchAppearance, string> get,
         Func<WorkbenchAppearance, string, WorkbenchAppearance> set, string automationId)
     {
-        var choices = available.ToList();
-        var saved = get(vm.Current);
-        if (!choices.Any(choice => choice.Value.Equals(saved, StringComparison.OrdinalIgnoreCase)))
-            choices.Add(new(saved, saved + "（未安装）"));
-        var input = new AutoCompleteBox
+        var picker = new FontPicker(available, label);
+        AutomationProperties.SetAutomationId(picker, automationId);
+        picker.SelectionCommitted += value =>
         {
-            ItemsSource = choices.Select(choice => choice.Label).ToArray(), Width = 220,
-            MinimumPrefixLength = 0, FilterMode = AutoCompleteFilterMode.ContainsOrdinal,
-            IsTextCompletionEnabled = false, PlaceholderText = "搜索字体", ClearSelectionOnLostFocus = false,
-            VerticalAlignment = VerticalAlignment.Center,
+            if (!_refreshing && !value.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase))
+                vm.Change(current => set(current, value));
         };
-        AutomationProperties.SetAutomationId(input, automationId);
-        AutomationProperties.SetName(input, label);
-        var applying = false;
-        input.DropDownClosed += (_, _) => Commit();
-        input.KeyDown += (_, args) =>
-        {
-            if (args.Key != Key.Enter) return;
-            Commit();
-            input.IsDropDownOpen = false;
-            args.Handled = true;
-        };
-        input.LostFocus += (_, _) =>
-        {
-            if (!input.IsKeyboardFocusWithin && !input.IsDropDownOpen) Commit();
-        };
-        var browse = WorkbenchUi.IconButton("ChevronDown", "展开" + label, 30, false);
-        browse.Click += (_, _) =>
-        {
-            if (input.IsDropDownOpen) { input.IsDropDownOpen = false; return; }
-            input.Focus();
-            input.Text = "";
-            input.IsDropDownOpen = true;
-        };
-        var field = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 4 };
-        field.Children.Add(input); field.Children.Add(browse);
-        _bindings.Add(current =>
-        {
-            applying = true;
-            try
-            {
-                var value = get(current);
-                input.Text = choices.FirstOrDefault(choice => choice.Value.Equals(value, StringComparison.OrdinalIgnoreCase))?.Label
-                    ?? value + "（未安装）";
-            }
-            finally { applying = false; }
-        });
-        return SettingsLayout.Row(label, description, field, "Document");
-
-        void Commit()
-        {
-            if (_refreshing || applying) return;
-            var choice = choices.FirstOrDefault(choice => choice.Label.Equals(input.Text?.Trim(), StringComparison.OrdinalIgnoreCase));
-            if (choice is null)
-            {
-                input.Text = choices.FirstOrDefault(item => item.Value.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase))?.Label
-                    ?? get(vm.Current) + "（未安装）";
-                return;
-            }
-            if (choice.Value.Equals(get(vm.Current), StringComparison.OrdinalIgnoreCase)) return;
-            applying = true;
-            try { vm.Change(current => set(current, choice.Value)); }
-            finally { applying = false; }
-        }
+        _bindings.Add(current => picker.SetValue(get(current)));
+        return SettingsLayout.Row(label, null, picker, "Document");
     }
 
     /// <summary>下拉行：改动写入外观配置。icon 为行首图标键，null 表示不显示。</summary>
@@ -822,7 +766,7 @@ public sealed class WorkbenchSectionsView : UserControl
     private Control BuildChoice(string label, string? description, string[] labels,
         Func<WorkbenchAppearance, string> get, Action<string> apply, string? icon, string[] values)
     {
-        var combo = new ComboBox { ItemsSource = labels, MinWidth = 150, MaxWidth = 220, VerticalAlignment = VerticalAlignment.Center };
+        var combo = new ComboBox { ItemsSource = labels, Width = 220, VerticalAlignment = VerticalAlignment.Center };
         var applying = false;
         combo.SelectionChanged += (_, _) =>
         {
@@ -879,7 +823,7 @@ public sealed class WorkbenchSectionsView : UserControl
         return SettingsLayout.Row(label, description, input);
     }
 
-    private Control ColorPickerRow(WorkbenchCustomizationViewModel vm, string title, string description,
+    private Control ColorPickerRow(WorkbenchCustomizationViewModel vm, string title, string? description,
         Func<WorkbenchAppearance, string> get, Func<WorkbenchAppearance, string, WorkbenchAppearance> set)
     {
         var picker = new ColorPicker { IsAlphaEnabled = false, VerticalAlignment = VerticalAlignment.Center };
@@ -920,7 +864,7 @@ public sealed class WorkbenchSectionsView : UserControl
     private Control EmphasisPickerRow(WorkbenchCustomizationViewModel vm) =>
         ColorPickerRow(vm,
             "强调色",
-            "用于正文中的 Markdown 标记，默认暖琥珀色（#E8B86A）；格式 #RRGGBB",
+            null,
             s => s.Emphasis,
             (s, value) => s with { Emphasis = value });
 

@@ -132,7 +132,7 @@
                        Margin="8,0,0,0"
                        VerticalAlignment="Bottom" Text="{Binding QueriedAtText}"/>
           </WrapPanel>
-          <TextBox x:Name="ExtensionFilterBox" Text="{Binding ExtensionFilter}"
+          <TextBox x:Name="ExtensionFilterBox" Classes="searchInput" Text="{Binding ExtensionFilter}"
                    PlaceholderText="按名称、路径、范围或状态过滤扩展…"/>
           <StackPanel x:Name="ExtensionEmptyStatePanel" IsVisible="{Binding HasExtensionEmptyState}"
                       Spacing="8" Margin="0,12,0,20" HorizontalAlignment="Stretch">
@@ -233,7 +233,7 @@
         <!-- 7. 命令与技能 -->
         <StackPanel Spacing="8">
           <TextBlock Classes="sectionCaption" Text="命令与技能"/>
-          <TextBox Text="{Binding CommandFilter}" PlaceholderText="按名称或描述过滤…"/>
+          <TextBox Classes="searchInput" Text="{Binding CommandFilter}" PlaceholderText="按名称或描述过滤…"/>
           <ItemsControl ItemsSource="{Binding Commands}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="{x:Type vm:CommandItemViewModel}">

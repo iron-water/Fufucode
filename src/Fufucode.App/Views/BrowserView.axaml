@@ -134,7 +134,7 @@
     <!-- 查找条 -->
     <Border Grid.Row="2" Classes="findBar" IsVisible="{Binding IsFindOpen}" Padding="8,4">
       <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto" ColumnSpacing="4">
-        <TextBox Text="{Binding FindQuery}" PlaceholderText="页内查找" KeyDown="Find_KeyDown" AutomationProperties.Name="浏览器查找输入" Height="26" VerticalContentAlignment="Center"/>
+        <TextBox Classes="searchInput" Text="{Binding FindQuery}" PlaceholderText="页内查找" KeyDown="Find_KeyDown" AutomationProperties.Name="浏览器查找输入" Height="26" VerticalContentAlignment="Center"/>
         <TextBlock Grid.Column="1" Classes="caption" Text="{Binding FindStatus}" VerticalAlignment="Center" MinWidth="52" TextTrimming="CharacterEllipsis"/>
         <Button Grid.Column="2" Classes="iconButton" Width="22" Height="22" Command="{Binding FindPreviousCommand}" AutomationProperties.Name="浏览器查找上一个"><PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="11" Height="11"/></Button>
         <Button Grid.Column="3" Classes="iconButton" Width="22" Height="22" Command="{Binding FindNextCommand}" AutomationProperties.Name="浏览器查找下一个"><PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="11" Height="11"/></Button>
@@ -150,7 +150,7 @@
             <TextBlock Text="浏览历史" Classes="bodyStrong" VerticalAlignment="Center"/>
             <Button Grid.Column="1" Classes="iconButton" Width="22" Height="22" Command="{Binding CloseHistoryCommand}" AutomationProperties.Name="关闭浏览历史"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10"/></Button>
           </Grid>
-          <TextBox Grid.Row="1" Text="{Binding HistoryQuery}" PlaceholderText="搜索标题或地址…" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="搜索浏览历史"/>
+          <TextBox Grid.Row="1" Classes="searchInput" Text="{Binding HistoryQuery}" PlaceholderText="搜索标题或地址…" Height="30" VerticalContentAlignment="Center" AutomationProperties.Name="搜索浏览历史"/>
           <ScrollViewer Grid.Row="2">
             <ItemsControl ItemsSource="{Binding HistoryEntries}">
               <ItemsControl.ItemTemplate>

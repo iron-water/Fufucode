@@ -290,7 +290,7 @@ internal sealed class BinaryFilePreviewProvider : FilePreviewProviderBase
 
     public override Control CreateView(FilePreviewResult result) => new ScrollViewer
     {
-        Content = new TextBlock { Text = result.Text, FontFamily = new FontFamily("Cascadia Mono,Consolas"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12) },
+        Content = new TextBlock { Text = result.Text, [!TextBlock.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(12) },
         HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
     };
 

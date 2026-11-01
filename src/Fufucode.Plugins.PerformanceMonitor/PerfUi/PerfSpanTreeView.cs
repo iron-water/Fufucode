@@ -194,7 +194,7 @@ internal sealed class PerfSpanTreeView : UserControl
     private readonly ListBox _list = new() { Background = Brushes.Transparent };
     private readonly TextBox _search = new()
     {
-        PlaceholderText = "过滤 span / 命令 / 工具…",
+        Classes = { "searchInput" }, PlaceholderText = "过滤 span / 命令 / 工具…",
         MinWidth = 116,
         Height = 28,
         FontSize = 11,

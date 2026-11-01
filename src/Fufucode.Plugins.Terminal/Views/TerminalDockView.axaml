@@ -62,7 +62,7 @@
             </Grid>
             <Border Grid.Row="1" x:Name="FindBar" Classes="terminalFindBar" IsVisible="{Binding SelectedTab.IsSearchOpen}">
                 <Grid ColumnDefinitions="*,Auto,Auto,Auto,Auto,Auto" Margin="6,4">
-                    <TextBox Grid.Column="0" x:Name="FindBox" Classes="flatInput" Text="{Binding SelectedTab.SearchQuery, Mode=TwoWay}" PlaceholderText="查找输出" FontSize="12" MinHeight="26" Padding="6,3" VerticalAlignment="Center" AutomationProperties.Name="查找输出文本"/>
+                    <TextBox Grid.Column="0" x:Name="FindBox" Classes="searchInput" Text="{Binding SelectedTab.SearchQuery, Mode=TwoWay}" PlaceholderText="查找输出" FontSize="12" MinHeight="26" Padding="6,3" VerticalAlignment="Center" AutomationProperties.Name="查找输出文本"/>
                     <Button Grid.Column="1" x:Name="FindCaseButton" Classes="iconButton toolButton" Click="ToggleFindCase_Click" AutomationProperties.HelpText="区分大小写" AutomationProperties.Name="区分大小写"><TextBlock Text="Aa" FontSize="11" VerticalAlignment="Center"/></Button>
                     <TextBlock Grid.Column="2" x:Name="FindStatus" Classes="meta" Text="{Binding SelectedTab.SearchStatus}" VerticalAlignment="Center" Margin="6,0" MinWidth="34" TextAlignment="Center"/>
                     <Button Grid.Column="3" x:Name="FindPreviousButton" Classes="iconButton toolButton" Click="FindPrevious_Click" AutomationProperties.HelpText="上一个匹配" AutomationProperties.Name="上一个匹配"><PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="14" Height="14"/></Button>

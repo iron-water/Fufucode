@@ -26,6 +26,7 @@
         <StyleInclude Source="avares://Fufucode.App/Styles/CardInteractionStyles.axaml" />
         <StyleInclude Source="avares://Fufucode.App/Styles/DockInteractionStyles.axaml" />
         <StyleInclude Source="avares://Fufucode.App/Styles/ScrollInteractionStyles.axaml" />
+        <StyleInclude Source="avares://Fufucode.App/Styles/SearchInputStyles.axaml" />
         <Style Selector=":is(Control)">
             <Setter Property="ToolTip.ServiceEnabled" Value="False" />
         </Style>

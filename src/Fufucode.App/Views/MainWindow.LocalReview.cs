@@ -130,7 +130,7 @@ public partial class MainWindow
             });
             var text = new TextBox { Text = content, IsReadOnly = true, AcceptsReturn = true,
                 HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch,
-                FontFamily = new Avalonia.Media.FontFamily("Consolas") };
+                [!TextBox.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont") };
             var start = 0;
             for (var i = 1; i < line; i++) { var next = content.IndexOf('\n', start); if (next < 0) break; start = next + 1; }
             var end = content.IndexOf('\n', start);

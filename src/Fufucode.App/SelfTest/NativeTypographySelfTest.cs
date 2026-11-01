@@ -111,6 +111,13 @@ internal static class NativeTypographySelfTest
         Console.WriteLine($"FONT CHOICES English={englishChoices.Count} Chinese={chineseChoices.Count}");
         Check(englishChoices.Any(choice => choice.Value == "Inter") && chineseChoices.Count > 1,
             "font picker includes bundled Inter and installed Chinese families");
+        Check(chineseChoices.All(choice => choice.Value == "system" ||
+            (FontManager.Current.TryGetGlyphTypeface(new Typeface(new FontFamily(choice.Value)), out var face) &&
+             "汉字审批权限规划继续确认变化".All(character => face.CharacterToGlyphMap.ContainsGlyph(character)))),
+            "Chinese pool contains complete Chinese UI coverage rather than partial Japanese or Korean Han coverage");
+        var rare = Shape("𠮷𰻞", body.FontFamily);
+        Check(rare.All(run => run.Face.Weight == FontWeight.Normal && run.Face.FamilyName.StartsWith("SimSun-Ext", StringComparison.Ordinal)),
+            "extended Han glyphs use installed Chinese extension fonts at regular weight");
         var chineseChoice = chineseChoices.First(choice => choice.Value is "宋体" or "SimSun");
         var chineseFace = new Typeface(new FontFamily(chineseChoice.Value)).GlyphTypeface.FamilyName;
         window.CustomizationForTesting.Change(current => current with { EnglishFont = "Inter", ChineseFont = chineseChoice.Value });
@@ -143,8 +150,9 @@ internal static class NativeTypographySelfTest
         var monoBlocks = page.GetVisualDescendants().OfType<HighlightedCodeView>().SelectMany(code => code.GetVisualDescendants().OfType<TextBlock>())
             .Where(block => block.Name == "PART_CodeTextBlock").ToArray();
         Console.WriteLine("CODE FONTS " + string.Join(" | ", monoBlocks.Select(block => block.GetType().FullName + "=" + block.FontFamily)));
-        Check(monoBlocks.Length > 0 && monoBlocks.All(block => new Typeface(block.FontFamily).GlyphTypeface.Metrics.IsFixedPitch),
-            "code blocks keep their monospace fonts");
+        Check(monoBlocks.Length > 0 && monoBlocks.All(block => block.FontFamily.Equals(AppTypography.MonoFamily) &&
+            new Typeface(block.FontFamily).GlyphTypeface.Metrics.IsFixedPitch),
+            "code blocks use the shared monospace family with the selected Chinese fallback");
         Check(monoBlocks.SelectMany(block => Flatten(block.Inlines)).OfType<Run>()
             .All(run => run.Background is ISolidColorBrush brush && brush.Color.A == 0),
             "syntax highlight tokens no longer paint a separate black background");
@@ -177,19 +185,23 @@ internal static class NativeTypographySelfTest
         await window.NavigateForTestingAsync(AppPage.Settings);
         vm.Settings.SelectCategory("appearance");
         await Settle();
-        var englishPicker = window.GetVisualDescendants().OfType<AutoCompleteBox>()
+        var englishPicker = window.GetVisualDescendants().OfType<FontPicker>()
             .Single(control => AutomationProperties.GetAutomationId(control) == "appearance-english-font");
-        var chinesePicker = window.GetVisualDescendants().OfType<AutoCompleteBox>()
+        var chinesePicker = window.GetVisualDescendants().OfType<FontPicker>()
             .Single(control => AutomationProperties.GetAutomationId(control) == "appearance-chinese-font");
         window.GetVisualDescendants().OfType<ScrollViewer>().Single(control => control.Name == "SettingsScroller").Offset = new Vector(0, 780);
         await Settle();
-        englishPicker.Text = "Segoe UI";
-        englishPicker.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        englishPicker.IsDropDownOpen = true;
+        englishPicker.SearchBox.Text = "Segoe UI";
+        await Settle();
+        englishPicker.SearchBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
         await Settle();
         Check(window.CustomizationForTesting.Current.EnglishFont == "Segoe UI" &&
             window.CustomizationForTesting.Current.ChineseFont == "Microsoft YaHei UI", "appearance English picker saves without changing Chinese");
-        chinesePicker.Text = chineseChoice.Label;
-        chinesePicker.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+        chinesePicker.IsDropDownOpen = true;
+        chinesePicker.SearchBox.Text = chineseChoice.Label;
+        await Settle();
+        chinesePicker.SearchBox.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
         await Settle();
         Check(window.CustomizationForTesting.Current.ChineseFont == chineseChoice.Value &&
             window.CustomizationForTesting.Current.EnglishFont == "Segoe UI", "appearance Chinese picker saves without changing English");
@@ -197,21 +209,24 @@ internal static class NativeTypographySelfTest
         window.CustomizationForTesting.Change(current => current with { EnglishFont = "system", ChineseFont = "system" });
         await Settle();
         Save(window, "font-settings.png");
-        chinesePicker.Focus();
-        chinesePicker.Text = chineseChoice.Label[..1];
-        await Task.Delay(200);
         chinesePicker.IsDropDownOpen = true;
+        chinesePicker.SearchBox.Text = chineseChoice.Label[..1];
         await Settle();
         var popup = window.OpenedPopups.Select(open => open.Child).OfType<Control>()
             .Select(child => TopLevel.GetTopLevel(child)).FirstOrDefault();
         Check(popup is not null && TextOptions.GetTextRenderingMode(popup) == TextRenderingMode.Antialias,
-            "font dropdown native popup uses grayscale antialiasing");
+            "font dropdown host uses grayscale antialiasing");
         if (popup is not null) Save(popup, "font-dropdown.png");
-        chinesePicker.SelectedItem = chineseChoice.Label;
-        chinesePicker.IsDropDownOpen = false;
+        chinesePicker.Results.SelectedItem = chineseChoice;
+        chinesePicker.Results.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
         await Settle();
         Check(window.CustomizationForTesting.Current.ChineseFont == chineseChoice.Value,
-            "choosing a dropdown item applies the font without requiring Enter");
+            "choosing a dropdown item applies the font");
+        chinesePicker.IsDropDownOpen = true;
+        await Settle();
+        Check(string.IsNullOrEmpty(chinesePicker.SearchBox.Text) && chinesePicker.Results.ItemCount == chineseChoices.Count,
+            "reopening the Chinese picker restores the complete pool and an independent empty query");
+        chinesePicker.IsDropDownOpen = false;
         window.CustomizationForTesting.Change(current => current with { EnglishFont = "system", ChineseFont = "system" });
         var toolCards = new StackPanel { Spacing = 6 };
         foreach (var state in new[] { "success", "failed", "running" })
@@ -220,13 +235,15 @@ internal static class NativeTypographySelfTest
             toolCards.Children.Add(card);
         }
         var groupCard = new Border { Classes = { "toolGroupCard" }, Padding = new Thickness(10), Child = toolCards };
-        var toolWindow = new Window { Width = 620, Height = 240, Content = groupCard };
+        var toolWindow = new Window { Width = 620, Height = 240, Content = groupCard, Topmost = true };
         toolWindow.Classes.Add("fluentWorkbench");
         toolWindow.Show();
         toolWindow.WindowState = WindowState.Normal;
         toolWindow.Width = 620;
         toolWindow.Height = 240;
         await Task.Delay(200);
+        toolWindow.Position = new PixelPoint(0, 0);
+        toolWindow.Activate();
         SetForegroundWindow(toolWindow.TryGetPlatformHandle()!.Handle);
         foreach (var card in toolCards.Children.OfType<Border>())
         {

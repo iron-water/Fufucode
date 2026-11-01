@@ -722,7 +722,7 @@
                 <Flyout Placement="TopEdgeAlignedLeft">
                   <Border Width="400" Classes="card" Padding="10">
                     <StackPanel Spacing="8">
-                      <TextBox Text="{Binding Extensions.FlyoutFilter}"
+                      <TextBox Classes="searchInput" Text="{Binding Extensions.FlyoutFilter}"
                                PlaceholderText="搜索命令或技能…"/>
                       <ScrollViewer MaxHeight="320">
                         <ItemsControl ItemsSource="{Binding Extensions.FlyoutCommands}">
@@ -800,7 +800,7 @@
                         </Style>
                       </Border.Styles>
                       <StackPanel Spacing="8">
-                        <TextBox x:Name="ModelPickerSearchBox"
+                        <TextBox x:Name="ModelPickerSearchBox" Classes="searchInput"
                                  Text="{Binding Settings.ModelPickerFilter, UpdateSourceTrigger=PropertyChanged}"
                                  TextChanged="ModelPickerSearchBox_TextChanged"
                                  PlaceholderText="搜索模型…"/>

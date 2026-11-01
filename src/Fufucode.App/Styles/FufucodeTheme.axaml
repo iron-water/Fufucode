@@ -231,7 +231,7 @@
                 </ResourceDictionary>
             </ResourceDictionary.ThemeDictionaries>
 
-            <FontFamily x:Key="AppFontFamily">fonts:FufucodeLatin#Segoe UI Variable Text, fonts:FufucodeLatin#Segoe UI, fonts:FufucodeLatin#Inter, Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="AppFontFamily">fonts:FufucodeLatin#Segoe UI, fonts:FufucodeLatin#Inter, fonts:FufucodeLatin#Microsoft YaHei UI</FontFamily>
             <FontFamily x:Key="AppMonoFont">Cascadia Mono, Consolas, monospace</FontFamily>
             <CornerRadius x:Key="ControlCornerRadius">4</CornerRadius>
             <CornerRadius x:Key="AppCornerCard">6</CornerRadius>
@@ -307,7 +307,7 @@
         <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
     </Style>
     <Style Selector="TextBlock.mono">
-        <Setter Property="FontFamily" Value="{StaticResource AppMonoFont}"/>
+        <Setter Property="FontFamily" Value="{DynamicResource AppMonoFont}"/>
         <!-- UI-1 排版微调：等宽字体同样锁定 tabular 数字，杜绝代码/计数数字列错位。 -->
         <Setter Property="FontFeatures" Value="{StaticResource AppTabularNumericFeatures}"/>
     </Style>

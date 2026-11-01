@@ -82,7 +82,7 @@ public sealed class ShortcutsPage : UserControl
         var filters = new DockPanel { LastChildFill = true, Margin = new Thickness(0, 0, 0, 8) };
         _searchBox = new TextBox
         {
-            PlaceholderText = "搜索动作、范围或当前绑定", MinWidth = 260, Margin = new Thickness(0, 0, 8, 0),
+            Classes = { "searchInput" }, PlaceholderText = "搜索动作、范围或当前绑定", MinWidth = 260, Margin = new Thickness(0, 0, 8, 0),
         };
         _searchBox.TextChanged += (_, _) => _vm.SearchText = _searchBox.Text ?? string.Empty;
         DockPanel.SetDock(_searchBox, Dock.Left);
@@ -257,7 +257,7 @@ public sealed class ShortcutsPage : UserControl
         var gesture = new TextBlock
         {
             Text = row.HasBinding ? row.EffectiveText : "未绑定",
-            FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
+            [!TextBlock.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"),
             Opacity = row.HasBinding ? 1 : .55, MinWidth = 96,
             VerticalAlignment = VerticalAlignment.Center,
         };

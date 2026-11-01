@@ -7,13 +7,11 @@ namespace Fufucode.App.Infrastructure;
 /// </summary>
 /// <remarks>
 /// 信号取自 TextBox 模板内 TextPresenter 的真实组合状态（PreeditText）：
-/// 组合进行中（PreeditText 非空）的回车一律吞掉；组合刚结束（非空 → 空跳变）的
-/// 80ms 内仍吞回车——IME 用回车提交组合时，提交回车与组合收尾在同一个消息批次内到达。
-/// 普通文本变化（任何形状）都不会触发吞回车。时钟可注入，便于无头测试。
-///
-/// UI-1 双重互锁：除组合态时间窗外，还叠加「输入法合成键」维度——对齐 Web 侧
-/// <c>!(isComposing || keyCode === 229)</c>。在 Avalonia 里 VK 229 由
-/// <see cref="Avalonia.Input.Key.ImeProcessed"/> 表达，凡该键一律吞掉，绝不发送。
+/// 组合进行中（PreeditText 非空）和组合刚结束的 80ms 内不发送。
+/// IME 用回车提交组合时，提交回车与组合收尾可能在同一个消息批次内到达。
+/// 普通文本变化不会启动时间窗。时钟可注入，便于无头测试。
+/// <see cref="Avalonia.Input.Key.ImeProcessed"/> 必须留给输入法处理；
+/// 本类的返回值只决定能否发送，不代表应将所有合成键标为 Handled。
 /// </remarks>
 public sealed class ImeEnterGuard
 {

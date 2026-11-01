@@ -27,7 +27,7 @@
 
     <StackPanel Grid.Row="1" Margin="16,0,16,8" Spacing="6">
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
-        <TextBox Text="{Binding SearchText}" PlaceholderText="搜索标题与全文（支持中文）"
+        <TextBox Classes="searchInput" Text="{Binding SearchText}" PlaceholderText="搜索标题与全文（支持中文）"
                  AutomationProperties.Name="资料检索"/>
         <Button Grid.Column="1" Classes="subtle" Content="搜索" Command="{Binding ReloadCommand}" MinHeight="32"/>
       </Grid>

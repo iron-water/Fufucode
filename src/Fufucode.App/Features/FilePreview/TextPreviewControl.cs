@@ -225,13 +225,13 @@ public sealed class TextPreviewControl : UserControl
                 Text = (line + 1).ToString(),
                 Width = Math.Max(36, owner.LineCount.ToString().Length * 9),
                 Foreground = Brushes.Gray,
-                FontFamily = new FontFamily("Cascadia Mono,Consolas"),
+                [!TextBlock.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"),
                 VerticalAlignment = VerticalAlignment.Top,
                 Padding = new Thickness(0, 0, 12, 0),
             };
             Code = new TextBlock
             {
-                FontFamily = new FontFamily("Cascadia Mono,Consolas"),
+                [!TextBlock.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"),
                 MinHeight = 20,
                 FontSize = 13,
             };

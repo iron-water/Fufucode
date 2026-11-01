@@ -65,7 +65,7 @@ public sealed class PluginContentView : ContentControl
     {
         Text = payload,
         TextWrapping = TextWrapping.Wrap,
-        FontFamily = new FontFamily("Cascadia Mono, Consolas, monospace"),
+        [!FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"),
         FontSize = 12,
         Opacity = 0.65,
     };

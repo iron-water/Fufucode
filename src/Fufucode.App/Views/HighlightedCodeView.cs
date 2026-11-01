@@ -95,7 +95,13 @@ public sealed class HighlightedCodeView : ContentControl
         };
         // 自带标题栏（语言名 + 换行/复制）与聊天页卡片头部重复，挂载后隐藏，
         // 复制与折叠仍由聊天页自己的卡片提供。模板若变更，最多表现为多一条标题栏。
-        _block.Loaded += (_, _) => { HideBuiltInHeader(); HookInnerScroll(); };
+        _block.Loaded += (_, _) =>
+        {
+            HideBuiltInHeader(); HookInnerScroll();
+            foreach (var text in _block.GetVisualDescendants().OfType<TextBlock>())
+                if (text.Name == "PART_CodeTextBlock")
+                    text.Bind(TextBlock.FontFamilyProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"));
+        };
 
         // 代码块内部自带 ScrollViewer；鼠标经过时它会抢走滚轮，导致滑动页面像在代码块里跳。
         // 与 Mermaid 一致：先在代码块上按一下，才允许内部滚动。

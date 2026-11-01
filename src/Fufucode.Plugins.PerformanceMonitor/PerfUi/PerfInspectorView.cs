@@ -18,7 +18,7 @@ namespace Fufucode.Plugins.PerformanceMonitor;
 /// </summary>
 internal sealed class PerfInspectorView : UserControl
 {
-    private readonly TextBlock _name = new() { FontSize = 13, FontFamily = new FontFamily("Cascadia Mono, Consolas") };
+    private readonly TextBlock _name = new() { FontSize = 13, [!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("AppMonoFont") };
     private readonly TextBlock _meta = new() { FontSize = 10 };
     private readonly TextBlock _duration = new() { FontSize = 18, FontWeight = FontWeight.SemiBold };
     private readonly Border _kindChip = new();
@@ -465,7 +465,7 @@ internal sealed class PerfInspectorView : UserControl
         foreach (var (key, value) in span.Tags)
         {
             var row = new Grid { ColumnDefinitions = new ColumnDefinitions("126,*"), ColumnSpacing = 10 };
-            var keyText = new TextBlock { Text = key, FontSize = 10, FontFamily = new FontFamily("Cascadia Mono, Consolas") };
+            var keyText = new TextBlock { Text = key, FontSize = 10, [!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("AppMonoFont") };
             keyText.Bind(TextBlock.ForegroundProperty, new DynamicResourceExtension("AppTextDim"));
             row.Children.Add(keyText);
             var valueText = new TextBlock
@@ -490,7 +490,7 @@ internal sealed class PerfInspectorView : UserControl
             IsReadOnly = true,
             AcceptsReturn = true,
             TextWrapping = TextWrapping.NoWrap,
-            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+            [!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("AppMonoFont"),
             FontSize = 10,
             MinHeight = 220,
             MaxHeight = 320,
@@ -578,7 +578,7 @@ internal sealed class PerfInspectorView : UserControl
         var block = new TextBlock
         {
             Text = text,
-            FontFamily = new FontFamily("Cascadia Mono, Consolas"),
+            [!TextBlock.FontFamilyProperty] = new DynamicResourceExtension("AppMonoFont"),
             FontSize = 10,
             TextWrapping = TextWrapping.Wrap,
             MaxHeight = 120,

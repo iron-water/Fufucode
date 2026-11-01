@@ -158,7 +158,7 @@
           <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshFilesCommand}" AutomationProperties.Name="刷新文件"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
         </Grid>
         <TextBlock Classes="caption" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis"/>
-        <TextBox Text="{Binding FileFilter}" PlaceholderText="搜索项目文件" AutomationProperties.Name="搜索项目文件"/>
+        <TextBox Classes="searchInput" Text="{Binding FileFilter}" PlaceholderText="搜索项目文件" AutomationProperties.Name="搜索项目文件"/>
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsFileOperationLoading}" Height="2"/>
         <TextBlock Classes="caption" Text="{Binding FilesError}" IsVisible="{Binding HasFilesError}" TextWrapping="Wrap"/>
         <TextBlock Classes="caption" Text="没有匹配文件" IsVisible="{Binding IsFilesEmpty}" Margin="0,8"/>
@@ -224,7 +224,7 @@
           <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4">
             <TextBlock Classes="caption" Text="{Binding PreviewResult.DisplayType}" VerticalAlignment="Center"/>
             <TextBlock Classes="caption mono" Text="{Binding PreviewResult.Format}" VerticalAlignment="Center"/>
-            <TextBox x:Name="PreviewFindBox" Width="150" PlaceholderText="查找文本" Padding="6,2"
+            <TextBox x:Name="PreviewFindBox" Classes="searchInput" Width="150" PlaceholderText="查找文本" Padding="6,2"
                      IsVisible="{Binding IsTextPreviewToolbar}" TextChanged="PreviewFindBox_TextChanged"
                      AutomationProperties.Name="预览内查找"/>
             <Button Classes="subtle" Content="上一个" Padding="7,2" Command="{Binding FindPreviousCommand}"
@@ -287,7 +287,7 @@
       </Border>
 
       <!-- 搜索：只在有文件时出现，空态不留一个无用输入框 -->
-      <TextBox Grid.Row="1" x:Name="ChangeSearch" Margin="12,0,12,8" Text="{Binding ChangeFilter}"
+      <TextBox Grid.Row="1" x:Name="ChangeSearch" Classes="searchInput" Margin="12,0,12,8" Text="{Binding ChangeFilter}"
                PlaceholderText="筛选文件" IsVisible="{Binding HasChanges}"
                AutomationProperties.Name="筛选变更文件"/>
 

@@ -116,7 +116,7 @@ public partial class ChatPage
 
     private void FindConversation_Click(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
     {
-        var query = new TextBox { PlaceholderText = "查找本会话", Width = 230 };
+        var query = new TextBox { Classes = { "searchInput" }, PlaceholderText = "查找本会话", Width = 230 };
         var previous = WorkbenchUi.IconButton("ChevronUp","上一个匹配");
         var next = WorkbenchUi.IconButton("ChevronDown","下一个匹配");
         var count = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center };

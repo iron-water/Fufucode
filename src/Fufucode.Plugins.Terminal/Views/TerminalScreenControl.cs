@@ -51,7 +51,7 @@ public sealed class TerminalScreenControl : Control
         try
         {
             var probe = new FormattedText("M", CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
-                new Typeface(MonoFont, FontStyle.Normal, FontWeight.Normal), _fontSizeDip, Brushes.White);
+                new Typeface(FontFamily, FontStyle.Normal, FontWeight.Normal), _fontSizeDip, Brushes.White);
             _cellWidth = Math.Max(4, Math.Round(probe.WidthIncludingTrailingWhitespace, 2));
             // Include line spacing so rows never overlap descenders across fonts.
             _cellHeight = Math.Max(10, Math.Round(Math.Max(probe.Height, _fontSizeDip * 1.32), 2));
@@ -70,7 +70,9 @@ public sealed class TerminalScreenControl : Control
     // so the interaction highlights are tuned against that surface rather than against theme resources.
     private static readonly IBrush SelectionBrush = new SolidColorBrush(Color.FromArgb(0x5A, 0x61, 0xAF, 0xEF));
     private static readonly IBrush SearchBrush = new SolidColorBrush(Color.FromArgb(0x8C, 0xE5, 0xC0, 0x7B));
-    private static readonly FontFamily MonoFont = new("Consolas, Cascadia Mono, Microsoft YaHei");
+    public static readonly StyledProperty<FontFamily> FontFamilyProperty = AvaloniaProperty.Register<TerminalScreenControl, FontFamily>(
+        nameof(FontFamily), new FontFamily("Consolas, Cascadia Mono, Microsoft YaHei UI"));
+    public FontFamily FontFamily { get => GetValue(FontFamilyProperty); set => SetValue(FontFamilyProperty, value); }
     private static readonly IBrush BellFlashBrush = new SolidColorBrush(Color.FromArgb(0x1C, 0xFF, 0xFF, 0xFF));
     private DateTime _bellFlashUntil;
 
@@ -147,6 +149,7 @@ public sealed class TerminalScreenControl : Control
     public TerminalScreenControl()
     {
         Focusable = true; ClipToBounds = true;
+        this.Bind(FontFamilyProperty, new DynamicResourceExtension("AppMonoFont"));
         this.Bind(SurfaceBrushProperty, new DynamicResourceExtension("AppTerminalBackground"));
         this.Bind(TextBrushProperty, new DynamicResourceExtension("AppTerminalForeground"));
         this.Bind(SelectionFillProperty, new DynamicResourceExtension("AppTerminalSelection"));
@@ -163,6 +166,11 @@ public sealed class TerminalScreenControl : Control
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
+        if (change.Property == FontFamilyProperty)
+        {
+            _textCache.Clear();
+            RecomputeCellMetrics(); InvalidateMeasure(); InvalidateVisual();
+        }
         if (change.Property != SessionProperty) return;
         if (_subscribed is not null) _subscribed.Buffer.Changed -= OnBufferChanged;
         _subscribed = Session;
@@ -338,7 +346,7 @@ public sealed class TerminalScreenControl : Control
     }
 
     private Typeface TypefaceFor(TerminalCell cell) =>
-        new(new FontFamily("Consolas, Cascadia Mono, Microsoft YaHei"),
+        new(FontFamily,
             cell.Italic ? FontStyle.Italic : FontStyle.Normal,
             cell.Bold ? FontWeight.Bold : FontWeight.Normal);
 

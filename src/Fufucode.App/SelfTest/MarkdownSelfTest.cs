@@ -71,8 +71,7 @@ public static class MarkdownSelfTest
             "解析后文本内容无丢失");
         Check(rendered.Contains("• ", StringComparison.Ordinal), "列表项渲染项目符号");
 
-        Check(inlines.OfType<Run>().Any(run =>
-                  run.FontFamily.ToString().Contains("Cascadia", StringComparison.OrdinalIgnoreCase)),
+        Check(inlines.OfType<Run>().Any(IsMonoRun),
               "行内代码段带等宽 FontFamily 属性");
         Check(inlines.OfType<Run>().Any(run => run.Background is not null),
               "行内代码段带浅背景（取自 AppCodeBackground 令牌）");
@@ -209,9 +208,7 @@ public static class MarkdownSelfTest
             .OfType<Run>()
             .FirstOrDefault();
 
-    private static bool IsMonoRun(Run run) =>
-        run.FontFamily.ToString().Contains("Cascadia", StringComparison.OrdinalIgnoreCase) ||
-        run.FontFamily.ToString().Contains("Consolas", StringComparison.OrdinalIgnoreCase);
+    private static bool IsMonoRun(Run run) => new Avalonia.Media.Typeface(run.FontFamily).GlyphTypeface.Metrics.IsFixedPitch;
 
     /// <summary>把行内元素还原为纯文本，用于断言语法符号是否消失。</summary>
     private static string SegmentText(Inline inline) => inline switch

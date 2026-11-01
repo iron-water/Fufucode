@@ -26,7 +26,7 @@
           <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="14" Height="14"/>
         </Button>
       </Grid>
-      <TextBox x:Name="SearchBox" Grid.Row="1" Text="{Binding SearchText}" PlaceholderText="搜索动作、会话与设置"
+      <TextBox x:Name="SearchBox" Classes="searchInput" Grid.Row="1" Text="{Binding SearchText}" PlaceholderText="搜索动作、会话与设置"
                Margin="16,0,16,8" MinHeight="36" AutomationProperties.Name="搜索动作、会话与设置"/>
       <Grid Grid.Row="2" MinHeight="80">
         <ListBox x:Name="ActionsList" Classes="paletteList" ItemsSource="{Binding Items}"

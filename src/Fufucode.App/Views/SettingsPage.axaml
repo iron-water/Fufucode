@@ -29,7 +29,7 @@
       <!-- 一级导航：与 Win11 设置一致的浮起侧栏，顶部搜索框、下方分类列表。 -->
       <Border Grid.Column="0" Classes="settingsNavHost" Margin="0,0,0,24">
         <Grid RowDefinitions="Auto,*">
-          <TextBox x:Name="SettingsSearchBox" Grid.Row="0" Text="{Binding SearchText}" PlaceholderText="查找设置"
+          <TextBox x:Name="SettingsSearchBox" Classes="searchInput" Grid.Row="0" Text="{Binding SearchText}" PlaceholderText="查找设置"
                    MinHeight="36" CornerRadius="{DynamicResource ControlCornerRadius}" Margin="4,4,4,10"
                    AutomationProperties.Name="搜索设置">
             <TextBox.InnerLeftContent>
@@ -421,7 +421,7 @@
               <Border Classes="settingsGroup">
                 <StackPanel Spacing="8">
                   <Border Classes="settingsRow">
-                    <TextBox Text="{Binding PresetFilter}" PlaceholderText="搜索提供商…"/>
+                    <TextBox Classes="searchInput" Text="{Binding PresetFilter}" PlaceholderText="搜索提供商…"/>
                   </Border>
                   <ItemsControl ItemsSource="{Binding FilteredPresets}">
                     <ItemsControl.ItemTemplate>
@@ -458,7 +458,7 @@
               <Border Classes="settingsGroup">
                 <StackPanel Spacing="8">
                   <Border Classes="settingsRow" IsVisible="{Binding HasEndpointProviders}">
-                    <TextBox Text="{Binding ProviderFilter}" PlaceholderText="搜索提供商或 Base URL…"/>
+                    <TextBox Classes="searchInput" Text="{Binding ProviderFilter}" PlaceholderText="搜索提供商或 Base URL…"/>
                   </Border>
                   <ItemsControl ItemsSource="{Binding FilteredEndpointProviders}">
                     <ItemsControl.ItemTemplate>
