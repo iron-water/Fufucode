@@ -169,7 +169,8 @@
                         <TextBlock Classes="meta" VerticalAlignment="Center" Text="{Binding TimeText}" IsVisible="{Binding HasTime}"/>
                       </Panel>
                     </StackPanel>
-                    <ItemsControl ItemsSource="{Binding DisplayBlocks}">
+                    <ItemsControl ItemsSource="{Binding DisplayBlocks}"
+                                  views:RichMarkdownView.IsStreaming="{Binding IsStreaming}">
                       <ItemsControl.DataTemplates>
 
                         <!-- 文本块（含代码块分段） -->

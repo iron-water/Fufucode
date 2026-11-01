@@ -74,6 +74,22 @@ public sealed class RichMarkdownView : ContentControl
     public static readonly StyledProperty<string> MarkdownProperty =
         AvaloniaProperty.Register<RichMarkdownView, string>(nameof(Markdown), string.Empty);
 
+    /// <summary>生成中保留表格自然列宽；终态才做换行重排。</summary>
+    public static readonly AttachedProperty<bool> IsStreamingProperty =
+        AvaloniaProperty.RegisterAttached<RichMarkdownView, Control, bool>(nameof(IsStreaming), inherits: true);
+
+    internal static readonly AttachedProperty<bool> IsTableFullScreenProperty =
+        AvaloniaProperty.RegisterAttached<RichMarkdownView, Control, bool>("IsTableFullScreen", inherits: true);
+
+    public bool IsStreaming
+    {
+        get => GetValue(IsStreamingProperty);
+        set => SetValue(IsStreamingProperty, value);
+    }
+
+    public static bool GetIsStreaming(Control control) => control.GetValue(IsStreamingProperty);
+    public static void SetIsStreaming(Control control, bool value) => control.SetValue(IsStreamingProperty, value);
+
     /// <summary>图片相对路径的基准目录（当前项目根）；为空时只解析绝对路径与网络地址。</summary>
     public static readonly StyledProperty<string?> ImageBasePathProperty =
         AvaloniaProperty.Register<RichMarkdownView, string?>(nameof(ImageBasePath));
@@ -239,6 +255,7 @@ public sealed class RichMarkdownView : ContentControl
             MarkdownNode.Register<MathInlineNode>();
             MarkdownNode.Register<MathBlockNode>();
             MarkdownNode.Register<MermaidBlockNode>();
+            MarkdownNode.Edit(nodes => nodes.Unregister<TableNode>().Register<ResponsiveTableNode>());
 
             MarkdownRenderer.ConfigurePipeline += pipeline =>
             {

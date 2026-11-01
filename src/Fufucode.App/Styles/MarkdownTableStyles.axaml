@@ -1,0 +1,21 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:views="using:Fufucode.App.Views">
+  <Style Selector="views|MarkdownTableView">
+    <Setter Property="Margin" Value="0,4,0,8"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+  </Style>
+  <Style Selector="Button.tableExpand">
+    <Setter Property="Width" Value="28"/>
+    <Setter Property="Height" Value="28"/>
+    <Setter Property="MinWidth" Value="28"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="Padding" Value="6"/>
+    <Setter Property="Margin" Value="0,0,4,4"/>
+  </Style>
+  <Style Selector="views|ResponsiveTablePanel > Border.TableCell">
+    <Setter Property="Padding" Value="12,8"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+</Styles>
