@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using Fufucode.App.Abstractions.Automation;
 using Fufucode.Core.Automation.Rebirth;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
@@ -100,9 +101,7 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
                 "autodev_plan" => Plan(kernel, call),
                 "autodev_advance" => Advance(kernel),
                 "autodev_authorize" => kernel.AuthorizeTicket(Command(call), Required(call, "ticketId"), "agent", Now()),
-                "autodev_run_start" => kernel.StartRun(Command(call), Required(call, "ticketId"),
-                    Text(call, "executor") ?? "session", Text(call, "model") ?? "default",
-                    Text(call, "workspace") ?? _context.ProjectPath ?? _context.PackageDirectory, Now()),
+                "autodev_run_start" => StartRun(kernel, call),
                 "autodev_run_finish" => kernel.CompleteRun(Command(call), Required(call, "runId"),
                     ParseOutcome(Required(call, "outcome")), Text(call, "terminalCode"), Text(call, "detail"), Now()),
                 "autodev_evidence" => kernel.AddEvidence(Command(call), Required(call, "ticketId"),
@@ -136,6 +135,55 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
         {
             return Task.FromResult(new PureToolResult(call.Id, false, error.Message));
         }
+    }
+
+    private object StartRun(RebirthKernel kernel, PureToolCall call)
+    {
+        var ticketId = Required(call, "ticketId");
+        var executor = Text(call, "executor") ?? "manual";
+        var model = Text(call, "model") ?? "manual";
+        var snapshot = kernel.ReadSnapshot(ProjectId);
+        var ticket = snapshot.Tickets.FirstOrDefault(item => item.Id == ticketId)
+            ?? throw new KeyNotFoundException("Unknown ticket: " + ticketId);
+        var root = string.IsNullOrWhiteSpace(_context.DataRoot) ? _context.PackageDirectory : _context.DataRoot;
+        var workspace = Text(call, "workspace") ?? Path.Combine(DataRoot, "auto-dev", "rebirth", RebirthPaths.Stable(ProjectId), "runs", ticketId);
+        var launch = !string.Equals(executor, "manual", StringComparison.OrdinalIgnoreCase);
+        if (launch)
+        {
+            var owner = ExecutionBaseLibrary.Current
+                ?? throw new InvalidOperationException("没有已注册的执行所有者；先启用 AutoDev 或改用 executor=manual 登记。");
+            if (!owner.SupportsHarness(executor))
+                throw new InvalidOperationException("执行器未登记 harness：" + executor);
+        }
+        var run = kernel.StartRun(Command(call), ticketId, executor, model, workspace, Now());
+        if (launch)
+        {
+            Directory.CreateDirectory(workspace);
+            var evidence = Path.Combine(workspace, "evidence");
+            Directory.CreateDirectory(evidence);
+            RebirthExecutionBridge.Start(kernel.DatabasePath, ProjectId, ticketId, run.Id,
+                BuildPrompt(snapshot, ticket), executor, model, root, evidence);
+        }
+        return run;
+    }
+
+    private static string BuildPrompt(RebirthSnapshot snapshot, RebirthTicket ticket)
+    {
+        var brief = snapshot.Brief.Brief;
+        return $"""
+            Ticket: {ticket.Id}
+            Title: {ticket.Title}
+            Goal: {ticket.Goal}
+
+            Acceptance:
+            {string.Join("\n", ticket.Acceptance.Select(item => "- " + item))}
+
+            Project constraints:
+            {string.Join("\n", brief.Constraints.Select(item => "- " + item).DefaultIfEmpty("- none"))}
+
+            Work only within the ticket scope. Perform real work in the provided workspace.
+            Report actual results and unverified items; do not claim verification that did not run.
+            """;
     }
 
     private object Status(RebirthKernel kernel)
@@ -191,7 +239,7 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
         {
             var title = acceptance[index].Trim();
             if (title.Length == 0) continue;
-            var ticketId = "ticket-" + Stable(title);
+            var ticketId = "ticket-" + RebirthPaths.Stable(title);
             if (known.Contains(ticketId)) continue;
             created.Add(kernel.CreateTicket(Command(call) + ":ticket:" + index, ProjectId,
                 title, title, new[] { title }, "default", "auto-dev", Now(), ticketId: ticketId));
@@ -215,21 +263,15 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
         };
     }
 
-    private string KernelPath
-    {
-        get
-        {
-            var root = string.IsNullOrWhiteSpace(_context.DataRoot)
-                ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode")
-                : _context.DataRoot;
-            return Path.Combine(root, "auto-dev", "rebirth", Stable(_context.ProjectPath ?? _context.PackageDirectory), "kernel.db");
-        }
-    }
+    private string DataRoot => string.IsNullOrWhiteSpace(_context.DataRoot)
+        ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode")
+        : _context.DataRoot;
 
-    private string ProjectId => "project-" + Stable(_context.ProjectPath ?? _context.PackageDirectory);
+    private string ProjectPath => _context.ProjectPath ?? _context.PackageDirectory;
 
-    private static string Stable(string value) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..12].ToLowerInvariant();
+    private string KernelPath => RebirthPaths.Database(DataRoot, ProjectPath);
+
+    private string ProjectId => RebirthPaths.ProjectId(ProjectPath);
 
     private static string Command(PureToolCall call) => call.Id;
 

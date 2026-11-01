@@ -58,6 +58,19 @@ public partial class AutomationControlPageView : UserControl
     }
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e) { base.OnAttachedToVisualTree(e); if (_model is not null) _timer.Start(); }
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e) { _timer.Stop(); base.OnDetachedFromVisualTree(e); }
+    private void RebirthKernel_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_model is not { } model) return;
+        if (string.IsNullOrWhiteSpace(model.ProjectContext))
+        {
+            model.StatusText = "先打开一个项目，再查看项目内核。";
+            return;
+        }
+        var window = new RebirthKernelWindow(model.DataRoot, model.ProjectContext);
+        if (TopLevel.GetTopLevel(this) is Window owner) window.Show(owner);
+        else window.Show();
+    }
+
     private async void Connect_Click(object? sender, RoutedEventArgs e)
     {
         if (_model is not { IsBusy: false } model || TopLevel.GetTopLevel(this) is not { } top) return;

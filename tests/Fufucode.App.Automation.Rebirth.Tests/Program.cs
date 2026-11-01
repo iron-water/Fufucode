@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Fufucode.App.Abstractions.Automation;
 using Fufucode.Core.Automation.Rebirth;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
@@ -219,7 +220,7 @@ catch (Exception error)
         Check(resume.Success, "autodev_resume 恢复重规划工单");
 
         var run = await tools.ExecuteAsync(new PureToolCall("tool-run", "autodev_run_start",
-            "{\"ticketId\":\"" + ticketId + "\",\"executor\":\"session\",\"model\":\"fumo\",\"workspace\":\"" +
+            "{\"ticketId\":\"" + ticketId + "\",\"executor\":\"manual\",\"model\":\"manual\",\"workspace\":\"" +
             Path.Combine(root, "workspace").Replace("\\", "\\\\") + "\"}"));
         Check(run.Success && run.Content.Contains("Running", StringComparison.Ordinal), "autodev_run_start 返回真实 Running");
         using var runDoc = JsonDocument.Parse(run.Content);
@@ -247,9 +248,58 @@ catch (Exception error)
         Console.WriteLine("FAIL tool interface: " + error);
     }
 
+    // ---- 真实执行器桥接：fake owner 回报 Completed，内核由后台桥接写入终态 ----
+    try
+    {
+        var root = Path.Combine(Path.GetTempPath(), "fufucode-rebirth-bridge-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
+        var owner = new FakeExecutionOwner();
+        ExecutionBaseLibrary.Register(owner);
+        try
+        {
+            var context = new PluginPackageContext("automation.auto-dev", root,
+                Path.Combine(root, "workspace"), null, root);
+            var tools = new AutoDevToolHandler(context);
+            var plan = await tools.ExecuteAsync(new PureToolCall("bridge-plan", "autodev_plan",
+                "{\"goal\":\"执行器桥接\",\"steps\":[\"执行真实假任务\"]}"));
+            using var planDoc = JsonDocument.Parse(plan.Content);
+            var ticketId = planDoc.RootElement.GetProperty("tickets")[0].GetProperty("id").GetString()!;
+            var start = await tools.ExecuteAsync(new PureToolCall("bridge-run", "autodev_run_start",
+                "{\"ticketId\":\"" + ticketId + "\",\"executor\":\"fake\",\"model\":\"fake-model\"}"));
+            Check(start.Success && start.Content.Contains("Running", StringComparison.Ordinal),
+                "已注册执行器的 run_start 登记 Running 并启动桥接");
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            var completed = false;
+            while (DateTime.UtcNow < deadline)
+            {
+                await Task.Delay(100);
+                var status = await tools.ExecuteAsync(new PureToolCall("bridge-status-" + Guid.NewGuid().ToString("N"),
+                    "autodev_status", "{}"));
+                if (status.Success && status.Content.Contains("Completed", StringComparison.Ordinal))
+                { completed = true; break; }
+            }
+            Check(completed, "fake 执行器回报后，后台桥接把 Run 写成 Completed");
+        }
+        finally { ExecutionBaseLibrary.Unregister(owner); }
+    }
+    catch (Exception error)
+    {
+        failures.Add("execution bridge: " + error);
+        Console.WriteLine("FAIL execution bridge: " + error);
+    }
+
 Console.WriteLine($"\n通过 {passed} 项，失败 {failures.Count} 项。");
 if (failures.Count > 0)
 {
     foreach (var failure in failures) Console.WriteLine(" - " + failure);
     Environment.ExitCode = 1;
+}
+
+internal sealed class FakeExecutionOwner : IExecutionOwner
+{
+    public string OwnerId => "test.fake";
+    public bool SupportsHarness(string harness) => string.Equals(harness, "fake", StringComparison.Ordinal);
+    public Task<ExecutionOutcome> ExecuteAsync(ExecutionRequest request, CancellationToken cancellationToken = default) =>
+        Task.FromResult(new ExecutionOutcome("fake-run", null, null, ExecutionStatus.Completed,
+            "fake executor output", null, request.OwnerDataRoot));
 }

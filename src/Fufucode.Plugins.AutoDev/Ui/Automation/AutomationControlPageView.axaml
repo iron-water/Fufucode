@@ -35,6 +35,7 @@
       <!-- 窄于 1000DIP 时主操作行下移到整行（第 2 行），避免与标题重叠。 -->
       <WrapPanel x:Name="HeaderActions" Grid.Column="1" VerticalAlignment="Top" HorizontalAlignment="Right">
         <Button Content="连接工作台…" Click="Connect_Click" Margin="0,0,8,4" AutomationProperties.Name="连接现有工作台数据库"/>
+        <Button Content="项目内核" Click="RebirthKernel_Click" Margin="0,0,8,4" AutomationProperties.Name="打开项目内核"/>
         <Button Content="刷新" Command="{Binding RefreshCommand}" Margin="0,0,8,4"/>
         <Button x:Name="ResumeAutomatic" Content="暂停新任务/继续（自动模式）" Command="{Binding ResumeAutomaticCommand}" Margin="0,0,8,4"
                 AutomationProperties.HelpText="向核心提交自动开发模式；未启用时保留核心拒绝的真实原因，不伪造切换成功。"/>

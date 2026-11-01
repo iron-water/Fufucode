@@ -34,6 +34,9 @@ public sealed partial class AutomationControlViewModel
 
     /// <summary>宿主注入的数据根（插件不自取进程级静态路径）。</summary>
     private readonly string _dataRoot;
+
+    /// <summary>供同一插件的项目内核窗口复用同一宿主数据根。</summary>
+    public string DataRoot => _dataRoot;
     private sealed record NativeControlAttempt(AutomationRequestRecord Request, Func<object> Execute);
     private NativeControlAttempt Prepare(object command, long now)
     {
