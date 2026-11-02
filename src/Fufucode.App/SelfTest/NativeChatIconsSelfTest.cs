@@ -171,6 +171,10 @@ internal static class NativeChatIconsSelfTest
             var restoreBorder = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("restoreInfo"));
             AssertIconColor(FindIcon(restoreBorder), MsYellow, "待恢复草稿历史图标");
 
+            var modeBtn = page.GetVisualDescendants().OfType<Button>()
+                .Single(control => Avalonia.Automation.AutomationProperties.GetAutomationId(control) == "composer-permission");
+            AssertIconColor(FindIcon(modeBtn), MsBlue, "输入栏权限模式盾牌图标");
+
             // 6. 消息操作浮动条（MessageActionsView）
             var actionsViews = page.GetVisualDescendants().OfType<MessageActionsView>().ToArray();
             var asstActions = actionsViews.FirstOrDefault(v => v.DataContext is AssistantMessageViewModel);
