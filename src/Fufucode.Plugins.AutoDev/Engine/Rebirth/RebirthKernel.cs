@@ -21,6 +21,26 @@ public sealed class RebirthKernel : IDisposable
     };
 
     private readonly string _path;
+    private SqliteConnection? _scopeConnection;
+    private SqliteTransaction? _scopeTransaction;
+
+    // A Graph command and the authority changes it invokes commit together. The owner serializes
+    // access to this kernel instance; independent instances still serialize through SQLite.
+    internal T Atomic<T>(Func<SqliteConnection, SqliteTransaction, T> action)
+    {
+        if (_scopeConnection is not null) return action(_scopeConnection, _scopeTransaction!);
+        using var connection = Open();
+        using var transaction = connection.BeginTransaction();
+        _scopeConnection = connection;
+        _scopeTransaction = transaction;
+        try
+        {
+            var result = action(connection, transaction);
+            transaction.Commit();
+            return result;
+        }
+        finally { _scopeConnection = null; _scopeTransaction = null; }
+    }
 
     public RebirthKernel(string databasePath)
     {
@@ -197,6 +217,8 @@ public sealed class RebirthKernel : IDisposable
 
     private T Mutate<T>(string commandId, string payload, Func<SqliteConnection, SqliteTransaction, T> action)
     {
+        if (_scopeConnection is not null)
+            return Command(_scopeConnection, _scopeTransaction!, commandId, payload, action);
         using var c = Open();
         using var tx = c.BeginTransaction();
         var result = Command(c, tx, commandId, payload, action);
@@ -378,6 +400,22 @@ public sealed class RebirthKernel : IDisposable
         return Convert.ToInt32(q.ExecuteScalar());
     }
 
+    /// <summary>Creates a real project identity before the human has supplied a purpose. No work is authorized.</summary>
+    internal RebirthProject EnsureProjectShell(string commandId, string projectId, string title, long nowUtc) =>
+        Mutate(commandId, JsonSerializer.Serialize(new { projectId, title, shell = true }, Json), (c, tx) =>
+        {
+            Execute(c, tx, """
+                INSERT INTO rb_projects(project_id,title,status,brief_version,revision,created_utc,updated_utc)
+                VALUES($id,$title,'Active',1,1,$now,$now)
+                """, ("$id", projectId), ("$title", Required(title, nameof(title))), ("$now", nowUtc));
+            InsertBrief(c, tx, projectId, 1, RebirthBrief.Empty, "system", nowUtc);
+            Execute(c, tx, "INSERT INTO rb_quota(project_id,compute_quota,spent_slots,paused) VALUES($id,0,0,1)",
+                ("$id", projectId));
+            AppendEvent(c, tx, commandId + ":project.registered", "project.registered", projectId, null,
+                new { projectId, title }, nowUtc);
+            return GetProject(c, tx, projectId);
+        });
+
     public RebirthProject CreateProject(string commandId, string title, RebirthBrief brief, string actor,
         long nowUtc, string? projectId = null)
     {
@@ -554,6 +592,9 @@ public sealed class RebirthKernel : IDisposable
 
     public RebirthTurnAdmission InspectAdmission(string ticketId, string owner, long nowUtc)
     {
+        if (_scopeConnection is not null)
+            return EvaluateAdmission(_scopeConnection, _scopeTransaction,
+                GetTicket(_scopeConnection, _scopeTransaction, ticketId), owner, nowUtc);
         using var c = Open();
         var ticket = GetTicket(c, null, ticketId);
         return EvaluateAdmission(c, null, ticket, owner, nowUtc);
@@ -739,10 +780,14 @@ public sealed class RebirthKernel : IDisposable
                 ("$detail", (object?)detail ?? DBNull.Value), ("$kind", resultKind.ToString()), ("$id", runId));
             var ticketStatus = outcome switch
             {
-                RebirthRunOutcome.Completed => RebirthTicketStatus.Review,
                 RebirthRunOutcome.Unknown => RebirthTicketStatus.NeedsReconciliation,
+                _ when ticket.Status is RebirthTicketStatus.HumanOwned or RebirthTicketStatus.Cancelled => ticket.Status,
+                _ when IsVetoed(c, tx, ticket) => RebirthTicketStatus.ReplanRequired,
+                RebirthRunOutcome.Completed => RebirthTicketStatus.Review,
                 _ => RebirthTicketStatus.ReplanRequired
             };
+            Execute(c, tx, "UPDATE rb_decisions SET status=$status WHERE ticket_id=$id AND kind='Stop' AND status='Requested'",
+                ("$status", outcome == RebirthRunOutcome.Interrupted ? "Acknowledged" : "Settled:" + status), ("$id", run.TicketId));
             Execute(c, tx, "UPDATE rb_tickets SET status=$status,updated_utc=$now WHERE ticket_id=$id",
                 ("$status", ticketStatus.ToString()), ("$now", nowUtc), ("$id", run.TicketId));
             ReleaseActiveLease(c, tx, run.TicketId);
@@ -795,6 +840,54 @@ public sealed class RebirthKernel : IDisposable
                 r.GetInt32(6) != 0, r.GetString(7), r.GetInt64(8), r.GetInt32(9) != 0);
         });
     }
+
+    internal void InvalidateEvidence(string commandId, string evidenceId, string reason, long nowUtc) =>
+        Mutate(commandId, JsonSerializer.Serialize(new { evidenceId, reason }, Json), (c, tx) =>
+        {
+            using var q = c.CreateCommand(); q.Transaction = tx;
+            q.CommandText = "SELECT ticket_id FROM rb_evidence WHERE evidence_id=$id";
+            q.Parameters.AddWithValue("$id", evidenceId);
+            var ticketId = q.ExecuteScalar() as string ?? throw new KeyNotFoundException("Unknown evidence: " + evidenceId);
+            var ticket = GetTicket(c, tx, ticketId);
+            Execute(c, tx, "UPDATE rb_evidence SET valid=0 WHERE evidence_id=$id", ("$id", evidenceId));
+            TouchProject(c, tx, ticket.ProjectId, nowUtc);
+            AppendEvent(c, tx, commandId + ":evidence.invalidated", "evidence.invalidated", ticket.ProjectId, ticketId,
+                new { evidenceId, reason }, nowUtc);
+            return true;
+        });
+
+    /// <summary>Human acceptance is separate from an executor finishing a run. Evidence is never manufactured here.</summary>
+    internal RebirthTicket AcceptTicket(string commandId, string ticketId, string reference, long nowUtc) =>
+        Atomic((c, tx) =>
+        {
+            var ticket = GetTicket(c, tx, ticketId);
+            if (ticket.Status != RebirthTicketStatus.Review)
+                throw new InvalidOperationException("Only a reviewing ticket can be accepted by a human.");
+            using var evidence = c.CreateCommand();
+            evidence.Transaction = tx;
+            evidence.CommandText = "SELECT COUNT(*) FROM rb_evidence WHERE ticket_id=$id AND reference=$ref AND valid=1 AND passed=1 AND kind<>'Note' AND acceptance_digest=$digest";
+            evidence.Parameters.AddWithValue("$id", ticketId);
+            evidence.Parameters.AddWithValue("$ref", Required(reference, nameof(reference)));
+            evidence.Parameters.AddWithValue("$digest", ticket.AcceptanceDigest);
+            if (Convert.ToInt64(evidence.ExecuteScalar()) == 0)
+                throw new InvalidOperationException("Acceptance must reference existing, valid passing evidence.");
+            foreach (var criterion in ticket.Acceptance)
+            {
+                using var passing = c.CreateCommand(); passing.Transaction = tx;
+                passing.CommandText = "SELECT COUNT(*) FROM rb_evidence WHERE ticket_id=$id AND criterion=$criterion AND valid=1 AND passed=1 AND kind<>'Note' AND acceptance_digest=$digest";
+                passing.Parameters.AddWithValue("$id", ticketId); passing.Parameters.AddWithValue("$criterion", criterion);
+                passing.Parameters.AddWithValue("$digest", ticket.AcceptanceDigest);
+                if (Convert.ToInt64(passing.ExecuteScalar()) == 0)
+                    throw new InvalidOperationException("Missing valid non-note passing evidence for: " + criterion);
+            }
+            var completed = CompleteTicket(commandId, ticketId, nowUtc);
+            Execute(c, tx, """
+                INSERT INTO rb_decisions(decision_id,project_id,ticket_id,kind,actor,target,scope,text,created_utc,status)
+                VALUES($id,$project,$ticket,'Acceptance','human',$target,'ticket',$text,$now,'Accepted')
+                """, ("$id", "accept-" + Sha(commandId)[..24]), ("$project", ticket.ProjectId),
+                ("$ticket", ticketId), ("$target", "ticket:" + ticketId), ("$text", reference), ("$now", nowUtc));
+            return completed;
+        });
 
     public RebirthTicket CompleteTicket(string commandId, string ticketId, long nowUtc)
     {
@@ -911,9 +1004,10 @@ public sealed class RebirthKernel : IDisposable
         });
     }
 
-    private static IReadOnlyList<RebirthLease> ReadLeases(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthLease> ReadLeases(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         using var q = c.CreateCommand();
+        q.Transaction = tx;
         q.CommandText = """
             SELECT l.lease_id,l.ticket_id,l.owner,l.mode,l.epoch,l.expires_utc,l.status
             FROM rb_leases l JOIN rb_tickets t ON t.ticket_id=l.ticket_id
@@ -1019,6 +1113,22 @@ public sealed class RebirthKernel : IDisposable
             actor, normalizedTarget, scope, text, nowUtc, "Active"), replanned);
     }
 
+    internal RebirthDecision RequestStop(string commandId, string ticketId, string reason, long nowUtc, string actor = "human") =>
+        Mutate(commandId, JsonSerializer.Serialize(new { ticketId, reason, actor, request = true }, Json), (c, tx) =>
+        {
+            var ticket = GetTicket(c, tx, ticketId);
+            var id = "stop-" + Sha(commandId)[..24];
+            Execute(c, tx, """
+                INSERT INTO rb_decisions(decision_id,project_id,ticket_id,kind,actor,target,scope,text,created_utc,status)
+                VALUES($id,$project,$ticket,'Stop',$actor,$target,'ticket',$text,$now,'Requested')
+                """, ("$id", id), ("$project", ticket.ProjectId), ("$ticket", ticketId),
+                ("$actor", actor), ("$target", "ticket:" + ticketId), ("$text", Required(reason, nameof(reason))), ("$now", nowUtc));
+            TouchProject(c, tx, ticket.ProjectId, nowUtc);
+            AppendEvent(c, tx, commandId + ":run.stop_requested", "run.stop_requested", ticket.ProjectId, ticketId,
+                new { ticketId, reason }, nowUtc);
+            return GetDecision(c, tx, id);
+        });
+
     public RebirthTicket StopTicket(string commandId, string ticketId, string reason, string actor, long nowUtc)
     {
         var payload = JsonSerializer.Serialize(new { ticketId, reason, actor }, Json);
@@ -1095,7 +1205,7 @@ public sealed class RebirthKernel : IDisposable
                 VALUES($id,$project,$ticket,$actor,$kind,$text,$state,$now,$delivered,$read,$applied)
                 """, ("$id", id), ("$project", projectId), ("$ticket", (object?)ticketId ?? DBNull.Value),
                 ("$actor", Required(actor, nameof(actor))), ("$kind", kind.ToString()),
-                ("$text", Required(text, nameof(text))), ("$state", state.ToString()), ("$now", nowUtc),
+                ("$text", string.IsNullOrWhiteSpace(text) ? throw new ArgumentException("Input text is required.", nameof(text)) : text), ("$state", state.ToString()), ("$now", nowUtc),
                 ("$delivered", ticketId is null ? DBNull.Value : nowUtc), ("$read", DBNull.Value),
                 ("$applied", (object?)applied ?? DBNull.Value));
             TouchProject(c, tx, projectId, nowUtc);
@@ -1235,35 +1345,44 @@ public sealed class RebirthKernel : IDisposable
 
     public RebirthSnapshot ReadSnapshot(string projectId)
     {
+        if (_scopeConnection is not null) return ReadSnapshot(_scopeConnection, _scopeTransaction, projectId);
         using var c = Open();
-        var project = GetProject(c, null, projectId);
-        var brief = GetBrief(c, null, projectId, project.BriefVersion);
-        return new RebirthSnapshot(project, brief, ReadTickets(c, projectId), ReadRuns(c, projectId),
-            ReadEvidence(c, projectId), ReadDecisions(c, projectId), ReadInputs(c, projectId), ReadAttention(c, projectId))
+        using var tx = c.BeginTransaction(deferred: true);
+        return ReadSnapshot(c, tx, projectId);
+    }
+
+    private static RebirthSnapshot ReadSnapshot(SqliteConnection c, SqliteTransaction? tx, string projectId)
+    {
+        var project = GetProject(c, tx, projectId);
+        var brief = GetBrief(c, tx, projectId, project.BriefVersion);
+        return new RebirthSnapshot(project, brief, ReadTickets(c, projectId, tx), ReadRuns(c, projectId, tx),
+            ReadEvidence(c, projectId, tx), ReadDecisions(c, projectId, tx), ReadInputs(c, projectId, tx), ReadAttention(c, projectId, tx))
         {
-            Quota = GetQuota(c, null, projectId),
-            Leases = ReadLeases(c, projectId)
+            Quota = GetQuota(c, tx, projectId),
+            Leases = ReadLeases(c, projectId, tx)
         };
     }
 
-    private static IReadOnlyList<RebirthTicket> ReadTickets(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthTicket> ReadTickets(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         var ids = new List<string>();
         using (var q = c.CreateCommand())
         {
+            q.Transaction = tx;
             q.CommandText = "SELECT ticket_id FROM rb_tickets WHERE project_id=$project ORDER BY created_utc,ticket_id";
             q.Parameters.AddWithValue("$project", projectId);
             using var r = q.ExecuteReader();
             while (r.Read()) ids.Add(r.GetString(0));
         }
-        return ids.Select(id => GetTicket(c, null, id)).ToArray();
+        return ids.Select(id => GetTicket(c, tx, id)).ToArray();
     }
 
-    private static IReadOnlyList<RebirthRun> ReadRuns(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthRun> ReadRuns(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         using var q = c.CreateCommand();
+        q.Transaction = tx;
         q.CommandText = """
-            SELECT r.run_id,r.ticket_id,r.executor,r.model,r.workspace,r.status,r.started_utc,r.ended_utc,r.terminal_code,r.detail
+            SELECT r.run_id,r.ticket_id,r.executor,r.model,r.workspace,r.status,r.started_utc,r.ended_utc,r.terminal_code,r.detail,r.result_kind,r.settled
             FROM rb_runs r JOIN rb_tickets t ON t.ticket_id=r.ticket_id
             WHERE t.project_id=$project ORDER BY r.started_utc,r.run_id
             """;
@@ -1273,15 +1392,17 @@ public sealed class RebirthKernel : IDisposable
         while (r.Read())
             items.Add(new(r.GetString(0), r.GetString(1), r.GetString(2), r.GetString(3), r.GetString(4),
                 Enum.Parse<RebirthRunStatus>(r.GetString(5)), r.GetInt64(6), r.IsDBNull(7) ? null : r.GetInt64(7),
-                r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9)));
+                r.IsDBNull(8) ? null : r.GetString(8), r.IsDBNull(9) ? null : r.GetString(9))
+            { ResultKind = r.IsDBNull(10) ? null : Enum.Parse<RebirthTurnResultKind>(r.GetString(10)), Settled = r.GetInt32(11) != 0 });
         return items;
     }
 
-    private static IReadOnlyList<RebirthEvidence> ReadEvidence(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthEvidence> ReadEvidence(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         using var q = c.CreateCommand();
+        q.Transaction = tx;
         q.CommandText = """
-            SELECT e.evidence_id,e.ticket_id,e.run_id,e.kind,e.criterion,e.reference,e.passed,e.verifier,e.created_utc,e.valid
+            SELECT e.evidence_id,e.ticket_id,e.run_id,e.kind,e.criterion,e.reference,e.passed,e.verifier,e.created_utc,e.valid,e.acceptance_digest
             FROM rb_evidence e JOIN rb_tickets t ON t.ticket_id=e.ticket_id
             WHERE t.project_id=$project ORDER BY e.created_utc,e.evidence_id
             """;
@@ -1291,13 +1412,14 @@ public sealed class RebirthKernel : IDisposable
         while (r.Read())
             items.Add(new(r.GetString(0), r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2),
                 Enum.Parse<RebirthEvidenceKind>(r.GetString(3)), r.GetString(4), r.GetString(5),
-                r.GetInt32(6) != 0, r.GetString(7), r.GetInt64(8), r.GetInt32(9) != 0));
+                r.GetInt32(6) != 0, r.GetString(7), r.GetInt64(8), r.GetInt32(9) != 0) { AcceptanceDigest = r.GetString(10) });
         return items;
     }
 
-    private static IReadOnlyList<RebirthDecision> ReadDecisions(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthDecision> ReadDecisions(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         using var q = c.CreateCommand();
+        q.Transaction = tx;
         q.CommandText = "SELECT decision_id,project_id,ticket_id,kind,actor,target,scope,text,created_utc,status FROM rb_decisions WHERE project_id=$project ORDER BY created_utc,decision_id";
         q.Parameters.AddWithValue("$project", projectId);
         using var r = q.ExecuteReader();
@@ -1309,9 +1431,10 @@ public sealed class RebirthKernel : IDisposable
         return items;
     }
 
-    private static IReadOnlyList<RebirthInput> ReadInputs(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthInput> ReadInputs(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         using var q = c.CreateCommand();
+        q.Transaction = tx;
         q.CommandText = "SELECT input_id,project_id,ticket_id,actor,kind,text,state,created_utc,delivered_utc,read_utc,applied_utc FROM rb_inputs WHERE project_id=$project ORDER BY created_utc,input_id";
         q.Parameters.AddWithValue("$project", projectId);
         using var r = q.ExecuteReader();
@@ -1325,9 +1448,10 @@ public sealed class RebirthKernel : IDisposable
         return items;
     }
 
-    private static IReadOnlyList<RebirthAttention> ReadAttention(SqliteConnection c, string projectId)
+    private static IReadOnlyList<RebirthAttention> ReadAttention(SqliteConnection c, string projectId, SqliteTransaction? tx = null)
     {
         using var q = c.CreateCommand();
+        q.Transaction = tx;
         q.CommandText = "SELECT attention_id,project_id,ticket_id,question,status,created_utc,answered_utc,answer FROM rb_attention WHERE project_id=$project ORDER BY created_utc,attention_id";
         q.Parameters.AddWithValue("$project", projectId);
         using var r = q.ExecuteReader();

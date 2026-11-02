@@ -244,120 +244,48 @@ catch (Exception error)
         Console.WriteLine("FAIL loopx semantics: " + error);
     }
 
-    // ---- 工具接口：AutoDevToolHandler 走真实内核，不返回假“已完成” ----
+    // Compatibility tools are read-only. Human mutations and terminal receipts belong to the host.
     try
     {
         var root = Path.Combine(Path.GetTempPath(), "fufucode-rebirth-tools-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        var context = new PluginPackageContext("automation.auto-dev", root,
-            Path.Combine(root, "workspace"), null, root);
+        var workspace = Path.Combine(root, "workspace");
+        Directory.CreateDirectory(workspace);
+        var context = new PluginPackageContext("automation.auto-dev", root, workspace, null, root);
         var tools = new AutoDevToolHandler(context);
         var status0 = await tools.ExecuteAsync(new PureToolCall("tool-status-0", "autodev_status", "{}"));
-        Check(status0.Success && status0.Content.Contains("uninitialized", StringComparison.Ordinal),
-            "工具状态在未建项目时明确返回 uninitialized");
-
-        var plan = await tools.ExecuteAsync(new PureToolCall("tool-plan", "autodev_plan",
-            "{\"goal\":\"稳定会话切换\",\"steps\":[\"验证切换焦点\"]}"));
-        Check(plan.Success && plan.Content.Contains("tickets", StringComparison.Ordinal),
-            "autodev_plan 通过工具写入真实项目与工单");
-        using var planDoc = JsonDocument.Parse(plan.Content);
-        var ticketId = planDoc.RootElement.GetProperty("tickets")[0].GetProperty("id").GetString()!;
-        var preflight = await tools.ExecuteAsync(new PureToolCall("tool-preflight", "autodev_preflight",
-            "{\"ticketId\":\"" + ticketId + "\",\"owner\":\"auto-dev\"}"));
-        Check(preflight.Success && preflight.Content.Contains("ReadyForHost", StringComparison.Ordinal),
-            "autodev_preflight 返回确定性准入");
-        var gatePlan = await tools.ExecuteAsync(new PureToolCall("tool-gate-plan", "autodev_plan",
-            "{\"goal\":\"Gate 工具\",\"steps\":[\"需要机主批准\"],\"taskClass\":\"UserGate\"}"));
-        using var gateDoc = JsonDocument.Parse(gatePlan.Content);
-        var gateTicket = gateDoc.RootElement.GetProperty("tickets").EnumerateArray()
-            .First(item => item.GetProperty("title").GetString() == "需要机主批准").GetProperty("id").GetString()!;
-        var gateResult = await tools.ExecuteAsync(new PureToolCall("tool-gate", "autodev_gate",
-            "{\"ticketId\":\"" + gateTicket + "\",\"decision\":\"approve\",\"scope\":\"一次\",\"text\":\"批准\"}"));
-        Check(gateResult.Success && gateResult.Content.Contains("Authorized", StringComparison.Ordinal),
-            "autodev_gate 批准 user_gate");
-
-        var veto = await tools.ExecuteAsync(new PureToolCall("tool-veto", "autodev_veto",
-            "{\"target\":\"route:default\",\"scope\":\"路线\",\"text\":\"不要默认路线\"}"));
-        Check(veto.Success && veto.Content.Contains("ticketsReplanned", StringComparison.Ordinal),
-            "autodev_veto 通过工具写入真实否决");
-        using var vetoDoc = JsonDocument.Parse(veto.Content);
-        var decisionId = vetoDoc.RootElement.GetProperty("decision").GetProperty("id").GetString()!;
-
-        var lift = await tools.ExecuteAsync(new PureToolCall("tool-lift", "autodev_lift_veto",
-            "{\"decisionId\":\"" + decisionId + "\"}"));
-        Check(lift.Success && lift.Content.Contains("Lifted", StringComparison.Ordinal), "autodev_lift_veto 解除真实否决");
-
-        var resume = await tools.ExecuteAsync(new PureToolCall("tool-resume", "autodev_resume",
-            "{\"ticketId\":\"" + ticketId + "\"}"));
-        Check(resume.Success, "autodev_resume 恢复重规划工单");
-
-        var run = await tools.ExecuteAsync(new PureToolCall("tool-run", "autodev_run_start",
-            "{\"ticketId\":\"" + ticketId + "\",\"executor\":\"manual\",\"model\":\"manual\",\"workspace\":\"" +
-            Path.Combine(root, "workspace").Replace("\\", "\\\\") + "\"}"));
-        Check(run.Success && run.Content.Contains("Running", StringComparison.Ordinal), "autodev_run_start 返回真实 Running");
-        using var runDoc = JsonDocument.Parse(run.Content);
-        var runId = runDoc.RootElement.GetProperty("id").GetString()!;
-
-        var finish = await tools.ExecuteAsync(new PureToolCall("tool-finish", "autodev_run_finish",
-            "{\"runId\":\"" + runId + "\",\"outcome\":\"completed\",\"terminalCode\":\"exit-0\",\"detail\":\"ok\"}"));
-        Check(finish.Success && finish.Content.Contains("Completed", StringComparison.Ordinal), "autodev_run_finish 写入真实终态");
-
-        var evidence = await tools.ExecuteAsync(new PureToolCall("tool-evidence", "autodev_evidence",
-            "{\"ticketId\":\"" + ticketId + "\",\"runId\":\"" + runId +
-            "\",\"kind\":\"test\",\"criterion\":\"验证切换焦点\",\"reference\":\"tmp/test.log\",\"passed\":true,\"verifier\":\"tests\"}"));
-        Check(evidence.Success && evidence.Content.Contains("true", StringComparison.Ordinal), "autodev_evidence 写入真实通过证据");
-
-        var complete = await tools.ExecuteAsync(new PureToolCall("tool-complete", "autodev_complete_ticket",
-            "{\"ticketId\":\"" + ticketId + "\"}"));
-        Check(complete.Success && complete.Content.Contains("Done", StringComparison.Ordinal), "autodev_complete_ticket 只有证据齐全才完成");
-
-        var status1 = await tools.ExecuteAsync(new PureToolCall("tool-status-1", "autodev_status", "{}"));
-        Check(status1.Success && status1.Content.Contains("Done", StringComparison.Ordinal), "autodev_status 读到完成工单");
-    }
-    catch (Exception error)
-    {
-        failures.Add("tool interface: " + error);
-        Console.WriteLine("FAIL tool interface: " + error);
-    }
-
-    // ---- 真实执行器桥接：fake owner 回报 Completed，内核由后台桥接写入终态 ----
-    try
-    {
-        var root = Path.Combine(Path.GetTempPath(), "fufucode-rebirth-bridge-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        var owner = new FakeExecutionOwner();
-        ExecutionBaseLibrary.Register(owner);
-        try
+        Check(!status0.Success && status0.Content.Contains("not initialized", StringComparison.Ordinal),
+            "兼容读取明确报告未初始化，不创建项目");
+        var legacyKey = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(workspace)))[..12].ToLowerInvariant();
+        var database = Path.Combine(root, "auto-dev", "rebirth", legacyKey, "kernel.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(database)!);
+        using var trusted = new RebirthKernel(database);
+        var projectId = "project-" + legacyKey;
+        var legacyBrief = new RebirthBrief("验证兼容读取边界", ["保护真实状态"], [], [], ["真实状态可追溯"], [workspace], 60, RebirthAutonomy.WithinMandate);
+        trusted.CreateProject("human-project", "真实兼容读取", legacyBrief, "human", Now(), projectId);
+        var ticket = trusted.CreateTicket("human-ticket", projectId, "可信宿主工单", "核查读取边界", ["真实状态可追溯"], "default", "graph", Now());
+        var before = trusted.ReadSnapshot(projectId);
+        var forbidden = new[] { "autodev_plan", "autodev_gate", "autodev_veto", "autodev_lift_veto", "autodev_resume",
+            "autodev_reconcile", "autodev_run_start", "autodev_run_finish", "autodev_evidence", "autodev_complete_ticket" };
+        foreach (var name in forbidden)
         {
-            var context = new PluginPackageContext("automation.auto-dev", root,
-                Path.Combine(root, "workspace"), null, root);
-            var tools = new AutoDevToolHandler(context);
-            var plan = await tools.ExecuteAsync(new PureToolCall("bridge-plan", "autodev_plan",
-                "{\"goal\":\"执行器桥接\",\"steps\":[\"执行真实假任务\"]}"));
-            using var planDoc = JsonDocument.Parse(plan.Content);
-            var ticketId = planDoc.RootElement.GetProperty("tickets")[0].GetProperty("id").GetString()!;
-            var start = await tools.ExecuteAsync(new PureToolCall("bridge-run", "autodev_run_start",
-                "{\"ticketId\":\"" + ticketId + "\",\"executor\":\"fake\",\"model\":\"fake-model\"}"));
-            Check(start.Success && start.Content.Contains("Running", StringComparison.Ordinal),
-                "已注册执行器的 run_start 登记 Running 并启动桥接");
-            var deadline = DateTime.UtcNow.AddSeconds(15);
-            var completed = false;
-            while (DateTime.UtcNow < deadline)
-            {
-                await Task.Delay(100);
-                var status = await tools.ExecuteAsync(new PureToolCall("bridge-status-" + Guid.NewGuid().ToString("N"),
-                    "autodev_status", "{}"));
-                if (status.Success && status.Content.Contains("Completed", StringComparison.Ordinal))
-                { completed = true; break; }
-            }
-            Check(completed, "fake 执行器回报后，后台桥接把 Run 写成 Completed");
+            Check(!tools.Registrations.Any(item => item.Name == name), name + " 不出现在模型工具目录");
+            var result = await tools.ExecuteAsync(new PureToolCall("reject-" + name, name,
+                JsonSerializer.Serialize(new { ticketId = ticket.Id, actor = "human", outcome = "completed" })));
+            Check(!result.Success, name + " 即使伪造 human 也不能修改权威");
         }
-        finally { ExecutionBaseLibrary.Unregister(owner); }
+        var after = trusted.ReadSnapshot(projectId);
+        Check(after.Project.Revision == before.Project.Revision && after.Runs.Count == 0 && after.Evidence.Count == 0,
+            "被拒绝的旧工具没有派发、证据或权威状态副作用");
+        var status = await tools.ExecuteAsync(new PureToolCall("tool-status", "autodev_status", "{}"));
+        Check(status.Success && status.Content.Contains(ticket.Id, StringComparison.Ordinal), "兼容工具可读取已存在的真实工单");
+        var preflight = await tools.ExecuteAsync(new PureToolCall("tool-preflight", "autodev_preflight",
+            JsonSerializer.Serialize(new { ticketId = ticket.Id })));
+        Check(preflight.Success && trusted.ReadSnapshot(projectId).Runs.Count == 0, "准入读取不隐式启动执行");
     }
     catch (Exception error)
     {
-        failures.Add("execution bridge: " + error);
-        Console.WriteLine("FAIL execution bridge: " + error);
+        failures.Add("tool authority boundary: " + error);
+        Console.WriteLine("FAIL tool authority boundary: " + error);
     }
 
     // ---- 内核主页签视图模型：建立工单、停止、接管都走真实内核 ----
@@ -395,13 +323,4 @@ if (failures.Count > 0)
 {
     foreach (var failure in failures) Console.WriteLine(" - " + failure);
     Environment.ExitCode = 1;
-}
-
-internal sealed class FakeExecutionOwner : IExecutionOwner
-{
-    public string OwnerId => "test.fake";
-    public bool SupportsHarness(string harness) => string.Equals(harness, "fake", StringComparison.Ordinal);
-    public Task<ExecutionOutcome> ExecuteAsync(ExecutionRequest request, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new ExecutionOutcome("fake-run", null, null, ExecutionStatus.Completed,
-            "fake executor output", null, request.OwnerDataRoot));
 }

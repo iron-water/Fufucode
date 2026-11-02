@@ -12,7 +12,7 @@ namespace Fufucode.Core.Backend;
 /// 其余工具落到会话自身的 <see cref="ProductionToolDispatcher"/>（工作区正确）。
 /// 插件注册表由组合根延迟提供，安装/卸载后下一次请求立即反映。
 /// </summary>
-public sealed class NativeToolComposite : IPureToolDispatcher, IPluginToolCatalog
+public sealed class NativeToolComposite : IPureToolDispatcher, IPluginToolCatalog, IApplicationToolCatalog
 {
     private readonly IPureToolDispatcher _builtin;
     public IPureToolDispatcher Builtin => _builtin;
@@ -24,6 +24,10 @@ public sealed class NativeToolComposite : IPureToolDispatcher, IPluginToolCatalo
         _builtin = builtin ?? throw new ArgumentNullException(nameof(builtin));
         _providers = providers;
     }
+
+    public IReadOnlyList<string> ApplicationToolNames =>
+        (_providers?.Invoke() ?? []).OfType<IApplicationToolCatalog>()
+            .SelectMany(catalog => catalog.ApplicationToolNames).Distinct(StringComparer.Ordinal).ToArray();
 
     private IReadOnlyList<IPluginToolCatalog> Catalogs() =>
         _providers?.Invoke().OfType<IPluginToolCatalog>().ToArray() ?? [];

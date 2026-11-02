@@ -11,6 +11,7 @@ public sealed class SecurityPolicyEvaluator(SecurityPolicyStore store, string wo
 {
     public SecurityPolicyStore Store => store;
     public Func<string, bool>? IsExternalTool { get; set; }
+    public Func<string, bool>? IsApplicationTool { get; set; }
     public SecurityDecision Evaluate(PureToolCall call)
     {
         try { return Evaluate(call, store.Current); }
@@ -25,7 +26,9 @@ public sealed class SecurityPolicyEvaluator(SecurityPolicyStore store, string wo
         if (args.ValueKind != JsonValueKind.Object) return new(SecurityAction.Deny, "arguments", "工具参数必须是对象。");
         var decisions = new List<SecurityDecision>();
         bool builtin = call.Name is "read_file" or "write_file" or "edit_file" or "list_dir" or "grep_search" or "glob_files" or "run_command" or "update_plan";
-        if (IsExternalTool?.Invoke(call.Name) == true) builtin = false;
+        var applicationTool = IsApplicationTool?.Invoke(call.Name) == true;
+        if (applicationTool) builtin = true;
+        else if (IsExternalTool?.Invoke(call.Name) == true) builtin = false;
         if (call.Name is "read_file" or "write_file" or "edit_file" or "list_dir" or "grep_search" or "glob_files")
         {
             var path = args.TryGetProperty("path", out var p) ? p.GetString() ?? "." : ".";

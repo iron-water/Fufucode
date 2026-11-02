@@ -18,6 +18,14 @@ try
         evaluator.Evaluate(Call("run_command", new { command = new[] { "bad" } })).Action == SecurityAction.Deny,
         "malformed tool arguments return denial instead of crashing the turn");
     Check(store.Current.Enabled && store.Current.BackupEnabled && store.Current.SecretRules.Count >= 5, "enabled defaults");
+    evaluator.IsApplicationTool = name => name == "graph_read";
+    evaluator.IsExternalTool = _ => true;
+    Check(evaluator.Evaluate(Call("graph_read", new { })).Action == SecurityAction.Allow, "registered application domain tool has native identity");
+    Check(evaluator.Evaluate(Call("graph_other", new { })).Action == SecurityAction.Ask, "graph name prefix does not grant application identity");
+    Check(evaluator.Evaluate(Call("mcp_tool", new { })).Action == SecurityAction.Ask, "MCP and ordinary plugins retain approval");
+    Check(evaluator.Evaluate(Call("graph_read", new { reference = "http://untrusted.example" })).Action == SecurityAction.Ask, "application tools retain network rules");
+    evaluator.IsApplicationTool = null;
+    evaluator.IsExternalTool = null;
     Check(evaluator.Evaluate(Call("read_file", new { path = "safe.txt" })).Action == SecurityAction.Allow, "ordinary file allow");
     Check(evaluator.Evaluate(Call("read_file", new { path = ".ssh/id_rsa" })).Action == SecurityAction.Ask, "sensitive directory ask");
     second.Update(s => s with { FileRules = [new("**/blocked.txt", SecurityAction.Deny)] });

@@ -66,6 +66,8 @@ public static class NativeSessionFactory
             resourceDispatcher.SecurityEvaluator = securityEvaluator;
             resourceDispatcher.SecurityBackups = builtin.SecurityBackups;
         }
+        securityEvaluator.IsApplicationTool = name => baseDispatcher is Plugins.IApplicationToolCatalog application &&
+            application.ApplicationToolNames.Contains(name, StringComparer.Ordinal);
         securityEvaluator.IsExternalTool = name => pluginCatalog?.ActiveToolNames.Contains(name, StringComparer.Ordinal) == true ||
             (toolRegistry is not null && toolRegistry is not ProductionToolDispatcher && pluginCatalog is null);
 

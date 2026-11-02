@@ -56,6 +56,12 @@ public interface IPluginToolCatalog
     IReadOnlyList<PluginToolRegistration> ActiveRegistrations { get; }
 }
 
+/// <summary>Tools owned by the application composition root, with domain authority enforced by their service.</summary>
+public interface IApplicationToolCatalog
+{
+    IReadOnlyList<string> ApplicationToolNames { get; }
+}
+
 /// <summary>
 /// 插件工具调度表：以插件市场实时状态为准，动态注册/注销插件工具。
 /// 未安装或未启用的插件不暴露工具；已注册工具在卸载/停用后立即失效，
