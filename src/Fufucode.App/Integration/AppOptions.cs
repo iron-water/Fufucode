@@ -30,7 +30,8 @@ public sealed record AppOptions(
     // 新窗口专用：忽略该项目最近会话，直接新建一条会话（避免与已打开窗口争用同一会话租约）。
     bool NewSession = false,
     // 新窗口专用：同一会话在多个窗口共享同一宿主，作为同步视图（单写者不变）。
-    bool ShareSession = false)
+    bool ShareSession = false,
+    bool StartGraph = false)
 {
     public static readonly AppOptions Mock = new(AppSessionMode.Mock, null, null, null, null);
 
@@ -51,6 +52,7 @@ public sealed record AppOptions(
         BackendId? backend = null;
         var parallelReview = false;
         var newSession = false;
+        var startGraph = false;
         string? reviewLabel = null;
         string? omp = null;
         string? claude = null;
@@ -107,6 +109,9 @@ public sealed record AppOptions(
                 case "--data-root" when i + 1 < args.Length:
                     dataRoot = System.IO.Path.GetFullPath(args[++i]);
                     break;
+                case "--graph":
+                    startGraph = true;
+                    break;
                 case "--new-session":
                     newSession = true;
                     break;
@@ -121,6 +126,6 @@ public sealed record AppOptions(
         }
 
         return new AppOptions(mode, project, session, node, cli, dataRoot, backend, omp, claude, codex, dsh,
-            parallelReview, reviewLabel, activation, newSession);
+            parallelReview, reviewLabel, activation, newSession, StartGraph: startGraph);
     }
 }

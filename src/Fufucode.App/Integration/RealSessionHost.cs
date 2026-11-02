@@ -38,7 +38,8 @@ public sealed class RealSessionHost : IAsyncDisposable
 
     /// <summary>首次打开：--session 指定 id；否则恢复该项目最近会话（失败如实诊断并新建）；无会话则新建。</summary>
     public static async Task<RealSessionHost> OpenAsync(AppOptions options, CancellationToken cancellationToken,
-        AppDataLayout? layout = null)
+        AppDataLayout? layout = null,
+        Func<string, string, IReadOnlyList<Fufucode.Core.Backend.IPureToolDispatcher>>? sessionToolProviders = null)
     {
         var projectPath = AppDataLayout.NormalizeProjectPath(options.ProjectPath ?? Environment.CurrentDirectory);
         var appDataLayout = layout ?? new AppDataLayout(options.AppDataRootOverride);
@@ -59,6 +60,8 @@ public sealed class RealSessionHost : IAsyncDisposable
             codexExecutablePath: RealSessionBootstrap.ResolveCodexRuntime(options),
             dshExecutablePath: RealSessionBootstrap.ResolveDshRuntime(options));
         manager.NativePluginToolProviders = NativeBackendWiring.ToolProviders;
+        manager.NativeSessionToolProviders = (project, session) =>
+            sessionToolProviders?.Invoke(project.Path, session.Id) ?? [];
         manager.NativeSystemPromptProvider = NativeBackendWiring.SystemPromptProvider;
         Fufucode.Core.Diagnostics.StartupProbe.Mark("host.manager", "PersistentSessionManager constructed");
         var project = manager.Metadata.GetOrCreateProject(projectPath);
@@ -428,6 +431,14 @@ public sealed class RealSessionHost : IAsyncDisposable
 
     /// <summary>保存当前会话草稿（按会话隔离；空文本也落盘，表示已清空）。</summary>
     public void SaveDraft(string text) => _manager.Metadata.SetDraft(_current.Session.Id, text);
+
+    internal async Task AdoptSessionAsync(PersistentSession next)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (next.Project.Id != _project.Id) throw new InvalidOperationException("侧边会话与主聊天项目不一致。");
+        if (ReferenceEquals(next, _current)) return;
+        await ReplaceAsync(next);
+    }
 
     private async Task ReplaceAsync(PersistentSession next)
     {

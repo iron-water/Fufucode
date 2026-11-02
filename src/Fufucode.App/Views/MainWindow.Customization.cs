@@ -236,6 +236,8 @@ public partial class MainWindow
             .ThenBy(action => WorkbenchActionDefaults.SubMenuOrder(action.Id)))
         {
             var placement = settings.Actions.GetValueOrDefault(action.Id, WorkbenchActionDefaults.Placement(action.Id));
+            if (action.Id == "notifications" && placement.Position == UiActionPosition.TopRight)
+                placement = placement with { Position = UiActionPosition.MenuRight };
             if (placement.Position == UiActionPosition.Hidden) continue;
             // 依赖插件/模块的动作：当前不可用时直接不渲染，避免菜单里堆一排灰条目。
             if (action.HideWhenUnavailable && _actions.GetDisabledReason(action.Id) is not null) continue;

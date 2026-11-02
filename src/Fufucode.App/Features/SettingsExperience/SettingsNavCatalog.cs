@@ -73,8 +73,8 @@ public static class SettingsNavCatalog
             "终端 命令 shell 输出 复制 粘贴 字体 terminal shell", "Terminal", "#4CC2FF"),
         new("files", "文件管理", SettingsNavTier.Features,
             "文件 管理 预览 目录 打开 资源管理器 files explorer preview", "Document", "#FFC83D"),
-        new("automation", "自动开发", SettingsNavTier.Features,
-            "自动 开发 自动化 任务 线程 automation agent", "Automation", "#B48CFF"),
+        new("automation", "Graph 与自主开发", SettingsNavTier.Features,
+            "Graph 图谱 模块 层级 工单 自主开发 预算 并发 模型 扫描 禁用 automation autodev", "Automation", "#F1707B"),
 
         // ── 其他（默认收纳二级小功能） ──
         new("notifications", "通知", SettingsNavTier.Other,

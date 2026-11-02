@@ -60,6 +60,8 @@ public partial class MainWindow
             wiring.PrepareForResync();
             _pluginPageHost.Manager.RequestPageResync();
         }
+        // AutoDev is now built in. Its retired package is absent from the activation catalog;
+        // legacy payload and state remain on disk for history without starting a second owner.
         _pluginPageHost.Start(_layoutContext);
         // 语音服务没有页面贡献，页面事件不会通知宿主；改用全局插件状态广播，
         // 安装/启用/停用/卸载后立即刷新朗读按钮、菜单与设置面板。

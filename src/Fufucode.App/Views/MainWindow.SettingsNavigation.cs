@@ -5,6 +5,7 @@ using Avalonia.Controls;
 using Avalonia.Layout;
 using Avalonia.Threading;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Infrastructure;
 
 namespace Fufucode.App;
 
@@ -19,6 +20,20 @@ public partial class MainWindow
     private async Task NavigateWorkspaceAsync(AppPage page)
     {
         if (_vm is not { } vm || _navigationPending || page == vm.CurrentPage) return;
+        if (page == AppPage.Graph)
+        {
+            if (!GraphEnabled) return;
+            if (_graphWorkspace is null)
+            {
+                try { EnsureGraphProject(_host?.ProjectPath ?? _options.ProjectPath ?? Environment.CurrentDirectory); }
+                catch (Exception error) { vm.Timeline.AddNotification("打开项目地图失败：" + error.Message); return; }
+            }
+        }
+        if (page == AppPage.Chat && _host is null && _options.Mode == Integration.AppSessionMode.Real)
+        {
+            await BootstrapRealAsync();
+            return;
+        }
         _navigationPending = true;
         try
         {
@@ -30,6 +45,10 @@ public partial class MainWindow
             }
             var returning = vm.IsSettingsPage;
             vm.CurrentPage = page;
+            if (page is AppPage.Chat or AppPage.Graph)
+            {
+                RefreshIsland();
+            }
             // 内容宿主只保留这一段过渡；先完成停靠区恢复和正文布局，避免淡入末尾再重排。
             UpdateLayout();
             Views.SurfaceMotion.Show(PageHost, offsetY: returning ? 0 : 6);

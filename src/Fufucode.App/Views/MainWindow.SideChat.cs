@@ -78,6 +78,14 @@ public partial class MainWindow
                 catch (Exception error) { _sideChatPage.ReportActionError(error.Message); }
             };
             menu.Items.Add(create);
+            var promote = new MenuItem { Header = "转到主聊天" };
+            Avalonia.Automation.AutomationProperties.SetAutomationId(promote, "sidechat-promote");
+            promote.Click += async (_, _) =>
+            {
+                try { await PromoteSideChatAsync(); }
+                catch (Exception error) { _sideChatPage.ReportActionError(error.Message); }
+            };
+            menu.Items.Add(promote);
             _sideChatPage.SetHeaderMenu(menu);
             OpenDockPage("sidechat", DockZone.Right);
         }
@@ -115,6 +123,7 @@ public partial class MainWindow
         _sideEmpty.IsVisible = false; _sideChatPage.IsVisible = true;
         vm.Input.IdentityContext = _vm?.Input.IdentityContext ?? "";
         vm.Input.DraftText = _host?.Manager.Metadata.GetDraft(session.Session.Id) ?? "";
+        RestoreGraphDraft(vm.Input, session.Session.Id);
         vm.Timeline.LoadHistory(HistoryMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel));
         _sideChatPage.ApplyAppearance(_customization.Current);
         if (_host is { } host)
@@ -125,15 +134,46 @@ public partial class MainWindow
         _sideDialogHost = new ExtensionUiDialogHost(this);
         _sideDialogHost.Attach(session.Chat);
         _sideExtensionUiWiring = SessionUiWiring.AttachExtensionUi(session.Chat, vm.Timeline, vm.Input, vm.StatusBar, _ => { });
+        AttachGraphConversation(session, main: false);
     }
 
-    private async Task CloseSideChatAsync()
+    private async Task PromoteSideChatAsync()
     {
+        if (_closed || _switching || _restarting || _sideSession is not { } side || _host is not { } host) return;
+        if (_borrowedHost) throw new InvalidOperationException("请在会话主窗口操作。");
+        if (_vm?.Input.IsTurnActive == true || (_sideChatPage.DataContext as MainViewModel)?.Input.IsTurnActive == true)
+            throw new InvalidOperationException("请先停止或等待当前聊天结束。");
+        if (!await ConfirmLeaveSettingsAsync()) return;
+        _switching = true;
+        try
+        {
+            if (_vm is { } previous) host.SaveDraft(previous.Input.ComposePrompt());
+            if (_sideChatPage.DataContext is MainViewModel sideVm)
+                host.Manager.Metadata.SetDraft(side.Session.Id, sideVm.Input.ComposePrompt());
+            _draftDebounce?.Stop();
+            var previousId = host.Current.Session.Id;
+            await host.AdoptSessionAsync(side);
+            await CloseSideChatAsync(releaseSession: false);
+            Integration.SessionWindowRegistry.CloseFollowers(previousId);
+            Integration.SessionWindowRegistry.RegisterOwner(side.Session.Id, host, this);
+            AttachRealSession();
+            await NavigateWorkspaceAsync(AppPage.Chat);
+            if (host.Manager.Metadata.GetPreference("graph-session-link:" + side.Session.Id) is not null)
+                OpenDockPage("graph-minimap", DockZone.Right);
+            _chatPage.Input.Focus();
+            Integration.SessionChangeBus.Publish(this);
+        }
+        finally { _switching = false; }
+    }
+
+    private async Task CloseSideChatAsync(bool releaseSession = true)
+    {
+        if (_sideSession is { } linked) DetachGraphConversation(linked.Session.Id);
         _sideDialogHost?.Detach(); _sideDialogHost = null;
         _sideExtensionUiWiring?.Dispose(); _sideExtensionUiWiring = null;
         if (_sideChatPage.DataContext is MainViewModel vm)
         {
-            if (_sideSession is { } current && _host is { } host) host.Manager.Metadata.SetDraft(current.Session.Id, vm.Input.DraftText);
+            if (_sideSession is { } current && _host is { } host) host.Manager.Metadata.SetDraft(current.Session.Id, vm.Input.ComposePrompt());
             // 侧边聊天换会话/关闭：解除旧时间线的会话订阅与工具组订阅，避免旧会话继续驱动。
             vm.Timeline.Dispose();
             vm.WorkspacePanel.Dispose(); vm.Sidebar.Dispose();
@@ -142,7 +182,7 @@ public partial class MainWindow
         _sideChatPage.IsVisible = false;
         _sideEmpty.IsVisible = true; _sideStatus.Text = "尚无侧边会话";
         if (_sideMock is { } mock) { _sideMock = null; await mock.StopAsync(); }
-        if (_sideSession is { } session) { _sideSession = null; await session.DisposeAsync(); }
+        if (_sideSession is { } session) { _sideSession = null; if (releaseSession) await session.DisposeAsync(); }
         _sideProject = null;
     }
 }

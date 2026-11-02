@@ -70,7 +70,7 @@ public partial class MainWindow
     private bool IsScratchSession(SessionRecord session) =>
         ScratchProject() is { } scratch && session.ProjectId == scratch.Id;
     /// <summary>真实会话用宿主元数据；mock 用一次性临时库，保证归档页也有一致的空态。</summary>
-    private DesktopMetadataStore MetadataOrMock() => _host?.Manager.Metadata ??
+    private DesktopMetadataStore MetadataOrMock() => _host?.Manager.Metadata ?? _projectOnlyManager?.Metadata ??
         (_mockOrganizationStore ??= new(new AppDataLayout(Path.Combine(Path.GetTempPath(), "Fufucode",
             "organization-demo-" + Guid.NewGuid().ToString("N")))));
 

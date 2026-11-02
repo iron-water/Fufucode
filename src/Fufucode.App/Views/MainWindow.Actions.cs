@@ -44,8 +44,8 @@ public partial class MainWindow
         Now("toggle.right", "右侧边栏", "布局", () => ToggleDock(DockZone.Right));
         Now("toggle.bottom", "底部面板", "布局", () => ToggleDock(DockZone.Bottom), shortcut: "Ctrl+J");
         Now("layout.reset", "恢复默认布局", "布局", ResetDockLayout);
-        Now("page.automation", "自动开发", "工作台", () => OpenDockPage("automation", DockZone.Right),
-            () => _workbenchPages.ContainsKey("automation") ? null : "请先在设置中启用自动开发模块", hideWhenUnavailable: true);
+        Action("page.automation", "Graph 自主开发", "工作台", () => NavigateWorkspaceAsync(AppPage.Graph),
+            () => GraphEnabled ? null : "Graph 模式已停用", hideWhenUnavailable: true);
         Now("page.local-review", "本地审查", "项目", () => OpenDockPage("local-review", DockZone.Right),
             () => !_workbenchPages.ContainsKey("local-review") ? "请先在设置中启用本地审查模块" :
                 _vm is null ? "会话尚未就绪" : !_vm.IsChatPage ? "返回工作区后可使用" : null, hideWhenUnavailable: true);

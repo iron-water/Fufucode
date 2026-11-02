@@ -29,6 +29,7 @@ public sealed record SettingsCategoryViewModel(string Id, string Title, string S
 {
     /// <summary>基础类固定，不参与升降级。</summary>
     public bool CanMoveTier => OriginTier != SettingsNavTier.Basic;
+    public bool IsAutoDev => Id == "automation";
 
     /// <summary>当前在「其他」时显示升级文案，否则显示收纳文案。</summary>
     public string TierActionLabel => Tier == SettingsNavTier.Other ? "升级到一级侧栏" : "收纳进「其他」";
@@ -231,7 +232,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// 等子页会保留控件树但整体不可见，表现为“点了没反应”。
     /// </summary>
     public bool ShowWorkbenchSection => SelectedCategory?.Id is
-        "appearance" or "functions" or "config" or "browser" or "terminal" or "files" or "automation";
+        "appearance" or "functions" or "config" or "browser" or "terminal" or "files";
     public string WorkbenchSectionId => SelectedCategory?.Id switch
     {
         "functions" => "functions", "config" => "config", "browser" => "browser",
@@ -404,7 +405,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool MatchesOption(string terms) => SearchText.Trim().Length == 0 || terms.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase);
     private void NotifyCategoryVisibility()
     {
-        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowSecurity), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
+        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(ShowGraphSettings), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowSecurity), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
                      nameof(ShowStorage), nameof(ShowMemory), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }

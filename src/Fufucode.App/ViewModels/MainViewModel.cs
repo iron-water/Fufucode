@@ -17,6 +17,7 @@ namespace Fufucode.App.ViewModels;
 public enum AppPage
 {
     Chat,
+    Graph,
     Extensions,
     Settings,
 }
@@ -50,7 +51,8 @@ public sealed partial class MainViewModel : ViewModelBase
     public IChatSession Session { get; }
 
     /// <summary>侧栏副标题：如实标注数据来源，mock 不得冒充真实连接。</summary>
-    public string ModeText => Session is MockChatSession ? "mock 数据演示 · 未连接真实后端" :
+    public string ModeText => Session is Integration.UnopenedChatSession ? "项目工作区 · 尚未打开聊天" :
+        Session is MockChatSession ? "mock 数据演示 · 未连接真实后端" :
         "真实 " + (Session is IBackendChatSession backend ? backend.BackendName : "后端") + " 会话";
 
     /// <summary>当前项目根：Markdown 相对图片按此解析。由组合根在切换项目时写入。</summary>
@@ -76,6 +78,7 @@ public sealed partial class MainViewModel : ViewModelBase
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsChatPage))]
+    [NotifyPropertyChangedFor(nameof(IsGraphPage))]
     [NotifyPropertyChangedFor(nameof(IsExtensionsPage))]
     [NotifyPropertyChangedFor(nameof(IsSettingsPage))]
     [NotifyPropertyChangedFor(nameof(CurrentPageContent))]
@@ -105,6 +108,7 @@ public sealed partial class MainViewModel : ViewModelBase
     }
 
     public bool IsChatPage => CurrentPage == AppPage.Chat;
+    public bool IsGraphPage => CurrentPage == AppPage.Graph;
 
     public bool IsExtensionsPage => CurrentPage == AppPage.Extensions;
 

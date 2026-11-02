@@ -51,7 +51,8 @@
                 <views:SemanticIcon Grid.Column="0" Width="20" Height="20" VerticalAlignment="Center"
                           IconName="{Binding Icon}" CategoryColor="{Binding IconColor}"/>
                 <TextBlock Grid.Column="1" Text="{Binding Title}" VerticalAlignment="Center"
-                           FontSize="14" Foreground="{DynamicResource AppTextPrimary}"/>
+                           Classes.autodevSetting="{Binding IsAutoDev}"
+                           FontSize="14"/>
               </Grid>
             </Grid>
           </DataTemplate>
@@ -70,7 +71,7 @@
           <DataTemplate x:DataType="vm:SettingsCategoryViewModel">
             <StackPanel Orientation="Horizontal" Spacing="8">
               <views:SemanticIcon Width="15" Height="15" VerticalAlignment="Center" IconName="{Binding Icon}"/>
-              <TextBlock Classes="body" Text="{Binding Title}" VerticalAlignment="Center"/>
+              <TextBlock Classes="body" Classes.autodevSetting="{Binding IsAutoDev}" Text="{Binding Title}" VerticalAlignment="Center"/>
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>
@@ -135,6 +136,8 @@
                                          Page="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ActivePageId}"
                                          SearchActive="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).IsSearching}"
                                          SearchText="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).SearchText}"/>
+
+            <ContentControl IsVisible="{Binding ShowGraphSettings}" Content="{Binding GraphSettingsContent}"/>
 
             <views:SecurityCenterView x:Name="SecurityCenter"
                                       IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowSecurity}"

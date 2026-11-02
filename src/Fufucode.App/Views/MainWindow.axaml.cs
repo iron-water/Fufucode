@@ -264,6 +264,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _extensionsPage.DataContext = vm.Extensions;
         _settingsPage.DataContext = vm.Settings;
         UpdatePageHost();
+        _actions.RefreshCapabilities();
+        if (_customization is not null) BuildActionSurfaces(_customization.Current);
         Core.Diagnostics.StartupProbe.Mark("attach.page-host", "page host updated");
 
         // 每个新 VM 只允许一条提交接线；旧 VM 的订阅随其输入对象一起丢弃。
@@ -280,11 +282,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             ? SelfTestSettingsStore(selfTestRoot)
             : App.SettingsStore;
         var host = _host;
-        var layout = host?.Manager.Layout;
+        var projectManager = host?.Manager ?? _projectOnlyManager;
+        var layout = projectManager?.Layout;
         var (nodeHint, cliHint) = RuntimePathHints();
         var context = new SettingsPageViewModel.Context(
-            Store: host?.Manager.Settings ?? _settingsStore,
-            IsMock: host is null,
+            Store: projectManager?.Settings ?? _settingsStore,
+            IsMock: _options.Mode == AppSessionMode.Mock,
             CurrentModel: () => host?.Chat.CurrentModel,
             QueryModels: host is null
                 ? null
@@ -323,7 +326,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             ApprovalDiagnostic: () => host?.Current.Coordinator.ApprovalDiagnostic,
             ActiveExtensionPaths: () => host?.ActiveExtensionPaths.ToArray() ?? [],
             LastStartupFailure: () => _lastStartupFailure,
-            ProjectPath: () => host?.ProjectPath ?? "(mock)",
+            ProjectPath: () => host?.ProjectPath ?? _options.ProjectPath ?? "(未选择项目)",
             OpenFolder: OpenFolderAsync,
             CopyText: text => Clipboard is { } clipboard
                 ? Avalonia.Input.Platform.ClipboardExtensions.SetTextAsync(clipboard, text)
@@ -408,8 +411,10 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         {
             AppPage.Extensions => _extensionsPage,
             AppPage.Settings => _settingsPage,
+            AppPage.Graph => _graphMainHost,
             _ => (object)_chatPage,
         };
+        ApplyWorkModeLayout(_vm.CurrentPage);
         _vm.Sidebar.SetConversationVisible(_vm.IsChatPage);
     }
 
@@ -440,6 +445,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 }
             }
 
+            if (_options.StartGraph && string.IsNullOrWhiteSpace(_options.SessionId))
+            {
+                try { await OpenProjectGraphAsync(_options.ProjectPath!); }
+                catch (Exception error) { ShowStartup("项目打开失败：" + error.Message, inProgress: false); }
+                return;
+            }
             Program.Startup?.Mark("session.bootstrap", "real session bootstrap begins");
             await BootstrapRealAsync();
             return;
@@ -495,7 +506,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             var host = await ProjectTrustFlow.RunAsync(
                 () => OpenHostForTesting is { } testOpen
                     ? testOpen(_bootstrapCts.Token)
-                    : RealSessionHost.OpenAsync(_options, _bootstrapCts.Token),
+                    : RealSessionHost.OpenAsync(_options, _bootstrapCts.Token, sessionToolProviders: GraphSessionTools),
                 AskTrustAsync,
                 (status, decision) => RealSessionHost.SaveTrustDecision(_options, status, decision));
             Core.Diagnostics.StartupProbe.Mark("session.open.end", "RealSessionHost.OpenAsync returned");
@@ -605,16 +616,23 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     {
         _options = _options with { ProjectPath = path, SessionId = null };
         StartupPickProject.IsVisible = false;
-        _ = BootstrapRealAsync();
+        if (_options.StartGraph) _ = OpenProjectGraphAsync(path);
+        else _ = BootstrapRealAsync();
     }
 
     /// <summary>运行中切换项目（先开后放：新项目打开成功才释放旧 host，失败/放弃旧会话原样保留）。</summary>
     private async Task SwitchProjectAsync(string path)
     {
-        if (_switching || _restarting || _closed || _host is null)
+        if (_switching || _restarting || _closed) return;
+        if (_vm?.IsGraphPage == true || _host is null && _projectOnlyManager is not null)
         {
+            _switching = true;
+            try { await OpenProjectGraphAsync(path); }
+            catch (Exception error) { _vm?.Timeline.AddNotification("打开项目失败：" + error.Message); }
+            finally { _switching = false; }
             return;
         }
+        if (_host is null) return;
 
         if (_borrowedHost)
         {
@@ -647,7 +665,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             ShowStartup("正在打开项目…", inProgress: true);
             var newOptions = _options with { ProjectPath = path, SessionId = null };
             var next = await ProjectTrustFlow.RunAsync(
-                () => RealSessionHost.OpenAsync(newOptions, _bootstrapCts.Token),
+                () => RealSessionHost.OpenAsync(newOptions, _bootstrapCts.Token, sessionToolProviders: GraphSessionTools),
                 AskTrustAsync,
                 (status, decision) => RealSessionHost.SaveTrustDecision(newOptions, status, decision));
             if (_closed)
@@ -800,9 +818,11 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
         // 草稿按会话隔离恢复（M4；desktop.db drafts 表）。
         vm.Input.DraftText = host.LoadDraft() ?? string.Empty;
+        RestoreGraphDraft(vm.Input, current.Id);
         // 同步视图不写草稿：草稿归主窗口所有，避免两个窗口互相覆盖。
         if (!_borrowedHost) WireDraftPersistence(vm);
 
+        AttachGraphConversation(host.Current);
         _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, host.CurrentTranscript(), current.Id);
         _dialogHost!.Attach(host.Chat);
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
@@ -1709,6 +1729,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _dialogHost?.Detach();
         _draftDebounce?.Stop();
         SaveWorkspaceDimensions();
+        SaveWorkModeLayout();
         DisposeFloatingDocks();
         try { SaveModulePreferences(); }
         catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
@@ -1717,6 +1738,16 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         DisposePerformance();
         foreach (var page in _workbenchPages.Values)
             foreach (var browser in page.Content.GetVisualDescendants().OfType<Views.BrowserViewHost>()) browser.Dispose();
+        foreach (var subscription in _graphChatSubscriptions.Values) subscription.Session.Event -= subscription.Handler;
+        _graphChatSubscriptions.Clear();
+        foreach (var workspace in _graphProjects.Values)
+        {
+            try { await workspace.Service.StopAllAsync(); }
+            catch (Exception error) { System.Diagnostics.Trace.TraceWarning("Graph stop: " + error.Message); }
+            workspace.Model.Dispose();
+            workspace.Service.Dispose();
+        }
+        _graphProjects.Clear();
         _workbenchPages.Dispose();
         _actions.Changed -= OnShortcutCapabilitiesChanged;
         _shortcuts.Changed -= UpdateShortcutLabels;

@@ -377,7 +377,6 @@ $plugins = @(
     @{ Id = 'skin.material3'; Project = 'src/Fufucode.Plugins.SkinMaterial3/Fufucode.Plugins.SkinMaterial3.csproj' },
     @{ Id = 'skin.luna'; Project = 'src/Fufucode.Plugins.SkinLuna/Fufucode.Plugins.SkinLuna.csproj' },
     @{ Id = 'skin.liquidglass'; Project = 'src/Fufucode.Plugins.SkinLiquidGlass/Fufucode.Plugins.SkinLiquidGlass.csproj' },
-    @{ Id = 'automation.auto-dev'; Project = 'src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj' },
     @{ Id = 'workspace.terminal'; Project = 'src/Fufucode.Plugins.Terminal/Fufucode.Plugins.Terminal.csproj' },
     @{ Id = 'workspace.layerfs'; Project = 'src/Fufucode.Plugins.LayerFs/Fufucode.Plugins.LayerFs.csproj' },
     @{ Id = 'workspace.browser'; Project = 'src/Fufucode.Plugins.Browser/Fufucode.Plugins.Browser.csproj' },

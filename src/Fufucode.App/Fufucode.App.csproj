@@ -138,6 +138,7 @@
     <ProjectReference Include="Abstractions\Fufucode.App.Abstractions.csproj" />
     <!-- M2 集成：组合根经 PersistentSessionManager 构建真实会话（decisions.md：集成时由 App 引用 Core） -->
     <ProjectReference Include="..\Fufucode.Core\Fufucode.Core.csproj" />
+    <ProjectReference Include="..\Fufucode.AutoDev\Fufucode.AutoDev.csproj" />
   </ItemGroup>
 
   <!-- E1：Microsoft.Web.WebView2 的 targets 会把 Core/WPF/WinForms 三个托管程序集一并注入引用。

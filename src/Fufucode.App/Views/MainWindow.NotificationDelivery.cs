@@ -70,7 +70,7 @@ public partial class MainWindow
         {
             SetNotificationPromptVisible(_notifications.HasPrompt && (_notificationDelivery.DeliversToToast ||
                 (_notificationDelivery.DeliversToWindows && _notifications.LatestPrompt is { } latest && _windowsFallbackKeys.Contains(latest.Key))));
-            Avalonia.Automation.AutomationProperties.SetHelpText(CaptionNotifications, _notifications.SummaryText);
+            Avalonia.Automation.AutomationProperties.SetHelpText(CaptionNotifications, "切换 Chat / Graph");
             _notificationsView.ShowChannelPrompt(_notificationDelivery.DeliversToPage
                 ? _notifications.Items.FirstOrDefault(item => item.IsProactive && !item.IsRead && (!item.IsApproval || item.RequiresAction)) : null);
             foreach (var dock in AllDockHosts()) { dock.BadgeText = NotificationBadge; dock.RefreshBadges(); }

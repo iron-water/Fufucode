@@ -75,7 +75,7 @@ public partial class MainWindow
         string? WorkAreaUnavailable() => _vm is null ? "会话尚未就绪" : _vm.IsSettingsPage ? "返回工作区后可使用" : null;
         RegisterBrowserActions();
         Register("commands", "命令面板", "全局", "Ctrl+K / Ctrl+Shift+P", "搜索动作、会话与设置；输入框斜杠命令仍归 composer", () => { OpenGlobalOverlay("commands"); _palette.Open(); return Task.CompletedTask; });
-        Register("settings", "设置", "全局", "", "切换设置与工作区", () => NavigateWorkspaceAsync(_vm?.IsSettingsPage == true ? AppPage.Chat : AppPage.Settings), SessionUnavailable);
+        Register("settings", "设置", "全局", "", "切换设置与工作区", () => NavigateWorkspaceAsync(_vm?.IsSettingsPage == true ? _settingsReturnPage : AppPage.Settings), SessionUnavailable);
         Register("chat", "返回对话", "导航", "", "返回当前会话", () => NavigateWorkspaceAsync(AppPage.Chat), SessionUnavailable);
         Register("extensions", "扩展", "导航", "", "管理已安装的扩展", () => NavigateWorkspaceAsync(AppPage.Extensions), SessionUnavailable);
         Register("files", "文件", "工作区", "Ctrl+P", "浏览项目文件，完整路径可复制", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Files), WorkAreaUnavailable);
@@ -99,8 +99,9 @@ public partial class MainWindow
             () => !_workbenchPages.ContainsKey("browser") ? "浏览器模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         Register("library", "资料库", "工作区", "", "导入、检索与引用本地资料", () => { OpenDockPage("library", DockZone.Right); return Task.CompletedTask; },
             () => !_workbenchPages.ContainsKey("library") ? "资料库模块已停用，可在设置中启用" : WorkAreaUnavailable(), hideWhenUnavailable: true);
+        RegisterGraphActions();
         CaptionCommands.Command = _actions.GetCommand("commands");
-        CaptionNotifications.Command = _actions.GetCommand("notifications");
+        CaptionNotifications.Command = _actions.GetCommand("workspace.mode");
         Activated += (_, _) => _notifications.SetWindowFocused(true);
         Deactivated += (_, _) => Dispatcher.UIThread.Post(RefreshNotificationFocus);
         SizeChanged += (_, _) => ResizeGlobalOverlay();
@@ -229,7 +230,7 @@ public partial class MainWindow
     private void GlobalScrim_Click(object? sender, RoutedEventArgs e) => CloseGlobalOverlay();
     private void OnNotificationPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        Avalonia.Automation.AutomationProperties.SetHelpText(CaptionNotifications, _notifications.SummaryText);
+        Avalonia.Automation.AutomationProperties.SetHelpText(CaptionNotifications, "切换 Chat / Graph");
         NotificationPrompt.DataContext = _notifications.LatestPrompt;
         // 浮层只在用户选择该渠道时出现；关掉浮层渠道后浮窗仍按原策略提醒。
         if (_notificationDelivery is not null) RefreshNotificationChannel();

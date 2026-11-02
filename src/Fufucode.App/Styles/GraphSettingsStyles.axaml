@@ -1,0 +1,26 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Style Selector="TextBlock.autodevSetting">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings ComboBox">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings NumericUpDown">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings Button">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings TextBlock.settingsRowTitle">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings TextBlock.settingsRowDesc">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+  <Style Selector=".autodevSettings TextBlock.settingsGroupHeader">
+    <Setter Property="Foreground" Value="{DynamicResource MsRed}"/>
+  </Style>
+</Styles>

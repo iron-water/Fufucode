@@ -66,7 +66,9 @@ public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     // 后台常驻（托盘）行为；旧配置没有该字段时按默认“关窗即退出”。
     BackgroundSettings? Background = null,
     // 内存优化开关；null 视为全部关闭（高性能模式）。
-    PerformanceSettings? Performance = null);
+    PerformanceSettings? Performance = null,
+    // Graph / AutoDev is a built-in mode; disabling it leaves ordinary Chat intact.
+    bool GraphEnabled = true);
 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(AppSettings))]

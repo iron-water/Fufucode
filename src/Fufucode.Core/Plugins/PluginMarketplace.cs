@@ -197,11 +197,6 @@ public static class PluginMarketplaceCatalog
             DefaultInstalled: false, DefaultEnabled: false),
 
         // ── 自动化与调度插件 ──
-        new("automation.auto-dev", "自动开发工作台", PluginCategory.Automation,
-            "多 Agent 自动化开发流水线、DAG 依赖规划、隔离工作树调度与交付卡自动对账审查闭环。",
-            "1.0.0", "Fufucode Team", ["多 Agent 派单调度", "Git 工作树生命周期", "自动化验收测试"],
-            DefaultInstalled: false, DefaultEnabled: false),
-
         new("automation.cron", "用户定时任务", PluginCategory.Automation,
             "定时与周期性执行用户自定义任务，支持 Heartbeat、Cron 与后台状态监听。",
             "1.0.0", "Fufucode Team", ["后台计时调度器"],

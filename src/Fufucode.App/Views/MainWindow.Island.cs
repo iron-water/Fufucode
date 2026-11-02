@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
@@ -259,9 +260,12 @@ public partial class MainWindow
         sessionCard.Classes.Add("islandWidget");
 
         // ── 卡 3：任务占位 ──────────────────────────────────────
-        var taskLabel = new TextBlock { Text = "卡片三", FontSize = 13, VerticalAlignment = VerticalAlignment.Top };
+        var taskLabel = new TextBlock { Text = "Graph 项目地图", FontSize = 14, VerticalAlignment = VerticalAlignment.Top };
         taskLabel.Classes.Add("meta");
-        var taskCard = new Border { Height = 72, Tag = "任务", Child = taskLabel };
+        var graphEntry = new Button { Content = taskLabel, Command = _actions.GetCommand("graph"),
+            HorizontalAlignment = HorizontalAlignment.Stretch, HorizontalContentAlignment = HorizontalAlignment.Left };
+        Avalonia.Automation.AutomationProperties.SetAutomationId(graphEntry, "island-graph");
+        var taskCard = new Border { Height = 72, Tag = "Graph", Child = graphEntry };
         taskCard.Classes.Add("islandWidget");
 
         // 候选卡片，用户后续拖/点加入上方三卡。
@@ -336,6 +340,17 @@ public partial class MainWindow
         var model = vm?.StatusBar.ModelText;
         var usage = vm?.StatusBar.UsageText;
         var hasQueue = vm?.StatusBar.HasQueue == true;
+        if (vm?.IsGraphPage == true && _graphWorkspace is { } graph)
+        {
+            var snapshot = graph.Model.Snapshot;
+            title = snapshot.Title;
+            activity = graph.Model.ProjectStatus;
+            running = snapshot.Runs.Any(run => run.Status is "Running" or "Queued" or "Stopping");
+            model = "Graph / " + activity;
+            failed = snapshot.Runs.Any(run => run.Status == "Unknown");
+            usage = null;
+            hasQueue = false;
+        }
 
         // ── 紧凑胶囊 ──
         // 窄窗分级收缩：先丢模型，再丢用量，最后只留"点 + 名称 + 展开"。

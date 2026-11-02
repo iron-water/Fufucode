@@ -436,10 +436,23 @@ public partial class MainWindow
     private void AttachWorkspaceContext(MainViewModel vm)
     {
         WireSessionContext(vm);
-        var path = _host?.ProjectPath ?? Environment.CurrentDirectory;
+        var path = _host?.ProjectPath ?? _options.ProjectPath ?? Environment.CurrentDirectory;
         vm.ProjectRootPath = Path.GetFullPath(path);
+        try { EnsureGraphProject(path); }
+        catch (IOException error) when (!vm.IsGraphPage)
+        {
+            // Another Graph owner cannot prevent an ordinary Chat window from opening.
+            _graphWorkspace = null;
+            _graphMainHost.Child = null;
+            foreach (var slot in _graphPanelSlots.Values) slot.Child = null;
+            vm.Timeline.AddNotification("项目地图暂不可用：" + error.Message);
+        }
         vm.Timeline.ResolveReferencedFiles(vm.ProjectRootPath);
-        if (_host is null) vm.WorkspacePanel.AttachMock(path);
+        if (_host is null && _options.Mode == AppSessionMode.Mock) vm.WorkspacePanel.AttachMock(path);
+        else if (_host is null)
+            vm.WorkspacePanel.AttachContext(path, null,
+                ct => ChangeRangeQuery.WorkspaceAsync(path, ct),
+                ct => ChangeRangeQuery.SessionWritesAsync(path, [], [], ct));
         else
         {
             var coordinator = _host.Current.Coordinator;
