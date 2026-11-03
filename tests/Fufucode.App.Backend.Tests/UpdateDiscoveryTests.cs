@@ -1,7 +1,9 @@
 using System;
 using System.IO;
+using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Fufucode.Core;
 using Fufucode.Core.Updates;
@@ -155,6 +157,34 @@ internal static class UpdateDiscoveryTests
                          Path.IsPathRooted(feedManifest.PackageUrl) &&
                          string.Equals(feedManifest.PackageUrl, packagePath, StringComparison.OrdinalIgnoreCase),
                 "清单里的相对 packageUrl 解析为同目录的绝对路径");
+
+            // 9. GitHub 路径：资产 JsonElement 必须在 JsonDocument 释放后仍然可读。
+            // 只在新版本分支读资产，所以「已是最新」一直正常、一有更新就 ObjectDisposedException。
+            var releaseJson =
+                "{\"tag_name\":\"v9.9.9\",\"body\":\"* 修复若干问题\",\"published_at\":\"2026-11-03T05:50:15Z\"," +
+                "\"assets\":[{\"name\":\"feed.json\",\"browser_download_url\":\"https://example.invalid/feed.json\"}," +
+                "{\"name\":\"Fufucode-Native-Setup.exe\",\"browser_download_url\":\"https://example.invalid/Fufucode-Native-Setup.exe\"," +
+                "\"size\":14,\"digest\":\"sha256:" + new string('b', 64) + "\"}]}";
+            var feedJson = JsonSerializer.Serialize(new
+            {
+                version = "9.9.9",
+                releaseDate = now,
+                releaseNotes = "feed 里的固定文案",
+                packageUrl = "Fufucode-Native-Setup.exe",
+                sha256 = new string('b', 64),
+                packageSizeBytes = 14,
+            });
+            using var github = new UpdateService(new HttpClient(new StubHttpHandler(request =>
+                request.RequestUri!.AbsolutePath.EndsWith("/feed.json", StringComparison.Ordinal)
+                    ? (System.Net.HttpStatusCode.OK, feedJson)
+                    : (System.Net.HttpStatusCode.OK, releaseJson))));
+            var githubResult = await github.CheckAsync("1.4.0", "iron-water/Fufucode");
+            checks.Check(githubResult.Status == UpdateCheckStatus.UpdateAvailable,
+                "GitHub Release 有新版本时返回 UpdateAvailable（资产在文档释放后仍可读）");
+            checks.Check(githubResult.Manifest is { } githubManifest &&
+                         githubManifest.PackageUrl == "https://example.invalid/Fufucode-Native-Setup.exe",
+                "feed.json 的相对 packageUrl 按资产地址补全为绝对下载地址");
+            checks.Equal("* 修复若干问题", githubResult.Manifest?.ReleaseNotes, "发布说明取 Release 正文");
             _ = Task.CompletedTask;
         }
         finally
@@ -164,5 +194,19 @@ internal static class UpdateDiscoveryTests
                 try { Directory.Delete(root, true); } catch { }
             }
         }
+    }
+}
+
+/// <summary>用固定 JSON 应答任意请求，避免测试联网。</summary>
+internal sealed class StubHttpHandler(Func<HttpRequestMessage, (System.Net.HttpStatusCode Status, string Body)> respond)
+    : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var (status, body) = respond(request);
+        return Task.FromResult(new HttpResponseMessage(status)
+        {
+            Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json"),
+        });
     }
 }

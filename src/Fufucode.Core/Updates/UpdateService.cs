@@ -205,7 +205,11 @@ public sealed class UpdateService : IDisposable
                         DateTimeOffset.TryParse(p.GetString(), out var publishedAt)
             ? publishedAt
             : DateTimeOffset.UtcNow;
-        return new ReleaseCandidate(version, assets.EnumerateArray().ToArray(), notes, published, null);
+        // 必须 Clone：JsonElement 借用所属 JsonDocument 的内存，调用方在 ResolveReleaseAsync
+        // 返回时就把它 using 掉了，不克隆的话后续读资产会抛 ObjectDisposedException
+        // ——只在新版本分支用到资产，所以「已是最新」看起来一切正常，一有更新就失败。
+        return new ReleaseCandidate(version, assets.EnumerateArray().Select(a => a.Clone()).ToArray(),
+            notes, published, null);
     }
 
     private static string? GetString(JsonElement element, string name) =>
