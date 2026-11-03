@@ -592,7 +592,18 @@ internal static class PureCSharpContractTests
             await compactEngine.RunTurnAsync(new PureModelRequest(
                 new[] { new PureAgentMessage(PureAgentRole.User, "继续") }, Array.Empty<string>()));
             var compacted = compactEngine.GetState().History!;
-            checks.Check(compacted.Count < largeHistory.Count + 1, "超长历史被压缩而不是原样发送");
+            // 判据是"前缀被摘要替换、字符量下降"，不是"条数必须变少"：保留的尾部组、台账、
+            // 钉住的用户指令都可能让条数持平甚至上升（见 tests/Fufucode.NativeCore.Tests
+            // Case02「有效压缩不以消息条数变化为前提」）。按条数断言会把正确实现判成失败。
+            static long HistoryChars(IEnumerable<PureAgentMessage> history) => history.Sum(m =>
+                (long)(m.Content?.Length ?? 0) + (m.ReasoningContent?.Length ?? 0) +
+                (m.ToolCalls?.Sum(call => (long)call.ArgumentsJson.Length) ?? 0));
+            var beforeChars = HistoryChars(largeHistory);
+            checks.Check(HistoryChars(compacted) < beforeChars, "超长历史被压缩而不是原样发送（字符量下降）");
+            // 用户指令可能被逐字钉住（FindPinnedInstructions），所以不能要求"某一条一定消失"；
+            // 但进入摘要的前缀必须确有消息退役，而不是整段原样带过。
+            var largeKept = compacted.Count(m => m.Content is { Length: >= 20_000 });
+            checks.Check(largeKept < 30, $"被摘要的前缀消息确有退役（原文保留 {largeKept} 条，共 30 条）");
             checks.Check(compacted.Any(m => m.Content.Contains("上下文") && m.Content.Contains("压缩")),
                 "压缩后插入明确的摘要/省略说明");
             checks.Equal(PureAgentRole.System, compacted[0].Role, "压缩后 System 消息仍保留在首位");
