@@ -55,7 +55,8 @@ public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     string? ThinkingLevel = null, string Theme = "system", string? ProxyUrl = null,
     CompatibleEndpoint? Endpoint = null,
     string? UpdateFeedUrl = null,
-    bool AutoCheckUpdates = false,
+    // 发布渠道构建启动时自动检查更新并提示下载；本地开发构建因 IsReleaseBuild=false 不会联网。
+    bool AutoCheckUpdates = true,
     // 双渠道更新：开发构建默认只扫描本地；正式发布版在构建时写入 GitHub 仓库坐标，
     // 使其自动对齐 GitHub Release。设置页不暴露这个字段。
     string? GitHubRepository = null,

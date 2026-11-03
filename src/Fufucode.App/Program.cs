@@ -45,6 +45,34 @@ internal static class Program
     public static void Main(string[] args)
     {
         // 尽早解析数据根：自定义 --data-root 时启动记录也落到同一处，而不是全局默认目录。
+        // 「发现新版本」提示窗口的无头渲染自测（截图 + 文案断言），不联网。
+        var updateShotIndex = Array.IndexOf(args, "--update-prompt-selftest");
+        if (updateShotIndex >= 0 && updateShotIndex + 1 < args.Length)
+            Environment.Exit(SelfTest.UpdatePromptShot.Run(args[updateShotIndex + 1]));
+
+        // 诊断入口：只跑一次发布更新检查并打印结果，不启动 UI。
+        // 用于验证发布包能否连上 GitHub Release（也可在 CI 里当冒烟）。
+        if (args.Contains("--check-updates"))
+        {
+            var build = Fufucode.Core.Updates.BuildInfo.ResolveCurrent();
+            if (!Fufucode.Core.Updates.UpdateService.IsReleaseBuild(build))
+            {
+                Console.WriteLine($"not-release-build version={build.Version} channel={build.Channel}");
+                Environment.Exit(2);
+            }
+            using var updater = new Fufucode.Core.Updates.UpdateService();
+            var result = updater.CheckAsync(build.Version, build.GitHubRepository!,
+                includePreReleases: build.IsTestChannel).GetAwaiter().GetResult();
+            Console.WriteLine($"status={result.Status} current={build.Version} repo={build.GitHubRepository}");
+            Console.WriteLine("message=" + result.Message);
+            if (result.Manifest is { } manifest)
+            {
+                Console.WriteLine($"manifest={manifest.Version} size={manifest.PackageSizeBytes} " +
+                                  $"url={manifest.PackageUrl} sha256={manifest.Sha256}");
+            }
+            Environment.Exit(result.Status == Fufucode.Core.Updates.UpdateCheckStatus.Failed ? 1 : 0);
+        }
+
         var startupOptions = AppOptions.Parse(args);
         StartupActivationPayload = startupOptions.ActivationPayload;
         // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。

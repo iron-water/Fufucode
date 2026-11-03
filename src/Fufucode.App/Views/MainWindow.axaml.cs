@@ -422,6 +422,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     {
         ApplyMicaOverrides();
         AttachComputerCursorOverlay();
+        // 发布渠道构建：启动后台检查 GitHub 新版本，有更新弹提示窗口（自身延迟，不阻塞启动）。
+        _ = CheckForUpdatesOnStartupAsync();
         if (_options.Mode == AppSessionMode.Real)
         {
             // M3.1：无显式 --project 时回退到最近一个仍存在的项目；全部缺失则进入“选择项目”态。
