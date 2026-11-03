@@ -45,7 +45,6 @@ internal sealed class DockRegionView : UserControl
     private readonly MenuItem _floatRegionItem = new() { Header = "浮动整栏" };
     private readonly ContextMenu _regionMenu = new();
     private Button? _hideButton;
-    private Button? _floatButton;
     internal ContextMenu RegionMenuForTesting => _regionMenu;
     private DockZone _zone;
     public DockZone Zone
@@ -86,8 +85,9 @@ internal sealed class DockRegionView : UserControl
     public event Action<string>? CloseRequested;
     public event Action<string>? PinRequested;
     public event Action<DockZone>? HideRequested;
-    public event Action<string, Point>? PageDragged;
-    public event Action<Point?>? DragPositionChanged;
+    // 拖拽位置用屏幕坐标上报：跨窗口（浮动栏 → 主窗停靠区）也能落到同一套命中逻辑。
+    public event Action<string, PixelPoint>? PageDragged;
+    public event Action<PixelPoint?>? DragPositionChanged;
     public event Action<string, int>? ReorderRequested;
     public event Action<string>? FloatPageRequested;
     public event Action? FloatRegionRequested;
@@ -107,11 +107,7 @@ internal sealed class DockRegionView : UserControl
         var add = WorkbenchUi.IconButton("Add", "打开功能页", showToolTip: false);
         var hide = WorkbenchUi.IconButton("ChevronDown", "隐藏此区域（页面与进程保留）");
         _hideButton = hide;
-        // 整栏浮动必须有可见入口：页签占满栏头时右键只能落到页签菜单，
-        // 只靠栏头空白右击会让“浮动整栏/变成独立窗口”事实上不可达。
-        var floatRegion = WorkbenchUi.IconButton("WindowNew", "浮动整栏（变为独立窗口）");
-        _floatButton = floatRegion;
-        floatRegion.Click += (_, _) => FloatRegionRequested?.Invoke();
+        // 整栏浮动保留右键菜单入口；栏头不再放单独按钮——页签拖到非停靠区即可变成独立窗口。
         var regionMenu = _regionMenu;
         _floatRegionItem.Click += (_, _) => FloatRegionRequested?.Invoke();
         regionMenu.Items.Add(_floatRegionItem);
@@ -141,14 +137,12 @@ internal sealed class DockRegionView : UserControl
             OpenRegionMenu();
             e.Handled = true;
         }, Avalonia.Interactivity.RoutingStrategies.Tunnel);
-        add.Classes.Add("toolButton"); hide.Classes.Add("toolButton"); floatRegion.Classes.Add("toolButton");
+        add.Classes.Add("toolButton"); hide.Classes.Add("toolButton");
         add.Margin = new Thickness(0, 0, 2, 0); hide.Margin = new Thickness(0, 0, 6, 0);
-        floatRegion.Margin = new Thickness(0, 0, 2, 0);
-        add.VerticalAlignment = hide.VerticalAlignment = floatRegion.VerticalAlignment = VerticalAlignment.Center;
+        add.VerticalAlignment = hide.VerticalAlignment = VerticalAlignment.Center;
         hide.Click += (_, _) => HideRequested?.Invoke(Zone);
         var header = _header;
         DockPanel.SetDock(hide, Dock.Right); header.Children.Add(hide);
-        DockPanel.SetDock(floatRegion, Dock.Right); header.Children.Add(floatRegion);
         DockPanel.SetDock(add, Dock.Right); header.Children.Add(add);
         _tabScroll.Content = _tabs;
         AutomationProperties.SetName(_tabScroll, "页签栏，可用滚轮横向浏览");
@@ -192,6 +186,16 @@ internal sealed class DockRegionView : UserControl
         return true;
     }
     internal void SetDropTarget(bool active) => _dropTarget.IsVisible = active;
+
+    /// <summary>页面被拖入本栏后短暂淡入，避免内容在布局动画结束时直接闪现。</summary>
+    internal void AnimatePageArrival()
+    {
+        if (_selectedId is null || Motion.Reduced) return;
+        if (Catalog.FirstOrDefault(page => page.Id == _selectedId)?.Content is not { } content) return;
+        content.Opacity = 0.35;
+        _ = Motion.AnimateValue(0.35, 1, Motion.Fast,
+            value => content.Opacity = value, () => content.Opacity = 1);
+    }
 
     internal bool CancelDrag()
     {
@@ -262,8 +266,6 @@ internal sealed class DockRegionView : UserControl
     {
         _state = state;
         _floatRegionItem.Header = FloatingId is null ? "浮动整栏" : "停靠回原栏";
-        // 浮动窗口自带“停靠回原栏”工具栏，页签栏不再重复显示浮动键。
-        if (_floatButton is not null) _floatButton.IsVisible = FloatingId is null;
         var ids = PageIds(state).Where(id => Catalog.Any(page => page.Id == id)).ToList();
         _empty.IsVisible = ids.Count == 0;
         var selected = ids.Contains(SelectedPage(state)!) ? SelectedPage(state) : ids.FirstOrDefault();
@@ -381,8 +383,18 @@ internal sealed class DockRegionView : UserControl
         private Point _lastReported;
         private bool _dragging;
         private bool _suppressClick;
-        public event Action<Point>? Dropped;
-        public event Action<Point?>? DragPositionChanged;
+        public event Action<PixelPoint>? Dropped;
+        public event Action<PixelPoint?>? DragPositionChanged;
+
+        private PixelPoint ScreenPoint(PointerEventArgs e)
+        {
+            var top = TopLevel.GetTopLevel(this);
+            if (top is null) return default;
+            var point = e.GetPosition(top);
+            // 无头自测没有真实屏幕句柄：退回窗口坐标，与主窗原点重合时结果一致。
+            try { return top.PointToScreen(point); }
+            catch (ArgumentException) { return new PixelPoint((int)point.X, (int)point.Y); }
+        }
         public bool CancelDrag()
         {
             if (_start is null) return false;
@@ -418,16 +430,16 @@ internal sealed class DockRegionView : UserControl
             // 累计位移不到 4px 就不上报，拖拽中的无谓重布局被压掉，同时抑制微晃动。
             if (!DragDeadZone.ShouldReport(_lastReported, point)) return;
             _lastReported = point;
-            DragPositionChanged?.Invoke(point);
+            DragPositionChanged?.Invoke(ScreenPoint(e));
         }
         protected override void OnPointerReleased(PointerReleasedEventArgs e)
         {
-            var point = e.GetPosition(TopLevel.GetTopLevel(this));
+            var screen = ScreenPoint(e);
             var drop = _dragging;
             base.OnPointerReleased(e);
             _start = null; _dragging = false; _suppressClick = false; Cursor = null;
             DragPositionChanged?.Invoke(null);
-            if (drop) Dropped?.Invoke(point);
+            if (drop) Dropped?.Invoke(screen);
         }
         protected override void OnClick() { if (!_suppressClick) base.OnClick(); }
         protected override void OnKeyDown(KeyEventArgs e)

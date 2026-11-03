@@ -10,6 +10,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Fufucode.App.Abstractions;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
@@ -176,8 +177,8 @@ public partial class MainWindow
             };
             dock.ReorderRequested += (id, index) => { _dockLayout.Reorder(id, index); RenderDockPages(); SaveWorkspaceDimensions(); };
             dock.HideRequested += ToggleDock;
-            dock.DragPositionChanged += UpdateDockDropTarget;
-            dock.PageDragged += DropDockPage;
+            dock.DragPositionChanged += UpdateDockDropTargetFromScreen;
+            dock.PageDragged += DropDockPageAtScreen;
         }
         LeftDock.Zone = DockZone.Left; RightDock.Zone = DockZone.Right; BottomDock.Zone = DockZone.Bottom;
         Opened += (_, _) => RenderDockPages();
@@ -313,24 +314,93 @@ public partial class MainWindow
 
     private DockRegionView[] Docks() => [LeftDock,RightDock,BottomDock];
 
+    /// <summary>收起状态的停靠区没有可见边界，拖拽时用工作区边缘这段宽度承接。</summary>
+    private const double DockEdgeDropWidth = 36;
+
     private DockZone? DockTargetAt(Point point)
     {
         foreach (var (zone, border) in new[] { (DockZone.Left, SidebarBorder), (DockZone.Right, RightPanelBorder), (DockZone.Bottom, TerminalBorder) })
             if (border.IsEffectivelyVisible && border.TranslatePoint(default, this) is { } location && new Rect(location, border.Bounds.Size).Contains(point))
                 return zone;
+        // 所有区域都已展开时没有额外热点，避免把普通拖放误判成停靠。
+        if (Bounds.Width <= 0 || Bounds.Height <= 0) return null;
+        if (DockClosed(DockZone.Left) && point.X is >= 0 and <= DockEdgeDropWidth) return DockZone.Left;
+        if (DockClosed(DockZone.Right) && point.X <= Bounds.Width && point.X >= Bounds.Width - DockEdgeDropWidth) return DockZone.Right;
+        if (DockClosed(DockZone.Bottom) && point.Y <= Bounds.Height && point.Y >= Bounds.Height - DockEdgeDropWidth) return DockZone.Bottom;
         return null;
+    }
+
+    /// <summary>窄窗左右栏是抽屉，抽屉收起等同停靠区关闭。</summary>
+    private bool DockClosed(DockZone zone) => zone != DockZone.Bottom && Bounds.Width < 1100
+        ? zone == DockZone.Left ? !_leftDrawerOpen : !_rightDrawerOpen
+        : _dockLayout.Hidden[zone];
+
+    /// <summary>拖到收起的停靠区边缘时直接展开，让用户能把页面放进去，而不必先手动开启侧栏。</summary>
+    private void OpenDockZoneForDrop(DockZone zone)
+    {
+        if (!DockClosed(zone)) return;
+        _animateNextLayout = true;
+        if (zone != DockZone.Bottom && Bounds.Width < 1100)
+        { _leftDrawerOpen = zone == DockZone.Left; _rightDrawerOpen = zone == DockZone.Right; }
+        _dockLayout.Hidden[zone] = false;
+        RenderDockPages();
     }
 
     internal void UpdateDockDropTarget(Point? point)
     {
         var target = point is { } position ? DockTargetAt(position) : null;
+        if (target is { } zone) OpenDockZoneForDrop(zone);
         foreach (var dock in Docks()) dock.SetDropTarget(target == dock.Zone);
     }
+
+    /// <summary>屏幕坐标 → 主窗客户区坐标。</summary>
+    private Point ClientFromScreen(PixelPoint screen) => this.PointToClient(screen);
+
+    /// <summary>页签拖动上报的是屏幕坐标，跨窗口拖放也落在同一套命中逻辑里。</summary>
+    internal void UpdateDockDropTargetFromScreen(PixelPoint? screen) =>
+        UpdateDockDropTarget(screen is { } point ? ClientFromScreen(point) : (Point?)null);
 
     internal void DropDockPage(string id, Point point)
     {
         UpdateDockDropTarget(null);
-        if (DockTargetAt(point) is { } zone) MoveDockPage(id, zone);
+        if (DockTargetAt(point) is { } zone) MoveDockPageAnimated(id, zone);
+        // 拖到非停靠区：直接变成独立窗口，不再需要栏头按钮。
+        else FloatPageFromDrag(id);
+    }
+
+    internal void DropDockPageAtScreen(string id, PixelPoint screen) => DropDockPage(id, ClientFromScreen(screen));
+
+    private void FloatPageFromDrag(string id)
+    {
+        if (!_workbenchPages.ContainsKey(id) || _dockLayout.FindFloating(id) is not null) return;
+        _animateNextLayout = true;
+        FloatDockPage(id);
+    }
+
+    /// <summary>拖入停靠区：区域展开 + 页面淡入；来自单页浮动窗时先让窗口淡出再关闭。</summary>
+    private void MoveDockPageAnimated(string id, DockZone zone)
+    {
+        void Commit()
+        {
+            _animateNextLayout = true;
+            MoveDockPage(id, zone);
+            Docks().FirstOrDefault(dock => dock.Zone == zone)?.AnimatePageArrival();
+        }
+        if (_dockLayout.FindFloating(id) is { Pages.Count: 1 } floating &&
+            _floatingDocks.TryGetValue(floating.Id, out var host) && host.Window.IsVisible && !Motion.Reduced)
+        {
+            var window = host.Window;
+            var disposed = false;
+            _ = Motion.AnimateValue(1, 0, Motion.Fast, value => window.Opacity = value, () =>
+            {
+                if (disposed) return;
+                disposed = true;
+                window.Opacity = 1;
+                Commit();
+            });
+            return;
+        }
+        Commit();
     }
 
     private void SetBrowserOcclusion(bool value)

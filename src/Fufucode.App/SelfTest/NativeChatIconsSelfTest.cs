@@ -213,6 +213,20 @@ internal static class NativeChatIconsSelfTest
                 }
             }
 
+            // 7. 回到最新：上滑出现，停手约 2.4 秒后自动淡出
+            for (var index = 0; index < 40; index++)
+                vm.Timeline.Entries.Add(new ErrorEntryViewModel { KindText = "填充", Message = "用于撑高时间线的占位内容。" });
+            await Settle();
+            var scroller = page.FindControl<ScrollViewer>("TimelineScroller")!;
+            var host = page.FindControl<Border>("BackToLatestHost")!;
+            scroller.Offset = new Vector(0, 240);
+            typeof(ChatPage).GetMethod("OnTimelineWheel", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!
+                .Invoke(page, [scroller, null!]);
+            await Settle();
+            Check(host.Opacity > 0.9, $"上滑时显示“回到最新”（实测 opacity={host.Opacity}）");
+            await Task.Delay(2900);
+            Check(host.Opacity < 0.1, $"停止滚动后自动隐藏“回到最新”（实测 opacity={host.Opacity}）");
+
             // 保存真机渲染截图
             Save(main, "chat-colorful-icons.png");
         }

@@ -6,6 +6,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Layout;
+using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Fufucode.App.Infrastructure;
@@ -64,6 +65,23 @@ public partial class MainWindow
         RenderDockPages(); SaveWorkspaceDimensions();
     }
 
+    /// <summary>停靠回主窗时先让浮动窗淡出，再交给停靠区展开动画，避免窗口瞬间消失。</summary>
+    private void DockFloatingRegionAnimated(string id, DockZone? destination = null)
+    {
+        if (!_floatingDocks.TryGetValue(id, out var host) || !host.Window.IsVisible || Motion.Reduced)
+        { DockFloatingRegion(id, destination); return; }
+        var window = host.Window;
+        var committed = false;
+        _ = Motion.AnimateValue(1, 0, Motion.Fast, value => window.Opacity = value, () =>
+        {
+            if (committed) return;
+            committed = true;
+            window.Opacity = 1;
+            _animateNextLayout = true;
+            DockFloatingRegion(id, destination);
+        });
+    }
+
     private void HideFloatingRegion(string id)
     {
         if (_dockLayout.Floating.FirstOrDefault(item => item.Id == id) is not { } floating) return;
@@ -114,13 +132,13 @@ public partial class MainWindow
             var dockBack = Views.WorkbenchUi.IconButton("ArrowEnterLeft", "停靠回原栏");
             dockBack.Classes.Add("toolButton");
             dockBack.Width = dockBack.Height = 28;
-            dockBack.Click += (_, _) => DockFloatingRegion(id);
+            dockBack.Click += (_, _) => DockFloatingRegionAnimated(id);
             var optionsMenu = new MenuFlyout();
             foreach (var zone in Enum.GetValues<DockZone>())
             {
                 var target = zone;
                 var item = new MenuItem { Header = zone switch { DockZone.Left => "停靠到左栏", DockZone.Right => "停靠到右栏", _ => "停靠到底栏" } };
-                item.Click += (_, _) => DockFloatingRegion(id, target);
+                item.Click += (_, _) => DockFloatingRegionAnimated(id, target);
                 optionsMenu.Items.Add(item);
             }
             optionsMenu.Items.Add(new Separator());
@@ -177,7 +195,10 @@ public partial class MainWindow
             dock.CloseRequested += CloseDockPage;
             dock.HideRequested += _ => HideFloatingRegion(id);
             dock.FloatPageRequested += pageId => FloatDockPage(pageId);
-            dock.FloatRegionRequested += () => DockFloatingRegion(id);
+            dock.FloatRegionRequested += () => DockFloatingRegionAnimated(id);
+            // 浮动窗口里的页签同样可以拖回主窗停靠区：屏幕坐标统一交给主窗命中。
+            dock.DragPositionChanged += UpdateDockDropTargetFromScreen;
+            dock.PageDragged += DropDockPageAtScreen;
             dock.PinRequested += pageId =>
             {
                 if (!_dockLayout.PinnedPages.Remove(pageId)) _dockLayout.PinnedPages.Add(pageId);
@@ -236,9 +257,23 @@ public partial class MainWindow
             if (!host.Window.IsVisible)
             {
                 host.Window.Position = VisibleFloatingPosition(floating, host.Window);
+                host.Window.Opacity = 0;
                 host.Window.Show(this);
+                AnimateFloatingWindowIn(host.Window);
             }
         }
+    }
+
+    /// <summary>新出现的独立页面淡入并从下方轻抬，替代直接闪现。</summary>
+    private static void AnimateFloatingWindowIn(Window window)
+    {
+        if (Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects || window.Content is not Control content)
+        { window.Opacity = 1; return; }
+        var transform = new TranslateTransform(0, 10);
+        content.RenderTransform = transform;
+        _ = Motion.AnimateValue(0, 1, Motion.StandardDuration,
+            value => { window.Opacity = value; transform.Y = 10 * (1 - value); },
+            () => { window.Opacity = 1; transform.Y = 0; });
     }
 
     private PixelPoint VisibleFloatingPosition(FloatingDockState state, Window window)

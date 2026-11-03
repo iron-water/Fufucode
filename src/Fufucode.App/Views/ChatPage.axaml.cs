@@ -38,6 +38,9 @@ public partial class ChatPage : UserControl
     /// <summary>滚轮停止后的兜底判定：最后一次 ScrollChanged 可能落在用户输入的忽略窗口内。</summary>
     private IDisposable? _atBottomTimer;
 
+    /// <summary>“回到最新”只在用户上滑时出现，停手 2.4 秒后自动淡出。</summary>
+    private Avalonia.Threading.DispatcherTimer? _backToLatestTimer;
+
     /// <summary>用户主动上滚后暂停自动跟随；只有用户自己滚回底部才恢复。</summary>
     private bool _followSuspended;
 
@@ -63,6 +66,7 @@ public partial class ChatPage : UserControl
         InputBox.TemplateApplied += (_, _) => HookInputPreedit();
 
         Loaded += (_, _) => { HookInputPreedit(); RefreshSessionContext(); };
+        BackToLatestButton.Click += (_, _) => HideBackToLatest();
         SessionProjectChip.Click += async (_, _) =>
         {
             if (SessionContextRequested?.Invoke() is not { CanChangeProject: true } info) return;
@@ -132,11 +136,9 @@ public partial class ChatPage : UserControl
     {
         MarkUserScrollInput();
         _followSuspended = true;
-        if (DataContext is MainViewModel vm)
-        {
-            vm.Timeline.SetAutoScrollAtBottom(false);
-            vm.Timeline.SetBackToLatestVisible(true);
-        }
+        if (DataContext is MainViewModel vm) vm.Timeline.SetAutoScrollAtBottom(false);
+        // 上滑时显示“回到最新”，停止滚动后由计时器自动收起。
+        RevealBackToLatest(true);
         ScheduleAtBottomRecompute();
     }
 
@@ -311,13 +313,48 @@ public partial class ChatPage : UserControl
                 {
                     _followSuspended = false;
                     vm.Timeline.SetAutoScrollAtBottom(true);
-                    vm.Timeline.SetBackToLatestVisible(false);
+                    SetBackToLatest(false);
                 }
                 return;
             }
             vm.Timeline.SetAutoScrollAtBottom(distance <= 40);
-            vm.Timeline.SetBackToLatestVisible(distance > 120);
+            SetBackToLatest(distance > 120);
         }, TimeSpan.FromMilliseconds(180));
+    }
+
+    /// <summary>同步视图模型的“可回到最新”状态，并驱动浮层显隐与自动收起计时。</summary>
+    private void SetBackToLatest(bool visible)
+    {
+        if (DataContext is MainViewModel vm) vm.Timeline.SetBackToLatestVisible(visible);
+        RevealBackToLatest(visible);
+    }
+
+    /// <summary>显示浮层并重置自动隐藏计时；已回到底部时直接收起。</summary>
+    private void RevealBackToLatest(bool visible)
+    {
+        if (!visible) { HideBackToLatest(); return; }
+        var distance = Math.Max(0,
+            TimelineScroller.Extent.Height - TimelineScroller.Viewport.Height - TimelineScroller.Offset.Y);
+        if (distance <= 120) { HideBackToLatest(); return; }
+        BackToLatestHost.Opacity = 1;
+        BackToLatestHost.IsHitTestVisible = true;
+        _backToLatestTimer ??= CreateBackToLatestTimer();
+        _backToLatestTimer.Stop();
+        _backToLatestTimer.Start();
+    }
+
+    private Avalonia.Threading.DispatcherTimer CreateBackToLatestTimer()
+    {
+        var timer = new Avalonia.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(2400) };
+        timer.Tick += (_, _) => { timer.Stop(); HideBackToLatest(); };
+        return timer;
+    }
+
+    private void HideBackToLatest()
+    {
+        _backToLatestTimer?.Stop();
+        BackToLatestHost.Opacity = 0;
+        BackToLatestHost.IsHitTestVisible = false;
     }
 
     /// <summary>点工具卡展开/收起明细；点复制等按钮时不触发。</summary>
@@ -492,19 +529,20 @@ public partial class ChatPage : UserControl
             {
                 _followSuspended = false;
                 vm.Timeline.SetAutoScrollAtBottom(true);
-                vm.Timeline.SetBackToLatestVisible(false);
+                SetBackToLatest(false);
             }
             else
             {
                 vm.Timeline.SetAutoScrollAtBottom(false);
-                vm.Timeline.SetBackToLatestVisible(distanceToBottom > 120);
+                SetBackToLatest(distanceToBottom > 120);
+                if (userActive && distanceToBottom > 120) RevealBackToLatest(true);
             }
             return;
         }
 
         if (now - _lastUserInputTicks < Stopwatch.Frequency * 0.15) return;
         vm.Timeline.SetAutoScrollAtBottom(distanceToBottom <= 40);
-        vm.Timeline.SetBackToLatestVisible(distanceToBottom > 120);
+        SetBackToLatest(distanceToBottom > 120);
     }
 
     /// <summary>把输入框模板内 TextPresenter 的真实组合状态（PreeditText）接入回车守卫。</summary>

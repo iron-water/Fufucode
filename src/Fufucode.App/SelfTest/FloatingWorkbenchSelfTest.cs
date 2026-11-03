@@ -82,20 +82,35 @@ internal static class FloatingWorkbenchSelfTest
         try
         {
             await Ready();
-            // 整栏浮动必须有可见入口：栏头“浮动整栏”按钮把左/右/底栏变成独立窗口。
+            // 栏头不再提供单独的“浮动整栏”按钮：整栏浮动保留在停靠区右键菜单里。
             var leftDock = window.FindControl<Fufucode.App.Views.DockRegionView>("LeftDock")!;
-            var floatRegionButton = leftDock.GetVisualDescendants().OfType<Button>()
-                .First(button => AutomationProperties.GetName(button) == "浮动整栏（变为独立窗口）");
-            var floatPoint = floatRegionButton.TranslatePoint(new Point(15, 15), window)!.Value;
-            window.MouseDown(floatPoint, MouseButton.Left); window.MouseUp(floatPoint, MouseButton.Left); await Ready();
+            Check(!leftDock.GetVisualDescendants().OfType<Button>().Any(button =>
+                    AutomationProperties.GetName(button) == "浮动整栏（变为独立窗口）"),
+                "the dock header no longer exposes a float-region button");
+            var floatRegionItem = leftDock.RegionMenuForTesting.Items.OfType<MenuItem>().First();
+            floatRegionItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); await Ready();
             var leftFloating = window.DockLayoutForTesting.FindFloating("overview");
             Check(leftFloating is not null && window.FloatingDockWindowForTesting(leftFloating.Id)!.IsVisible &&
                 !window.FindControl<Border>("SidebarBorder")!.IsVisible,
-                "the dock header float button turns the whole bar into an independent window");
+                "the dock region menu turns the whole bar into an independent window");
             window.DockFloatingRegion(leftFloating!.Id); await Ready();
             Check(window.DockLayoutForTesting.Find("overview") == DockZone.Left &&
                 window.FindControl<Border>("SidebarBorder")!.IsVisible,
                 "the floated bar docks back into its original region");
+            // 真实指针拖动：把左栏页签拖到聊天区，应直接变成独立窗口（不再依赖栏头按钮）。
+            window.MoveDockPage("files", DockZone.Left); await Ready();
+            var filesTab = window.GetVisualDescendants().OfType<Button>()
+                .Single(button => AutomationProperties.GetAutomationId(button) == "dock-tab-files");
+            var dragStart = filesTab.TranslatePoint(new Point(filesTab.Bounds.Width / 2, filesTab.Bounds.Height / 2), window)!.Value;
+            var dragTarget = new Point(window.Bounds.Width / 2, window.Bounds.Height / 2);
+            window.MouseDown(dragStart, MouseButton.Left);
+            window.MouseMove(new Point(dragStart.X + 8, dragStart.Y + 8), RawInputModifiers.LeftMouseButton);
+            window.MouseMove(dragTarget, RawInputModifiers.LeftMouseButton);
+            window.MouseUp(dragTarget, MouseButton.Left); await Ready();
+            Check(window.DockLayoutForTesting.FindFloating("files") is not null && window.DockLayoutForTesting.Find("files") is null,
+                "dragging a tab into the page area turns it into an independent window");
+            var dragged = window.DockLayoutForTesting.FindFloating("files")!;
+            window.DockFloatingRegion(dragged.Id); await Ready();
             window.MoveDockPage("files", DockZone.Left); await Ready();
             var files = window.PageForTesting("files");
             var tab = window.GetVisualDescendants().OfType<Button>().Single(button => AutomationProperties.GetAutomationId(button) == "dock-tab-files");

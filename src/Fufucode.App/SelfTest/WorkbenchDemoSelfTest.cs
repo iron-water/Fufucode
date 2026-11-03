@@ -267,8 +267,23 @@ internal static class WorkbenchDemoSelfTest
             }
             window.UpdateDockDropTarget(new Point(-10, -10));
             window.DropDockPage("files", new Point(-10, -10));
-            Check(window.DockLayoutForTesting.Find("files") == DockZone.Bottom && !window.GetVisualDescendants().OfType<Views.DockRegionView>().Any(dock => dock.IsDropTarget),
-                "L08: invalid drop leaves layout unchanged");
+            Check(window.DockLayoutForTesting.FindFloating("files") is not null && window.DockLayoutForTesting.Find("files") is null &&
+                !window.GetVisualDescendants().OfType<Views.DockRegionView>().Any(dock => dock.IsDropTarget),
+                "L08: dropping outside the docks turns the page into an independent window");
+            // 独立之后用同一套拖放入口拖回左侧栏。
+            var sidebarPoint = window.PointToScreen(new Point(40, window.Bounds.Height / 2));
+            window.DropDockPageAtScreen("files", sidebarPoint); await Ready();
+            Check(window.DockLayoutForTesting.Find("files") == DockZone.Left &&
+                window.DockLayoutForTesting.FindFloating("files") is null,
+                "L08: a page dragged back from its independent window docks into the target region");
+            // 收起状态的停靠区没有可见边界：拖到工作区底边应自动展开并接纳页面。
+            Check(window.DockLayoutForTesting.Hidden[DockZone.Bottom], "L08: bottom dock is collapsed before the edge drag");
+            var bottomPoint = new Point(window.Bounds.Width / 2, window.Bounds.Height - 12);
+            window.UpdateDockDropTarget(bottomPoint);
+            Check(!window.DockLayoutForTesting.Hidden[DockZone.Bottom], "L08: dragging to the collapsed edge opens the dock automatically");
+            window.DropDockPage("files", bottomPoint); await Ready();
+            Check(window.DockLayoutForTesting.Find("files") == DockZone.Bottom,
+                "L08: dropping on the auto-opened edge docks the page");
             window.UpdateDockDropTarget(null);
             window.ResetDockLayout(); await Ready();
             Check(window.DockLayoutForTesting.Find("files") == DockZone.Left && window.DockLayoutForTesting.Find("browser") is null && window.DockLayoutForTesting.Hidden[DockZone.Bottom],

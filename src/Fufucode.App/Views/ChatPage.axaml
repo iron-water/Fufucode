@@ -602,9 +602,9 @@
 
         <!-- 回到最新：浮动 pill + 阴影（阴影挂在包裹层，Button 无 BoxShadow）。
              靠右放置，避免压住居中排版的正文。 -->
+        <!-- 只在用户上滑时出现，停止滚动一小段时间后自动淡出；由本页代码控制显隐。 -->
         <Border x:Name="BackToLatestHost" ZIndex="6" CornerRadius="{DynamicResource AppCornerPill}"
-                Opacity="{Binding Timeline.ShowBackToLatest, Converter={x:Static anim:BoolToOpacityConverter.Instance}}"
-                IsHitTestVisible="{Binding Timeline.ShowBackToLatest}"
+                Opacity="0" IsHitTestVisible="False"
                 BoxShadow="{DynamicResource FluentPillShadow}"
                 HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,20,10">
           <Border.Transitions>
