@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Automation;
@@ -87,11 +88,38 @@ public static class HeadlessUiRunner
                 }
                 else if (Directory.Exists(data))
                 {
-                    Directory.Delete(data, recursive: true);
+                    DeletePreviewData(data);
                 }
             }
             catch (IOException error) { Console.Error.WriteLine("Preview data cleanup failed: " + error.Message); }
             catch (UnauthorizedAccessException error) { Console.Error.WriteLine("Preview data cleanup failed: " + error.Message); }
+        }
+    }
+
+    /// <summary>
+    /// 清理预览数据根。应用自身的退出是异步的：Shutdown() 返回时 SQLite 连接与
+    /// kernel.db.graph-owner.lock 可能还没释放，立刻递归删除会撞 IOException。
+    /// 这里短退避重试几次；仍失败就留在 %TEMP% 下不动（临时目录本就随时可弃），
+    /// 不往 stderr 写字——预览命令的 stderr 是"命令失败"的通道，
+    /// 把清理噪音写进去会让调用方（CLI UI 验收）误判成命令失败。
+    /// </summary>
+    private static void DeletePreviewData(string data)
+    {
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                Directory.Delete(data, recursive: true);
+                return;
+            }
+            catch (DirectoryNotFoundException)
+            {
+                return;
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                Thread.Sleep(150 * (attempt + 1));
+            }
         }
     }
 

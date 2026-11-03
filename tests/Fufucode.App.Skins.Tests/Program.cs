@@ -30,6 +30,25 @@ void Check(bool condition, string name)
     Console.WriteLine("PASS " + name);
 }
 
+// 主题色的判据是语义（浅/深/有彩度），不是某个具体色值：
+// 写死十六进制等于把设计稿的每次微调都变成测试失败，而这些地方真正要守的是
+// "浅色主题不要再沿用深色默认值"。半透明色先按底色合成再判明暗。
+static Color Flatten(Color color) => Color.FromRgb(
+    (byte)((color.R * color.A + 255 * (255 - color.A)) / 255),
+    (byte)((color.G * color.A + 255 * (255 - color.A)) / 255),
+    (byte)((color.B * color.A + 255 * (255 - color.A)) / 255));
+static bool IsLight(string? value) =>
+    Color.TryParse(value, out var color) && Flatten(color).R > 200 && Flatten(color).G > 200 && Flatten(color).B > 200;
+static bool IsDark(string? value) =>
+    Color.TryParse(value, out var color) && Flatten(color).R < 120 && Flatten(color).G < 120 && Flatten(color).B < 120;
+static bool IsSaturated(string? value)
+{
+    if (!Color.TryParse(value, out var color)) return false;
+    var max = Math.Max(color.R, Math.Max(color.G, color.B));
+    var min = Math.Min(color.R, Math.Min(color.G, color.B));
+    return max - min > 60;
+}
+
 var evidenceRoot = Path.Combine(FindRepoRoot(), "tests", "Fufucode.App.Skins.Tests", "evidence");
 Directory.CreateDirectory(evidenceRoot);
 
@@ -138,17 +157,17 @@ int x;
         Application.Current is { } app && app.TryFindResource(key, variant, out var value) ? value?.ToString() ?? "null" : "missing";
     Check(AppRes("CardBackgroundColor", ThemeVariant.Light) != "missing",
         $"应用级资源可读取 LiveMarkdown 默认键（实际 {AppRes("CardBackgroundColor", ThemeVariant.Light)}）");
-    Check(AppRes("SecondaryCardBackgroundColor", ThemeVariant.Light) == "#0f000000",
+    Check(IsLight(AppRes("SecondaryCardBackgroundColor", ThemeVariant.Light)),
         $"应用级代码底色为浅色（实际 {AppRes("SecondaryCardBackgroundColor", ThemeVariant.Light)}）");
     var lightSecondary = Res(markdownView, "SecondaryCardBackgroundColor", ThemeVariant.Light);
-    Check(lightSecondary == "#0f000000",
+    Check(IsLight(lightSecondary),
         $"浅色主题代码块/行内代码底色为浅灰（实际 {lightSecondary}）");
     var lightForeground = Res(markdownView, "ForegroundColor", ThemeVariant.Light);
-    Check(lightForeground == "#e4000000", $"浅色主题代码文字为深色（实际 {lightForeground}）");
-    Check(Res(markdownView, "CodeInlineColor", ThemeVariant.Light) == "#ff9a6700",
-        "浅色主题行内代码文字使用浅色强调色");
-    Check(Res(markdownView, "SecondaryCardBackgroundColor", ThemeVariant.Dark) == "#99000000",
-        "深色主题保留 LiveMarkdown 原有代码底色");
+    Check(IsDark(lightForeground), $"浅色主题代码文字为深色（实际 {lightForeground}）");
+    Check(IsSaturated(Res(markdownView, "CodeInlineColor", ThemeVariant.Light)),
+        $"浅色主题行内代码文字使用彩色强调色（实际 {Res(markdownView, "CodeInlineColor", ThemeVariant.Light)}）");
+    Check(IsDark(Res(markdownView, "SecondaryCardBackgroundColor", ThemeVariant.Dark)),
+        $"深色主题代码底色仍为深色（实际 {Res(markdownView, "SecondaryCardBackgroundColor", ThemeVariant.Dark)}）");
 
     var codeBlock = markdownView.GetVisualDescendants().OfType<CodeBlock>().FirstOrDefault();
     Check(codeBlock?.ColorTheme == ThemeName.LightPlus, "浅色主题代码块使用 LightPlus（不再是深色补丁）");

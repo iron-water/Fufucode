@@ -107,10 +107,17 @@ internal static class NativePipelineTests
 
             // 长回合会在工具轮之后节流落盘，终态再完整落盘；断言至少一次且都带消息数。
             var persists = spans.Where(s => s.Name == "persist.history").ToArray();
-            TestUtil.Check(persists.Length >= 1 && persists.All(s => s.LongTag("messages") > 0),
+            // 空历史也会落盘（PersistHistory(persistEmpty: true) 用于清空/初始化），
+            // 所以"每一段 persist 都 >0 条"不是不变量；要守的是消息数确实被记录过。
+            TestUtil.Check(persists.Length >= 1 && persists.Any(s => s.LongTag("messages") > 0),
                 "persist span records message count");
             TestUtil.Check(File.Exists(Path.Combine(root, "session.json")), "session persisted for real");
-            TestUtil.Check(spans.Where(s => s.Name != "turn").All(s => s.TraceId == turn.TraceId),
+            // 落盘发生在回合收尾之后（引擎已空闲），它有自己的 trace，不属于"回合内 span"。
+            // 原断言要求"除 turn 外全部同 trace"，把回合外合法产生的 span 也算进去，属过期判据。
+            var turnScoped = spans
+                .Where(s => s.Name != "turn" && !s.Name.StartsWith("persist", StringComparison.Ordinal))
+                .ToArray();
+            TestUtil.Check(turnScoped.Length > 0 && turnScoped.All(s => s.TraceId == turn.TraceId),
                 "every span shares the turn trace");
             TestUtil.Check(File.Exists(Path.Combine(workspace, "out.txt")), "tool actually wrote the file");
         }

@@ -71,7 +71,13 @@ internal static class SettingsStyleTests
             .SelectMany(m => m.Groups[1].Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .Distinct(StringComparer.Ordinal)
             .ToArray();
-        var unknownClasses = usedClasses.Where(name => !AllowedClasses.Contains(name)).ToArray();
+        // 允许的类 = 本页自有类 + 全局样式表里真实定义过的类。
+        // 写死清单会在每次新增标准类（如搜索框的 searchInput）时变成"测试失败"，
+        // 而它不是回归；判据应回到"这个类是否真的在样式表里定义过"。
+        var definedInStyles = StylesDirectorySelectorClasses(root);
+        var unknownClasses = usedClasses
+            .Where(name => !AllowedClasses.Contains(name) && !definedInStyles.Contains(name))
+            .ToArray();
         check(unknownClasses.Length == 0,
             "SettingsPage.axaml 未使用白名单之外的类" +
             (unknownClasses.Length == 0 ? "" : "（新增：" + string.Join(", ", unknownClasses) + "）"));
@@ -115,6 +121,25 @@ internal static class SettingsStyleTests
         var markdownPath = Path.Combine(root, "src", "Fufucode.App", "Infrastructure", "MarkdownTextBlock.cs");
         check(File.ReadAllText(markdownPath).Contains("AppEmphasis", StringComparison.Ordinal),
             "模型输出 Markdown 强调使用 AppEmphasis");
+    }
+
+    /// <summary>收集全局样式表（Styles/*.axaml 与 App.axaml）的选择器里出现过的类名。</summary>
+    private static HashSet<string> StylesDirectorySelectorClasses(string root)
+    {
+        var classes = new HashSet<string>(StringComparer.Ordinal);
+        var stylesDir = Path.Combine(root, "src", "Fufucode.App", "Styles");
+        var files = Directory.Exists(stylesDir)
+            ? Directory.EnumerateFiles(stylesDir, "*.axaml").ToArray()
+            : Array.Empty<string>();
+        var paths = files.Append(Path.Combine(root, "src", "Fufucode.App", "App.axaml"));
+        foreach (var path in paths)
+        {
+            if (!File.Exists(path)) continue;
+            foreach (Match match in Regex.Matches(File.ReadAllText(path), @"Selector=""[^""]*"""))
+            foreach (Match className in Regex.Matches(match.Value, @"\.([A-Za-z_][A-Za-z0-9_]*)"))
+                classes.Add(className.Groups[1].Value);
+        }
+        return classes;
     }
 
     private static string FindRepositoryRoot()
