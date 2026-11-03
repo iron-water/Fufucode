@@ -162,34 +162,41 @@ internal static class NativeChatIconsSelfTest
             var errorDismiss = errorIcons.Last();
             AssertIconColor(errorDismiss, MsRed, "错误卡关闭按钮图标");
 
-            // 5. 底部输入栏按钮图标：更多（蓝）、附件（黄）、项目（黄）、模型（绿）、思考（黄）、停止（红）、恢复草稿（黄）、移除引用（红）
+            // 5. 输入栏内的图标应回到界面默认中性色（深色主题下接近白色），不再使用彩色
+            void AssertNeutral(PathIcon icon, string name)
+            {
+                var color = (icon.Foreground as ISolidColorBrush)?.Color;
+                var neutral = color is { } c && Math.Abs(c.R - c.G) < 24 && Math.Abs(c.G - c.B) < 24 && c.R > 140;
+                Check(neutral, $"{name} 应回到界面默认白/中性色（实测：{color}）");
+            }
+
             var composerMore = page.FindControl<Button>("ComposerMoreButton")!;
-            AssertIconColor(FindIcon(composerMore), MsBlue, "输入栏附加功能加号图标");
+            AssertNeutral(FindIcon(composerMore), "输入栏附加功能加号图标");
 
             var attachBtn = page.FindControl<Button>("AttachContextButton")!;
-            AssertIconColor(FindIcon(attachBtn), emphasis, "输入栏附件回形针图标");
+            AssertNeutral(FindIcon(attachBtn), "输入栏附件回形针图标");
 
             var projectBtn = page.FindControl<Button>("SessionProjectChip")!;
-            AssertIconColor(FindIcon(projectBtn), emphasis, "输入栏项目文件夹图标");
+            AssertNeutral(FindIcon(projectBtn), "输入栏项目文件夹图标");
 
             var modelBtn = page.FindControl<Button>("ModelButton")!;
-            AssertIconColor(FindIcon(modelBtn), accent, "输入栏模型星芒图标");
+            AssertNeutral(FindIcon(modelBtn), "输入栏模型星芒图标");
 
             var thinkBtn = page.FindControl<Button>("ThinkingButton")!;
-            AssertIconColor(FindIcon(thinkBtn), emphasis, "输入栏思考大脑图标");
+            AssertNeutral(FindIcon(thinkBtn), "输入栏思考大脑图标");
 
             var stopBtn = page.FindControl<Button>("StopButton")!;
-            AssertIconColor(FindIcon(stopBtn), MsRed, "输入栏停止按钮红圈图标");
+            AssertNeutral(FindIcon(stopBtn), "输入栏停止按钮图标");
 
             var restartBtn = page.FindControl<Button>("RestartButton")!;
-            AssertIconColor(FindIcon(restartBtn), emphasis, "输入栏重试按钮图标");
+            AssertNeutral(FindIcon(restartBtn), "输入栏重试按钮图标");
 
             var restoreBorder = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("restoreInfo"));
-            AssertIconColor(FindIcon(restoreBorder), emphasis, "待恢复草稿历史图标");
+            AssertNeutral(FindIcon(restoreBorder), "待恢复草稿历史图标");
 
             var modeBtn = page.GetVisualDescendants().OfType<Button>()
                 .Single(control => Avalonia.Automation.AutomationProperties.GetAutomationId(control) == "composer-permission");
-            AssertIconColor(FindIcon(modeBtn), MsBlue, "输入栏权限模式盾牌图标");
+            AssertNeutral(FindIcon(modeBtn), "输入栏权限模式盾牌图标");
 
             // 6. 消息操作浮动条（MessageActionsView）
             var actionsViews = page.GetVisualDescendants().OfType<MessageActionsView>().ToArray();

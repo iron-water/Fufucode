@@ -134,8 +134,6 @@ public partial class ChatPage
         };
         // 权限模式：小图标保持原点击菜单，状态由局部自绘气泡显示。
         var modeButton = WorkbenchUi.IconButton("ShieldCheckmark", "权限模式", 30);
-        if (modeButton.Content is PathIcon modeIcon)
-            modeIcon.Bind(PathIcon.ForegroundProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("MsBlue"));
         var modeMenu = new MenuFlyout { Placement = PlacementMode.TopEdgeAlignedRight };
         modeButton.Flyout = modeMenu;
         _executionModeMenu = modeMenu;

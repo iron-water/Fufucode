@@ -649,9 +649,9 @@
                       AutomationProperties.Name="展开或折叠排队消息">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="11" Height="11" VerticalAlignment="Center"
-                            IsVisible="{Binding Input.IsQueueExpanded}" Foreground="{DynamicResource AppEmphasis}"/>
+                            IsVisible="{Binding Input.IsQueueExpanded}"/>
                   <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="11" Height="11" VerticalAlignment="Center"
-                            IsVisible="{Binding !Input.IsQueueExpanded}" Foreground="{DynamicResource AppEmphasis}"/>
+                            IsVisible="{Binding !Input.IsQueueExpanded}"/>
                   <TextBlock Classes="caption" Text="{Binding Input.QueueSummary}" VerticalAlignment="Center"/>
                 </StackPanel>
               </Button>
@@ -697,7 +697,7 @@
                       Command="{Binding Input.ApplyPendingRestoreCommand}"/>
               <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"
-                          VerticalAlignment="Center" Foreground="{DynamicResource AppEmphasis}"/>
+                          VerticalAlignment="Center"/>
                 <TextBlock Classes="caption" Text="{Binding Input.PendingRestoreSummary}" VerticalAlignment="Center"/>
               </StackPanel>
             </DockPanel>
@@ -708,7 +708,7 @@
               <TextBlock Text="{Binding Input.ReferenceContext}" Classes="caption" TextTrimming="CharacterEllipsis" MaxLines="2" TextWrapping="Wrap"/>
             </Border>
             <Button Grid.Column="1" Classes="iconButton toolButton" VerticalAlignment="Top" Command="{Binding Input.ClearReferenceCommand}" AutomationProperties.Name="移除引用">
-              <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12" Foreground="{DynamicResource MsRed}"/>
+              <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="12" Height="12"/>
             </Button>
           </Grid>
           <StackPanel x:Name="AttachedFiles"/>
@@ -725,11 +725,11 @@
           <!-- 工具栏位于同一个卡片内，与编辑区留出间距。 -->
           <Grid x:Name="ComposerToolbar" Margin="0,10,0,0" RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto">
             <Button x:Name="ComposerMoreButton" Classes="iconButton" AutomationProperties.Name="附加功能">
-              <PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14" Foreground="{DynamicResource MsBlue}"/>
+              <PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/>
             </Button>
             <Button x:Name="CommandFlyoutButton" Grid.Column="1" Classes="iconButton" VerticalAlignment="Center" IsVisible="False"
                     IsEnabled="{Binding Extensions.CanUseCommands}">
-              <PathIcon Data="{DynamicResource Icon.AppsList}" Width="14" Height="14" Foreground="{DynamicResource MsBlue}"/>
+              <PathIcon Data="{DynamicResource Icon.AppsList}" Width="14" Height="14"/>
               <Button.Flyout>
                 <Flyout Placement="TopEdgeAlignedLeft">
                   <Border Width="400" Classes="card" Padding="10">
@@ -768,7 +768,7 @@
               </Button.Flyout>
             </Button>
             <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton">
-              <PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
+              <PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14"/>
             </Button>
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
             <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="4"
@@ -776,7 +776,7 @@
               <Button x:Name="SessionProjectChip" Classes="iconButton" Width="32" Height="32"
 
                       AutomationProperties.Name="更改此会话的项目">
-                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
+                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14"/>
               </Button>
               <TextBlock x:Name="SessionProjectChipText" IsVisible="False"/>
             </StackPanel>
@@ -785,7 +785,7 @@
               <Button x:Name="ModelButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}"
                      >
-                <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14" Foreground="{DynamicResource AppAccent}"/>
+                <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened" FlyoutPresenterClasses="modelPickerFlyout">
                     <Border Width="380" Classes="modelPickerSurface" Padding="10" Background="Transparent">
@@ -901,7 +901,7 @@
               </Button>
               <Button x:Name="ThinkingButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}">
-                <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
+                <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14"/>
                 <Button.Flyout>
                   <MenuFlyout Placement="TopEdgeAlignedRight"/>
                 </Button.Flyout>
@@ -914,14 +914,14 @@
                         Command="{Binding Input.StopCommand}"
                         IsVisible="{Binding Input.ShowStopButton}"
                         AutomationProperties.Name="停止">
-                  <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14" Foreground="{DynamicResource MsRed}"/>
+                  <PathIcon Data="{DynamicResource Icon.RecordStop}" Width="14" Height="14"/>
                 </Button>
                 <!-- 上一回合被中断/失败时出现：把最后一条用户消息重投本会话，带着已有上下文续跑。 -->
                 <Button x:Name="RestartButton" Classes="iconButton" Width="32" Height="32"
                         Command="{Binding Input.RestartCommand}"
                         IsVisible="{Binding Input.ShowRestartButton}"
                         AutomationProperties.Name="重发上一条">
-                  <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
+                  <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/>
                 </Button>
                 <Button x:Name="SendButton" Classes="accent composerSend" Height="32" Padding="12,0"
                         Command="{Binding Input.SendCommand}"
