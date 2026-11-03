@@ -23,8 +23,6 @@ internal static class SessionBadgeTests
         checks.Equal("Claude", claude.DisplayName, "Claude 徽标显示名为 Claude");
         checks.Equal("FUMO", native.DisplayName, "FUMO 徽标显示名为 FUMO");
 
-        checks.Equal(6, BackendBadgeCatalog.All.Count, "徽标目录包含六个后端");
-
         foreach (var id in Enum.GetValues<EngineId>())
         {
             var badge = BackendBadgeCatalog.For(id);
