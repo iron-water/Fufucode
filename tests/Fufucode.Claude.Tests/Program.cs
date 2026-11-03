@@ -24,6 +24,7 @@ try
         return 0;
     }
     ClaudeFrameTests.Run(checks);
+    ClaudeEnvironmentTests.Run(checks);
     await ClaudeSessionTests.RunAsync(checks, root);
     Console.WriteLine($"\n全部通过：{checks.Passed} 项断言");
     return 0;

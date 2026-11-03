@@ -38,6 +38,7 @@ public sealed class ClaudeSessionFactory : IBackendSessionFactory
             executable,
             runArgs,
             request.ProjectPath,
+            EnvironmentVariables: ClaudeSettingsEnvironment.Load(),
             DiagnosticSink: new ClaudeDiagnosticSink(request.DiagnosticLog));
 
         var adapter = await ClaudeChatSessionAdapter.ConnectAsync(options, cancellationToken).ConfigureAwait(false);

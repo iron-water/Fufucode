@@ -26,6 +26,10 @@ internal static class CodexDshIntegrationTests
 
     public static async Task RunAsync(string root)
     {
+        // 后端插件在自己初始化时显式登记工厂；测试直接复用同一登记契约。
+        BackendPluginLoader.RegisterSessionFactory(new Fufucode.Plugins.Codex.CodexSessionFactory());
+        BackendPluginLoader.RegisterSessionFactory(new Fufucode.Plugins.Dsh.DshSessionFactory());
+
         var scratch = Path.Combine(root, "tmp", "codex-dsh-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);
         var layout = new AppDataLayout(Path.Combine(scratch, "data"));
@@ -143,7 +147,8 @@ internal static class CodexDshIntegrationTests
         {
             sessionId = session.Session.Id;
             Check(session.Session.Backend == BackendId.Dsh, "DSH 会话创建成功，后端标识为 Dsh");
-            Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Verified, "DSH 协调器审批状态为 Verified");
+            Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Unavailable,
+                "DSH 未接统一审批桥，审批状态如实为 Unavailable");
 
             var turnSettled = false;
             session.Chat.Event += (_, ev) =>
@@ -215,7 +220,8 @@ internal static class CodexDshIntegrationTests
         {
             sessionId = session.Session.Id;
             Check(session.Session.Backend == BackendId.Codex, "Codex 会话创建成功，后端标识为 Codex");
-            Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Verified, "Codex 协调器审批状态为 Verified");
+            Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Unavailable,
+                "Codex 未接统一审批桥，审批状态如实为 Unavailable");
 
             var turnSettled = false;
             session.Chat.Event += (_, ev) =>

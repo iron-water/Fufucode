@@ -17,7 +17,8 @@ internal static class ClaudeLiveProbe
         var workingDirectory = Path.Combine(Path.GetTempPath(), "fufucode-claude-live-tool-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(workingDirectory);
         var options = new ClaudeStreamOptions(executable, ClaudeProtocol.BuildArguments(model),
-            workingDirectory, StartupTimeout: TimeSpan.FromSeconds(60), ShutdownTimeout: TimeSpan.FromSeconds(10));
+            workingDirectory, StartupTimeout: TimeSpan.FromSeconds(60), ShutdownTimeout: TimeSpan.FromSeconds(10),
+            EnvironmentVariables: Fufucode.Plugins.Claude.ClaudeSettingsEnvironment.Load());
         await using var session = await ClaudeChatSessionAdapter.ConnectAsync(options);
         var statuses = new List<ToolCallBlock>();
         var permissionSeen = new TaskCompletionSource<ClaudePermissionRequest>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -56,7 +57,8 @@ internal static class ClaudeLiveProbe
         Console.WriteLine($"executable: {executable}");
         Console.WriteLine($"model: {model}");
         var options = new ClaudeStreamOptions(executable, ClaudeProtocol.BuildArguments(model),
-            workingDirectory, StartupTimeout: TimeSpan.FromSeconds(60), ShutdownTimeout: TimeSpan.FromSeconds(10));
+            workingDirectory, StartupTimeout: TimeSpan.FromSeconds(60), ShutdownTimeout: TimeSpan.FromSeconds(10),
+            EnvironmentVariables: Fufucode.Plugins.Claude.ClaudeSettingsEnvironment.Load());
         await using var session = await ClaudeChatSessionAdapter.ConnectAsync(options);
         Console.WriteLine($"handshake: {session.Connection}");
         var texts = new List<string>();

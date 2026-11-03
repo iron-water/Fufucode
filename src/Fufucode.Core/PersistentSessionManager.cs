@@ -895,7 +895,7 @@ public sealed class PersistentSessionManager
         if (backend == BackendId.Pi && (_nodePath.Length == 0 || !File.Exists(_nodePath) || !File.Exists(_cliPath)))
             throw new FileNotFoundException("Pi runtime missing. Configure --pi-node and --pi-cli with the managed runtime paths.");
         if (backend == BackendId.Omp && (_ompExecutablePath is null || !File.Exists(_ompExecutablePath)))
-            throw new FileNotFoundException("OMP runtime missing. Configure --omp-exe with the verified OMP 18.8.5 executable.", _ompExecutablePath);
+            throw new FileNotFoundException("OMP runtime missing. Configure --omp-exe with the verified OMP 18.14.1 executable.", _ompExecutablePath);
     }
 
     private static bool PiPluginAvailable() =>
