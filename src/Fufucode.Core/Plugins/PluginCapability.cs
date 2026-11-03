@@ -27,7 +27,7 @@ public enum PluginCapability
     ReverseLab,
 
     /// <summary>
-    /// 自动开发工作台：DAG 目标规划与多步骤推进（automation.auto-dev）。
+    /// 保留旧工具契约的标识和枚举序号。内建 Graph 由应用组合根注册并校验项目权限。
     /// </summary>
     AutoDevelopment,
 
@@ -64,7 +64,6 @@ public static class PluginCapabilityRegistry
             [PluginCapability.BrowserControl] = "agent.browser-use",
             [PluginCapability.ComputerControl] = "agent.computer-use",
             [PluginCapability.ReverseLab] = "tool.seep-reverse-lab",
-            [PluginCapability.AutoDevelopment] = "automation.auto-dev",
             [PluginCapability.SandboxExecution] = "sandbox.nvx",
         };
 
@@ -124,6 +123,10 @@ public sealed class PluginCapabilityGateway
 
     public PluginCapabilityStatus Status(PluginCapability capability)
     {
+        if (capability == PluginCapability.AutoDevelopment)
+            return new PluginCapabilityStatus(capability, null, false, false,
+                "自动开发已内建，请通过 Graph 使用；其可用性由项目设置和授权决定。");
+
         var providerId = PluginCapabilityRegistry.ProviderId(capability);
         if (providerId is null)
             return new PluginCapabilityStatus(capability, null, false, false, "没有插件提供该能力。");

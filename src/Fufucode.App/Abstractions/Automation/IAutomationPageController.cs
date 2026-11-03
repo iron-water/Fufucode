@@ -26,7 +26,7 @@ public interface IAutomationPageController
 }
 
 /// <summary>
-/// 插件贡献的命令入口：宿主 CLI 在没有静态引用插件程序集时仍然能执行 control/host。
+/// 自动开发命令入口：内建 CLI 复用既有 control/host 的显式数据库协议。
 /// 返回退出码与已序列化的标准输出；长驻 host serve 直接写 <see cref="System.IO.TextWriter"/>。
 /// </summary>
 public interface IAutomationCommandHost

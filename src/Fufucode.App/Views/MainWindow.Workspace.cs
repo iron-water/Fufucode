@@ -158,7 +158,7 @@ public partial class MainWindow
         _browserModule = new("builtin.browser", "浏览器", SetBrowserModuleEnabled);
         _libraryModule = new("builtin.library", "资料库", SetLibraryModuleEnabled);
         _localReviewModule = new("builtin.local-review", "本地审查", SetLocalReviewModuleEnabled);
-        // 资料库、本地审查、浏览器、终端、自动开发都由插件贡献；宿主不保留页面壳。
+        // 资料库、本地审查、浏览器、终端由插件贡献；自动开发使用内建 Graph。
         Add("sidechat", "侧边聊天", "Chat", CreateSideChatHost());
         WorkspacePanel.PreviewRequested += () => OpenDockPage("files", DockZone.Right);
         foreach (var dock in Docks())

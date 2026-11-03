@@ -2,7 +2,7 @@ using Fufucode.Core.Automation;
 using Fufucode.Plugins.AutoDev.Engine.Harnesses;
 using Microsoft.Data.Sqlite;
 
-// 控制链路按 harness id 校验协议适配器；适配器实现现在随自动开发插件发布。
+// 控制链路按 harness id 校验协议适配器；适配器由内建自动开发领域程序集提供。
 BatchHarnessAdapters.Register();
 
 if (args.Length >= 2 && args[0] == "--c4-protocol")

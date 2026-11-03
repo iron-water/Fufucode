@@ -12,5 +12,6 @@
   -->
   <ItemGroup>
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
+    <ProjectReference Include="../Fufucode.AutoDev/Fufucode.AutoDev.csproj" />
   </ItemGroup>
 </Project>

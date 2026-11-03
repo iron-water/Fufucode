@@ -5,11 +5,11 @@ namespace Fufucode.Core.Features.LocalReview;
 /// <summary>
 /// Adapter from the narrow review seam onto the host's execution dispatch
 /// (<see cref="ExecutionBaseLibrary"/>). It owns no protocol and no worktree: the registered
-/// execution owner (the auto-development plugin) runs the review in a module-owned scratch
+/// execution owner runs the review in a module-owned scratch
 /// worktree, journals the run, and reports its real terminal state. Two properties are
 /// deliberate:
 ///
-/// - Without a registered owner the review reports Failed with the installation reason; the host
+/// - Without a registered owner the review reports Failed with the service reason; the host
 ///   never falls back to a second executor of its own (LocalReviewHarnessExecutor was removed).
 /// - Findings are accepted only when the owner reports Completed. An Unknown or Interrupted end
 ///   state is shown as cancelled with its retained worktree; the transport reaching a terminal
@@ -60,7 +60,7 @@ public sealed class LocalReviewHarnessExecutor : ILocalReviewExecutor
             var owner = ExecutionBaseLibrary.Current;
             if (owner is null)
                 return Fail(scope, null,
-                    "审查执行后端不可用：请在插件市场中安装并启用自动开发工作台（automation.auto-dev）。", finished);
+                    "审查执行服务尚未就绪：宿主未注册执行后端。", finished);
             if (_runtime is null && !owner.SupportsHarness("pi"))
                 return Fail(scope, null,
                     $"审查执行后端 '{owner.OwnerId}' 未登记 pi harness，无法执行本地审查。", finished);

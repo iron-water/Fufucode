@@ -4,7 +4,7 @@ using System.Linq;
 namespace Fufucode.App.Abstractions.Automation;
 
 // 执行契约：宿主（本地审查、CLI）向“执行所有者”请求一次 harness 运行。
-// 自动开发插件安装并启用时登记所有者；未登记时调用方必须显示真实原因，不能回退到宿主内第二份执行器。
+// 宿主服务初始化时登记所有者；未登记时调用方必须显示真实原因，不能回退到第二份执行器。
 
 /// <summary>一次执行请求。提示词、工作树与运行簿记都由所有者负责，调用方只给出事实。</summary>
 public sealed record ExecutionRequest(
@@ -33,7 +33,7 @@ public sealed record ExecutionOutcome(
 public enum ExecutionStatus { Completed, Failed, Interrupted, Unknown }
 
 /// <summary>
-/// 执行所有者（当前由自动开发插件实现）。停止/卸载时未完成运行必须如实返回 Unknown 并保留工作树。
+/// 执行所有者。停止时未完成运行必须如实返回 Unknown 并保留工作树。
 /// </summary>
 public interface IExecutionOwner
 {
@@ -53,7 +53,7 @@ public static class ExecutionBaseLibrary
     private static readonly object Gate = new();
     private static readonly System.Collections.Generic.List<IExecutionOwner> Owners = [];
 
-    /// <summary>取最近登记的所有者；注销后自动回落到仍存活的同插件实例。</summary>
+    /// <summary>取最近登记的所有者；注销后自动回落到仍存活的同所有者实例。</summary>
     public static IExecutionOwner? Current
     {
         get { lock (Gate) return Owners.Count > 0 ? Owners[^1] : null; }
@@ -64,8 +64,8 @@ public static class ExecutionBaseLibrary
         ArgumentNullException.ThrowIfNull(owner);
         lock (Gate)
         {
-            // 不同插件不能抢同一个后台；同一插件的多个激活实例（主窗口与设置页各持一个
-            // 管理器）可以并存，注销其中一个不会让另一个失去执行入口。
+            // 不同所有者不能抢同一个后台；同一所有者的多个宿主实例可以并存，
+            // 注销其中一个不会让另一个失去执行入口。
             var conflicting = Owners.FirstOrDefault(existing =>
                 !ReferenceEquals(existing, owner) &&
                 !string.Equals(existing.OwnerId, owner.OwnerId, StringComparison.OrdinalIgnoreCase));

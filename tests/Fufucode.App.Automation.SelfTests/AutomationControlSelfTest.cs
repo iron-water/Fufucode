@@ -225,12 +225,8 @@ internal static partial class AutomationControlSelfTest
         var shell = new MainWindow(AppOptions.Mock); shell.Show();
         try
         {
-            shell.OpenDockPage("automation", Fufucode.App.Infrastructure.DockZone.Right);
-            Check(shell.PageAvailableForTesting("automation") && shell.PageForTesting("automation") is AutomationControlPageView, "shared workbench catalog exposes the real native page");
-            var page = shell.PageForTesting("automation"); shell.FloatDockPage("automation");
-            var floated = shell.DockLayoutForTesting.Floating.Single(f => f.Pages.Contains("automation"));
-            Check(shell.FloatingDockWindowForTesting(floated.Id) is not null && ReferenceEquals(page, shell.PageForTesting("automation")), "floating the native tab retains its one client instance");
-            shell.DockFloatingRegion(floated.Id); Check(ReferenceEquals(page, shell.PageForTesting("automation")), "returning the floating tab docks the same live page");
+            Check(!shell.PageAvailableForTesting("automation") && shell.DockLayoutForTesting.Find("automation") is null,
+                "retired automation plugin page has no workbench registration or dock slot");
         }
         finally { shell.Close(); }
         await RunPersistenceAsync(root, Check);

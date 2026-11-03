@@ -84,8 +84,8 @@ public static class Program
             case "backends": return await CliBackendCommands.RunAsync(options, Console.Out, cancellationToken);
             case "changes": return await CliReportCommands.ChangesAsync(options, Console.Out, cancellationToken);
             case "usage": return await CliReportCommands.UsageAsync(options, Console.Out);
-            case "control": return await AutomationPluginCommands.RunControlAsync(options, Console.Out, cancellationToken);
-            case "host": return await AutomationPluginCommands.RunHostAsync(options, Console.Out, cancellationToken);
+            case "control": return await AutomationCommands.RunControlAsync(options, Console.Out, cancellationToken);
+            case "host": return await AutomationCommands.RunHostAsync(options, Console.Out, cancellationToken);
             case "ui":
                 // 无头预览始终使用 mock 会话；REPL 里也可以直接调用。
                 return await CliUiCommands.RunAsync(args, Console.Out, Console.Error, cancellationToken);

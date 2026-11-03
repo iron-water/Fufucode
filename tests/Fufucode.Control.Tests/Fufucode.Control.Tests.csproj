@@ -10,7 +10,7 @@
     <ProjectReference Include="../../src/Fufucode.Cli/Fufucode.Cli.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/Fufucode.Plugins.AutoDev/Fufucode.Plugins.AutoDev.csproj" />
+    <ProjectReference Include="../../src/Fufucode.AutoDev/Fufucode.AutoDev.csproj" />
     <Using Include="Fufucode.App.Abstractions.Automation.Harnesses" />
   </ItemGroup>
 </Project>

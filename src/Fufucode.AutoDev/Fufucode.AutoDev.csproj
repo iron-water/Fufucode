@@ -11,10 +11,18 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Reuse the existing authority without importing the retired plugin's UI or view-model types. -->
-    <Compile Include="../Fufucode.Plugins.AutoDev/Engine/Rebirth/*.cs" Link="Rebirth/%(Filename)%(Extension)" />
+    <!-- Shared domain and explicit-database CLI compatibility; the retired package retains only its UI. -->
+    <Compile Include="../Fufucode.Plugins.AutoDev/Engine/**/*.cs" Link="Engine/%(RecursiveDir)%(Filename)%(Extension)" />
+    <Compile Include="../Fufucode.Plugins.AutoDev/Cli/*.cs" Link="Cli/%(Filename)%(Extension)" />
+    <Compile Include="../Fufucode.Plugins.AutoDev/AutoDevCommandHost.cs" Link="AutoDevCommandHost.cs" />
     <Compile Include="../Fufucode.Plugins.AutoDev/Graph/*.cs" Link="Graph/%(Filename)%(Extension)" />
     <Compile Include="../Fufucode.Plugins.AutoDev/RebirthPaths.cs" Link="RebirthPaths.cs" />
     <Compile Include="../Fufucode.Plugins.AutoDev/AutoDevToolHandler.cs" Link="AutoDevToolHandler.cs" />
+    <InternalsVisibleTo Include="Fufucode.Plugins.AutoDev" />
+    <InternalsVisibleTo Include="Fufucode.App" />
+    <InternalsVisibleTo Include="Fufucode.App.Automation.Persistence.Tests" />
+    <InternalsVisibleTo Include="Fufucode.App.Automation.V4.Tests" />
+    <InternalsVisibleTo Include="Fufucode.App.Ui1.Tests" />
+    <InternalsVisibleTo Include="Fufucode.App.Automation.SelfTests" />
   </ItemGroup>
 </Project>

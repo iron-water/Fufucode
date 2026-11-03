@@ -24,9 +24,6 @@ public static class PluginAccess
     /// <summary>语音朗读服务插件 ID。</summary>
     public const string SpeechPluginId = "service.speech-synthesis";
 
-    /// <summary>自动开发工作台插件 ID。</summary>
-    public const string AutoDevPluginId = "automation.auto-dev";
-
     /// <summary>用户定时任务插件 ID。</summary>
     public const string CronPluginId = "automation.cron";
 

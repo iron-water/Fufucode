@@ -77,7 +77,7 @@ public partial class MainWindow
                 return Failure(scope, "审查目录与当前项目不同，请先打开该项目。");
             try
             {
-                // 执行后端由已启用的自动开发插件提供（唯一后台）；这里只解析本次审查的部署。
+                // 执行请求交给宿主已注册的唯一执行服务；这里只解析本次审查的部署。
                 var (node, cli) = RealSessionBootstrap.ResolveRuntime(window._options);
                 var manifest = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(cli)!, "..", "..", "package.json"));
                 using var package = JsonDocument.Parse(await File.ReadAllTextAsync(manifest, cancellationToken));

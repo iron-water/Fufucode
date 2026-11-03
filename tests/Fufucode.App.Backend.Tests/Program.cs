@@ -56,6 +56,12 @@ internal static class Program
         var checks = new Checks();
         try
         {
+            if (args.Length == 1 && args[0] == "--plugin-capability-only")
+            {
+                await PluginCapabilityTests.RunAsync(checks);
+                Console.WriteLine("插件能力门禁：" + checks.Passed + " 项断言");
+                return 0;
+            }
             if (args.Length == 1 && args[0] == "--plugin-dist-only")
             {
                 PluginDistributionInstallTests.Run(checks);

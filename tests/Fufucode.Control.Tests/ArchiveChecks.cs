@@ -10,27 +10,14 @@ using Microsoft.Data.Sqlite;
 internal static class ArchiveChecks
 {
     /// <summary>
-    /// 自动开发命令现在由插件提供：CLI 子进程需要一个真实、隔离的插件安装。
-    /// 只复制命令入口程序集与清单；页面/Avalonia 类型不会被 CLI 触碰。
+    /// CLI 使用内建自动开发命令；隔离数据根不准备任何插件载荷或安装状态。
     /// </summary>
     internal static readonly string CliDataRoot = PrepareCliDataRoot();
 
     private static string PrepareCliDataRoot()
     {
-        var root = Path.Combine(Path.GetTempPath(), "fufucode-cli-plugin-" + Guid.NewGuid().ToString("N"));
-        var layout = new AppDataLayout(root);
-        var pluginId = "automation.auto-dev";
-        var dir = layout.PluginDirectory(pluginId);
-        Directory.CreateDirectory(dir);
-        var payload = typeof(Fufucode.Plugins.AutoDev.AutoDevPluginPackage).Assembly.Location;
-        File.Copy(payload, Path.Combine(dir, "Fufucode.Plugins.AutoDev.dll"), true);
-        File.WriteAllText(Path.Combine(dir, "manifest.json"), """
-            {"id":"automation.auto-dev","name":"自动开发工作台","version":"1.0.0",
-             "entryAssembly":"Fufucode.Plugins.AutoDev.dll",
-             "packageType":"Fufucode.Plugins.AutoDev.AutoDevPluginPackage",
-             "commandHostType":"Fufucode.Plugins.AutoDev.AutoDevCommandHost","category":"Automation"}
-            """);
-        new PluginStateStore(layout).Install(pluginId);
+        var root = Path.Combine(Path.GetTempPath(), "fufucode-cli-builtin-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(root);
         return root;
     }
 
@@ -117,6 +104,12 @@ internal static class ArchiveChecks
         var init = await Cli("control", "init", cliDb);
         check(init.Exit == 0 && JsonDocument.Parse(init.Output).RootElement.GetProperty("mode").GetString() == "Manual",
             "actual CLI initializes an explicit database in manual mode");
+        check(!Directory.Exists(new AppDataLayout(CliDataRoot).PluginDirectory("automation.auto-dev")),
+            "actual CLI initializes control without creating or installing plugins");
+        var legacyDirectory = new AppDataLayout(CliDataRoot).PluginDirectory("automation.auto-dev");
+        Directory.CreateDirectory(legacyDirectory);
+        File.WriteAllText(Path.Combine(legacyDirectory, "manifest.json"), "invalid retired manifest must never load");
+        File.WriteAllText(Path.Combine(legacyDirectory, "Fufucode.Plugins.AutoDev.dll"), "not an assembly");
         var cliArchive = command with { SourceId = "cli-origin" };
         var file = Path.Combine(root, "archive command 资料.json");
         File.WriteAllText(file, JsonSerializer.Serialize(cliArchive));

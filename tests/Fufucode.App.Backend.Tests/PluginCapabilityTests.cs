@@ -28,6 +28,13 @@ internal static class PluginCapabilityTests
         try
         {
             var layout = new AppDataLayout(root);
+            var legacyDirectory = layout.PluginDirectory("automation.auto-dev");
+            Directory.CreateDirectory(legacyDirectory);
+            File.WriteAllText(Path.Combine(legacyDirectory, "manifest.json"), "{\"id\":\"automation.auto-dev\"}");
+            File.WriteAllText(Path.Combine(layout.Root, "plugins.json"), """
+                {"version":1,"states":{"automation.auto-dev":{"id":"automation.auto-dev",
+                "isInstalled":true,"isEnabled":true,"lastUpdatedUtc":"2026-11-01T00:00:00Z"}}}
+                """);
             var store = new PluginStateStore(layout);
             var gateway = new PluginCapabilityGateway(store);
             var registry = new PluginToolRegistry(gateway);
@@ -120,28 +127,41 @@ internal static class PluginCapabilityTests
         checks.Check(!testRegistry.ActiveToolNames.Contains(ComputerUsePlugin.ScreenshotTool),
             "ComputerUse 物理卸载成功：工具彻底注销");
 
-        // 7. AutoDev 物理生命周期与真实工具调度验证
-        PluginPackageManager.RegisterPackageFactory("automation.auto-dev", () => new Fufucode.Plugins.AutoDev.AutoDevPluginPackage());
-        packageManager.InstallPackage("automation.auto-dev");
-        checks.Check(packageManager.HasPhysicalPayload("automation.auto-dev"),
-            "AutoDev 物理安装成功：产生载荷与 manifest");
-        checks.Check(testRegistry.ActiveToolNames.Contains("autodev_status"),
-            "AutoDev 物理安装成功：autodev_status 工具动态注册");
-        checks.Check(testRegistry.ActiveToolNames.Contains("autodev_advance"),
-            "AutoDev 物理安装成功：autodev_advance 工具动态注册");
-        checks.Check(testRegistry.ActiveToolNames.Contains("autodev_plan"),
-            "AutoDev 物理安装成功：autodev_plan 工具动态注册");
-
-        var statusCall = new PureToolCall("call_autodev_1", "autodev_status", "{}");
-        var statusResult = await testRegistry.DispatchAsync(statusCall);
-        checks.Check(statusResult.Success, "AutoDev 工具执行成功");
-        checks.Check(statusResult.Content.Contains("AutoDevelopment"), "AutoDev 状态输出包含能力标识");
-
-        packageManager.UninstallPackage("automation.auto-dev");
-        checks.Check(!Directory.Exists(layout.PluginDirectory("automation.auto-dev")),
-            "AutoDev 物理卸载成功：物理目录已彻底删除");
-        checks.Check(!testRegistry.ActiveToolNames.Contains("autodev_status"),
-            "AutoDev 物理卸载成功：工具彻底注销");
+        // 7. 内建 AutoDev 不再属于插件市场；历史载荷不能重新激活第二个所有者。
+        const string retiredId = "automation.auto-dev";
+        checks.Check(store.TryGetStoredState(retiredId, out var legacyState) &&
+                     legacyState.IsInstalled && legacyState.IsEnabled,
+            "回归夹具保留迁移前已安装且启用的真实磁盘状态");
+        checks.Check(PluginMarketplaceCatalog.Find(retiredId) is null &&
+                     store.GetAllStates().All(s => s.Id != retiredId),
+            "内建 AutoDev 不出现在市场或插件状态列表");
+        var legacyDirectory = layout.PluginDirectory(retiredId);
+        Directory.CreateDirectory(legacyDirectory);
+        var legacyManifest = Path.Combine(legacyDirectory, "manifest.json");
+        File.WriteAllText(legacyManifest, "{\"id\":\"automation.auto-dev\"}");
+        var legacyFactoryInvoked = false;
+        PluginPackageManager.RegisterPackageFactory(retiredId, () =>
+        {
+            legacyFactoryInvoked = true;
+            throw new InvalidOperationException("Retired AutoDev package must not be activated.");
+        });
+        try
+        {
+            packageManager.InitializeInstalledPlugins();
+            checks.Check(!legacyFactoryInvoked && packageManager.PageContribution(retiredId) is null,
+                "历史 AutoDev 载荷不会被激活为插件页面或第二执行所有者");
+            checks.Check(File.Exists(legacyManifest), "兼容迁移保留旧载荷与历史数据");
+            var status = gateway.Status(PluginCapability.AutoDevelopment);
+            checks.Check(status.PluginId is null && !status.IsAvailable &&
+                         status.Reason.Contains("已内建") && !status.Reason.Contains("插件市场"),
+                "旧插件能力门禁如实指向内建 Graph，不伪造执行授权");
+            checks.Check(!testRegistry.ActiveToolNames.Contains("autodev_status"),
+                "历史载荷不会向插件调度表注入 AutoDev 工具");
+        }
+        finally
+        {
+            PluginPackageManager.UnregisterPackageFactory(retiredId);
+        }
 
         // 8. AeroSkin 插件包物理生命周期与皮肤贡献验证
         PluginPackageManager.RegisterPackageFactory("skin.aero", () => new Fufucode.Plugins.AeroSkin.AeroSkinPluginPackage());
@@ -224,8 +244,9 @@ internal static class PluginCapabilityTests
             "浏览器控制能力解析到 browser-use 插件");
         checks.Equal("agent.computer-use", PluginCapabilityRegistry.ProviderId(PluginCapability.ComputerControl),
             "电脑操控能力解析到 computer-use 插件");
-        checks.Equal("automation.auto-dev", PluginCapabilityRegistry.ProviderId(PluginCapability.AutoDevelopment),
-            "自动开发能力解析到 auto-dev 插件");
+        checks.Check(PluginCapabilityRegistry.ProviderId(PluginCapability.AutoDevelopment) is null &&
+                     PluginCapabilityRegistry.CapabilitiesOf("automation.auto-dev").Count == 0,
+            "内建自动开发不再映射到退役插件");
         checks.Check(PluginCapabilityRegistry.Provider(PluginCapability.BrowserControl) is not null &&
                      PluginCapabilityRegistry.Provider(PluginCapability.ComputerControl) is not null,
             "能力提供者都能解析到真实插件定义");

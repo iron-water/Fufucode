@@ -20,7 +20,7 @@ namespace Fufucode.App.SelfTest;
 
 internal static class NativeGraphSelfTest
 {
-    internal static async Task<int> RunAsync(MainWindow window, string evidenceDirectory)
+    internal static async Task<int> RunAsync(MainWindow window, string evidenceDirectory, bool settingsOnly = false)
     {
         Directory.CreateDirectory(evidenceDirectory);
         var failures = new List<string>();
@@ -37,6 +37,10 @@ internal static class NativeGraphSelfTest
         var original = service.ReadSnapshot();
         var metadata = new DesktopMetadataStore(new AppDataLayout(Program.SelfTestDataRoot));
         Check(vm.IsGraphPage, "真实项目直接进入 Graph");
+        var builtInStatus = window.CustomizationForTesting.StatusOf("automation");
+        Check(builtInStatus.State == "已启用" && builtInStatus.ActionId == "graph" &&
+              builtInStatus.Detail.Contains("内建") && builtInStatus.PageId != "marketplace",
+            "自动开发运行状态来自内建 Graph 而非插件安装");
         Check(vm.Session is UnopenedChatSession, "项目入口不创建聊天会话");
         Check(metadata.ListSessions(original.ProjectId).Count == 0, "原生会话索引仍为空");
         await service.ScanAsync();
@@ -51,6 +55,15 @@ internal static class NativeGraphSelfTest
         await Settle();
         Check(window.PageAvailableForTesting("graph-properties") && window.PageAvailableForTesting("graph-tickets"), "属性和工单接入原有停靠系统");
         Check(window.GraphModelForTesting.SelectedModuleId == module.Id, "选中模块保持稳定身份");
+        if (settingsOnly)
+        {
+            await VerifyBuiltinSettingsAsync(window, service, evidenceDirectory, Check);
+            Check(metadata.ListSessions(original.ProjectId).Count == 0, "设置检查不创建聊天会话");
+            var settingsReport = $"Native AutoDev settings: {count - failures.Count}/{count} passed\n" + string.Join("\n", failures);
+            await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, "native-result.txt"), settingsReport);
+            Console.WriteLine(settingsReport);
+            return failures.Count == 0 ? 0 : 1;
+        }
         var modeButton = window.GetVisualDescendants().OfType<Button>().FirstOrDefault(item => AutomationProperties.GetAutomationId(item) == "action-workspace.mode");
         Check(modeButton is { IsVisible: true }, "顶栏原通知位置显示模式切换按钮");
         Screenshot(window, Path.Combine(evidenceDirectory, "sgline-graph.png"));
@@ -132,26 +145,7 @@ internal static class NativeGraphSelfTest
         var preserved = AttachmentPresentation.Parse(metadata.GetDraft(linkedSessionId!) ?? "");
         Check(preserved.Body == "关联讨论尚未发送的修改" && preserved.Files.Any(file => file.Context.Contains(module.Name, StringComparison.Ordinal)), "转移讨论仍保存原主 Chat 草稿和上下文附件");
         await window.NavigateForTestingAsync(AppPage.Graph);
-        await window.NavigateForTestingAsync(AppPage.Settings);
-        vm.Settings.SelectCategory("automation");
-        await Settle();
-        Check(vm.Settings.ShowGraphSettings && vm.Settings.GraphSettingsContent is Control, "共用原设置页中的 Graph 设置");
-        var settings = (Control)vm.Settings.GraphSettingsContent!;
-        var titleBlocks = settings.GetVisualDescendants().OfType<TextBlock>().Where(item => item.Classes.Contains("settingsRowTitle")).ToArray();
-        Check(titleBlocks.Length > 0 && titleBlocks.All(item => (item.Foreground as ISolidColorBrush)?.Color == Color.Parse("#F25022")), "AutoDev 设置项文字使用共享微软红色");
-        Screenshot(window, Path.Combine(evidenceDirectory, "sgline-settings.png"));
-        var enabled = settings.GetVisualDescendants().OfType<ToggleSwitch>().Single(item => AutomationProperties.GetAutomationId(item) == "graph-setting-enabled");
-        var apply = settings.GetVisualDescendants().OfType<Button>().Single(item => AutomationProperties.GetAutomationId(item) == "graph-settings-apply");
-        enabled.IsChecked = false;
-        apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        for (var i = 0; i < 100 && service.ReadOptions().Enabled; i++) await Task.Delay(50);
-        await Settle();
-        Check(!service.ReadOptions().Enabled && !window.PageAvailableForTesting("graph-tickets"), "禁用 Graph 撤下专属面板");
-        enabled.IsChecked = true;
-        apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-        for (var i = 0; i < 100 && !service.ReadOptions().Enabled; i++) await Task.Delay(50);
-        await Settle();
-        Check(service.ReadOptions().Enabled && window.PageAvailableForTesting("graph-tickets"), "重新启用恢复能力和已有数据");
+        await VerifyBuiltinSettingsAsync(window, service, evidenceDirectory, Check);
         Check(service.ReadSnapshot().Tickets.Any(item => item.Id == ticket.Id), "禁用不删除工单或历史");
         await window.NavigateForTestingAsync(AppPage.Graph);
         window.Width = 1100;
@@ -162,6 +156,46 @@ internal static class NativeGraphSelfTest
         await File.WriteAllTextAsync(Path.Combine(evidenceDirectory, "native-result.txt"), report);
         Console.WriteLine(report);
         return failures.Count == 0 ? 0 : 1;
+    }
+
+    private static async Task VerifyBuiltinSettingsAsync(MainWindow window, IGraphProjectService service,
+        string evidenceDirectory, Action<bool, string> check)
+    {
+        await window.NavigateForTestingAsync(AppPage.Settings);
+        var vm = (MainViewModel)window.DataContext!;
+        vm.Settings.SelectCategory("marketplace");
+        await Settle();
+        check(vm.Settings.MarketplacePlugins.All(item => item.Id != "automation.auto-dev"),
+            "真实设置页插件列表不包含内建 AutoDev");
+        Screenshot(window, Path.Combine(evidenceDirectory, "marketplace-without-autodev.png"));
+        vm.Settings.SelectCategory("automation");
+        await Settle();
+        check(vm.Settings.ShowGraphSettings && vm.Settings.GraphSettingsContent is Control, "共用原设置页中的 Graph 设置");
+        var settings = (Control)vm.Settings.GraphSettingsContent!;
+        var titleBlocks = settings.GetVisualDescendants().OfType<TextBlock>().Where(item => item.Classes.Contains("settingsRowTitle")).ToArray();
+        Application.Current!.TryGetResource("MsRed", window.ActualThemeVariant, out var sharedRed);
+        check(sharedRed is ISolidColorBrush red && titleBlocks.Length > 0 &&
+              titleBlocks.All(item => (item.Foreground as ISolidColorBrush)?.Color == red.Color),
+            "AutoDev 设置项文字使用共享微软红色");
+        Screenshot(window, Path.Combine(evidenceDirectory, "sgline-settings.png"));
+        var enabled = settings.GetVisualDescendants().OfType<ToggleSwitch>().Single(item => AutomationProperties.GetAutomationId(item) == "graph-setting-enabled");
+        var apply = settings.GetVisualDescendants().OfType<Button>().Single(item => AutomationProperties.GetAutomationId(item) == "graph-settings-apply");
+        enabled.IsChecked = false;
+        apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        for (var i = 0; i < 100 && service.ReadOptions().Enabled; i++) await Task.Delay(50);
+        await Settle();
+        check(!service.ReadOptions().Enabled && !window.PageAvailableForTesting("graph-tickets"), "禁用 Graph 撤下专属面板");
+        var disabledStatus = window.CustomizationForTesting.StatusOf("automation");
+        check(disabledStatus.State == "已停用" && disabledStatus.PageId == "automation" &&
+              disabledStatus.ActionId is null && !disabledStatus.Detail.Contains("插件"),
+            "停用 Graph 的状态回到内建设置，不引导安装插件");
+        enabled.IsChecked = true;
+        apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        for (var i = 0; i < 100 && !service.ReadOptions().Enabled; i++) await Task.Delay(50);
+        await Settle();
+        check(service.ReadOptions().Enabled && window.PageAvailableForTesting("graph-tickets"), "重新启用恢复能力和已有数据");
+        check(window.CustomizationForTesting.StatusOf("automation").ActionId == "graph",
+            "重新启用后的状态指向内建 Graph");
     }
 
     private static async Task Settle()

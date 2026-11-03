@@ -6,8 +6,8 @@ using System.Text.Json;
 namespace Fufucode.App.Abstractions.Automation.Harnesses;
 
 // 执行基库（宿主契约）：运行环境描述、一次运行的请求与结果、协议适配器身份、
-// harness id → 适配器的登记点。具体协议实现随自动开发插件发布；宿主与其内置模块
-// （本地审查）只依赖本文件，停止/卸载插件后这里不再有任何已登记的 harness。
+// harness id → 适配器的登记点。具体协议由执行服务登记；调用方（如本地审查）
+// 只依赖本文件。协议已登记不代表部署可用或执行已获授权。
 
 // Deployment (installed CLI, bundled runtime, remote host) is distinct from protocol.
 public sealed record HarnessRuntime(string Id, string Harness, string Executable,
@@ -68,8 +68,7 @@ public interface IHarnessAdapter
 
 public static class HarnessAdapters
 {
-    // 适配器实现属于自动开发插件；宿主只登记“哪个 id 由哪个装载器提供”，
-    // 插件加载时注册、卸载时注销。未登记时与未知 harness 同样拒绝。
+    // 执行服务按 id 登记和注销适配器。未登记时与未知 harness 同样拒绝。
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Func<IHarnessAdapter>>
         Registered = new(StringComparer.OrdinalIgnoreCase);
 

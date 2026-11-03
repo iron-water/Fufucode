@@ -12,6 +12,7 @@ using Avalonia.Headless;
 using Avalonia.Threading;
 using Fufucode.App;
 using Fufucode.App.Integration;
+using Fufucode.App.Infrastructure;
 using Fufucode.App.SelfTest;
 using Fufucode.Core;
 using Fufucode.Core.Plugins;
@@ -22,8 +23,7 @@ using Avalonia.Themes.Fluent;
 namespace Fufucode.App.Automation.SelfTests;
 
 /// <summary>
-/// 自动开发自测的独立入口。App 的发布程序不再静态引用自动开发插件；
-/// 本组件同时引用 App 与插件，验证页面挂载、停靠和真实执行链路。
+/// 自动开发自测的独立入口。验证内建入口归属，并保留旧控制协议与页面的兼容测试。
 /// </summary>
 internal static class Program
 {
@@ -45,34 +45,27 @@ internal static class Program
         Directory.CreateDirectory(root);
         Fufucode.App.Program.EnterSelfTestMode(root);
 
-        // 自测通过工厂安装插件，模拟“已安装并启用”；宿主随后从同一数据根加载。
-        var layout = new AppDataLayout(root);
-        PluginPackageManager.RegisterPackageFactory(AutoDevPluginPackage.PluginId, () => new AutoDevPluginPackage());
-        var registry = new PluginToolRegistry(new PluginCapabilityGateway(new PluginStateStore(layout)));
-        var manager = new PluginPackageManager(layout, registry);
-        if (!manager.HasPhysicalPayload(AutoDevPluginPackage.PluginId))
-            manager.InstallPackage(AutoDevPluginPackage.PluginId);
-        manager.SetPackageEnabled(AutoDevPluginPackage.PluginId, true);
-
         var failures = new List<string>();
         var completion = new TaskCompletionSource<int>();
         Dispatcher.UIThread.Post(async () =>
         {
             try
             {
-                // 先验证插件页面确实挂进宿主：未安装时容器为空，安装后控制器必须存在。
+                // 空插件目录下仍报告内建功能，旧插件页面不再占据宿主页签。
                 if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime lifetime0)
                     lifetime0.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 var shell = new MainWindow(AppOptions.Mock);
                 try
                 {
                     shell.Show();
-                    var page = shell.PageAvailableForTesting("automation") ? shell.PageForTesting("automation") : null;
-                    var hasPage = page is AutomationControlPageView;
-                    Console.WriteLine(hasPage
-                        ? "PASS 插件页面已挂载到宿主页签"
-                        : "FAIL 插件页面未挂载到宿主页签");
-                    if (!hasPage) failures.Add("插件页面未挂载到宿主页签");
+                    var status = shell.CustomizationForTesting.StatusOf("automation");
+                    var builtIn = status.Detail.Contains("内建") && status.PageId != "marketplace" &&
+                        PluginMarketplaceCatalog.Find("automation.auto-dev") is null &&
+                        !shell.PageAvailableForTesting("automation");
+                    Console.WriteLine(builtIn
+                        ? "PASS 自动开发使用内建入口，不再挂载旧插件页面"
+                        : "FAIL 自动开发仍依赖旧插件页面或市场安装状态");
+                    if (!builtIn) failures.Add("自动开发内建入口归属错误");
                 }
                 finally { shell.Close(); }
                 BatchHarnessAdapters.Register();
@@ -100,8 +93,8 @@ internal static class Program
             // App 的 ApplicationDefinition 资源只能由入口程序集加载；测试用同等的
             // 主题组合（Fluent + 产品样式），页面与窗口的 DynamicResource 键保持一致。
             AppBuilder.Configure<TestApp>()
-                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
-                .WithInterFont()
+                .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+                .UseSkia().WithInterFont().WithAppTypography()
                 .StartWithClassicDesktopLifetime([]);
         }
         catch (Exception error)
@@ -112,7 +105,6 @@ internal static class Program
 
         var code = completion.Task.IsCompleted ? completion.Task.Result : 1;
         Console.WriteLine($"Automation page failures: {failures.Count}");
-        manager.DisposeAsync().AsTask().GetAwaiter().GetResult();
         return code;
     }
 
@@ -120,6 +112,7 @@ internal static class Program
     {
         public override void Initialize()
         {
+            AppTypography.Initialize();
             Styles.Add(new FluentTheme());
             Styles.Add(new StyleInclude(new Uri("avares://Fufucode.App/"))
             {

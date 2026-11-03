@@ -4,8 +4,8 @@ using Fufucode.Core.Automation.Harnesses;
 namespace Fufucode.Plugins.AutoDev.Engine.Harnesses;
 
 /// <summary>
-/// 把插件自带的批量 harness 适配器登记到宿主契约 <see cref="HarnessAdapters"/>。
-/// 适配器的协议代码随自动开发插件发布；宿主只按 id 取用。
+/// 把内建自动开发领域的批量 harness 适配器登记到宿主契约 <see cref="HarnessAdapters"/>。
+/// 只登记协议，不启动执行器或后台宿主。
 /// </summary>
 public static class BatchHarnessAdapters
 {
