@@ -73,6 +73,19 @@ public sealed class UpdateService : IDisposable
                     var json = await _http.GetStringAsync(feedUrl, cancellationToken).ConfigureAwait(false);
                     var manifest = JsonSerializer.Deserialize<AppUpdateManifest>(json,
                         new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                    // feed.json 由打包脚本生成，packageUrl 是相对资产名（同一目录发布）：
+                    // 下载端只认绝对地址，按 feed 自身地址补全，否则会当成不存在的本地文件。
+                    if (manifest is not null &&
+                        !Uri.TryCreate(manifest.PackageUrl, UriKind.Absolute, out _))
+                    {
+                        manifest = manifest with
+                        {
+                            PackageUrl = new Uri(new Uri(feedUrl, UriKind.Absolute), manifest.PackageUrl).ToString(),
+                        };
+                    }
+                    // 发布页正文才是这次更新的真实变更说明；feed.json 里的说明是打包脚本的固定文案。
+                    if (manifest is not null && !string.IsNullOrWhiteSpace(release.Notes))
+                        manifest = manifest with { ReleaseNotes = release.Notes };
                     if (manifest is not null && UpdateVersion.Compare(manifest.Version, currentVersion) > 0)
                     {
                         return new UpdateCheckResult(UpdateCheckStatus.UpdateAvailable, manifest,
