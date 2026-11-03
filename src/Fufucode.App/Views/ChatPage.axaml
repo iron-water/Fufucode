@@ -158,7 +158,7 @@
                           VerticalAlignment="Top" Margin="0,2,0,0"
                           Background="{DynamicResource AppAccentSubtle}">
                     <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="16" Height="16"
-                              Foreground="{DynamicResource MsGreen}"/>
+                              Foreground="{DynamicResource AppAccent}"/>
                   </Border>
                   <StackPanel Grid.Column="1" Margin="12,0,0,0" AutomationProperties.AutomationId="MSG-ASSISTANT-BUBBLE">
                     <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,4,0,4">
@@ -233,7 +233,7 @@
                                       Padding="10,7">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                   <PathIcon Data="{DynamicResource Icon.Brain}" Width="15" Height="15"
-                                            Foreground="{DynamicResource MsYellow}"/>
+                                            Foreground="{DynamicResource AppEmphasis}"/>
                                   <TextBlock Classes="caption" Text="思考过程" VerticalAlignment="Center"/>
                                   <!-- 展开态不再显示箭头（用户 2026-10-29 要求）；整行本身可点。 -->
                                 </StackPanel>
@@ -399,7 +399,7 @@
                               HorizontalContentAlignment="Stretch" Padding="12,8">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                           <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="13" Height="13"
-                                    VerticalAlignment="Center" Foreground="{DynamicResource MsYellow}"/>
+                                    VerticalAlignment="Center" Foreground="{DynamicResource AppEmphasis}"/>
                           <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <TextBlock Classes="metaName" Text="{Binding RelatedFilesHeaderText}"/>
                             <TextBlock Classes="meta" Text="消息提到的路径，不代表已读取"/>
@@ -423,7 +423,7 @@
                                         Padding="12,5">
                                   <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">
                                     <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="12" Height="12"
-                                              VerticalAlignment="Center" Foreground="{DynamicResource MsYellow}"/>
+                                              VerticalAlignment="Center" Foreground="{DynamicResource AppEmphasis}"/>
                                     <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
                                       <!-- 统一字阶：相关文件名 12.5 归入 12。 -->
                                       <TextBlock Text="{Binding DisplayName}" FontSize="12" TextTrimming="CharacterEllipsis"/>
@@ -457,7 +457,7 @@
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,10,12,8" ColumnSpacing="10">
                           <Border Grid.Column="0" Classes="changeIcon" Width="28" Height="28" CornerRadius="8">
                             <PathIcon Data="{DynamicResource Icon.Edit}" Width="14" Height="14"
-                                      Foreground="{DynamicResource MsGreen}"/>
+                                      Foreground="{DynamicResource AppAccent}"/>
                           </Border>
                           <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock Classes="metaName" Text="{Binding ChangeCard.HeaderText}"/>
@@ -577,7 +577,7 @@
                               IsVisible="{Binding IsInfo}"/>
                     <PathIcon Grid.Column="0" Width="18" Height="18" Margin="0,1,0,0"
                               Data="{DynamicResource Icon.RecordStop}"
-                              Foreground="{DynamicResource MsYellow}"
+                              Foreground="{DynamicResource AppEmphasis}"
                               IsVisible="{Binding IsNeutral}"/>
                     <StackPanel Grid.Column="1" Margin="10,0,0,0">
                       <StackPanel Orientation="Horizontal" Spacing="8">
@@ -615,7 +615,7 @@
         <Button x:Name="BackToLatestButton" Classes="backToLatest"
                 Command="{Binding Timeline.ScrollToLatestSmoothCommand}">
           <StackPanel Orientation="Horizontal" Spacing="6">
-            <PathIcon Data="{DynamicResource Icon.ArrowDown}" Width="14" Height="14" Foreground="{DynamicResource MsGreen}"/>
+            <PathIcon Data="{DynamicResource Icon.ArrowDown}" Width="14" Height="14" Foreground="{DynamicResource AppAccent}"/>
             <TextBlock Classes="caption" Text="{Binding Timeline.BackToLatestLabel}" VerticalAlignment="Center"/>
           </StackPanel>
         </Button>
@@ -649,9 +649,9 @@
                       AutomationProperties.Name="展开或折叠排队消息">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="11" Height="11" VerticalAlignment="Center"
-                            IsVisible="{Binding Input.IsQueueExpanded}" Foreground="{DynamicResource MsYellow}"/>
+                            IsVisible="{Binding Input.IsQueueExpanded}" Foreground="{DynamicResource AppEmphasis}"/>
                   <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="11" Height="11" VerticalAlignment="Center"
-                            IsVisible="{Binding !Input.IsQueueExpanded}" Foreground="{DynamicResource MsYellow}"/>
+                            IsVisible="{Binding !Input.IsQueueExpanded}" Foreground="{DynamicResource AppEmphasis}"/>
                   <TextBlock Classes="caption" Text="{Binding Input.QueueSummary}" VerticalAlignment="Center"/>
                 </StackPanel>
               </Button>
@@ -697,7 +697,7 @@
                       Command="{Binding Input.ApplyPendingRestoreCommand}"/>
               <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                 <PathIcon Data="{DynamicResource Icon.History}" Width="13" Height="13"
-                          VerticalAlignment="Center" Foreground="{DynamicResource MsYellow}"/>
+                          VerticalAlignment="Center" Foreground="{DynamicResource AppEmphasis}"/>
                 <TextBlock Classes="caption" Text="{Binding Input.PendingRestoreSummary}" VerticalAlignment="Center"/>
               </StackPanel>
             </DockPanel>
@@ -768,7 +768,7 @@
               </Button.Flyout>
             </Button>
             <Button x:Name="AttachContextButton" Grid.Column="2" Classes="iconButton">
-              <PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14" Foreground="{DynamicResource MsYellow}"/>
+              <PathIcon Data="{DynamicResource Icon.Attach}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
             </Button>
             <!-- 会话所属项目：底部工具行靠左（+、命令、附件之后）；新会话发送第一条前可改。 -->
             <StackPanel x:Name="SessionContextBar" Grid.Column="3" Orientation="Horizontal" Spacing="4"
@@ -776,7 +776,7 @@
               <Button x:Name="SessionProjectChip" Classes="iconButton" Width="32" Height="32"
 
                       AutomationProperties.Name="更改此会话的项目">
-                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource MsYellow}"/>
+                <PathIcon Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
               </Button>
               <TextBlock x:Name="SessionProjectChipText" IsVisible="False"/>
             </StackPanel>
@@ -785,7 +785,7 @@
               <Button x:Name="ModelButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}"
                      >
-                <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14" Foreground="{DynamicResource MsGreen}"/>
+                <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14" Foreground="{DynamicResource AppAccent}"/>
                 <Button.Flyout>
                   <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened" FlyoutPresenterClasses="modelPickerFlyout">
                     <Border Width="380" Classes="modelPickerSurface" Padding="10" Background="Transparent">
@@ -901,7 +901,7 @@
               </Button>
               <Button x:Name="ThinkingButton" Classes="iconButton" Width="32" Height="32"
                       IsEnabled="{Binding Settings.CanChangeModel}">
-                <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14" Foreground="{DynamicResource MsYellow}"/>
+                <PathIcon Data="{DynamicResource Icon.Brain}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
                 <Button.Flyout>
                   <MenuFlyout Placement="TopEdgeAlignedRight"/>
                 </Button.Flyout>
@@ -921,7 +921,7 @@
                         Command="{Binding Input.RestartCommand}"
                         IsVisible="{Binding Input.ShowRestartButton}"
                         AutomationProperties.Name="重发上一条">
-                  <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14" Foreground="{DynamicResource MsYellow}"/>
+                  <PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14" Foreground="{DynamicResource AppEmphasis}"/>
                 </Button>
                 <Button x:Name="SendButton" Classes="accent composerSend" Height="32" Padding="12,0"
                         Command="{Binding Input.SendCommand}"

@@ -179,6 +179,10 @@ public partial class MainWindow
         Resources["AppAccentText"] = new SolidColorBrush(textFill);
         Resources["AppAccentForeground"] = new SolidColorBrush(contrast);
         Resources["AppAccentSubtle"] = new SolidColorBrush(Color.FromArgb(30, accent.R, accent.G, accent.B));
+        // 变更 diff 的新增色跟随主题强调色：行内文字用强调色本身，整行色块用同色低透明度叠加。
+        Resources["AppDiffAddedForeground"] = new SolidColorBrush(fill);
+        Resources["AppDiffAddedBackground"] = new SolidColorBrush(Color.FromArgb(0x22, accent.R, accent.G, accent.B));
+        Resources["AppDiffAddedStrong"] = new SolidColorBrush(Color.FromArgb(0x4A, accent.R, accent.G, accent.B));
         // 卡片描边用强调色线：比中性描边更容易区分卡与卡，又不抢正文。
         Resources["AppAccentBorder"] = new SolidColorBrush(Color.FromArgb(170, accent.R, accent.G, accent.B));
         Resources["UiUserName"] = settings.UserName; Resources["UiAssistantName"] = settings.AssistantName;

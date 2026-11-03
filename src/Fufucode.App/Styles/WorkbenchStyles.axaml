@@ -1484,11 +1484,11 @@
     <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
   <Style Selector="TextBlock.additions">
-    <Setter Property="Foreground" Value="{DynamicResource AppSuccessForeground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
     <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
   <Style Selector="TextBlock.deletions">
-    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppDiffRemovedForeground}"/>
     <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
 

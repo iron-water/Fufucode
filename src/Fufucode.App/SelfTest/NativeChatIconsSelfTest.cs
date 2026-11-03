@@ -19,10 +19,11 @@ namespace Fufucode.App.SelfTest;
 
 internal static class NativeChatIconsSelfTest
 {
-    private static readonly Color MsRed = Color.Parse("#F25022");
-    private static readonly Color MsGreen = Color.Parse("#7FBA00");
-    private static readonly Color MsBlue = Color.Parse("#00A4EF");
-    private static readonly Color MsYellow = Color.Parse("#FFB900");
+    private static readonly Color MsRed = Color.Parse("#E81123");
+    private static readonly Color MsBlue = Color.Parse("#0078D4");
+
+    private static Color ResolveBrush(StyledElement root, string key, Color fallback) =>
+        root.TryFindResource(key, null, out var value) && value is ISolidColorBrush brush ? brush.Color : fallback;
 
     internal static async Task<int> RunAsync(MainWindow main)
     {
@@ -30,6 +31,9 @@ internal static class NativeChatIconsSelfTest
         Directory.CreateDirectory(evidence);
         var failures = new List<string>();
         var checks = 0;
+        // 绿色跟随主题强调色、黄色跟随强调文字色：断言读取窗口实际资源，避免写死十六进制。
+        var accent = ResolveBrush(main, "AppAccent", Color.Parse("#26FF8E"));
+        var emphasis = ResolveBrush(main, "AppEmphasis", Color.Parse("#E8B86A"));
 
         void Check(bool condition, string message)
         {
@@ -119,12 +123,12 @@ internal static class NativeChatIconsSelfTest
             AssertIconColor(FindIcon(userAvatar), MsBlue, "用户头像图标");
 
             var asstAvatar = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-ASSISTANT-AVATAR");
-            AssertIconColor(FindIcon(asstAvatar), MsGreen, "AI助手头像图标");
+            AssertIconColor(FindIcon(asstAvatar), accent, "AI助手头像图标");
 
             // 3. 正文块内图标：思考（黄）、工具（蓝）、代码复制（蓝）、相关文件（黄）、变更卡（绿）、跳转打开（蓝）
             var thinkingPanel = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("thinkingBlock"));
             var brainIcon = thinkingPanel.GetVisualDescendants().OfType<PathIcon>().First();
-            AssertIconColor(brainIcon, MsYellow, "思考过程大脑图标");
+            AssertIconColor(brainIcon, emphasis, "思考过程大脑图标");
 
             var toolCard = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("toolGroupCard"));
             var wrenchIcon = toolCard.GetVisualDescendants().OfType<PathIcon>().First();
@@ -132,11 +136,23 @@ internal static class NativeChatIconsSelfTest
             Check((brainIcon.Foreground as ISolidColorBrush)?.Color != (wrenchIcon.Foreground as ISolidColorBrush)?.Color, "输出中的思考与工具图标颜色不能相同");
 
             var relatedCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-RELATED-FILES-CARD");
-            AssertIconColor(relatedCard.GetVisualDescendants().OfType<PathIcon>().First(), MsYellow, "相关文件文档图标");
+            AssertIconColor(relatedCard.GetVisualDescendants().OfType<PathIcon>().First(), emphasis, "相关文件文档图标");
 
             var changeCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-TURN-CHANGE-CARD");
-            AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().First(), MsGreen, "代码变更卡编辑图标");
+            AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().First(), accent, "代码变更卡编辑图标");
             AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().Last(), MsBlue, "变更文件打开跳转图标");
+
+            // 3b. 变更增删配色：新增=主题强化色，删除=大红
+            var diffAdded = ResolveBrush(main, "AppDiffAddedForeground", accent);
+            var diffRemoved = ResolveBrush(main, "AppDiffRemovedForeground", MsRed);
+            Check(diffAdded == accent, $"diff 新增前景应等于主题强调色（实测：{diffAdded}）");
+            Check(diffRemoved == MsRed, $"diff 删除前景应为大红 {MsRed}（实测：{diffRemoved}）");
+            var addedText = changeCard.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().First(t => t.Classes.Contains("additions"));
+            var removedText = changeCard.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().First(t => t.Classes.Contains("deletions"));
+            var addedColor = (addedText.Foreground as ISolidColorBrush)?.Color;
+            var removedColor = (removedText.Foreground as ISolidColorBrush)?.Color;
+            Check(addedColor == accent, $"变更卡新增文字应为主题绿色（实测：{addedColor}）");
+            Check(removedColor == MsRed, $"变更卡删除文字应为大红 {MsRed}（实测：{removedColor}）");
 
             // 4. 错误卡（红圈、红叉）
             var errorCard = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("errorCard"));
@@ -151,25 +167,25 @@ internal static class NativeChatIconsSelfTest
             AssertIconColor(FindIcon(composerMore), MsBlue, "输入栏附加功能加号图标");
 
             var attachBtn = page.FindControl<Button>("AttachContextButton")!;
-            AssertIconColor(FindIcon(attachBtn), MsYellow, "输入栏附件回形针图标");
+            AssertIconColor(FindIcon(attachBtn), emphasis, "输入栏附件回形针图标");
 
             var projectBtn = page.FindControl<Button>("SessionProjectChip")!;
-            AssertIconColor(FindIcon(projectBtn), MsYellow, "输入栏项目文件夹图标");
+            AssertIconColor(FindIcon(projectBtn), emphasis, "输入栏项目文件夹图标");
 
             var modelBtn = page.FindControl<Button>("ModelButton")!;
-            AssertIconColor(FindIcon(modelBtn), MsGreen, "输入栏模型星芒图标");
+            AssertIconColor(FindIcon(modelBtn), accent, "输入栏模型星芒图标");
 
             var thinkBtn = page.FindControl<Button>("ThinkingButton")!;
-            AssertIconColor(FindIcon(thinkBtn), MsYellow, "输入栏思考大脑图标");
+            AssertIconColor(FindIcon(thinkBtn), emphasis, "输入栏思考大脑图标");
 
             var stopBtn = page.FindControl<Button>("StopButton")!;
             AssertIconColor(FindIcon(stopBtn), MsRed, "输入栏停止按钮红圈图标");
 
             var restartBtn = page.FindControl<Button>("RestartButton")!;
-            AssertIconColor(FindIcon(restartBtn), MsYellow, "输入栏重试按钮图标");
+            AssertIconColor(FindIcon(restartBtn), emphasis, "输入栏重试按钮图标");
 
             var restoreBorder = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("restoreInfo"));
-            AssertIconColor(FindIcon(restoreBorder), MsYellow, "待恢复草稿历史图标");
+            AssertIconColor(FindIcon(restoreBorder), emphasis, "待恢复草稿历史图标");
 
             var modeBtn = page.GetVisualDescendants().OfType<Button>()
                 .Single(control => Avalonia.Automation.AutomationProperties.GetAutomationId(control) == "composer-permission");
@@ -185,7 +201,7 @@ internal static class NativeChatIconsSelfTest
                 foreach (var icon in actionIcons)
                 {
                     var brush = icon.Foreground as ISolidColorBrush;
-                    var isMsColor = brush is not null && (brush.Color == MsRed || brush.Color == MsGreen || brush.Color == MsBlue || brush.Color == MsYellow);
+                    var isMsColor = brush is not null && (brush.Color == MsRed || brush.Color == accent || brush.Color == MsBlue || brush.Color == emphasis);
                     Check(isMsColor, $"动作图标用色应在微软四色范围内（实测：{brush?.Color}）");
                 }
             }
