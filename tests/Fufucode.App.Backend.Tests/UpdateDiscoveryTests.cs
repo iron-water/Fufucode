@@ -111,6 +111,20 @@ internal static class UpdateDiscoveryTests
                 "build-info.json 可读回并保留提交哈希");
             var (version, commit) = BuildInfo.SplitInformationalVersion("1.0.0+383b6beab5492d90");
             checks.Check(version == "1.0.0" && commit == "383b6beab5492d90", "程序集版本中的 +hash 被拆成 commit");
+
+            // 打包脚本写的是全小写 "githubRepository"，而 CamelCase 策略把记录属性
+            // "GitHubRepository" 写成 "gitHubRepository"。读回必须大小写不敏感，
+            // 否则发布包读不到仓库坐标，更新通道静默失效（2026-11-03 实测发现）。
+            var releaseDir = Path.Combine(root, "release-marker");
+            Directory.CreateDirectory(releaseDir);
+            await File.WriteAllTextAsync(Path.Combine(releaseDir, BuildInfo.FileName),
+                "{\"version\":\"1.4.0\",\"builtAtUtc\":\"2026-11-03T04:50:59Z\",\"channel\":\"github\"," +
+                "\"commit\":\"c0405f4c6423\",\"githubRepository\":\"iron-water/Fufucode\"}");
+            var releaseBuild = BuildInfo.Read(releaseDir);
+            checks.Check(releaseBuild?.GitHubRepository == "iron-water/Fufucode",
+                "打包脚本写出的 githubRepository 能被读回");
+            checks.Check(UpdateService.IsReleaseBuild(releaseBuild),
+                "发布渠道标记可识别为发布构建（更新通道启用）");
             _ = Task.CompletedTask;
         }
         finally

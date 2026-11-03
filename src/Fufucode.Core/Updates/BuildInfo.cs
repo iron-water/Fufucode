@@ -88,6 +88,11 @@ public sealed record BuildInfo(
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // 必须大小写不敏感：CamelCase 命名策略只把首字母转小写，
+        // "GitHubRepository" 会被序列化成 "gitHubRepository"，而打包脚本写的是
+        // "githubRepository"。不设置该项时发布包读不到仓库坐标，
+        // IsReleaseBuild 恒为 false —— 更新通道静默失效（2026-11-03 实测发现）。
+        PropertyNameCaseInsensitive = true,
     };
 
     /// <summary>读取指定目录下的构建标记；不存在或损坏时返回 null（不猜测）。</summary>
