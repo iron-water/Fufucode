@@ -25,6 +25,20 @@
   </PropertyGroup>
 
   <!--
+    清理旧的自包含运行时残留：输出目录里如果留着 coreclr.dll/hostfxr.dll，apphost 会把
+    当前目录当成自包含布局（native executable mode），不再去全局框架目录找运行时，
+    框架依赖构建就会弹“You must install or update .NET”。这里在非自包含构建前删掉这些
+    残留文件，保证输出目录永远是单一形态，避免混排后无法启动。
+  -->
+  <Target Name="ClearStaleSelfContainedRuntime" BeforeTargets="Build"
+          Condition="'$(SelfContained)' != 'true' and '$(RuntimeIdentifier)' == ''">
+    <ItemGroup>
+      <_StaleSelfContainedRuntime Include="$(OutDir)coreclr.dll;$(OutDir)hostfxr.dll;$(OutDir)hostpolicy.dll;$(OutDir)clrjit.dll;$(OutDir)System.Private.CoreLib.dll" />
+    </ItemGroup>
+    <Delete Files="@(_StaleSelfContainedRuntime)" TreatErrorsAsWarnings="true" />
+  </Target>
+
+  <!--
     自包含 Release 不裁剪（用户 2026-10-25 决定）。
 
     裁剪发生在构建期、插件加载发生在运行期：trimmer 的可达图里没有市场插件，
