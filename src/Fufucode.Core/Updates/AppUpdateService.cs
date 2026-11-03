@@ -100,6 +100,14 @@ public sealed class AppUpdateService : IAppUpdateService, IDisposable
                     "更新清单格式无效：缺少版本字段或反序列化为空。");
             }
 
+            // packageUrl 允许写相对名，语义是"与本清单同目录/同站点"。下载端只认绝对地址，
+            // 不补全就会当成不存在的本地文件（GitHub 资产里的 feed.json 正是这种写法）。
+            if (!string.IsNullOrWhiteSpace(manifest.PackageUrl) &&
+                !Uri.TryCreate(manifest.PackageUrl, UriKind.Absolute, out _))
+            {
+                manifest = manifest with { PackageUrl = ResolvePackageUrl(feedLocation, manifest.PackageUrl) };
+            }
+
             var comparison = CompareVersions(manifest.Version, currentVersion);
             if (comparison <= 0)
             {
@@ -328,6 +336,23 @@ public sealed class AppUpdateService : IAppUpdateService, IDisposable
             File.WriteAllText(_interruptedFilePath, json);
             return Task.CompletedTask;
         }
+    }
+
+    /// <summary>把清单里的相对 packageUrl 补成绝对地址：http(s) 源按站点解析，本地源按清单所在目录解析。</summary>
+    private static string ResolvePackageUrl(string feedLocation, string packageUrl)
+    {
+        if (Uri.TryCreate(feedLocation, UriKind.Absolute, out var feedUri) &&
+            (feedUri.Scheme == Uri.UriSchemeHttp || feedUri.Scheme == Uri.UriSchemeHttps))
+        {
+            return new Uri(feedUri, packageUrl).ToString();
+        }
+
+        var directory = Path.GetDirectoryName(feedLocation.StartsWith("file://", StringComparison.OrdinalIgnoreCase)
+            ? new Uri(feedLocation).LocalPath
+            : feedLocation);
+        return string.IsNullOrWhiteSpace(directory)
+            ? Path.GetFullPath(packageUrl)
+            : Path.GetFullPath(Path.Combine(directory, packageUrl));
     }
 
     private static int CompareVersions(string v1, string v2)

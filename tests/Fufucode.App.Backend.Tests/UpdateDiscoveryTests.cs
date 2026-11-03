@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Security.Cryptography;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Fufucode.Core;
 using Fufucode.Core.Updates;
@@ -125,6 +127,34 @@ internal static class UpdateDiscoveryTests
                 "打包脚本写出的 githubRepository 能被读回");
             checks.Check(UpdateService.IsReleaseBuild(releaseBuild),
                 "发布渠道标记可识别为发布构建（更新通道启用）");
+
+            // 8. 清单里的相对 packageUrl 必须补成绝对地址：下载端只认绝对路径，
+            // 否则会当成不存在的本地文件（GitHub 资产里的 feed.json 就是这么写的）。
+            var feedDir = Path.Combine(root, "feed");
+            Directory.CreateDirectory(feedDir);
+            var packagePath = Path.Combine(feedDir, "Fufucode-Native-Setup.exe");
+            await File.WriteAllTextAsync(packagePath, "fake-installer");
+            var feedPath = Path.Combine(feedDir, "feed.json");
+            await File.WriteAllTextAsync(feedPath, JsonSerializer.Serialize(new
+            {
+                version = "9.9.9",
+                releaseDate = now,
+                releaseNotes = "测试用发布说明",
+                packageUrl = "Fufucode-Native-Setup.exe",
+                sha256 = Convert.ToHexString(SHA256.HashData("fake-installer"u8.ToArray())),
+                packageSizeBytes = 14,
+                minCompatibleVersion = "1.0.0",
+            }));
+            await File.WriteAllTextAsync(Path.Combine(root, "settings.json"),
+                JsonSerializer.Serialize(new { version = 1, updateFeedUrl = feedPath }));
+            var feedStore = new AppSettingsStore(layout);
+            using var appUpdates = new AppUpdateService(layout, feedStore);
+            var feedResult = await appUpdates.CheckForUpdatesAsync("1.0.0");
+            checks.Check(feedResult.Status == UpdateCheckStatus.UpdateAvailable, "本地 feed 清单发现新版本");
+            checks.Check(feedResult.Manifest is { } feedManifest &&
+                         Path.IsPathRooted(feedManifest.PackageUrl) &&
+                         string.Equals(feedManifest.PackageUrl, packagePath, StringComparison.OrdinalIgnoreCase),
+                "清单里的相对 packageUrl 解析为同目录的绝对路径");
             _ = Task.CompletedTask;
         }
         finally

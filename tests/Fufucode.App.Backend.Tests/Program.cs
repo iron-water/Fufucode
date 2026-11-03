@@ -62,6 +62,13 @@ internal static class Program
                 Console.WriteLine("插件分发安装：" + checks.Passed + " 项断言");
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--updates-only")
+            {
+                await AppUpdateServiceTests.RunAsync(checks);
+                await UpdateDiscoveryTests.RunAsync(checks);
+                Console.WriteLine("\n部署与更新通道通过：" + checks.Passed + " 项断言");
+                return 0;
+            }
             if (args.Length == 1 && args[0] == "--session-only")
             {
                 await NativeChatSessionStreamingTests.RunAsync(checks);
