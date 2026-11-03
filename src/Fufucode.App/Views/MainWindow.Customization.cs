@@ -239,8 +239,8 @@ public partial class MainWindow
             if (action.Id == "notifications" && placement.Position == UiActionPosition.TopRight)
                 placement = placement with { Position = UiActionPosition.MenuRight };
             if (placement.Position == UiActionPosition.Hidden) continue;
-            // 依赖插件/模块的动作：当前不可用时直接不渲染，避免菜单里堆一排灰条目。
-            if (action.HideWhenUnavailable && _actions.GetDisabledReason(action.Id) is not null) continue;
+            // Hide missing capabilities, but keep an executing action mounted while its command is disabled.
+            if (action.HideWhenUnavailable && action.DisabledReason?.Invoke() is not null) continue;
             // 会话岛专用位置：磁贴由 BuildSessionIsland 统一渲染，不进顶栏/菜单。
             // 非 Fluent 皮肤下岛不存在，这些动作折回左侧功能菜单，保证可达。
             var islandSlot = UseSessionIsland(settings);
@@ -340,7 +340,12 @@ public partial class MainWindow
             var available = position == UiActionPosition.MenuLeft ? Math.Min(540, width * .38) : Math.Min(420, width * .34);
             var capacity = Math.Max(1, (int)((available - 16) / 49) - 1);
             var buttons = panel.Children.OfType<Button>().ToArray();
-            var visible = buttons.OrderByDescending(b => b.Tag as string is "settings" or "navigate.back").Take(capacity).ToHashSet();
+            var visible = buttons.OrderByDescending(b => (b.Tag as string) switch
+            {
+                "workspace.mode" => 2,
+                "settings" or "navigate.back" => 1,
+                _ => 0,
+            }).Take(capacity).ToHashSet();
             foreach (var button in buttons.Where(b => !visible.Contains(b)))
             {
                 button.IsVisible = false;
