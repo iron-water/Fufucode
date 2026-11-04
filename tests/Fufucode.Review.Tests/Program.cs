@@ -19,6 +19,7 @@ var tests = new (string, Func<Task>)[]
     ("install copies nested resources", NestedResources),
     ("update keeps a disabled plugin disabled", DisabledUpdate),
     ("failed update retains old payload", FailedUpdate),
+    ("partial activation does not leave ghost contributions", PartialActivationRollback),
 };
 foreach (var (name, run) in tests)
 {
@@ -179,6 +180,32 @@ static async Task FailedUpdate()
     Check(File.ReadAllText(Path.Combine(f.Layout.PluginDirectory("agent.browser-use"), "version.txt")) == "v1",
         "failed update did not restore old files");
 }
+static async Task PartialActivationRollback()
+{
+    using var f = new Fixture();
+    await using var pm = f.Manager();
+    const string id = "workspace.library";
+    // 模拟已安装状态与真实载荷：ActivatePluginLocked 走工厂，不需要真实程序集。
+    var payload = f.Layout.PluginDirectory(id);
+    Directory.CreateDirectory(payload);
+    File.WriteAllText(Path.Combine(payload, "manifest.json"), """{"id":"workspace.library"}""");
+    f.Store.Install(id);
+    PluginPackageManager.RegisterPackageFactory(id, () => new PartialPackage());
+    try
+    {
+        pm.InitializeInstalledPlugins();
+        Check(!pm.GetActivePluginIds().Contains(id), "failed activation is not reported as active");
+        Check(pm.LoadErrors.ContainsKey(id), "failed activation is reported in load errors");
+        Check(!PluginContentRegistry.IsContentLanguage("review-partial"),
+            "content contribution registered before the failure is withdrawn");
+    }
+    finally
+    {
+        PluginContentRegistry.Unregister(id);
+        PluginPackageManager.UnregisterPackageFactory(id);
+    }
+}
+
 static string Sha(string file) => Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file)));
 
 sealed class Fixture : IDisposable
@@ -215,6 +242,17 @@ sealed class Handler(params string[] names) : IPluginToolHandler
     public Task<PureToolResult> ExecuteAsync(PureToolCall call, CancellationToken cancellationToken = default) =>
         throw new NotSupportedException();
 }
+sealed class PartialPackage : IPluginPackage
+{
+    public string Id => "workspace.library";
+    public string Version => "1.0.0";
+    public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => null;
+    public PluginContentContribution? CreateContentContribution(PluginPackageContext context) =>
+        new("review-partial", _ => new object());
+    public PluginComposerContribution? CreateComposerContribution(PluginPackageContext context) =>
+        throw new InvalidOperationException("fixture composer contribution failed");
+}
+
 sealed class Package : IPluginPackage
 {
     public string Id => "agent.browser-use";

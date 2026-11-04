@@ -442,10 +442,19 @@ public sealed class PluginPackageManager : IAsyncDisposable
         }
         catch (Exception error)
         {
+            // 激活可能已经登记了部分贡献；失败时必须按相反顺序全部撤回，
+            // 不能只注销工具处理器，否则失败的插件仍会出现在代码块视图/输入栏/皮肤列表里。
             if (handler is not null) _toolRegistry.Unregister(handler);
+            _activePlugins.Remove(id);
+            _loadContexts.Remove(id);
+            _pageContributions.Remove(id);
+            PluginContentRegistry.Unregister(id);
+            PluginSkinRegistry.Unregister(id);
+            var hadComposer = _composerContributions.Remove(id);
             try { package.ShutdownAsync().GetAwaiter().GetResult(); }
             catch (Exception cleanup) { throw new AggregateException("插件激活和副作用恢复均失败。", error, cleanup); }
             finally { loadContext?.Unload(); }
+            if (hadComposer) ComposerContributionsChanged?.Invoke();
             throw;
         }
         if (page is not null) { PagesChanged?.Invoke(); PageContributionsChanged?.Invoke(); }
