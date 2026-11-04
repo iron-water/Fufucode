@@ -172,5 +172,29 @@ internal static class SessionAdoptionTests
             "文件搬回规范目录后索引行同步改挂，不会留下指向旧路径的孤立行");
         Check(!File.Exists(staleFile),
             "旧目录里的文件确实搬走了（没有两份互相矛盾的副本）");
+
+        // ── 9) 目标路径已被另一条会话行占用：不得搬文件，也不得留下悬挂行 ──
+        var nine = Scratch(root, "occupied");
+        var layoutNine = new AppDataLayout(nine);
+        var projectPathNine = Path.Combine(nine, "project-j");
+        Directory.CreateDirectory(projectPathNine);
+        var metadataNine = new DesktopMetadataStore(layoutNine);
+        var canonicalNine = metadataNine.GetOrCreateProject(projectPathNine);
+        const string orphanIdNine = "jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj";
+        var destinationNine = Path.Combine(layoutNine.ProjectSessionsDirectory(canonicalNine.Id),
+            "fumo", "s9.json");
+        Check(metadataNine.AdoptSession("occupied-session", canonicalNine.Id, destinationNine),
+            "前置：目标路径已被另一条悬挂行占用");
+        WriteSession(layoutNine, orphanIdNine, "s9", (1, "目标被占用时不能把文件搬走"));
+        SessionAdoption.WriteMarker(layoutNine, orphanIdNine, projectPathNine);
+
+        var resultNine = SessionAdoption.Reconcile(layoutNine, metadataNine);
+        Check(resultNine.Relocated == 0,
+            "目标路径已有属主时不搬移文件（避免索引无法同时容纳两条行）");
+        Check(File.Exists(Path.Combine(layoutNine.ProjectSessionsDirectory(orphanIdNine), "fumo",
+                "s9.json")),
+            "被跳过的会话文件保留在原目录，仍可由下一次人工处理");
+        Check(metadataNine.ListSessions(canonicalNine.Id).All(s => s.Id != "s9"),
+            "不会创建一条指向已搬走文件的 s9 行");
     }
 }

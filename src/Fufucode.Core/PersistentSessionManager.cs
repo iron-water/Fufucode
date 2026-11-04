@@ -764,21 +764,44 @@ public sealed class PersistentSessionManager
 
     public static NativeSessionFile? LoadNativeMessages(string file)
     {
+        NativeSessionFile? parsed;
         try
         {
-            using var stream = File.OpenRead(file);
-            return ParseNativeMessages(stream);
+            // 允许其他进程/扫描器同时读取与删除：短暂的共享冲突不是内容损坏。
+            using var stream = new FileStream(file, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            parsed = ParseNativeMessages(stream);
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is System.Text.Json.JsonException or InvalidDataException
+                                       or NotSupportedException)
         {
-            System.Diagnostics.Trace.TraceWarning("Failed to restore FUMO session history: {0}", ex);
-            try
-            {
-                var backup = file + ".corrupt-" + DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmss");
-                File.Move(file, backup, overwrite: true);
-            }
-            catch { }
+            System.Diagnostics.Trace.TraceWarning("FUMO session history is invalid: {0}", ex);
+            QuarantineCorruptNativeFile(file);
             return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 文件被占用/权限不足属于可重试的读取失败，绝不因此移动用户唯一的副本。
+            // 交给上层按“本次没有历史”处理，下一次打开会重新读取。
+            System.Diagnostics.Trace.TraceWarning("FUMO session history is temporarily unreadable; kept in place: {0}", ex);
+            return null;
+        }
+        return parsed;
+    }
+
+    /// <summary>只隔离确实无法解析的文件；唯一命名避免覆盖先前已有的损坏副本。</summary>
+    private static void QuarantineCorruptNativeFile(string file)
+    {
+        try
+        {
+            var backup = file + ".corrupt-" +
+                         DateTimeOffset.UtcNow.ToString("yyyyMMddHHmmssfff") + "-" +
+                         Guid.NewGuid().ToString("N")[..8];
+            File.Move(file, backup);
+        }
+        catch
+        {
+            // 隔离失败不阻止会话继续打开；原文件仍然保留。
         }
     }
 

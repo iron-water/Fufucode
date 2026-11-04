@@ -121,11 +121,6 @@ public static class SessionAdoption
                 var targetFumo = sameProject
                     ? fumoDirectory
                     : Path.Combine(layout.ProjectSessionsDirectory(targetId), "fumo");
-                if (!sameProject && Directory.Exists(fumoDirectory))
-                {
-                    Directory.CreateDirectory(targetFumo);
-                    relocated++;
-                }
 
                 if (Directory.Exists(fumoDirectory))
                 {
@@ -133,12 +128,24 @@ public static class SessionAdoption
                     {
                         var sessionId = Path.GetFileNameWithoutExtension(file);
                         var finalPath = file;
+                        var moved = false;
                         if (!sameProject)
                         {
                             var destination = Path.Combine(targetFumo, Path.GetFileName(file));
+                            // 目标路径已属于另一条会话行：不能把文件搬到一个索引无法同时容纳的位置。
+                            // 保留源文件与源行原样，宁可这次不收养，也不留下指向已搬走文件的悬挂行。
+                            if (metadata.IsSessionFileRegisteredToAnother(destination, sessionId))
+                                continue;
                             if (!File.Exists(destination))
                             {
-                                try { File.Move(file, destination); finalPath = destination; }
+                                try
+                                {
+                                    Directory.CreateDirectory(targetFumo);
+                                    File.Move(file, destination);
+                                    finalPath = destination;
+                                    moved = true;
+                                    relocated++;
+                                }
                                 catch (IOException) { finalPath = file; } // 搬不动就留在原地，索引仍指向真实文件
                             }
                             else
@@ -155,7 +162,21 @@ public static class SessionAdoption
                         }
 
                         // 已有行随文件一起改挂，而不是只更新文件、留下指向旧路径的孤立行。
-                        if (metadata.TryRepointSession(sessionId, targetId, finalPath)) continue;
+                        var repoint = metadata.TryRepointSession(sessionId, targetId, finalPath);
+                        if (repoint == SessionRepointOutcome.Repointed) continue;
+                        if (repoint == SessionRepointOutcome.FileClaimed)
+                        {
+                            // 检查与更新之间的竞态：尽力把已搬走的文件送回原处，让源行继续指向真实文件。
+                            if (moved)
+                            {
+                                try
+                                {
+                                    if (!File.Exists(file) && File.Exists(finalPath)) File.Move(finalPath, file);
+                                }
+                                catch (IOException) { }
+                            }
+                            continue;
+                        }
                         if (metadata.AdoptSession(sessionId, targetId, finalPath)) sessions++;
                     }
                 }

@@ -12,6 +12,14 @@ public sealed record SessionRecord(string Id, string ProjectId, string? FilePath
     public bool IsFork => ParentSessionId is not null;
 }
 
+/// <summary>索引改挂的结果；FileClaimed 与 NotFound 必须区分，否则收养会把悬空行当成已修复。</summary>
+public enum SessionRepointOutcome
+{
+    Repointed,
+    NotFound,
+    FileClaimed,
+}
+
 /// <summary>Only desktop metadata lives here. Pi JSONL remains the sole conversation history.</summary>
 public sealed class DesktopMetadataStore
 {
@@ -171,10 +179,9 @@ public sealed class DesktopMetadataStore
 
     /// <summary>
     /// 把已有会话行改挂到另一个项目并更新其文件路径（收养搬迁用）。
-    /// 目标路径已被另一行占用时不做改动并返回 false：宁可留着旧行，也不制造两条指向同一文件的记录。
-    /// 返回该 id 是否存在（false 表示调用方应改用 <see cref="AdoptSession"/> 新建）。
+    /// 目标路径已被另一行占用时不做改动：宁可留着旧行，也不制造两条指向同一文件的记录。
     /// </summary>
-    public bool TryRepointSession(string sessionId, string projectId, string filePath)
+    public SessionRepointOutcome TryRepointSession(string sessionId, string projectId, string filePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         ArgumentException.ThrowIfNullOrWhiteSpace(projectId);
@@ -186,14 +193,32 @@ public sealed class DesktopMetadataStore
             owner.CommandText = "SELECT id FROM sessions WHERE file_path=$file AND id<>$id LIMIT 1";
             owner.Parameters.AddWithValue("$file", full);
             owner.Parameters.AddWithValue("$id", sessionId);
-            if (owner.ExecuteScalar() is not null) return true; // 已由另一行持有：保持原样
+            if (owner.ExecuteScalar() is not null) return SessionRepointOutcome.FileClaimed;
         }
         using var command = connection.CreateCommand();
         command.CommandText = "UPDATE sessions SET project_id=$project, file_path=$file WHERE id=$id";
         command.Parameters.AddWithValue("$project", projectId);
         command.Parameters.AddWithValue("$file", full);
         command.Parameters.AddWithValue("$id", sessionId);
-        return command.ExecuteNonQuery() == 1;
+        return command.ExecuteNonQuery() == 1
+            ? SessionRepointOutcome.Repointed
+            : SessionRepointOutcome.NotFound;
+    }
+
+    /// <summary>
+    /// 目标路径是否已经属于另一条会话行。收养搬迁前先查，避免先把文件搬过去
+    /// 再发现索引被占用，留下指向已搬走文件的悬挂行。
+    /// </summary>
+    public bool IsSessionFileRegisteredToAnother(string filePath, string sessionId)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
+        using var connection = Open();
+        using var owner = connection.CreateCommand();
+        owner.CommandText = "SELECT id FROM sessions WHERE file_path=$file LIMIT 1";
+        owner.Parameters.AddWithValue("$file", Path.GetFullPath(filePath));
+        return owner.ExecuteScalar() is string ownerId &&
+               !string.Equals(ownerId, sessionId, StringComparison.Ordinal);
     }
 
     /// <summary>收养一条会话：索引里没有同 id 的行时补一条。已存在时不动它（幂等）。</summary>
@@ -215,7 +240,7 @@ public sealed class DesktopMetadataStore
         command.Parameters.AddWithValue("$id", sessionId);
         command.Parameters.AddWithValue("$project", projectId);
         command.Parameters.AddWithValue("$file", Path.GetFullPath(filePath));
-        command.Parameters.AddWithValue("$name", DeriveSessionName(filePath));
+        command.Parameters.AddWithValue("$name", (object?)DeriveSessionName(filePath) ?? DBNull.Value);
         command.Parameters.AddWithValue("$opened", DateTimeOffset.UtcNow.ToString("O"));
         return command.ExecuteNonQuery() == 1;
     }
