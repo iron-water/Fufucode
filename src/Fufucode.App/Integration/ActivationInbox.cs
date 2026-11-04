@@ -17,7 +17,19 @@ internal static class ActivationInbox
 {
     private static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(30);
 
-    private static string Root => Path.Combine(Fufucode.Core.AppDataLayout.DefaultRoot(), "activation");
+    private static string _root = Path.Combine(Fufucode.Core.AppDataLayout.DefaultRoot(), "activation");
+    private static string Root => _root;
+
+    /// <summary>
+    /// 绑定到本进程的显式数据根。协议激活本身没有 --data-root，仍会落在默认根；
+    /// 但隔离/审阅实例不应取走或写入用户安装的投递箱。
+    /// </summary>
+    internal static void Configure(string dataRoot)
+    {
+        if (string.IsNullOrWhiteSpace(dataRoot)) return;
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataRoot));
+        _root = Path.Combine(full, "activation");
+    }
 
     internal static void Enqueue(string payload)
     {

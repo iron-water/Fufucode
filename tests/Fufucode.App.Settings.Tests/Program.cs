@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using Fufucode.App.Features.SettingsExperience;
 using Fufucode.App.Infrastructure;
+using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 
 // S2-SETTINGS 定向测试（独立入口，未注册全量自测）：
@@ -20,6 +21,12 @@ void Check(bool condition, string name)
 
 var root = Path.Combine(Path.GetTempPath(), "fufucode-settings-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
+
+// 单实例槽位名必须按“规范化后的数据根”计算：尾斜杠只是同一目录的另一种写法。
+var slotRoot = Path.Combine(root, "slot-root");
+Check(SingleInstanceGuard.SlotNameForTesting(slotRoot) ==
+      SingleInstanceGuard.SlotNameForTesting(slotRoot + Path.DirectorySeparatorChar),
+    "同一数据根的尾斜杠写法得到同一个单实例槽位名");
 
 try
 {

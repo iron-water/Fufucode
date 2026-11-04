@@ -42,11 +42,11 @@ internal sealed class SingleInstanceGuard : IDisposable
     /// </summary>
     private static string BaseName(string? dataRootOverride)
     {
-        var root = string.IsNullOrWhiteSpace(dataRootOverride)
+        var root = NormalizeRoot(string.IsNullOrWhiteSpace(dataRootOverride)
             ? Fufucode.Core.AppDataLayout.DefaultRoot()
-            : System.IO.Path.GetFullPath(dataRootOverride);
-        var defaultRoot = System.IO.Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode");
+            : dataRootOverride);
+        var defaultRoot = NormalizeRoot(System.IO.Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode"));
         if (string.Equals(root, defaultRoot, StringComparison.OrdinalIgnoreCase)) return DefaultBaseName;
         // string.GetHashCode 在 .NET 每次进程启动都随机化，两个进程会算出不同的名字；
         // 这里必须用稳定摘要，两个进程才能互相看见同一个命名对象。
@@ -54,6 +54,16 @@ internal sealed class SingleInstanceGuard : IDisposable
             System.Text.Encoding.UTF8.GetBytes(root.ToUpperInvariant()));
         return DefaultBaseName + "." + Convert.ToHexString(digest, 0, 4).ToLowerInvariant();
     }
+
+    /// <summary>
+    /// 同一数据根必须得到同一个单实例名：GetFullPath 会保留尾部分隔符，
+    /// C:\foo 与 C:\foo\ 若不归一会算出两个 Mutex，两个进程就会同时写同一个数据库。
+    /// </summary>
+    private static string NormalizeRoot(string root) =>
+        System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(root));
+
+    /// <summary>自测用：同一数据根的不同路径写法必须得到同一个槽位名。</summary>
+    internal static string SlotNameForTesting(string dataRootOverride) => BaseName(dataRootOverride);
 
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _activation;

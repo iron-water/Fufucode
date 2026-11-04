@@ -1707,98 +1707,119 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         e.Cancel = true;
         if (_closingInProgress) return;
         _closingInProgress = true;
-        if (!_forceClose && !await ConfirmLeaveSettingsAsync())
+        var leaveConfirmed = _forceClose;
+        if (!leaveConfirmed)
+        {
+            try { leaveConfirmed = await ConfirmLeaveSettingsAsync(); }
+            catch (Exception error)
+            {
+                // 确认流程本身失败时按“允许关闭”处理，不能让窗口永远卡在 Closing。
+                System.Diagnostics.Trace.TraceError("ConfirmLeaveSettings failed: {0}", error);
+                leaveConfirmed = true;
+            }
+        }
+        if (!leaveConfirmed)
         {
             _closingInProgress = false;
             return;
         }
         _closed = true;
-        // 本窗口是某个会话的宿主：先关掉共享视图，避免它们引用已释放的会话。
-        if (!_borrowedHost && _host is { } closingHost)
+        try
         {
-            Integration.SessionWindowRegistry.CloseFollowers(closingHost.Current.Session.Id);
-        }
-        if (_borrowedHost && _sharedSessionId is { Length: > 0 } sharedId)
-        {
-            Integration.SessionWindowRegistry.RemoveFollower(sharedId, this);
-        }
-        // 语音服务归插件所有：窗口只解除状态广播订阅，进程由插件管理器在停用时释放。
-        Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
-        // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
-        await ShutdownReverseLabAsync();
-        await DisposeBrowserControlAsync();
-        await CloseSideChatAsync();
-        _bootstrapCts.Cancel();
-
-        _dialogHost?.Detach();
-        _draftDebounce?.Stop();
-        SaveWorkspaceDimensions();
-        SaveWorkModeLayout();
-        DisposeFloatingDocks();
-        try { SaveModulePreferences(); }
-        catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
-        { LayoutStateText.Text = "模块状态保存失败：" + error.Message; }
-        _pluginPageHost?.Dispose();
-        DisposePerformance();
-        foreach (var page in _workbenchPages.Values)
-            foreach (var browser in page.Content.GetVisualDescendants().OfType<Views.BrowserViewHost>()) browser.Dispose();
-        foreach (var subscription in _graphChatSubscriptions.Values) subscription.Session.Event -= subscription.Handler;
-        _graphChatSubscriptions.Clear();
-        foreach (var workspace in _graphProjects.Values)
-        {
-            try { await workspace.Service.StopAllAsync(); }
-            catch (Exception error) { System.Diagnostics.Trace.TraceWarning("Graph stop: " + error.Message); }
-            workspace.Model.Dispose();
-            workspace.Service.Dispose();
-        }
-        _graphProjects.Clear();
-        _workbenchPages.Dispose();
-        _actions.Changed -= OnShortcutCapabilitiesChanged;
-        _shortcuts.Changed -= UpdateShortcutLabels;
-        _storageManager.Dispose();
-        _localPluginViewModel?.Dispose();
-        _libraryService?.Dispose();
-        _palette.Dispose();
-        Infrastructure.NoticeHub.Shared.CornerRequested -= ShowCornerNotice;
-        _notifications.Dispose();
-        if (_workspaceSession is not null) _workspaceSession.Event -= OnWorkspaceSessionEvent;
-        _vm?.WorkspacePanel.Dispose();
-        _vm?.Sidebar.Dispose();
-        if (!_borrowedHost && DataContext is MainViewModel vm && _host is not null)
-        {
-            _host.SaveDraft(vm.Input.ComposePrompt());
-        }
-
-        // 释放主 VM：解除草稿防抖、扩展接线、定制/全局处理器与时间线的会话订阅
-        // （_vm 可能不是 DataContext 绑定的实例，须单独释放）。
-        DetachDraftPersistence();
-        DetachCustomizationSession();
-        if (_vm is not null && _globalVmPropertyChanged is not null) _vm.PropertyChanged -= _globalVmPropertyChanged;
-        _globalVmPropertyChanged = null;
-        _extensionUiWiring?.Dispose();
-        _extensionUiWiring = null;
-        _extensionUiWiredSession = null;
-        try { _vm?.Timeline.Dispose(); }
-        catch
-        {
-            // 关闭路径尽力而为；异常不阻止退出。
-        }
-
-        // 借用宿主（同步视图）不拥有会话生命周期；由所属主窗口释放。
-        if (!_borrowedHost && _host is not null)
-        {
-            try
+            // 本窗口是某个会话的宿主：先关掉共享视图，避免它们引用已释放的会话。
+            if (!_borrowedHost && _host is { } closingHost)
             {
-                await _host.DisposeAsync();
+                Integration.SessionWindowRegistry.CloseFollowers(closingHost.Current.Session.Id);
             }
+            if (_borrowedHost && _sharedSessionId is { Length: > 0 } sharedId)
+            {
+                Integration.SessionWindowRegistry.RemoveFollower(sharedId, this);
+            }
+            // 语音服务归插件所有：窗口只解除状态广播订阅，进程由插件管理器在停用时释放。
+            Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
+            // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
+            await ShutdownReverseLabAsync();
+            await DisposeBrowserControlAsync();
+            await CloseSideChatAsync();
+            _bootstrapCts.Cancel();
+
+            _dialogHost?.Detach();
+            _draftDebounce?.Stop();
+            SaveWorkspaceDimensions();
+            SaveWorkModeLayout();
+            DisposeFloatingDocks();
+            try { SaveModulePreferences(); }
+            catch (Exception error) when (error is System.IO.IOException or UnauthorizedAccessException or Microsoft.Data.Sqlite.SqliteException)
+            { LayoutStateText.Text = "模块状态保存失败：" + error.Message; }
+            _pluginPageHost?.Dispose();
+            DisposePerformance();
+            foreach (var page in _workbenchPages.Values)
+                foreach (var browser in page.Content.GetVisualDescendants().OfType<Views.BrowserViewHost>()) browser.Dispose();
+            foreach (var subscription in _graphChatSubscriptions.Values) subscription.Session.Event -= subscription.Handler;
+            _graphChatSubscriptions.Clear();
+            foreach (var workspace in _graphProjects.Values)
+            {
+                try { await workspace.Service.StopAllAsync(); }
+                catch (Exception error) { System.Diagnostics.Trace.TraceWarning("Graph stop: " + error.Message); }
+                workspace.Model.Dispose();
+                workspace.Service.Dispose();
+            }
+            _graphProjects.Clear();
+            _workbenchPages.Dispose();
+            _actions.Changed -= OnShortcutCapabilitiesChanged;
+            _shortcuts.Changed -= UpdateShortcutLabels;
+            _storageManager.Dispose();
+            _localPluginViewModel?.Dispose();
+            _libraryService?.Dispose();
+            _palette.Dispose();
+            Infrastructure.NoticeHub.Shared.CornerRequested -= ShowCornerNotice;
+            _notifications.Dispose();
+            if (_workspaceSession is not null) _workspaceSession.Event -= OnWorkspaceSessionEvent;
+            _vm?.WorkspacePanel.Dispose();
+            _vm?.Sidebar.Dispose();
+            if (!_borrowedHost && DataContext is MainViewModel vm && _host is not null)
+            {
+                _host.SaveDraft(vm.Input.ComposePrompt());
+            }
+
+            // 释放主 VM：解除草稿防抖、扩展接线、定制/全局处理器与时间线的会话订阅
+            // （_vm 可能不是 DataContext 绑定的实例，须单独释放）。
+            DetachDraftPersistence();
+            DetachCustomizationSession();
+            if (_vm is not null && _globalVmPropertyChanged is not null) _vm.PropertyChanged -= _globalVmPropertyChanged;
+            _globalVmPropertyChanged = null;
+            _extensionUiWiring?.Dispose();
+            _extensionUiWiring = null;
+            _extensionUiWiredSession = null;
+            try { _vm?.Timeline.Dispose(); }
             catch
             {
                 // 关闭路径尽力而为；异常不阻止退出。
             }
-        }
 
-        _closeApproved = true;
-        Close();
+            // 借用宿主（同步视图）不拥有会话生命周期；由所属主窗口释放。
+            if (!_borrowedHost && _host is not null)
+            {
+                try
+                {
+                    await _host.DisposeAsync();
+                }
+                catch
+                {
+                    // 关闭路径尽力而为；异常不阻止退出。
+                }
+            }
+        }
+        catch (Exception error)
+        {
+            // 任一清理步骤失败都不能把窗口留在“已标记关闭但未关闭”的不可用状态。
+            System.Diagnostics.Trace.TraceError("Window shutdown failed: {0}", error);
+        }
+        finally
+        {
+            _closeApproved = true;
+            Close();
+        }
     }
 
     private void OnClosed(object? sender, EventArgs e)

@@ -27,6 +27,11 @@ internal static class Program
     {
         SelfTestMode = true;
         SelfTestDataRoot = dataRoot;
+        if (!string.IsNullOrWhiteSpace(dataRoot))
+        {
+            Fufucode.Core.Backend.FileChangeJournal.Configure(dataRoot);
+            Integration.ActivationInbox.Configure(dataRoot);
+        }
     }
 
     /// <summary>当前进程的启动追踪；为 null 表示数据根不可写或未启动。</summary>
@@ -74,6 +79,10 @@ internal static class Program
         }
 
         var startupOptions = AppOptions.Parse(args);
+        // 显式 --data-root 不进环境变量；撤销备份与激活投递箱必须跟随本进程的实际数据根。
+        var startupLayout = startupOptions.CreateAppDataLayout();
+        Fufucode.Core.Backend.FileChangeJournal.Configure(startupLayout.Root);
+        Integration.ActivationInbox.Configure(startupLayout.Root);
         StartupActivationPayload = startupOptions.ActivationPayload;
         // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。
         var isolatedRun = args.Contains("--selftest") || args.Contains("--headless-ui") ||
