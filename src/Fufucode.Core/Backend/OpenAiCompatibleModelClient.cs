@@ -16,13 +16,15 @@ namespace Fufucode.Core.Backend;
 /// 同时支持一次性（stream=false）与真实 Server-Sent Events 流式（stream=true）响应，
 /// 流式路径增量派发 delta.content 与 delta.tool_calls 分片，并在 data: [DONE] 处收束。
 /// </summary>
-public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClient
+public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClient, IDisposable
 {
     private readonly HttpClient _httpClient;
+    private readonly bool _ownsHttpClient;
     private readonly string _baseUrl;
     private readonly string? _apiKey;
     private readonly string _defaultModelId;
     private readonly TimeSpan? _requestTimeout;
+    private bool _disposed;
 
     /// <summary>模型请求的可选 wall-clock 超时；null 表示由调用方取消或 HttpClient 自身策略决定。</summary>
     public TimeSpan? RequestTimeout => _requestTimeout;
@@ -44,8 +46,17 @@ public class OpenAiCompatibleModelClient : IPureModelClient, IStreamingModelClie
         _defaultModelId = defaultModelId;
         // 不继承 HttpClient 的 100 秒默认超时：长推理请求在真实开发中经常超过它。
         // 生命周期由调用方取消或显式 RequestTimeout 控制；注入的 HttpClient 保持其自身配置。
+        _ownsHttpClient = httpClient is null;
         _httpClient = httpClient ?? new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         _requestTimeout = requestTimeout is { } timeout && timeout > TimeSpan.Zero ? timeout : null;
+    }
+
+    /// <summary>只释放本类创建的 HttpClient；调用方注入的实例仍由调用方管理。</summary>
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_ownsHttpClient) _httpClient.Dispose();
     }
 
     /// <summary>已解析的 Chat Completions 端点。</summary>

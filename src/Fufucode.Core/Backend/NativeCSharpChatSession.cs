@@ -45,6 +45,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     private bool _disposed;
 
     private readonly string? _persistFilePath;
+    /// <summary>由本会话独占、需要随会话释放的资源（原生模型客户端及其 HttpClient）。</summary>
+    private IDisposable? _ownedResource;
 
     public bool SupportsExecutionModes => true;
     public string ExecutionMode { get; private set; } = "manual";
@@ -253,9 +255,11 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         SkillRegistry? skills = null,
         McpManager? mcp = null,
         INativeSubagentRuntime? subagents = null,
-        string? workspaceRoot = null)
+        string? workspaceRoot = null,
+        IDisposable? ownedResource = null)
     {
         _engine = engine ?? throw new ArgumentNullException(nameof(engine));
+        _ownedResource = ownedResource;
         _supportsImages = supportsImages;
         _skills = skills;
         _mcp = mcp;
@@ -908,6 +912,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         await turn.ConfigureAwait(false);
         if (_mcp is not null)
             await _mcp.DisposeAsync().ConfigureAwait(false);
+        // 回合已结束再释放模型客户端，避免关闭请求中途拆掉仍被使用的连接池。
+        var owned = Interlocked.Exchange(ref _ownedResource, null);
+        owned?.Dispose();
     }
 
     /// <summary>每个模型轮次独立建消息，工具调用通过轮次内索引关联，执行结果通过真实调用 ID 关联。</summary>

@@ -21,7 +21,21 @@ public static class FileChangeJournal
     /// <summary>备份保留时长：只服务最近几轮撤销，过期自动清理。</summary>
     private static readonly TimeSpan Retention = TimeSpan.FromDays(2);
 
-    public static string Root { get; } = System.IO.Path.Combine(AppDataLayout.DefaultRoot(), "turn-backups");
+    private static string _root = System.IO.Path.Combine(AppDataLayout.DefaultRoot(), "turn-backups");
+
+    /// <summary>当前进程实际使用的备份根。--data-root 启动时由组合根覆盖。</summary>
+    public static string Root => _root;
+
+    /// <summary>
+    /// 绑定到指定的数据根。显式 --data-root 不会改写 FUFUCODE_DATA_ROOT，
+    /// 静态路径若只读默认根，会把隔离实例的撤销备份写进用户真实数据目录。
+    /// </summary>
+    public static void Configure(string dataRoot)
+    {
+        if (string.IsNullOrWhiteSpace(dataRoot)) return;
+        var full = System.IO.Path.TrimEndingDirectorySeparator(System.IO.Path.GetFullPath(dataRoot));
+        _root = System.IO.Path.Combine(full, "turn-backups");
+    }
 
     /// <summary>写入前记录原样内容。文件不存在时也记录一条，撤销时按"删除新文件"处理。</summary>
     public static void Capture(string toolCallId, string absolutePath)

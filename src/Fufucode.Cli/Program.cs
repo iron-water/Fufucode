@@ -15,7 +15,9 @@ public static class Program
         try
         {
             var dataRoot = ReadAppDataArgument(args);
-            Fufucode.Core.Runtimes.ToolchainEnvironment.ApplyToProcess(new AppDataLayout(dataRoot));
+            var startupLayout = new AppDataLayout(dataRoot);
+            Fufucode.Core.Backend.FileChangeJournal.Configure(startupLayout.Root);
+            Fufucode.Core.Runtimes.ToolchainEnvironment.ApplyToProcess(startupLayout);
         }
         catch (Exception error)
         {

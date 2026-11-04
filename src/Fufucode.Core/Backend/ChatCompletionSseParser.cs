@@ -191,19 +191,28 @@ public sealed class ChatCompletionSseParser
             return;
         }
 
-        var fallbackIndex = 0;
+        // 规范要求每个分片带 index；部分兼容网关会省略后续分片的 index。
+        // 这种情况下只有出现新的 id 才视为新工具调用，否则继续拼接到当前调用，
+        // 不能把同一调用的参数字分片拆成多个调用。
+        var lastIndex = -1;
+        string? lastId = null;
         foreach (var chunk in toolCalls.EnumerateArray())
         {
             if (chunk.ValueKind != JsonValueKind.Object) continue;
-
-            var index = TryReadInt(chunk, "index") ?? fallbackIndex;
-            fallbackIndex = index + 1;
 
             string? id = null;
             if (chunk.TryGetProperty("id", out var idElement) && idElement.ValueKind == JsonValueKind.String)
             {
                 id = idElement.GetString();
             }
+
+            var explicitIndex = TryReadInt(chunk, "index");
+            var index = explicitIndex ??
+                        (lastIndex >= 0 && (id is null || string.Equals(id, lastId, StringComparison.Ordinal))
+                            ? lastIndex
+                            : Math.Max(lastIndex + 1, 0));
+            lastIndex = index;
+            if (!string.IsNullOrEmpty(id)) lastId = id;
 
             string? name = null;
             string arguments = "";

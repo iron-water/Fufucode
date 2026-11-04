@@ -131,7 +131,8 @@ public static class NativeSessionFactory
             skills: skills,
             mcp: mcp,
             subagents: subagents,
-            workspaceRoot: workspaceRoot);
+            workspaceRoot: workspaceRoot,
+            ownedResource: client as IDisposable);
 
         if (!string.IsNullOrWhiteSpace(current.ThinkingLevel) && current.ThinkingLevel != "off")
             chat.SetThinkingLevel(current.ThinkingLevel);

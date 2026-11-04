@@ -41,6 +41,7 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
     /// <summary>端点设置来源。查询模型时实时读取，这样保存新端点后无需重启会话。</summary>
     private readonly AppSettingsStore? _settings;
     private readonly ModelCatalogClient? _modelCatalog;
+    private readonly ModelCatalogClient? _ownedModelCatalog;
     private readonly string? _endpointApiKey;
 
     public NativeSessionCoordinator(NativeCSharpChatSession session, BackendId backend = BackendId.NativeCSharp,
@@ -50,6 +51,8 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
         Backend = backend;
         _settings = settings;
         _modelCatalog = modelCatalog ?? new ModelCatalogClient();
+        // 只释放自己创建的目录客户端；注入实例的生命周期仍归调用方。
+        _ownedModelCatalog = modelCatalog is null ? _modelCatalog : null;
         _endpointApiKey = endpointApiKey;
         _session.Event += OnSessionEvent;
     }
@@ -550,6 +553,7 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
         }
         _session.Event -= OnSessionEvent;
         await _session.DisposeAsync().ConfigureAwait(false);
+        _ownedModelCatalog?.Dispose();
         lock (_gate) _connection = ConnectionState.Stopped;
         Publish();
     }
