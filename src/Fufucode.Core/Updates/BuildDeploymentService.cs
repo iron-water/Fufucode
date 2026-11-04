@@ -191,17 +191,59 @@ public sealed class BuildDeploymentService
             return false;
         }
 
-        if (pending is null || !Directory.Exists(pending.SourceDirectory))
+        if (pending is null || pending.Files is null || !Directory.Exists(pending.SourceDirectory))
         {
             TryDeleteFile(pendingPath);
             return false;
         }
 
+        // 待重启清单绑定的是“哪一次构建”。重启前若源目录已被重新构建，
+        // 按旧清单复制新文件会把安装目录变成两个构建的混合体；此时整份清单作废。
+        var sourceBuild = BuildInfo.Read(pending.SourceDirectory);
+        if (sourceBuild is null || !string.Equals(sourceBuild.BuildId, pending.BuildId,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            System.Diagnostics.Trace.TraceWarning(
+                "Discarding stale restart-pending manifest: source build no longer matches {0}.", pending.BuildId);
+            TryDeleteFile(pendingPath);
+            return false;
+        }
+
+        // 先验证全部源文件与相对路径，再开始覆盖；任何一个缺失都保留清单等待下次启动，
+        // 避免只替换一部分程序集。
+        var pathComparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        var fullTargetRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(targetDirectory)) +
+                             Path.DirectorySeparatorChar;
+        var fullSourceRoot = Path.TrimEndingDirectorySeparator(Path.GetFullPath(pending.SourceDirectory)) +
+                             Path.DirectorySeparatorChar;
+        var copies = new List<(string Source, string Target)>(pending.Files.Count);
         foreach (var relative in pending.Files)
         {
-            var source = Path.Combine(pending.SourceDirectory, relative);
-            var target = Path.Combine(targetDirectory, relative);
-            if (!File.Exists(source)) continue;
+            if (string.IsNullOrWhiteSpace(relative)) continue;
+            string source, target;
+            try
+            {
+                source = Path.GetFullPath(Path.Combine(pending.SourceDirectory, relative));
+                target = Path.GetFullPath(Path.Combine(targetDirectory, relative));
+            }
+            catch (Exception)
+            {
+                TryDeleteFile(pendingPath);
+                return false;
+            }
+            if (!source.StartsWith(fullSourceRoot, pathComparison) ||
+                !target.StartsWith(fullTargetRoot, pathComparison))
+            {
+                TryDeleteFile(pendingPath);
+                return false;
+            }
+            if (!File.Exists(source)) return false;
+            copies.Add((source, target));
+        }
+
+        foreach (var (source, target) in copies)
+        {
             try
             {
                 var dir = Path.GetDirectoryName(target);

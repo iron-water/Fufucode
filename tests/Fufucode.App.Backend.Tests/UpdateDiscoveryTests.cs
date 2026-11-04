@@ -65,6 +65,52 @@ internal static class UpdateDiscoveryTests
             var again = deployment.Deploy(source, target);
             checks.Check(again.Success && again.Copied == 0 && again.Skipped > 0, "同一构建重复部署不复制任何文件");
 
+            // 3b. 待重启清单绑定构建身份：源目录被重新构建后，旧清单必须作废，
+            // 否则重启会用新构建的文件补旧清单，安装目录混装两个构建。
+            var pendingSource = Path.Combine(root, "pending-source");
+            var pendingTarget = Path.Combine(root, "pending-target");
+            Directory.CreateDirectory(pendingSource);
+            Directory.CreateDirectory(pendingTarget);
+            var oldBuild = new BuildInfo("1.4.0", now.AddMinutes(-10), "local", Commit: "aaa1111");
+            oldBuild.Write(pendingSource);
+            await File.WriteAllTextAsync(Path.Combine(pendingSource, "a.dll"), "old-a");
+            await File.WriteAllTextAsync(Path.Combine(pendingTarget, "a.dll"), "installed-old-a");
+            await File.WriteAllTextAsync(Path.Combine(pendingTarget, "restart-pending.json"),
+                JsonSerializer.Serialize(new
+                {
+                    SourceDirectory = pendingSource,
+                    BuildId = oldBuild.BuildId,
+                    CreatedAtUtc = now,
+                    Files = new[] { "a.dll" },
+                }));
+            // 用户尚未重启就重新构建了同一个输出目录。
+            new BuildInfo("1.4.0", now.AddMinutes(-5), "local", Commit: "bbb2222").Write(pendingSource);
+            await File.WriteAllTextAsync(Path.Combine(pendingSource, "a.dll"), "new-build-a");
+            checks.Check(!deployment.ApplyPendingOnStartup(pendingTarget),
+                "源构建身份变化时拒绝应用待重启清单");
+            checks.Check(await File.ReadAllTextAsync(Path.Combine(pendingTarget, "a.dll")) == "installed-old-a",
+                "过期待重启清单不会把新构建文件混入旧安装");
+            checks.Check(!File.Exists(Path.Combine(pendingTarget, "restart-pending.json")),
+                "过期待重启清单被清除，避免下次启动继续混装");
+
+            // 3c. 构建身份仍匹配但源文件缺失：保留清单等待下次启动，不静默丢弃，也不部分应用。
+            var currentPendingBuild = BuildInfo.Read(pendingSource)!;
+            await File.WriteAllTextAsync(Path.Combine(pendingTarget, "restart-pending.json"),
+                JsonSerializer.Serialize(new
+                {
+                    SourceDirectory = pendingSource,
+                    BuildId = currentPendingBuild.BuildId,
+                    CreatedAtUtc = now,
+                    Files = new[] { "a.dll", "missing.dll" },
+                }));
+            checks.Check(!deployment.ApplyPendingOnStartup(pendingTarget),
+                "源文件缺失时拒绝部分应用待重启清单");
+            checks.Check(await File.ReadAllTextAsync(Path.Combine(pendingTarget, "a.dll")) == "installed-old-a",
+                "源文件缺失时一个文件也不覆盖");
+            checks.Check(File.Exists(Path.Combine(pendingTarget, "restart-pending.json")),
+                "源文件缺失时保留待重启清单，下一次启动仍可重试");
+            File.Delete(Path.Combine(pendingTarget, "restart-pending.json"));
+
             // 4. 发布渠道构建不能通过本地部署覆盖。
             var releaseSource = Path.Combine(root, "release");
             Directory.CreateDirectory(releaseSource);
