@@ -349,16 +349,47 @@ public partial class MainWindow
     internal void UpdateDockDropTarget(Point? point)
     {
         var target = point is { } position ? DockTargetAt(position) : null;
-        if (target is { } zone) OpenDockZoneForDrop(zone);
+        // 拖动过程中只高亮目标，不重排布局：中途展开区域会重建控件并丢失指针捕获，导致这次拖放失效。
         foreach (var dock in Docks()) dock.SetDropTarget(target == dock.Zone);
     }
 
     /// <summary>屏幕坐标 → 主窗客户区坐标。</summary>
     private Point ClientFromScreen(PixelPoint screen) => this.PointToClient(screen);
 
+    /// <summary>屏幕坐标直接与各停靠区的屏幕矩形比较，避免跨窗口换算误差把“拖到左栏”误判成空白区。</summary>
+    private DockZone? DockTargetAtScreen(PixelPoint screen)
+    {
+        try { return DockTargetAtScreenCore(screen); }
+        catch (ArgumentException) { return DockTargetAt(ClientFromScreen(screen)); }
+    }
+
+    private DockZone? DockTargetAtScreenCore(PixelPoint screen)
+    {
+        var point = new Point(screen.X, screen.Y);
+        var scaling = RenderScaling > 0 ? RenderScaling : 1;
+        foreach (var (zone, border) in new[] { (DockZone.Left, SidebarBorder), (DockZone.Right, RightPanelBorder), (DockZone.Bottom, TerminalBorder) })
+        {
+            if (!border.IsEffectivelyVisible) continue;
+            var origin = border.PointToScreen(new Point(0, 0));
+            var size = new Size(border.Bounds.Width * scaling, border.Bounds.Height * scaling);
+            if (new Rect(origin.X, origin.Y, size.Width, size.Height).Contains(point)) return zone;
+        }
+        var windowOrigin = Avalonia.VisualExtensions.PointToScreen(this, new Point(0, 0));
+        var windowWidth = Bounds.Width * scaling;
+        var windowHeight = Bounds.Height * scaling;
+        var edge = DockEdgeDropWidth * scaling;
+        if (DockClosed(DockZone.Left) && screen.X >= windowOrigin.X && screen.X <= windowOrigin.X + edge) return DockZone.Left;
+        if (DockClosed(DockZone.Right) && screen.X >= windowOrigin.X + windowWidth - edge && screen.X <= windowOrigin.X + windowWidth) return DockZone.Right;
+        if (DockClosed(DockZone.Bottom) && screen.Y >= windowOrigin.Y + windowHeight - edge && screen.Y <= windowOrigin.Y + windowHeight) return DockZone.Bottom;
+        return null;
+    }
+
     /// <summary>页签拖动上报的是屏幕坐标，跨窗口拖放也落在同一套命中逻辑里。</summary>
-    internal void UpdateDockDropTargetFromScreen(PixelPoint? screen) =>
-        UpdateDockDropTarget(screen is { } point ? ClientFromScreen(point) : (Point?)null);
+    internal void UpdateDockDropTargetFromScreen(PixelPoint? screen)
+    {
+        var target = screen is { } point ? DockTargetAtScreen(point) : null;
+        foreach (var dock in Docks()) dock.SetDropTarget(target == dock.Zone);
+    }
 
     internal void DropDockPage(string id, Point point)
     {
@@ -368,7 +399,12 @@ public partial class MainWindow
         else FloatPageFromDrag(id);
     }
 
-    internal void DropDockPageAtScreen(string id, PixelPoint screen) => DropDockPage(id, ClientFromScreen(screen));
+    internal void DropDockPageAtScreen(string id, PixelPoint screen)
+    {
+        UpdateDockDropTarget(null);
+        if (DockTargetAtScreen(screen) is { } zone) MoveDockPageAnimated(id, zone);
+        else FloatPageFromDrag(id);
+    }
 
     private void FloatPageFromDrag(string id)
     {

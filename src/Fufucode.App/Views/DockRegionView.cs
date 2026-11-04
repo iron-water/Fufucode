@@ -411,7 +411,11 @@ internal sealed class DockRegionView : UserControl
         {
             base.OnPointerPressed(e);
             if (e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            { _start = e.GetPosition(TopLevel.GetTopLevel(this)); _dragging = false; _suppressClick = false; }
+            {
+                _start = e.GetPosition(TopLevel.GetTopLevel(this)); _dragging = false; _suppressClick = false;
+                // 显式捕获：跨窗口（浮动栏 → 主窗）拖动时仍能收到移动与释放，否则一出窗口就丢事件。
+                e.Pointer.Capture(this);
+            }
         }
         protected override void OnPointerMoved(PointerEventArgs e)
         {
