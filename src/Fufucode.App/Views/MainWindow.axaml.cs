@@ -320,7 +320,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 new Fufucode.Core.WindowsPasswordVaultCredentialResolver().ResolveAsync(envName),
             ModelApplied: model => vm.StatusBar.SetModelOverride(model),
             AgentDirectory: layout?.AgentDirectory,
-            DataRoot: layout?.Root,
+            DataRoot: layout?.Root ?? (Program.SelfTestMode ? Program.SelfTestDataRoot : null),
             LogsDirectory: layout?.LogsDirectory,
             ApprovalText: () => host is null ? null : host.Current.Coordinator.ApprovalAvailability.ToString(),
             ApprovalDiagnostic: () => host?.Current.Coordinator.ApprovalDiagnostic,
@@ -334,6 +334,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             PiVersion: () => DiagnosticsSummary.ResolvePiVersion(cliHint),
             NodeVersion: () => DiagnosticsSummary.ResolveNodeVersion(nodeHint),
             UsesEndpointModelIds: host?.Chat is Fufucode.Core.Backend.NativeCSharpChatSession);
+        vm.Settings.PackageManagerAccessor = () => _pluginPageHost?.Manager;
         vm.Settings.Attach(context);
         // 后台常驻跟随真实设置存储（host.Manager.Settings）；设置页保存后立即生效。
         AttachBackgroundMode(context.Store);
@@ -1725,6 +1726,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
         // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
         await ShutdownReverseLabAsync();
+        await DisposeBrowserControlAsync();
         await CloseSideChatAsync();
         _bootstrapCts.Cancel();
 

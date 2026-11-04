@@ -37,7 +37,7 @@ public sealed record BrowserNavigationRequest(string? Address, string? Document,
 /// 每页签是独立的 BrowserTab（独立地址草稿/真实导航地址/历史/标题/查找/缩放）。
 /// 旧的单页属性（AddressText/DocumentTitle/NavigateCommand 等）保留为“当前页签”的门面，既有调用方不用改。
 /// </summary>
-public sealed partial class BrowserViewModel : ViewModelBase
+public sealed partial class BrowserViewModel : ViewModelBase, IDisposable
 {
     private static int _tabCounter;
 
@@ -103,7 +103,7 @@ public sealed partial class BrowserViewModel : ViewModelBase
     /// <summary>探测完成且不可用才提示；初始未探测（Message 为空）不遮挡宿主。</summary>
     public bool HasRuntimeNotice => !IsRuntimeAvailable && RuntimeMessage.Length > 0;
 
-    public bool CanCloseTab => Tabs.Count > 1;
+    public bool CanCloseTab => Tabs.Count > 0;
     public string TabCountText => Tabs.Count == 1 ? "1 个页签" : $"{Tabs.Count} 个页签";
 
     // ---- 地址栏来源安全态（门面） ----
@@ -146,6 +146,23 @@ public sealed partial class BrowserViewModel : ViewModelBase
         set => ActiveTab.AddressText = value;
     }
 
+    [ObservableProperty] private bool _isAddressEditing;
+    [ObservableProperty] private double _panelWidth = 320;
+    [ObservableProperty] private bool _isFeedbackOpen;
+    [ObservableProperty] private string _feedbackText = string.Empty;
+    [ObservableProperty] private bool _animateLoading = true;
+
+    public string AddressInput
+    {
+        get => IsAddressEditing ? AddressText : DisplayAddress;
+        set { if (IsAddressEditing) AddressText = value; }
+    }
+    partial void OnIsAddressEditingChanged(bool value) => OnPropertyChanged(nameof(AddressInput));
+    public bool IsPageEmpty => ActiveTab.IsPageEmpty && !HasRuntimeNotice;
+    public bool HasPageError => ActiveTab.HasPageError && !HasRuntimeNotice;
+    public string PageError => ActiveTab.PageError;
+    public bool IsRestoring => ActiveTab.IsRestoring && !HasRuntimeNotice;
+    public bool CanAnnotate => ActiveTab.CanAnnotate && !HasRuntimeNotice;
     public string DocumentTitle => ActiveTab.DocumentTitle;
     public bool IsLoading => ActiveTab.IsLoading;
     public double Progress => ActiveTab.Progress;
@@ -390,6 +407,24 @@ public sealed partial class BrowserViewModel : ViewModelBase
         ? "暂无下载"
         : Downloads.Any(item => item.IsActive) ? "正在下载…" : $"最近 {Downloads.Count} 个下载";
 
+    partial void OnAnimateLoadingChanged(bool value)
+    {
+        foreach (var item in Downloads) item.AnimateProgress = value;
+    }
+
+    internal void RestoreDownloads(IEnumerable<BrowserDownloadEntry> entries)
+    {
+        foreach (var entry in entries.Reverse())
+        {
+            if (!Enum.TryParse<BrowserDownloadState>(entry.State, true, out var state) || state == BrowserDownloadState.InProgress) continue;
+            var item = new BrowserDownloadItem("history-" + Guid.NewGuid().ToString("N"), entry.FileName) { AnimateProgress = AnimateLoading };
+            item.Apply(new BrowserDownloadProgress(item.Id, entry.FileName, entry.FullPath, entry.TotalBytes, entry.TotalBytes, state, null));
+            Downloads.Insert(0, item);
+        }
+        OnPropertyChanged(nameof(HasDownloads));
+        OnPropertyChanged(nameof(DownloadSummary));
+    }
+
     public void ApplyDownloadProgress(BrowserDownloadProgress progress)
     {
         if (!Dispatcher.UIThread.CheckAccess())
@@ -406,6 +441,7 @@ public sealed partial class BrowserViewModel : ViewModelBase
             OnPropertyChanged(nameof(DownloadSummary));
             IsDownloadsOpen = true;   // 有真实下载开始时自动展开，用户可随时关闭
         }
+        item.AnimateProgress = AnimateLoading;
         item.Apply(progress);
         OnPropertyChanged(nameof(DownloadSummary));
     }
@@ -420,11 +456,37 @@ public sealed partial class BrowserViewModel : ViewModelBase
     [ObservableProperty] private bool _isHistoryOpen;
     [ObservableProperty] private string _historyQuery = string.Empty;
 
+    public bool HasHistoryEntries => HistoryEntries.Count > 0;
+    public string HistoryEmptyText => string.IsNullOrWhiteSpace(HistoryQuery) ? "暂无浏览历史" : "没有匹配的记录";
     public void RefreshHistory()
     {
         HistoryEntries.Clear();
-        if (_historyStore is null) return;
-        foreach (var entry in _historyStore.Search(HistoryQuery, 100)) HistoryEntries.Add(entry);
+        if (_historyStore is not null)
+            foreach (var entry in _historyStore.Search(HistoryQuery, 100)) HistoryEntries.Add(entry);
+        OnPropertyChanged(nameof(HasHistoryEntries));
+        OnPropertyChanged(nameof(HistoryEmptyText));
+    }
+
+    partial void OnIsHistoryOpenChanged(bool value)
+    {
+        if (!value) return;
+        IsDownloadsOpen = false;
+        IsSuggestionsOpen = false;
+        IsFeedbackOpen = false;
+    }
+    partial void OnIsDownloadsOpenChanged(bool value)
+    {
+        if (!value) return;
+        IsHistoryOpen = false;
+        IsSuggestionsOpen = false;
+        IsFeedbackOpen = false;
+    }
+    partial void OnIsSuggestionsOpenChanged(bool value)
+    {
+        if (!value) return;
+        IsHistoryOpen = false;
+        IsDownloadsOpen = false;
+        IsFeedbackOpen = false;
     }
 
     [RelayCommand]
@@ -650,6 +712,8 @@ public sealed partial class BrowserViewModel : ViewModelBase
             nameof(BrowserTab.DisplayAddress) => nameof(DisplayAddress),
             _ => e.PropertyName ?? string.Empty,
         });
+        if (ReferenceEquals(sender, ActiveTab) && e.PropertyName is nameof(BrowserTab.AddressText) or nameof(BrowserTab.DisplayAddress))
+            OnPropertyChanged(nameof(AddressInput));
         if (ReferenceEquals(sender, ActiveTab) && e.PropertyName == nameof(BrowserTab.DocumentTitle))
             UpdateVisitTitle(ActiveTab.NavigationAddress, ActiveTab.DocumentTitle);
         if (ReferenceEquals(sender, ActiveTab) &&
@@ -666,6 +730,12 @@ public sealed partial class BrowserViewModel : ViewModelBase
     private void NotifyFacade()
     {
         OnPropertyChanged(nameof(AddressText));
+        OnPropertyChanged(nameof(AddressInput));
+        OnPropertyChanged(nameof(IsPageEmpty));
+        OnPropertyChanged(nameof(HasPageError));
+        OnPropertyChanged(nameof(PageError));
+        OnPropertyChanged(nameof(IsRestoring));
+        OnPropertyChanged(nameof(CanAnnotate));
         OnPropertyChanged(nameof(DocumentTitle));
         OnPropertyChanged(nameof(IsLoading));
         OnPropertyChanged(nameof(Progress));
@@ -726,5 +796,18 @@ public sealed partial class BrowserViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(IsRuntimeAvailable));
         OnPropertyChanged(nameof(HasRuntimeNotice));
+        NotifyFacade();
+    }
+
+    partial void OnRuntimeMessageChanged(string value)
+    {
+        OnPropertyChanged(nameof(HasRuntimeNotice));
+        NotifyFacade();
+    }
+
+    public void Dispose()
+    {
+        if (_bookmarkStore is not null) _bookmarkStore.Changed -= OnBookmarkStoreChanged;
+        foreach (var tab in Tabs) { Detach(tab); tab.DisposeFavicon(); }
     }
 }

@@ -63,7 +63,7 @@ internal static class BrowserSurfaceActions
         var vm = view.ViewModel;
         return actionId switch
         {
-            CloseTab => vm.CanCloseTab ? null : "至少保留一个页签。",
+            CloseTab => vm.CanCloseTab ? null : "当前没有页签。",
             Back => vm.CanGoBack ? null : "没有可后退的历史。",
             Forward => vm.CanGoForward ? null : "没有可前进的历史。",
             Stop => vm.CanStop ? null : "当前没有正在进行的加载。",

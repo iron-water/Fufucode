@@ -90,8 +90,9 @@ internal static class BrowserAddressResolver
     private static bool LooksLikeHost(string candidate) =>
         Uri.TryCreate(candidate, UriKind.Absolute, out var uri) &&
         (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp) &&
-        uri.Host.Length > 0 &&
-        uri.Host.All(c => char.IsLetterOrDigit(c) || c is '.' or '-' || c > 0x7F) &&
+        (uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase) ||
+         uri.Host.Contains('.') || uri.HostNameType is UriHostNameType.IPv4 or UriHostNameType.IPv6 || !uri.IsDefaultPort) &&
+        uri.Host.All(c => char.IsLetterOrDigit(c) || c is '.' or '-' or ':' or '[' or ']' || c > 0x7F) &&
         !uri.Host.StartsWith('.') && !uri.Host.EndsWith('.');
 
     private static BrowserTarget Search(string query, string? template)
@@ -101,7 +102,8 @@ internal static class BrowserAddressResolver
         string url;
         try { url = string.Format(format, Uri.EscapeDataString(query)); }
         catch (FormatException) { url = string.Format(DefaultSearchTemplate, Uri.EscapeDataString(query)); }
-        return Uri.TryCreate(url, UriKind.Absolute, out _)
+        return Uri.TryCreate(url, UriKind.Absolute, out var search) &&
+               (search.Scheme == Uri.UriSchemeHttp || search.Scheme == Uri.UriSchemeHttps)
             ? new(BrowserTargetKind.Search, url, null, query)
             : BrowserTarget.Reject("搜索地址无效，请在设置中修正搜索模板。");
     }

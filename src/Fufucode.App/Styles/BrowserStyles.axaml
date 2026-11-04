@@ -1,0 +1,186 @@
+<Styles xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- 浏览器只使用应用表面、字体与图标；尺寸集中于此，网页视口不参与淡入或位移动画。 -->
+  <Styles.Resources>
+    <Thickness x:Key="BrowserChromeInset">8,4</Thickness>
+    <Thickness x:Key="BrowserPanelInset">16</Thickness>
+    <Thickness x:Key="BrowserRowInset">8</Thickness>
+    <Thickness x:Key="BrowserStateInset">24</Thickness>
+    <x:Double x:Key="BrowserIconSize">16</x:Double>
+    <x:Double x:Key="BrowserSmallIconSize">12</x:Double>
+  </Styles.Resources>
+  <Style Selector="Grid.browserShell">
+    <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
+  </Style>
+  <Style Selector="Grid.browserTabsStrip">
+    <Setter Property="Margin" Value="{StaticResource BrowserChromeInset}"/>
+    <Setter Property="ColumnSpacing" Value="4"/>
+    <Setter Property="MinHeight" Value="32"/>
+  </Style>
+  <Style Selector="Border.browserTabRow">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="MinWidth" Value="96"/>
+    <Setter Property="MaxWidth" Value="216"/>
+  </Style>
+  <Style Selector="Border.browserTabRow:pointerover">
+    <Setter Property="Background" Value="{DynamicResource AppListHover}"/>
+  </Style>
+  <Style Selector="Border.browserTabRow.selected">
+    <Setter Property="Background" Value="{DynamicResource AppTabSelectedBackground}"/>
+  </Style>
+  <Style Selector="Button.browserTab">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+  </Style>
+  <Style Selector="Button.browserTab.selected">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.browserTab /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="TextBlock.browserTabTitle">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="MaxWidth" Value="144"/>
+    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.browserTool, Button.browserTabClose, Button.browserAudio">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="Width" Value="28"/>
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="MinWidth" Value="28"/>
+    <Setter Property="MinHeight" Value="28"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.browserTool:pointerover, Button.browserTabClose:pointerover, Button.browserAudio:pointerover">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+  </Style>
+  <Style Selector="Button.browserTool:disabled">
+    <Setter Property="Opacity" Value="0.4"/>
+  </Style>
+  <Style Selector="Button.browserTool.active, Button.browserAudio.active">
+    <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Button.browserTabClose, Button.browserAudio">
+    <Setter Property="Width" Value="24"/>
+    <Setter Property="Height" Value="24"/>
+    <Setter Property="MinWidth" Value="24"/>
+    <Setter Property="MinHeight" Value="24"/>
+  </Style>
+  <Style Selector="Grid.browserToolbar">
+    <Setter Property="Margin" Value="8,0,8,8"/>
+    <Setter Property="ColumnSpacing" Value="4"/>
+    <Setter Property="MinHeight" Value="36"/>
+  </Style>
+  <Style Selector="TextBox.browserAddress">
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="Padding" Value="8,7"/>
+    <Setter Property="FontSize" Value="14"/>
+  </Style>
+  <Style Selector="Border.browserFindBar">
+    <Setter Property="Padding" Value="8,0,8,8"/>
+    <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
+  </Style>
+  <Style Selector="Border.browserPopup">
+    <Setter Property="Background" Value="{DynamicResource MenuSurfaceBrush}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+    <Setter Property="Padding" Value="{StaticResource BrowserPanelInset}"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentFlyoutShadow}"/>
+    <Setter Property="MaxHeight" Value="480"/>
+  </Style>
+  <Style Selector="Border.browserPopup.suggestions">
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="MaxHeight" Value="320"/>
+  </Style>
+  <Style Selector="ListBox.browserSuggestions">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+  <Style Selector="ListBox.browserSuggestions ListBoxItem">
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="MinHeight" Value="48"/>
+  </Style>
+  <Style Selector="Button.browserListRow">
+    <Setter Property="HorizontalAlignment" Value="Stretch"/>
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="{StaticResource BrowserRowInset}"/>
+    <Setter Property="MinHeight" Value="48"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="TextBlock.browserMeta">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+  </Style>
+  <Style Selector="TextBlock.browserHeading">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+  <Style Selector="Border.browserState">
+    <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
+    <Setter Property="Padding" Value="{StaticResource BrowserStateInset}"/>
+  </Style>
+  <Style Selector="StackPanel.browserStateBody">
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="MaxWidth" Value="360"/>
+    <Setter Property="Spacing" Value="16"/>
+  </Style>
+  <Style Selector="PathIcon.browserStateIcon">
+    <Setter Property="Width" Value="32"/>
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="TextBlock.browserStateTitle">
+    <Setter Property="FontSize" Value="14"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="TextAlignment" Value="Center"/>
+    <Setter Property="TextWrapping" Value="Wrap"/>
+  </Style>
+  <Style Selector="ProgressBar.browserLoading">
+    <Setter Property="MinHeight" Value="2"/>
+    <Setter Property="Height" Value="2"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="IsHitTestVisible" Value="False"/>
+  </Style>
+  <Style Selector="Window.browserDialog">
+    <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
+    <Setter Property="MinWidth" Value="320"/>
+  </Style>
+  <Style Selector="StackPanel.browserDialogBody">
+    <Setter Property="Margin" Value="24"/>
+    <Setter Property="Spacing" Value="16"/>
+  </Style>
+  <Style Selector="Expander.browserAdjust /template/ Border">
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Grid.browserAdjustRow">
+    <Setter Property="ColumnSpacing" Value="12"/>
+    <Setter Property="RowSpacing" Value="8"/>
+  </Style>
+  <Style Selector="TextBox.browserAdjustField">
+    <Setter Property="MinWidth" Value="0"/>
+    <Setter Property="MinHeight" Value="36"/>
+  </Style>
+</Styles>

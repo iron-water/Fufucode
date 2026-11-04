@@ -117,8 +117,7 @@ public static class BrowserRuntime
     }
 
     /// <summary>环境已拆除/列表不可用时的空快照；不把同机其它 WebView2 应用算入预算。</summary>
-    public static BrowserProcessSnapshot SnapshotAfterEnvironmentTeardown() =>
-        new(0, 0, 0, 0, 0, Array.Empty<int>(), true);
+    public static BrowserProcessSnapshot SnapshotAfterEnvironmentTeardown() => BrowserProcessSnapshot.Empty;
 
     /// <summary>便捷采样（UI 线程调用）。运行时支持时返回精确分类，否则返回降级采样。</summary>
     public static BrowserProcessSnapshot Sample(string userDataFolder)

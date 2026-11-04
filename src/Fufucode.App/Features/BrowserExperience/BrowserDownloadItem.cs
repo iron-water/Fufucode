@@ -21,6 +21,13 @@ public sealed partial class BrowserDownloadItem : ObservableObject
     public bool IsInterrupted => State == BrowserDownloadState.Interrupted;
     public bool IsActive => State == BrowserDownloadState.InProgress;
     public bool CanCancel => IsActive;
+    private bool _animateProgress = true;
+    public bool AnimateProgress
+    {
+        get => _animateProgress;
+        set { if (_animateProgress == value) return; _animateProgress = value; OnPropertyChanged(nameof(IsIndeterminate)); }
+    }
+    public bool IsIndeterminate => AnimateProgress && IsActive && TotalBytes <= 0;
 
     public double ProgressPercent =>
         TotalBytes > 0 ? Math.Clamp(BytesReceived * 100.0 / TotalBytes, 0, 100) : 0;
@@ -47,6 +54,7 @@ public sealed partial class BrowserDownloadItem : ObservableObject
         OnPropertyChanged(nameof(IsInterrupted));
         OnPropertyChanged(nameof(IsActive));
         OnPropertyChanged(nameof(CanCancel));
+        OnPropertyChanged(nameof(IsIndeterminate));
         OnPropertyChanged(nameof(ProgressPercent));
         OnPropertyChanged(nameof(ProgressText));
         OnPropertyChanged(nameof(Summary));

@@ -54,7 +54,7 @@ internal static class BrowserExtensionLoader
                 if (!File.Exists(Path.Combine(directory, "manifest.json"))) continue;
                 try
                 {
-                    await profile.AddBrowserExtensionAsync(directory).ConfigureAwait(false);
+                    await profile.AddBrowserExtensionAsync(directory).ConfigureAwait(true);
                     loaded.Add(Path.GetFileName(directory));
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException
@@ -67,6 +67,10 @@ internal static class BrowserExtensionLoader
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             failures.Add("扩展目录不可读：" + error.Message);
+        }
+        finally
+        {
+            lock (Gate) Loading.Remove(Path.GetFullPath(folder));
         }
         return new BrowserExtensionLoadResult(loaded, failures);
     }

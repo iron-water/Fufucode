@@ -130,8 +130,22 @@ public sealed class BrowserViewHost : Control, IDisposable
     internal Func<uint, KeyModifiers, bool>? AcceleratorHandler { get; set; }
     private bool _initializeRequested;
     private bool _initializing;
+    private bool _initializationFailed;
     private bool _disposed;
     private bool _occluded;
+    private bool _contentHidden;
+    private bool _discarded;
+    private bool _coreRequested;
+    private readonly HashSet<Action> _pendingDecisions = new();
+    private readonly Dictionary<string, Action> _downloadDetachers = new(StringComparer.Ordinal);
+    private bool _suspending;
+    private bool _memoryTargetLow;
+    private string? _defaultUserAgent;
+    private string? _explicitNavigation;
+    private ulong? _explicitNavigationId;
+    private ulong _currentNavigationId;
+    private ulong? _downloadNavigationId;
+    private ulong? _stoppedNavigationId;
     /// <summary>
     /// 控制器创建前的唯一待发导航：地址与文档二选一，最后一次请求胜出（不再被 _pendingAddress 覆盖）。
     /// </summary>
@@ -175,21 +189,14 @@ public sealed class BrowserViewHost : Control, IDisposable
     public event EventHandler<string>? OpenExternallyRequested;
 
     private bool _openLinksExternally;
-    private bool _suppressExternalNavigation;
 
-    /// <summary>设置是否把所有页面内 http/https 跳转交给系统浏览器；地址栏主动导航不受影响。</summary>
+    /// <summary>设置是否把页面内 http/https 跳转交给系统浏览器；主动导航及其重定向留在当前页。</summary>
     public void SetOpenLinksExternally(bool value) => _openLinksExternally = value;
 
-    /// <summary>地址栏/Agent 主动导航期间临时关闭外部跳转，保证主动导航仍在内置浏览器完成。</summary>
-    private IDisposable SuppressExternalNavigation()
+    private void BeginExplicitNavigation(string? address)
     {
-        _suppressExternalNavigation = true;
-        return new Suppression(this);
-    }
-
-    private sealed class Suppression(BrowserViewHost host) : IDisposable
-    {
-        public void Dispose() => host._suppressExternalNavigation = false;
+        _explicitNavigation = address ?? string.Empty;
+        _explicitNavigationId = null;
     }
 
     /// <summary>页面请求打开新窗口；视图层创建页签后把真实 CoreWebView2 交回，保留 opener 关系。</summary>
@@ -330,16 +337,19 @@ public sealed class BrowserViewHost : Control, IDisposable
     /// <summary>惰性初始化：只有真正可见且有尺寸时才创建 WebView2，无头自测因此完全不触碰运行时。</summary>
     private void EnsureInitialized()
     {
-        if (_disposed || _initializeRequested || _initializing) return;
+        if (_disposed || _discarded || _occluded || _initializationFailed || _initializeRequested || _initializing) return;
+        if (_pendingNavigation is null && !_coreRequested) return;
         if (!IsEffectivelyVisible) return;
-        // 低内存模式：后台页签不提前创建 controller（= 一个 renderer 进程）。
-        if (_occluded && Fufucode.App.Integration.MemoryProfile.ReduceBackgroundBrowserMemory) return;
         if (Bounds.Width <= 0 || Bounds.Height <= 0) return;
         if (VisualRoot is null) return;
         // 无头自测不创建真实 WebView2：既没有真实 HWND，也不应触碰运行时。
         // 原生模块自测显式打开 NativeModuleSelfTest，仍走真实控制器。
-        if (Program.SelfTestMode && !Program.NativeModuleSelfTest) { _initializeRequested = true; return; }
-        if (!OperatingSystem.IsWindows()) { StatusChanged?.Invoke(this, "内置浏览器仅支持 Windows。"); _initializeRequested = true; return; }
+        if (Program.SelfTestMode && !Program.NativeModuleSelfTest)
+        {
+            _coreReady?.TrySetResult(null);
+            return;
+        }
+        if (!OperatingSystem.IsWindows()) { FailInitialization("内置浏览器仅支持 Windows。"); return; }
         var parent = TryGetParentWindow();
         if (parent == IntPtr.Zero) return; // 窗口句柄尚未就绪（或无头环境）：静默等待下一次机会
         _initializeRequested = true;
@@ -354,18 +364,22 @@ public sealed class BrowserViewHost : Control, IDisposable
         {
             var probe = WebView2RuntimeGate.Probe();
             RuntimeProbeCompleted?.Invoke(this, probe);
-            if (!probe.IsAvailable) { StatusChanged?.Invoke(this, probe.Guidance); return; }
+            if (!probe.IsAvailable) { FailInitialization(probe.Guidance); return; }
 
             var folder = BrowserUserDataLayout.Resolve(Program.SelfTestMode ? Program.SelfTestDataRoot : null);
             var folderError = BrowserUserDataLayout.TryEnsure(folder);
-            if (folderError is not null) { StatusChanged?.Invoke(this, "浏览器数据目录不可写：" + folderError); return; }
+            if (folderError is not null) { FailInitialization("浏览器数据目录不可写：" + folderError); return; }
 
             var environment = await BrowserRuntime.GetEnvironmentAsync(folder);
             if (Abandon(token)) return;
+            if (_occluded || _discarded) { DeferInitialization(); return; }
             _environment = environment;
 
             var controller = await environment.CreateCoreWebView2ControllerAsync(parent);
             if (Abandon(token)) { controller.Close(); return; }
+            if (_occluded || _discarded) { controller.Close(); DeferInitialization(); return; }
+            if (this.TryFindResource("AppWindowBackground", out var background) && background is Avalonia.Media.ISolidColorBrush brush)
+                controller.DefaultBackgroundColor = System.Drawing.Color.FromArgb(brush.Color.A, brush.Color.R, brush.Color.G, brush.Color.B);
             _controller = controller;
             controller.AcceleratorKeyPressed += OnAcceleratorKeyPressed;
             _intendedParentInParent = SafeControllerParent();
@@ -393,36 +407,54 @@ public sealed class BrowserViewHost : Control, IDisposable
             else
             {
                 RaiseState(loading: false);
-                using (SuppressExternalNavigation())
+                switch (_pendingNavigation)
                 {
-                    switch (_pendingNavigation)
-                    {
-                        case (true, var document): _pendingNavigation = null; _core.NavigateToString(document); break;
-                        case (false, var address): _pendingNavigation = null; _core.Navigate(address); break;
-                        default: _core.Navigate("about:blank"); break;
-                    }
+                    case (true, var document):
+                        _pendingNavigation = null;
+                        BeginExplicitNavigation("about:blank");
+                        _core.NavigateToString(document);
+                        break;
+                    case (false, var address):
+                        _pendingNavigation = null;
+                        BeginExplicitNavigation(address);
+                        _core.Navigate(address);
+                        break;
+                    default:
+                        BeginExplicitNavigation("about:blank");
+                        _core.Navigate("about:blank");
+                        break;
                 }
             }
         }
         catch (Exception error)
         {
-            if (!_disposed) StatusChanged?.Invoke(this, "内置浏览器初始化失败：" + error.Message);
-            _coreReady?.TrySetResult(null);
-            _coreReady = null;
-            _initializeRequested = false;
+            if (!_disposed && token == _lifecycleToken) FailInitialization("内置浏览器初始化失败：" + error.Message);
         }
         finally
         {
-            _initializing = false;
+            if (token == _lifecycleToken) _initializing = false;
         }
 
         bool Abandon(int captured)
         {
             if (!_disposed && captured == _lifecycleToken) return false;
-            // 生命周期已经前进：本次创建作废，并允许后续挂载重新初始化。
-            _initializeRequested = false;
             return true;
         }
+    }
+
+    private void DeferInitialization()
+    {
+        _initializeRequested = false;
+        _coreReady?.TrySetResult(null);
+        _coreReady = null;
+    }
+
+    private void FailInitialization(string message)
+    {
+        ReleaseController();
+        _initializationFailed = true;
+        RaiseState(loading: false);
+        StatusChanged?.Invoke(this, message);
     }
 
     private async Task LoadFaviconAsync(CoreWebView2 core)
@@ -443,6 +475,7 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     /// <summary>当前 controller 是否真的持有一个 CoreWebView2（Discarded 后为 false）。</summary>
     public bool HasController => _core is not null;
+    public bool HasActiveDownloads => _downloads.Count > 0;
     public bool IsSuspended
     {
         get { try { return _core?.IsSuspended ?? false; } catch (Exception e) when (IsControllerGone(e)) { return false; } }
@@ -451,21 +484,23 @@ public sealed class BrowserViewHost : Control, IDisposable
     /// <summary>低内存目标：页面继续运行，但 renderer 主动收缩缓存。</summary>
     public void SetMemoryTargetLow(bool low)
     {
-        if (_core is not { } core) return;
-        try { core.MemoryUsageTargetLevel = low ? CoreWebView2MemoryUsageTargetLevel.Low : CoreWebView2MemoryUsageTargetLevel.Normal; }
-        catch (Exception error) when (IsControllerGone(error) || error is NotSupportedException) { }
+        _memoryTargetLow = low;
+        ApplyMemoryUsageTarget();
     }
 
     /// <summary>进入 Active：恢复挂起、可见、正常内存目标。</summary>
     public void SetActive()
     {
+        if (_disposed) return;
+        _discarded = false;
+        _memoryTargetLow = false;
+        _occluded = false;
         if (_core is { } core)
         {
             try { if (core.IsSuspended) core.Resume(); } catch (Exception e) when (IsControllerGone(e)) { }
-            SetMemoryTargetLow(false);
         }
-        _occluded = false;
         UpdateVisibility();
+        EnsureInitialized();
     }
 
     /// <summary>进入 Warm：隐藏并降低内存目标，但保留 DOM/脚本状态。</summary>
@@ -479,28 +514,36 @@ public sealed class BrowserViewHost : Control, IDisposable
     /// <summary>进入 Suspended：隐藏后调用 WebView2 挂起；DevTools 打开等原因失败时退回 Low。</summary>
     public async Task<bool> TrySuspendAsync()
     {
-        if (_core is not { } core) return false;
+        if (_core is not { } core || _suspending) return false;
+        if (core.IsSuspended) return true;
+        _suspending = true;
         try
         {
             _occluded = true;
             UpdateVisibility();
-            if (core.IsSuspended) return true;
-            // 同一 controller 不混用 Low 与 TrySuspend：挂起前先恢复正常目标。
-            SetMemoryTargetLow(false);
             var suspended = await core.TrySuspendAsync().ConfigureAwait(true);
-            if (!suspended) SetMemoryTargetLow(true);
+            if (!ReferenceEquals(_core, core)) return false;
+            // 挂起期间用户可能已返回当前页；迟到的挂起不得再次隐藏它。
+            if (!_occluded && suspended) { core.Resume(); return false; }
+            _memoryTargetLow = !suspended;
             return suspended;
         }
         catch (Exception error) when (IsControllerGone(error) || error is NotSupportedException)
         {
-            SetMemoryTargetLow(true);
+            _memoryTargetLow = true;
             return false;
+        }
+        finally
+        {
+            _suspending = false;
+            ApplyMemoryUsageTarget();
         }
     }
 
     /// <summary>丢弃 controller，保留 host 控件本身；下次激活时重新创建并导航回保存的 URL。</summary>
     public void DiscardController()
     {
+        _discarded = true;
         _occluded = true;
         ReleaseController();
         UpdateVisibility();
@@ -584,18 +627,22 @@ public sealed class BrowserViewHost : Control, IDisposable
         }
         void OnNavigationStarting(object? _, CoreWebView2NavigationStartingEventArgs e)
         {
-            RaiseState(loading: true);
-            // 页面内导航到系统浏览器（设置：网页链接打开位置 = 系统默认浏览器）。
-            if (_openLinksExternally && e.Uri is { Length: > 0 } target &&
-                Uri.TryCreate(target, UriKind.Absolute, out var uri) &&
-                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps) &&
-                !string.Equals(target, SafeSource(), StringComparison.OrdinalIgnoreCase) &&
-                !_suppressExternalNavigation)
+            _currentNavigationId = e.NavigationId;
+            if (_explicitNavigation is not null && _explicitNavigationId is null &&
+                (_explicitNavigation.Length == 0 || string.Equals(_explicitNavigation, e.Uri, StringComparison.OrdinalIgnoreCase)))
+                _explicitNavigationId = e.NavigationId;
+            var explicitNavigation = _explicitNavigationId == e.NavigationId;
+            if (_openLinksExternally && !explicitNavigation && e.IsUserInitiated &&
+                Uri.TryCreate(e.Uri, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
             {
                 e.Cancel = true;
-                Dispatcher.UIThread.Post(() => OpenExternallyRequested?.Invoke(this, target));
-                StatusChanged?.Invoke(this, "已在系统浏览器打开：" + target);
+                _stoppedNavigationId = e.NavigationId;
+                var externalAddress = e.Uri;
+                Dispatcher.UIThread.Post(() => OpenExternallyRequested?.Invoke(this, externalAddress));
+                return;
             }
+            RaiseState(loading: true);
         }
         void OnHistoryChanged(object? _, object __) => RaiseState(loading: _loading);
         void OnSourceChanged(object? _, CoreWebView2SourceChangedEventArgs __) => RaiseState(loading: _loading);
@@ -663,7 +710,11 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     private void ApplyUserAgent(CoreWebView2Settings settings)
     {
-        try { settings.UserAgent = _userAgent is { Length: > 0 } value ? value : settings.UserAgent; }
+        try
+        {
+            _defaultUserAgent ??= settings.UserAgent;
+            settings.UserAgent = _userAgent ?? _defaultUserAgent;
+        }
         catch (Exception error) when (error is COMException or InvalidOperationException or NotSupportedException or ObjectDisposedException) { }
     }
 
@@ -684,11 +735,26 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     private void OnNavigationCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e)
     {
+        if (e.NavigationId == _explicitNavigationId)
+        {
+            _explicitNavigation = null;
+            _explicitNavigationId = null;
+        }
         RaiseState(loading: false);
         var source = SafeSource();
         var title = _core?.DocumentTitle;
         NavigationCompleted?.Invoke(this, new BrowserHostNavigationCompleted(e.IsSuccess, source, title));
-        StatusChanged?.Invoke(this, e.IsSuccess ? "加载完成" : $"加载失败：{e.WebErrorStatus}");
+        var download = e.NavigationId == _downloadNavigationId;
+        var stopped = e.NavigationId == _stoppedNavigationId;
+        if (download) _downloadNavigationId = null;
+        if (stopped) _stoppedNavigationId = null;
+        // SDK 对转入附件下载、Stop 和替换导航都报告 ConnectionAborted；下载事件可能晚于完成事件。
+        // 保留 NavigationCompleted.IsSuccess=false，但取消不显示成页面故障。
+        var aborted = e.WebErrorStatus == CoreWebView2WebErrorStatus.ConnectionAborted;
+        if (!e.IsSuccess && aborted && !download && !stopped) return;
+        StatusChanged?.Invoke(this, e.IsSuccess ? "加载完成" : aborted
+            ? download ? "已转入下载" : "已停止加载。"
+            : $"加载失败：{e.WebErrorStatus}");
     }
 
     /// <summary>
@@ -705,28 +771,37 @@ public sealed class BrowserViewHost : Control, IDisposable
         NewWindowRequested.Invoke(this, request);
     }
 
-    private async Task ApplyNewWindowAsync(BrowserNewWindowRequest request,
-        CoreWebView2NewWindowRequestedEventArgs args, CoreWebView2Deferral deferral)
+    private Task ApplyNewWindowAsync(BrowserNewWindowRequest request,
+        CoreWebView2NewWindowRequestedEventArgs args, CoreWebView2Deferral deferral) =>
+        ResolveDecisionAsync(request.Window, null, request.Resolve, deferral,
+            window => { if (window is not null) args.NewWindow = window; }, TimeSpan.FromSeconds(10));
+
+    // 决策、超时及释放都在 UI 线程收口，controller 关闭前完成每个 deferral，且只完成一次。
+    private async Task ResolveDecisionAsync<T>(Task<T> decision, T fallback, Action<T> resolve,
+        CoreWebView2Deferral deferral, Action<T> apply, TimeSpan timeout)
     {
-        CoreWebView2? window = null;
-        try { window = await request.Window.WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false); }
-        catch (TimeoutException) { StatusChanged?.Invoke(this, "新窗口打开超时，已取消该弹窗。"); }
-        catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException or COMException)
+        var completed = false;
+        Action abort = null!;
+        void Complete(T value)
         {
-            StatusChanged?.Invoke(this, "新窗口打开失败：" + error.Message);
+            if (completed) return;
+            completed = true;
+            _pendingDecisions.Remove(abort);
+            resolve(value);
+            try { apply(value); }
+            catch (Exception error) when (IsControllerGone(error) || error is ArgumentException)
+            { StatusChanged?.Invoke(this, "浏览器请求已结束：" + error.Message); }
+            finally
+            {
+                try { deferral.Complete(); }
+                catch (Exception error) when (IsControllerGone(error)) { }
+            }
         }
-        Dispatcher.UIThread.Post(() =>
-        {
-            try
-            {
-                if (window is not null && !_disposed) args.NewWindow = window;
-            }
-            catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException or COMException)
-            {
-                StatusChanged?.Invoke(this, "新窗口接管失败：" + error.Message);
-            }
-            finally { deferral.Complete(); }
-        });
+        abort = () => Complete(fallback);
+        _pendingDecisions.Add(abort);
+        try { Complete(await decision.WaitAsync(timeout)); }
+        catch (Exception error) when (error is TimeoutException or OperationCanceledException || IsControllerGone(error))
+        { Complete(fallback); }
     }
 
     /// <summary>
@@ -739,30 +814,16 @@ public sealed class BrowserViewHost : Control, IDisposable
         var request = new BrowserPermissionRequest(e.Uri, e.PermissionKind.ToString(), e.IsUserInitiated);
         e.Handled = true;
         var deferral = e.GetDeferral();
-        _ = ApplyPermissionDecisionAsync(request, e, deferral);
-    }
-
-    private async Task ApplyPermissionDecisionAsync(BrowserPermissionRequest request,
-        CoreWebView2PermissionRequestedEventArgs args, CoreWebView2Deferral deferral)
-    {
-        BrowserPermissionDecision decision;
-        try { decision = await request.Decision.ConfigureAwait(false); }
-        catch (Exception) { decision = BrowserPermissionDecision.Deny("权限决策失败。"); }
-        Dispatcher.UIThread.Post(() =>
-        {
-            try
+        _ = ResolveDecisionAsync(request.Decision, BrowserPermissionDecision.Deny(), request.Resolve, deferral,
+            decision =>
             {
-                args.State = decision.Allow ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
-                args.SavesInProfile = decision.Allow && decision.Persist;
-                if (!decision.Allow && decision.Note is { Length: > 0 } note)
-                    StatusChanged?.Invoke(this, note);
-            }
-            catch (Exception error) when (error is COMException or InvalidOperationException or ObjectDisposedException)
-            {
-                StatusChanged?.Invoke(this, "权限设置失败：" + error.Message);
-            }
-            finally { deferral.Complete(); }
-        });
+                e.State = decision.Allow ? CoreWebView2PermissionState.Allow : CoreWebView2PermissionState.Deny;
+                e.SavesInProfile = decision.Persist;
+                if (decision.Note is { Length: > 0 } note) StatusChanged?.Invoke(this, note);
+            }, TimeSpan.FromSeconds(60));
+        try { PermissionRequested.Invoke(this, request); }
+        catch (Exception error)
+        { request.Resolve(BrowserPermissionDecision.Deny("权限请求失败：" + error.Message)); }
     }
 
     /// <summary>
@@ -818,10 +879,12 @@ public sealed class BrowserViewHost : Control, IDisposable
     /// </summary>
     public Task<CoreWebView2?> EnsureCoreAsync()
     {
+        if (_disposed || _initializationFailed) return Task.FromResult<CoreWebView2?>(null);
         if (_core is { } core) return Task.FromResult<CoreWebView2?>(core);
-        _coreReady ??= new TaskCompletionSource<CoreWebView2?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        _coreRequested = true;
+        var ready = _coreReady ??= new TaskCompletionSource<CoreWebView2?>(TaskCreationOptions.RunContinuationsAsynchronously);
         EnsureInitialized();
-        return _coreReady.Task;
+        return ready.Task;
     }
 
     /// <summary>
@@ -831,6 +894,7 @@ public sealed class BrowserViewHost : Control, IDisposable
     private void OnDownloadStarting(object? sender, CoreWebView2DownloadStartingEventArgs e)
     {
         if (e.DownloadOperation is not { } operation || DownloadRequested is null) return;
+        _downloadNavigationId = _currentNavigationId;
         var request = new BrowserDownloadRequest(
             Guid.NewGuid().ToString("N"),
             Path.GetFileName(e.ResultFilePath),
@@ -839,42 +903,30 @@ public sealed class BrowserViewHost : Control, IDisposable
             operation.TotalBytesToReceive is { } total ? (long)Math.Min(total, long.MaxValue) : 0);
         e.Handled = true;
         var deferral = e.GetDeferral();
-        DownloadRequested.Invoke(this, request);
-        _ = ApplyDownloadDecisionAsync(request, e, operation, deferral);
-    }
-
-    private async Task ApplyDownloadDecisionAsync(BrowserDownloadRequest request,
-        CoreWebView2DownloadStartingEventArgs args, CoreWebView2DownloadOperation operation,
-        CoreWebView2Deferral deferral)
-    {
-        BrowserDownloadDecision decision;
-        try { decision = await request.Decision.ConfigureAwait(false); }
-        catch (Exception) { decision = BrowserDownloadDecision.Deny("下载决策失败，已取消。"); }
-        // WebView2 事件参数只能在创建它的 UI 线程上写；决策可能由后台续体完成。
-        Dispatcher.UIThread.Post(() =>
-        {
-            try
+        _ = ResolveDecisionAsync(request.Decision, BrowserDownloadDecision.Deny("下载已取消。"), request.Resolve,
+            deferral, decision =>
             {
+                e.Cancel = decision.Cancel;
                 if (decision.Cancel)
                 {
-                    args.Cancel = true;
                     StatusChanged?.Invoke(this, decision.Note ?? "下载已取消。");
+                    return;
                 }
-                else
+                try
                 {
                     if (!string.IsNullOrWhiteSpace(decision.ResultFilePath))
-                        args.ResultFilePath = decision.ResultFilePath!;
-                    AttachDownload(request.Id, operation, args.ResultFilePath);
-                    StatusChanged?.Invoke(this, "开始下载：" + Path.GetFileName(args.ResultFilePath));
+                        e.ResultFilePath = decision.ResultFilePath;
+                    AttachDownload(request.Id, operation, e.ResultFilePath);
                 }
-            }
-            catch (Exception error) when (error is COMException or InvalidOperationException or ObjectDisposedException or ArgumentException)
-            {
-                args.Cancel = true;
-                StatusChanged?.Invoke(this, "下载初始化失败：" + error.Message);
-            }
-            finally { deferral.Complete(); }
-        });
+                catch
+                {
+                    e.Cancel = true;
+                    throw;
+                }
+            }, TimeSpan.FromMinutes(2));
+        try { DownloadRequested.Invoke(this, request); }
+        catch (Exception error)
+        { request.Resolve(BrowserDownloadDecision.Deny("下载请求失败：" + error.Message)); }
     }
 
     private void AttachDownload(string id, CoreWebView2DownloadOperation operation, string resultPath)
@@ -896,16 +948,19 @@ public sealed class BrowserViewHost : Control, IDisposable
                 ? null
                 : operation.InterruptReason.ToString()));
         void OnBytes(object? _, object __) => Raise();
+        void Detach()
+        {
+            operation.BytesReceivedChanged -= OnBytes;
+            operation.StateChanged -= OnState;
+            _downloadDetachers.Remove(id);
+            _downloads.Remove(id);
+        }
         void OnState(object? _, object __)
         {
             Raise();
-            if (operation.State is CoreWebView2DownloadState.Completed or CoreWebView2DownloadState.Interrupted)
-            {
-                operation.BytesReceivedChanged -= OnBytes;
-                operation.StateChanged -= OnState;
-                _downloads.Remove(id);
-            }
+            if (operation.State is CoreWebView2DownloadState.Completed or CoreWebView2DownloadState.Interrupted) Detach();
         }
+        _downloadDetachers[id] = Detach;
         operation.BytesReceivedChanged += OnBytes;
         operation.StateChanged += OnState;
         Raise();
@@ -921,39 +976,50 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     public void Navigate(string? address)
     {
+        if (_disposed) return;
+        _initializationFailed = false;
         if (_core is { } core && address is { Length: > 0 })
         {
-            using (SuppressExternalNavigation()) core.Navigate(address);
+            BeginExplicitNavigation(address);
+            core.Navigate(address);
         }
         else if (address is { Length: > 0 })
         {
             // 新的用户导航撤销此前的待发 Stop：旧请求保持取消，新请求照常加载。
             _pendingStop = false;
             _pendingNavigation = (false, address);
+            EnsureInitialized();
         }
     }
 
     public void NavigateToDocument(string? document)
     {
-        if (_core is { } core && document is not null) core.NavigateToString(document);
+        if (_disposed) return;
+        _initializationFailed = false;
+        if (_core is { } core && document is not null)
+        {
+            BeginExplicitNavigation("about:blank");
+            core.NavigateToString(document);
+        }
         else if (document is not null)
         {
             _pendingStop = false;
             _pendingNavigation = (true, document);
+            EnsureInitialized();
         }
     }
 
     public void GoBack()
     {
-        try { using (SuppressExternalNavigation()) _core?.GoBack(); } catch (Exception e) when (IsControllerGone(e)) { }
+        try { BeginExplicitNavigation(null); _core?.GoBack(); } catch (Exception e) when (IsControllerGone(e)) { }
     }
     public void GoForward()
     {
-        try { using (SuppressExternalNavigation()) _core?.GoForward(); } catch (Exception e) when (IsControllerGone(e)) { }
+        try { BeginExplicitNavigation(null); _core?.GoForward(); } catch (Exception e) when (IsControllerGone(e)) { }
     }
     public void Reload()
     {
-        try { using (SuppressExternalNavigation()) _core?.Reload(); } catch (Exception e) when (IsControllerGone(e)) { }
+        try { BeginExplicitNavigation(null); _core?.Reload(); } catch (Exception e) when (IsControllerGone(e)) { }
     }
     public void Stop()
     {
@@ -967,6 +1033,7 @@ public sealed class BrowserViewHost : Control, IDisposable
             StatusChanged?.Invoke(this, "已停止加载。");
             return;
         }
+        _stoppedNavigationId = _currentNavigationId;
         try { core.Stop(); } catch (Exception e) when (IsControllerGone(e)) { }
     }
 
@@ -1097,7 +1164,7 @@ public sealed class BrowserViewHost : Control, IDisposable
     private void UpdateVisibility()
     {
         if (_controller is null) return;
-        var visible = !_occluded && IsEffectivelyVisible && Bounds.Width > 0 && Bounds.Height > 0 && VisualRoot is not null;
+        var visible = !_occluded && !_contentHidden && IsEffectivelyVisible && Bounds.Width > 0 && Bounds.Height > 0 && VisualRoot is not null;
         try { _controller.IsVisible = visible; }
         catch (Exception error) when (IsControllerGone(error)) { }
         ApplyMemoryUsageTarget();
@@ -1110,10 +1177,11 @@ public sealed class BrowserViewHost : Control, IDisposable
     private void ApplyMemoryUsageTarget()
     {
         if (_core is null) return;
-        var low = Fufucode.App.Integration.MemoryProfile.ReduceBackgroundBrowserMemory
-            && (_occluded || !IsEffectivelyVisible);
         try
         {
+            var low = !_suspending && !_core.IsSuspended && (_memoryTargetLow ||
+                (Fufucode.App.Integration.MemoryProfile.ReduceBackgroundBrowserMemory &&
+                 (_occluded || !IsEffectivelyVisible)));
             _core.MemoryUsageTargetLevel = low
                 ? CoreWebView2MemoryUsageTargetLevel.Low
                 : CoreWebView2MemoryUsageTargetLevel.Normal;
@@ -1145,6 +1213,19 @@ public sealed class BrowserViewHost : Control, IDisposable
         _lifecycleToken++;   // 让任何在途初始化作废
         _pendingNavigation = null;
         _pendingStop = false;
+        _coreRequested = false;
+        _explicitNavigation = null;
+        _explicitNavigationId = null;
+        _currentNavigationId = 0;
+        _downloadNavigationId = _stoppedNavigationId = null;
+        foreach (var abort in new List<Action>(_pendingDecisions)) abort();
+        foreach (var operation in new List<CoreWebView2DownloadOperation>(_downloads.Values))
+        {
+            try { operation.Cancel(); } catch (Exception error) when (IsControllerGone(error)) { }
+        }
+        foreach (var detach in new List<Action>(_downloadDetachers.Values)) detach();
+        _downloadDetachers.Clear();
+        _downloads.Clear();
         foreach (var detach in _coreDetachers) { try { detach(); } catch (Exception e) when (IsControllerGone(e)) { } }
         _coreDetachers.Clear();
         _core = null;
@@ -1158,6 +1239,13 @@ public sealed class BrowserViewHost : Control, IDisposable
         _initializing = false;
         _loading = false;
         _intendedParentInParent = IntPtr.Zero;
+    }
+
+    internal void SetContentHidden(bool value)
+    {
+        if (_contentHidden == value) return;
+        _contentHidden = value;
+        UpdateVisibility();
     }
 
     public void SetOccluded(bool value)

@@ -42,6 +42,7 @@ internal static class NativeBrowserModuleSelfTest
         vm.Input.DraftText = "preserved native module draft";
         window.OpenDockPage("browser", DockZone.Right);
         var browser = (BrowserView)window.PageForTesting("browser");
+        browser.SuppressExternalOpenForTesting = true; // 只验证外开请求，不启动用户真实浏览器。
 
         // ---- 1. 单页签基础导航与历史（保留既有行为） ----
         browser.ViewModel.AddressText = file;
@@ -264,6 +265,7 @@ internal static class NativeBrowserModuleSelfTest
         browser.ViewModel.NewTabCommand.Execute(null);
         var downloadTab = browser.ViewModel.ActiveTab;
         var downloadHost = browser.HostForTabForTesting(downloadTab);
+        await downloadHost.EnsureCoreAsync();
         await Until(() => downloadHost.IsReady);
         var downloadDir = Path.Combine(root, "downloads");
         var settings = window.BrowserSettingsForTesting;
@@ -276,24 +278,18 @@ internal static class NativeBrowserModuleSelfTest
         Note("download settings: permission=" + settings.CurrentSettings.DefaultDownloadPermission +
              " dir=" + settings.CurrentSettings.DefaultDownloadDirectory +
              " view gate=" + browser.CurrentSettings.DefaultDownloadPermission);
-        var downloadsFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-        var beforeDownloads = Directory.Exists(downloadsFolder)
-            ? Directory.GetFiles(downloadsFolder).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         downloadHost.Navigate(loopback.Url + "blocked-download.bin");
         var downloaded = await WaitSoftAsync(
             () => Directory.Exists(downloadDir) && Directory.GetFiles(downloadDir).Length > 0,
             TimeSpan.FromSeconds(15));
-        var afterDownloads = Directory.Exists(downloadsFolder)
-            ? Directory.GetFiles(downloadsFolder).ToHashSet(StringComparer.OrdinalIgnoreCase)
-            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         Check(downloaded, "Download writes a real file into the configured download directory");
-        Check(afterDownloads.SetEquals(beforeDownloads),
-            "Configured download directory is used instead of the system Downloads folder");
+        Check(browser.ViewModel.Downloads.Any(item => item.ResultFilePath.StartsWith(Path.GetFullPath(downloadDir) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)),
+            "Download operation reports the configured isolated directory");
         var completed = await WaitSoftAsync(
             () => browser.ViewModel.Downloads.Any(item => item.IsCompleted),
             TimeSpan.FromSeconds(8));
         Check(completed, "Download list observes the real Completed state");
+        Check(!downloadTab.HasPageError, "Successful attachment download does not show a navigation failure");
         Note("download files=" + (Directory.Exists(downloadDir) ? string.Join(",", Directory.GetFiles(downloadDir)) : "(none)") +
              " messages=" + string.Join(" | ", downloadMessages));
         var historyFile = Path.Combine(root, "browser-downloads.json");
@@ -338,7 +334,9 @@ internal static class NativeBrowserModuleSelfTest
         await browser.ActivateTabForTestingAsync(tabA);
 
         browser.MemoryGovernorForTesting.HotLimit = 1;
+        browser.ViewModel.SelectTab(tabB);
         await browser.ActivateTabForTestingAsync(tabB);
+        browser.ViewModel.SelectTab(tabA);
         await browser.ActivateTabForTestingAsync(tabA);
         Check(browser.ViewModel.Tabs.Count(tab => !tab.IsDiscarded) <= 1,
             "热池上限 1 时其它页签按 LRU 休眠");
@@ -388,9 +386,28 @@ internal static class NativeBrowserModuleSelfTest
             "Core draft and all module entry points remain consistent");
         window.BrowserModuleForTesting.IsEnabled = true;
         var restored = (BrowserView)window.PageForTesting("browser");
-        await Until(() => restored.HostForTesting.IsReady && restored.ViewModel.DocumentTitle == "NATIVE_MODULE_OK");
+        try { await Until(() => restored.HostForTesting.IsReady && restored.ViewModel.DocumentTitle == "NATIVE_MODULE_OK"); }
+        catch (TimeoutException)
+        {
+            Note($"reactivation: visible={restored.IsEffectivelyVisible} bounds={restored.Bounds} attached={TopLevel.GetTopLevel(restored) is not null} " +
+                 $"ready={restored.HostForTesting.IsReady} initializing={restored.HostForTesting.IsInitializingForTesting} " +
+                 $"title={restored.ViewModel.DocumentTitle} url={restored.ViewModel.ActiveTab.NavigationAddress} " +
+                 $"loading={restored.ViewModel.IsLoading} restoring={restored.ViewModel.IsRestoring} error={restored.ViewModel.PageError}");
+            throw;
+        }
         Check(!ReferenceEquals(restored, browser) && window.DockLayoutForTesting.Find("browser") == DockZone.Bottom,
             "Reactivation creates a fresh native host and restores document and zone");
+
+        var marketplaceBrowser = vm.Settings.MarketplacePlugins.Single(item => item.Id == "workspace.browser");
+        vm.Settings.TogglePluginEnabled(marketplaceBrowser);
+        await Task.Delay(150);
+        Check(!marketplaceBrowser.IsEnabled && restored.HostForTesting.IsDisposedForTesting,
+            "Marketplace disable shares the live page manager and releases the browser");
+        vm.Settings.TogglePluginEnabled(marketplaceBrowser);
+        await Task.Delay(150);
+        Check(marketplaceBrowser.IsEnabled && window.PageForTesting("browser") is BrowserView &&
+              !marketplaceBrowser.StatusMessage.Contains("失败"),
+            "Marketplace re-enable uses the host browser factory without a second plugin owner");
 
         // ---- 10. 初始化期间停用不能复活 ----
         window.BrowserModuleForTesting.IsEnabled = false;
@@ -441,7 +458,7 @@ internal static class NativeBrowserModuleSelfTest
     }
 
     /// <summary>极小本机 loopback HTTP 站点：只监听 127.0.0.1，不联网、不需要 URL ACL。</summary>
-    private sealed class LoopbackSite : IDisposable
+    internal sealed class LoopbackSite : IDisposable
     {
         private readonly TcpListener _listener;
         private readonly CancellationTokenSource _cts = new();

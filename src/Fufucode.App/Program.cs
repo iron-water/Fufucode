@@ -77,7 +77,7 @@ internal static class Program
         StartupActivationPayload = startupOptions.ActivationPayload;
         // 自测/无头预览有自己的隔离数据根，且会在启动后重建；不把测试启动污染进用户性能目录。
         var isolatedRun = args.Contains("--selftest") || args.Contains("--headless-ui") ||
-                          args.Contains("--native-module-selftest") || args.Contains("--native-security-selftest") ||
+                          args.Contains("--native-module-selftest") || args.Contains("--browser-sidebar-selftest") || args.Contains("--browser-memory-probe") || args.Contains("--native-security-selftest") ||
                           args.Contains("--native-motion-selftest") || args.Contains("--native-graph-selftest") || args.Contains("--parallel-review");
 
         // 单实例：同一登录会话只允许一个 Fufucode。第二个实例先唤醒已有窗口（可能在托盘），
@@ -235,10 +235,14 @@ internal static class Program
                 .StartWithClassicDesktopLifetime(Array.Empty<string>());
             Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
         }
-        if (args.Contains("--native-module-selftest"))
+        if (args.Contains("--native-module-selftest") || args.Contains("--browser-sidebar-selftest"))
         {
             SelfTestMode = NativeModuleSelfTest = true;
             SelfTestDataRoot = System.IO.Path.GetFullPath("tmp/native-modules-" + Guid.NewGuid().ToString("N"));
+            System.IO.Directory.CreateDirectory(SelfTestDataRoot);
+            using var nativeLog = new System.IO.StreamWriter(System.IO.Path.Combine(SelfTestDataRoot, "native-selftest.log")) { AutoFlush = true };
+            Console.SetOut(nativeLog);
+            Console.SetError(nativeLog);
             var completion = new TaskCompletionSource<int>();
             Dispatcher.UIThread.Post(async () =>
             {
@@ -246,7 +250,12 @@ internal static class Program
                 lifetime.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 var window = (MainWindow)lifetime.MainWindow!;
                 var code = 1;
-                try { code = await SelfTest.NativeBrowserModuleSelfTest.RunAsync(window); }
+                try
+                {
+                    code = args.Contains("--browser-sidebar-selftest")
+                        ? await SelfTest.NativeBrowserSidebarSelfTest.RunAsync(window)
+                        : await SelfTest.NativeBrowserModuleSelfTest.RunAsync(window);
+                }
                 catch (Exception error) { Console.WriteLine("Native module test failed: " + error); }
                 finally
                 {
@@ -257,8 +266,12 @@ internal static class Program
                 }
             }, DispatcherPriority.Background);
             Startup?.Mark("avalonia.native-selftest", "native module selftest");
-            BuildAvaloniaApp(AppOptions.Mock with { AppDataRootOverride = SelfTestDataRoot })
-                .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            try
+            {
+                BuildAvaloniaApp(AppOptions.Mock with { AppDataRootOverride = SelfTestDataRoot })
+                    .StartWithClassicDesktopLifetime(Array.Empty<string>());
+            }
+            catch (Exception error) { Console.Error.WriteLine("Native startup failed: " + error); }
             Environment.Exit(completion.Task.IsCompleted ? completion.Task.Result : 1);
         }
         if (args.Length > 0 && args[0] == "--headless-ui")

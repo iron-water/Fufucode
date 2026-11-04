@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Controls;
 using Fufucode.App.Features.BrowserExperience;
@@ -23,60 +25,76 @@ public partial class MainWindow
     private BrowserDownloadHistory? _browserDownloads;
     private PluginToolRegistry? _browserToolRegistry;
     private PluginPackageManager? _pluginPackageManager;
+    private PluginStateStore? _browserPluginState;
     private WebView2BrowserUseBridge? _wiredBridge;
     private ExternalBrowserBridgeServer? _externalBrowserBridge;
-    private BrowserSettings _lastExternalBrowserSettings = BrowserSettings.Default;
-    private bool _startingExternalBrowser;
+    private readonly SemaphoreSlim _externalBrowserLifecycle = new(1, 1);
+    private readonly CancellationTokenSource _browserControlLifetime = new();
+    private bool _browserControlDisposed;
+    private BrowserSettings _lastBrowserSettings = BrowserSettings.Default;
     internal ExternalBrowserBridgeServer? ExternalBrowserBridgeForTesting => _externalBrowserBridge;
     internal BrowserSettingsViewModel BrowserSettingsForTesting => _browserSettings.ViewModel;
-
-    /// <summary>Browser Use 工具注册表（真实接线状态）；未创建时为 null。</summary>
     internal PluginToolRegistry? BrowserToolRegistryForTesting => _browserToolRegistry;
 
-    /// <summary>
-    /// BRW-1：组合根创建唯一的浏览器设置宿主，同时供【设置 → 浏览器】与内置浏览器读取；
-    /// 设置变化即时推给已打开的浏览器页（显示完整网址、Agent 控制门禁）。
-    /// </summary>
+    private bool IsBrowserUsePluginEnabled => !_browserControlDisposed &&
+        _browserPluginState?.GetState("agent.browser-use") is { IsInstalled: true, IsEnabled: true } &&
+        _pluginPackageManager?.GetActivePluginIds().Contains("agent.browser-use") == true;
+
     private void InitializeBrowserSettings()
     {
-        var root = Program.SelfTestMode
-            ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata")
-            : _options.CreateAppDataLayout().Root;
+        var root = _browserSettingsRoot();
         _browserSettings = new BrowserSettingsHost(root);
         EnsureBrowserStores();
         MigrateLegacyBrowserSettings();
-        EnsureExternalBrowserIdentity();
-        InitializeExternalBrowserBridge();
         _browserSettings.ViewModel.Changed += ApplyBrowserSettings;
         _settingsPage.AttachBrowserSettings(_browserSettings.ViewModel);
         WireBrowserUseRegistry(_browserSettings);
+        PluginStateNotifier.Changed += OnBrowserPluginStateChanged;
         ApplyBrowserSettings(_browserSettings.ViewModel.CurrentSettings);
     }
 
-    /// <summary>
-    /// 把浏览器视图的真实桥接进 Core 的插件工具注册表（BRW-1）：
-    /// 只有“插件已安装且已启用”时 <see cref="PluginToolRegistry"/> 才暴露工具；
-    /// 每次注册/重绑都使用当前活动浏览器视图的桥，切换页签后仍指向真实页面。
-    /// </summary>
     private void WireBrowserUseRegistry(BrowserSettingsHost host)
     {
         if (_browserSettings.Store is null) return;
         var layout = new AppDataLayout(_browserSettingsRoot());
-        var gateway = new PluginCapabilityGateway(new PluginStateStore(layout));
-        _browserToolRegistry = new PluginToolRegistry(gateway, new ProductionToolDispatcher(_host?.ProjectPath));
-        _pluginPackageManager = new PluginPackageManager(layout, _browserToolRegistry, serviceResolver: type =>
+        _browserPluginState = new PluginStateStore(layout);
+        _browserToolRegistry = new PluginToolRegistry(new PluginCapabilityGateway(_browserPluginState),
+            new ProductionToolDispatcher(_host?.ProjectPath));
+        // 桥本身不保留 BrowserView；每次工具调用重新寻找仍挂载的可见页面。
+        _wiredBridge = new WebView2BrowserUseBridge(ResolveBrowserControlView, () =>
         {
-            if (type == typeof(BrowserUseBridge)) return _wiredBridge;
-            if (type == typeof(ExternalBrowserBridge)) return _externalBrowserBridge;
-            return null;
-        });
+            var settings = _browserSettings.Store?.Current ?? BrowserSettings.Default;
+            return new BrowserSettingsGate(IsBrowserUsePluginEnabled && settings.BrowserUseEnabled, settings.EnableFullCdpAccess);
+        }) { ApprovalHandler = ApproveBrowserAgentActionAsync };
+        _pluginPackageManager = new PluginPackageManager(layout, _browserToolRegistry, _browserPluginState,
+            serviceResolver: type =>
+            {
+                if (!IsBrowserUsePluginEnabled) return null;
+                if (type == typeof(BrowserUseBridge)) return _wiredBridge;
+                if (type == typeof(ExternalBrowserBridge) && _browserSettings.Store?.Current.ExternalBrowserEnabled == true)
+                    return _externalBrowserBridge;
+                return null;
+            });
         _pluginPackageManager.InitializeInstalledPlugins(_host?.ProjectPath);
     }
 
-    /// <summary>
-    /// 浏览器页可能在设置宿主之前由工作区注册表惰性创建；存储必须可重复安全初始化，
-    /// 否则先创建的页会拿到 null 下载历史，表现为“下载完成但不落历史”。
-    /// </summary>
+    private BrowserView? ResolveBrowserControlView()
+    {
+        if (_browserControlDisposed) return null;
+        var views = BrowserViews().ToList();
+        return views.FirstOrDefault(view => view.IsEffectivelyVisible) ?? views.FirstOrDefault();
+    }
+
+    private void OnBrowserPluginStateChanged()
+    {
+        if (_browserControlDisposed) return;
+        // PackageManager 也会刷新同一 state store；这里主动读取确保订阅顺序不影响门禁。
+        _browserPluginState?.Reload();
+        void Apply() { if (!_browserControlDisposed) ApplyBrowserSettings(_browserSettings.ViewModel.CurrentSettings); }
+        if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) Apply();
+        else Avalonia.Threading.Dispatcher.UIThread.Post(Apply);
+    }
+
     private void EnsureBrowserStores()
     {
         var root = _browserSettingsRoot();
@@ -90,133 +108,140 @@ public partial class MainWindow
         }
     }
 
-    private string _browserSettingsRoot() =>
-        Program.SelfTestMode
-            ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata")
-            : _options.CreateAppDataLayout().Root;
+    private string _browserSettingsRoot() => Program.SelfTestMode
+        ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata")
+        : _options.CreateAppDataLayout().Root;
 
-    /// <summary>把设置推给现有浏览器视图；尚未创建的视图在创建时自行读取当前值。</summary>
     private void ApplyBrowserSettings(BrowserSettings settings)
     {
-        if (_closed) return;
+        if (_closed || _browserControlDisposed) return;
         _lastBrowserSettings = settings.Normalize();
-        foreach (var view in BrowserViews())
-        {
-            view.ViewModel.ApplyShowFullUrl(settings.ShowFullUrl);
-            view.ApplyAgentControl(settings, _browserSettings.Store, _browserSettings.ViewModel);
-            view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
-            AttachBridge(view);
-        }
-        ApplyExternalBrowserSettings(settings);
+        foreach (var view in BrowserViews()) ApplyLatestBrowserSettings(view);
+        _ = ApplyExternalBrowserSettingsAsync();
     }
 
-    /// <summary>外部浏览器桥的身份（PIN/令牌）必须落盘，否则重启后扩展需要重新配对。</summary>
-    private void EnsureExternalBrowserIdentity()
+    private void ApplyLatestBrowserSettings(BrowserView view)
     {
-        if (_browserSettings.Store is not { } store) return;
-        var current = store.Current;
-        var pin = current.ExternalBrowserPin;
-        if (pin.Length != 4)
-            pin = Random.Shared.Next(0, 10000).ToString("D4");
-        var token = current.ExternalBrowserToken;
-        if (string.IsNullOrWhiteSpace(token))
-            token = Guid.NewGuid().ToString("N");
-        if (pin != current.ExternalBrowserPin || token != current.ExternalBrowserToken)
-            store.Save(current with { ExternalBrowserPin = pin, ExternalBrowserToken = token });
+        var enabled = IsBrowserUsePluginEnabled;
+        var settings = enabled ? _lastBrowserSettings : _lastBrowserSettings with { BrowserUseEnabled = false };
+        view.ViewModel.ApplyShowFullUrl(settings.ShowFullUrl);
+        view.ApplyAgentControl(settings, _browserSettings?.Store, _browserSettings?.ViewModel);
+        view.SetAgentApprovalHandler(enabled ? ApproveBrowserAgentActionAsync : null);
     }
 
-    private void InitializeExternalBrowserBridge()
+    /// <summary>串行收敛最新设置；停用/卸载/关闭后，即使此前启动仍在 await 也会停止监听。</summary>
+    private async Task ApplyExternalBrowserSettingsAsync()
     {
-        if (_browserSettings.Store is not { } store) return;
-        var current = store.Current;
-        _externalBrowserBridge = new ExternalBrowserBridgeServer(
-            () => _browserSettings.Store?.Current ?? BrowserSettings.Default,
-            current.ExternalBrowserToken,
-            current.ExternalBrowserPin);
-        _externalBrowserBridge.PageReferenceHandler = AcceptExternalBrowserReferenceAsync;
-        _externalBrowserBridge.ApprovalHandler = ApproveBrowserAgentActionAsync;
-        _externalBrowserBridge.StatusChanged += UpdateExternalBrowserStatus;
-        _lastExternalBrowserSettings = current;
-        UpdateExternalBrowserStatus();
-        if (current.ExternalBrowserEnabled) _ = StartExternalBrowserAsync(current);
-    }
-
-    private async Task StartExternalBrowserAsync(BrowserSettings settings)
-    {
-        if (_externalBrowserBridge is null || _startingExternalBrowser) return;
-        _startingExternalBrowser = true;
+        await _externalBrowserLifecycle.WaitAsync();
         try
         {
-            await _externalBrowserBridge.StartAsync(settings.ExternalBrowserPort, settings.ExternalBrowserPin);
-            var extension = ExternalBrowserExtensionInstaller.Ensure(
-                _browserSettingsRoot(), _externalBrowserBridge.Port, settings.ExternalBrowserPin);
-            var bridgeStatus = _externalBrowserBridge.Status;
-            _browserSettings.ViewModel.ReportExternalBrowser(
-                bridgeStatus.Running
-                    ? $"运行中 · 端口 {bridgeStatus.Port} · " + (bridgeStatus.HandshakeComplete ? "扩展已就绪" : bridgeStatus.Connected ? "扩展已连接，等待握手" : "等待扩展连接")
-                    : "启动失败",
-                bridgeStatus.Port,
-                bridgeStatus.Connected,
-                extension,
-                bridgeStatus);
+            var settings = _browserSettings.Store?.Current ?? BrowserSettings.Default;
+            if (!IsBrowserUsePluginEnabled || !settings.ExternalBrowserEnabled)
+            {
+                if (_externalBrowserBridge is not null) await _externalBrowserBridge.StopAsync();
+                UpdateExternalBrowserStatus();
+                return;
+            }
+            EnsureExternalBrowserIdentity();
+            settings = _browserSettings.Store?.Current ?? settings;
+            if (_externalBrowserBridge is null || _externalBrowserBridge.Token != settings.ExternalBrowserToken)
+            {
+                if (_externalBrowserBridge is not null)
+                {
+                    _externalBrowserBridge.StatusChanged -= UpdateExternalBrowserStatus;
+                    await _externalBrowserBridge.DisposeAsync();
+                }
+                _externalBrowserBridge = new ExternalBrowserBridgeServer(
+                    () => IsBrowserUsePluginEnabled ? _browserSettings.Store?.Current ?? BrowserSettings.Default
+                        : BrowserSettings.Default, settings.ExternalBrowserToken, settings.ExternalBrowserPin)
+                {
+                    PageReferenceHandler = AcceptExternalBrowserReferenceAsync,
+                    ApprovalHandler = ApproveBrowserAgentActionAsync,
+                };
+                _externalBrowserBridge.StatusChanged += UpdateExternalBrowserStatus;
+            }
+            var bridge = _externalBrowserBridge;
+            // 实际端口可能因占用而不同；记住请求配置避免每次普通设置变化都重启。
+            if (!bridge.Running || _externalBrowserRequestedPort != settings.ExternalBrowserPort || bridge.Pin != settings.ExternalBrowserPin)
+            {
+                _externalBrowserRequestedPort = settings.ExternalBrowserPort;
+                await bridge.StartAsync(settings.ExternalBrowserPort, settings.ExternalBrowserPin);
+            }
+            if (_browserControlDisposed || !IsBrowserUsePluginEnabled || _browserSettings.Store?.Current.ExternalBrowserEnabled != true)
+                await bridge.StopAsync();
+            else if (bridge.Running)
+                _externalBrowserExtensionPath = ExternalBrowserExtensionInstaller.Ensure(
+                    _browserSettingsRoot(), bridge.Port, settings.ExternalBrowserPin);
+            UpdateExternalBrowserStatus();
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or System.Net.Sockets.SocketException)
         {
             _vm?.Timeline.AddNotification("外部浏览器桥启动失败：" + error.Message);
             _browserSettings.ViewModel.ReportExternalBrowser("启动失败：" + error.Message, 0, false, string.Empty);
         }
-        finally { _startingExternalBrowser = false; }
+        finally { _externalBrowserLifecycle.Release(); }
     }
 
-    private void ApplyExternalBrowserSettings(BrowserSettings settings)
+    private int _externalBrowserRequestedPort;
+    private string _externalBrowserExtensionPath = string.Empty;
+
+    private void EnsureExternalBrowserIdentity()
     {
-        if (_externalBrowserBridge is null) return;
-        var previous = _lastExternalBrowserSettings;
-        _lastExternalBrowserSettings = settings;
-        var changed = previous.ExternalBrowserEnabled != settings.ExternalBrowserEnabled ||
-                      previous.ExternalBrowserPort != settings.ExternalBrowserPort ||
-                      previous.ExternalBrowserPin != settings.ExternalBrowserPin;
-        if (changed)
-        {
-            if (settings.ExternalBrowserEnabled) _ = StartExternalBrowserAsync(settings);
-            else _ = _externalBrowserBridge.StopAsync();
-            return;
-        }
-        var extension = ExternalBrowserExtensionInstaller.Ensure(
-            _browserSettingsRoot(), _externalBrowserBridge.Port, settings.ExternalBrowserPin);
-        var bridgeStatus = _externalBrowserBridge.Status;
-        _browserSettings.ViewModel.ReportExternalBrowser(
-            bridgeStatus.Running
-                ? $"运行中 · 端口 {bridgeStatus.Port} · " + (bridgeStatus.HandshakeComplete ? "扩展已就绪" : bridgeStatus.Connected ? "扩展已连接，等待握手" : "等待扩展连接")
-                : "未启动",
-            bridgeStatus.Port,
-            bridgeStatus.Connected,
-            extension,
-            bridgeStatus);
+        if (_browserSettings.Store is not { } store) return;
+        var current = store.Current;
+        var pin = current.ExternalBrowserPin;
+        if (pin.Length != 4) pin = Random.Shared.Next(0, 10000).ToString("D4");
+        var token = current.ExternalBrowserToken;
+        if (string.IsNullOrWhiteSpace(token)) token = Guid.NewGuid().ToString("N");
+        if (pin != current.ExternalBrowserPin || token != current.ExternalBrowserToken)
+            store.Save(current with { ExternalBrowserPin = pin, ExternalBrowserToken = token });
     }
 
     private void UpdateExternalBrowserStatus()
     {
-        if (_externalBrowserBridge is null) return;
-        var bridge = _externalBrowserBridge;
         void Apply()
         {
-            var settings = _browserSettings.ViewModel.CurrentSettings;
-            var extension = ExternalBrowserExtensionInstaller.Ensure(
-                _browserSettingsRoot(), bridge.Port, settings.ExternalBrowserPin);
-            _browserSettings.ViewModel.ReportExternalBrowser(
-                bridge.Running
-                    ? $"运行中 · 端口 {bridge.Port} · " + (bridge.IsConnected ? "扩展已连接" : "等待扩展连接")
-                    : "未启动",
-                bridge.Port,
-                bridge.IsConnected,
-                extension);
+            if (_browserControlDisposed) return;
+            var bridge = _externalBrowserBridge;
+            var enabled = IsBrowserUsePluginEnabled && _browserSettings.Store?.Current.ExternalBrowserEnabled == true;
+            var running = enabled && bridge?.Running == true;
+            var status = running ? $"运行中 · 端口 {bridge!.Port} · " +
+                (bridge.Status.HandshakeComplete ? "扩展已就绪" : bridge.IsConnected ? "扩展已连接，等待握手" : "等待扩展连接")
+                : "未启动";
+            _browserSettings.ViewModel.ReportExternalBrowser(status, running ? bridge!.Port : 0,
+                running && bridge!.IsConnected, running ? _externalBrowserExtensionPath : string.Empty, running ? bridge!.Status : null);
         }
         if (Avalonia.Threading.Dispatcher.UIThread.CheckAccess()) Apply();
         else Avalonia.Threading.Dispatcher.UIThread.Post(Apply);
     }
 
-    /// <summary>外部浏览器扩展的“引用到对话”走与内置浏览器相同的草稿语义。</summary>
+    /// <summary>由 MainWindow 关闭入口 await；解除事件、停止监听并释放插件宿主。</summary>
+    internal async Task DisposeBrowserControlAsync()
+    {
+        if (_browserControlDisposed) return;
+        _browserControlDisposed = true;
+        _browserControlLifetime.Cancel();
+        PluginStateNotifier.Changed -= OnBrowserPluginStateChanged;
+        if (_browserSettings is not null) _browserSettings.ViewModel.Changed -= ApplyBrowserSettings;
+        _wiredBridge = null;
+        await _externalBrowserLifecycle.WaitAsync();
+        try
+        {
+            if (_externalBrowserBridge is not null)
+            {
+                _externalBrowserBridge.StatusChanged -= UpdateExternalBrowserStatus;
+                await _externalBrowserBridge.DisposeAsync();
+                _externalBrowserBridge = null;
+            }
+            if (_pluginPackageManager is not null)
+            {
+                await _pluginPackageManager.DisposeAsync();
+                _pluginPackageManager = null;
+            }
+        }
+        finally { _externalBrowserLifecycle.Release(); }
+    }
+
     private async Task<string> AcceptExternalBrowserReferenceAsync(ExternalBrowserPageReference reference)
     {
         var text = new System.Text.StringBuilder();
@@ -228,30 +253,24 @@ public partial class MainWindow
         var dispatcher = Avalonia.Threading.Dispatcher.UIThread;
         if (dispatcher.CheckAccess())
             return await AcceptBrowserReferenceAsync(new BrowserChatReference(text.ToString().TrimEnd(), null));
-        return await dispatcher.InvokeAsync(() =>
-            AcceptBrowserReferenceAsync(new BrowserChatReference(text.ToString().TrimEnd(), null)));
+        return await dispatcher.InvokeAsync(() => AcceptBrowserReferenceAsync(new BrowserChatReference(text.ToString().TrimEnd(), null)));
     }
 
-    private BrowserSettings _lastBrowserSettings = BrowserSettings.Default;
-
-    /// <summary>新创建的浏览器视图（如 XAML 预览页）在挂载时读取最近一次下发的设置。</summary>
-    private void ApplyLatestBrowserSettings(Views.BrowserView view)
+    private async Task<bool> ApproveBrowserAgentActionAsync(BrowserApprovalRequest request, CancellationToken cancellationToken)
     {
-        view.ViewModel.ApplyShowFullUrl(_lastBrowserSettings.ShowFullUrl);
-        view.ApplyAgentControl(_lastBrowserSettings, _browserSettings?.Store, _browserSettings?.ViewModel);
-        view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
-    }
-
-    /// <summary>
-    /// 智能体浏览器动作的人工审批：复用现有“扩展 UI 确认”卡片（非模态，关闭即拒绝）。
-    /// 审批必须在 UI 线程弹窗，判定结果原样返回给桥，不在 auto/full 模式放行。
-    /// </summary>
-    private Task<bool> ApproveBrowserAgentActionAsync(BrowserApprovalRequest request,
-        System.Threading.CancellationToken cancellationToken)
-    {
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _browserControlLifetime.Token);
+        lifetime.CancelAfter(WebView2BrowserUseBridge.ApprovalTimeout);
+        cancellationToken = lifetime.Token;
         var completion = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        ExtensionUiDialogWindow? window = null;
+        using var registration = cancellationToken.Register(() =>
+        {
+            completion.TrySetResult(false);
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => window?.Close());
+        });
         Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
+            if (_closed || _browserControlDisposed || cancellationToken.IsCancellationRequested) { completion.TrySetResult(false); return; }
             try
             {
                 var payload = System.Text.Json.JsonSerializer.SerializeToElement(new
@@ -261,14 +280,13 @@ public partial class MainWindow
                 });
                 var uiRequest = new Fufucode.Core.ExtensionUiRequest(Guid.NewGuid(), Guid.NewGuid().ToString("N"), "confirm",
                     payload, DateTimeOffset.UtcNow, WebView2BrowserUseBridge.ApprovalTimeout);
-                var window = new ExtensionUiDialogWindow(uiRequest,
-                    (_, response) =>
-                    {
-                        completion.TrySetResult(response.Confirmed == true);
-                        return Task.CompletedTask;
-                    });
+                window = new ExtensionUiDialogWindow(uiRequest, (_, response) =>
+                {
+                    completion.TrySetResult(!cancellationToken.IsCancellationRequested && response.Confirmed == true);
+                    return Task.CompletedTask;
+                });
                 window.Closed += (_, _) => completion.TrySetResult(false);
-                if (this.IsVisible) window.Show(this); else window.Show();
+                if (IsVisible) window.Show(this); else window.Show();
             }
             catch (Exception error)
             {
@@ -276,27 +294,18 @@ public partial class MainWindow
                 completion.TrySetResult(false);
             }
         });
-        cancellationToken.Register(() => completion.TrySetResult(false));
-        return completion.Task;
+        return await completion.Task.ConfigureAwait(false);
     }
 
-    /// <summary>浏览器引用/标注进入当前主聊天草稿（与资料库引用同一套不覆盖语义）。</summary>
-    private void OnChatReferenceRequested(Views.BrowserView view, Views.BrowserChatReference reference)
-        => _ = AcceptBrowserReferenceAsync(reference);
+    private void OnChatReferenceRequested(BrowserView view, BrowserChatReference reference) => _ = AcceptBrowserReferenceAsync(reference);
 
-    /// <summary>
-    /// 首次创建 browser-settings.json 时，把旧的 WorkbenchAppearance 浏览器偏好迁移过来，
-    /// 避免老用户设置丢失；迁移只在文件尚不存在时发生一次，之后以浏览器设置为唯一真源。
-    /// </summary>
     private void MigrateLegacyBrowserSettings()
     {
-        if (_browserSettings.Store is not { } store || store.Exists) return;
-        if (_customization is not { } customization) return;
+        if (_browserSettings.Store is not { } store || store.Exists || _customization is not { } customization) return;
         try
         {
             var legacy = BrowserSettings.FromLegacy(customization.Current);
-            // 保留主开关的旧值：WorkbenchAppearance 里没有 BrowserUseEnabled 时按默认 true。
-            store.Save(legacy with { BrowserUseEnabled = customization.Current.BrowserUseEnabled });
+            store.Save(legacy with { BrowserUseEnabled = false }); // 旧模型默认 true 不代表用户显式授权控制。
             _browserSettings.ViewModel.Attach(_browserSettingsRoot());
         }
         catch (Exception error)
@@ -305,37 +314,17 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>把该视图的桥接到插件处理器；桥只是入口，门禁仍在每次调用时校验。</summary>
-    private void AttachBridge(Views.BrowserView view)
+    private IEnumerable<BrowserView> BrowserViews()
     {
-        if (view.BridgeForTesting is not { } bridge) return;
-        view.BrowserAgentBridgeChanged -= OnBrowserBridgeChanged;
-        view.BrowserAgentBridgeChanged += OnBrowserBridgeChanged;
-        OnBrowserBridgeChanged(view, bridge);
-    }
-
-    private void OnBrowserBridgeChanged(object? sender, WebView2BrowserUseBridge bridge)
-    {
-        // 最后一次绑定的活动视图胜出：工具调用始终命中用户当前正在看的页面。
-        _wiredBridge = bridge;
-    }
-
-    private System.Collections.Generic.IEnumerable<Views.BrowserView> BrowserViews()
-    {
-        if (_workbenchPages.ContainsKey("browser") && _workbenchPages["browser"].Content is Views.BrowserView page)
-            yield return page;
-        if (WorkspacePanel is { } panel)
+        if (_workbenchPages.ContainsKey("browser") && _workbenchPages["browser"].Content is BrowserView page) yield return page;
+        if (WorkspacePanel is not { } panel) yield break;
+        BrowserView? preview = null;
+        try
         {
-            Views.BrowserView? preview = null;
-            try
-            {
-                // 无 NameScope 的控件上 FindControl 会抛异常（右栏可整体收起），按"不可用"处理。
-                if (Avalonia.Controls.NameScope.GetNameScope(panel) is not null)
-                    preview = panel.FindControl<Views.BrowserView>(Views.BrowserView.PreviewControlName);
-            }
-            catch (InvalidOperationException) { preview = null; }
-            if (preview is not null)
-                yield return preview;
+            if (Avalonia.Controls.NameScope.GetNameScope(panel) is not null)
+                preview = panel.FindControl<BrowserView>(BrowserView.PreviewControlName);
         }
+        catch (InvalidOperationException) { }
+        if (preview is not null) yield return preview;
     }
 }

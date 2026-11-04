@@ -58,6 +58,37 @@ public sealed partial class BrowserTab : ObservableObject
     [ObservableProperty] private string _addressText = string.Empty;
     [ObservableProperty] private string _documentTitle = string.Empty;
     [ObservableProperty] private bool _isLoading;
+    [ObservableProperty] private bool _isRestoring;
+    [ObservableProperty] private string _pageError = string.Empty;
+
+    public bool HasPageError => PageError.Length > 0;
+    public bool IsPageEmpty => string.IsNullOrWhiteSpace(NavigationAddress) && !IsFileMode && !IsLoading && !HasPageError;
+    public bool CanAnnotate => !IsPageEmpty && !IsLoading && !IsRestoring && !HasPageError;
+
+    partial void OnPageErrorChanged(string value) => NotifyPageState();
+    partial void OnIsRestoringChanged(bool value) => NotifyPageState();
+    private void NotifyPageState()
+    {
+        OnPropertyChanged(nameof(HasPageError));
+        OnPropertyChanged(nameof(IsPageEmpty));
+        OnPropertyChanged(nameof(CanAnnotate));
+    }
+
+    /// <summary>恢复仅填元数据；controller 与文件预览文档在选择该页后再创建。</summary>
+    internal void Restore(BrowserTabState state)
+    {
+        Mode = string.IsNullOrWhiteSpace(state.FilePath) ? BrowserSurfaceMode.Free : BrowserSurfaceMode.File;
+        CurrentFilePath = state.FilePath;
+        NavigationAddress = state.NavigationAddress;
+        DocumentTitle = state.Title ?? string.Empty;
+        ScrollX = state.ScrollX;
+        ScrollY = state.ScrollY;
+        ApplySecurityFromAddress(IsFileMode ? null : NavigationAddress);
+        SetAddressFromNavigation(NavigationAddress ?? string.Empty);
+        AddressText = state.AddressDraft ?? string.Empty;
+        ApplyLifecycle(BrowserTabLifecycle.Discarded);
+        NotifyPageState();
+    }
     [ObservableProperty] private double _progress;
     [ObservableProperty] private bool _canGoBack;
     [ObservableProperty] private bool _canGoForward;
@@ -162,6 +193,7 @@ public sealed partial class BrowserTab : ObservableObject
             StatusText = target.Note ?? "无法导航。";
             return;
         }
+        PageError = string.Empty;
         Mode = BrowserSurfaceMode.Free;
         CurrentFilePath = null;
         NavigationAddress = target.Address;
@@ -182,6 +214,7 @@ public sealed partial class BrowserTab : ObservableObject
             StatusText = target.Note ?? "无法预览该文件。";
             return;
         }
+        PageError = string.Empty;
         Mode = BrowserSurfaceMode.File;
         CurrentFilePath = target.FullPath;
         NavigationAddress = target.Address;
@@ -297,16 +330,26 @@ public sealed partial class BrowserTab : ObservableObject
 
     public bool HasFavicon => FaviconSource is not null;
     public bool ShowsAudio => IsPlayingAudio || IsMuted;
-    partial void OnFaviconSourceChanged(Bitmap? value) => OnPropertyChanged(nameof(HasFavicon));
+    partial void OnFaviconSourceChanged(Bitmap? oldValue, Bitmap? newValue)
+    {
+        if (!ReferenceEquals(oldValue, newValue)) oldValue?.Dispose();
+        OnPropertyChanged(nameof(HasFavicon));
+    }
     partial void OnIsPlayingAudioChanged(bool value) => OnPropertyChanged(nameof(ShowsAudio));
     partial void OnIsMutedChanged(bool value) => OnPropertyChanged(nameof(ShowsAudio));
 
     partial void OnCanGoBackChanged(bool value) => BackCommand.NotifyCanExecuteChanged();
     partial void OnCanGoForwardChanged(bool value) => ForwardCommand.NotifyCanExecuteChanged();
-    partial void OnIsLoadingChanged(bool value) { StopCommand.NotifyCanExecuteChanged(); OnPropertyChanged(nameof(CanStop)); }
-    partial void OnModeChanged(BrowserSurfaceMode value) { OnPropertyChanged(nameof(ModeText)); OnPropertyChanged(nameof(IsFileMode)); }
+    partial void OnIsLoadingChanged(bool value)
+    {
+        if (value) PageError = string.Empty;
+        StopCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanStop));
+        NotifyPageState();
+    }
+    partial void OnModeChanged(BrowserSurfaceMode value) { OnPropertyChanged(nameof(ModeText)); OnPropertyChanged(nameof(IsFileMode)); NotifyPageState(); }
     partial void OnDocumentTitleChanged(string value) => OnPropertyChanged(nameof(TabHeader));
-    partial void OnNavigationAddressChanged(string? value) => OnPropertyChanged(nameof(TabHeader));
+    partial void OnNavigationAddressChanged(string? value) { OnPropertyChanged(nameof(TabHeader)); NotifyPageState(); }
     partial void OnSecurityChanged(BrowserSecurityState value)
     {
         OnPropertyChanged(nameof(ShowSecurity));
@@ -320,7 +363,6 @@ public sealed partial class BrowserTab : ObservableObject
     /// <summary>关闭页签时释放 favicon 位图；页签对象随后由集合移除。</summary>
     public void DisposeFavicon()
     {
-        FaviconSource?.Dispose();
         FaviconSource = null;
         _faviconBytes = null;
     }

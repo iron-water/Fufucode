@@ -66,9 +66,10 @@ internal static class Program
             vm.CloseTabByIdCommand.Execute(fresh);
             Check(vm.Tabs.Count == 1 && !ReferenceEquals(vm.Tabs[0], fresh) && vm.Tabs[0].NavigationAddress is null,
                 "关闭最后一个页签留下一个清晰空页");
-            Check(!vm.CanCloseTab, "单页签时关闭动作不可用");
-            Check(BrowserSurfaceActions.GetDisabledReason(view, BrowserSurfaceActions.CloseTab) is not null,
-                "动作接缝报告关闭动作的禁用原因");
+            Check(vm.CanCloseTab, "最后一个页签也可关闭并替换为空页");
+            var lastId = vm.ActiveTab!.Id;
+            Check(BrowserSurfaceActions.TryExecute(view, BrowserSurfaceActions.CloseTab) && vm.Tabs.Count == 1 && vm.ActiveTab.Id != lastId,
+                "关闭按钮与快捷动作一致：最后一个页签替换为新空页");
 
             // ---- v2 捕获/恢复往返 ----
             var tab1 = vm.ActiveTab!;
@@ -177,8 +178,8 @@ internal static class Program
             Check(settingsVm.Categories.Any(c => c.Id == "browser" && c.Title == "浏览器" && c.Icon == "Globe"),
                 "系统设置中已注册专属【浏览器】分类");
             var appearance = new WorkbenchAppearance();
-            Check(appearance.BrowserUseEnabled && appearance.WebUrlOpenTarget == "builtin" && appearance.EnableFullCdpAccess,
-                "浏览器偏好具备标准默认值并支持持久化");
+            Check(!appearance.BrowserUseEnabled && appearance.WebUrlOpenTarget == "builtin" && !appearance.EnableFullCdpAccess,
+                "浏览器控制与完整 CDP 的外观偏好默认关闭");
 
             // ---- BRW-1：浏览器设置存储、安全态、白名单与 Browser Use 桥门禁 ----
             BrowserSettingsTests.Run(Check);
@@ -186,6 +187,7 @@ internal static class Program
             BrowserUsabilityTests.Run(Check);
             ExternalBrowserBridgeTests.Run(Check);
             BrowserMemoryGovernorTests.Run(Check);
+            BrowserControlRegressionTests.Run(Check);
 
             // ---- 320 DIP / 浅深主题入口可达（真实控件布局） ----
             UiSmoke.Run(Check);
@@ -220,6 +222,14 @@ internal static class Program
             Styles.Add(new StyleInclude(new Uri("avares://Fufucode.App/"))
             {
                 Source = new Uri("avares://Fufucode.App/Styles/WorkbenchStyles.axaml"),
+            });
+            Styles.Add(new StyleInclude(new Uri("avares://Fufucode.App/"))
+            {
+                Source = new Uri("avares://Fufucode.App/Styles/SearchInputStyles.axaml"),
+            });
+            Styles.Add(new StyleInclude(new Uri("avares://Fufucode.App/"))
+            {
+                Source = new Uri("avares://Fufucode.App/Styles/BrowserStyles.axaml"),
             });
         }
     }

@@ -19,7 +19,7 @@ internal static class ExternalBrowserBridgeTests
 {
     public static void Run(Action<bool, string> check)
     {
-        var settings = BrowserSettings.Default;
+        var settings = BrowserSettings.Default with { ExternalBrowserEnabled = true, DefaultBrowsePermission = "allow" };
         var server = new ExternalBrowserBridgeServer(() => settings, "test-token", "1234");
         ExternalBrowserPageReference? collected = null;
         server.PageReferenceHandler = reference => { collected = reference; return Task.FromResult("已插入草稿"); };
@@ -55,6 +55,16 @@ internal static class ExternalBrowserBridgeTests
             var unauthorized = Send(http, HttpMethod.Get, "/api/next", null, null);
             check(unauthorized.Status == HttpStatusCode.Unauthorized, "未授权请求不能取命令");
 
+            var privateStatus = GetJson(http, "/api/status", null);
+            check(privateStatus.GetProperty("activeUrl").ValueKind == JsonValueKind.Null &&
+                privateStatus.GetProperty("clientId").ValueKind == JsonValueKind.Null,
+                "未配对的状态查询不泄露当前地址和扩展身份");
+            using (var cancellation = new System.Threading.CancellationTokenSource())
+            {
+                var expired = server.ExecuteAsync("get_dom", "{}", cancellation.Token);
+                cancellation.Cancel();
+                try { expired.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
+            }
             var execution = server.ExecuteAsync("state", "{}");
             var command = GetJson(http, "/api/next", "test-token");
             check(command.GetProperty("action").GetString() == "state", "长轮询下发真实 action");
@@ -74,7 +84,7 @@ internal static class ExternalBrowserBridgeTests
                   collected.Title == "T" && collected.Selector == "#main",
                 "页面引用交给聊天接线并返回成功");
 
-            settings = BrowserSettings.Default with { DefaultBrowsePermission = "block" };
+            settings = settings with { DefaultBrowsePermission = "block" };
             var blocked = server.ExecuteAsync("navigate", "{\"url\":\"https://blocked.example/\"}").GetAwaiter().GetResult();
             using var blockedDoc = JsonDocument.Parse(blocked);
             check(blockedDoc.RootElement.TryGetProperty("error", out var blockedError) &&

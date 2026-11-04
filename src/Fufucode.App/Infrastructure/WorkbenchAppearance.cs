@@ -68,7 +68,7 @@ public sealed record WorkbenchAppearance
     /// <summary>会话自动取名方式：subagent（子代理）/ mechanical（截取首条 prompt）。</summary>
     public string SessionNaming { get; init; } = "subagent";
     // ---- 浏览器 (Browser Use / CDP) 偏好设置 ----
-    public bool BrowserUseEnabled { get; init; } = true;
+    public bool BrowserUseEnabled { get; init; }
     public string WebUrlOpenTarget { get; init; } = "builtin";
     public string LocalUrlOpenTarget { get; init; } = "builtin";
     public bool ShowFullUrl { get; init; } = true;
@@ -78,7 +78,7 @@ public sealed record WorkbenchAppearance
     public bool EnableSiteTools { get; init; } = true;
     public string DefaultBrowsePermission { get; init; } = "approval";
     public string DefaultDownloadPermission { get; init; } = "approval";
-    public bool EnableFullCdpAccess { get; init; } = true;
+    public bool EnableFullCdpAccess { get; init; }
     public Dictionary<string, UiActionPlacement> Actions { get; init; } = new(StringComparer.Ordinal);
     public WorkbenchLayoutState? Layout { get; init; }
 

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -26,7 +26,7 @@ namespace Fufucode.App.Views;
 public sealed record BrowserChatReference(string Text, string? ImagePath);
 
 /// <summary>标注说明 + 可选的实时样式调整（CSS）。</summary>
-public sealed record BrowserAnnotationEdit(string Comment, string Css);
+public sealed record BrowserAnnotationEdit(string Comment, string Css, bool IncludeScreenshot = false);
 
 /// <summary>
 /// 右栏 Preview / 工作区浏览器页：页签栏 + 导航 + 地址 + 查找 + 缩放 + WebView2 宿主。
@@ -57,6 +57,10 @@ public partial class BrowserView : UserControl, IDisposable
     private bool _lifecycleBusy;
     private bool _forceBackgroundForTesting;
     private string? _userDataFolder;
+    private int _activationGeneration;
+    private int _annotationGeneration;
+    private bool _restoringTabs;
+    private DispatcherTimer? _feedbackTimer;
 
     /// <summary>BRW-1：Agent 控制与 CDP 门禁快照；设置变化时由组合根更新。</summary>
     private BrowserSettingsGate _agentGate = BrowserSettingsGate.Disabled;
@@ -73,6 +77,7 @@ public partial class BrowserView : UserControl, IDisposable
     {
         _downloadHistory = downloads;
         _viewModel = new BrowserViewModel(bookmarks, history);
+        if (downloads is not null) _viewModel.RestoreDownloads(downloads.Entries);
         DataContext = _viewModel;
         InitializeComponent();
         var tabScroll = this.FindControl<ScrollViewer>("BrowserTabScroller")!;
@@ -87,8 +92,19 @@ public partial class BrowserView : UserControl, IDisposable
         _hostLayer = this.FindControl<Grid>("HostLayer")
                      ?? throw new InvalidOperationException("BrowserView 缺少 WebView2 宿主层（x:Name=HostLayer）。");
         if (this.FindControl<TextBox>("AddressBox") is { } addressBox) addressBox.TextChanged += Address_TextChanged;
-        SizeChanged += (_, _) => _viewModel.IsCompact = Bounds.Width < 380;
-        _viewModel.IsCompact = Bounds.Width > 0 && Bounds.Width < 380;
+        SizeChanged += (_, _) => UpdateBrowserLayout();
+        EffectiveViewportChanged += OnBrowserEffectiveViewportChanged;
+        UpdateBrowserLayout();
+        Fufucode.App.Integration.MemoryProfile.VisualEffectsChanged += UpdateBrowserMotion;
+        PropertyChanged += (_, args) =>
+        {
+            if (args.Property == IsVisibleProperty) { UpdateBackgroundState(); UpdateHostVisibility(); }
+        };
+        AddHandler(KeyDownEvent, Browser_KeyDown, RoutingStrategies.Tunnel);
+        WireBrowserPopup("HistoryPopup", "HistorySurface", "HistorySearch");
+        WireBrowserPopup("DownloadsPopup", "DownloadsSurface", null);
+        WireBrowserIme("AddressBox", _addressIme);
+        WireBrowserIme("FindBox", _findIme);
 
         _viewModel.TabNavigationRequested += OnNavigationRequested;
         _viewModel.TabActionRequested += OnActionRequested;
@@ -116,10 +132,13 @@ public partial class BrowserView : UserControl, IDisposable
             _lifecycleTimer.Tick += (_, _) => _ = RunLifecycleAsync();
             _lifecycleTimer.Start();
         }
+        if (_lifecycleWindow is not null) _lifecycleWindow.PropertyChanged -= OnLifecycleWindowPropertyChanged;
         _lifecycleWindow = TopLevel.GetTopLevel(this) as Window;
         if (_lifecycleWindow is not null)
             _lifecycleWindow.PropertyChanged += OnLifecycleWindowPropertyChanged;
         UpdateBackgroundState();
+        UpdateHostVisibility();
+        if (!IsBrowserBackground) _ = ActivateTabAsync(_viewModel.ActiveTab);
     }
 
     private void DetachLifecycle(bool stopTimer = true)
@@ -136,19 +155,30 @@ public partial class BrowserView : UserControl, IDisposable
         if (!stopTimer) _backgroundSince ??= DateTimeOffset.UtcNow;
     }
 
+    private void OnBrowserEffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
+    {
+        if (_disposed) return;
+        UpdateBackgroundState();
+        UpdateHostVisibility();
+    }
+
     private void OnLifecycleWindowPropertyChanged(object? sender, AvaloniaPropertyChangedEventArgs e)
     {
         if (e.Property == Window.WindowStateProperty || e.Property == Visual.IsVisibleProperty)
             UpdateBackgroundState();
     }
 
+    private bool IsBrowserBackground => _forceBackgroundForTesting || _lifecycleWindow is null ||
+        !IsEffectivelyVisible || !_lifecycleWindow.IsVisible || _lifecycleWindow.WindowState == WindowState.Minimized;
+
     private void UpdateBackgroundState()
     {
-        var background = _lifecycleWindow is null || !_lifecycleWindow.IsVisible ||
-                         _lifecycleWindow.WindowState == WindowState.Minimized;
+        var background = IsBrowserBackground;
         if (background)
         {
+            _activationGeneration++;
             _backgroundSince ??= DateTimeOffset.UtcNow;
+            foreach (var host in _hosts.Values) host.SetOccluded(true);
         }
         else if (_backgroundSince is not null)
         {
@@ -163,60 +193,82 @@ public partial class BrowserView : UserControl, IDisposable
     private async Task RestoreActiveAfterBackgroundAsync()
     {
         var active = _viewModel.ActiveTab;
-        if (active is null || !active.IsDiscarded) return;
+        if (_disposed) return;
         await ActivateTabAsync(active);
     }
 
     /// <summary>选中页签：只有当前页签允许创建 controller；被丢弃的页签按需重建并恢复滚动位置。</summary>
     private async Task ActivateTabAsync(BrowserTab tab)
     {
-        if (_disposed || !_viewModel.Tabs.Contains(tab)) return;
+        if (_disposed || _restoringTabs || !ReferenceEquals(tab, _viewModel.ActiveTab) || !_viewModel.Tabs.Contains(tab)) return;
+        var generation = ++_activationGeneration;
         tab.Touch();
         var host = HostFor(tab);
         UpdateHostVisibility();
-        if (!host.HasController)
+        if (IsBrowserBackground) return;
+        host.SetActive();
+        if (!host.HasController && string.IsNullOrWhiteSpace(tab.NavigationAddress) && !tab.IsFileMode) return;
+        bool Current() => !_disposed && generation == _activationGeneration &&
+            ReferenceEquals(tab, _viewModel.ActiveTab) && _viewModel.Tabs.Contains(tab) && !IsBrowserBackground;
+        try
         {
-            if (!string.IsNullOrWhiteSpace(tab.NavigationAddress)) host.Navigate(tab.NavigationAddress);
-            try
+            if (!host.HasController)
             {
-                var core = await host.EnsureCoreAsync().WaitAsync(TimeSpan.FromSeconds(15));
-                if (_disposed) return;
-                if (core is not null && tab.IsLoading) await WaitForNavigationAsync(host);
-                if (core is not null && (Math.Abs(tab.ScrollX) > 0.5 || Math.Abs(tab.ScrollY) > 0.5))
-                    await host.RestoreScrollAsync(tab.ScrollX, tab.ScrollY);
+                tab.IsRestoring = true;
+                tab.IsLoading = true;
+                UpdateHostVisibility();
+                var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                void OnCompleted(object? sender, BrowserHostNavigationCompleted state) => completed.TrySetResult();
+                host.NavigationCompleted += OnCompleted;
+                try
+                {
+                    PrepareTabNavigation(tab, host);
+                    if (tab.HasPageError) return;
+                    var core = await host.EnsureCoreAsync().WaitAsync(TimeSpan.FromSeconds(15));
+                    if (!Current() || core is null) return;
+                    await completed.Task.WaitAsync(TimeSpan.FromSeconds(15));
+                    if (!Current()) return;
+                    if (!tab.HasPageError && (Math.Abs(tab.ScrollX) > 0.5 || Math.Abs(tab.ScrollY) > 0.5))
+                        await host.RestoreScrollAsync(tab.ScrollX, tab.ScrollY);
+                    if (!Current()) return;
+                }
+                finally { host.NavigationCompleted -= OnCompleted; }
             }
-            catch (TimeoutException)
+            if (!Current()) return;
+            tab.ApplyLifecycle(BrowserTabLifecycle.Active);
+            UpdateHostVisibility();
+            await EnforceHotPoolAsync(tab);
+        }
+        catch (TimeoutException)
+        {
+            if (Current())
             {
-                _viewModel.ReportStatusTo(tab, "页面恢复超时，保留休眠状态。");
+                host.DiscardController();
+                tab.PageError = "页面恢复超时";
+                tab.IsLoading = false;
                 tab.ApplyLifecycle(BrowserTabLifecycle.Discarded);
-                return;
             }
         }
-        else host.SetActive();
-        tab.ApplyLifecycle(BrowserTabLifecycle.Active);
-
-        foreach (var other in _viewModel.Tabs)
+        finally
         {
-            if (ReferenceEquals(other, tab)) continue;
-            if (_hosts.TryGetValue(other.Id, out var otherHost) && otherHost.HasController)
+            if (generation == _activationGeneration)
             {
-                otherHost.SetWarm();
-                other.ApplyLifecycle(BrowserTabLifecycle.Warm);
+                tab.IsRestoring = false;
+                UpdateHostVisibility();
             }
         }
-        await EnforceHotPoolAsync(tab);
     }
 
-    private static async Task WaitForNavigationAsync(BrowserViewHost host)
+    private static void PrepareTabNavigation(BrowserTab tab, BrowserViewHost host)
     {
-        var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnCompleted(object? sender, BrowserHostNavigationCompleted state)
+        if (tab.IsFileMode)
         {
-            if (state.IsSuccess) completion.TrySetResult();
+            var preview = BrowserFilePreview.Inspect(tab.CurrentFilePath);
+            if (preview.Document is not null) host.NavigateToDocument(preview.Document);
+            else if (preview.Address is not null) host.Navigate(preview.Address);
+            else { tab.PageError = preview.Note ?? "文件已不可用"; tab.IsLoading = false; }
         }
-        host.NavigationCompleted += OnCompleted;
-        try { await Task.WhenAny(completion.Task, Task.Delay(8000)); }
-        finally { host.NavigationCompleted -= OnCompleted; }
+        else if (!string.IsNullOrWhiteSpace(tab.NavigationAddress)) host.Navigate(tab.NavigationAddress);
     }
 
     private async Task EnforceHotPoolAsync(BrowserTab active)
@@ -233,26 +285,36 @@ public partial class BrowserView : UserControl, IDisposable
             if (over <= 0) break;
             if (ReferenceEquals(item.Tab, active)) continue;
             await DiscardTabAsync(item.Tab!);
-            over--;
+            if (!item.Host.HasController) over--;
         }
     }
 
     private async Task DiscardTabAsync(BrowserTab tab)
     {
         if (!_hosts.TryGetValue(tab.Id, out var host)) { tab.ApplyLifecycle(BrowserTabLifecycle.Discarded); return; }
+        if (tab.IsPlayingAudio || host.HasActiveDownloads) return;
+        var accessed = tab.LastAccessUtc;
+        var generation = _activationGeneration;
         if (host.HasController)
         {
-            var scroll = await host.CaptureScrollAsync();
+            (double X, double Y)? scroll = null;
+            try { scroll = await host.CaptureScrollAsync().WaitAsync(TimeSpan.FromSeconds(2)); }
+            catch (TimeoutException) { return; }
+            if (_disposed || !_viewModel.Tabs.Contains(tab) || accessed != tab.LastAccessUtc || generation != _activationGeneration) return;
             if (scroll is { } position) { tab.ScrollX = position.X; tab.ScrollY = position.Y; }
             host.DiscardController();
         }
+        tab.IsLoading = false;
+        tab.IsRestoring = false;
         tab.ApplyLifecycle(BrowserTabLifecycle.Discarded);
     }
 
     private async Task SuspendTabAsync(BrowserTab tab)
     {
-        if (!_hosts.TryGetValue(tab.Id, out var host)) return;
+        if (!_hosts.TryGetValue(tab.Id, out var host) || tab.IsPlayingAudio || host.HasActiveDownloads) return;
+        var generation = _activationGeneration;
         var suspended = await host.TrySuspendAsync();
+        if (_disposed || generation != _activationGeneration || !_viewModel.Tabs.Contains(tab)) return;
         tab.ApplyLifecycle(suspended ? BrowserTabLifecycle.Suspended : BrowserTabLifecycle.Warm);
     }
 
@@ -261,12 +323,11 @@ public partial class BrowserView : UserControl, IDisposable
     {
         if (_disposed || _lifecycleBusy) return;
         _lifecycleBusy = true;
+        UpdateBrowserMotion();
         try
         {
             var now = DateTimeOffset.UtcNow;
-            var background = _forceBackgroundForTesting ||
-                             (_lifecycleWindow is not null &&
-                              (!_lifecycleWindow.IsVisible || _lifecycleWindow.WindowState == WindowState.Minimized));
+            var background = IsBrowserBackground;
             if (background) _backgroundSince ??= now; else _backgroundSince = null;
 
             var tabs = _viewModel.Tabs
@@ -288,21 +349,26 @@ public partial class BrowserView : UserControl, IDisposable
             }
             if (_disposed) return;
 
+            MemorySnapshotForTesting = snapshot;
+            var generation = _activationGeneration;
             var decision = _memoryGovernor.Evaluate(tabs, snapshot.TotalPrivateBytes, now, background, _backgroundSince);
+            LastDecisionForTesting = decision;
             if (decision.IsEmpty) return;
 
             foreach (var id in decision.Discard)
             {
+                if (_disposed || generation != _activationGeneration) return;
                 var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == id);
-                if (tab is not null) await DiscardTabAsync(tab);
+                if (tab is not null && !ReferenceEquals(tab, _viewModel.ActiveTab)) await DiscardTabAsync(tab);
             }
             foreach (var id in decision.Suspend)
             {
+                if (_disposed || generation != _activationGeneration) return;
                 var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == id);
-                if (tab is not null) await SuspendTabAsync(tab);
+                if (tab is not null && !ReferenceEquals(tab, _viewModel.ActiveTab)) await SuspendTabAsync(tab);
             }
-            if (decision.DiscardActive && _viewModel.ActiveTab is { } active)
-                await DiscardTabAsync(active);
+            if (decision.DiscardActive && IsBrowserBackground && generation == _activationGeneration)
+                await DiscardTabAsync(_viewModel.ActiveTab);
             MemorySnapshotForTesting = snapshot;
             LastDecisionForTesting = decision;
         }
@@ -320,6 +386,7 @@ public partial class BrowserView : UserControl, IDisposable
         finally { _forceBackgroundForTesting = false; }
     }
     internal Task ActivateTabForTestingAsync(BrowserTab tab) => ActivateTabAsync(tab);
+    internal void RefreshNativeVisibilityForTesting() => UpdateHostVisibility();
     internal Task DiscardTabForTestingAsync(BrowserTab tab) => DiscardTabAsync(tab);
     internal Task SuspendTabForTestingAsync(BrowserTab tab) => SuspendTabAsync(tab);
     internal BrowserProcessSnapshot SampleProcessesForTesting() => BrowserRuntime.Sample(UserDataFolder);
@@ -436,8 +503,13 @@ public partial class BrowserView : UserControl, IDisposable
         if (title.Length > 0) text.AppendLine("标题：" + title);
         text.AppendLine("地址：" + url);
         if (selection.Length > 0) text.AppendLine("选中内容：\n" + selection.Trim());
-        ChatReferenceRequested?.Invoke(this, new BrowserChatReference(text.ToString().TrimEnd(), null));
-        _viewModel.ReportStatusTo(tab, "已发送到对话输入框。");
+        if (_disposed || !_viewModel.Tabs.Contains(tab) || !ReferenceEquals(tab, _viewModel.ActiveTab)) return;
+        if (ChatReferenceRequested is { } receiver)
+        {
+            receiver.Invoke(this, new BrowserChatReference(text.ToString().TrimEnd(), null));
+            _viewModel.ReportStatusTo(tab, "已发送到对话输入框。");
+        }
+        else await CopyAddressAsync(text.ToString().TrimEnd());
     }
 
     /// <summary>
@@ -460,13 +532,11 @@ public partial class BrowserView : UserControl, IDisposable
         var created = _viewModel.CreateTab();
         var createdHost = HostFor(created);
         UpdateHostVisibility();
-        if (request.Uri is { Length: > 0 } uri &&
-            !uri.Equals("about:blank", StringComparison.OrdinalIgnoreCase))
-        {
-            created.AddressText = uri;
-            created.NavigateCommand.Execute(null);
-        }
-        var core = await createdHost.EnsureCoreAsync();
+        // 目标导航由 WebView2 在赋 NewWindow 后发起，保留 opener 与初始脚本且不重复请求。
+        createdHost.SetActive();
+        Microsoft.Web.WebView2.Core.CoreWebView2? core = null;
+        try { core = await createdHost.EnsureCoreAsync().WaitAsync(TimeSpan.FromSeconds(9)); }
+        catch (TimeoutException) { }
         request.Resolve(core);
         if (core is null) _viewModel.ReportStatusTo(created, "新窗口未能建立浏览器运行时，已保留为新页签。");
     }
@@ -564,22 +634,17 @@ public partial class BrowserView : UserControl, IDisposable
     /// </summary>
     private async Task HandlePermissionRequestAsync(BrowserPermissionRequest request)
     {
-        var remembered = _siteRules.PermissionDecision(request.Host, request.Kind);
-        if (remembered is { } known)
-        {
-            request.Resolve(known ? BrowserPermissionDecision.Always() : BrowserPermissionDecision.Deny());
-            return;
-        }
-
         var site = _siteRules.PermissionFor(request.Uri);
         if (string.Equals(site, "block", StringComparison.OrdinalIgnoreCase))
         {
             request.Resolve(BrowserPermissionDecision.Deny($"{request.Host} 的站点权限为“禁止访问”，已拒绝{PermissionLabel(request.Uri, request.Kind)}。"));
             return;
         }
-        if (string.Equals(site, "allow", StringComparison.OrdinalIgnoreCase))
+        // 智能体浏览站点许可不授予摄像头、麦克风等网页原生权限。
+        var remembered = _siteRules.PermissionDecision(request.Host, request.Kind);
+        if (remembered is { } known)
         {
-            request.Resolve(BrowserPermissionDecision.Always());
+            request.Resolve(known ? BrowserPermissionDecision.Once() : BrowserPermissionDecision.Deny());
             return;
         }
 
@@ -590,51 +655,40 @@ public partial class BrowserView : UserControl, IDisposable
             return;
         }
 
-        var decision = await AskPermissionAsync(request.Host, PermissionLabel(request.Uri, request.Kind));
+        var decision = await AskPermissionAsync(request, PermissionLabel(request.Uri, request.Kind));
+        if (_disposed || request.Decision.IsCompleted) return;
         _siteRules.RememberPermission(request.Host, request.Kind, decision.Allow);
         request.Resolve(decision);
     }
 
-    private async Task<BrowserPermissionDecision> AskPermissionAsync(string host, string label)
+    private async Task<BrowserPermissionDecision> AskPermissionAsync(BrowserPermissionRequest request, string label)
     {
+        if (_disposed || request.Decision.IsCompleted) return BrowserPermissionDecision.Deny();
         var owner = TopLevel.GetTopLevel(this) as Window;
         var dialog = new Window
         {
-            Title = "站点权限",
-            Width = 420,
-            SizeToContent = SizeToContent.Height,
-            CanResize = false,
+            Title = "站点权限", Classes = { "browserDialog" }, Width = 400,
+            SizeToContent = SizeToContent.Height, CanResize = false,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
         };
-        var panel = new StackPanel { Margin = new Thickness(18), Spacing = 12 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = $"{host} 正在请求{label}。",
-            TextWrapping = TextWrapping.Wrap,
-            FontWeight = FontWeight.SemiBold,
-        });
-        panel.Children.Add(new TextBlock
-        {
-            Text = "只在你信任该站点时允许。本次选择在当前运行期间对该站点保持。",
-            TextWrapping = TextWrapping.Wrap,
-            Opacity = 0.75,
-            FontSize = 12,
-        });
+        var panel = new StackPanel { Classes = { "browserDialogBody" } };
+        panel.Children.Add(new TextBlock { Text = request.Host, Classes = { "browserHeading" } });
+        panel.Children.Add(new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap });
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Spacing = 8 };
         var deny = new Button { Content = "拒绝" };
-        var allow = new Button { Content = "允许" };
+        var allow = new Button { Content = "本次运行允许" };
         buttons.Children.Add(deny);
         buttons.Children.Add(allow);
         panel.Children.Add(buttons);
         dialog.Content = panel;
-
-        var completion = new TaskCompletionSource<BrowserPermissionDecision>();
+        var completion = new TaskCompletionSource<BrowserPermissionDecision>(TaskCreationOptions.RunContinuationsAsynchronously);
         deny.Click += (_, _) => { completion.TrySetResult(BrowserPermissionDecision.Deny()); dialog.Close(); };
-        allow.Click += (_, _) => { completion.TrySetResult(BrowserPermissionDecision.Always()); dialog.Close(); };
+        allow.Click += (_, _) => { completion.TrySetResult(BrowserPermissionDecision.Once()); dialog.Close(); };
         dialog.Closed += (_, _) => completion.TrySetResult(BrowserPermissionDecision.Deny());
-        if (owner is not null) await dialog.ShowDialog(owner);
-        else dialog.Show();
-        return await completion.Task;
+        if (owner is not null) _ = dialog.ShowDialog(owner); else dialog.Show();
+        await Task.WhenAny(completion.Task, request.Decision);
+        dialog.Close();
+        return completion.Task.IsCompleted ? await completion.Task : BrowserPermissionDecision.Deny();
     }
 
     private void ApplyDownloadProgress(BrowserDownloadProgress progress)
@@ -665,345 +719,6 @@ public partial class BrowserView : UserControl, IDisposable
     }
 
     /// <summary>
-    /// 标注模式：页面上拖一个框 → 截取该区域 → 填写说明 → 发送到当前对话。
-    /// 选区完全由注入脚本完成；截图走真实 CDP Page.captureScreenshot 的 clip，不裁 Avalonia 位图。
-    /// </summary>
-    private async Task StartAnnotationAsync(BrowserTab tab, BrowserViewHost host)
-    {
-        if (!host.IsReady)
-        {
-            _viewModel.ReportStatusTo(tab, "请先加载网页再标注。");
-            return;
-        }
-        var started = await host.ExecuteScriptAsync(AnnotationScript);
-        if (started is null)
-        {
-            _viewModel.ReportStatusTo(tab, "无法在当前页面启动标注。");
-            return;
-        }
-        _viewModel.ReportStatusTo(tab, "标注模式：在页面上拖出区域，按 Esc 取消。");
-
-        string? payload = null;
-        for (var attempt = 0; attempt < 400; attempt++)
-        {
-            await Task.Delay(150);
-            var probe = await host.ExecuteScriptAsync(
-                "window.__fufuAnnotationResult ? JSON.stringify(window.__fufuAnnotationResult) : null");
-            if (string.IsNullOrWhiteSpace(probe) || probe.Trim() is "null" or "\"null\"") continue;
-            payload = UnquoteJson(probe);
-            break;
-        }
-        if (payload is null)
-        {
-            _viewModel.ReportStatusTo(tab, "标注等待超时，未发送任何内容。");
-            return;
-        }
-
-        int x = 0, y = 0, width = 0, height = 0;
-        string selector = string.Empty;
-        bool cancelled = false;
-        try
-        {
-            using var doc = JsonDocument.Parse(payload);
-            var root = doc.RootElement;
-            if (root.TryGetProperty("cancelled", out var cancel)) cancelled = cancel.ValueKind == JsonValueKind.True;
-            if (root.TryGetProperty("x", out var xv)) x = (int)xv.GetDouble();
-            if (root.TryGetProperty("y", out var yv)) y = (int)yv.GetDouble();
-            if (root.TryGetProperty("w", out var wv)) width = (int)wv.GetDouble();
-            if (root.TryGetProperty("h", out var hv)) height = (int)hv.GetDouble();
-            if (root.TryGetProperty("selector", out var sel)) selector = sel.GetString() ?? string.Empty;
-        }
-        catch (JsonException)
-        {
-            _viewModel.ReportStatusTo(tab, "标注结果无法解析，未发送任何内容。");
-            return;
-        }
-        if (cancelled)
-        {
-            _viewModel.ReportStatusTo(tab, "已取消标注。");
-            return;
-        }
-        if (width < 2 || height < 2)
-        {
-            _viewModel.ReportStatusTo(tab, "框选区域太小，请重新标注。");
-            return;
-        }
-
-        string? imagePath = null;
-        Bitmap? preview = null;
-        if (_settings.AnnotationIncludeScreenshot && !string.Equals(_settings.ScreenshotMode, "never", StringComparison.OrdinalIgnoreCase))
-        {
-            (imagePath, preview) = await CaptureAnnotationAsync(host, x, y, width, height);
-        }
-
-        var edit = await PromptAnnotationCommentAsync(preview, tab.DocumentTitle, selector,
-            css => ApplyAnnotationStyleAsync(host, selector, css));
-        preview?.Dispose();
-        if (edit is null)
-        {
-            await ApplyAnnotationStyleAsync(host, selector, string.Empty);
-            _viewModel.ReportStatusTo(tab, "已取消标注。");
-            return;
-        }
-
-        var text = new StringBuilder();
-        text.AppendLine("【网页标注】");
-        if (tab.DocumentTitle is { Length: > 0 } title) text.AppendLine("标题：" + title);
-        text.AppendLine("地址：" + (tab.NavigationAddress ?? string.Empty));
-        if (selector.Length > 0) text.AppendLine("元素：" + selector);
-        text.AppendLine($"区域：{x},{y} {width}×{height}");
-        text.AppendLine("说明：" + (edit.Comment.Length > 0 ? edit.Comment : "（未填写说明，仅标注区域）"));
-        if (edit.Css.Length > 0) text.AppendLine("样式调整：" + edit.Css);
-        ChatReferenceRequested?.Invoke(this, new BrowserChatReference(text.ToString().TrimEnd(), imagePath));
-        _viewModel.ReportStatusTo(tab, edit.Css.Length > 0 ? "标注与样式调整已发送到对话输入框。" : "标注已发送到对话输入框。");
-    }
-
-    private async Task<(string? Path, Bitmap? Preview)> CaptureAnnotationAsync(
-        BrowserViewHost host, int x, int y, int width, int height)
-    {
-        try
-        {
-            var parameters = JsonSerializer.Serialize(new
-            {
-                format = "png",
-                clip = new { x, y, width = Math.Max(1, width), height = Math.Max(1, height), scale = 1.0 },
-            });
-            var result = await host.CallDevToolsProtocolMethodAsync("Page.captureScreenshot", parameters);
-            if (string.IsNullOrWhiteSpace(result)) return (null, null);
-            using var doc = JsonDocument.Parse(result);
-            if (!doc.RootElement.TryGetProperty("data", out var data)) return (null, null);
-            var bytes = Convert.FromBase64String(data.GetString() ?? string.Empty);
-            if (bytes.Length == 0) return (null, null);
-            var folder = Path.Combine(Path.GetTempPath(), "fufucode-browser-annotations");
-            Directory.CreateDirectory(folder);
-            var path = Path.Combine(folder, "annotation-" + Guid.NewGuid().ToString("N") + ".png");
-            await File.WriteAllBytesAsync(path, bytes);
-            using var stream = new MemoryStream(bytes);
-            return (path, new Bitmap(stream));
-        }
-        catch (Exception error) when (error is JsonException or FormatException or IOException or UnauthorizedAccessException or ArgumentException)
-        {
-            return (null, null);
-        }
-    }
-
-    /// <summary>
-    /// 标注说明与 Adjust：填写说明，并可实时调整字体大小、行高、颜色、内边距与圆角。
-    /// 返回 null 表示取消；Css 为空表示不做样式调整。
-    /// </summary>
-    private async Task<BrowserAnnotationEdit?> PromptAnnotationCommentAsync(
-        Bitmap? preview, string title, string selector, Func<string, Task> applyCss)
-    {
-        var owner = TopLevel.GetTopLevel(this) as Window;
-        var dialog = new Window
-        {
-            Title = "标注 / 调整样式",
-            Width = 560,
-            Height = preview is null ? 360 : 560,
-            MinWidth = 460,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            CanResize = true,
-        };
-        var panel = new StackPanel { Margin = new Thickness(18), Spacing = 10 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = string.IsNullOrWhiteSpace(title) ? "标注当前页面" : title,
-            FontWeight = FontWeight.SemiBold,
-            TextWrapping = TextWrapping.Wrap,
-        });
-        if (selector.Length > 0)
-            panel.Children.Add(new TextBlock { Text = "元素：" + selector, Opacity = 0.7, FontSize = 12 });
-        if (preview is not null)
-        {
-            panel.Children.Add(new Border
-            {
-                Height = 180,
-                Background = Brushes.Transparent,
-                Child = new Image { Source = preview, Stretch = Stretch.Uniform, Height = 180 },
-            });
-        }
-        var comment = new TextBox
-        {
-            AcceptsReturn = true,
-            TextWrapping = TextWrapping.Wrap,
-            Height = 80,
-            PlaceholderText = "说明想改什么（可留空，仅发送区域截图）…",
-        };
-        panel.Children.Add(comment);
-
-        panel.Children.Add(new TextBlock { Text = "Adjust（可选，实时预览）", FontWeight = FontWeight.SemiBold, FontSize = 12 });
-        TextBox Field(string placeholder) => new()
-        {
-            Width = 100, Height = 30, PlaceholderText = placeholder, VerticalContentAlignment = VerticalAlignment.Center,
-        };
-        var fontSize = Field("字号 px");
-        var lineHeight = Field("行高");
-        var textColor = Field("文字颜色");
-        var background = Field("背景色");
-        var padding = Field("内边距 px");
-        var radius = Field("圆角 px");
-        var fields = new WrapPanel { Orientation = Orientation.Horizontal, ItemSpacing = 8, LineSpacing = 8 };
-        foreach (var field in new[] { fontSize, lineHeight, textColor, background, padding, radius })
-            fields.Children.Add(field);
-        panel.Children.Add(fields);
-
-        string BuildCss()
-        {
-            var parts = new List<string>();
-            Add("font-size", fontSize, "px");
-            Add("line-height", lineHeight, "");
-            Add("color", textColor, "");
-            Add("background-color", background, "");
-            Add("padding", padding, "px");
-            Add("border-radius", radius, "px");
-            return string.Join("", parts);
-
-            void Add(string property, TextBox box, string suffix)
-            {
-                var value = (box.Text ?? string.Empty).Trim();
-                if (value.Length == 0) return;
-                if (suffix == "px")
-                {
-                    if (!double.TryParse(value, System.Globalization.NumberStyles.Float,
-                            System.Globalization.CultureInfo.InvariantCulture, out var number) ||
-                        number < 0 || number > 500) return;
-                    value = number.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                }
-                if (property is "color" or "background-color" &&
-                    !System.Text.RegularExpressions.Regex.IsMatch(value, "^#[0-9a-fA-F]{3,8}$|^[a-zA-Z]{3,20}$"))
-                    return;
-                parts.Add(property + ":" + value + suffix + ";");
-            }
-        }
-
-        var reset = new Button { Content = "还原样式", HorizontalAlignment = HorizontalAlignment.Left };
-        panel.Children.Add(reset);
-
-        var buttons = new StackPanel
-        {
-            Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Spacing = 8,
-        };
-        var cancel = new Button { Content = "取消" };
-        var send = new Button { Content = "发送到对话", Classes = { "accent" } };
-        buttons.Children.Add(cancel);
-        buttons.Children.Add(send);
-        panel.Children.Add(buttons);
-        dialog.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = Avalonia.Controls.Primitives.ScrollBarVisibility.Auto };
-
-        async void Apply()
-        {
-            try { await applyCss(BuildCss()); }
-            catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException) { }
-        }
-        foreach (var field in new[] { fontSize, lineHeight, textColor, background, padding, radius })
-            field.TextChanged += (_, _) => Apply();
-        reset.Click += (_, _) =>
-        {
-            foreach (var field in new[] { fontSize, lineHeight, textColor, background, padding, radius }) field.Text = string.Empty;
-            Apply();
-        };
-
-        var completion = new TaskCompletionSource<BrowserAnnotationEdit?>();
-        cancel.Click += (_, _) => { completion.TrySetResult(null); dialog.Close(); };
-        send.Click += (_, _) =>
-        {
-            completion.TrySetResult(new BrowserAnnotationEdit((comment.Text ?? string.Empty).Trim(), BuildCss()));
-            dialog.Close();
-        };
-        dialog.Closed += (_, _) => completion.TrySetResult(null);
-        if (owner is not null) await dialog.ShowDialog(owner);
-        else dialog.Show();
-        return await completion.Task;
-    }
-
-    /// <summary>把 Adjust 的 CSS 实时注入页面；空 CSS 删除预览样式。</summary>
-    private static async Task ApplyAnnotationStyleAsync(BrowserViewHost host, string selector, string css)
-    {
-        if (string.IsNullOrWhiteSpace(selector)) return;
-        var script = "(function(sel,css){var id='__fufu_annotation_style';var el=document.getElementById(id);" +
-                     "if(!css){if(el)el.remove();return 'cleared';}" +
-                     "if(!el){el=document.createElement('style');el.id=id;(document.head||document.documentElement).appendChild(el);}" +
-                     "el.textContent=sel+'{'+css+'}';return 'applied';})(" +
-                     JsonSerializer.Serialize(selector) + "," + JsonSerializer.Serialize(css) + ")";
-        try { await host.ExecuteScriptAsync(script); }
-        catch (Exception error) when (error is InvalidOperationException or ObjectDisposedException) { }
-    }
-
-    /// <summary>页面内拖框脚本：只做选区与结果写入，不发送任何网络请求。</summary>
-    private const string AnnotationScript = """
-        (function () {
-          try {
-            if (window.__fufuAnnotationCleanup) window.__fufuAnnotationCleanup();
-            window.__fufuAnnotationResult = null;
-            const layer = document.createElement('div');
-            Object.assign(layer.style, { position: 'fixed', inset: '0', zIndex: '2147483647',
-              cursor: 'crosshair', background: 'rgba(0,0,0,0.04)' });
-            const box = document.createElement('div');
-            Object.assign(box.style, { position: 'absolute', border: '2px solid #4c8dff',
-              background: 'rgba(76,141,255,0.16)', display: 'none', pointerEvents: 'none' });
-            layer.appendChild(box);
-            document.body.appendChild(layer);
-            let sx = 0, sy = 0, dragging = false;
-            function cleanup() {
-              layer.remove();
-              document.removeEventListener('mousedown', down, true);
-              document.removeEventListener('mousemove', move, true);
-              document.removeEventListener('mouseup', up, true);
-              document.removeEventListener('keydown', key, true);
-              window.__fufuAnnotationCleanup = null;
-            }
-            function move(e) {
-              if (!dragging) return;
-              const x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
-              Object.assign(box.style, { left: x + 'px', top: y + 'px',
-                width: Math.abs(e.clientX - sx) + 'px', height: Math.abs(e.clientY - sy) + 'px' });
-            }
-            function down(e) {
-              dragging = true; sx = e.clientX; sy = e.clientY;
-              box.style.display = 'block'; move(e);
-              e.preventDefault(); e.stopPropagation();
-            }
-            function up(e) {
-              if (!dragging) return;
-              dragging = false;
-              let x = Math.min(sx, e.clientX), y = Math.min(sy, e.clientY);
-              let w = Math.abs(e.clientX - sx), h = Math.abs(e.clientY - sy);
-              let el = document.elementFromPoint(x + w / 2, y + h / 2);
-              // 单击（几乎没有拖动）= 选中元素；拖动 = 选中区域。
-              if ((w < 4 || h < 4) && el) {
-                const r = el.getBoundingClientRect();
-                x = r.left; y = r.top; w = r.width; h = r.height;
-              }
-              let selector = '';
-              if (el) {
-                if (el.id) selector = '#' + el.id;
-                else if (typeof el.className === 'string' && el.className.trim())
-                  selector = '.' + el.className.trim().split(/\s+/).slice(0, 2).map(c => CSS.escape(c)).join('.');
-                else selector = el.tagName.toLowerCase();
-              }
-              cleanup();
-              window.__fufuAnnotationResult = { x: x, y: y, w: w, h: h, selector: selector };
-              e.preventDefault(); e.stopPropagation();
-            }
-            function key(e) {
-              if (e.key === 'Escape') {
-                cleanup();
-                window.__fufuAnnotationResult = { cancelled: true };
-              }
-            }
-            window.__fufuAnnotationCleanup = cleanup;
-            document.addEventListener('mousedown', down, true);
-            document.addEventListener('mousemove', move, true);
-            document.addEventListener('mouseup', up, true);
-            document.addEventListener('keydown', key, true);
-            return 'annotation-started';
-          } catch (error) { return 'annotation-error:' + error.message; }
-        })();
-        """;
-
-    /// <summary>
     /// Agent 请求导航：走与用户点击同一套规范化与宿主调用，不绕过地址白名单。
     /// 导航请求是同步派发给宿主的，因此这里不做额外的异步等待，避免 sync-over-async 死锁。
     /// </summary>
@@ -1026,7 +741,15 @@ public partial class BrowserView : UserControl, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
+        _activationGeneration++;
+        CancelAnnotation();
+        _feedbackTimer?.Stop();
+        Fufucode.App.Integration.MemoryProfile.VisualEffectsChanged -= UpdateBrowserMotion;
+        foreach (var detach in _imeDetachers) detach();
+        _imeDetachers.Clear();
+        _viewModel.IsHistoryOpen = _viewModel.IsDownloadsOpen = _viewModel.IsSuggestionsOpen = _viewModel.IsFeedbackOpen = false;
         DetachLifecycle(stopTimer: true);
+        EffectiveViewportChanged -= OnBrowserEffectiveViewportChanged;
         _viewModel.TabNavigationRequested -= OnNavigationRequested;
         _viewModel.TabActionRequested -= OnActionRequested;
         _viewModel.ZoomRequested -= OnZoomRequested;
@@ -1042,6 +765,7 @@ public partial class BrowserView : UserControl, IDisposable
         _findStarted.Clear();
         _findGeneration.Clear();
         _findDocumentEpoch.Clear();
+        _viewModel.Dispose();
     }
 
     internal BrowserPageState CaptureState()
@@ -1065,21 +789,25 @@ public partial class BrowserView : UserControl, IDisposable
         }
         if (state.Version == 1)
         {
-            // 旧 v1 单页状态：仍然恢复，不丢用户旧配置。
-            RestoreIntoTab(_viewModel.ActiveTab, state.FilePath, state.NavigationAddress, state.AddressDraft);
+            _viewModel.ActiveTab.Restore(new BrowserTabState(_viewModel.ActiveTab.Id,
+                state.AddressDraft ?? string.Empty, state.NavigationAddress, state.FilePath, string.Empty));
+            _ = ActivateTabAsync(_viewModel.ActiveTab);
             return;
         }
         // 过滤 null/空白记录并成对归一化 ID：重复 ID 保留首个合法条目，后续重命名而不是丢弃。
         var savedTabs = NormalizeTabs(state.Tabs, state);
         // 整体重建页签：旧页签的宿主被释放，新页签按保存的 id 建独立宿主。
-        var restored = _viewModel.ResetTabs(savedTabs.Select(tab => tab.Id).ToArray());
-        for (var index = 0; index < savedTabs.Count; index++)
-            RestoreIntoTab(restored[index], savedTabs[index].FilePath, savedTabs[index].NavigationAddress,
-                savedTabs[index].AddressDraft, savedTabs[index].ScrollX, savedTabs[index].ScrollY);
-        var active = restored.FirstOrDefault(tab => tab.Id == state.ActiveTabId) ?? restored[0];
-        _viewModel.SelectTab(active);
+        _restoringTabs = true;
+        _activationGeneration++;
+        try
+        {
+            var restored = _viewModel.ResetTabs(savedTabs.Select(tab => tab.Id).ToArray());
+            for (var index = 0; index < savedTabs.Count; index++) restored[index].Restore(savedTabs[index]);
+            _viewModel.SelectTab(restored.FirstOrDefault(tab => tab.Id == state.ActiveTabId) ?? restored[0]);
+        }
+        finally { _restoringTabs = false; }
         UpdateHostVisibility();
-        _ = ActivateTabAsync(active);
+        _ = ActivateTabAsync(_viewModel.ActiveTab);
     }
 
     /// <summary>
@@ -1113,20 +841,6 @@ public partial class BrowserView : UserControl, IDisposable
             result.Add(new BrowserTabState("tab-restored-1", state.AddressDraft ?? "", state.NavigationAddress, state.FilePath, ""));
         }
         return result;
-    }
-
-    private static void RestoreIntoTab(BrowserTab tab, string? filePath, string? navigationAddress,
-        string addressDraft, double scrollX = 0, double scrollY = 0)
-    {
-        tab.ScrollX = scrollX;
-        tab.ScrollY = scrollY;
-        if (!string.IsNullOrWhiteSpace(filePath)) tab.PreviewFile(filePath);
-        else if (!string.IsNullOrWhiteSpace(navigationAddress))
-        {
-            tab.AddressText = navigationAddress;
-            tab.NavigateCommand.Execute(null);
-        }
-        tab.AddressText = addressDraft ?? "";
     }
 
     /// <summary>直接向当前页签推送本地路径进入文件预览模式。</summary>
@@ -1170,16 +884,25 @@ public partial class BrowserView : UserControl, IDisposable
     {
         if (_hosts.TryGetValue(tab.Id, out var existing)) return existing;
         var host = new BrowserViewHost();
+        host.SetOccluded(true);
         host.SetUserAgent(_settings.UserAgent);
         host.SetAutofill(_settings.EnableAutofill);
         host.SetPasswordAutosave(_settings.EnablePasswordAutosave);
         host.SetOpenLinksExternally(_siteRules.OpensWebExternally);
         host.OpenExternallyRequested += (_, address) => _ = OpenExternalAsync(address);
         host.AcceleratorHandler = (key, modifiers) => NativeShortcutHandler?.Invoke(key, modifiers) == true;
-        host.NavigationStateChanged += (_, state) => _viewModel.ApplyNavigationStateTo(tab, state.CanGoBack, state.CanGoForward, state.Loading, state.Source);
+        host.NavigationStateChanged += (_, state) =>
+        {
+            if (_disposed) return;
+            _viewModel.ApplyNavigationStateTo(tab, state.CanGoBack, state.CanGoForward, state.Loading, state.Source);
+            if (host.HasController) tab.ApplyLifecycle(ReferenceEquals(tab, _viewModel.ActiveTab) && !IsBrowserBackground
+                ? BrowserTabLifecycle.Active : BrowserTabLifecycle.Warm);
+        };
         host.NavigationCompleted += (_, state) =>
         {
-            if (state.IsSuccess) _viewModel.RecordVisit(state.Source, state.Title);
+            if (_disposed) return;
+            if (state.IsSuccess) { tab.PageError = string.Empty; _viewModel.RecordVisit(state.Source, state.Title); }
+            UpdateHostVisibility();
         };
         host.ContextMenuActionRequested += (_, action) => HandleContextMenuAction(tab, host, action);
         host.FaviconChanged += (_, bytes) => tab.ApplyFavicon(bytes);
@@ -1188,7 +911,17 @@ public partial class BrowserView : UserControl, IDisposable
         host.DownloadProgressChanged += (_, progress) => ApplyDownloadProgress(progress);
         host.PermissionRequested += (_, request) => _ = HandlePermissionRequestAsync(request);
         host.DocumentTitleChanged += (_, title) => _viewModel.ApplyDocumentTitleTo(tab, title);
-        host.StatusChanged += (_, message) => _viewModel.ReportStatusTo(tab, message);
+        host.StatusChanged += (_, message) =>
+        {
+            if (_disposed) return;
+            _viewModel.ReportStatusTo(tab, message);
+            if (message.StartsWith("加载失败：", StringComparison.Ordinal) || message.StartsWith("内置浏览器初始化失败", StringComparison.Ordinal) || message.StartsWith("浏览器数据目录不可写", StringComparison.Ordinal))
+            {
+                tab.PageError = message;
+                tab.IsLoading = tab.IsRestoring = false;
+                UpdateHostVisibility();
+            }
+        };
         host.RuntimeProbeCompleted += (_, probe) => _viewModel.ApplyRuntimeProbe(probe);
         // 页面弹出新窗口 → 新页签接管同一个 CoreWebView2，保留 opener/postMessage/OAuth 弹窗关系。
         host.NewWindowRequested += (_, request) => _ = HandleNewWindowAsync(request);
@@ -1216,7 +949,8 @@ public partial class BrowserView : UserControl, IDisposable
         foreach (var entry in _hosts)
         {
             var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == entry.Key);
-            var active = ReferenceEquals(entry.Key, _viewModel.ActiveTab.Id);
+            var active = entry.Key == _viewModel.ActiveTab.Id && !IsBrowserBackground;
+            entry.Value.SetContentHidden(tab is null || tab.IsPageEmpty || tab.HasPageError || tab.IsRestoring || _viewModel.HasRuntimeNotice);
             entry.Value.SetOccluded(!active);
             if (!active && entry.Value.HasController)
             {
@@ -1232,8 +966,14 @@ public partial class BrowserView : UserControl, IDisposable
 
     private void OnTabSelectionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(BrowserViewModel.StatusText)) ShowBrowserFeedback(_viewModel.StatusText);
+        if (e.PropertyName == nameof(BrowserViewModel.IsFindOpen) && _viewModel.IsFindOpen)
+            Dispatcher.UIThread.Post(() => this.FindControl<TextBox>("FindBox")?.Focus());
         if (e.PropertyName != nameof(BrowserViewModel.ActiveTab)) return;
         var tab = _viewModel.ActiveTab;
+        CancelAnnotation();
+        foreach (var item in _viewModel.Tabs) item.IsRestoring = false;
+        _viewModel.IsSuggestionsOpen = _viewModel.IsHistoryOpen = _viewModel.IsDownloadsOpen = false;
         _viewModel.Tabs.FirstOrDefault(candidate => ReferenceEquals(candidate, tab))?.Touch();
         Dispatcher.UIThread.Post(() =>
         {
@@ -1266,9 +1006,16 @@ public partial class BrowserView : UserControl, IDisposable
         InvalidateFind(e.Tab.Id, resetDocumentEpoch: true);
         e.Tab.FindStatus = string.Empty;
         var host = HostFor(e.Tab);
-        UpdateHostVisibility();
+        if (ReferenceEquals(e.Tab, _viewModel.ActiveTab))
+        {
+            _activationGeneration++;
+            CancelAnnotation();
+            e.Tab.IsRestoring = false;
+            if (!IsBrowserBackground) host.SetActive();
+        }
         if (e.Request.Document is not null) host.NavigateToDocument(e.Request.Document);
         else host.Navigate(e.Request.Address);
+        UpdateHostVisibility();
     }
 
     private void OnActionRequested(object? sender, (BrowserTab Tab, BrowserTabAction Action) e) => ApplyAction(e.Tab, e.Action);
@@ -1290,7 +1037,12 @@ public partial class BrowserView : UserControl, IDisposable
             case BrowserTabAction.Back: host.GoBack(); break;
             case BrowserTabAction.Forward: host.GoForward(); break;
             case BrowserTabAction.Reload: host.Reload(); break;
-            case BrowserTabAction.Stop: host.Stop(); break;
+            case BrowserTabAction.Stop:
+                if (ReferenceEquals(tab, _viewModel.ActiveTab)) _activationGeneration++;
+                tab.IsRestoring = false;
+                host.Stop();
+                UpdateHostVisibility();
+                break;
             case BrowserTabAction.CloseFind:
                 InvalidateFind(tab.Id, resetDocumentEpoch: false);
                 host.StopFind();
@@ -1379,8 +1131,11 @@ public partial class BrowserView : UserControl, IDisposable
         catch (Exception error) { _viewModel.ReportStatus("复制失败：" + error.Message); }
     }
 
+    internal bool SuppressExternalOpenForTesting { get; set; }
+
     private async Task OpenExternalAsync(string address)
     {
+        if (Program.SelfTestMode && SuppressExternalOpenForTesting) return;
         var topLevel = TopLevel.GetTopLevel(this);
         if (topLevel is null) { _viewModel.ReportStatus("当前环境无法打开外部链接。"); return; }
         if (!Uri.TryCreate(address, UriKind.Absolute, out var uri)) { _viewModel.ReportStatus("地址无效，无法外部打开。"); return; }
@@ -1408,6 +1163,8 @@ public partial class BrowserView : UserControl, IDisposable
             return;
         }
         if (e.Key is not (Key.Return or Key.Enter)) return;
+        if (_addressIme.ShouldSwallowEnter()) return;
+        e.Handled = true;
         if (_viewModel.IsSuggestionsOpen && _viewModel.SelectedSuggestion is { } selected)
         {
             _viewModel.AcceptSuggestionCommand.Execute(selected);
@@ -1484,8 +1241,10 @@ public partial class BrowserView : UserControl, IDisposable
 
     private void Find_KeyDown(object? sender, KeyEventArgs e)
     {
-        if (e.Key is not (Key.Return or Key.Enter)) return;
-        if (_viewModel.FindNextCommand.CanExecute(null)) _viewModel.FindNextCommand.Execute(null);
+        if (e.Key is not (Key.Return or Key.Enter) || _findIme.ShouldSwallowEnter()) return;
+        var command = e.KeyModifiers.HasFlag(KeyModifiers.Shift) ? _viewModel.FindPreviousCommand : _viewModel.FindNextCommand;
+        if (command.CanExecute(null)) command.Execute(null);
+        e.Handled = true;
     }
 
     private void Download_Click(object? sender, RoutedEventArgs e) => _viewModel.ToggleDownloadsCommand.Execute(null);
@@ -1498,75 +1257,6 @@ public partial class BrowserView : UserControl, IDisposable
         var cancelled = false;
         foreach (var host in _hosts.Values) cancelled |= host.CancelDownload(id);
         _viewModel.ReportStatus(cancelled ? "已取消下载。" : "该下载已结束，无法取消。");
-    }
-
-    private void More_Click(object? sender, RoutedEventArgs e)
-    {
-        if (sender is not Control anchor) return;
-        var menu = new ContextMenu();
-        var copy = new MenuItem { Header = "复制当前地址" };
-        copy.Click += (_, _) => _viewModel.CopyAddressCommand.Execute(null);
-        menu.Items.Add(copy);
-        var open = new MenuItem { Header = "在默认浏览器打开" };
-        open.Click += (_, _) => _viewModel.OpenExternalCommand.Execute(null);
-        menu.Items.Add(open);
-        var share = new MenuItem { Header = "分享当前地址（复制链接）" };
-        share.Click += (_, _) => _viewModel.ShareCommand.Execute(null);
-        menu.Items.Add(share);
-        var bookmark = new MenuItem { Header = "收藏 / 取消收藏当前页面" };
-        bookmark.Click += (_, _) => _viewModel.ToggleBookmarkCommand.Execute(null);
-        menu.Items.Add(bookmark);
-        menu.Items.Add(new Separator());
-        var find = new MenuItem { Header = "页内查找 (Ctrl+F)" };
-        find.Click += (_, _) => _viewModel.ToggleFindCommand.Execute(null);
-        menu.Items.Add(find);
-        var zoomIn = new MenuItem { Header = "放大 (+10%)" };
-        zoomIn.Click += (_, _) => _viewModel.ZoomInCommand.Execute(null);
-        menu.Items.Add(zoomIn);
-        var zoomOut = new MenuItem { Header = "缩小 (-10%)" };
-        zoomOut.Click += (_, _) => _viewModel.ZoomOutCommand.Execute(null);
-        menu.Items.Add(zoomOut);
-        var zoomReset = new MenuItem { Header = $"重置缩放 (当前 {_viewModel.ZoomPercent}%)" };
-        zoomReset.Click += (_, _) => _viewModel.ZoomResetCommand.Execute(null);
-        menu.Items.Add(zoomReset);
-        menu.Items.Add(new Separator());
-        var downloads = new MenuItem { Header = "下载列表" };
-        downloads.Click += (_, _) => _viewModel.ToggleDownloadsCommand.Execute(null);
-        menu.Items.Add(downloads);
-        var annotate = new MenuItem { Header = "标注页面区域…" };
-        annotate.Click += (_, _) =>
-        {
-            if (_hosts.TryGetValue(_viewModel.ActiveTab.Id, out var host))
-                _ = StartAnnotationAsync(_viewModel.ActiveTab, host);
-        };
-        menu.Items.Add(annotate);
-        var fullView = new MenuItem { Header = _viewModel.FullViewToolTip };
-        fullView.Click += (_, _) => _viewModel.ToggleFullViewCommand.Execute(null);
-        menu.Items.Add(fullView);
-        var recent = new MenuItem { Header = "显示最近访问" };
-        recent.Click += (_, _) => _viewModel.RefreshSuggestions(string.Empty);
-        menu.Items.Add(recent);
-        var history = new MenuItem { Header = "浏览历史" };
-        history.Click += (_, _) => _viewModel.ToggleHistoryCommand.Execute(null);
-        menu.Items.Add(history);
-        menu.Items.Add(new Separator());
-        var devtools = new MenuItem { Header = "开发者工具" };
-        devtools.Click += (_, _) => _viewModel.OpenDevToolsCommand.Execute(null);
-        menu.Items.Add(devtools);
-        menu.Open(anchor);
-    }
-
-    private async void InspectElement_Click(object? sender, RoutedEventArgs e)
-    {
-        var host = _lastHost ?? (_hosts.TryGetValue(_viewModel.ActiveTab.Id, out var h) ? h : null);
-        if (host is null || !host.IsReady)
-        {
-            _viewModel.ReportStatus("请先加载网页再拾取元素。");
-            return;
-        }
-        const string inspectScript = "(function(){if(window.__fufuInspectorActive){window.__fufuInspectorCleanup?.();return 'Inspector deactivated';}window.__fufuInspectorActive=true;let o=document.createElement('div');o.style.position='fixed';o.style.pointerEvents='none';o.style.border='2px solid #0078D4';o.style.background='rgba(0,120,212,0.2)';o.style.zIndex='999999';document.body.appendChild(o);function onMove(e){let r=e.target?.getBoundingClientRect();if(!r)return;o.style.top=r.top+'px';o.style.left=r.left+'px';o.style.width=r.width+'px';o.style.height=r.height+'px';}function onClick(e){e.preventDefault();e.stopPropagation();let sel=(e.target?.id)?'#'+e.target.id:(e.target?.className)?'.'+e.target.className.split(' ').join('.'):e.target?.tagName?.toLowerCase()||'element';cleanup();navigator.clipboard?.writeText(sel);alert('已拾取元素并复制到剪贴板: '+sel);}function onKey(e){if(e.key==='Escape')cleanup();}function cleanup(){window.__fufuInspectorActive=false;o.remove();document.removeEventListener('mousemove',onMove,true);document.removeEventListener('click',onClick,true);document.removeEventListener('keydown',onKey,true);}window.__fufuInspectorCleanup=cleanup;document.addEventListener('mousemove',onMove,true);document.addEventListener('click',onClick,true);document.addEventListener('keydown',onKey,true);return 'Inspector activated';})();";
-        var result = await host.ExecuteScriptAsync(inspectScript);
-        _viewModel.ReportStatus(result?.Contains("activated") == true ? "元素检查器已激活：悬停高亮，点击复制选择器，按 Esc 退出。" : "元素检查器已关闭。");
     }
 
     private async void OpenFile_Click(object? sender, RoutedEventArgs e)

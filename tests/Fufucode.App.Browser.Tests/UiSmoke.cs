@@ -53,11 +53,21 @@ internal static class UiSmoke
                 Avalonia.Automation.AutomationProperties.GetName(button) == "浏览器新建页签" && IsReachable(button, view)),
             "窄宽下新建页签按钮可达");
 
+        var menu = view.BuildBrowserMenu();
+        var entries = menu.Items.OfType<MenuItem>().Select(item => item.Header?.ToString()).ToArray();
+        check(new[] { "打开文件", "复制链接", "分享链接", "收藏页面", "浏览历史", "下载" }.All(entries.Contains),
+            "窄栏收起的操作全部保留在真实更多菜单中");
+        check(view.FindControl<TextBox>("AddressBox")!.Classes.Contains("searchInput"), "地址栏使用应用统一下划线输入样式");
+        check(!view.HostForTesting.HasController, "无头空页不创建原生 controller");
+
         // 宽布局
         window.Width = 900;
         Pump();
         check(view.Bounds.Width > 700, "恢复宽布局");
         check(Reachable(view), "宽布局下浏览器入口可达");
+        check(view.ViewModel.ShowWideTools && view.GetVisualDescendants().OfType<Button>()
+            .Where(button => Avalonia.Automation.AutomationProperties.GetName(button) is "浏览器历史" or "浏览器下载" or "浏览器收藏当前页面")
+            .All(button => IsReachable(button, view)), "宽栏常驻工具完整可达");
 
         // BRW-1：不再有文字状态栏/二重分划线；一体化胶囊地址栏真实存在。
         var captionTexts = view.GetVisualDescendants().OfType<TextBlock>()
@@ -85,7 +95,7 @@ internal static class UiSmoke
         string[] names =
         [
             "浏览器后退", "浏览器前进", "浏览器刷新", "浏览器地址栏",
-            "浏览器收藏当前页面", "浏览器分享", "浏览器打开文件", "浏览器更多操作",
+            "浏览器标注", "浏览器更多操作",
             "浏览器新建页签",
         ];
         var controls = view.GetVisualDescendants().OfType<Control>()

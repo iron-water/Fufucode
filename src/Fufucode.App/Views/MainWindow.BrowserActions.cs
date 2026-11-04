@@ -58,10 +58,7 @@ public partial class MainWindow
         // BRW-1：新页面立即读取当前浏览器设置（显示完整网址 + Agent 控制门禁），不等下一次设置变化。
         if (_browserSettings?.ViewModel is { } settings)
         {
-            view.ViewModel.ApplyShowFullUrl(settings.CurrentSettings.ShowFullUrl);
-            view.ApplyAgentControl(settings.CurrentSettings, _browserSettings.Store, settings);
-            view.SetAgentApprovalHandler(ApproveBrowserAgentActionAsync);
-            AttachBridge(view);
+            ApplyLatestBrowserSettings(view);
         }
         return view;
     }

@@ -367,6 +367,7 @@ public sealed partial class SettingsPageViewModel
     public string CdpStatusText => BrowserUseStatusText;
 
     private PluginPackageManager? _packageManager;
+    internal Func<PluginPackageManager?>? PackageManagerAccessor { get; set; }
 
     /// <summary>
     /// 设置页只持有一个包管理器：每次安装/启停都新建会在全局状态通知上累积订阅，
@@ -374,6 +375,7 @@ public sealed partial class SettingsPageViewModel
     /// </summary>
     private PluginPackageManager ResolvePackageManager()
     {
+        if (PackageManagerAccessor?.Invoke() is { } hostManager) return hostManager;
         if (_packageManager is not null) return _packageManager;
         var root = _context?.DataRoot ?? Program.SelfTestDataRoot ?? Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var layout = new AppDataLayout(root);

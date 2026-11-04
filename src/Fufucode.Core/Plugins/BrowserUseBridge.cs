@@ -1,3 +1,5 @@
+using System;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -9,6 +11,41 @@ namespace Fufucode.Core.Plugins;
 /// </summary>
 public abstract class BrowserUseBridge
 {
+    /// <summary>解开旧宿主脚本返回的 JSON 字符串外层，保留真实 JSON 类型。</summary>
+    public static string NormalizeScriptResult(string raw)
+    {
+        using var document = JsonDocument.Parse(raw);
+        if (document.RootElement.ValueKind != JsonValueKind.String) return document.RootElement.GetRawText();
+        var inner = document.RootElement.GetString() ?? "null";
+        using var decoded = JsonDocument.Parse(inner);
+        return decoded.RootElement.GetRawText();
+    }
+
+    /// <summary>只识别结果对象的错误字段，不把网页文本中的 error 单词当作失败。</summary>
+    public static bool IsErrorResult(string payload)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            var root = document.RootElement;
+            // 兼容仍返回 JSON 字符串包装的旧桥。
+            if (root.ValueKind == JsonValueKind.String)
+            {
+                var inner = root.GetString();
+                if (string.IsNullOrWhiteSpace(inner) || !inner.TrimStart().StartsWith("{", StringComparison.Ordinal)) return false;
+                using var decoded = JsonDocument.Parse(inner);
+                return HasError(decoded.RootElement);
+            }
+            return HasError(root);
+        }
+        catch (JsonException) { return false; } // 旧桥的成功说明允许为纯文本。
+    }
+
+    private static bool HasError(JsonElement root) => root.ValueKind == JsonValueKind.Object &&
+        ((root.TryGetProperty("error", out var error) && error.ValueKind is not (JsonValueKind.Null or JsonValueKind.False)) ||
+         (root.TryGetProperty("success", out var success) && success.ValueKind == JsonValueKind.False) ||
+         (root.TryGetProperty("exceptionDetails", out var exception) && exception.ValueKind != JsonValueKind.Null));
+
     /// <summary>在匹配元素中输入文本（可选先清空）；默认实现返回“未实现”，不伪造成功。</summary>
     public virtual Task<string> TypeAsync(string selector, string text, bool clear, CancellationToken cancellationToken = default)
         => Task.FromResult("{\"error\":\"browser_type 未实现：当前桥不提供文本输入。\"}");

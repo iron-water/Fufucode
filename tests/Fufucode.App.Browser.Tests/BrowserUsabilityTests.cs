@@ -103,6 +103,18 @@ internal static class BrowserUsabilityTests
 
     private static void SearchFallback(Action<bool, string> check)
     {
+        check(BrowserAddressResolver.Resolve("hello").Kind == BrowserTargetKind.Search &&
+              BrowserAddressResolver.Resolve("我的笔记").Kind == BrowserTargetKind.Search,
+            "单个英文词和中文词都转入搜索");
+        check(BrowserAddressResolver.Resolve("[::1]:3000").Kind == BrowserTargetKind.Web,
+            "IPv6 回环地址保留导航语义");
+        check(BrowserAddressResolver.Resolve("hello", null, "javascript:{0}").Kind == BrowserTargetKind.Rejected,
+            "搜索模板不能注入脚本协议");
+        check(BrowserView.AnnotationCss("line-height", "1.5;color:red") == "" &&
+              BrowserView.AnnotationCss("padding", "NaN") == "" && BrowserView.AnnotationCss("color", "#12345") == "",
+            "Adjust 拒绝 CSS 注入、非有限尺寸和非法十六进制颜色");
+        check(BrowserView.AnnotationCss("font-size", "18") == "font-size:18px !important;",
+            "Adjust 只输出允许属性的有界值");
         var words = BrowserAddressResolver.Resolve("hello world");
         check(words.Kind == BrowserTargetKind.Search && words.IsNavigable && words.Query == "hello world",
             "含空格的普通文字转为搜索而不是拒绝");

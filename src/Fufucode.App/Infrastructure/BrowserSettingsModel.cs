@@ -17,7 +17,7 @@ public sealed record BrowserSettings
 
     // ── 常规 ──
     /// <summary>让智能体控制内置浏览器的主开关；关闭时浏览器仍可手动使用。</summary>
-    public bool BrowserUseEnabled { get; init; } = true;
+    public bool BrowserUseEnabled { get; init; } = false;
 
     public string WebUrlOpenTarget { get; init; } = "builtin";
     public string LocalUrlOpenTarget { get; init; } = "builtin";

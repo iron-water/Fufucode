@@ -177,65 +177,96 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
     public override async Task<string> ExecuteAsync(string action, string argumentsJson,
         CancellationToken cancellationToken = default)
     {
-        if (!IsConnected)
-            return Error("设备浏览器扩展未连接：请安装扩展、填写端口/配对码并保持 Chrome/Edge 运行。");
+        cancellationToken.ThrowIfCancellationRequested();
+        if (!_settingsAccessor().ExternalBrowserEnabled) return Error("外部浏览器控制未开启。");
+        if (!IsConnected) return Error("设备浏览器扩展未连接或握手已失效。");
         if (string.IsNullOrWhiteSpace(action)) return Error("缺少 action。");
-
-        var settings = _settingsAccessor();
-        var rules = new BrowserSiteRules(settings);
         var args = string.IsNullOrWhiteSpace(argumentsJson) ? "{}" : argumentsJson;
-        var targetUrl = ReadString(args, "url");
-        var host = BrowserSiteRules.HostOf(targetUrl) ?? _lastHost;
-        var permission = rules.PermissionFor(targetUrl ?? _lastUrl);
-        var needsApproval = action switch
-        {
-            ExternalBrowserActions.State or ExternalBrowserActions.Tabs => false,
-            ExternalBrowserActions.Evaluate => true,
-            _ => !string.Equals(permission, "allow", StringComparison.OrdinalIgnoreCase),
-        };
+        JsonDocument arguments;
+        try { arguments = JsonDocument.Parse(args); }
+        catch (JsonException error) { return Error("动作参数不是合法 JSON：" + error.Message); }
+        using var _ = arguments;
+        if (arguments.RootElement.ValueKind != JsonValueKind.Object) return Error("动作参数必须是 JSON 对象。");
+        // confirmed 是宿主二次审批凭证，不能由工具参数自行声明。
+        args = JsonSerializer.Serialize(arguments.RootElement.EnumerateObject()
+            .Where(property => property.Name != "confirmed").ToDictionary(property => property.Name, property => property.Value));
+        // 仅导航类动作可以用 url 作为审批目标；其它动作不能夹带 allow 站点 URL 绕过当前页 block。
+        var targetUrl = action is ExternalBrowserActions.Navigate or ExternalBrowserActions.OpenTab ? ReadString(args, "url") : null;
+        var sourceUrl = _lastUrl;
+        var sourceClient = _clientId;
+        var address = targetUrl ?? sourceUrl;
+        using var lifetime = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _cts?.Token ?? CancellationToken.None);
+        lifetime.CancelAfter(TimeSpan.FromSeconds(60));
+        var token = lifetime.Token;
 
-        if (host is { Length: > 0 } && string.Equals(permission, "block", StringComparison.OrdinalIgnoreCase))
-            return Error($"{host} 的站点权限为“禁止访问”，已拒绝 {action}。");
-
-        if (needsApproval)
+        string? Denial()
         {
-            if (ApprovalHandler is null)
-                return Error($"外部浏览器动作 {action} 需要批准，但当前会话没有可用的确认通道。");
-            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout.CancelAfter(TimeSpan.FromSeconds(60));
+            token.ThrowIfCancellationRequested();
+            var settings = _settingsAccessor();
+            if (!settings.ExternalBrowserEnabled) return "外部浏览器控制已关闭。";
+            if (!IsConnected || _clientId != sourceClient || _lastUrl != sourceUrl) return "设备浏览器页面或连接已改变，请重新请求。";
+            if (new BrowserSiteRules(settings).PermissionFor(address) == "block")
+                return "站点权限为“禁止访问”。";
+            if (action == ExternalBrowserActions.Evaluate && !settings.EnableFullCdpAccess) return "完整 CDP 访问权限未开启，不能执行任意 JavaScript。";
+            if (action == ExternalBrowserActions.Screenshot && settings.ScreenshotMode == "never") return "截图策略为“从不”。";
+            return null;
+        }
+
+        async Task<bool> Approve(string description)
+        {
+            var handler = ApprovalHandler;
+            if (handler is null) return false;
             try
             {
-                var allowed = await ApprovalHandler(
-                    new BrowserApprovalRequest(action, host ?? _lastHost ?? "设备浏览器", targetUrl ?? _lastUrl ?? string.Empty),
-                    timeout.Token).ConfigureAwait(false);
-                if (!allowed) return Error($"外部浏览器动作 {action} 被用户拒绝。");
+                return await handler(new BrowserApprovalRequest(description,
+                    BrowserSiteRules.HostOf(address) ?? "设备浏览器", address ?? string.Empty), token)
+                    .WaitAsync(token).ConfigureAwait(false) && !token.IsCancellationRequested;
             }
-            catch (OperationCanceledException)
-            {
-                return Error($"外部浏览器动作 {action} 等待批准超时，已拒绝。");
-            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception) { return false; }
         }
 
-        await _executeGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var result = await SendAsync(action, args, cancellationToken).ConfigureAwait(false);
-            if (result.Contains("\"needsConfirmation\":true", StringComparison.Ordinal))
+            if (Denial() is { } denial) return Error(denial);
+            // 排队也有期限；取得执行权以后才按最新规则审批，不沿用排队前的 allow。
+            await _executeGate.WaitAsync(token).ConfigureAwait(false);
+            try
             {
-                var text = ReadString(result, "text");
-                if (ApprovalHandler is null)
-                    return Error($"该操作看起来是敏感操作（{text}），当前没有确认通道，已拒绝。");
-                var allowed = await ApprovalHandler(
-                    new BrowserApprovalRequest("敏感操作：" + (text ?? action), host ?? _lastHost ?? "设备浏览器", _lastUrl ?? string.Empty),
-                    cancellationToken).ConfigureAwait(false);
-                if (!allowed) return Error("用户拒绝了敏感操作。");
-                args = AddConfirmed(args);
-                result = await SendAsync(action, args, cancellationToken).ConfigureAwait(false);
+                if (Denial() is { } queuedDenial) return Error(queuedDenial);
+                var settings = _settingsAccessor();
+                var needsApproval = action == ExternalBrowserActions.Evaluate ||
+                    new BrowserSiteRules(settings).PermissionFor(address) != "allow" ||
+                    (action == ExternalBrowserActions.Screenshot && settings.ScreenshotMode == "ask");
+                if (needsApproval && !await Approve(action).ConfigureAwait(false)) return Error("外部浏览器动作未获批准。");
+                if (Denial() is { } approvedDenial) return Error(approvedDenial);
+                var result = await SendAsync(action, args, token).ConfigureAwait(false);
+                using (var response = JsonDocument.Parse(result))
+                {
+                    if (response.RootElement.ValueKind == JsonValueKind.Object &&
+                        response.RootElement.TryGetProperty("needsConfirmation", out var confirmation) && confirmation.ValueKind == JsonValueKind.True)
+                    {
+                        if (!await Approve("敏感操作：" + (ReadString(result, "text") ?? action)).ConfigureAwait(false))
+                            return Error("用户拒绝了敏感操作。");
+                        if (Denial() is { } sensitiveDenial) return Error(sensitiveDenial);
+                        result = await SendAsync(action, AddConfirmed(args), token).ConfigureAwait(false);
+                    }
+                }
+                token.ThrowIfCancellationRequested();
+                // 导航可以改变活动地址；结果交付前仍核查最新开关和目标站点规则。
+                var latest = _settingsAccessor();
+                if (!latest.ExternalBrowserEnabled || new BrowserSiteRules(latest).PermissionFor(address) == "block" ||
+                    (action == ExternalBrowserActions.Evaluate && !latest.EnableFullCdpAccess))
+                    return Error("浏览器控制或站点权限已被撤销。");
+                UpdateKnownPage(result);
+                return result;
             }
-            UpdateKnownPage(result);
-            return result;
+            finally { _executeGate.Release(); }
         }
-        finally { _executeGate.Release(); }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return Error("外部浏览器动作等待超时或服务已停止，已拒绝。");
+        }
     }
 
     private async Task<string> SendAsync(string action, string args, CancellationToken cancellationToken)
@@ -305,6 +336,7 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
                 switch (request.Path)
                 {
                     case "/api/status":
+                        var authorized = IsAuthorized(request);
                         await WriteJsonAsync(stream, 200, JsonSerializer.Serialize(new
                         {
                             ok = true,
@@ -313,12 +345,12 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
                             handshake = Status.HandshakeComplete,
                             port = Port,
                             version = typeof(ExternalBrowserBridgeServer).Assembly.GetName().Version?.ToString(),
-                            clientId = _clientId,
-                            browser = _browserName,
-                            browserVersion = _browserVersion,
-                            activeUrl = _lastUrl,
-                            tabCount = _tabCount,
-                            capabilities = _capabilities,
+                            clientId = authorized ? _clientId : null,
+                            browser = authorized ? _browserName : null,
+                            browserVersion = authorized ? _browserVersion : null,
+                            activeUrl = authorized ? _lastUrl : null,
+                            tabCount = authorized ? _tabCount : 0,
+                            capabilities = authorized ? _capabilities : Array.Empty<string>(),
                         }), cancellationToken).ConfigureAwait(false);
                         return;
                     case "/api/extension/handshake":
@@ -390,15 +422,17 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
         timeout.CancelAfter(TimeSpan.FromSeconds(25));
         try
         {
-            if (!await _outbox.Reader.WaitToReadAsync(timeout.Token).ConfigureAwait(false) ||
-                !_outbox.Reader.TryRead(out var command))
+            while (await _outbox.Reader.WaitToReadAsync(timeout.Token).ConfigureAwait(false))
             {
-                await WriteEmptyAsync(stream, 204, cancellationToken).ConfigureAwait(false);
+                if (!_outbox.Reader.TryRead(out var command)) continue;
+                // 已取消或超时的队列项不得在扩展重连后迟到执行。
+                if (!_pending.ContainsKey(command.Id)) continue;
+                await WriteJsonAsync(stream, 200,
+                    $"{{\"id\":{JsonSerializer.Serialize(command.Id)},\"action\":{JsonSerializer.Serialize(command.Action)},\"arguments\":{command.ArgumentsJson}}}",
+                    cancellationToken).ConfigureAwait(false);
                 return;
             }
-            await WriteJsonAsync(stream, 200,
-                $"{{\"id\":{JsonSerializer.Serialize(command.Id)},\"action\":{JsonSerializer.Serialize(command.Action)},\"arguments\":{command.ArgumentsJson}}}",
-                cancellationToken).ConfigureAwait(false);
+            await WriteEmptyAsync(stream, 204, cancellationToken).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -425,6 +459,8 @@ public sealed class ExternalBrowserBridgeServer : ExternalBrowserBridge, IAsyncD
         _browserName = ReadString(request.Body, "browser")?.Trim();
         _browserVersion = ReadString(request.Body, "browserVersion")?.Trim();
         _tabCount = ReadInt(request.Body, "tabCount");
+        _lastUrl = ReadString(request.Body, "activeUrl");
+        _lastHost = BrowserSiteRules.HostOf(_lastUrl);
         _capabilities = ReadStringArray(request.Body, "capabilities");
         _lastHandshakeUtc = DateTimeOffset.UtcNow;
         _lastSeenUtc = _lastHandshakeUtc;

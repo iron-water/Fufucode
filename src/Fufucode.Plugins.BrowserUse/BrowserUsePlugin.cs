@@ -93,10 +93,13 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         "\"arguments\":{\"type\":\"object\",\"description\":\"动作参数，例如 url、selector、text、x/y、key、tabId。\"}}," +
         "\"required\":[\"action\"]}";
 
-    public BrowserUsePlugin(BrowserUseBridge? bridge = null, ExternalBrowserBridge? externalBridge = null)
+    public BrowserUsePlugin(BrowserUseBridge? bridge = null, ExternalBrowserBridge? externalBridge = null,
+        Func<BrowserUseBridge?>? bridgeResolver = null, Func<ExternalBrowserBridge?>? externalBridgeResolver = null)
     {
-        Bridge = bridge;
-        ExternalBridge = externalBridge;
+        _bridge = bridge;
+        _externalBridge = externalBridge;
+        _bridgeResolver = bridgeResolver;
+        _externalBridgeResolver = externalBridgeResolver;
         var tools = new List<PluginToolRegistration>
         {
             new(CdpTool, "通过 Chrome DevTools Protocol 调用内置浏览器内部方法（DOM、网络、性能等）。", CdpSchema, PluginCapability.BrowserControl),
@@ -113,7 +116,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
             new(ScreenshotTool, "截取内置浏览器当前可视区域的图片（base64）。", ScreenshotSchema, PluginCapability.BrowserControl),
             new(GetStateTool, "读取内置浏览器当前地址、标题、加载状态与权限状态。", GetStateSchema, PluginCapability.BrowserControl),
         };
-        if (ExternalBridge is not null)
+        if (externalBridge is not null || externalBridgeResolver is not null)
         {
             tools.Add(new PluginToolRegistration(ExternalStateTool,
                 "读取设备自带浏览器（Chrome/Edge）的当前页签、地址、标题与连接状态。",
@@ -125,8 +128,14 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         Registrations = tools;
     }
 
-    public BrowserUseBridge? Bridge { get; set; }
-    public ExternalBrowserBridge? ExternalBridge { get; set; }
+    private BrowserUseBridge? _bridge;
+    private ExternalBrowserBridge? _externalBridge;
+    private readonly Func<BrowserUseBridge?>? _bridgeResolver;
+    private readonly Func<ExternalBrowserBridge?>? _externalBridgeResolver;
+
+    // 组合根晚创建/替换/移除视图后，下次工具调用必须重新解析，不保留旧视图的桥。
+    public BrowserUseBridge? Bridge { get => _bridgeResolver is null ? _bridge : _bridgeResolver(); set => _bridge = value; }
+    public ExternalBrowserBridge? ExternalBridge { get => _externalBridgeResolver is null ? _externalBridge : _externalBridgeResolver(); set => _externalBridge = value; }
 
     public PluginCapability? Capability => PluginCapability.BrowserControl;
 
@@ -227,8 +236,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         return new PureToolResult(call.Id, !IsErrorPayload(payload), payload);
     }
 
-    private static bool IsErrorPayload(string payload) =>
-        payload.Length > 0 && payload.Contains("\"error\"", StringComparison.Ordinal);
+    private static bool IsErrorPayload(string payload) => BrowserUseBridge.IsErrorResult(payload);
 
     private async Task<PureToolResult> EvaluateAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
     {
@@ -242,7 +250,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         }
 
         var result = await Bridge!.EvaluateAsync(script, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, true, result ?? "null");
+        return new PureToolResult(call.Id, !IsErrorPayload(result ?? "null"), result ?? "null");
     }
 
     private async Task<PureToolResult> NavigateAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -272,7 +280,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         }
 
         var result = await Bridge!.ClickAsync(selector, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> TypeAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -292,7 +300,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         var clear = root.TryGetProperty("clear", out var clearElement) && clearElement.ValueKind == JsonValueKind.True;
 
         var result = await Bridge!.TypeAsync(selector, text, clear, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> ScrollAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -302,7 +310,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         var x = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("x", out var xe) && xe.TryGetInt32(out var xi) ? xi : 0;
         var y = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("y", out var ye) && ye.TryGetInt32(out var yi) ? yi : 0;
         var result = await Bridge!.ScrollAsync(x, y, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> HoverAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -311,7 +319,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         if (!TryString(doc.RootElement, "selector", out var selector))
             return new PureToolResult(call.Id, false, "参数错误：'browser_hover' 需要 selector。");
         var result = await Bridge!.HoverAsync(selector, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> KeyAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -324,7 +332,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
             TryBool(doc.RootElement, "ctrl"), TryBool(doc.RootElement, "shift"),
             TryBool(doc.RootElement, "alt"), TryBool(doc.RootElement, "meta"),
             cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> SelectAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -334,7 +342,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
             !TryString(doc.RootElement, "value", out var value))
             return new PureToolResult(call.Id, false, "参数错误：'browser_select' 需要 selector 与 value。");
         var result = await Bridge!.SelectAsync(selector, value, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> WaitAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -346,7 +354,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
                       doc.RootElement.TryGetProperty("timeoutMs", out var timeoutElement) &&
                       timeoutElement.TryGetInt32(out var parsed) ? parsed : 5000;
         var result = await Bridge!.WaitAsync(selector, timeout, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> GetDomAsync(PureToolCall call, string arguments, CancellationToken cancellationToken)
@@ -358,7 +366,7 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         var maxHtml = doc.RootElement.ValueKind == JsonValueKind.Object &&
                       doc.RootElement.TryGetProperty("maxHtml", out var htmlElement) && htmlElement.TryGetInt32(out var html) ? html : 20000;
         var result = await Bridge!.GetDomAsync(selector, maxText, maxHtml, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private static bool TryString(JsonElement root, string name, out string value)
@@ -391,13 +399,13 @@ public sealed class BrowserUsePlugin : IPluginToolHandler
         }
 
         var result = await Bridge!.ScreenshotAsync(format, cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 
     private async Task<PureToolResult> GetStateAsync(PureToolCall call, CancellationToken cancellationToken)
     {
         var result = await Bridge!.GetStateAsync(cancellationToken).ConfigureAwait(false);
-        return new PureToolResult(call.Id, !result.Contains("\"error\"", StringComparison.Ordinal), result);
+        return new PureToolResult(call.Id, !IsErrorPayload(result), result);
     }
 }
 
@@ -411,8 +419,7 @@ public sealed class BrowserUsePluginPackage : IPluginPackage
 
     public IPluginToolHandler? CreateToolHandler(PluginPackageContext context)
     {
-        var bridge = context.GetService<BrowserUseBridge>();
-        var external = context.GetService<ExternalBrowserBridge>();
-        return new BrowserUsePlugin(bridge, external);
+        return new BrowserUsePlugin(bridgeResolver: () => context.GetService<BrowserUseBridge>(),
+            externalBridgeResolver: () => context.GetService<ExternalBrowserBridge>());
     }
 }
