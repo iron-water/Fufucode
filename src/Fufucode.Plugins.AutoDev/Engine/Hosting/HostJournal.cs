@@ -91,7 +91,9 @@ public sealed class HostJournal
     public bool TryClaim(HostInstance instance, IProcessProbe probe)
     {
         using var c = Open();
-        using var tx = c.BeginTransaction();
+        // 抢槽必须一开始就拿写锁：默认 deferred 事务允许两个进程同时读到“空槽”，
+        // 写升级时一方会收到 SQLITE_BUSY 异常而不是约定的 false。
+        using var tx = c.BeginTransaction(deferred: false);
         using (var read = c.CreateCommand())
         {
             read.Transaction = tx;

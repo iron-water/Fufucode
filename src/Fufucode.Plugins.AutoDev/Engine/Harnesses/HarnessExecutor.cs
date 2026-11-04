@@ -44,7 +44,6 @@ public sealed class HarnessExecutor(AutomationStore project, string evidenceDire
         cancellationToken.ThrowIfCancellationRequested();
         if (!Runs.Claim(request, thread, runtime, thread.Status == ThreadStatus.Active && project.IsTaskUnlocked(task.TaskId)))
             return Runs.Get(request.RunId);
-        Directory.CreateDirectory(directory);
         var initial = Runs.Get(request.RunId);
         Process? process = null;
         Task? stderrTask = null;
@@ -61,6 +60,9 @@ public sealed class HarnessExecutor(AutomationStore project, string evidenceDire
             request.TaskId, null, request.RunId, JsonSerializer.Serialize(payload), DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
         try
         {
+            // 证据目录属于“已认领的运行”的一部分：创建失败也必须在 catch 中把运行
+            // 置为失败，否则 Dispatching 行会永久占住 thread/worktree 的唯一索引。
+            Directory.CreateDirectory(directory);
             var start = adapter.Prepare(runtime, request, thread.Worktree, directory, locator);
             Publish("dispatching", new { runtime.Id, runtime.Harness, runtime.Version, request.Model });
             process = new Process { StartInfo = start };

@@ -39,6 +39,8 @@ public sealed class BackgroundHost : IAsyncDisposable
     /// <summary>Set only by an explicit stop, never by a process death: that is what keeps a clean
     /// exit distinguishable from a crash in the durable record.</summary>
     private volatile bool _stopRequested;
+    private volatile bool _claimed;
+    private int _finished;
 
     public BackgroundHost(HostOptions options, IProcessProbe? probe = null)
     {
@@ -81,6 +83,7 @@ public sealed class BackgroundHost : IAsyncDisposable
         if (!_queue.TryClaim(new HostInstance(_options.HostId, _probe.CurrentPid, _ownStartUtc, now),
                 _probe))
             return false;
+        _claimed = true;
         _listener = new TcpListener(IPAddress.Loopback, _options.Port);
         _listener.Start();
         Port = ((IPEndPoint)_listener.LocalEndpoint).Port;
@@ -479,9 +482,16 @@ public sealed class BackgroundHost : IAsyncDisposable
 
     private void FinishStop()
     {
-        _queue.Release(_options.HostId, Now());
-        var endpoint = Path.GetFullPath(_options.EndpointFile);
-        if (HostClient.ReadEndpoint(endpoint) == Port) File.Delete(endpoint);
+        // Drain 的 finally 与 DisposeAsync 都可能走到这里；只允许第一个执行释放。
+        if (Interlocked.Exchange(ref _finished, 1) != 0) return;
+        // 抢槽失败的竞争者也可能被 Dispose；它没有持有槽位，绝不能按 host id 去 Release
+        // 另一个正在运行的宿主（Release 只按 host id 过滤，不校验进程身份）。
+        if (_claimed)
+        {
+            _queue.Release(_options.HostId, Now());
+            var endpoint = Path.GetFullPath(_options.EndpointFile);
+            if (HostClient.ReadEndpoint(endpoint) == Port) File.Delete(endpoint);
+        }
         _listener?.Stop();
         _stopRecorded.TrySetResult();
     }
@@ -496,11 +506,13 @@ public sealed class BackgroundHost : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        _stopping.Cancel();
+        // 走与显式 Stop 相同的收尾路径：drain 的 finally 会调用 FinishStop；
+        // 若 drain 还没启动/已提前结束，下面再补一次（FinishStop 幂等）。
+        RequestStop();
         _listener?.Stop();
-        _stopRecorded.TrySetResult();
         if (_drain is not null) { try { await _drain; } catch { /* closing */ } }
         if (_accept is not null) { try { await _accept; } catch { /* closing */ } }
+        FinishStop();
         _stopping.Dispose();
         _store.Dispose();
         GC.SuppressFinalize(this);

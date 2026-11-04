@@ -39,6 +39,22 @@ internal static class HostBoundaryChecks
             await host.StopAsync();
             Check(HostClient.ReadEndpoint(endpoint) is null, "actual host stop removes publication without disturbing the old read handle");
         }
+
+        // DisposeAsync 也必须走完释放：不能只取消循环而把槽位和 endpoint 留在“运行中”。
+        var disposeEndpoint = Path.Combine(directory, "dispose-host.endpoint");
+        var disposeDatabase = Path.Combine(directory, "dispose-control.db");
+        await using (var host = new BackgroundHost(new(disposeDatabase, Path.Combine(directory, "dispose-runs"),
+                         "dispose-boundary-host", disposeEndpoint)))
+        {
+            Check(await host.StartAsync(), "dispose fixture claims the host slot");
+        }
+        Check(!File.Exists(disposeEndpoint), "DisposeAsync without Stop still removes the endpoint file");
+        using (var disposedStore = new Fufucode.Core.Automation.AutomationStore(disposeDatabase))
+        {
+            var disposedJournal = new HostJournal(disposedStore);
+            Check(disposedJournal.SlotState(SystemProcessProbe.Shared) == HostSlotState.Stopped,
+                "DisposeAsync marks the host slot as cleanly stopped");
+        }
     }
 
     private sealed class BirthProbe(int childId, DateTimeOffset? birth) : IProcessProbe

@@ -64,6 +64,30 @@ var git = GitCliEvidence.Shared;
     Check(executor.Runs.ListActive().Count == 0, "owner: a terminal run releases the thread");
 }
 
+// --------------------------------------------- 1b. claimed run cannot stay Dispatching when evidence setup fails
+{
+    var scenario = New(root, "claim-failure");
+    GitInit(scenario.Worktree);
+    using var store = Seed(scenario);
+    var evidenceFile = Path.Combine(scenario.State, "evidence-is-a-file");
+    File.WriteAllText(evidenceFile, "not a directory");
+    var executor = new HarnessExecutor(store, evidenceFile, "host-claim-failure", git);
+    HarnessRun? failedRun = null;
+    try
+    {
+        failedRun = await executor.ExecuteAsync(Runtime(scenario),
+            new HarnessRequest("run-claim-failure", "thread", "task", "devin/swe-2", "echo:never"));
+    }
+    catch (IOException)
+    {
+        // 旧实现会在 Claim 之后、try 之外抛出，运行行永久停在 Dispatching。
+    }
+    Check(failedRun is { Status: HarnessRunStatus.Failed },
+        "evidence setup failure is journaled as a failed run, not left Dispatching");
+    Check(executor.Runs.ListActive().Count == 0,
+        "evidence setup failure releases the thread/worktree claim");
+}
+
 // --------------------------------------------- 2. two hosts compete; the live one owns
 {
     var scenario = New(root, "compete");
