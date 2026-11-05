@@ -103,12 +103,7 @@ internal static class Case07FactoryChainTests
         checks.Check(!string.IsNullOrEmpty(s1.JobId) && !string.IsNullOrEmpty(s2.JobId) && s1.JobId != s2.JobId,
             "同一 runner 上的先后子代理任务获得不同 JobId");
 
-        // 3) 显式指定的 jobId 得到采纳并贯通到进度事件与结果
-        var custom = await runner.RunAsync("explore", "自定义任务", null, CancellationToken.None, jobId: "custom-job-42");
-        checks.Check(custom.JobId == "custom-job-42", "显式传入的 jobId 被采纳");
-        checks.Check(progressEvents.Any(e => e.JobId == "custom-job-42"), "显式 jobId 贯通到进度事件");
-
-        // 4) 嵌套子代理：子任务获得独立 JobId，且 ParentJobId 记录父级 JobId
+        // 3) 嵌套子代理：子任务获得独立 JobId，且 ParentJobId 记录父级 JobId
         var leadResult = await runner.RunAsync("lead", "nest-test", null, CancellationToken.None);
         checks.Check(leadResult.Success, "嵌套 lead 代理执行成功");
         var leadEvents = progressEvents.Where(e => e.Agent == "lead").ToList();
@@ -116,7 +111,7 @@ internal static class Case07FactoryChainTests
         checks.Check(leadEvents.Count > 0 && exploreEvents.Count > 0, "嵌套子代理事件正常上报");
         checks.Check(leadEvents[0].JobId != exploreEvents[0].JobId, "嵌套子代理任务拥有独立的 JobId，不侵占父任务 ID");
 
-        // 5) 并发 patch 子代理补丁文件隔离：不同任务生成独立的补丁路径，互不覆盖
+        // 4) 并发 patch 子代理补丁文件隔离：不同任务生成独立的补丁路径，互不覆盖
         var gitRepo = Path.Combine(testDir, "git-repo");
         Directory.CreateDirectory(gitRepo);
         if (RunGit(gitRepo, "init") && RunGit(gitRepo, "config user.email test@example.com") &&

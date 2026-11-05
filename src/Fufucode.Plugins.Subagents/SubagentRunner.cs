@@ -134,10 +134,9 @@ public sealed class SubagentRunner
     }
 
     public async Task<SubagentResult> RunAsync(string agentName, string prompt, string? modelOverride,
-        CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null,
-        string? jobId = null)
+        CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null)
     {
-        var runJobId = ResolveJobId(jobId);
+        var runJobId = Guid.NewGuid().ToString("N")[..12];
         if (Lifetime is not { } generation)
             return await RunObservedAsync(runJobId, agentName, prompt, modelOverride, cancellationToken, fork, mode)
                 .ConfigureAwait(false);
@@ -154,16 +153,6 @@ public sealed class SubagentRunner
         {
             generation.Exit();
         }
-    }
-
-    private static string ResolveJobId(string? jobId)
-    {
-        if (string.IsNullOrWhiteSpace(jobId))
-            return Guid.NewGuid().ToString("N")[..12];
-        var invalid = Path.GetInvalidFileNameChars();
-        var chars = jobId.Trim().Select(c => invalid.Contains(c) ? '_' : c).ToArray();
-        var sanitized = new string(chars);
-        return sanitized.Length <= 32 ? sanitized : sanitized[..32];
     }
 
     private async Task<SubagentResult> RunObservedAsync(string runJobId, string agentName, string prompt, string? modelOverride,
