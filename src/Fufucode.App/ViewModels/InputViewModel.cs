@@ -374,8 +374,16 @@ public sealed partial class InputViewModel : ViewModelBase
         ApplyPendingRestoreCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>输入区只消费队列与回合/连接状态；流式增量不在这里处理。</summary>
+    internal static bool HandlesSessionEvent(SessionEvent e) =>
+        e is SessionEvent.QueueCleared or SessionEvent.QueueChanged or
+            SessionEvent.ActivityChanged or SessionEvent.TurnSettled or
+            SessionEvent.ConnectionChanged or SessionEvent.SessionError;
+
     private void OnSessionEvent(object? sender, SessionEvent e)
     {
+        // 在排队前过滤：每个文本/思考/工具分片都 Post 到 UI 再走默认分支丢弃，只会放大队列。
+        if (!HandlesSessionEvent(e)) return;
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => OnSessionEvent(sender, e));

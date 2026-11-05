@@ -238,21 +238,24 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
     private void RefreshLiveState() => _liveSessionItem?.UpdateLiveState(
         _session.Activity, _session.LastOutcome, _session.Connection);
 
+    /// <summary>侧栏只消费状态类事件；流式增量（文本/思考/工具片段）与这里无关。</summary>
+    internal static bool HandlesSessionEvent(SessionEvent e) =>
+        e is SessionEvent.ActivityChanged or SessionEvent.ConnectionChanged or
+            SessionEvent.TurnSettled or SessionEvent.SessionError;
+
     private void OnSessionEvent(object? sender, SessionEvent e)
     {
         if (_disposed) return;
+        // 在排队前过滤：流式增量随分片到达，若全部 Post 到 UI 线程再丢弃，会放大无用队列。
+        if (!HandlesSessionEvent(e)) return;
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => OnSessionEvent(sender, e));
             return;
         }
-        if (e is SessionEvent.ActivityChanged or SessionEvent.ConnectionChanged or
-            SessionEvent.TurnSettled or SessionEvent.SessionError)
-        {
-            RefreshLiveState();
-            if (e is SessionEvent.TurnSettled && !_conversationVisible)
-                _liveSessionItem?.MarkUnread(true);
-        }
+        RefreshLiveState();
+        if (e is SessionEvent.TurnSettled && !_conversationVisible)
+            _liveSessionItem?.MarkUnread(true);
     }
 
     public void Dispose()

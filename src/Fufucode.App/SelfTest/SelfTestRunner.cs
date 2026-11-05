@@ -304,6 +304,7 @@ public static class SelfTestRunner
         }
 
         // 纯逻辑部分不需要 UI 线程
+        TestSessionEventFilter();
         TestImeGuard();
         TestTextSegmenter();
         TestRebuilderRules();
@@ -452,6 +453,39 @@ public static class SelfTestRunner
         var path = Path.Combine(Program.SelfTestDataRoot!, "evidence", group);
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    // ── 会话事件过滤：流式增量不得进入这两个 VM 的 UI 队列 ──
+    private static void TestSessionEventFilter()
+    {
+        Console.WriteLine("[会话事件过滤]");
+        SessionEvent[] streaming =
+        [
+            new TextAppended("m", 0, "x"),
+            new ThinkingAppended("m", 0, "x"),
+            new ToolCallAppended("m", 0, "t", "{}"),
+        ];
+        SessionEvent[] state =
+        [
+            new TurnSettled(SessionOutcome.Completed, null),
+            new ConnectionChanged(SessionConnection.Connected),
+            new ActivityChanged(SessionActivity.Idle),
+            new SessionError(SessionErrorKind.Unknown, "x", null),
+        ];
+        var ok = true;
+        foreach (var e in streaming)
+        {
+            if (ViewModels.SidebarViewModel.HandlesSessionEvent(e)) { Fail("侧栏仍排队处理 " + e.GetType().Name); ok = false; }
+            if (ViewModels.InputViewModel.HandlesSessionEvent(e)) { Fail("输入区仍排队处理 " + e.GetType().Name); ok = false; }
+        }
+        foreach (var e in state)
+        {
+            if (!ViewModels.SidebarViewModel.HandlesSessionEvent(e)) { Fail("侧栏漏掉 " + e.GetType().Name); ok = false; }
+            if (!ViewModels.InputViewModel.HandlesSessionEvent(e)) { Fail("输入区漏掉 " + e.GetType().Name); ok = false; }
+        }
+        if (!ViewModels.InputViewModel.HandlesSessionEvent(new QueueCleared([]))) { Fail("输入区漏掉 QueueCleared"); ok = false; }
+        if (!ViewModels.InputViewModel.HandlesSessionEvent(new QueueChanged(0, []))) { Fail("输入区漏掉 QueueChanged"); ok = false; }
+        if (ok) Pass("会话事件过滤：流式增量不再排队，状态与队列事件保留");
     }
 
     // ── 输入法守卫状态机（信号=PreeditText 组合状态，假时钟） ──
