@@ -53,6 +53,13 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--event-filter-only"))
+        {
+            TestSessionEventFilter();
+            Console.WriteLine($"Event filter failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--chat-attachments-only"))
         {
             await RunOnHeadlessUiThreadAsync(() =>
@@ -459,18 +466,18 @@ public static class SelfTestRunner
     private static void TestSessionEventFilter()
     {
         Console.WriteLine("[会话事件过滤]");
-        SessionEvent[] streaming =
+        Fufucode.App.Abstractions.SessionEvent[] streaming =
         [
-            new TextAppended("m", 0, "x"),
-            new ThinkingAppended("m", 0, "x"),
-            new ToolCallAppended("m", 0, "t", "{}"),
+            new Fufucode.App.Abstractions.SessionEvent.TextAppended("m", 0, "x"),
+            new Fufucode.App.Abstractions.SessionEvent.ThinkingAppended("m", 0, "x"),
+            new Fufucode.App.Abstractions.SessionEvent.ToolCallAppended("m", 0, "t", "{}"),
         ];
-        SessionEvent[] state =
+        Fufucode.App.Abstractions.SessionEvent[] state =
         [
-            new TurnSettled(SessionOutcome.Completed, null),
-            new ConnectionChanged(SessionConnection.Connected),
-            new ActivityChanged(SessionActivity.Idle),
-            new SessionError(SessionErrorKind.Unknown, "x", null),
+            new Fufucode.App.Abstractions.SessionEvent.TurnSettled(Fufucode.App.Abstractions.SessionOutcome.Completed, null),
+            new Fufucode.App.Abstractions.SessionEvent.ConnectionChanged(Fufucode.App.Abstractions.SessionConnection.Connected),
+            new Fufucode.App.Abstractions.SessionEvent.ActivityChanged(Fufucode.App.Abstractions.SessionActivity.Idle),
+            new Fufucode.App.Abstractions.SessionEvent.SessionError(Fufucode.App.Abstractions.SessionErrorKind.Unknown, "x", null),
         ];
         var ok = true;
         foreach (var e in streaming)
@@ -483,9 +490,15 @@ public static class SelfTestRunner
             if (!ViewModels.SidebarViewModel.HandlesSessionEvent(e)) { Fail("侧栏漏掉 " + e.GetType().Name); ok = false; }
             if (!ViewModels.InputViewModel.HandlesSessionEvent(e)) { Fail("输入区漏掉 " + e.GetType().Name); ok = false; }
         }
-        if (!ViewModels.InputViewModel.HandlesSessionEvent(new QueueCleared([]))) { Fail("输入区漏掉 QueueCleared"); ok = false; }
-        if (!ViewModels.InputViewModel.HandlesSessionEvent(new QueueChanged(0, []))) { Fail("输入区漏掉 QueueChanged"); ok = false; }
-        if (ok) Pass("会话事件过滤：流式增量不再排队，状态与队列事件保留");
+        if (!ViewModels.InputViewModel.HandlesSessionEvent(new Fufucode.App.Abstractions.SessionEvent.QueueCleared([]))) { Fail("输入区漏掉 Fufucode.App.Abstractions.SessionEvent.QueueCleared"); ok = false; }
+        if (!ViewModels.InputViewModel.HandlesSessionEvent(new Fufucode.App.Abstractions.SessionEvent.QueueChanged(0, []))) { Fail("输入区漏掉 Fufucode.App.Abstractions.SessionEvent.QueueChanged"); ok = false; }
+        // 投递计数回归：1000 条流式增量都不应再排队；只保留真正的状态/队列事件。
+        var flood = Enumerable.Range(0, 1000).Select(index => (Fufucode.App.Abstractions.SessionEvent)new Fufucode.App.Abstractions.SessionEvent.TextAppended("m", index, "x")).ToArray();
+        var sidebarDispatches = flood.Concat(state).Count(ViewModels.SidebarViewModel.HandlesSessionEvent);
+        var inputDispatches = flood.Concat(state).Count(ViewModels.InputViewModel.HandlesSessionEvent) + 2;
+        if (sidebarDispatches != state.Length) { Fail($"侧栏派发计数 {sidebarDispatches}，应为 {state.Length}"); ok = false; }
+        if (inputDispatches != state.Length + 2) { Fail($"输入区派发计数 {inputDispatches}，应为 {state.Length + 2}"); ok = false; }
+        if (ok) Pass($"会话事件过滤：1000 条流式增量下侧栏派发 {sidebarDispatches} 次、输入区 {inputDispatches} 次（过滤前各 >1000）");
     }
 
     // ── 输入法守卫状态机（信号=PreeditText 组合状态，假时钟） ──
