@@ -35,7 +35,8 @@ public sealed record SubagentResult(
     long? InputTokens = null,
     long? OutputTokens = null,
     long? DurationMs = null,
-    bool Truncated = false);
+    bool Truncated = false,
+    string? ParentJobId = null);
 
 /// <summary>
 /// 进程内子代理运行器：
@@ -96,9 +97,11 @@ public sealed class SubagentRunner
             .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         _definitions = definitions;
         JobId = jobId ?? Guid.NewGuid().ToString("N")[..12];
+        ParentJobId = jobId;
     }
 
     public string JobId { get; }
+    public string? ParentJobId { get; init; }
 
     /// <summary>插件激活代次；非 null 时执行进入 lease，撤销后拒绝并取消在途调用。</summary>
     internal SubagentGeneration? Lifetime { get; init; }
@@ -112,36 +115,39 @@ public sealed class SubagentRunner
     public IReadOnlyList<AgentDefinition> Agents => _agents.All;
     public string BuildPromptSection() => _agents.BuildPromptSection();
 
-    private void Report(string agent, string kind, string? detail = null) =>
-        Progress?.Invoke(new SubagentProgress(JobId, agent, kind, detail));
+    private void Report(string jobId, string agent, string kind, string? detail = null) =>
+        Progress?.Invoke(new SubagentProgress(jobId, agent, kind, detail));
 
-    private SubagentRunner CreateChildRunner()
+    private SubagentRunner CreateChildRunner(string? parentJobId = null)
     {
         var child = new SubagentRunner(
             _agents, _modelClient, _capabilities, _defaultModelId, _workspaceRoot, _capabilityDefinitions,
-            _depth + 1, _maxDepth, HistoryProvider, JobId)
+            _depth + 1, _maxDepth, HistoryProvider, parentJobId ?? JobId)
         {
             Lifetime = Lifetime,
             ApprovalGate = ApprovalGate,
             ParentMode = ParentMode,
-            Progress = Progress
+            Progress = Progress,
+            ParentJobId = parentJobId ?? JobId
         };
         return child;
     }
 
     public async Task<SubagentResult> RunAsync(string agentName, string prompt, string? modelOverride,
-        CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null)
+        CancellationToken cancellationToken, bool? fork = null, SubagentMode? mode = null,
+        string? jobId = null)
     {
+        var runJobId = ResolveJobId(jobId);
         if (Lifetime is not { } generation)
-            return await RunObservedAsync(agentName, prompt, modelOverride, cancellationToken, fork, mode)
+            return await RunObservedAsync(runJobId, agentName, prompt, modelOverride, cancellationToken, fork, mode)
                 .ConfigureAwait(false);
         // 旧会话在 Shutdown 后仍可能调用：撤销后拒绝新执行，执行中的调用由代次 token 取消。
         if (!generation.TryEnter(out var generationToken))
-            return Failure(agentName, mode ?? SubagentMode.Read, "子代理插件已卸载，调用被拒绝。");
+            return Failure(runJobId, agentName, mode ?? SubagentMode.Read, "子代理插件已卸载，调用被拒绝。");
         try
         {
             using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, generationToken);
-            return await RunObservedAsync(agentName, prompt, modelOverride, linked.Token, fork, mode)
+            return await RunObservedAsync(runJobId, agentName, prompt, modelOverride, linked.Token, fork, mode)
                 .ConfigureAwait(false);
         }
         finally
@@ -150,17 +156,28 @@ public sealed class SubagentRunner
         }
     }
 
-    private async Task<SubagentResult> RunObservedAsync(string agentName, string prompt, string? modelOverride,
+    private static string ResolveJobId(string? jobId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return Guid.NewGuid().ToString("N")[..12];
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = jobId.Trim().Select(c => invalid.Contains(c) ? '_' : c).ToArray();
+        var sanitized = new string(chars);
+        return sanitized.Length <= 32 ? sanitized : sanitized[..32];
+    }
+
+    private async Task<SubagentResult> RunObservedAsync(string runJobId, string agentName, string prompt, string? modelOverride,
         CancellationToken cancellationToken, bool? fork, SubagentMode? mode)
     {
         // 子代理在独立上下文中运行：开启新的根 span，内部模型/工具调用挂在它下面。
         using var span = PerfTracer.Step("subagent", "agent", agentName);
+        span.Tag("jobId", runJobId);
         span.Tag("mode", mode?.ToString() ?? "default");
         span.Tag("fork", fork == true);
         var started = Stopwatch.GetTimestamp();
         try
         {
-            var result = await RunDispatchAsync(agentName, prompt, modelOverride, cancellationToken, fork, mode)
+            var result = await RunDispatchAsync(runJobId, agentName, prompt, modelOverride, cancellationToken, fork, mode)
                 .ConfigureAwait(false);
             span.Tag("ok", result.Success);
             span.Tag("toolCalls", result.ToolCalls);
@@ -171,32 +188,32 @@ public sealed class SubagentRunner
         catch (Exception error) { span.Fail(error.GetType().Name); throw; }
     }
 
-    private async Task<SubagentResult> RunDispatchAsync(string agentName, string prompt, string? modelOverride,
+    private async Task<SubagentResult> RunDispatchAsync(string runJobId, string agentName, string prompt, string? modelOverride,
         CancellationToken cancellationToken, bool? fork, SubagentMode? mode)
     {
         if (!_agents.TryGet(agentName, out var agent))
-            return Failure(agentName, SubagentMode.Read,
+            return Failure(runJobId, agentName, SubagentMode.Read,
                 $"未知子代理 '{agentName}'。可用：{string.Join(", ", _agents.All.Select(a => a.Name))}。");
 
         if (string.IsNullOrWhiteSpace(prompt))
-            return Failure(agent.Name, agent.Mode, "子代理任务 prompt 不能为空。");
+            return Failure(runJobId, agent.Name, agent.Mode, "子代理任务 prompt 不能为空。");
 
         var effectiveMode = mode ?? agent.Mode;
-        Report(agent.Name, "started", prompt.Length > 120 ? prompt[..120] + "…" : prompt);
+        Report(runJobId, agent.Name, "started", prompt.Length > 120 ? prompt[..120] + "…" : prompt);
 
         if (effectiveMode == SubagentMode.Patch)
         {
             if (ParentMode?.Invoke() == PermissionMode.Plan)
-                return Failure(agent.Name, SubagentMode.Patch, "Plan 模式只允许 read 子代理，patch 已被拒绝。");
-            return await RunPatchAsync(agent, prompt, modelOverride, fork, cancellationToken)
+                return Failure(runJobId, agent.Name, SubagentMode.Patch, "Plan 模式只允许 read 子代理，patch 已被拒绝。");
+            return await RunPatchAsync(runJobId, agent, prompt, modelOverride, fork, cancellationToken)
                 .ConfigureAwait(false);
         }
 
-        return await RunCoreAsync(agent, prompt, modelOverride, fork, _capabilities,
+        return await RunCoreAsync(runJobId, agent, prompt, modelOverride, fork, _capabilities,
             SubagentMode.Read, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<SubagentResult> RunCoreAsync(AgentDefinition agent, string prompt, string? modelOverride,
+    private async Task<SubagentResult> RunCoreAsync(string runJobId, AgentDefinition agent, string prompt, string? modelOverride,
         bool? fork, IPureToolDispatcher baseDispatcher, SubagentMode mode,
         CancellationToken cancellationToken)
     {
@@ -219,11 +236,11 @@ public sealed class SubagentRunner
             .Distinct(StringComparer.Ordinal)
             .ToArray();
         if (allowed.Length == 0)
-            return Failure(agent.Name, mode, $"子代理 '{agent.Name}' 没有可用的工具。");
+            return Failure(runJobId, agent.Name, mode, $"子代理 '{agent.Name}' 没有可用的工具。");
 
         IPureToolDispatcher chain = baseDispatcher;
         if (allowed.Contains(SubagentDispatcher.ToolName, StringComparer.Ordinal))
-            chain = new NestedSubagentDispatcher(chain, this.CreateChildRunner());
+            chain = new NestedSubagentDispatcher(chain, this.CreateChildRunner(runJobId));
         // 同一次子代理运行内重复读取同一文件/同一检索是最常见的浪费：
         // 缓存命中直接复用结果，不重复落盘、不重复递归扫描。跨运行不共享，避免读到过期内容。
         chain = new RunScopedReadCache(chain);
@@ -265,19 +282,19 @@ public sealed class SubagentRunner
                 OnMessageAppended = message =>
                 {
                     if (message.Role == PureAgentRole.Assistant && !string.IsNullOrWhiteSpace(message.Content))
-                        Report(agent.Name, "assistant", Truncate(message.Content, 400));
+                        Report(runJobId, agent.Name, "assistant", Truncate(message.Content, 400));
                 },
-                OnToolStarting = call => Report(agent.Name, "tool_start", call.Name),
+                OnToolStarting = call => Report(runJobId, agent.Name, "tool_start", call.Name),
                 OnToolCompleted = (call, toolResult) =>
                 {
                     trace.Add(new SubagentToolTrace(call.Name, call.ArgumentsJson, toolResult.Success,
                         Truncate(toolResult.Content ?? string.Empty, 200)));
-                    Report(agent.Name, "tool_end", call.Name + (toolResult.Success ? "" : " (失败)"));
+                    Report(runJobId, agent.Name, "tool_end", call.Name + (toolResult.Success ? "" : " (失败)"));
                 }
             }, timeout.Token).ConfigureAwait(false);
 
             if (result.Status == PureAgentTurnStatus.Failed)
-                return Failure(agent.Name, mode, result.Error ?? "子代理执行失败。",
+                return Failure(runJobId, agent.Name, mode, result.Error ?? "子代理执行失败。",
                     result.Usage?.InputTokens, result.Usage?.OutputTokens);
 
             var content = result.Response.Text ?? string.Empty;
@@ -291,10 +308,10 @@ public sealed class SubagentRunner
                 var (json, error) = ExtractAndValidate(content, agent.OutputSchema);
                 if (error is not null)
                 {
-                    Report(agent.Name, "failed", error);
+                    Report(runJobId, agent.Name, "failed", error);
                     return new SubagentResult(false, agent.Name, mode, content, result.ToolResults.Count,
-                        error, JobId, null, null, null, null, null, trace,
-                        result.Usage?.InputTokens, result.Usage?.OutputTokens);
+                        error, runJobId, null, null, null, null, null, trace,
+                        result.Usage?.InputTokens, result.Usage?.OutputTokens, ParentJobId: ParentJobId);
                 }
                 structured = json;
                 content = json!;
@@ -305,30 +322,30 @@ public sealed class SubagentRunner
                     ? "（子代理执行了工具但没有返回文本。）"
                     : "（子代理没有返回内容。）";
 
-            Report(agent.Name, truncated ? "truncated" : "completed", null);
-            return new SubagentResult(true, agent.Name, mode, content, result.ToolResults.Count, null, JobId,
+            Report(runJobId, agent.Name, truncated ? "truncated" : "completed", null);
+            return new SubagentResult(true, agent.Name, mode, content, result.ToolResults.Count, null, runJobId,
                 structured, null, null, null, null, trace,
-                result.Usage?.InputTokens, result.Usage?.OutputTokens, Truncated: truncated);
+                result.Usage?.InputTokens, result.Usage?.OutputTokens, Truncated: truncated, ParentJobId: ParentJobId);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested && timeoutSpan is not null)
         {
-            Report(agent.Name, "failed", "timeout");
-            return Failure(agent.Name, mode,
+            Report(runJobId, agent.Name, "failed", "timeout");
+            return Failure(runJobId, agent.Name, mode,
                 $"子代理执行超时（{timeoutSpan.Value.TotalSeconds:0} 秒）。");
         }
     }
 
-    private async Task<SubagentResult> RunPatchAsync(AgentDefinition agent, string prompt, string? modelOverride,
+    private async Task<SubagentResult> RunPatchAsync(string runJobId, AgentDefinition agent, string prompt, string? modelOverride,
         bool? fork, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_workspaceRoot))
-            return Failure(agent.Name, SubagentMode.Patch, "patch 模式需要工作区根目录。");
+            return Failure(runJobId, agent.Name, SubagentMode.Patch, "patch 模式需要工作区根目录。");
 
         var (path, error) = await CreateWorktreeAsync(_workspaceRoot!, cancellationToken).ConfigureAwait(false);
         if (path is null)
         {
-            Report(agent.Name, "failed", error);
-            return Failure(agent.Name, SubagentMode.Patch, error ?? "创建 worktree 失败。");
+            Report(runJobId, agent.Name, "failed", error);
+            return Failure(runJobId, agent.Name, SubagentMode.Patch, error ?? "创建 worktree 失败。");
         }
 
         try
@@ -341,7 +358,7 @@ public sealed class SubagentRunner
                 dispatcher.SecurityEvaluator = new Security.SecurityPolicyEvaluator(security.Evaluator.Store, path);
                 dispatcher.SecurityBackups = new Security.SecurityBackupStore(Path.GetDirectoryName(security.Evaluator.Store.FilePath)!);
             }
-            var result = await RunCoreAsync(agent, prompt, modelOverride, fork, dispatcher,
+            var result = await RunCoreAsync(runJobId, agent, prompt, modelOverride, fork, dispatcher,
                 SubagentMode.Patch, cancellationToken).ConfigureAwait(false);
             if (!string.IsNullOrWhiteSpace(dirty))
                 result = result with
@@ -384,7 +401,7 @@ public sealed class SubagentRunner
             // 补丁始终落一份临时文件，避免父模型上下文截断导致补丁不可应用；
             // 小补丁同时内联返回，便于直接审阅。
             var patchPath = Path.Combine(Path.GetTempPath(),
-                "fufucode-subagent-patch-" + JobId + ".patch");
+                "fufucode-subagent-patch-" + runJobId + ".patch");
             await File.WriteAllTextAsync(patchPath, diff, CancellationToken.None).ConfigureAwait(false);
             var patch = diff.Length <= 32 * 1024 ? diff : null;
             var note = $"\n\n[patch 候选补丁：{changedFiles.Length} 个文件，基于 {Truncate(baseHead, 12)}；未交付]" +
@@ -490,12 +507,12 @@ public sealed class SubagentRunner
     private static string Truncate(string value, int length) =>
         value.Length <= length ? value : value[..length] + "…";
 
-    private SubagentResult Failure(string agent, SubagentMode mode, string error,
+    private SubagentResult Failure(string runJobId, string agent, SubagentMode mode, string error,
         long? input = null, long? output = null)
     {
-        Report(agent, "failed", error);
-        return new SubagentResult(false, agent, mode, string.Empty, 0, error, JobId,
-            InputTokens: input, OutputTokens: output);
+        Report(runJobId, agent, "failed", error);
+        return new SubagentResult(false, agent, mode, string.Empty, 0, error, runJobId,
+            InputTokens: input, OutputTokens: output, ParentJobId: ParentJobId);
     }
 
     private sealed class AllowedToolDispatcher(IPureToolDispatcher inner, HashSet<string> allowed)
