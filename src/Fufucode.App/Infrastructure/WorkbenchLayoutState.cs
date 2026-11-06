@@ -212,7 +212,6 @@ public sealed class WorkbenchLayoutState
             pages.RemoveAll(id => id is null || !known.Contains(id) || id == "preview");
             if (Selected.TryGetValue(zone, out var sel) && (sel is null || !pages.Contains(sel) || sel == "preview"))
                 Selected[zone] = pages.FirstOrDefault();
-            if (zone != DockZone.Right && pages.Count == 0) Hidden[zone] = true;
         }
         foreach (var fl in Floating)
         {

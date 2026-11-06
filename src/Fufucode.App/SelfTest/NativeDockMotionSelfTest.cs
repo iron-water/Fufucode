@@ -167,6 +167,13 @@ internal static class NativeDockMotionSelfTest
         {
             foreach (var id in window.DockLayoutForTesting.Pages[zone].ToArray()) window.CloseDockPageForTesting(id);
             await Settle();
+            // 前面已验证过的空右栏可能本就开着；先确保确实从关闭态测试“重新打开”。
+            if (!window.DockLayoutForTesting.Hidden[zone])
+            {
+                await Toggle(zone);
+                await Settle();
+            }
+            Check(window.DockLayoutForTesting.Hidden[zone], zone + " empty-region reopen fixture starts closed");
             await Toggle(zone);
             await Settle();
             Check(window.DockLayoutForTesting.Pages[zone].Count == 0 && Panel(zone).IsVisible,
