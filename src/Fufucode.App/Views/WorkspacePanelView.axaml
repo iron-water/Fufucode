@@ -362,7 +362,7 @@
                 <PathIcon Data="{DynamicResource Icon.ArrowLeft}" Width="14" Height="14"/>
               </Button>
               <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
-                <TextBlock Classes="mono" FontSize="12.5" Text="{Binding SelectedChange.Name}"
+                <TextBlock Classes="mono" FontSize="12" Text="{Binding SelectedChange.Name}"
                            TextTrimming="CharacterEllipsis"/>
                 <TextBlock Classes="caption mono" Text="{Binding SelectedChange.Folder}" TextTrimming="CharacterEllipsis"
                            IsVisible="{Binding SelectedChange.HasFolder}" Foreground="{DynamicResource AppTextDim}"/>

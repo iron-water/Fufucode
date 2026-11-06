@@ -202,13 +202,13 @@ public partial class MainWindow
     {
         // ── 卡 1：状态占位 ──────────────────────────────────────
         _islandPanelTitle = new TextBlock { FontSize = 14, FontWeight = FontWeight.SemiBold, TextTrimming = TextTrimming.CharacterEllipsis };
-        _islandPanelSubtitle = new TextBlock { FontSize = 11, TextTrimming = TextTrimming.CharacterEllipsis };
+        _islandPanelSubtitle = new TextBlock { FontSize = 12, TextTrimming = TextTrimming.CharacterEllipsis };
         _islandPanelSubtitle.Classes.Add("meta");
         var who = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         who.Children.Add(_islandPanelTitle);
         who.Children.Add(_islandPanelSubtitle);
 
-        _islandLiveMeta = new TextBlock { FontSize = 11, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
+        _islandLiveMeta = new TextBlock { FontSize = 12, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center };
         _islandLiveMeta.Classes.Add("meta");
         var statusHeader = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto"), ColumnSpacing = 10 };
         statusHeader.Children.Add(who);
@@ -239,7 +239,7 @@ public partial class MainWindow
         statusCard.Classes.Add("islandWidget");
 
         // ── 卡 2：会话占位 ──────────────────────────────────────
-        var sessionLabel = new TextBlock { Text = "卡片二", FontSize = 13, VerticalAlignment = VerticalAlignment.Top };
+        var sessionLabel = new TextBlock { Text = "卡片二", FontSize = 14, VerticalAlignment = VerticalAlignment.Top };
         sessionLabel.Classes.Add("meta");
         var refreshIcon = new PathIcon { Width = 14, Height = 14, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         refreshIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.ArrowClockwise"));

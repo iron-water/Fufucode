@@ -295,7 +295,7 @@ public partial class MainWindow
               UiActionPosition.StatusLeft => CustomStatusLeft, _ => CustomStatusRight };
             if (action.Id.StartsWith("status.", StringComparison.Ordinal))
             {
-                var label = new TextBlock { FontSize = 11, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 260, TextTrimming = TextTrimming.CharacterEllipsis };
+                var label = new TextBlock { FontSize = 12, VerticalAlignment = VerticalAlignment.Center, MaxWidth = 260, TextTrimming = TextTrimming.CharacterEllipsis };
                 label.Classes.Add("meta");
                 if (!_statusLabels.TryGetValue(action.Id, out var labels)) _statusLabels.Add(action.Id, labels = new());
                 labels.Add(label);

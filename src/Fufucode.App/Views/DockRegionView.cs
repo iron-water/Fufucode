@@ -323,7 +323,14 @@ internal sealed class DockRegionView : UserControl
                 Grid.SetColumnSpan(tab, _accentStroke ? 2 : 1);
                 close.ZIndex = 2;
                 row.Children.Add(tab); Grid.SetColumn(close, 1); row.Children.Add(close);
-                var stroke = new Border { BorderThickness = new Thickness(2, 2, 0, 0), CornerRadius = new CornerRadius(0),
+                // 强调描边贴着区域所在的屏幕边：左栏左上、右栏右上、底栏左右半厚 + 底边。
+                var strokeThickness = Zone switch
+                {
+                    DockZone.Right => new Thickness(0, 2, 2, 0),
+                    DockZone.Bottom => new Thickness(1, 0, 1, 2),
+                    _ => new Thickness(2, 2, 0, 0),
+                };
+                var stroke = new Border { BorderThickness = strokeThickness, CornerRadius = new CornerRadius(0),
                     IsHitTestVisible = false, Opacity = 0, ZIndex = 1, Margin = new Thickness(0, 1, 0, 1) };
                 stroke.Bind(Border.BorderBrushProperty, new DynamicResourceExtension("AppAccent"));
                 Grid.SetColumnSpan(stroke, 2);

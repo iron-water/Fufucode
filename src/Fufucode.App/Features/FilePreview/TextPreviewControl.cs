@@ -233,7 +233,7 @@ public sealed class TextPreviewControl : UserControl
             {
                 [!TextBlock.FontFamilyProperty] = new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppMonoFont"),
                 MinHeight = 20,
-                FontSize = 13,
+                FontSize = 14,
             };
             SetColumn(Code, 1);
             Children.Add(number);
