@@ -94,6 +94,11 @@ public sealed partial class SettingsPageViewModel
     /// </summary>
     private async Task DeployLocalBuildAsync()
     {
+        if (Program.SelfTestMode)
+        {
+            UpdateStatusText = "测试模式不部署本地构建。";
+            return;
+        }
         IsCheckingUpdate = true;
         UpdateProgressText = "正在查找最新构建…";
         try
