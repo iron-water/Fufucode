@@ -2,8 +2,6 @@
   <!-- 卡片只画一层 1px 轮廓：常态深边，悬停才显出由上到下衰减的亮边。 -->
   <Style Selector="Window.fluentWorkbench Border.settingsRow,
                    Window.fluentWorkbench Border.settingsPanel:not(.subtle),
-                   Window.fluentWorkbench Border.overviewGroup,
-                   Window.fluentWorkbench Border.fileTreeSection,
                    Window.fluentWorkbench Border.navFill,
                    Window.fluentWorkbench Border.card,
                    Window.fluentWorkbench Border.toolGroupCard,
@@ -14,8 +12,6 @@
   </Style>
   <Style Selector="Window.fluentWorkbench Border.settingsRow:pointerover,
                    Window.fluentWorkbench Border.settingsPanel:not(.subtle):pointerover,
-                   Window.fluentWorkbench Border.overviewGroup:pointerover,
-                   Window.fluentWorkbench Border.fileTreeSection:pointerover,
                    Window.fluentWorkbench Border.navFill:pointerover,
                    Window.fluentWorkbench Border.card:pointerover,
                    Window.fluentWorkbench Border.toolGroupCard:pointerover,
@@ -28,9 +24,7 @@
                    Window.fluentWorkbench Border.toolCard:not(.success):not(.failed):not(.running).pointerHover">
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
   </Style>
-  <Style Selector="Window.fluentWorkbench Border.overviewGroup:pointerover,
-                   Window.fluentWorkbench Border.fileTreeSection:pointerover,
-                   Window.fluentWorkbench Border.card:pointerover,
+  <Style Selector="Window.fluentWorkbench Border.card:pointerover,
                    Window.fluentWorkbench Border.settingsPanel:not(.subtle):pointerover">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
   </Style>
