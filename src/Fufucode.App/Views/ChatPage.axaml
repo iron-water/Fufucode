@@ -404,11 +404,11 @@
                             <TextBlock Classes="metaName" Text="{Binding RelatedFilesHeaderText}"/>
                             <TextBlock Classes="meta" Text="消息提到的路径，不代表已读取"/>
                           </StackPanel>
-                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.CaretDown}" Width="9" Height="9"
+                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"
                                     IsVisible="{Binding RelatedFilesExpanded}"/>
-                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
-                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.CaretRight}" Width="9" Height="9"
+                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"
                                     IsVisible="{Binding !RelatedFilesExpanded}"/>
                         </Grid>
                       </Button>
@@ -479,15 +479,15 @@
                             <DataTemplate DataType="vm:TurnFileChangeViewModel" x:DataType="vm:TurnFileChangeViewModel">
                               <StackPanel>
                                 <!-- 点整行展开内联 diff，不跳侧栏也能看清改了什么。 -->
-                                <Button Classes="changeFileRow" Click="OnToggleFileDiff"
+                                <Button Classes="changeFileRow" Classes.expanded="{Binding IsExpanded}" Click="OnToggleFileDiff"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                         Padding="12,5">
                                   <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" ColumnSpacing="6">
-                                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.CaretDown}" Width="9" Height="9"
+                                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"
                                               IsVisible="{Binding IsExpanded}"/>
-                                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.ChevronRight}" Width="10" Height="10"
-                                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
+                                    <PathIcon Grid.Column="0" Data="{DynamicResource Icon.CaretRight}" Width="9" Height="9"
+                                              VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"
                                               IsVisible="{Binding IsCollapsed}"/>
                                     <!-- 统一字阶：变更路径与增删计数 12.5 归入 12。 -->
                                     <TextBlock Grid.Column="1" Classes="mono changePath" FontSize="12"

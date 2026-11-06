@@ -197,6 +197,7 @@ public partial class ChatPage : UserControl
     private void OnToggleFileDiff(object? sender, RoutedEventArgs e)
     {
         if (sender is not Control { DataContext: TurnFileChangeViewModel file }) return;
+        e.Handled = true;
         file.ToggleDiff(ActualThemeVariant != Avalonia.Styling.ThemeVariant.Light);
     }
 

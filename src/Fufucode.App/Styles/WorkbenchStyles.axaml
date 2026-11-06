@@ -1408,13 +1408,20 @@
   </Style>
 
   <!-- 变更卡：整行可点开内联 diff。 -->
+  <!-- 卡内行共享卡片的外圆角：行自身不再画大圆角，避免侵蚀外层柔和边缘。 -->
+  <Style Selector="Border.changeCard Button.changeFileRow">
+    <Setter Property="CornerRadius" Value="0"/>
+  </Style>
   <Style Selector="Button.changeFileRow">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="4"/>
   </Style>
   <Style Selector="Button.changeFileRow:pointerover">
-    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
+  </Style>
+  <Style Selector="Button.changeFileRow.expanded">
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
   </Style>
   <Style Selector="Border.diffWell">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
@@ -1477,7 +1484,7 @@
 
   <!-- 回合变更总结卡：与工具卡同一层级，但更强调"这一轮改了什么"。 -->
   <Style Selector="Border.changeCard">
-    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
     <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
