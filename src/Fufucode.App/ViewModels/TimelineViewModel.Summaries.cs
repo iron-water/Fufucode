@@ -26,7 +26,8 @@ public sealed partial class TimelineViewModel
     private static void Summarize(List<AssistantMessageViewModel> turn)
     {
         var expandedFiles = turn.SelectMany(message => message.ChangeCard.Files)
-            .Where(file => file.IsExpanded).Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
+            .Where(file => file.IsExpanded).GroupBy(file => file.Path, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
         foreach (var message in turn)
         {
             message.ChangeSummary = "";
@@ -56,7 +57,13 @@ public sealed partial class TimelineViewModel
         }
 
         foreach (var file in card.Files)
-            if (expandedFiles.Contains(file.Path)) file.IsExpanded = true;
+        {
+            if (!expandedFiles.TryGetValue(file.Path, out var previous)) continue;
+            file.DiffModel = previous.DiffModel;
+            file.HasDiff = previous.HasDiff;
+            file.DiffNote = previous.DiffNote;
+            file.IsExpanded = true;
+        }
         var last = turn[^1];
         last.ChangeSummary = string.Join(Environment.NewLine, changes.Distinct());
         // ArtifactSummary 的赋值会一并刷新 ShowArtifactBlock（依赖变更卡是否已列出文件）。
