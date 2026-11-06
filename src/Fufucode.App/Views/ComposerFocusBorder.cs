@@ -55,6 +55,7 @@ public sealed class ComposerFocusBorder : Border
 
     private void RefreshPulse()
     {
+        if (CanPulse && _pulse.IsEnabled) return;
         _pulse.Stop();
         _stroke.Opacity = 1;
         if (!CanPulse) return;

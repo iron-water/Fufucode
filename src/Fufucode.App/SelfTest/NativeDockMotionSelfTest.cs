@@ -163,6 +163,18 @@ internal static class NativeDockMotionSelfTest
         var finalLeft = Extent(DockZone.Left);
         await Task.Delay(250);
         Check(Math.Abs(Extent(DockZone.Left) - finalLeft) < .1, "resizing cancels the obsolete extent writer");
+        foreach (var zone in Enum.GetValues<DockZone>())
+        {
+            foreach (var id in window.DockLayoutForTesting.Pages[zone].ToArray()) window.CloseDockPageForTesting(id);
+            await Settle();
+            await Toggle(zone);
+            await Settle();
+            Check(window.DockLayoutForTesting.Pages[zone].Count == 0 && Panel(zone).IsVisible,
+                zone + " reopening after closing all tabs does not restore defaults");
+            var persisted = WorkbenchLayoutState.Restore(window.DockLayoutForTesting.Serialize());
+            Check(persisted.Pages[zone].Count == 0 && !persisted.Hidden[zone],
+                zone + " persists its empty visible state symmetrically");
+        }
         File.WriteAllText(Path.Combine(evidence, "motion-samples.json"), JsonSerializer.Serialize(samples, new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(evidence, "result.json"), JsonSerializer.Serialize(new { failures, sampleCount = samples.Count }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"Native dock motion failures: {failures.Count}; samples: {samples.Count}; evidence: {evidence}");
@@ -188,13 +200,17 @@ internal static class NativeDockMotionSelfTest
         {
             var previous = Extent(zone);
             var lastGap = Gap(zone);
+            var lockedWidth = host.Width;
             for (var frame = 0; frame < 15; frame++)
             {
                 await Task.Delay(20);
                 window.UpdateLayout();
                 var value = Extent(zone);
                 var gap = Gap(zone);
-                samples.Add(new { zone, phase, frame, value, gap, visible = Panel(zone).IsVisible });
+                samples.Add(new { zone, phase, frame, value, gap, visible = Panel(zone).IsVisible, contentWidth = host.Bounds.Width });
+                if (double.IsFinite(lockedWidth) && double.IsFinite(host.Width))
+                    Check(Math.Abs(host.Bounds.Width - lockedWidth) < 1,
+                        "central content keeps one measured width during dock motion");
                 Check(opening ? value >= previous - .1 && gap >= lastGap - .1 : value <= previous + .1 && gap <= lastGap + .1,
                     zone + " " + phase + " frame " + frame + " progresses without a backward jump");
                 previous = value; lastGap = gap;

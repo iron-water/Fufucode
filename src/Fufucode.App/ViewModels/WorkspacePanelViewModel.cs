@@ -127,6 +127,7 @@ public sealed class WorkspacePanelFileItemViewModel : ViewModelBase
     public bool ChildrenLoaded { get; private set; }
     public bool IsLoadingChildren { get; private set; }
     public bool IsExpanded { get; private set; }
+    public bool IsCollapsedDirectory => IsDirectory && !IsExpanded;
     public string Glyph => IsDirectory ? (IsExpanded ? "▾" : "▸") : "";
     private bool _isSelected;
     public bool IsSelected
@@ -178,6 +179,7 @@ public sealed class WorkspacePanelFileItemViewModel : ViewModelBase
     {
         IsExpanded = expanded;
         OnPropertyChanged(nameof(IsExpanded));
+        OnPropertyChanged(nameof(IsCollapsedDirectory));
         OnPropertyChanged(nameof(Glyph));
     }
 }

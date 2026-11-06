@@ -38,6 +38,15 @@ internal static class UiRefinementSelfTest
                 accent is ISolidColorBrush { Color: var color } && color == Color.Parse("#26FF8E"),
                 "interaction accent preserves the exact selected RGB without whitening");
             var vm = (MainViewModel)window.DataContext!;
+            var startupMethod = typeof(MainWindow).GetMethod("ShowStartup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+            startupMethod.Invoke(window, new object[] { "正在启动会话…", true });
+            Check(!window.FindControl<Border>("StartupOverlay")!.IsVisible && window.FindControl<ProgressBar>("NavigationProgress")!.IsVisible,
+                "startup progress uses the caption strip without reviving the old centered startup card");
+            typeof(MainWindow).GetMethod("HideStartupOverlay", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(window, null);
+            await window.ActionsForTesting.ExecuteAsync("commands");
+            Check(window.FindControl<Grid>("GlobalOverlay")!.IsVisible, "search action opens the command palette");
+            await window.ActionsForTesting.ExecuteAsync("commands");
+            Check(!window.FindControl<Grid>("GlobalOverlay")!.IsVisible, "second search action closes rather than reopening the command palette");
             var search = new TextBox { Classes = { "searchInput" }, Width = 240 };
             var searchWindow = new Window { Content = search, Width = 300, Height = 100 };
             searchWindow.Show();
@@ -50,7 +59,7 @@ internal static class UiRefinementSelfTest
             var links = new System.Collections.Generic.List<MessageLinkViewModel>();
             var referencedFiles = new System.Collections.Generic.List<MessageFileViewModel>();
             MessageReferenceExtractor.Extract("`https://github.com/ximeiorg/ochwpro`（README） `https://index.ximei.me/models/index.yaml`", links, referencedFiles);
-            Check(links.Count == 2 && links[0].Url == "https://github.com/ximeiorg/ochwpro" &&
+            Check(links.Count == 2 && referencedFiles.Count == 0 && links[0].Url == "https://github.com/ximeiorg/ochwpro" &&
                 links[1].Url == "https://index.ximei.me/models/index.yaml",
                 "website extraction excludes inline-code delimiters and adjacent Chinese annotations");
             var entryCount = vm.Timeline.Entries.Count;
@@ -62,6 +71,9 @@ internal static class UiRefinementSelfTest
             vm.Sidebar.SelectNewSessionBackendCommand.Execute("fixture");
             Check(vm.Sidebar.DefaultBackendLabel == "Fixture" && vm.Timeline.Entries.Count == entryCount,
                 "backend selection changes only the pending backend without creating or resetting a session");
+            var commandBlock = new ToolCallBlockViewModel { InputJson = "{\"command\":\"printf fixture\"}", Output = "fixture output" };
+            Check(commandBlock.InputDisplay == "printf fixture" && commandBlock.ShowTextOutput,
+                "command card keeps command input and returned output as separate visible data");
             var preview = new TurnFileChangeViewModel("fixture.cs", 1, 1);
             preview.AddPreview("{\"old_string\":\"old line\",\"new_string\":\"new line\"}");
             preview.ToggleDiff(true);

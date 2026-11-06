@@ -1828,6 +1828,9 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
                 pinned.Contains(choice.Value, StringComparer.Ordinal)) { IsConfirmed = choice.Value == ConfirmedModel });
         }
 
+        if (!string.IsNullOrWhiteSpace(ConfirmedModel) && !items.Any(item => item.Value == ConfirmedModel))
+            items.Add(new ModelPickerItem(ConfirmedModel, ConfirmedModel,
+                pinned.Contains(ConfirmedModel, StringComparer.Ordinal)) { IsConfirmed = true });
         FilteredModelChoices.Clear();
         foreach (var item in items
                      .OrderByDescending(item => item.IsPinned)

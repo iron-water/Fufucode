@@ -204,6 +204,7 @@ public partial class ChatPage
                 CornerRadius = new CornerRadius(4),
                 IsEnabled = _executionMode.IsEnabled,
             };
+            item.Classes.Set("permissionSelected", captured == _executionMode.SelectedIndex);
             item.BorderBrush = Avalonia.Media.Brushes.Transparent;
             if (captured == _executionMode.SelectedIndex)
                 item.Bind(MenuItem.BorderBrushProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccent"));

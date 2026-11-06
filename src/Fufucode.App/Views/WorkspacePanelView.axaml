@@ -144,7 +144,7 @@
           <Setter Property="Background" Value="{DynamicResource AppHover}"/>
         </Style>
         <Style Selector="Button.fileTreeRow.selected">
-          <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+          <Setter Property="Background" Value="{DynamicResource AppHover}"/>
         </Style>
         <Style Selector="Button.fileTreeRow.selected /template/ Border#FileRowSurface,
                          Button.fileTreeRow:focus-visible /template/ Border#FileRowSurface">
@@ -179,7 +179,8 @@
                     <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
                       <Button Classes="fileTreeRow" Classes.selected="{Binding IsSelected}" Click="FileRow_Click">
                         <Grid Margin="{Binding Indent}" ColumnDefinitions="16,18,*,Auto" ColumnSpacing="6" Height="32" Background="Transparent">
-                          <TextBlock Text="{Binding Glyph}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                          <PathIcon Data="{DynamicResource Icon.CaretDown}" Width="8" Height="8" IsVisible="{Binding IsExpanded}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                          <PathIcon Data="{DynamicResource Icon.CaretRight}" Width="8" Height="8" IsVisible="{Binding IsCollapsedDirectory}" Foreground="{DynamicResource AppTextSecondary}" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                           <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Folder}" Width="14" Height="14" Foreground="{DynamicResource AppTextSecondary}" IsVisible="{Binding IsDirectory}"/>
                           <PathIcon Grid.Column="1" Data="{DynamicResource Icon.Document}" Width="13" Height="13" Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsDirectory}"/>
                           <TextBlock Grid.Column="2" Text="{Binding Name}" FontSize="14" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/>

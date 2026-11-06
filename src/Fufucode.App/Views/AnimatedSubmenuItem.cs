@@ -1,3 +1,4 @@
+using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 
@@ -15,6 +16,13 @@ internal sealed class AnimatedSubmenuItem : MenuItem
         base.OnApplyTemplate(e);
         _popup = e.NameScope.Find<Popup>("PART_Popup");
         if (_popup is not null) _popup.Opened += OnPopupOpened;
+    }
+
+    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
+    {
+        if (change.Property == IsSubMenuOpenProperty && change.GetNewValue<bool>() && _popup?.Child is Control surface)
+            surface.Opacity = 0;
+        base.OnPropertyChanged(change);
     }
 
     private void OnPopupOpened(object? sender, System.EventArgs e)

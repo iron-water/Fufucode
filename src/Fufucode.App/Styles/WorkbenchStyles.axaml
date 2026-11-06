@@ -4,6 +4,11 @@
         xmlns:mdm="clr-namespace:LiveMarkdown.Avalonia;assembly=LiveMarkdown.Avalonia.Mermaid">
   <!-- 工作台共享组件：停靠容器、页签、分隔条、窗口外框、工具条与空状态。
        只引用 App* 语义键，主题/强调色/风格预设统一经由令牌生效。 -->
+  <Style Selector="MenuItem.permissionSelected /template/ Border#PART_LayoutRoot">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="4"/>
+  </Style>
   <Style Selector="Button.subtle">
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
   </Style>
@@ -1442,6 +1447,24 @@
                    Button.changeFileRow:pressed /template/ ContentPresenter#PART_ContentPresenter,
                    Button.changeFileRow.expanded /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.relatedFileRow">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
+  </Style>
+  <Style Selector="Button.relatedFileRow /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{TemplateBinding Background}"/>
+    <Setter Property="BorderBrush" Value="{TemplateBinding BorderBrush}"/>
+    <Setter Property="BorderThickness" Value="{TemplateBinding BorderThickness}"/>
+    <Setter Property="CornerRadius" Value="{TemplateBinding CornerRadius}"/>
+  </Style>
+  <Style Selector="Button.relatedFileRow:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.relatedFileRow.expanded /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
   </Style>
   <Style Selector="Border.diffWell">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>

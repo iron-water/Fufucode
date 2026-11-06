@@ -20,7 +20,6 @@ namespace Fufucode.App.SelfTest;
 internal static class NativeChatIconsSelfTest
 {
     private static readonly Color MsRed = Color.Parse("#E81123");
-    private static readonly Color MsBlue = Color.Parse("#0078D4");
 
     private static Color ResolveBrush(StyledElement root, string key, Color fallback) =>
         root.TryFindResource(key, null, out var value) && value is ISolidColorBrush brush ? brush.Color : fallback;
@@ -81,8 +80,13 @@ internal static class NativeChatIconsSelfTest
             new MessageText("这是回复内容，包含网页链接：https://microsoft.com 以及相关文件。"),
         ], null, true));
 
-        // 注入相关文件与变更卡数据
+        // 注入隔离相关文件；验证真实预览而非仅检测文字。
+        var fixtureRoot = Path.Combine(evidence, "project");
+        Directory.CreateDirectory(Path.Combine(fixtureRoot, "src", "Views"));
+        File.WriteAllText(Path.Combine(fixtureRoot, "src", "Views", "ChatPage.axaml"), "<Grid />");
+        vm.WorkspacePanel.AttachMock(fixtureRoot);
         assistantMsg.Files.Add(new MessageFileViewModel("src/Views/ChatPage.axaml"));
+        assistantMsg.ResolveReferencedFiles(fixtureRoot);
         assistantMsg.RelatedFilesExpanded = true;
         assistantMsg.ChangeCard.Files.Add(new TurnFileChangeViewModel("src/Views/ChatPage.axaml", 12, 4));
         assistantMsg.ChangeCard.VisibleFiles.Add(new TurnFileChangeViewModel("src/Views/ChatPage.axaml", 12, 4));
@@ -137,6 +141,13 @@ internal static class NativeChatIconsSelfTest
 
             var relatedCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-RELATED-FILES-CARD");
             AssertIconColor(relatedCard.GetVisualDescendants().OfType<PathIcon>().First(), emphasis, "相关文件文档图标");
+
+            var fileRow = relatedCard.GetVisualDescendants().OfType<Button>().Single(button => button.DataContext is MessageFileViewModel { Exists: true });
+            fileRow.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await Settle();
+            Check(vm.WorkspacePanel.IsFilePreviewOpen && vm.WorkspacePanel.PreviewFilePath.EndsWith("ChatPage.axaml", StringComparison.OrdinalIgnoreCase),
+                "相关文件卡通过文件管理的同一预览宿主打开隔离文件");
+            vm.WorkspacePanel.CloseFilePreviewCommand.Execute(null);
 
             var changeCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-TURN-CHANGE-CARD");
             AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().First(), accent, "代码变更卡编辑图标");
@@ -212,6 +223,54 @@ internal static class NativeChatIconsSelfTest
                     Check(isMsColor, $"动作图标使用主题色、强调色或错误红，不再使用蓝色（实测：{brush?.Color}）");
                 }
             }
+
+            var cascade = new AnimatedMenuFlyout();
+            var firstGroup = new AnimatedSubmenuItem { Header = "第一组" };
+            var secondGroup = new AnimatedSubmenuItem { Header = "第二组" };
+            firstGroup.Items.Add(new MenuItem { Header = "第一项" });
+            secondGroup.Items.Add(new MenuItem { Header = "第二项" });
+            cascade.Items.Add(firstGroup);
+            cascade.Items.Add(secondGroup);
+            cascade.ShowAt(headerMore);
+            await Settle();
+            firstGroup.IsSubMenuOpen = true;
+            await Settle();
+            secondGroup.IsSubMenuOpen = true;
+            firstGroup.IsSubMenuOpen = false;
+            await Settle();
+            Check(secondGroup.IsSubMenuOpen && !firstGroup.IsSubMenuOpen,
+                "原生级联菜单切换保持单一展开组");
+            Save(main, "cascade-handoff.png");
+            cascade.Hide();
+
+            var modeMenu = (MenuFlyout)modeBtn.Flyout!;
+            modeMenu.ShowAt(modeBtn);
+            await Settle();
+            var selectedMode = modeMenu.Items.OfType<MenuItem>().Single(item => item.Classes.Contains("permissionSelected"));
+            Check(selectedMode.Header is string modeLabel && !modeLabel.Contains('✓'), "权限选中项不再使用勾字符");
+            Check(selectedMode.BorderBrush is ISolidColorBrush { Color: var modeColor } && modeColor == accent,
+                "权限选中项使用主题色描边");
+            modeMenu.Hide();
+            await main.ActionsForTesting.ExecuteAsync("commands");
+            await Settle();
+            var paletteSearch = main.GetVisualDescendants().OfType<TextBox>().Single(box => box.Name == "SearchBox" && box.IsEffectivelyVisible);
+            paletteSearch.Focus();
+            await Settle();
+            var underline = paletteSearch.GetVisualDescendants().OfType<Border>().First(border => border.Name == "PART_BorderElement");
+            Check(underline.BorderBrush is ISolidColorBrush { Color: var underlineColor } && underlineColor == accent,
+                "原生命令面板搜索焦点底线精确匹配主题色");
+            Save(main, "palette-search-underline.png");
+            await main.ActionsForTesting.ExecuteAsync("commands");
+            await Settle();
+            Check(!main.FindControl<Grid>("GlobalOverlay")!.IsVisible, "原生窗口再次点击搜索关闭命令面板");
+
+            var toolHeader = toolCard.GetVisualDescendants().OfType<Button>().First(button => button.Classes.Contains("toolGroupHeader"));
+            toolHeader.Focus();
+            await Settle();
+            Check(toolCard.BorderBrush is ISolidColorBrush { Color: var focusColor } && focusColor == accent,
+                "工具组键盘焦点轮廓使用主题色");
+            Check(toolHeader.FocusAdorner is null, "工具组不叠加偏移的默认白色焦点框");
+            Save(main, "tool-keyboard-focus.png");
 
             // 7. 回到最新：上滑出现，停手约 2.4 秒后自动淡出
             for (var index = 0; index < 40; index++)
