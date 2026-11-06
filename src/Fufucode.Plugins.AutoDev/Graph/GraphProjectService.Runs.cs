@@ -93,7 +93,7 @@ public sealed partial class GraphProjectService
                     Read omitted records explicitly before relying on them. graph_read defaults to a bounded index;
                     use its paging parameters or full:true to read complete original records, and graph_context for another focus.
                     Your host-issued role is {(ticket.Route == "project-planning" ? "ProjectLead: organize scoped work and maintain project architecture" : "Executor: implement this work; report follow-up suggestions to the project lead instead of creating work or changing global architecture")}.
-                    Use only tools authorized for this role. Read graph_inbox when beginning and before reporting completion; acknowledge actual reading and resolution separately. For delegated work call graph_delegate before it can run. Bind evidence to this run and the exact acceptance criterion. State unknown and unverified results explicitly.
+                    Use only tools authorized for this role. Propose exact verification commands and criterion coverage with graph_propose_validation; this does not execute or approve them. Read graph_inbox when beginning and before reporting completion; acknowledge actual reading and resolution separately. For delegated work call graph_delegate before it can run. Bind evidence to this run and the exact acceptance criterion. State unknown and unverified results explicitly.
                     A settled execution enters Review; exit code zero alone does not prove settlement. Only the human can accept a ticket.
                     """, options, sessionId)
                 {
