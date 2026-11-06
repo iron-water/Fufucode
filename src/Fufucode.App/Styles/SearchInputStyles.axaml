@@ -1,9 +1,9 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-  <!-- 搜索框统一使用一级底色与绿色底线，继续使用原生 TextBox 模板和输入法支持。 -->
+  <!-- 搜索框统一使用一级底色；主题绿底线只在获得焦点时出现（对齐 UniGetUI / Windows 设置）。 -->
   <Style Selector="TextBox.searchInput">
     <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0,0,0,2"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="12,7"/>
@@ -15,7 +15,7 @@
                    TextBox.searchInput:pointerover /template/ Border#PART_BorderElement,
                    TextBox.searchInput:focus /template/ Border#PART_BorderElement">
     <Setter Property="Background" Value="{DynamicResource AppWindowBackground}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0,0,0,2"/>
   </Style>
   <Style Selector="TextBox.searchInput:disabled /template/ Border#PART_BorderElement">

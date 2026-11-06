@@ -19,7 +19,7 @@
       <Grid ColumnDefinitions="*,Auto" Margin="16,12,12,8">
         <TextBlock Classes="sectionTitle" Text="命令面板" VerticalAlignment="Center"/>
         <Button x:Name="CloseButton" Grid.Column="1" Width="46" Height="32"
-                Padding="12,6" Background="{DynamicResource AppHover}" BorderThickness="0"
+                Padding="12,6" Background="Transparent" BorderThickness="0"
                 CornerRadius="{DynamicResource ControlCornerRadius}"
                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                 Command="{Binding CloseCommand}" AutomationProperties.Name="关闭命令面板">

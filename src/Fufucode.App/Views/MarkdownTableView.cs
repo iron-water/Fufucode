@@ -31,7 +31,6 @@ public sealed class MarkdownTableView : ContentControl
         };
         var icon = new PathIcon { Width = 14, Height = 14 };
         icon.Bind(PathIcon.DataProperty, new DynamicResourceExtension("Icon.FullScreenMaximize"));
-        icon.Bind(PathIcon.ForegroundProperty, new DynamicResourceExtension("MsBlue"));
         _expand = new Button
         {
             Name = "ExpandMarkdownTable",
