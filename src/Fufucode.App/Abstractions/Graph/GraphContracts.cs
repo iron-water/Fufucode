@@ -52,6 +52,7 @@ public sealed record GraphRunResult(string Status, string Output, string? Error 
     string? SessionId = null)
 {
     public string? CandidateManifestPath { get; init; }
+    public string? DeliveryStatus { get; init; }
 }
 
 public interface IGraphRunExecutor

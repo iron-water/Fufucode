@@ -556,6 +556,16 @@ internal static class Program
             Check(s.ReadSnapshot().Runs.Single().Status == "Unknown" && s.ReadSnapshot().Tickets.Single().Status == "NeedsReconciliation", "exit zero without settled receipt remains unknown");
             Throws(() => s.AcceptTicket(ticket.Id, "nonexistent"), "unknown cannot be accepted");
         }
+        var empty = Fixture("empty-delivery");
+        using (var service = Service(empty, new CallbackExecutor(_ => Task.FromResult(new GraphRunResult("Completed", "No source changes") { DeliveryStatus = "EmptyCandidate" }))))
+        {
+            service.SetPurpose("Separate settlement from actual delivery");
+            var work = Ticket(service); await service.RunTicketAsync(work.Id);
+            Check(service.ReadSnapshot().Runs.Single().Status == "Completed" && service.ReadSnapshot().Tickets.Single().Status == "Review",
+                "empty candidate does not falsify the actual execution terminal state");
+            Check(service.ReadSnapshot().Entries.Any(e => e.Kind == "delivery") && service.ReadOrganizationSnapshot().Messages.Any(m => m.Content.Kind == "delivery-blocked" && !m.Content.HumanRecipient),
+                "empty delivery is explicit and addressed to project responsibility, not automatically pushed to humans");
+        }
         var failed = Fixture("transport-unknown");
         using var second = Service(failed, new CallbackExecutor(_ => throw new IOException("TEST-ONLY transport disconnected after potential side effects")));
         second.SetPurpose("Transport uncertainty is not deterministic failure"); await second.RunTicketAsync(Ticket(second).Id);

@@ -115,9 +115,12 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
                 $"Host execution workspace: {executionPath}\nOriginal project identity (not a writable path): {request.ProjectPath}\nAll file tools and command cwd must use relative paths under the execution workspace. Never write to the original project absolute path. Candidate changes are collected by the host.\n\n" + request.Prompt;
             await session.Coordinator.SendPromptAsync(executionPrompt, cancellationToken: budget.Token).ConfigureAwait(false);
             var result = await settled.Task.WaitAsync(budget.Token).ConfigureAwait(false);
+            var delivery = workspace is null ? "NoCodeCandidateExpected" :
+                (await workspace.CaptureCandidateAsync(CancellationToken.None).ConfigureAwait(false)).PatchSize > 0
+                    ? "CandidateReady" : "EmptyCandidate";
             return new GraphRunResult(result.Outcome.ToString(), Collected(), error ??
                 (result.Outcome == SessionOutcome.Completed ? null : result.Summary), session.Session.Id)
-            { CandidateManifestPath = workspace?.ManifestPath };
+            { CandidateManifestPath = workspace?.ManifestPath, DeliveryStatus = delivery };
         }
         catch (OperationCanceledException)
         {

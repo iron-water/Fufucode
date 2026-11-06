@@ -215,8 +215,15 @@ public sealed partial class GraphProjectService
                     Entry(context, c, tx, managed.TicketId, null, "run-result", Serialize(new
                     {
                         managed.Id, status = outcome.ToString(), result.Output, result.Error, result.SessionId,
-                        outputHash = Hash(result.Output ?? ""), producer = "executor", result.CandidateManifestPath
+                        outputHash = Hash(result.Output ?? ""), producer = "executor", result.CandidateManifestPath, result.DeliveryStatus
                     }), managed.Id, "executor");
+                    if (result.DeliveryStatus == "EmptyCandidate")
+                    {
+                        Entry(context, c, tx, managed.TicketId, null, "delivery", "执行回合已结束，但没有代码候选变更；这不是产品交付。", managed.Id, "system");
+                        SendHostOrganizationMessage("empty-candidate:" + managed.Id, new GraphMessageDraft("project-lead", false,
+                            "delivery-blocked", "The execution settled with an empty code candidate. Inspect actual tool failures and whether this was intentionally read-only; do not report product delivery or blindly retry.",
+                            managed.TicketId, null, Revision(context, c, tx)));
+                    }
                     if (result.Error?.StartsWith("NeedsRepositoryAuthorization:", StringComparison.Ordinal) == true ||
                         result.Error?.StartsWith("BaselineDirty:", StringComparison.Ordinal) == true)
                     {
