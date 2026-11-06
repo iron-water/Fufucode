@@ -101,6 +101,21 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
             return null;
         }
     }
+    public bool LoadValidationProposal() => Mutate("读取验证提案", () =>
+    {
+        var entry = Snapshot.Entries.Where(e => e.TicketId == SelectedTicketId && e.Kind == "validation-proposal")
+            .OrderByDescending(e => e.CreatedUtc).FirstOrDefault() ?? throw new InvalidOperationException("此工作尚无验证提案");
+        var proposal = JsonSerializer.Deserialize<GraphValidationProposal>(entry.Text,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true }) ?? throw new InvalidOperationException("验证提案不可读");
+        if (proposal.TicketId != RequireTicket() || !Snapshot.Runs.Any(r => r.Id == proposal.RunId && r.TicketId == proposal.TicketId))
+            throw new InvalidOperationException("验证提案与工作身份不一致");
+        ValidationExecutable = proposal.Executable;
+        ValidationArguments = string.Join("\n", proposal.Arguments);
+        ValidationTimeout = proposal.TimeoutSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        CoveredCriteria = string.Join("\n", proposal.CoveredCriteria);
+        Notify(nameof(CoveredCriteria));
+    });
+
     public Task<bool> ValidateCandidateAsync() => ExecuteAsync("候选验证", async token =>
     {
         var ticket = RequireTicket();

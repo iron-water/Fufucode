@@ -5,6 +5,9 @@ public interface IGraphOrganizationService
     GraphOrganizationSnapshot SendOrganizationMessage(string commandId, GraphMessageDraft message, GraphExecutionIdentity? hostIdentity = null);
 }
 
+public sealed record GraphValidationProposal(string TicketId, string RunId, string Executable,
+    string[] Arguments, int TimeoutSeconds, string[] CoveredCriteria, string Reason);
+
 public sealed record GraphResponsibility(string Id, GraphExecutionRole Role, string[] ModuleIds, string? TicketId = null);
 public enum GraphMessageStatus { Received, Delivered, Read, Applied, Rejected }
 public sealed record GraphMessageDraft(string RecipientId, bool HumanRecipient, string Kind, string Text, string? TicketId, string? ModuleId, long Revision);

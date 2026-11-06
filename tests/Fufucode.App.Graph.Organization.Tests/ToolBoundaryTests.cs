@@ -54,6 +54,9 @@ internal static class ToolBoundaryTests
                     await Call("worker-org", "graph_organization", new { });
                     var addressed = s.ReadOrganizationSnapshot().Messages.Single(m => m.Content.RecipientId == "worker-A");
                     await Call("worker-ack", "graph_ack", new { messageId = addressed.Id, status = "Delivered", reason = "host received" });
+                    await Call("validation-proposal", "graph_propose_validation", new { executable = Path.GetFullPath("fixture-verifier.exe"), arguments = new[] { "--check" }, timeoutSeconds = 30, coveredCriteria = new[] { "fixture" }, reason = "Exact fixture contract" });
+                    Check(s.ReadSnapshot().Entries.Any(e => e.Kind == "validation-proposal" && e.TicketId == a), "validation proposal is persisted without execution or acceptance");
+                    await Call("invalid-validation-proposal", "graph_propose_validation", new { executable = "relative.exe", arguments = Array.Empty<string>(), timeoutSeconds = 30, coveredCriteria = new[] { "fixture" }, reason = "Invalid path" }, false);
                     workerDone.TrySetResult();
                 }
                 return new GraphRunResult("completed", "TEST-ONLY tool boundaries");

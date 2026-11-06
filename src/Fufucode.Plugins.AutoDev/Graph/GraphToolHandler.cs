@@ -28,6 +28,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
     private const string V = "\"expectedRevision\":{\"type\":\"integer\"}";
     public IReadOnlyList<PluginToolRegistration> Registrations { get; } =
     [
+        Tool("graph_propose_validation", "Propose exact verification commands and criterion coverage for this run. This records a proposal only; the host permission workflow must approve actual execution.", "\"executable\":" + S + ",\"arguments\":" + A + ",\"timeoutSeconds\":{\"type\":\"integer\"},\"coveredCriteria\":" + A + ",\"reason\":" + S, "\"executable\",\"arguments\",\"timeoutSeconds\",\"coveredCriteria\",\"reason\""),
         Tool("graph_organization", "Read current project responsibilities, work dependencies and organization version.", ""),
         Tool("graph_delegate", "Lead delegates one execution responsibility. Existing responsibilities are preserved. No TicketLead role exists.", "\"responsibilityId\":" + S + ",\"role\":{\"type\":\"string\",\"enum\":[\"Executor\",\"ScopeLead\",\"Verifier\"]},\"ticketId\":" + S + ",\"moduleIds\":" + A + ",\"expectedVersion\":{\"type\":\"integer\"},\"reason\":" + S, "\"responsibilityId\",\"ticketId\",\"moduleIds\",\"expectedVersion\",\"reason\""),
         Tool("graph_dependency", "Lead records an explicit work prerequisite; module relationships are not work dependencies.", "\"ticketId\":" + S + ",\"dependsOnTicketId\":" + S + ",\"remove\":{\"type\":\"boolean\"},\"reason\":" + S, "\"ticketId\",\"dependsOnTicketId\",\"remove\",\"reason\""),
@@ -130,6 +131,15 @@ public sealed class GraphToolHandler : IPluginToolHandler
             {
                 switch (call.Name)
                 {
+                    case "graph_propose_validation":
+                        var proposal = new GraphValidationProposal(_identity!.TicketId, _identity.RunId,
+                            Required(data, "executable"), Strings(data, "arguments"), PageNumber(data, "timeoutSeconds", 120, 1, 86400),
+                            Strings(data, "coveredCriteria"), Required(data, "reason"));
+                        if (!System.IO.Path.IsPathFullyQualified(proposal.Executable) || proposal.CoveredCriteria.Length == 0 ||
+                            proposal.CoveredCriteria.Any(c => !_service.ReadSnapshot().Tickets.Single(t => t.Id == _identity.TicketId).Acceptance.Contains(c, StringComparer.Ordinal)))
+                            throw new ArgumentException("Validation requires an absolute executable and exact current criterion coverage.");
+                        _service.AddEntry(_identity.TicketId, null, "validation-proposal", GraphStorage.Serialize(proposal));
+                        return new { status = "proposed-not-executed", proposal.RunId };
                     case "graph_upsert_module": return _service.UpsertModule(Text(data, "id"), Text(data, "parentId"), Required(data, "name"), Required(data, "summary"), Strings(data, "sourcePaths"));
                     case "graph_remove_module": _service.RemoveModule(Required(data, "moduleId")); return new { status = "removed" };
                     case "graph_upsert_relation": return _service.UpsertRelation(Text(data, "id"), Required(data, "sourceId"), Required(data, "targetId"), Required(data, "kind"), Required(data, "label"));
@@ -158,7 +168,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
         var run = _service.ReadSnapshot().Runs.SingleOrDefault(r => r.Id == _identity.RunId && r.TicketId == _identity.TicketId);
         if (run is null || run.Status != "Running")
             throw new InvalidOperationException("The host execution identity is no longer active.");
-        if (name is "graph_send" or "graph_inbox" or "graph_ack") return;
+        if (name is "graph_send" or "graph_inbox" or "graph_ack" or "graph_propose_validation") return;
         if (name == "graph_evidence")
         {
             if (Required(data, "ticketId") != _identity.TicketId || Required(data, "runId") != _identity.RunId)

@@ -144,6 +144,7 @@ public sealed class GraphTicketsView : GraphContentView
         {
             Header = "候选验证与集成", HorizontalAlignment = HorizontalAlignment.Stretch,
             Content = GraphUi.Stack(GraphUi.Value("CandidateManifestPath", "caption"),
+                GraphUi.Button("读取模型验证提案", () => vm.LoadValidationProposal(), "GraphLoadValidationProposal", true),
                 GraphUi.Field("可执行文件（绝对路径）", GraphUi.Input("ValidationExecutable", "GraphValidationExecutable")),
                 GraphUi.Field("参数（每行一个，空行作为空参数）", GraphUi.Input("ValidationArguments", "GraphValidationArguments", true)),
                 GraphUi.Field("超时（秒）", GraphUi.Input("ValidationTimeout", "GraphValidationTimeout")),
