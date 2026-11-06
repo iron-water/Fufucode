@@ -14,6 +14,32 @@ namespace Fufucode.App.ViewModels;
 public sealed partial class TurnFileChangeViewModel : ViewModelBase
 {
     private readonly List<string> _toolCallIds = new();
+    private readonly List<(string Before, string After)> _previews = new();
+
+    internal void AddPreview(string inputJson)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(inputJson);
+            var root = document.RootElement;
+            string? Read(params string[] keys)
+            {
+                foreach (var key in keys)
+                    if (root.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.String)
+                        return value.GetString();
+                return null;
+            }
+            if (root.TryGetProperty("edits", out var edits) && edits.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var edit in edits.EnumerateArray()) AddPreview(edit.GetRawText());
+                return;
+            }
+            var before = Read("old_string", "old_str", "original");
+            var after = Read("new_string", "new_str", "replacement", "content", "text", "file_text");
+            if (after is not null) _previews.Add((before ?? string.Empty, after));
+        }
+        catch (JsonException) { }
+    }
 
     public TurnFileChangeViewModel(string path, int additions, int deletions)
     {
@@ -78,12 +104,26 @@ public sealed partial class TurnFileChangeViewModel : ViewModelBase
         if (IsExpanded) { IsExpanded = false; return; }
 
         if (DiffModel is null) LoadDiff(dark);
-        if (DiffModel is null || !HasDiff) return;
         IsExpanded = true;
     }
 
     private void LoadDiff(bool dark)
     {
+        if (_previews.Count > 0)
+        {
+            var language = System.IO.Path.GetExtension(Path).TrimStart('.');
+            var previewModel = DiffViewModel.FromTexts(_previews[0].Before, _previews[0].After, language, dark);
+            foreach (var preview in _previews.Skip(1))
+            {
+                previewModel.Rows.Add(DiffRowViewModel.Note("下一处修改"));
+                foreach (var row in DiffViewModel.FromTexts(preview.Before, preview.After, language, dark).Rows)
+                    previewModel.Rows.Add(row);
+            }
+            DiffModel = previewModel;
+            HasDiff = previewModel.Rows.Any(row => row.IsBody);
+            DiffNote = HasDiff ? string.Empty : "内容无变化";
+            return;
+        }
         // 同一文件可能被多次修改：用最早一次调用拿到"本轮之前"的原始内容。
         var first = _toolCallIds.FirstOrDefault();
         if (first is null)
@@ -154,7 +194,7 @@ public sealed partial class TurnChangeSummaryViewModel : ViewModelBase
 
     partial void OnIsUndoneChanged(bool value) => OnPropertyChanged(nameof(CanUndo));
 
-    internal void Add(string toolCallId, string path, int additions, int deletions)
+    internal void Add(string toolCallId, string path, int additions, int deletions, string? inputJson = null)
     {
         if (!string.IsNullOrWhiteSpace(toolCallId)) _toolCallIds.Add(toolCallId);
 
@@ -163,12 +203,14 @@ public sealed partial class TurnChangeSummaryViewModel : ViewModelBase
         {
             var created = new TurnFileChangeViewModel(path, additions, deletions);
             created.AddToolCall(toolCallId);
+            if (inputJson is not null) created.AddPreview(inputJson);
             Files.Add(created);
         }
         else
         {
             existing.Merge(additions, deletions);
             existing.AddToolCall(toolCallId);
+            if (inputJson is not null) existing.AddPreview(inputJson);
         }
 
         NotifyShapeChanged();

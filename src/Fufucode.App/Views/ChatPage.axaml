@@ -37,7 +37,7 @@
             <!-- 图标已表达重命名动作，去掉重复提示，名称保留给无障碍读取。 -->
             <Button Grid.Column="1" Classes="iconButton" Command="{Binding Sidebar.BeginRenameCommand}"
                     IsVisible="{Binding Sidebar.IsReal}" AutomationProperties.Name="重命名会话">
-              <PathIcon Data="{DynamicResource Icon.Edit}" Width="14" Height="14" Foreground="{DynamicResource MsBlue}"/>
+              <PathIcon Data="{DynamicResource Icon.Edit}" Width="14" Height="14" Foreground="{DynamicResource AppAccent}"/>
             </Button>
             <TextBox x:Name="RenameBox" Grid.ColumnSpan="2" MaxWidth="360" HorizontalAlignment="Stretch"
                      Text="{Binding Sidebar.RenameDraft}" IsVisible="{Binding Sidebar.IsRenaming}" KeyDown="RenameBox_KeyDown"/>
@@ -50,14 +50,14 @@
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- 会话后端由顶栏会话岛展示（图标 + 名称），这里不再重复徽标。 -->
           <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" AutomationProperties.Name="会话操作">
-            <PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16" Foreground="{DynamicResource MsBlue}"/>
+            <PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16" Foreground="{DynamicResource AppAccent}"/>
           </Button>
           <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click">
-            <PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15" Foreground="{DynamicResource MsBlue}"/>
+            <PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15" Foreground="{DynamicResource AppAccent}"/>
           </Button>
           <Button x:Name="SessionDetailsButton" Classes="iconButton" Width="32" Height="32"
                   AutomationProperties.Name="会话详情">
-            <PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16" Foreground="{DynamicResource MsBlue}"/>
+            <PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16" Foreground="{DynamicResource AppAccent}"/>
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight">
                 <StackPanel MinWidth="240" MaxWidth="360" Spacing="12" Margin="8">
@@ -81,8 +81,15 @@
 
     <!-- 时间线 + 输入区（x:Name 供抽屉避让带度量：输入区上沿相对本页顶端） -->
     <Grid x:Name="ConversationBody" Grid.Row="1" ColumnDefinitions="Auto,*,Auto" ClipToBounds="True" Background="Transparent">
-      <StackPanel x:Name="MessageRuler" Width="34" Spacing="2" IsVisible="False"
-                  VerticalAlignment="Center" Margin="4,0,4,0"/>
+      <Grid x:Name="RulerTrack" Width="42">
+        <StackPanel x:Name="MessageRuler" Width="34" Spacing="2" IsVisible="False"
+                    VerticalAlignment="Center" Margin="4,0,4,0"/>
+        <Border x:Name="CurrentTurnMarker" Width="3" Height="16" CornerRadius="1.5"
+                Background="{DynamicResource AppAccent}" HorizontalAlignment="Left"
+                VerticalAlignment="Top" IsVisible="False" IsHitTestVisible="False">
+          <Border.Transitions><Transitions><ThicknessTransition Property="Margin" Duration="0:0:0.12"/></Transitions></Border.Transitions>
+        </Border>
+      </Grid>
       <!-- 正文与输入框共用阅读列；两侧为等宽的刻度留白，滚动条放在列外。 -->
       <Border x:Name="ReadingColumnSpacer" Grid.Column="2" Width="42"/>
       <Grid x:Name="ReadingColumn" Grid.Column="1" MaxWidth="768" Margin="24,0"
@@ -139,7 +146,7 @@
                     <Border Grid.Column="1" Classes="avatar" AutomationProperties.AutomationId="MSG-USER-AVATAR" Width="24" Height="24" CornerRadius="{DynamicResource AppCornerAvatarUser}" VerticalAlignment="Top" IsVisible="{DynamicResource UiShowAvatars}"
                             Background="{DynamicResource AppAccentSubtle}">
                       <PathIcon Data="{DynamicResource Icon.Person}" Width="14" Height="14"
-                                Foreground="{DynamicResource MsBlue}"/>
+                                Foreground="{DynamicResource AppAccent}"/>
                     </Border>
                   </Grid>
                   <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6" Margin="0,2,32,0">
@@ -169,9 +176,6 @@
                                           IsVisible="{Binding ShowAwaitingIndicator}"/>
                       <TextBlock Classes="meta" Text="{Binding AwaitingText}" VerticalAlignment="Center"
                                  IsVisible="{Binding ShowAwaitingIndicator}"/>
-                      <Panel IsVisible="{DynamicResource UiShowMessageTimes}">
-                        <TextBlock Classes="meta" VerticalAlignment="Center" Text="{Binding TimeText}" IsVisible="{Binding HasTime}"/>
-                      </Panel>
                     </StackPanel>
                     <ItemsControl ItemsSource="{Binding DisplayBlocks}"
                                   views:RichMarkdownView.IsStreaming="{Binding IsStreaming}">
@@ -204,7 +208,7 @@
                                         <Button DockPanel.Dock="Right" Classes="iconButton" Width="26" Height="22"
                                                 Command="{Binding CopyCommand}" AutomationProperties.Name="复制代码">
                                           <PathIcon Data="{DynamicResource Icon.Copy}" Width="13" Height="13"
-                                                    Foreground="{DynamicResource MsBlue}"/>
+                                                    Foreground="{DynamicResource AppAccent}"/>
                                         </Button>
                                         <TextBlock Classes="caption" VerticalAlignment="Center"
                                                    Text="{Binding Language, FallbackValue='代码'}"/>
@@ -226,9 +230,9 @@
 
                         <!-- 轻量可折叠思考块 -->
                         <DataTemplate DataType="vm:ThinkingBlockViewModel" x:DataType="vm:ThinkingBlockViewModel">
-                          <Border Classes="thinkingBlock" Margin="0,4">
+                          <Border Classes="thinkingBlock" Margin="0,4" Loaded="OnTransientBlockLoaded">
                             <StackPanel>
-                              <Button Classes="subtle" Command="{Binding ToggleExpandedCommand}"
+                              <Button Classes="subtle reasoningHeader" Command="{Binding ToggleExpandedCommand}"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
                                       Padding="10,7">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
@@ -249,14 +253,14 @@
 
                         <!-- 工具组：连续工具调用折叠成一行；运行中显示动态状态 -->
                         <DataTemplate DataType="vm:ToolGroupViewModel" x:DataType="vm:ToolGroupViewModel">
-                          <Border Classes="toolGroupCard" Margin="0,4">
+                          <Border Classes="toolGroupCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
                             <StackPanel>
                               <Button Classes="toolGroupHeader" Click="OnToolGroupClicked"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                       Padding="10,7">
                                 <Grid ColumnDefinitions="Auto,Auto,*,Auto" ColumnSpacing="8">
                                   <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
-                                            VerticalAlignment="Center" Foreground="{DynamicResource MsBlue}"/>
+                                            VerticalAlignment="Center" Foreground="{DynamicResource AppAccent}"/>
                                   <views:ActivityDots Grid.Column="1" Width="18" VerticalAlignment="Center"
                                                       IsVisible="{Binding IsActive}"/>
                                   <TextBlock Grid.Column="2" Classes="caption" Text="{Binding SummaryText}"
@@ -267,7 +271,7 @@
                               <TextBlock Classes="meta mono" Text="{Binding LatestHint, StringFormat='  └ {0}'}"
                                          TextWrapping="NoWrap" TextTrimming="CharacterEllipsis"
                                          Margin="30,0,12,6" IsVisible="{Binding HasHint}"/>
-                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="0,0,0,6">
+                              <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
                               <ItemsControl ItemsSource="{Binding VisibleTools}">
                                 <ItemsControl.DataTemplates>
                                   <DataTemplate DataType="vm:ToolCallBlockViewModel" x:DataType="vm:ToolCallBlockViewModel">
@@ -287,13 +291,13 @@
                                                   Click="OnCopyToolOutput" IsVisible="{Binding HasOutput}"
                                                   AutomationProperties.Name="复制工具输出">
                                             <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
-                                                      Foreground="{DynamicResource MsBlue}"/>
+                                                      Foreground="{DynamicResource AppAccent}"/>
                                           </Button>
                                           <!-- 工具行不再显示展开箭头（用户 2026-10-29 要求）；整行可点。 -->
                                         </StackPanel>
                                         <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
                                         <StackPanel>
-                                        <TextBlock Classes="caption mono" Text="{Binding InputJson}"
+                                        <TextBlock Classes="caption mono" Text="{Binding InputDisplay}"
                                                    TextWrapping="Wrap" MaxLines="3" Margin="12,0,12,4"
                                                    Foreground="{DynamicResource AppTextDim}"/>
                                         <views:ToolImageView SourceText="{Binding ImageOutputSource}"
@@ -331,7 +335,7 @@
                               <!-- 头部行：wrench + 工具名 + 耗时 + 展开箭头 -->
                               <StackPanel Orientation="Horizontal" Spacing="8" Margin="12,8,12,4">
                                 <PathIcon Data="{DynamicResource Icon.Wrench}" Width="14" Height="14"
-                                          VerticalAlignment="Center" Foreground="{DynamicResource MsBlue}"/>
+                                          VerticalAlignment="Center" Foreground="{DynamicResource AppAccent}"/>
                                 <!-- 统一字阶：工具名 12.5 收敛到 12，与工具组头一致。 -->
                                 <TextBlock Classes="mono" FontSize="12" FontWeight="SemiBold" Text="{Binding ToolName}" VerticalAlignment="Center"/>
                                 <TextBlock Classes="meta tabularNumeric" Text="{Binding DurationText}"
@@ -340,13 +344,13 @@
                                         Click="OnCopyToolOutput" IsVisible="{Binding HasOutput}"
                                         AutomationProperties.Name="复制工具输出">
                                   <PathIcon Data="{DynamicResource Icon.Copy}" Width="11" Height="11"
-                                            Foreground="{DynamicResource MsBlue}"/>
+                                            Foreground="{DynamicResource AppAccent}"/>
                                 </Button>
                                           <!-- 工具行不再显示展开箭头（用户 2026-10-29 要求）；整行可点。 -->
                               </StackPanel>
                               <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}">
                               <StackPanel>
-                              <TextBlock Classes="caption mono" Text="{Binding InputJson}"
+                              <TextBlock Classes="caption mono" Text="{Binding InputDisplay}"
                                          TextWrapping="Wrap" MaxLines="3" Margin="12,0,12,6"
                                          Foreground="{DynamicResource AppTextDim}"/>
                               <views:ToolImageView SourceText="{Binding ImageOutputSource}"
@@ -381,7 +385,7 @@
                         <Button Classes="referenceChip" Click="OnOpenMessageLink" Margin="0,0,6,6">
                           <StackPanel Orientation="Horizontal" Spacing="6">
                             <PathIcon Data="{DynamicResource Icon.Globe}" Width="12" Height="12"
-                                      VerticalAlignment="Center" Foreground="{DynamicResource MsBlue}"/>
+                                      VerticalAlignment="Center" Foreground="{DynamicResource AppAccent}"/>
                             <TextBlock Classes="caption" Text="{Binding Title}" MaxWidth="240"
                                        TextTrimming="CharacterEllipsis"/>
                             <TextBlock Classes="meta" Text="{Binding Domain}" VerticalAlignment="Center"
@@ -402,14 +406,7 @@
                                     VerticalAlignment="Center" Foreground="{DynamicResource AppEmphasis}"/>
                           <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="1">
                             <TextBlock Classes="metaName" Text="{Binding RelatedFilesHeaderText}"/>
-                            <TextBlock Classes="meta" Text="消息提到的路径，不代表已读取"/>
                           </StackPanel>
-                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.CaretDown}" Width="9" Height="9"
-                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"
-                                    IsVisible="{Binding RelatedFilesExpanded}"/>
-                          <PathIcon Grid.Column="2" Data="{DynamicResource Icon.CaretRight}" Width="9" Height="9"
-                                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"
-                                    IsVisible="{Binding !RelatedFilesExpanded}"/>
                         </Grid>
                       </Button>
                       <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
@@ -500,12 +497,13 @@
                                     <Button Grid.Column="4" Classes="iconButton" Width="22" Height="22"
                                             Click="OnOpenFileInChanges"
                                             AutomationProperties.Name="在变更面板中查看此文件">
-                                      <PathIcon Data="{DynamicResource Icon.Open}" Width="11" Height="11" Foreground="{DynamicResource MsBlue}"/>
+                                      <PathIcon Data="{DynamicResource Icon.Open}" Width="11" Height="11" Foreground="{DynamicResource AppAccent}"/>
                                     </Button>
                                   </Grid>
                                 </Button>
                                 <!-- 与变更面板同一套行模型：行号、增删底色、语法着色一致。 -->
                                 <views:CollapsiblePanel IsExpanded="{Binding IsExpanded}" Margin="12,0,12,8">
+                                <StackPanel>
                                 <!-- 内层圆角钳 0，与 8px 的 changeCard 同心。 -->
                                 <Border Classes="diffWell" CornerRadius="0">
                                   <ScrollViewer MaxHeight="320" HorizontalScrollBarVisibility="Disabled"
@@ -536,9 +534,10 @@
                                     </ItemsControl>
                                   </ScrollViewer>
                                 </Border>
-                                </views:CollapsiblePanel>
                                 <TextBlock Classes="meta" Text="{Binding DiffNote}" IsVisible="{Binding HasNote}"
                                            Margin="24,0,12,8"/>
+                                </StackPanel>
+                                </views:CollapsiblePanel>
                               </StackPanel>
                             </DataTemplate>
                           </ItemsControl.DataTemplates>
@@ -573,7 +572,7 @@
                               IsVisible="{Binding IsError}"/>
                     <PathIcon Grid.Column="0" Width="18" Height="18" Margin="0,1,0,0"
                               Data="{DynamicResource Icon.Info}"
-                              Foreground="{DynamicResource MsBlue}"
+                              Foreground="{DynamicResource AppAccent}"
                               IsVisible="{Binding IsInfo}"/>
                     <PathIcon Grid.Column="0" Width="18" Height="18" Margin="0,1,0,0"
                               Data="{DynamicResource Icon.RecordStop}"
@@ -628,7 +627,7 @@
               Margin="0,0,0,10" IsVisible="False" Click="OnExpandComposer"
               AutomationProperties.Name="展开输入框">
         <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="14" Height="14"
-                  Foreground="{DynamicResource MsBlue}"/>
+                  Foreground="{DynamicResource AppAccent}"/>
       </Button>
 
       <!-- 输入卡直接叠放在聊天上方，四周没有单独的底栏或填充容器。 -->
@@ -719,7 +718,6 @@
           <TextBox x:Name="InputBox" Classes="composerInput"
                    Text="{Binding Input.DraftText}"
                    AcceptsReturn="True" TextWrapping="Wrap"
-                   PlaceholderText="输入任务…"
                    MinHeight="44" MaxHeight="200" />
 
           <!-- 工具栏位于同一个卡片内，与编辑区留出间距。 -->
@@ -732,7 +730,7 @@
               <PathIcon Data="{DynamicResource Icon.AppsList}" Width="14" Height="14"/>
               <Button.Flyout>
                 <Flyout Placement="TopEdgeAlignedLeft">
-                  <Border Width="400" Classes="card" Padding="10">
+                  <Border Width="520" MaxWidth="640" Classes="overlayPanel" Padding="12">
                     <StackPanel Spacing="8">
                       <TextBox Classes="searchInput" Text="{Binding Extensions.FlyoutFilter}"
                                PlaceholderText="搜索命令或技能…"/>
@@ -755,7 +753,7 @@
                                   </StackPanel>
                                   <TextBlock Classes="caption" Text="{Binding Description}"
                                              Foreground="{DynamicResource AppTextDim}"
-                                             TextWrapping="Wrap"/>
+                                             TextWrapping="Wrap" MaxLines="2" TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
                               </Button>
                             </DataTemplate>
@@ -836,7 +834,7 @@
                                           AutomationProperties.Name="关闭该关键字"
                                           Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.DismissSearchKeywordCommand}"
                                           CommandParameter="{Binding}">
-                                    <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10" Foreground="{DynamicResource MsRed}"/>
+                                    <PathIcon Data="{DynamicResource Icon.Dismiss}" Width="10" Height="10" Foreground="{DynamicResource AppTextPrimary}"/>
                                   </Button>
                                 </StackPanel>
                               </Border>
@@ -880,10 +878,10 @@
                                             Command="{Binding $parent[ItemsControl].((vm:MainViewModel)DataContext).Settings.ToggleModelPinCommand}"
                                             CommandParameter="{Binding}">
                                       <Panel>
+                                        <PathIcon Data="{DynamicResource Icon.PinFilled}" Width="12" Height="12"
+                                                  Foreground="{DynamicResource AppAccent}" IsVisible="{Binding IsPinned}"/>
                                         <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
-                                                  Foreground="{DynamicResource MsBlue}" IsVisible="{Binding IsPinned}"/>
-                                        <PathIcon Data="{DynamicResource Icon.Pin}" Width="12" Height="12"
-                                                  Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding !IsPinned}"/>
+                                                  Foreground="{DynamicResource AppTextPrimary}" IsVisible="{Binding !IsPinned}"/>
                                       </Panel>
                                     </Button>
                                   </Grid>

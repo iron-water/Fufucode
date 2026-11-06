@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace Fufucode.App.ViewModels;
@@ -87,12 +88,12 @@ public static class MessageReferenceExtractor
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private static readonly Regex BareUrl = new(
-        @"https?://[^\s)\]<>""'，。；]+",
+        @"https?://[^\s)\]<>""'`（），。；]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     // Windows 绝对路径，或至少带一级目录且有扩展名的相对路径。
     private static readonly Regex FilePath = new(
-        @"(?<![\w:/])(?:[A-Za-z]:\\[^\s""'<>|*?，。；]+|(?:\.{0,2}/)?(?:[\w.@-]+/)+[\w.@-]+\.[A-Za-z0-9]{1,8})(?![\w/])",
+        @"(?<![\w:/])(?:[A-Za-z]:[\\/][^\s""'`<>|*?（），。；]+|(?:\.{0,2}[\\/])?(?:[\w.@-]+[\\/])+[\w.@-]+\.[A-Za-z0-9]{1,8})(?![\w/])",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static void Extract(string? text,
@@ -126,6 +127,7 @@ public static class MessageReferenceExtractor
         foreach (Match match in FilePath.Matches(text))
         {
             if (files.Count >= MaxFiles) break;
+            if (BareUrl.Matches(text).Cast<Match>().Any(url => match.Index >= url.Index && match.Index < url.Index + url.Length)) continue;
             var path = match.Value.TrimEnd('.', ',', ';', ':', ')', '，', '。', '；');
             if (path.Contains("://", StringComparison.Ordinal)) continue;
             if (!seenFiles.Add(path)) continue;

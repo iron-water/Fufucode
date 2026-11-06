@@ -197,9 +197,16 @@ public partial class ChatPage
             var text = label?.ToString() ?? string.Empty;
             var item = new MenuItem
             {
-                Header = (captured == _executionMode.SelectedIndex ? "✓  " : "    ") + text,
+                Header = text,
+                FontFamily = InputBox.FontFamily,
+                FontSize = 14,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
                 IsEnabled = _executionMode.IsEnabled,
             };
+            item.BorderBrush = Avalonia.Media.Brushes.Transparent;
+            if (captured == _executionMode.SelectedIndex)
+                item.Bind(MenuItem.BorderBrushProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccent"));
             item.Click += (_, _) => _executionMode.SelectedIndex = captured;
             menu.Items.Add(item);
         }

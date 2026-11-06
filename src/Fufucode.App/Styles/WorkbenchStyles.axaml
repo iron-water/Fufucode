@@ -22,14 +22,14 @@
 
   <!-- 新建会话后端选择条：常驻二级色，悬停/按下升到三级色。 -->
   <Style Selector="Button.backendSwitchBar">
-    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Padding" Value="12,8"/>
     <Setter Property="MinHeight" Value="36"/>
   </Style>
   <Style Selector="Button.backendSwitchBar /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
   </Style>
   <Style Selector="Button.backendSwitchBar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
@@ -38,7 +38,7 @@
     <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
   </Style>
 
-  <!-- 会话管理的分组标题条：默认与悬停都不铺底色，只有按下时出现二级色。 -->
+  <!-- 管理分组与子项使用同一悬停反馈。 -->
   <Style Selector="Button.overviewHeading">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
@@ -50,7 +50,7 @@
     </Setter>
   </Style>
   <Style Selector="Button.overviewHeading:pointerover">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
   <Style Selector="Button.overviewHeading:pressed">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
@@ -59,7 +59,7 @@
     <Setter Property="Background" Value="Transparent"/>
   </Style>
   <Style Selector="Button.overviewHeading:pointerover /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
   <Style Selector="Button.overviewHeading:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
@@ -155,6 +155,10 @@
   <!-- 会话管理只保留三层：页底 → 项目组面板（项目栏与会话同色）→ 悬停高亮。
        不再给单行套卡片/描边，避免多层 box 叠在一起。 -->
   <!-- 分组只做间距容器；每条项目/会话行自带二级色卡片，悬停与选中升三级色。 -->
+  <Style Selector="Border.overviewSession.selected">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
   <Style Selector="Border.overviewGroup">
     <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
@@ -1310,6 +1314,15 @@
   <Style Selector="ItemsControl.absorbed">
     <Setter Property="Opacity" Value="1"/>
   </Style>
+  <Style Selector="Button.toolGroupHeader, Button.reasoningHeader">
+    <Setter Property="FocusAdorner" Value="{x:Null}"/>
+    <Setter Property="MinHeight" Value="36"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Border.toolGroupCard:focus-within, Border.thinkingBlock:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
   <Style Selector="Border.toolGroupCard">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
@@ -1422,6 +1435,14 @@
   <Style Selector="Button.changeFileRow.expanded">
     <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
   </Style>
+  <Style Selector="Button.changeFileRow /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.changeFileRow:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.changeFileRow:pressed /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.changeFileRow.expanded /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
   <Style Selector="Border.diffWell">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
@@ -1483,6 +1504,8 @@
 
   <!-- 回合变更总结卡：与工具卡同一层级，但更强调"这一轮改了什么"。 -->
   <Style Selector="Border.changeCard">
+    <Setter Property="ClipToBounds" Value="True"/>
+    <Setter Property="Padding" Value="1"/>
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource CardStrokeColorDefaultBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>

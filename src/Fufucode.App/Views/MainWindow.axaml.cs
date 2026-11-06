@@ -1343,6 +1343,14 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
     private void ShowStartup(string message, bool inProgress)
     {
+        if (inProgress)
+        {
+            StopStartupAnimation();
+            StartupOverlay.IsVisible = false;
+            NavigationProgress.IsVisible = true;
+            return;
+        }
+        NavigationProgress.IsVisible = false;
         StartupText.Text = message;
         StartupProgress.IsVisible = inProgress;
         // 失败态（非进行中）显示 interrupted 空态插画；进行中保持原标识。
@@ -1395,6 +1403,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     /// <summary>启动页淡出：180ms 透明度过渡期间不阻塞 UI；结束后从可视化树移除。</summary>
     private void HideStartupOverlay()
     {
+        NavigationProgress.IsVisible = _navigationPending;
         if (!StartupOverlay.IsVisible) return;
         StopStartupAnimation();
         if (Program.SelfTestMode || MotionPreference.ReducedMotion || _closed)

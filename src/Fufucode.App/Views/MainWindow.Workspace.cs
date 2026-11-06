@@ -729,8 +729,7 @@ public partial class MainWindow
             _leftDrawerOpen = opening && zone == DockZone.Left;
             _rightDrawerOpen = opening && zone == DockZone.Right;
             _dockLayout.Hidden[zone] = !opening;
-            if (opening) EnsureDockHasPages(zone);
-            RenderDockPages(); SaveWorkspaceDimensions();
+            RefreshDockVisibility(); SaveWorkspaceDimensions();
             return;
         }
         // Hidden 表达开关意图；关闭动画结束前面板仍可见，不能把它当作仍需关闭。
@@ -745,8 +744,8 @@ public partial class MainWindow
         var isOpen = !_dockLayout.Hidden[zone] &&
             (_dockLayout.Pages[zone].Count > 0 || border.IsVisible);
         if (isOpen) _dockLayout.Hidden[zone] = true;
-        else { EnsureDockHasPages(zone); _dockLayout.Hidden[zone] = false; }
-        RenderDockPages(); SaveWorkspaceDimensions();
+        else _dockLayout.Hidden[zone] = false;
+        RefreshDockVisibility(); SaveWorkspaceDimensions();
     }
 
     /// <summary>在设置页点停靠区开关：先回到对话工作区，并直接打开该区域的页签。
@@ -756,7 +755,6 @@ public partial class MainWindow
         if (_vm?.NavigateCommand is { } navigate) await navigate.ExecuteAsync(AppPage.Chat);
         if (_vm?.IsSettingsPage == true) return;
         _animateNextLayout = true;
-        EnsureDockHasPages(zone);
         _dockLayout.Hidden[zone] = false;
         if (zone != DockZone.Bottom && Bounds.Width < 1100)
         {
@@ -767,29 +765,42 @@ public partial class MainWindow
         SaveWorkspaceDimensions();
     }
 
-    /// <summary>左栏与底栏保留默认页恢复；右栏保持用户关闭后的空状态。</summary>
-    private bool EnsureDockHasPages(DockZone zone)
+    /// <summary>纯开关不重建页签或搬移页面；三区共用同一显隐刷新路径。</summary>
+    private int _dockContentFreezeGeneration;
+
+    private void FreezeCentralLayoutDuringDockMotion()
     {
-        if (zone == DockZone.Right || _dockLayout.Pages[zone].Count > 0) return false;
-        // 一个页面只能有一个视觉宿主：已在其它停靠区或浮窗中的页面不能再作为默认页塞进来，
-        // 否则 Avalonia 会报“控件已有视觉父级”。
-        var occupied = _dockLayout.Pages.Where(pair => pair.Key != zone)
-            .SelectMany(pair => pair.Value)
-            .Concat(_dockLayout.Floating.SelectMany(floating => floating.Pages))
-            .ToHashSet(StringComparer.Ordinal);
-        var preferred = new WorkbenchLayoutState().Pages[zone]
-            .Where(id => _workbenchPages.ContainsKey(id)).ToList();
-        var defaults = preferred.Where(id => !occupied.Contains(id)).ToList();
-        if (defaults.Count > 0)
+        if (Views.Motion.Reduced || MemoryProfile.DisableVisualEffects || PageHost.Bounds.Width <= 0) return;
+        var generation = ++_dockContentFreezeGeneration;
+        PageHost.Width = PageHost.Bounds.Width;
+        PageHost.Height = PageHost.Bounds.Height;
+        PageHost.HorizontalAlignment = HorizontalAlignment.Left;
+        PageHost.VerticalAlignment = VerticalAlignment.Top;
+        DispatcherTimer.RunOnce(Release, Views.Motion.StandardDuration + TimeSpan.FromMilliseconds(32));
+        void Release()
         {
-            _dockLayout.Pages[zone] = defaults;
-            _dockLayout.Selected[zone] = defaults[0];
-            return true;
+            if (generation != _dockContentFreezeGeneration) return;
+            if (_leftDockMotion.IsAnimating || _rightDockMotion.IsAnimating || _bottomDockMotion.IsAnimating)
+            {
+                DispatcherTimer.RunOnce(Release, TimeSpan.FromMilliseconds(16));
+                return;
+            }
+            PageHost.ClearValue(WidthProperty);
+            PageHost.ClearValue(HeightProperty);
+            PageHost.ClearValue(HorizontalAlignmentProperty);
+            PageHost.ClearValue(VerticalAlignmentProperty);
         }
-        // 所有默认页都已被别的区域持有：把第一个默认页移过来，保持“一页一宿主”。
-        if (preferred.Count == 0) return false;
-        _dockLayout.Move(preferred[0], zone);
-        return true;
+    }
+
+    private void RefreshDockVisibility()
+    {
+        FreezeCentralLayoutDuringDockMotion();
+        _syncingDockState = true;
+        try { _vm?.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]); }
+        finally { _syncingDockState = false; }
+        SynchronizeAuxiliaryPageVisibility();
+        RefreshNotificationChannel();
+        ApplyWorkspaceLayout();
     }
 
     private void RenderDockPages()

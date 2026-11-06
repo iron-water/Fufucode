@@ -383,7 +383,7 @@ public partial class ChatPage : UserControl
     {
         if (sender is not Control control) return;
         control.Loaded -= OnTransientBlockLoaded;
-        Motion.AnimateIn(control, offsetY: 3, Motion.FastDuration);
+        Motion.AnimateIn(control, offsetY: 3, Motion.StandardDuration);
     }
 
     private void UpdateComposerToolbar()
@@ -513,6 +513,7 @@ public partial class ChatPage : UserControl
 
     private void TimelineScroller_ScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
+        UpdateCurrentTurnMarker();
         var now = Stopwatch.GetTimestamp();
         if (_programmaticScroll || now < _programmaticUntilTicks || DataContext is not MainViewModel vm)
         {

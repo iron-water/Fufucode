@@ -115,12 +115,12 @@ internal static class NativeChatIconsSelfTest
             var headerMore = page.FindControl<Button>("HeaderActionsButton")!;
             var headerInfo = page.FindControl<Button>("SessionDetailsButton")!;
 
-            AssertIconColor(FindIcon(headerMore), MsBlue, "标题栏更多操作图标");
-            AssertIconColor(FindIcon(headerInfo), MsBlue, "标题栏会话详情图标");
+            AssertIconColor(FindIcon(headerMore), accent, "标题栏更多操作图标");
+            AssertIconColor(FindIcon(headerInfo), accent, "标题栏会话详情图标");
 
             // 2. 消息头像（用户：蓝，助手：绿）
             var userAvatar = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-USER-AVATAR");
-            AssertIconColor(FindIcon(userAvatar), MsBlue, "用户头像图标");
+            AssertIconColor(FindIcon(userAvatar), accent, "用户头像图标");
 
             var asstAvatar = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-ASSISTANT-AVATAR");
             AssertIconColor(FindIcon(asstAvatar), accent, "AI助手头像图标");
@@ -132,7 +132,7 @@ internal static class NativeChatIconsSelfTest
 
             var toolCard = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("toolGroupCard"));
             var wrenchIcon = toolCard.GetVisualDescendants().OfType<PathIcon>().First();
-            AssertIconColor(wrenchIcon, MsBlue, "工具组扳手图标");
+            AssertIconColor(wrenchIcon, accent, "工具组扳手图标");
             Check((brainIcon.Foreground as ISolidColorBrush)?.Color != (wrenchIcon.Foreground as ISolidColorBrush)?.Color, "输出中的思考与工具图标颜色不能相同");
 
             var relatedCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-RELATED-FILES-CARD");
@@ -140,7 +140,7 @@ internal static class NativeChatIconsSelfTest
 
             var changeCard = page.GetVisualDescendants().OfType<Border>().First(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "MSG-TURN-CHANGE-CARD");
             AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().First(), accent, "代码变更卡编辑图标");
-            AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().Last(), MsBlue, "变更文件打开跳转图标");
+            AssertIconColor(changeCard.GetVisualDescendants().OfType<PathIcon>().Last(), accent, "变更文件打开跳转图标");
 
             // 3b. 变更增删配色：新增=主题强化色，删除=大红
             var diffAdded = ResolveBrush(main, "AppDiffAddedForeground", accent);
@@ -208,8 +208,8 @@ internal static class NativeChatIconsSelfTest
                 foreach (var icon in actionIcons)
                 {
                     var brush = icon.Foreground as ISolidColorBrush;
-                    var isMsColor = brush is not null && (brush.Color == MsRed || brush.Color == accent || brush.Color == MsBlue || brush.Color == emphasis);
-                    Check(isMsColor, $"动作图标用色应在微软四色范围内（实测：{brush?.Color}）");
+                    var isMsColor = brush is not null && (brush.Color == MsRed || brush.Color == accent || brush.Color == emphasis);
+                    Check(isMsColor, $"动作图标使用主题色、强调色或错误红，不再使用蓝色（实测：{brush?.Color}）");
                 }
             }
 

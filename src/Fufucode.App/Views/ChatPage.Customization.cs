@@ -52,6 +52,7 @@ public partial class ChatPage
         ReadingColumn.ColumnDefinitions[0].Width = new GridLength(narrow ? 0 : (Appearance.ShowAvatars ? 40 : 12));
         var rulerVisible = !narrow;
         MessageRuler.IsVisible = rulerVisible;
+        RulerTrack.IsVisible = rulerVisible;
         if (ReadingColumnSpacer is not null)
         {
             ReadingColumnSpacer.Width = rulerVisible ? 42 : 0;
@@ -84,7 +85,7 @@ public partial class ChatPage
 
         foreach (var (entry, number) in numbered)
         {
-            var tick = new StackPanel { Spacing = 1, HorizontalAlignment = HorizontalAlignment.Center };
+            var tick = new StackPanel { Spacing = 1, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             // 纯图形不靠字号撑大小：收藏圆点改用 6×6 的 Border（圆角取半径 3）。
             if (entry.IsPinned)
             {
@@ -111,6 +112,9 @@ public partial class ChatPage
             var button = new Button
             {
                 Content = tick,
+                Tag = entry,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
+                VerticalContentAlignment = VerticalAlignment.Center,
                 Width = 30,
                 Height = 28,
                 Padding = new Thickness(0),
@@ -142,6 +146,25 @@ public partial class ChatPage
             button.Click += (_, _) => ScrollToMessage(id);
             MessageRuler.Children.Add(button);
         }
+        Avalonia.Threading.Dispatcher.UIThread.Post(UpdateCurrentTurnMarker, Avalonia.Threading.DispatcherPriority.Loaded);
+    }
+
+    private void UpdateCurrentTurnMarker()
+    {
+        if (!MessageRuler.IsVisible) { CurrentTurnMarker.IsVisible = false; return; }
+        Button? current = null;
+        foreach (var button in MessageRuler.Children.OfType<Button>())
+        {
+            if (button.Tag is not TimelineEntryViewModel entry) continue;
+            if (TimelineItems.ContainerFromItem(entry) is not Visual container) continue;
+            if (container.TranslatePoint(default, TimelineScroller) is not { } point) continue;
+            if (point.Y <= TimelineScroller.Viewport.Height * .25) current = button;
+            else { current ??= button; break; }
+        }
+        if (current?.TranslatePoint(default, RulerTrack) is not { } position)
+        { CurrentTurnMarker.IsVisible = false; return; }
+        CurrentTurnMarker.IsVisible = true;
+        CurrentTurnMarker.Margin = new Thickness(0, position.Y + (current.Bounds.Height - 16) / 2, 0, 0);
     }
 
     internal static string TurnPreview(string? text)

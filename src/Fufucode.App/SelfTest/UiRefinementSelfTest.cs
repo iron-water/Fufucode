@@ -38,6 +38,37 @@ internal static class UiRefinementSelfTest
                 accent is ISolidColorBrush { Color: var color } && color == Color.Parse("#26FF8E"),
                 "interaction accent preserves the exact selected RGB without whitening");
             var vm = (MainViewModel)window.DataContext!;
+            var search = new TextBox { Classes = { "searchInput" }, Width = 240 };
+            var searchWindow = new Window { Content = search, Width = 300, Height = 100 };
+            searchWindow.Show();
+            search.Focus();
+            await Ready();
+            var searchBorder = search.GetVisualDescendants().OfType<Border>().FirstOrDefault(border => border.Name == "PART_BorderElement");
+            Check(searchBorder?.BorderBrush is ISolidColorBrush { Color: var searchColor } && searchColor != Colors.Transparent &&
+                searchBorder.BorderThickness.Bottom == 2, "focused search renders its two-DIP accent underline");
+            searchWindow.Close();
+            var links = new System.Collections.Generic.List<MessageLinkViewModel>();
+            var referencedFiles = new System.Collections.Generic.List<MessageFileViewModel>();
+            MessageReferenceExtractor.Extract("`https://github.com/ximeiorg/ochwpro`（README） `https://index.ximei.me/models/index.yaml`", links, referencedFiles);
+            Check(links.Count == 2 && links[0].Url == "https://github.com/ximeiorg/ochwpro" &&
+                links[1].Url == "https://index.ximei.me/models/index.yaml",
+                "website extraction excludes inline-code delimiters and adjacent Chinese annotations");
+            var entryCount = vm.Timeline.Entries.Count;
+            vm.Sidebar.SetBackends(new[]
+            {
+                new SidebarViewModel.NewSessionBackendOption("fumo", "FUMO", true, true),
+                new SidebarViewModel.NewSessionBackendOption("fixture", "Fixture", true),
+            });
+            vm.Sidebar.SelectNewSessionBackendCommand.Execute("fixture");
+            Check(vm.Sidebar.DefaultBackendLabel == "Fixture" && vm.Timeline.Entries.Count == entryCount,
+                "backend selection changes only the pending backend without creating or resetting a session");
+            var preview = new TurnFileChangeViewModel("fixture.cs", 1, 1);
+            preview.AddPreview("{\"old_string\":\"old line\",\"new_string\":\"new line\"}");
+            preview.ToggleDiff(true);
+            Check(preview.IsExpanded && preview.HasDiff && preview.DiffModel is not null,
+                "change preview uses recorded edit content without a journal snapshot");
+            preview.ToggleDiff(true);
+            Check(!preview.IsExpanded, "second change-row activation collapses the preview");
             var card = window.GetVisualDescendants().OfType<ComposerFocusBorder>().FirstOrDefault(control => control.IsEffectivelyVisible);
             Check(card is not null && Math.Abs(card.BorderThickness.Left * window.RenderScaling - 4) < 0.01,
                 "composer uses one four-screen-pixel focus border");

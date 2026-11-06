@@ -215,7 +215,25 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
     public string InputJson
     {
         get => _inputJson;
-        set => SetProperty(ref _inputJson, value);
+        set
+        {
+            if (SetProperty(ref _inputJson, value)) OnPropertyChanged(nameof(InputDisplay));
+        }
+    }
+
+    public string InputDisplay
+    {
+        get
+        {
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(InputJson);
+                if (document.RootElement.TryGetProperty("command", out var command) && command.ValueKind == System.Text.Json.JsonValueKind.String)
+                    return command.GetString() ?? InputJson;
+            }
+            catch (System.Text.Json.JsonException) { }
+            return InputJson;
+        }
     }
 
     public string? StatusText
@@ -457,7 +475,7 @@ public sealed partial class ToolCallBlockViewModel : BlockViewModel
 
     private void RefreshOutputUi()
     {
-        OutputMaxHeight = IsOutputExpanded ? double.PositiveInfinity : CollapsedOutputHeight;
+        OutputMaxHeight = CollapsedOutputHeight;
         OutputToggleLabel = IsOutputExpanded ? "收起" : $"展开（{_outputLineCount} 行）";
         OnPropertyChanged(nameof(OutputMaxHeight));
         OnPropertyChanged(nameof(OutputToggleLabel));

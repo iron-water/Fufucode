@@ -105,7 +105,7 @@ internal sealed class DockRegionMotion(Control panel, Control splitter, Action<d
                 finished = true;
                 _animation = null;
                 completed();
-            });
+            }, frameOwner: TopLevel.GetTopLevel(panel));
         if (!finished) _animation = animation;
         else animation.Dispose();
     }

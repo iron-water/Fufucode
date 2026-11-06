@@ -60,15 +60,22 @@ public partial class ChatPage
 
     private void SelectionReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (e.InitialPressMouseButton != MouseButton.Left) return;
+        if (e.InitialPressMouseButton is not (MouseButton.Left or MouseButton.Right)) return;
         var block = (e.Source as Avalonia.Visual)?.GetVisualAncestors().Prepend(e.Source as Avalonia.Visual).OfType<SelectableTextBlock>().FirstOrDefault();
         if (block is null || string.IsNullOrWhiteSpace(block.SelectedText)) return;
-        ShowSelectionActions(block,block.SelectedText);
+        ShowSelectionActions(block, block.SelectedText, e.GetPosition(block));
+        e.Handled = true;
     }
 
-    internal void ShowSelectionActions(Control anchor, string text)
+    internal void ShowSelectionActions(Control anchor, string text, Point? selectionEnd = null)
     {
         var menu = new MenuFlyout();
+        if (selectionEnd is { } end)
+        {
+            menu.Placement = PlacementMode.RightEdgeAlignedTop;
+            menu.HorizontalOffset = end.X - anchor.Bounds.Width;
+            menu.VerticalOffset = end.Y + 8;
+        }
         Add("复制", async () =>
         {
             if (TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)

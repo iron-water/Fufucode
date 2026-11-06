@@ -42,4 +42,9 @@
     <Setter Property="BorderThickness" Value="{TemplateBinding BorderThickness}"/>
     <Setter Property="CornerRadius" Value="{TemplateBinding CornerRadius}"/>
   </Style>
+  <Style Selector="Window.fluentWorkbench Border.toolGroupCard:focus-within,
+                   Window.fluentWorkbench Border.thinkingBlock:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+  </Style>
 </Styles>

@@ -25,6 +25,8 @@ public sealed partial class TimelineViewModel
     /// </summary>
     private static void Summarize(List<AssistantMessageViewModel> turn)
     {
+        var expandedFiles = turn.SelectMany(message => message.ChangeCard.Files)
+            .Where(file => file.IsExpanded).Select(file => file.Path).ToHashSet(StringComparer.Ordinal);
         foreach (var message in turn)
         {
             message.ChangeSummary = "";
@@ -50,9 +52,11 @@ public sealed partial class TimelineViewModel
             if (isWrite) artifacts.Add(file);
 
             var (additions, deletions) = StatsFor(tool, isWrite);
-            card.Add(tool.ToolCallId, file, additions, deletions);
+            card.Add(tool.ToolCallId, file, additions, deletions, tool.InputJson);
         }
 
+        foreach (var file in card.Files)
+            if (expandedFiles.Contains(file.Path)) file.IsExpanded = true;
         var last = turn[^1];
         last.ChangeSummary = string.Join(Environment.NewLine, changes.Distinct());
         // ArtifactSummary 的赋值会一并刷新 ShowArtifactBlock（依赖变更卡是否已列出文件）。

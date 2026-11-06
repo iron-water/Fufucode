@@ -23,7 +23,7 @@ public partial class OverviewView : UserControl
             {
                 Header = option.IsDefault ? option.Label + "（默认）" : option.Label,
                 IsEnabled = option.Available,
-                Command = viewModel.Sidebar.NewSessionWithBackendCommand,
+                Command = viewModel.Sidebar.SelectNewSessionBackendCommand,
                 CommandParameter = option.Key,
             });
         }

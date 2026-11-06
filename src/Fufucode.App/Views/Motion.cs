@@ -95,7 +95,7 @@ internal static class Motion
     /// 例如 Grid 列宽。返回的对象可用于中途取消。
     /// </summary>
     public static IDisposable AnimateValue(double from, double to, TimeSpan duration,
-        Action<double> apply, Action? completed = null)
+        Action<double> apply, Action? completed = null, TopLevel? frameOwner = null)
     {
         if (Reduced || Math.Abs(to - from) < 0.01)
         {
@@ -105,6 +105,21 @@ internal static class Motion
         }
 
         var startedAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (frameOwner is not null)
+        {
+            var cancelled = false;
+            void Frame(TimeSpan _)
+            {
+                if (cancelled) return;
+                var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(startedAt);
+                var progress = Math.Clamp(elapsed.TotalMilliseconds / duration.TotalMilliseconds, 0, 1);
+                apply(from + (to - from) * CubicEase.Ease(progress));
+                if (progress < 1) frameOwner.RequestAnimationFrame(Frame);
+                else completed?.Invoke();
+            }
+            frameOwner.RequestAnimationFrame(Frame);
+            return new ActionDisposable(() => cancelled = true);
+        }
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(16) };
         timer.Tick += (_, _) =>
         {

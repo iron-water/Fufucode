@@ -146,7 +146,8 @@
         <Style Selector="Button.fileTreeRow.selected">
           <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
         </Style>
-        <Style Selector="Button.fileTreeRow:focus-visible /template/ Border#FileRowSurface">
+        <Style Selector="Button.fileTreeRow.selected /template/ Border#FileRowSurface,
+                         Button.fileTreeRow:focus-visible /template/ Border#FileRowSurface">
           <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
           <Setter Property="BorderThickness" Value="1"/>
         </Style>
@@ -158,7 +159,6 @@
           <TextBlock Classes="bodyStrong" Text="项目文件" VerticalAlignment="Center"/>
           <Button Grid.Column="1" Classes="iconButton" Command="{Binding RefreshFilesCommand}" AutomationProperties.Name="刷新文件"><PathIcon Data="{DynamicResource Icon.ArrowClockwise}" Width="14" Height="14"/></Button>
         </Grid>
-        <TextBlock Classes="caption" Text="{Binding CurrentDirectoryText}" TextTrimming="CharacterEllipsis"/>
         <TextBox Classes="searchInput" Text="{Binding FileFilter}" PlaceholderText="搜索项目文件" AutomationProperties.Name="搜索项目文件"/>
         <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsFileOperationLoading}" Height="2"/>
         <TextBlock Classes="caption" Text="{Binding FilesError}" IsVisible="{Binding HasFilesError}" TextWrapping="Wrap"/>
@@ -194,10 +194,6 @@
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </ScrollViewer>
-      <Grid Grid.Row="2" ColumnDefinitions="*,Auto" Margin="12,2,8,6" ColumnSpacing="6">
-        <TextBlock Classes="caption" Text="{Binding FileStatusText}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
-        <Button Grid.Column="1" Classes="subtle" Content="复制路径" Command="{Binding CopyFilePathCommand}" IsEnabled="{Binding HasSelectedFile}" Padding="6,3"/>
-      </Grid>
       </Grid>
       <!-- 统一预览宿主：provider 负责分类与加载，面板只显示统一元数据和错误。 -->
       <Grid x:Name="FilesPreviewContainer" IsVisible="{Binding IsFilePreviewOpen}" RowDefinitions="Auto,Auto,*">

@@ -1000,6 +1000,12 @@
         <Setter Property="Fill" Value="{DynamicResource TextOnAccentFillColorDisabledBrush}"/>
     </Style>
 
+    <Style Selector="SelectableTextBlock">
+        <Setter Property="SelectionBrush" Value="{DynamicResource AppEmphasis}"/>
+    </Style>
+    <Style Selector="TextBox">
+        <Setter Property="SelectionBrush" Value="{DynamicResource AppEmphasis}"/>
+    </Style>
     <Style Selector="ProgressBar">
         <Setter Property="Foreground" Value="{DynamicResource AccentFillColorDefaultBrush}"/>
     </Style>

@@ -5,6 +5,10 @@
              x:DataType="vm:CommandPaletteViewModel"
              MaxWidth="640" AutomationProperties.Name="命令面板">
   <UserControl.Styles>
+    <Style Selector="Button#CloseButton:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                     Button#CloseButton:pressed /template/ ContentPresenter#PART_ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+    </Style>
     <Style Selector="ListBox.paletteList ListBoxItem">
       <Setter Property="Padding" Value="12,8"/>
       <Setter Property="HorizontalContentAlignment" Value="Stretch"/>

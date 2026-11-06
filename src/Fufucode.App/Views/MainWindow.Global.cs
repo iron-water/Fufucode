@@ -74,7 +74,7 @@ public partial class MainWindow
         string? SessionUnavailable() => _vm is null ? "会话尚未就绪" : null;
         string? WorkAreaUnavailable() => _vm is null ? "会话尚未就绪" : _vm.IsSettingsPage ? "返回工作区后可使用" : null;
         RegisterBrowserActions();
-        Register("commands", "命令面板", "全局", "Ctrl+K / Ctrl+Shift+P", "搜索动作、会话与设置；输入框斜杠命令仍归 composer", () => { OpenGlobalOverlay("commands"); _palette.Open(); return Task.CompletedTask; });
+        Register("commands", "命令面板", "全局", "Ctrl+K / Ctrl+Shift+P", "搜索动作、会话与设置；输入框斜杠命令仍归 composer", () => { if (_overlayKind == "commands") CloseGlobalOverlay("commands"); else { OpenGlobalOverlay("commands"); _palette.Open(); } return Task.CompletedTask; });
         Register("settings", "设置", "全局", "", "切换设置与工作区", () => NavigateWorkspaceAsync(_vm?.IsSettingsPage == true ? _settingsReturnPage : AppPage.Settings), SessionUnavailable);
         Register("chat", "返回对话", "导航", "", "返回当前会话", () => NavigateWorkspaceAsync(AppPage.Chat), SessionUnavailable);
         Register("extensions", "扩展", "导航", "", "管理已安装的扩展", () => NavigateWorkspaceAsync(AppPage.Extensions), SessionUnavailable);

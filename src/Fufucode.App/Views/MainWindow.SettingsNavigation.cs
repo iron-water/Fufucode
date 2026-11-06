@@ -43,6 +43,8 @@ public partial class MainWindow
                 _settingsReturnPage = vm.CurrentPage;
                 _settingsReturnFocus = _overlayReturnFocus ?? FocusManager?.GetFocusedElement() as Control;
             }
+            NavigationProgress.IsVisible = true;
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             var returning = vm.IsSettingsPage;
             vm.CurrentPage = page;
             if (page is AppPage.Chat or AppPage.Graph)
@@ -51,11 +53,12 @@ public partial class MainWindow
             }
             // 内容宿主只保留这一段过渡；先完成停靠区恢复和正文布局，避免淡入末尾再重排。
             UpdateLayout();
-            Views.SurfaceMotion.Show(PageHost, offsetY: returning ? 0 : 6);
+            Views.SurfaceMotion.Reset(PageHost);
+            await Task.Delay(180);
             RecordNavigation();
             if (returning) RestoreFocus(_settingsReturnFocus);
         }
-        finally { _navigationPending = false; }
+        finally { NavigationProgress.IsVisible = false; _navigationPending = false; }
     }
 
     private async Task<bool> ConfirmLeaveSettingsAsync()

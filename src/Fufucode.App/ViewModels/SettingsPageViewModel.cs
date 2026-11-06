@@ -663,7 +663,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     [ObservableProperty] private string? _confirmedModel;
     partial void OnConfirmedModelChanged(string? value)
     {
-        foreach (var item in FilteredModelChoices) item.IsConfirmed = item.Value == value;
+        RebuildFilteredModels();
     }
     public string? DataRoot => _context?.DataRoot ?? Program.SelfTestDataRoot;
 
@@ -1819,7 +1819,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         foreach (var choice in ModelChoices)
         {
             if (choice.Value is null) continue;
-            if (filter.Length > 0 &&
+            if (filter.Length > 0 && choice.Value != ConfirmedModel &&
+                !pinned.Contains(choice.Value, StringComparer.Ordinal) &&
                 !choice.Label.Contains(filter, StringComparison.OrdinalIgnoreCase) &&
                 !choice.Value.Contains(filter, StringComparison.OrdinalIgnoreCase))
                 continue;
@@ -1830,6 +1831,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         FilteredModelChoices.Clear();
         foreach (var item in items
                      .OrderByDescending(item => item.IsPinned)
+                     .ThenByDescending(item => item.IsConfirmed)
                      .ThenBy(item => item.Label, StringComparer.OrdinalIgnoreCase))
             FilteredModelChoices.Add(item);
 

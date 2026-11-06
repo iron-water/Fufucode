@@ -151,8 +151,19 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
     public bool HasBackendChoice => _newSessionBackends.Count(option => option.Available) > 1;
 
     /// <summary>当前默认后端的显示名（无选择时为空）。</summary>
+    private string? _selectedNewSessionBackend;
+
+    [RelayCommand]
+    private void SelectNewSessionBackend(string? backendKey)
+    {
+        if (!_newSessionBackends.Any(option => option.Key == backendKey && option.Available)) return;
+        _selectedNewSessionBackend = backendKey;
+        OnPropertyChanged(nameof(DefaultBackendLabel));
+    }
+
     public string DefaultBackendLabel =>
-        _newSessionBackends.FirstOrDefault(option => option.IsDefault)?.Label ?? string.Empty;
+        _newSessionBackends.FirstOrDefault(option => option.Key == _selectedNewSessionBackend)?.Label
+        ?? _newSessionBackends.FirstOrDefault(option => option.IsDefault)?.Label ?? string.Empty;
 
 
     private readonly IChatSession _session;
@@ -378,7 +389,9 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
             return;
         }
 
-        _ = RunSwitchAsync(() => _callbacks.NewSessionRequested());
+        _ = RunSwitchAsync(() => _selectedNewSessionBackend is not null && _callbacks.NewSessionWithBackendRequested is not null
+            ? _callbacks.NewSessionWithBackendRequested(_selectedNewSessionBackend)
+            : _callbacks.NewSessionRequested());
     }
 
     /// <summary>按指定后端新建会话（会话管理页“新建会话”右侧菜单）。</summary>

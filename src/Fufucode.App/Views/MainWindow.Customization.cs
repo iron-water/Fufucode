@@ -263,7 +263,7 @@ public partial class MainWindow
                 var key = effective + "/" + group;
                 if (!subMenus.TryGetValue(key, out var parent))
                 {
-                    parent = new MenuItem { Header = group };
+                    parent = new Views.AnimatedSubmenuItem { Header = group };
                     parent.Icon = Views.WorkbenchUi.IconButton(
                         group switch
                         {

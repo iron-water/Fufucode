@@ -180,7 +180,6 @@ public sealed class WorkbenchLayoutState
             if (!state.Selected.TryGetValue(zone, out var selected) || selected is null || !state.Pages[zone].Contains(selected))
                 state.Selected[zone] = state.Pages[zone].FirstOrDefault();
             state.Hidden.TryAdd(zone, false);
-            if (zone != DockZone.Right && state.Pages[zone].Count == 0) state.Hidden[zone] = true;
         }
         var windowIds = new HashSet<string>(StringComparer.Ordinal);
         state.Floating = (state.Floating ?? []).Where(item => item is not null &&

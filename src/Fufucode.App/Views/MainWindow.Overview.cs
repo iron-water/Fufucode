@@ -500,8 +500,9 @@ public partial class MainWindow
         Grid.SetColumn(tail, 1); grid.Children.Add(tail);
         var row = new Border
         {
-            Classes = { "overviewSession" }, Margin = new Thickness(indent, 0, 0, 0), Child = grid,
+            Classes = { "overviewSession" }, Margin = new Thickness(indent + depth * 16, 0, 0, 4), Child = grid,
         };
+        row.Classes.Set("selected", isCurrent);
         void SetHover(bool on)
         {
             if (on) row.Classes.Add("hover"); else row.Classes.Remove("hover");

@@ -557,6 +557,22 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
             foreach (var segment in text.Segments.OfType<PlainSegmentViewModel>())
                 MessageReferenceExtractor.Extract(segment.Text, Links, Files);
         }
+        foreach (var tool in Blocks.OfType<ToolCallBlockViewModel>())
+        {
+            try
+            {
+                using var document = System.Text.Json.JsonDocument.Parse(tool.InputJson);
+                foreach (var key in new[] { "path", "file_path", "filePath", "filename", "file" })
+                {
+                    if (!document.RootElement.TryGetProperty(key, out var value) || value.ValueKind != System.Text.Json.JsonValueKind.String) continue;
+                    var path = value.GetString();
+                    if (!string.IsNullOrWhiteSpace(path) && !Files.Any(file => string.Equals(file.Path, path, StringComparison.OrdinalIgnoreCase)))
+                        Files.Add(new MessageFileViewModel(path));
+                    break;
+                }
+            }
+            catch (System.Text.Json.JsonException) { }
+        }
         if (this is AssistantMessageViewModel assistant && assistant.ProjectRootForReferences is { } root)
             assistant.ResolveReferencedFiles(root);
         OnPropertyChanged(nameof(HasLinks));

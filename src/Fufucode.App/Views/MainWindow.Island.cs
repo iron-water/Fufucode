@@ -121,7 +121,7 @@ public partial class MainWindow
             Child = pillContent,
             Padding = new Thickness(18, 0),
             Height = 48,
-            CornerRadius = new CornerRadius(24),
+            CornerRadius = new CornerRadius(14),
             Cursor = new Avalonia.Input.Cursor(Avalonia.Input.StandardCursorType.Hand),
         };
         _islandPill.Classes.Add("sessionIsland");
@@ -430,6 +430,12 @@ public partial class MainWindow
         var isFumo = string.IsNullOrWhiteSpace(backendId) || backendId == "fumo";
         // FUMO：圆框 F 占位；其它后端：形状图标（官方高清图标资产未入库，先用图标表近似）。
         if (_islandBackendCircle is not null) _islandBackendCircle.IsVisible = isFumo;
+        if (_islandDot is not null)
+        {
+            _islandDot.IsVisible = !isFumo;
+            if (_islandBackendCircle is not null)
+                _islandBackendCircle.BorderBrush = _islandDot.Background;
+        }
         _islandBackend.IsVisible = !isFumo;
         if (!isFumo)
         {
