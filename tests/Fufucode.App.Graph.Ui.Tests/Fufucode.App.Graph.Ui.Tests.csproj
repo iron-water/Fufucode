@@ -13,5 +13,6 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.3" />
     <Compile Include="../../src/Fufucode.App/Features/Graph/*.cs" Link="Graph/%(Filename)%(Extension)" />
     <Compile Include="../../src/Fufucode.App/Abstractions/Graph/GraphContracts.cs" Link="GraphContracts.cs" />
+    <Compile Include="../../src/Fufucode.App/Abstractions/Graph/GraphOrganizationContracts.cs" Link="GraphOrganizationContracts.cs" />
   </ItemGroup>
 </Project>

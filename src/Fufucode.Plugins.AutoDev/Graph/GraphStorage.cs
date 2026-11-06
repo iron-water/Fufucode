@@ -67,7 +67,10 @@ internal static class GraphStorage
         return result;
     }
 
-    internal static void Migrate(SqliteConnection c, SqliteTransaction tx) => Execute(c, tx, """
+    internal static void Migrate(SqliteConnection c, SqliteTransaction tx)
+    {
+        GraphOrganizationStorage.Ensure(c, tx);
+        Execute(c, tx, """
         CREATE TABLE IF NOT EXISTS graph_state (
           project_id TEXT PRIMARY KEY REFERENCES rb_projects(project_id), project_path TEXT NOT NULL,
           revision INTEGER NOT NULL DEFAULT 0, kernel_revision INTEGER NOT NULL DEFAULT 0,
@@ -115,6 +118,7 @@ internal static class GraphStorage
           project_id TEXT NOT NULL, command_id TEXT NOT NULL, payload_hash TEXT NOT NULL,
           result_json TEXT NOT NULL, PRIMARY KEY(project_id,command_id));
         """);
+    }
 }
 
 /// <summary>Host identity aliases the existing kernel instead of cloning its tickets under a new id.</summary>

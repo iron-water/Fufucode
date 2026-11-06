@@ -10,12 +10,14 @@ public sealed class GraphToolHandler : IPluginToolHandler
 {
     private readonly IGraphProjectService _service;
     private readonly string? _projectPath;
+    private readonly GraphExecutionIdentity? _identity;
     public GraphToolHandler(IGraphProjectService service) => _service = service ?? throw new ArgumentNullException(nameof(service));
     /// <summary>Pin a managed run's tool scope even while the user selects another project in the UI.</summary>
-    public GraphToolHandler(IGraphProjectService service, string projectPath)
+    public GraphToolHandler(IGraphProjectService service, string projectPath, GraphExecutionIdentity? identity = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
         _projectPath = GraphStorage.Canonical(projectPath);
+        _identity = identity;
     }
     public PluginCapability? Capability => PluginCapability.AutoDevelopment;
 
@@ -26,6 +28,12 @@ public sealed class GraphToolHandler : IPluginToolHandler
     private const string V = "\"expectedRevision\":{\"type\":\"integer\"}";
     public IReadOnlyList<PluginToolRegistration> Registrations { get; } =
     [
+        Tool("graph_organization", "Read current project responsibilities, work dependencies and organization version.", ""),
+        Tool("graph_delegate", "Lead delegates one execution responsibility. Existing responsibilities are preserved. No TicketLead role exists.", "\"responsibilityId\":" + S + ",\"role\":{\"type\":\"string\",\"enum\":[\"Executor\",\"ScopeLead\",\"Verifier\"]},\"ticketId\":" + S + ",\"moduleIds\":" + A + ",\"expectedVersion\":{\"type\":\"integer\"},\"reason\":" + S, "\"responsibilityId\",\"ticketId\",\"moduleIds\",\"expectedVersion\",\"reason\""),
+        Tool("graph_dependency", "Lead records an explicit work prerequisite; module relationships are not work dependencies.", "\"ticketId\":" + S + ",\"dependsOnTicketId\":" + S + ",\"remove\":{\"type\":\"boolean\"},\"reason\":" + S, "\"ticketId\",\"dependsOnTicketId\",\"remove\",\"reason\""),
+        Tool("graph_send", "Send addressed collaboration or a human attention item. This does not grant authority or prove delivery.", "\"recipientId\":" + S + ",\"humanRecipient\":{\"type\":\"boolean\"},\"ticketId\":" + S + ",\"moduleId\":" + S + ",\"kind\":" + S + ",\"text\":" + S + ",\"revision\":{\"type\":\"integer\"}", "\"recipientId\",\"humanRecipient\",\"kind\",\"text\",\"revision\""),
+        Tool("graph_inbox", "Read this host-issued responsibility's addressed messages.", ""),
+        Tool("graph_ack", "Acknowledge actual consumption or resolution of an addressed message, never another recipient's message.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Delivered\",\"Read\",\"Applied\",\"Rejected\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
         Tool("graph_read", "Read a bounded project graph index by default. Page modules/entries explicitly or request full:true for the entire unabridged snapshot. Counts and omitted fields are explicit; pin revision for stable pages.", "\"revision\":{\"type\":\"integer\"},\"full\":{\"type\":\"boolean\"},\"moduleOffset\":{\"type\":\"integer\"},\"moduleLimit\":{\"type\":\"integer\"},\"includeEntries\":{\"type\":\"boolean\"},\"entryOffset\":{\"type\":\"integer\"},\"entryLimit\":{\"type\":\"integer\"}"),
         Tool("graph_context", "Read project context focused on a module or ticket; historical data stays at its revision.", "\"moduleId\":" + S + ",\"ticketId\":" + S + ",\"revision\":{\"type\":\"integer\"}"),
         Tool("graph_upsert_module", "Propose a sourced module definition within the human project mandate. Changes are attributed to agent.", "\"id\":" + S + ",\"parentId\":" + S + ",\"name\":" + S + ",\"summary\":" + S + ",\"sourcePaths\":" + A + "," + V, "\"name\",\"summary\",\"sourcePaths\",\"expectedRevision\""),
@@ -65,10 +73,17 @@ public sealed class GraphToolHandler : IPluginToolHandler
             var data = document.RootElement;
             using var schema = JsonDocument.Parse(registration.ParametersJsonSchema);
             Validate(data, schema.RootElement);
+            ValidateExecutionIdentity(call.Name, data);
             var revision = Integer(data, "revision");
             if (call.Name == "graph_read")
             {
                 var snapshot = _service.ReadSnapshot(revision);
+                // Architecture reads are not a back door to other recipients' communication.
+                snapshot = snapshot with
+                {
+                    Organization = snapshot.Organization is { } organizationView ? organizationView with { Messages = [] } : null,
+                    Entries = snapshot.Entries.Where(e => e.Kind != "organization").ToArray()
+                };
                 var full = data.TryGetProperty("full", out var fullValue) && fullValue.GetBoolean();
                 if (full)
                 {
@@ -79,6 +94,34 @@ public sealed class GraphToolHandler : IPluginToolHandler
                 return Success(call, GraphReadIndex.Build(snapshot, PageNumber(data, "moduleOffset", 0, 0, int.MaxValue),
                     PageNumber(data, "moduleLimit", 24, 1, 100), data.TryGetProperty("includeEntries", out var include) && include.GetBoolean(),
                     PageNumber(data, "entryOffset", 0, 0, int.MaxValue), PageNumber(data, "entryLimit", 16, 1, 100)));
+            }
+            if (call.Name == "graph_organization")
+            {
+                var state = ((GraphProjectService)_service).ReadOrganizationSnapshot();
+                return Success(call, GraphStorage.Serialize(new { state.ProjectId, state.Version, state.Responsibilities, state.Dependencies,
+                    messageCount = state.Messages.Length, inbox = "Use graph_inbox to read addressed messages; organization does not broadcast private correspondence." }));
+            }
+            if (call.Name is "graph_delegate" or "graph_dependency" or "graph_send" or "graph_inbox" or "graph_ack")
+            {
+                var organization = (GraphProjectService)_service;
+                if (_identity is null) throw new InvalidOperationException("Addressed agent communication requires a host-issued identity.");
+                object response;
+                switch (call.Name)
+                {
+                    case "graph_delegate":
+                        var member = new GraphResponsibility(Required(data, "responsibilityId"), Text(data, "role") is { } delegatedRole ? Enum.Parse<GraphExecutionRole>(delegatedRole) : GraphExecutionRole.Executor, Strings(data, "moduleIds"), Required(data, "ticketId"));
+                        response = organization.DelegateResponsibility(call.Id, Integer(data, "expectedVersion")!.Value,
+                            Required(data, "reason"), member, _identity);
+                        break;
+                    case "graph_dependency": response = organization.SetWorkDependency(call.Id, Required(data, "ticketId"), Required(data, "dependsOnTicketId"), data.GetProperty("remove").GetBoolean(), Required(data, "reason"), _identity); break;
+                    case "graph_send": response = organization.SendOrganizationMessage(call.Id, new GraphMessageDraft(Required(data, "recipientId"), data.GetProperty("humanRecipient").GetBoolean(), Required(data, "kind"), Required(data, "text"), Text(data, "ticketId"), Text(data, "moduleId"), Integer(data, "revision")!.Value), _identity); break;
+                    case "graph_inbox": response = organization.ReadOrganizationInbox(_identity.ResponsibilityId, false, _identity); break;
+                    default: response = organization.AdvanceOrganizationMessage(call.Id, Required(data, "messageId"), Enum.Parse<GraphMessageStatus>(Required(data, "status")), Required(data, "reason"), _identity); break;
+                }
+                if (call.Name is "graph_delegate" or "graph_dependency") organization.WakeOrganizationQueue();
+                return Success(call, GraphStorage.Serialize(response is GraphOrganizationSnapshot updated
+                    ? new { updated.Version, status = "recorded", inbox = "Use graph_inbox for your addressed correspondence." }
+                    : response));
             }
             if (call.Name == "graph_context") return Success(call, _service.BuildContext(Text(data, "moduleId"), Text(data, "ticketId"), revision));
             if (_service is not GraphProjectService concrete)
@@ -105,6 +148,48 @@ public sealed class GraphToolHandler : IPluginToolHandler
         }
         catch (Exception e) when (e is ArgumentException or InvalidOperationException or KeyNotFoundException or JsonException or System.IO.IOException or Microsoft.Data.Sqlite.SqliteException)
         { return Task.FromResult(new PureToolResult(call.Id, false, e.Message)); }
+    }
+
+    private void ValidateExecutionIdentity(string name, JsonElement data)
+    {
+        if (name is "graph_read" or "graph_context" or "graph_organization") return;
+        if (_identity is null)
+            throw new InvalidOperationException("Graph mutations require a host-issued execution identity; ordinary discussions are read-only.");
+        var run = _service.ReadSnapshot().Runs.SingleOrDefault(r => r.Id == _identity.RunId && r.TicketId == _identity.TicketId);
+        if (run is null || run.Status != "Running")
+            throw new InvalidOperationException("The host execution identity is no longer active.");
+        if (name is "graph_send" or "graph_inbox" or "graph_ack") return;
+        if (name == "graph_evidence")
+        {
+            if (Required(data, "ticketId") != _identity.TicketId || Required(data, "runId") != _identity.RunId)
+                throw new InvalidOperationException("Evidence must belong to this execution, not another worker.");
+            return;
+        }
+        if (name == "graph_add_entry")
+        {
+            if (Text(data, "ticketId") is { } target && target != _identity.TicketId)
+                throw new InvalidOperationException("Use addressed communication for another work item.");
+            return;
+        }
+        if (_identity.Role is not (GraphExecutionRole.ProjectLead or GraphExecutionRole.ScopeLead))
+            throw new InvalidOperationException("Executors submit results and suggestions; only a responsible lead can organize work or architecture.");
+        if (_identity.Role == GraphExecutionRole.ScopeLead)
+        {
+            if (name is "graph_delegate" or "graph_dependency") return; // Domain service checks all proposed affected scopes.
+            var scope = _identity.ModuleIds.ToHashSet(StringComparer.Ordinal);
+            var targets = name switch
+            {
+                "graph_create_ticket" => Strings(data, "moduleIds"),
+                "graph_upsert_relation" => new[] { Required(data, "sourceId"), Required(data, "targetId") },
+                "graph_remove_module" => new[] { Required(data, "moduleId") },
+                "graph_upsert_module" => new[] { Text(data, "id"), Text(data, "parentId") }.Where(x => x is not null).Cast<string>().ToArray(),
+                "graph_remove_relation" => _service.ReadSnapshot().Relations.Where(r => r.Id == Required(data, "relationId"))
+                    .SelectMany(r => new[] { r.SourceId, r.TargetId }).ToArray(),
+                _ => Array.Empty<string>()
+            };
+            if (targets.Length == 0 || targets.Any(id => !scope.Contains(id)))
+                throw new InvalidOperationException("This change crosses the delegated architecture scope.");
+        }
     }
 
     private static void Validate(JsonElement data, JsonElement schema)

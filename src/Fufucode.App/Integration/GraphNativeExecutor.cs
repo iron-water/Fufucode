@@ -34,6 +34,25 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         CancellationToken cancellationToken)
     {
         var manager = new PersistentSessionManager(string.Empty, string.Empty, _layout);
+        Fufucode.Core.Automation.ManagedDevelopmentWorkspace? workspace = null;
+        // Leads inspect the project. Writing executions always receive a fixed, isolated Git baseline.
+        if (request.Identity?.Role == GraphExecutionRole.Executor)
+        {
+            var trust = manager.GetProjectTrustStatus(request.ProjectPath);
+            if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
+            var created = await Fufucode.Core.Automation.ManagedDevelopmentWorkspace.CreateAsync(request.ProjectPath,
+                System.IO.Path.Combine(_layout.Root, "auto-dev", "workspaces"), cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (created.Status != Fufucode.Core.Automation.ManagedWorkspaceStatus.Ready || created.Workspace is null)
+                return new("Failed", "", created.Status + ": " + (created.Error ?? "Workspace creation did not succeed."));
+            workspace = created.Workspace;
+            // A generated path must not bypass the original project's trust boundary.
+            manager.SetProjectTrustDecision(workspace.Manifest.WorktreePath,
+                trust.Decision ?? ProjectTrustDecision.DoNotTrust);
+        }
+        var executionPath = workspace?.Manifest.WorktreePath ?? request.ProjectPath;
+        if (request.Identity?.Role is GraphExecutionRole.ProjectLead or GraphExecutionRole.ScopeLead or GraphExecutionRole.Verifier)
+            manager.NativeHostToolAllowed = name => name.StartsWith("graph_", StringComparison.Ordinal) ||
+                name is "read_file" or "list_dir" or "glob_files" or "grep_search" or "update_plan";
         var handler = _tools(request);
         manager.NativePluginToolProviders = () => handler is null ? [] : [new GraphApplicationToolDispatcher(handler)];
         PersistentSession? session = null;
@@ -71,14 +90,14 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
             cancellationToken.ThrowIfCancellationRequested();
             // A discussion currently displayed in Chat owns its session lease. Background work gets
             // its own run session; the ticket context keeps the discussion's identity and correspondence.
-            var resume = !string.IsNullOrWhiteSpace(request.SessionId)
+            var resume = workspace is null && !string.IsNullOrWhiteSpace(request.SessionId)
                 && _sessionInUse?.Invoke(request.SessionId) != true
                 && !SessionWindowRegistry.TryGetOwner(request.SessionId, out _, out _);
             session = resume
                 ? await manager.ResumeAsync(request.SessionId!, cancellationToken).ConfigureAwait(false)
-                : await manager.CreateAsync(request.ProjectPath, "工单 / " + request.TicketId,
+                : await manager.CreateAsync(executionPath, "工作 / " + request.TicketId,
                     cancellationToken, BackendId.NativeCSharp).ConfigureAwait(false);
-            if (session.Project.Id != request.ProjectId)
+            if (workspace is null && session.Project.Id != request.ProjectId)
                 throw new InvalidOperationException("工单会话与项目身份不一致。");
             session.Chat.Event += OnEvent;
             if (_attachApproval is not null) approval = await _attachApproval(session).ConfigureAwait(false);
@@ -92,10 +111,13 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
             using var budget = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             budget.CancelAfter(TimeSpan.FromMinutes(request.Options.BudgetMinutes));
             dispatched = true;
-            await session.Coordinator.SendPromptAsync(request.Prompt, cancellationToken: budget.Token).ConfigureAwait(false);
+            var executionPrompt = workspace is null ? request.Prompt :
+                $"Host execution workspace: {executionPath}\nOriginal project identity (not a writable path): {request.ProjectPath}\nAll file tools and command cwd must use relative paths under the execution workspace. Never write to the original project absolute path. Candidate changes are collected by the host.\n\n" + request.Prompt;
+            await session.Coordinator.SendPromptAsync(executionPrompt, cancellationToken: budget.Token).ConfigureAwait(false);
             var result = await settled.Task.WaitAsync(budget.Token).ConfigureAwait(false);
             return new GraphRunResult(result.Outcome.ToString(), Collected(), error ??
-                (result.Outcome == SessionOutcome.Completed ? null : result.Summary), session.Session.Id);
+                (result.Outcome == SessionOutcome.Completed ? null : result.Summary), session.Session.Id)
+            { CandidateManifestPath = workspace?.ManifestPath };
         }
         catch (OperationCanceledException)
         {
@@ -107,28 +129,40 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
                 if (settled.Task.IsCompletedSuccessfully)
                 {
                     var result = await settled.Task.ConfigureAwait(false);
-                    return new(result.Outcome.ToString(), Collected(), result.Summary, session.Session.Id);
+                    return new GraphRunResult(result.Outcome.ToString(), Collected(), result.Summary, session.Session.Id)
+                    { CandidateManifestPath = workspace?.ManifestPath };
                 }
                 if (session.Chat.Activity == SessionActivity.Idle)
-                    return new("Interrupted", Collected(), "原执行会话已确认停止。", session.Session.Id);
-                return new("Unknown", Collected(), "停止请求已发出，尚无执行终态确认。", session.Session.Id);
+                    return new GraphRunResult("Interrupted", Collected(), "原执行会话已确认停止。", session.Session.Id) { CandidateManifestPath = workspace?.ManifestPath };
+                return new GraphRunResult("Unknown", Collected(), "停止请求已发出，尚无执行终态确认。", session.Session.Id) { CandidateManifestPath = workspace?.ManifestPath };
             }
             catch (Exception stopError)
             {
-                return new("Unknown", Collected(), "停止未确认：" + stopError.Message, session.Session.Id);
+                return new GraphRunResult("Unknown", Collected(), "停止未确认：" + stopError.Message, session.Session.Id) { CandidateManifestPath = workspace?.ManifestPath };
             }
         }
         catch (Exception failed)
         {
-            return new(dispatched ? "Unknown" : "Failed", Collected(), failed.Message, session?.Session.Id);
+            return new GraphRunResult(dispatched ? "Unknown" : "Failed", Collected(), failed.Message, session?.Session.Id) { CandidateManifestPath = workspace?.ManifestPath };
         }
         finally
         {
-            approval?.Dispose();
-            if (session is not null)
+            try
             {
-                session.Chat.Event -= OnEvent;
-                await session.DisposeAsync().ConfigureAwait(false);
+                if (workspace is not null)
+                {
+                    // Preserve interrupted candidates without allowing capture failure to leak a session lease.
+                    await workspace.CaptureCandidateAsync(CancellationToken.None).ConfigureAwait(false);
+                }
+            }
+            finally
+            {
+                approval?.Dispose();
+                if (session is not null)
+                {
+                    session.Chat.Event -= OnEvent;
+                    await session.DisposeAsync().ConfigureAwait(false);
+                }
             }
         }
     }

@@ -1184,8 +1184,9 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         var targetDir = ResolveReadablePath(relPath, _workspaceRoot, out var error);
         if (targetDir is null) return new PureToolResult(call.Id, false, error);
 
-        if (!Directory.Exists(targetDir))
-            return new PureToolResult(call.Id, false, $"目录不存在：'{relPath}'。");
+        var singleFile = File.Exists(targetDir);
+        if (!singleFile && !Directory.Exists(targetDir))
+            return new PureToolResult(call.Id, false, $"路径不存在：'{relPath}'。");
 
         Regex regex;
         try
@@ -1210,8 +1211,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         {
             await Task.Run(() =>
             {
-                var indexed = SearchIndexedFiles(targetDir, lineMatcher, globRegex, collector, contextLines, ct);
-                if (!indexed)
+                var indexed = SearchIndexedFiles(targetDir, lineMatcher, globRegex, collector, contextLines, ct, singleFile);
+                if (!singleFile && !indexed)
                 {
                     // 索引在 30 秒 TTL 内可能不含外部创建/经 run_command 生成的大文件；
                     // 该子树在索引里一条都没有时回退到磁盘真实枚举，
@@ -1349,18 +1350,19 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     /// 否则"未找到匹配项"是假阴性。前缀判定在 glob 过滤之前，避免 glob 无命中被误判为目录缺失。
     /// </summary>
     private bool SearchIndexedFiles(string targetDir, Func<string, bool> matches, Regex? globRegex,
-        GrepCollector results, int contextLines, CancellationToken ct)
+        GrepCollector results, int contextLines, CancellationToken ct, bool singleFile = false)
     {
         var prefix = Relative(targetDir).TrimEnd('/');
         if (prefix == ".") prefix = string.Empty;
         var prefixWithSeparator = prefix.Length == 0 ? string.Empty : prefix + "/";
         var inScope = 0;
 
-        foreach (var relative in WorkspaceFiles(ct))
+        // Explicit file searches must not build/enumerate the whole workspace index.
+        foreach (var relative in singleFile ? new[] { Relative(targetDir) } : WorkspaceFiles(ct))
         {
             ct.ThrowIfCancellationRequested();
             if (results.IsFull) return inScope > 0;
-            if (prefixWithSeparator.Length > 0 &&
+            if (!singleFile && prefixWithSeparator.Length > 0 &&
                 !relative.StartsWith(prefixWithSeparator, StringComparison.Ordinal)) continue;
             inScope++;
 
@@ -1408,6 +1410,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     }
                 }
             }
+            catch (RegexMatchTimeoutException) { throw; }
             catch (OperationCanceledException) { throw; }
             catch
             {

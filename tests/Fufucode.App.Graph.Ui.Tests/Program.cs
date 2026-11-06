@@ -33,6 +33,9 @@ try
     {
         DomainBoundaries();
         NativeInteractions();
+        OrganizationInbox();
+        DevelopmentBindings();
+        InternalCompletion();
         FormBindings();
         EmptyAndLifetime();
         ReceiptPresentation();
@@ -250,6 +253,147 @@ void NativeInteractions()
     finally { window.Close(); }
 }
 
+void OrganizationInbox()
+{
+    using var service = new FakeGraphService();
+    var human = new GraphOrganizationMessage(1, "human-message", "lead", new("human", true, "question", "Human question", "t1", "a", 3), GraphMessageStatus.Delivered, "Awaiting human");
+    var internalMessage = human with { Id = "internal-message", Content = human.Content with { RecipientId = "worker", HumanRecipient = false, Text = "Internal log" } };
+    var organization = new GraphOrganizationSnapshot("project", 7,
+        new[] { new GraphResponsibility("lead", GraphExecutionRole.ProjectLead, new[] { "a" }, "t1") },
+        new[] { new GraphWorkDependency("t2", "t1") }, new[] { human, internalMessage }, Array.Empty<GraphCompletionBarrier>());
+    service.Current = service.Current with { Organization = organization };
+    service.History[2] = service.History[2] with { Organization = organization with { Version = 2, Messages = new[] { human with { Status = GraphMessageStatus.Received } } } };
+    using var vm = new GraphWorkspaceViewModel(service);
+    using var view = new GraphTicketsView(vm);
+    var window = new Window { Width = 700, Height = 900, Content = view }; window.Show(); Pump();
+    try
+    {
+        Check(vm.ShowHumanInbox && vm.HumanInbox.Count == 1 && vm.HumanInbox[0].Id == human.Id,
+            "default human inbox excludes internal organization messages");
+        Check(!view.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetAutomationId(b) == "GraphMail-t1"),
+            "default inbox does not materialize internal ticket rows");
+        var mutations = service.Mutations;
+        Press(Find<Button>(view, "GraphInbox-human-message"));
+        Check(vm.SelectedTicketId == "t1" && vm.SelectedModuleId == "a" && service.Mutations == mutations && service.AcceptCalls == 0 &&
+            vm.SelectedHumanMessage?.Status == GraphMessageStatus.Delivered, "opening inbox selects context without advancing or accepting");
+        var texts = view.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
+        Check(texts.Contains("Human question") && texts.Contains("Delivered") && texts.Contains("lead"), "inbox renders sender content and real lifecycle status");
+        string? module = "unset", ticket = "unset";
+        vm.OpenChatRequested += (m, t, _) => { module = m; ticket = t; };
+        Press(Find<Button>(view, "GraphProjectLeadChat"));
+        Check(module == null && ticket == null && service.ContextModule == null && service.ContextTicket == null,
+            "project lead chat remains project scoped with active selection");
+        Find<TextBox>(view, "GraphOrganizationReply").Text = "Human answer";
+        Press(Find<Button>(view, "GraphSendOrganizationReply"));
+        Check(vm.Error != null && vm.OrganizationReply == "Human answer" && service.Mutations == mutations,
+            "fake without organization capability fails visibly and preserves reply draft");
+        var toggle = view.GetVisualDescendants().OfType<CheckBox>().Single(c => Equals(c.Content, "内部工作"));
+        toggle.IsChecked = true; Pump();
+        Check(vm.ShowInternalWork && Find<Button>(view, "GraphMail-t1") != null, "native internal switch restores legacy ticket rows");
+        toggle.IsChecked = false; Pump();
+        var resets = 0;
+        vm.HumanInbox.CollectionChanged += (_, e) => { if (e.Action == NotifyCollectionChangedAction.Reset) resets++; };
+        service.Current = service.Current with { Organization = organization with { Version = 8 } }; service.RaiseChanged(); Pump();
+        Check(resets == 0 && vm.OrganizationResponsibilities.Count == 1 && vm.WorkDependencies.Count == 1,
+            "organization collections refresh incrementally without reset");
+        vm.ShowRevision(2); Pump();
+        Check(vm.OrganizationVersion == "组织 v2" && vm.HumanInbox.Single().Status == GraphMessageStatus.Received,
+            "history organization uses frozen snapshot rather than live authority");
+        Check(!Find<Button>(view, "GraphSendOrganizationReply").IsEnabled && !vm.ReplyToHumanMessage() && service.Mutations == mutations,
+            "history reply control and command both reject writes");
+        vm.ShowRevision(1); Pump();
+        Check(vm.HumanInbox.Count == 0 && vm.OrganizationResponsibilities.Count == 0 && vm.WorkDependencies.Count == 0,
+            "legacy null organization never falls back to live organization");
+        var capable = System.Reflection.DispatchProxy.Create<IOrganizationUiFake, OrganizationUiProxy>();
+        var proxy = (OrganizationUiProxy)(object)capable;
+        proxy.Inner = service;
+        using var replyVm = new GraphWorkspaceViewModel(capable);
+        replyVm.SelectHumanMessage(human.Id);
+        Check(!replyVm.ReplyToHumanMessage() && proxy.Sends == 0, "blank human reply cannot invoke capable fake");
+        replyVm.OrganizationReply = "  Explicit human answer  ";
+        Check(replyVm.ReplyToHumanMessage() && proxy.Sends == 1 && proxy.Identity == null &&
+            proxy.Draft is { RecipientId: "lead", HumanRecipient: false, Text: "Explicit human answer", TicketId: "t1", ModuleId: "a", Revision: 3 } &&
+            replyVm.OrganizationReply == "" && service.AcceptCalls == 0 && service.Current.Organization!.Messages[0].Status == GraphMessageStatus.Delivered,
+            "capable fake receives host human reply to original sender without model impersonation or implicit apply");
+    }
+    finally { window.Close(); }
+}
+
+void DevelopmentBindings()
+{
+    using var service = new FakeGraphService();
+    var manifest = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "graph-ui-fixture", "manifest.json"));
+    service.Current = service.Current with { Entries = service.Current.Entries.Append(new GraphEntry("candidate", "t1", null,
+        "run-result", "executor", System.Text.Json.JsonSerializer.Serialize(new { candidateManifestPath = manifest }), null, 50)).ToArray() };
+    using var vm = new GraphWorkspaceViewModel(service);
+    vm.ShowInternalWork = true; vm.SelectTicket("t1");
+    using var view = new GraphTicketsView(vm);
+    var window = new Window { Width = 700, Height = 900, Content = view }; window.Show(); Pump();
+    try
+    {
+        Check(vm.CandidateManifestPath == manifest, "development candidate derives from selected executor run result");
+        var expander = view.GetVisualDescendants().OfType<Expander>().Single(e => Equals(e.Header, "候选验证与集成"));
+        expander.IsExpanded = true; Pump();
+        Find<TextBox>(view, "GraphValidationExecutable").Text = "relative.exe";
+        Check(!vm.ValidateCandidateAsync().GetAwaiter().GetResult() && vm.Error != null, "validation refuses nonabsolute executable before host dispatch");
+        var exe = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trusted-fixture.exe"));
+        Find<TextBox>(view, "GraphValidationExecutable").Text = exe;
+        Find<TextBox>(view, "GraphValidationArguments").Text = "build\nargument with spaces\n\nlast";
+        Find<TextBox>(view, "GraphValidationTimeout").Text = "12";
+        var validations = 0; var integrations = 0;
+        vm.ValidateCandidateRequested += (ticket, candidate, executable, arguments, timeout, _) =>
+        {
+            Check(ticket == "t1" && candidate == manifest && executable == exe && timeout == TimeSpan.FromSeconds(12) &&
+                arguments.SequenceEqual(new[] { "build", "argument with spaces", "", "last" }),
+                "native validation form dispatches exact candidate executable individual arguments and timeout");
+            validations++; return Task.FromResult("Passed; requires post-integration validation");
+        };
+        vm.IntegrateCandidateRequested += (ticket, _) => { integrations++; return Task.FromResult("Integrated; target revalidation required"); };
+        Press(Find<Button>(view, "GraphValidateCandidate"));
+        Check(validations == 1 && vm.DevelopmentResult.Contains("Passed") && service.AcceptCalls == 0 && service.Mutations == 0,
+            "validation displays host result without product acceptance or graph mutation");
+        Press(Find<Button>(view, "GraphIntegrateCandidate"));
+        Check(integrations == 1 && vm.DevelopmentResult.Contains("revalidation required") && service.AcceptCalls == 0,
+            "integration dispatch remains separate and displays target revalidation requirement");
+        service.RaiseChanged(); Pump();
+        Check(vm.ValidationExecutable == exe && vm.ValidationArguments.Contains("argument with spaces"), "refresh preserves validation form draft");
+        vm.SelectTicket("t2"); Pump();
+        Check(vm.CandidateManifestPath == null && vm.DevelopmentResult == "", "development candidate and result are ticket scoped");
+        Check(!vm.ValidateCandidateAsync().GetAwaiter().GetResult() && validations == 1, "ticket without candidate cannot dispatch validation");
+        vm.SelectTicket("t1"); vm.ShowRevision(2); Pump();
+        Check(!expander.IsEnabled && !vm.ValidateCandidateAsync().GetAwaiter().GetResult() && !vm.IntegrateCandidateAsync().GetAwaiter().GetResult() &&
+            validations == 1 && integrations == 1, "historical development UI and commands reject both writes");
+    }
+    finally { window.Close(); }
+}
+
+void InternalCompletion()
+{
+    using var service = new FakeGraphService();
+    using var vm = new GraphWorkspaceViewModel(service);
+    vm.SelectTicket("t1");
+    var calls = 0;
+    vm.CompleteInternalRequested += (ticket, criteria, continuation, reason, token) =>
+    {
+        Check(ticket == "t1" && criteria.SequenceEqual(new[] { "build", "review" }) && continuation == "active_goal" &&
+            reason == "Continue next planned work" && !token.IsCancellationRequested,
+            "internal completion dispatches exact selected ticket covered criteria continuation and reason");
+        calls++; return Task.FromResult("Internal work complete; product acceptance remains human");
+    };
+    Check(!vm.CompleteInternalAsync().GetAwaiter().GetResult() && calls == 0, "internal completion rejects empty coverage and reason");
+    vm.CoveredCriteria = "build";
+    Check(!vm.CompleteInternalAsync().GetAwaiter().GetResult() && calls == 0, "internal completion rejects missing continuation reason");
+    vm.CoveredCriteria = " \r\n "; vm.ContinuationReason = "Continue next planned work";
+    Check(!vm.CompleteInternalAsync().GetAwaiter().GetResult() && calls == 0, "internal completion rejects whitespace-only coverage");
+    vm.CoveredCriteria = "  build\r\n\r\n review  ";
+    Check(vm.CompleteInternalAsync().GetAwaiter().GetResult() && calls == 1 && vm.DevelopmentResult.Contains("product acceptance remains human") &&
+        service.AcceptCalls == 0 && service.Mutations == 0 && service.Current.Tickets.Single(t => t.Id == "t1").Status == "Review",
+        "internal completion displays host result without automatic product acceptance or fake graph mutation");
+    vm.ShowRevision(2);
+    Check(!vm.CompleteInternalAsync().GetAwaiter().GetResult() && calls == 1 && service.AcceptCalls == 0,
+        "historical internal completion cannot invoke host or accept product");
+}
+
 void FormBindings()
 {
     using var service = new FakeGraphService();
@@ -283,6 +427,7 @@ void FormBindings()
         Press(Find<Button>(properties, "GraphSaveRelation"));
         Check(service.Current.Relations.Any(r => r.SourceId == "a" && r.TargetId == "b" && r.Kind == "dataflow" && r.Label == "flow label"),
             "relation form submits typed endpoints and label");
+        vm.ShowInternalWork = true; Pump();
         Press(Find<Button>(tickets, "GraphNewTicket"));
         Find<TextBox>(tickets, "GraphTicketTitle").Text = "Form ticket";
         Find<TextBox>(tickets, "GraphTicketGoal").Text = "Form goal";
@@ -401,10 +546,11 @@ void ReceiptPresentation()
     var window = new Window { Width = 1300, Height = 900, Content = columns }; window.Show(); Pump();
     try
     {
+        vm.ShowInternalWork = true;
         vm.SelectTicket("t1"); vm.SelectModule("a"); Pump();
         var visibleText = tickets.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? "").ToArray();
         Check(visibleText.Any(t => t.Contains("工单已建立") && t.Contains("目标")) && visibleText.All(t => !t.Contains("\\u5DE5") && !t.Contains("ticket-created") && !t.Contains("human")),
-            "mail default view renders readable correspondence without internal JSON or actor ids");
+            "internal mail view renders readable correspondence without internal JSON or actor ids");
         var raw = tickets.GetVisualDescendants().OfType<Expander>().First(e => e.Header as string == "原始记录");
         Check(!raw.IsExpanded && raw.Content == null, "raw receipt stays collapsed and unmaterialized by default");
         raw.IsExpanded = true; Pump();
@@ -436,6 +582,7 @@ void RecoveryOperations()
     var window = new Window { Width = 560, Height = 850, Content = tickets }; window.Show(); Pump();
     try
     {
+        vm.ShowInternalWork = true;
         vm.SelectTicket("t1"); Pump();
         var recovery = Find<Expander>(tickets, "GraphRecovery");
         Check(!recovery.IsExpanded && recovery.Header as string == "人工恢复", "recovery operations default to a collapsed decision section");
@@ -506,4 +653,22 @@ void SetResources(bool dark)
     app.Resources["AppListSelected"] = new SolidColorBrush(Color.Parse(dark ? "#405048" : "#E5EEE8"));
     app.Resources["AppMicaPageBackground"] = new SolidColorBrush(Color.Parse(dark ? "#1C1C1C" : "#F3F3F3"));
     app.Resources["AppCriticalForeground"] = new SolidColorBrush(Color.Parse(dark ? "#FF9999" : "#B00020"));
+}
+
+public interface IOrganizationUiFake : IGraphProjectService, IGraphOrganizationService { }
+public class OrganizationUiProxy : System.Reflection.DispatchProxy
+{
+    internal IGraphProjectService Inner = null!;
+    internal int Sends;
+    internal GraphMessageDraft? Draft;
+    internal GraphExecutionIdentity? Identity;
+    protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? arguments)
+    {
+        if (method!.Name == nameof(IGraphOrganizationService.SendOrganizationMessage))
+        {
+            Sends++; Draft = (GraphMessageDraft)arguments![1]!; Identity = (GraphExecutionIdentity?)arguments[2];
+            return Inner.ReadSnapshot().Organization!;
+        }
+        return method.Invoke(Inner, arguments);
+    }
 }

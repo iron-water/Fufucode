@@ -333,12 +333,15 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     /// Plan 模式只声明明确只读的内置工具与 update_plan：声明一个必然被拒绝的写工具，
     /// 既浪费输入 Token，也会诱发模型反复尝试无效调用。
     /// </summary>
+    public Func<string, bool>? HostToolAllowed { get; set; }
+
     private IReadOnlyList<string> BuildToolNames()
     {
         var planOnly = IsPlanMode();
         var merged = new List<string>(BuiltInToolNames.Length);
         foreach (var name in BuiltInToolNames)
         {
+            if (HostToolAllowed?.Invoke(name) == false) continue;
             if (planOnly && !ProductionToolDispatcher.IsPlanSafeTool(name)) continue;
             merged.Add(name);
         }
@@ -352,12 +355,12 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
 
         // Plan 模式不声明插件工具：第三方工具无法静态证明只读，调度器必然拒绝，
         // 声明它们只会制造无效调用。
-        if (planOnly || _pluginTools is not { } pluginTools) return merged;
+        if (planOnly || _pluginTools is not { } pluginTools) return HostToolAllowed is null ? merged : merged.Where(HostToolAllowed).ToList();
         foreach (var name in pluginTools.ActiveToolNames)
         {
-            if (!merged.Contains(name, StringComparer.Ordinal)) merged.Add(name);
+            if (HostToolAllowed?.Invoke(name) != false && !merged.Contains(name, StringComparer.Ordinal)) merged.Add(name);
         }
-        return merged;
+        return HostToolAllowed is null ? merged : merged.Where(HostToolAllowed).ToList();
     }
 
     /// <summary>当前会话是否处于只读 Plan 模式（非 FUMO 引擎时按 false 处理）。</summary>
@@ -371,6 +374,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         var list = new List<PureToolDefinition>();
         foreach (var definition in ProductionToolDispatcher.GetBuiltinToolDefinitions())
         {
+            if (HostToolAllowed?.Invoke(definition.Name) == false) continue;
             if (planOnly && !ProductionToolDispatcher.IsPlanSafeTool(definition.Name)) continue;
             list.Add(definition);
         }
@@ -389,7 +393,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 list.Add(new PureToolDefinition(reg.Name, reg.Description, reg.ParametersJsonSchema));
             }
         }
-        return list;
+        return HostToolAllowed is null ? list : list.Where(definition => HostToolAllowed(definition.Name)).ToList();
     }
 
     /// <summary>

@@ -22,7 +22,7 @@ public static class NativeSessionFactory
         Func<IReadOnlyList<IPureToolDispatcher>>? pluginProviders = null,
         bool supportsImages = true, SkillRegistry? skills = null, McpManager? mcp = null,
         INativeSubagentRuntime? subagents = null,
-        int? maxIterations = null)
+        int? maxIterations = null, Func<string, bool>? hostToolAllowed = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var current = settings.Current;
@@ -101,6 +101,7 @@ public static class NativeSessionFactory
         IPureToolDispatcher dispatcher = subagents is null ? capabilities :
             new Security.SecurityToolDispatcher(subagents.Wrap(capabilities), securityEvaluator, securityAudit);
 
+        if (hostToolAllowed is not null) dispatcher = new HostToolBoundary(dispatcher, hostToolAllowed);
         // 主会话默认不设置轮次预算。CLI/无人值守调用方如需预算，显式传入 maxIterations。
         var engine = new PureCSharpAgentEngine(dispatcher, client, maxIterations);
 
@@ -134,6 +135,7 @@ public static class NativeSessionFactory
             workspaceRoot: workspaceRoot,
             ownedResource: client as IDisposable);
 
+        chat.HostToolAllowed = hostToolAllowed;
         if (!string.IsNullOrWhiteSpace(current.ThinkingLevel) && current.ThinkingLevel != "off")
             chat.SetThinkingLevel(current.ThinkingLevel);
 

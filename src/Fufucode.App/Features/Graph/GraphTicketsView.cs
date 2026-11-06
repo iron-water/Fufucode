@@ -32,7 +32,24 @@ public sealed class GraphTicketsView : GraphContentView
             ItemTemplate = new FuncDataTemplate<GraphTicketRow>((row, _) => row == null ? null : MailRow(vm, row))
         };
         GraphUi.Bind(mail, ItemsControl.ItemsSourceProperty, "TicketRows");
-        var mailbox = GraphUi.Scroll(mail);
+        GraphUi.Bind(mail, IsVisibleProperty, "ShowInternalWork");
+        var inbox = new ItemsControl
+        {
+            ItemTemplate = new FuncDataTemplate<GraphOrganizationMessage>((message, _) =>
+            {
+                if (message == null) return null;
+                var button = GraphUi.Button(message.SenderId, () => vm.SelectHumanMessage(message.Id), "GraphInbox-" + message.Id);
+                button.Content = GraphUi.Stack(GraphUi.Text(message.SenderId, "bodyStrong"),
+                    GraphUi.Text(message.Content.Text), GraphUi.Text(message.Status.ToString(), "caption"),
+                    GraphUi.Text(message.Resolution ?? "", "caption"));
+                button.HorizontalAlignment = HorizontalAlignment.Stretch;
+                button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+                return button;
+            })
+        };
+        GraphUi.Bind(inbox, ItemsControl.ItemsSourceProperty, "HumanInbox");
+        GraphUi.Bind(inbox, IsVisibleProperty, "ShowHumanInbox");
+        var mailbox = GraphUi.Scroll(GraphUi.Stack(inbox, mail));
         var moduleChoices = new ItemsControl
         {
             ItemTemplate = new FuncDataTemplate<GraphModule>((module, _) =>
@@ -123,13 +140,39 @@ public sealed class GraphTicketsView : GraphContentView
                 GraphUi.AsyncButton("停止", () => vm.StopTicketAsync(), "GraphStopTicket")),
             send, GraphUi.Divider(), evidence, GraphUi.Divider(), decisions, GraphUi.Divider(), session);
         GraphUi.Bind(editing, IsVisibleProperty, "!IsHistorical");
+        var development = new Expander
+        {
+            Header = "候选验证与集成", HorizontalAlignment = HorizontalAlignment.Stretch,
+            Content = GraphUi.Stack(GraphUi.Value("CandidateManifestPath", "caption"),
+                GraphUi.Field("可执行文件（绝对路径）", GraphUi.Input("ValidationExecutable", "GraphValidationExecutable")),
+                GraphUi.Field("参数（每行一个，空行作为空参数）", GraphUi.Input("ValidationArguments", "GraphValidationArguments", true)),
+                GraphUi.Field("超时（秒）", GraphUi.Input("ValidationTimeout", "GraphValidationTimeout")),
+                GraphUi.Text("严格策略：不豁免生成物；构建写入也可能被拒绝。集成后必须重新验证，产品验收仍由人决定。", "caption"),
+                GraphUi.Actions(GraphUi.AsyncButton("验证候选", vm.ValidateCandidateAsync, "GraphValidateCandidate"),
+                    GraphUi.AsyncButton("集成候选", vm.IntegrateCandidateAsync, "GraphIntegrateCandidate")),
+                GraphUi.Field("验证覆盖的验收项（逐行精确填写）", GraphUi.Input("CoveredCriteria", "GraphCoveredCriteria", true)),
+                GraphUi.Field("后续工作说明（项目仍继续）", GraphUi.Input("ContinuationReason", "GraphContinuationReason", true)),
+                GraphUi.AsyncButton("完成内部工作", vm.CompleteInternalAsync, "GraphCompleteInternal"),
+                GraphUi.Value("DevelopmentResult"))
+        };
+        GraphUi.Bind(development, IsEnabledProperty, "CanEdit");
         var details = GraphUi.Stack(GraphUi.Value("SelectedTicketStatus", "caption"),
             GraphUi.Value("SelectedTicket.Goal"), GraphUi.Field("验收条件", GraphUi.Value("SelectedTicketAcceptance")),
             linkedModules, GraphUi.Value("SelectedTicket.SessionId", "caption"),
             GraphUi.Button("打开会话", () => vm.OpenChat(null, vm.SelectedTicketId), "GraphTicketChat"),
-            GraphUi.Divider(), entries, runs, editing);
+            GraphUi.Divider(), entries, runs, development, editing);
         GraphUi.Bind(details, IsVisibleProperty, "HasSelectedTicket");
-        var thread = GraphUi.Stack(create, GraphUi.Value("TicketSelectionLabel", "bodyStrong"), details);
+        var internalThread = GraphUi.Stack(create, GraphUi.Value("TicketSelectionLabel", "bodyStrong"), details);
+        GraphUi.Bind(internalThread, IsVisibleProperty, "ShowInternalWork");
+        var reply = GraphUi.Stack(GraphUi.Field("回复", GraphUi.Input("OrganizationReply", "GraphOrganizationReply", true)),
+            GraphUi.Button("发送回复", () => vm.ReplyToHumanMessage(), "GraphSendOrganizationReply", true));
+        GraphUi.Bind(reply, IsEnabledProperty, "CanEdit");
+        var humanThread = GraphUi.Stack(GraphUi.Value("SelectedHumanMessage.SenderId", "bodyStrong"),
+            GraphUi.Value("SelectedHumanMessage.Content.Text"), GraphUi.Value("SelectedHumanMessage.Status", "caption"),
+            GraphUi.Value("SelectedHumanMessage.Resolution", "caption"), reply);
+        humanThread.Bind(IsVisibleProperty, new MultiBinding { Converter = BoolConverters.And,
+            Bindings = { new Binding("ShowHumanInbox"), new Binding("HasSelectedHumanMessage") } });
+        var thread = GraphUi.Stack(humanThread, internalThread);
         thread.Margin = new Thickness(0, 10, 0, 8);
         _threadScroll.Content = thread;
         _threadScroll.ScrollChanged += (_, _) =>
@@ -138,7 +181,11 @@ public sealed class GraphTicketsView : GraphContentView
             GraphUi.AsyncButton("启动推进", () => vm.SetAutonomyAsync(true), "GraphStartAutonomy"),
             GraphUi.AsyncButton("停止推进", () => vm.SetAutonomyAsync(false), "GraphStopAutonomy"),
             GraphUi.AsyncButton("停止全部", () => vm.StopAllAsync(), "GraphStopAll"));
-        var top = GraphUi.Stack(GraphUi.Version(vm), GraphUi.Error(vm), GraphUi.Busy(), commands, GraphUi.Value("ProjectStatus", "caption"));
+        var internalSwitch = new CheckBox { Content = "内部工作" };
+        GraphUi.Bind(internalSwitch, ToggleButton.IsCheckedProperty, "ShowInternalWork", BindingMode.TwoWay);
+        var top = GraphUi.Stack(GraphUi.Version(vm), GraphUi.Error(vm), GraphUi.Busy(),
+            GraphUi.Actions(GraphUi.Button("项目负责人", vm.OpenProjectLeadChat, "GraphProjectLeadChat"), internalSwitch),
+            commands, GraphUi.Value("ProjectStatus", "caption"));
         top.Spacing = 4;
         var splitter = new GridSplitter { Height = 4, HorizontalAlignment = HorizontalAlignment.Stretch,
             ResizeDirection = GridResizeDirection.Rows, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
@@ -170,7 +217,8 @@ public sealed class GraphTicketsView : GraphContentView
     }
     protected override void OnWorkspaceChanged(string? name)
     {
-        var key = Workspace.Snapshot.ProjectId + "/" + Workspace.VersionLabel + "/" + Workspace.SelectedTicketId;
+        var key = Workspace.Snapshot.ProjectId + "/" + Workspace.VersionLabel + "/" +
+            (Workspace.ShowHumanInbox ? Workspace.SelectedHumanMessage?.Id : Workspace.SelectedTicketId);
         if (key == _threadKey) return;
         if (_threadKey != null && !_restoring) Workspace.SaveReadingOffset(_threadKey, _threadScroll.Offset);
         _threadKey = key; _restoring = true;

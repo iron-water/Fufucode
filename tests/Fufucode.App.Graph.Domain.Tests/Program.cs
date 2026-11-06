@@ -26,6 +26,7 @@ internal static class Program
             await Test("disable stops scheduling and waits for cancellation", Disable);
             await Test("restart marks in-flight work unknown without retry", Restart);
             await Test("autonomy plans and advances real queued follow-ups", Autonomy);
+            await Test("lead failure retains pending events until explicit human recovery", LeadFailureRecovery);
             await Test("model tools enforce provenance, idempotency and conflicts", Tools);
             await Test("tools stay bound to their run project", ProjectScope);
             await Test("changed budgets cancel and await real receipts", Budget);
@@ -55,8 +56,25 @@ internal static class Program
     }
     private static GraphProjectService Service((string Data, string Project) f, IGraphRunExecutor? executor = null, string host = "host-project")
     { var s = new GraphProjectService(f.Data, executor ?? new NeverExecutor()); s.SetProject(host, f.Project); return s; }
-    private static GraphTicket Ticket(GraphProjectService s, string name = "real fixture work", params string[] criteria) =>
-        s.CreateTicket(name, "Check a real test fixture, never a production task", [], criteria.Length == 0 ? ["fixture verified"] : criteria);
+    private static GraphTicket Ticket(GraphProjectService s, string name = "real fixture work", params string[] criteria)
+    {
+        var ticket = s.CreateTicket(name, "Check a real test fixture, never a production task", [], criteria.Length == 0 ? ["fixture verified"] : criteria);
+        var organization = s.ReadOrganizationSnapshot();
+        var member = new GraphResponsibility("fixture-executor:" + ticket.Id, GraphExecutionRole.Executor, [], ticket.Id);
+        s.ApplyOrganization("fixture-delegate:" + ticket.Id, organization.Version, "Explicit test fixture execution delegation",
+            [..organization.Responsibilities, member], [member.Id]);
+        return ticket;
+    }
+    private static string PlanningTicket(GraphProjectService s, string data)
+    {
+        using var kernel = new RebirthKernel(Database(data));
+        var snapshot = s.ReadSnapshot();
+        var ticket = kernel.CreateTicket("fixture-planning-" + Guid.NewGuid().ToString("N"), snapshot.ProjectId,
+            "TEST-ONLY project planning", "Exercise host-issued project lead tools", ["fixture planning verified"],
+            "project-planning", "project-lead", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        s.ReadSnapshot(); // Refresh the Graph projection after this explicit kernel fixture mutation.
+        return ticket.Id;
+    }
     private static string Database(string data) => Directory.EnumerateFiles(data, "kernel.db", SearchOption.AllDirectories).Single();
     private static long Scalar(string db, string sql)
     { using var c = new SqliteConnection("Data Source=" + db); c.Open(); using var q = c.CreateCommand(); q.CommandText = sql; return Convert.ToInt64(q.ExecuteScalar()); }
@@ -238,30 +256,93 @@ internal static class Program
             calls.Enqueue(request.TicketId);
             if (calls.Count == 1)
             {
-                var tools = new GraphToolHandler(service!);
+                var tools = new GraphToolHandler(service!, request.ProjectPath, request.Identity);
+                Check(request.Identity?.Role == GraphExecutionRole.ProjectLead, "initial planning receives host ProjectLead identity");
                 var follow = await tools.ExecuteAsync(new("test-followup", "graph_create_ticket", "{\"title\":\"Concrete fixture follow-up\",\"goal\":\"Verify the real fixture result\",\"moduleIds\":[],\"acceptance\":[\"fixture checked\"]}"));
                 Check(follow.Success, "model can create follow-up under mandate");
+                var followTicket = service!.ReadSnapshot().Tickets.Single(t => t.Title == "Concrete fixture follow-up");
+                var delegation = await tools.ExecuteAsync(new("test-followup-delegation", "graph_delegate", JsonSerializer.Serialize(new
+                {
+                    responsibilityId = "followup-executor", ticketId = followTicket.Id, moduleIds = Array.Empty<string>(),
+                    expectedVersion = service.ReadOrganizationSnapshot().Version, reason = "Explicit fixture follow-up delegation"
+                })));
+                Check(delegation.Success, "project lead explicitly delegates follow-up execution");
+            }
+            else if (request.Identity?.Role == GraphExecutionRole.Executor)
+            {
+                var tools = new GraphToolHandler(service!, request.ProjectPath, request.Identity);
+                Check(!(await tools.ExecuteAsync(new("executor-create-denied", "graph_create_ticket", "{\"title\":\"forbidden\",\"goal\":\"forbidden\",\"moduleIds\":[],\"acceptance\":[\"x\"]}"))).Success,
+                    "executor cannot create follow-up work");
+                Check(!(await tools.ExecuteAsync(new("executor-module-denied", "graph_upsert_module", "{\"name\":\"forbidden\",\"summary\":\"forbidden\",\"sourcePaths\":[]}"))).Success,
+                    "executor cannot change global architecture");
             }
             return new GraphRunResult("completed", "TEST-ONLY planned/ran fixture work");
         });
         using var s = Service(f, fake); service = s;
         await Rejects(() => s.SetAutonomyAsync(true), "empty purpose cannot start");
         s.SetPurpose("Inspect fixture and make checkable follow-up work"); await s.SetAutonomyAsync(true);
-        await WaitUntil(() => s.ReadSnapshot().Tickets.Count == 2 && s.ReadSnapshot().Runs.Count == 2 && s.ReadSnapshot().Runs.All(r => r.EndedUtc is not null));
+        await WaitUntil(() => s.ReadSnapshot().Tickets.Any(t => t.Title == "Concrete fixture follow-up" && t.Status == "Review"));
         await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
-        Check(calls.Count == 2 && s.ReadSnapshot().Tickets.All(t => t.Status == "Review"), "planning and follow-up advance once, awaiting human acceptance");
+        Check(s.ReadSnapshot().Runs.Count(r => r.TicketId == s.ReadSnapshot().Tickets.Single(t => t.Title == "Concrete fixture follow-up").Id) == 1,
+            "delegated follow-up executes once, awaiting human acceptance");
         var arrival = Ticket(s, "queued arrival after idle");
         await WaitUntil(() => s.ReadSnapshot().Tickets.Single(t => t.Id == arrival.Id).Status == "Review");
+        await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
+        var settled = s.ReadSnapshot().Runs.Count;
+        var watermark = s.ReconcileLeadCycle(f.Project);
+        var repeated = s.ReconcileLeadCycle(f.Project);
+        Check(repeated.ObservedWatermark == watermark.ObservedWatermark && repeated.PlannedWatermark == watermark.PlannedWatermark,
+            "replayed terminal facts do not advance lead event watermark");
+        await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
+        var afterReplay = s.ReadSnapshot().Runs.Count;
+        s.ReconcileLeadCycle(f.Project);
+        Check(s.ReadSnapshot().Runs.Count == afterReplay && afterReplay >= settled,
+            "lead completion does not self-excite another planning run");
         await s.SetAutonomyAsync(false);
-        Check(calls.Count == 3, "new queue arrivals resume inside existing mandate without repeated human authorization");
+        Check(s.ReadSnapshot().Runs.Count(r => r.TicketId == arrival.Id) == 1,
+            "new delegated queue arrival resumes once within existing mandate");
         Check(s.ReadSnapshot().Entries.Any(e => e.Kind == "ticket-created" && e.Actor == "agent"), "follow-up provenance is agent");
+    }
+
+    private static async Task LeadFailureRecovery()
+    {
+        var f = Fixture("lead-failure"); var calls = 0;
+        using var s = Service(f, new CallbackExecutor(_ => Task.FromResult(new GraphRunResult(
+            Interlocked.Increment(ref calls) == 2 ? "unknown" : "completed", "TEST-ONLY lead receipt"))));
+        s.SetPurpose("Retain human planning requests after uncertain lead outcomes");
+        await s.SetAutonomyAsync(true);
+        await WaitUntil(() => s.ReadSnapshot().Runs.Count == 1 && s.ReadSnapshot().ProjectStatus != "Running");
+        s.SendOrganizationMessage("pending-human-request", new GraphMessageDraft("project-lead", false, "message",
+            "HUMAN_REQUEST_MUST_SURVIVE_UNKNOWN", null, null, s.ReadSnapshot().Revision));
+        s.ReconcileLeadCycle(f.Project);
+        await WaitUntil(() => s.ReadSnapshot().Runs.Any(r => r.Status == "Unknown") && s.ReadSnapshot().ProjectStatus != "Running");
+        var attention = s.ReconcileLeadCycle(f.Project);
+        Check(attention.State == "reconciliation-required", "unknown lead batch remains pending reconciliation, not idle");
+        var before = calls;
+        for (var i = 0; i < 3; i++) Check(s.ReconcileLeadCycle(f.Project).State == "reconciliation-required", "ordinary hooks do not retry uncertain planning");
+        Check(calls == before && s.ReadSnapshot().Entries.Count(e => e.Kind == "lead-cycle-attention") == 1,
+            "failure produces one durable attention entry without infinite retries");
+        var recovered = s.ResumeLeadCycle(f.Project);
+        Check(recovered.State == "planning-ready" && recovered.TicketId != attention.TicketId, "explicit human recovery creates a distinct reconciliation plan");
+        Check(s.ReadLeadCyclePrompt(f.Project, recovered.TicketId!).EventsJson.Contains("HUMAN_REQUEST_MUST_SURVIVE_UNKNOWN"),
+            "new reconciliation plan retains original human message facts");
+        await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
+        Check(s.ReadSnapshot().Runs.Count(r => r.Status == "Unknown") == 1 && calls == before + 1,
+            "unknown run is never replayed; only new lead reconciliation executes");
+        Check(s.ReconcileLeadCycle(f.Project).State == "idle", "successful reconciliation does not self-excite");
+        Check(s.ReadOrganizationSnapshot().Messages.Single().Status != GraphMessageStatus.Applied,
+            "planning transport never manufactures Applied acknowledgement");
+        await s.SetAutonomyAsync(false);
     }
 
     private static async Task Tools()
     {
-        var f = Fixture("tools"); using var s = Service(f, new InstantExecutor()); var handler = new GraphToolHandler(s);
-        var noMandate = await handler.ExecuteAsync(new("no-mandate", "graph_create_ticket", "{\"title\":\"x\",\"goal\":\"x\",\"moduleIds\":[],\"acceptance\":[\"x\"]}")); Check(!noMandate.Success, "model cannot create a purpose");
-        s.SetPurpose("Test safe tool mutation"); var ticket = Ticket(s); await s.RunTicketAsync(ticket.Id);
+        var f = Fixture("tools"); GraphProjectService? service = null;
+        var executor = new CallbackExecutor(async request =>
+        {
+        var s = service!;
+        var handler = new GraphToolHandler(s, request.ProjectPath, request.Identity);
+        Check(request.Identity?.Role == GraphExecutionRole.ProjectLead, "mutation fixture uses a real live project lead");
         var revision = s.ReadSnapshot().Revision;
         var args = JsonSerializer.Serialize(new { name = "Agent sourced module", summary = "real fixture", sourcePaths = Array.Empty<string>(), expectedRevision = revision });
         var call = new PureToolCall("idempotent-module", "graph_upsert_module", args);
@@ -279,17 +360,37 @@ internal static class Program
         Sql(Database(f.Data), "UPDATE graph_state SET budget_started_utc=1");
         Check(!(await handler.ExecuteAsync(new("expired-budget", "graph_add_entry", "{\"kind\":\"message\",\"text\":\"out of budget\"}"))).Success, "expired budget rejects model writes");
         await Rejects(() => s.RunTicketAsync(Ticket(s, "new work").Id), "expired budget rejects executor launch");
+        return new GraphRunResult("completed", "TEST-ONLY live tool fixture receipt");
+        });
+        using var owner = Service(f, executor); service = owner;
+        var unbound = new GraphToolHandler(owner);
+        var noMandate = await unbound.ExecuteAsync(new("no-mandate", "graph_create_ticket", "{\"title\":\"x\",\"goal\":\"x\",\"moduleIds\":[],\"acceptance\":[\"x\"]}"));
+        Check(!noMandate.Success, "model cannot create a purpose");
+        owner.SetPurpose("Test safe tool mutation");
+        Check((await unbound.ExecuteAsync(new("unbound-read", "graph_read", "{}"))).Success, "no identity retains read access");
+        Check(!(await unbound.ExecuteAsync(new("unbound-write", "graph_add_entry", "{\"kind\":\"message\",\"text\":\"untrusted\"}"))).Success,
+            "no identity cannot mutate even under a valid purpose");
+        await owner.RunTicketAsync(PlanningTicket(owner, f.Data));
     }
 
     private static async Task ProjectScope()
     {
         var f = Fixture("project-scope"); var other = Path.Combine(Sandbox, "other-project"); Directory.CreateDirectory(other);
-        using var s = Service(f, new InstantExecutor()); s.SetPurpose("Project A purpose"); await s.RunTicketAsync(Ticket(s).Id);
-        var pinned = new GraphToolHandler(s, f.Project);
-        s.SetProject("host-B", other); s.SetPurpose("Project B purpose");
-        var result = await pinned.ExecuteAsync(new("project-A-entry", "graph_add_entry", "{\"kind\":\"message\",\"text\":\"Only project A should receive this\"}"));
-        Check(result.Success && s.ReadSnapshot().ProjectId == "host-B" && !s.ReadSnapshot().Entries.Any(e => e.Text.Contains("Only project A")), "pinned tools preserve selected UI project and never mutate B");
-        s.SetProject("host-project", f.Project); Check(s.ReadSnapshot().Entries.Any(e => e.Text.Contains("Only project A") && e.Actor == "agent"), "pinned command wrote to A");
+        GraphProjectService? service = null;
+        var executor = new CallbackExecutor(async request =>
+        {
+            var s = service!;
+            var pinned = new GraphToolHandler(s, request.ProjectPath, request.Identity);
+            s.SetProject("host-B", other); s.SetPurpose("Project B purpose");
+            var result = await pinned.ExecuteAsync(new("project-A-entry", "graph_add_entry", JsonSerializer.Serialize(new
+            { ticketId = request.TicketId, kind = "message", text = "Only project A should receive this" })));
+            Check(result.Success && s.ReadSnapshot().ProjectId == "host-B" && !s.ReadSnapshot().Entries.Any(e => e.Text.Contains("Only project A")), "pinned tools preserve selected UI project and never mutate B");
+            s.SetProject("host-project", f.Project);
+            Check(s.ReadSnapshot().Entries.Any(e => e.Text.Contains("Only project A") && e.Actor == "agent"), "pinned command wrote to A");
+            return new GraphRunResult("completed", "TEST-ONLY pinned tool receipt");
+        });
+        using var owner = Service(f, executor); service = owner;
+        owner.SetPurpose("Project A purpose"); await owner.RunTicketAsync(Ticket(owner).Id);
     }
 
     private static async Task Budget()
@@ -310,7 +411,7 @@ internal static class Program
         GraphProjectService? service = null;
         var fake = new CallbackExecutor(async request =>
         {
-            var handler = new GraphToolHandler(service!, request.ProjectPath);
+            var handler = new GraphToolHandler(service!, request.ProjectPath, request.Identity);
             var arguments = JsonSerializer.Serialize(new { ticketId = request.TicketId, runId = request.RunId, kind = "test", criterion = "fixture verified", reference = proof, passed = true });
             var result = await handler.ExecuteAsync(new("run-evidence-claim", "graph_evidence", arguments));
             Check(result.Success && result.Content.Contains("claim-recorded"), "in-run evidence is a claim until receipt");
@@ -437,7 +538,7 @@ internal static class Program
         Check(page.Success, "explicit paged read succeeds"); using var pageData = JsonDocument.Parse(page.Content);
         Check(pageData.RootElement.GetProperty("modules").GetArrayLength() == 7 && pageData.RootElement.GetProperty("entries").GetArrayLength() == 5, "module and entry page sizes honoured");
         var all = await tools.ExecuteAsync(new("explicit-full", "graph_read", "{\"full\":true}")); Check(all.Success, "explicit full read succeeds"); using var allData = JsonDocument.Parse(all.Content);
-        Check(allData.RootElement.GetProperty("modules").GetArrayLength() == full.Modules.Count && allData.RootElement.GetProperty("entries").GetArrayLength() == full.Entries.Count, "full:true preserves every original record");
+        Check(allData.RootElement.GetProperty("modules").GetArrayLength() == full.Modules.Count && allData.RootElement.GetProperty("entries").GetArrayLength() == full.Entries.Count(e => e.Kind != "organization"), "full:true preserves every architecture record without broadcasting private organization audit");
         Check(!(await tools.ExecuteAsync(new("bad-page", "graph_read", "{\"moduleOffset\":-1}"))).Success
             && !(await tools.ExecuteAsync(new("ambiguous-full", "graph_read", "{\"full\":true,\"includeEntries\":false}"))).Success, "invalid or contradictory pages rejected");
         await s.RunTicketAsync(ticket.Id);

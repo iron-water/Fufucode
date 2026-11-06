@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.IO;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
@@ -63,6 +65,60 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         _service.Changed += OnServiceChanged;
     }
 
+    public event Func<string, string, string, string[], TimeSpan, CancellationToken, Task<string>>? ValidateCandidateRequested;
+    public event Func<string, string[], string, string, CancellationToken, Task<string>>? CompleteInternalRequested;
+    public string CoveredCriteria { get; set; } = "";
+    public string ContinuationReason { get; set; } = "";
+    public Task<bool> CompleteInternalAsync() => ExecuteAsync("完成内部工作", async token =>
+    {
+        var handler = CompleteInternalRequested ?? throw new InvalidOperationException("可信完成宿主未连接");
+        var criteria = CoveredCriteria.Replace("\r\n", "\n").Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (criteria.Length == 0 || string.IsNullOrWhiteSpace(ContinuationReason)) throw new InvalidOperationException("必须明确验证覆盖的验收项和后续工作说明");
+        _developmentResults[RequireTicket()] = await handler(RequireTicket(), criteria, "active_goal", ContinuationReason, token);
+        Notify(nameof(DevelopmentResult));
+    }, default);
+    public event Func<string, CancellationToken, Task<string>>? IntegrateCandidateRequested;
+    private string _validationExecutable = "", _validationArguments = "", _validationTimeout = "300";
+    private readonly Dictionary<string, string> _developmentResults = new(StringComparer.Ordinal);
+    public string ValidationExecutable { get => _validationExecutable; set => Set(ref _validationExecutable, value); }
+    public string ValidationArguments { get => _validationArguments; set => Set(ref _validationArguments, value); }
+    public string ValidationTimeout { get => _validationTimeout; set => Set(ref _validationTimeout, value); }
+    public string DevelopmentResult => SelectedTicketId is { } id && _developmentResults.TryGetValue(id, out var result) ? result : "";
+    public string? CandidateManifestPath
+    {
+        get
+        {
+            foreach (var entry in Snapshot.Entries.Where(e => e.TicketId == SelectedTicketId && e.Kind == "run-result" && e.Actor == "executor").OrderByDescending(e => e.CreatedUtc))
+            {
+                try
+                {
+                    using var data = JsonDocument.Parse(entry.Text);
+                    if (data.RootElement.TryGetProperty("candidateManifestPath", out var path) && path.ValueKind == JsonValueKind.String &&
+                        path.GetString() is { } value && Path.IsPathFullyQualified(value)) return value;
+                }
+                catch (JsonException) { }
+            }
+            return null;
+        }
+    }
+    public Task<bool> ValidateCandidateAsync() => ExecuteAsync("候选验证", async token =>
+    {
+        var ticket = RequireTicket();
+        var manifest = CandidateManifestPath ?? throw new InvalidOperationException("选中工单没有候选清单");
+        if (!Path.IsPathFullyQualified(ValidationExecutable) || !double.TryParse(ValidationTimeout, out var seconds) ||
+            !double.IsFinite(seconds) || seconds <= 0 || seconds > 86400) throw new InvalidOperationException("需要绝对可执行路径及1天以内的正数超时秒数");
+        var handler = ValidateCandidateRequested ?? throw new InvalidOperationException("验证宿主未连接");
+        var arguments = ValidationArguments.Length == 0 ? Array.Empty<string>() : ValidationArguments.Replace("\r\n", "\n").Split('\n');
+        _developmentResults[ticket] = await handler(ticket, manifest, ValidationExecutable, arguments, TimeSpan.FromSeconds(seconds), token);
+        Notify(nameof(DevelopmentResult));
+    }, default);
+    public Task<bool> IntegrateCandidateAsync() => ExecuteAsync("候选集成", async token =>
+    {
+        var ticket = RequireTicket();
+        var handler = IntegrateCandidateRequested ?? throw new InvalidOperationException("集成宿主未连接");
+        _developmentResults[ticket] = await handler(ticket, token);
+        Notify(nameof(DevelopmentResult));
+    }, default);
     public event Action<string?, string?, string>? OpenChatRequested;
     public event Action<string>? RevealPanelRequested;
     public event Action? SceneChanged;
@@ -72,6 +128,45 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public ObservableCollection<GraphModule> VisibleModules { get; } = new();
     public ObservableCollection<GraphRelation> SelectedModuleRelations { get; } = new();
     public ObservableCollection<GraphRelationRow> RelationRows { get; } = new();
+    public ObservableCollection<GraphOrganizationMessage> HumanInbox { get; } = new();
+    public ObservableCollection<GraphResponsibility> OrganizationResponsibilities { get; } = new();
+    public ObservableCollection<GraphWorkDependency> WorkDependencies { get; } = new();
+    private string? _selectedMessageId;
+    private string _organizationReply = "";
+    private bool _showInternalWork;
+    public bool ShowInternalWork { get => _showInternalWork; set { if (Set(ref _showInternalWork, value)) Notify(nameof(ShowHumanInbox)); } }
+    public bool ShowHumanInbox => !ShowInternalWork;
+    public GraphOrganizationMessage? SelectedHumanMessage => HumanInbox.FirstOrDefault(m => m.Id == _selectedMessageId);
+    public bool HasSelectedHumanMessage => SelectedHumanMessage != null;
+    public string OrganizationReply { get => _organizationReply; set => Set(ref _organizationReply, value); }
+    public string OrganizationVersion => Snapshot.Organization is { } organization ? $"组织 v{organization.Version}" : "此快照无组织记录";
+    public string ResponsibilityText(GraphResponsibility responsibility) => responsibility.Id + " · " + responsibility.Role + "\n范围：" +
+        string.Join("、", responsibility.ModuleIds.Select(id => Snapshot.Modules.FirstOrDefault(m => m.Id == id)?.Name ?? id)) +
+        "\n指派：" + (responsibility.TicketId is { } ticket ? Snapshot.Tickets.FirstOrDefault(t => t.Id == ticket)?.Title ?? ticket : "项目持续职责");
+    public string DependencyText(GraphWorkDependency dependency) =>
+        (Snapshot.Tickets.FirstOrDefault(t => t.Id == dependency.TicketId)?.Title ?? dependency.TicketId) + " ← " +
+        (Snapshot.Tickets.FirstOrDefault(t => t.Id == dependency.DependsOnTicketId)?.Title ?? dependency.DependsOnTicketId);
+    public void SelectHumanMessage(string id)
+    {
+        _selectedMessageId = id;
+        if (SelectedHumanMessage is { } message)
+        {
+            if (message.Content.TicketId is { } ticket) SelectTicket(ticket);
+            if (message.Content.ModuleId is { } module) SelectModule(module);
+        }
+        Notify(null);
+    }
+    public bool ReplyToHumanMessage() => Mutate("回复", () =>
+    {
+        var message = SelectedHumanMessage ?? throw new InvalidOperationException("未选择收件消息");
+        if (string.IsNullOrWhiteSpace(OrganizationReply)) throw new InvalidOperationException("请输入回复内容");
+        if (_service is not IGraphOrganizationService service)
+            throw new NotSupportedException("当前服务不支持组织消息");
+        var recipient = message.SenderId == "host" ? "project-lead" : message.SenderId;
+        service.SendOrganizationMessage(Guid.NewGuid().ToString("N"), new GraphMessageDraft(recipient,
+            recipient == "human", "reply", OrganizationReply.Trim(), message.Content.TicketId, message.Content.ModuleId, Snapshot.Revision));
+        OrganizationReply = "";
+    });
     public ObservableCollection<GraphTicketRow> TicketRows { get; } = new();
     public ObservableCollection<GraphTicket> Tickets { get; } = new();
     public ObservableCollection<GraphEntry> ThreadEntries { get; } = new();
@@ -148,6 +243,9 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
                 if (!_projects.TryGetValue(_projectId, out _state!))
                     _projects[_projectId] = _state = new WorkspaceState();
                 IsModuleEditorOpen = IsRelationEditorOpen = IsTicketEditorOpen = false;
+                _selectedMessageId = null;
+                OrganizationReply = "";
+                ShowInternalWork = false;
             }
             var next = _state.Revision is { } revision ? _service.ReadSnapshot(revision) : current;
             ApplySnapshot(next);
@@ -174,6 +272,10 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
             _projects[_projectId] = _state;
         }
         Snapshot = next;
+        Reconcile(HumanInbox, (next.Organization?.Messages ?? Array.Empty<GraphOrganizationMessage>())
+            .Where(m => m.Content.HumanRecipient && m.Content.RecipientId == "human").OrderByDescending(m => m.Sequence), m => m.Id);
+        Reconcile(OrganizationResponsibilities, next.Organization?.Responsibilities ?? Array.Empty<GraphResponsibility>(), r => r.Id);
+        Reconcile(WorkDependencies, next.Organization?.Dependencies ?? Array.Empty<GraphWorkDependency>(), d => (d.TicketId, d.DependsOnTicketId));
         if (!_state.PurposeDirty) _state.Purpose = next.Purpose;
         Reconcile(Modules, next.Modules, m => m.Id);
         Reconcile(Tickets, next.Tickets.OrderByDescending(t => t.UpdatedUtc), t => t.Id);
@@ -293,6 +395,12 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
             OpenChatRequested?.Invoke(moduleId, ticketId, context);
         }
         catch (Exception ex) { Error = "打开会话失败：" + ex.Message; }
+    }
+    public void OpenProjectLeadChat()
+    {
+        if (_disposed) return;
+        try { OpenChatRequested?.Invoke(null, null, _service.BuildContext(null, null, IsHistorical ? Snapshot.Revision : null)); }
+        catch (Exception ex) { Error = "打开项目负责人失败：" + ex.Message; }
     }
     public void RevealPanel(string pageId) => RevealPanelRequested?.Invoke(pageId);
     public void DismissError() => Error = null;
@@ -595,6 +703,9 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         _lifetime.Cancel();
         _lifetime.Dispose();
         OpenChatRequested = null;
+        CompleteInternalRequested = null;
+        ValidateCandidateRequested = null;
+        IntegrateCandidateRequested = null;
         RevealPanelRequested = null;
         SceneChanged = null;
     }

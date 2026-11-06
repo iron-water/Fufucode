@@ -19,7 +19,10 @@ public sealed record GraphSnapshot(string ProjectId, string ProjectPath, string 
     string ProjectStatus, long Revision, bool IsHistorical, IReadOnlyList<GraphModule> Modules,
     IReadOnlyList<GraphRelation> Relations, IReadOnlyList<GraphTicket> Tickets,
     IReadOnlyList<GraphEntry> Entries, IReadOnlyList<GraphRevision> Revisions,
-    IReadOnlyList<GraphRun> Runs);
+    IReadOnlyList<GraphRun> Runs)
+{
+    public GraphOrganizationSnapshot? Organization { get; init; }
+}
 
 public sealed record GraphOptions
 {
@@ -34,10 +37,22 @@ public sealed record GraphOptions
     public int ValidationTimeoutSeconds { get; init; } = 120;
 }
 
+public enum GraphExecutionRole { Executor, ProjectLead, ScopeLead, Verifier }
+
+/// <summary>Issued by the host, never deserialized from model tool arguments. No TicketLead role exists.</summary>
+public sealed record GraphExecutionIdentity(string ResponsibilityId, GraphExecutionRole Role,
+    string[] ModuleIds, string TicketId, string RunId);
+
 public sealed record GraphRunRequest(string RunId, string TicketId, string ProjectId,
-    string ProjectPath, string Prompt, GraphOptions Options, string? SessionId = null);
+    string ProjectPath, string Prompt, GraphOptions Options, string? SessionId = null)
+{
+    public GraphExecutionIdentity? Identity { get; init; }
+}
 public sealed record GraphRunResult(string Status, string Output, string? Error = null,
-    string? SessionId = null);
+    string? SessionId = null)
+{
+    public string? CandidateManifestPath { get; init; }
+}
 
 public interface IGraphRunExecutor
 {

@@ -70,6 +70,12 @@ try
     Check(!(await guard.ExecuteCheckedAsync(ask, (_, _) => Task.FromResult(true), false, () => null, default)).Success, "local injection rule blocks tool output");
     Check(!string.Join("", Directory.GetFiles(data, "security-audit*").Select(File.ReadAllText)).Contains(secret), "audit never stores raw secret");
     fake.Output = "ok";
+    using (var restricted = (NativeCSharpChatSession)NativeSessionFactory.Create(new AppSettingsStore(new AppDataLayout(Path.Combine(root, "restricted"))),
+        "restricted-lead", workspace, toolRegistry: fake, hostToolAllowed: name => name == "read_file"))
+    {
+        var names = (IReadOnlyList<string>)typeof(NativeCSharpChatSession).GetMethod("BuildToolNames", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(restricted, null)!;
+        Check(names.Contains("read_file") && !names.Contains("run_command") && !names.Contains("write_file"), "host role hides shell and writes from lead tool catalog");
+    }
     var engine = new PureCSharpAgentEngine(guard);
     using var session = new NativeCSharpChatSession(engine);
     var approval = typeof(NativeCSharpChatSession).GetMethod("RequestApprovalAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;

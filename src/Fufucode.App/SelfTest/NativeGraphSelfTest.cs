@@ -103,6 +103,23 @@ internal static class NativeGraphSelfTest
         await Settle();
         Check(service.ReadSnapshot().Tickets.Any(item => item.Id == ticket.Id && item.ModuleIds.Contains(module.Id)), "真实工单和模块关联持久化");
         Check(service.ReadSnapshot().Entries.Any(item => item.TicketId == ticket.Id), "工单往来保存原始来源");
+        var organizationService = (Fufucode.Plugins.AutoDev.Graph.GraphProjectService)service;
+        organizationService.SendOrganizationMessage("native-human-inbox", new GraphMessageDraft("human", true,
+            "question", "原生收件箱测试：请核对真实模块来源", ticket.Id, module.Id, service.ReadSnapshot().Revision));
+        organizationService.SendOrganizationMessage("native-internal-inbox", new GraphMessageDraft("project-lead", false,
+            "note", "TEST-ONLY 内部协作不进入人类收件箱", ticket.Id, module.Id, service.ReadSnapshot().Revision));
+        window.GraphModelForTesting.Refresh();
+        await Settle();
+        Check(window.GraphModelForTesting.ShowHumanInbox && window.GraphModelForTesting.HumanInbox.Count == 1,
+            "原生默认收件箱只显示发给人的事项");
+        Check(window.GraphModelForTesting.Snapshot.Organization?.Responsibilities.Single().Role == GraphExecutionRole.ProjectLead,
+            "项目组织具有稳定负责人且无独立工单Agent");
+        var incoming = window.GraphModelForTesting.HumanInbox.Single();
+        window.GraphModelForTesting.SelectHumanMessage(incoming.Id);
+        Check(organizationService.ReadOrganizationSnapshot().Messages.Single(m => m.Id == incoming.Id).Status == GraphMessageStatus.Received,
+            "原生阅读收件消息不虚报已读应用或验收");
+        window.GraphModelForTesting.ShowInternalWork = true;
+        await Settle();
         Screenshot(window, Path.Combine(evidenceDirectory, "sgline-ticket.png"));
         var trust = new PersistentSessionManager(string.Empty, string.Empty, new AppDataLayout(Program.SelfTestDataRoot));
         trust.SetProjectTrustDecision(scanned.ProjectPath, ProjectTrustDecision.DoNotTrust);

@@ -154,6 +154,12 @@ public partial class MainWindow
                 OpenDockPage(pageId, pageId == "graph-history" ? DockZone.Bottom : pageId == "graph-structure" ? DockZone.Left : DockZone.Right);
                 return Task.CompletedTask;
             }, () => GraphEnabled && _graphWorkspace is not null ? null : "Graph 模式未启用", true);
+        Register("graph.resume-lead", "核查后恢复项目负责人", "Graph", "", "在核查未知影响后建立新的负责人复核回合", async () =>
+        {
+            var service = _graphWorkspace?.Service as GraphProjectService ?? throw new InvalidOperationException("项目未打开。");
+            if (await ApproveGraphDevelopmentAsync("恢复项目负责人", "请先核查上次负责人运行的未知副作用。此操作建立新的复核回合，不重放原未知运行。"))
+                service.ResumeLeadCycle(service.ReadSnapshot().ProjectPath);
+        }, () => GraphEnabled && _graphWorkspace is not null ? null : "Graph 模式未启用", true);
         Register("graph.sidechat", "项目侧边会话", "Graph", "", "打开侧边会话",
             StartGraphSideChatAsync,
             () => GraphEnabled ? null : "Graph 模式已停用", true);
@@ -168,7 +174,7 @@ public partial class MainWindow
         {
             GraphProjectService? service = null;
             var executor = new GraphNativeExecutor(GraphLayout,
-                request => service is null ? null : new GraphToolHandler(service, request.ProjectPath),
+                request => service is null ? null : new GraphToolHandler(service, request.ProjectPath, request.Identity),
                 async session => await Dispatcher.UIThread.InvokeAsync<IDisposable?>(() =>
                 {
                     var dialogs = new ExtensionUiDialogHost(this);
@@ -180,6 +186,7 @@ public partial class MainWindow
             if (service.ReadOptions().Enabled != GraphEnabled)
                 service.SaveOptionsAsync(service.ReadOptions() with { Enabled = GraphEnabled }).GetAwaiter().GetResult();
             var model = new GraphWorkspaceViewModel(service);
+            InitializeGraphDevelopment(service, model);
             var panels = new Dictionary<string, Control>(StringComparer.Ordinal)
             {
                 ["graph-properties"] = new GraphPropertiesView(model),
@@ -330,11 +337,12 @@ public partial class MainWindow
         var snapshot = workspace.Service.ReadSnapshot();
         var metadata = new DesktopMetadataStore(GraphLayout);
         var ticket = snapshot.Tickets.FirstOrDefault(item => item.Id == ticketId);
-        var key = "graph-module-session:" + snapshot.ProjectId + ":" + (moduleId ?? "project");
+        var projectDiscussion = ticketId is null && moduleId is null;
+        var key = projectDiscussion ? "graph-project-lead-session:" + snapshot.ProjectId : "graph-module-session:" + snapshot.ProjectId + ":" + moduleId;
         var linked = ticketId is not null ? ticket?.SessionId : metadata.GetPreference(key);
         if (!string.IsNullOrEmpty(linked) && metadata.GetSession(linked).ProjectId != snapshot.ProjectId)
             throw new InvalidOperationException("关联会话与项目身份不一致。");
-        var name = ticket?.Title ?? snapshot.Modules.FirstOrDefault(item => item.Id == moduleId)?.Name ?? "项目讨论";
+        var name = projectDiscussion ? "项目负责人" : ticket?.Title ?? snapshot.Modules.FirstOrDefault(item => item.Id == moduleId)?.Name ?? "项目讨论";
         _switching = true;
         try
         {

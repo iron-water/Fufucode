@@ -6,7 +6,7 @@ using static Fufucode.Plugins.AutoDev.Graph.GraphStorage;
 namespace Fufucode.Plugins.AutoDev.Graph;
 
 /// <summary>Durable Graph projection and managed execution over the single Rebirth project authority.</summary>
-public sealed partial class GraphProjectService : IGraphProjectService
+public sealed partial class GraphProjectService : IGraphProjectService, IGraphOrganizationService
 {
     private sealed class ProjectContext : IDisposable
     {
@@ -212,6 +212,17 @@ public sealed partial class GraphProjectService : IGraphProjectService
         }
     }
 
+    private static GraphOrganizationSnapshot ReadOrganizationSnapshotForCapture(ProjectContext context, SqliteConnection c, SqliteTransaction tx)
+    {
+        var json = Scalar(c, tx, "SELECT state_json FROM graph_organization WHERE project_id=$p", ("$p", context.AuthorityId)) as string;
+        return json is null ? new(context.AuthorityId, 0, [new("project-lead", GraphExecutionRole.ProjectLead, [])], [], [], []) : Deserialize<GraphOrganizationSnapshot>(json);
+    }
+
+    internal void WakeOrganizationQueue()
+    {
+        lock (_gate) KickQueue(Current);
+    }
+
     private static GraphSnapshot Capture(ProjectContext context, SqliteConnection c, SqliteTransaction tx, string summary)
     {
         var authority = context.Kernel.ReadSnapshot(context.AuthorityId);
@@ -259,7 +270,8 @@ public sealed partial class GraphProjectService : IGraphProjectService
         var status = !options.Enabled ? "Disabled" : string.IsNullOrWhiteSpace(authority.Brief.Brief.Statement) ? "NeedsPurpose"
             : autonomy ? "Running" : authority.Project.Status == RebirthProjectStatus.Active ? "Paused" : authority.Project.Status.ToString();
         var snapshot = new GraphSnapshot(context.HostId, context.Path, authority.Project.Title, authority.Brief.Brief.Statement,
-            status, version, false, modules, relations, tickets, entries.OrderBy(e => e.CreatedUtc).ThenBy(e => e.Id).ToArray(), revisions, runs);
+            status, version, false, modules, relations, tickets, entries.OrderBy(e => e.CreatedUtc).ThenBy(e => e.Id).ToArray(), revisions, runs)
+        { Organization = ReadOrganizationSnapshotForCapture(context, c, tx) };
         Execute(c, tx, "UPDATE graph_revisions SET snapshot_json=$json WHERE project_id=$id AND version=$version",
             ("$json", Serialize(snapshot)), ("$id", context.AuthorityId), ("$version", version));
         return snapshot;

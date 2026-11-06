@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+<PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+<ItemGroup>
+<ProjectReference Include="../../src/Fufucode.AutoDev/Fufucode.AutoDev.csproj" />
+<ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
+<Compile Include="../../src/Fufucode.App/Integration/GraphDevelopmentHost.cs" Link="GraphDevelopmentHost.cs" />
+</ItemGroup>
+</Project>

@@ -344,8 +344,15 @@ public sealed partial class GraphProjectService
         }
     }
 
-    public string BuildContext(string? moduleId, string? ticketId, long? revision = null) =>
-        GraphFocusedContext.Build(ReadSnapshot(revision), moduleId, ticketId);
+    public string BuildContext(string? moduleId, string? ticketId, long? revision = null)
+    {
+        var snapshot = ReadSnapshot(revision);
+        return GraphFocusedContext.Build(snapshot with
+        {
+            Organization = snapshot.Organization is { } organization ? organization with { Messages = [] } : null,
+            Entries = snapshot.Entries.Where(e => e.Kind != "organization").ToArray()
+        }, moduleId, ticketId);
+    }
 
     public void AcceptTicket(string ticketId, string evidenceReference)
     {
@@ -374,6 +381,9 @@ public sealed partial class GraphProjectService
                     Entry(context, c, tx, ticketId, null, "conflict", "Evidence content changed; previous passing evidence invalidated", source.File, "system");
                 }
                 if (stale) return false;
+                var barrier = CloseOrganizationBarrier(CommandId(), ticketId);
+                if (barrier.Barriers.Any(b => b.TicketId == ticketId && b.RequiresReview))
+                    throw new InvalidOperationException("New mandatory information requires review before acceptance.");
                 context.Kernel.AcceptTicket(CommandId(), ticketId, Required(evidenceReference, nameof(evidenceReference)), Now());
                 return true;
             });
@@ -397,6 +407,9 @@ public sealed partial class GraphProjectService
                 }
                 return true;
             });
+            var organization = ReadOrganizationSnapshot();
+            var recipient = organization.Responsibilities.FirstOrDefault(r => r.TicketId == ticketId && r.Role == GraphExecutionRole.Executor)?.Id ?? "project-lead";
+            SendOrganizationMessage(CommandId(), new GraphMessageDraft(recipient, false, "veto", reason, ticketId, null, ReadSnapshot().Revision));
             if (context.Runs.TryGetValue(ticketId, out var managed)) managed.Cancellation.Cancel();
         }
     }

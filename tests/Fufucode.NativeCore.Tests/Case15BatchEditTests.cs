@@ -26,6 +26,38 @@ internal static class Case15BatchEditTests
         {
             var dispatcher = new ProductionToolDispatcher(workspace);
 
+            // grep_search accepts one concrete file without enumerating sibling files.
+            var searchDir = Path.Combine(workspace, "grep-fixture"); Directory.CreateDirectory(searchDir);
+            var searchFile = Path.Combine(searchDir, "one.txt");
+            await File.WriteAllTextAsync(searchFile, "before\nneedle\nafter\nNEEDLE\ntail\n");
+            Task<PureToolResult> Grep(string path, string pattern = "needle", string? glob = null, int context = 0, int max = 100, int offset = 0) =>
+                dispatcher.DispatchAsync(new PureToolCall(Guid.NewGuid().ToString("N"), "grep_search",
+                    JsonSerializer.Serialize(new { path, pattern, glob, context_lines = context, max_matches = max, offset })));
+            var fileGrep = await Grep(searchFile, context: 1);
+            var directoryGrep = await Grep(searchDir, context: 1);
+            checks.Check(fileGrep.Success && directoryGrep.Success && fileGrep.Content == directoryGrep.Content,
+                "file path and single-file directory return identical grouped context");
+            checks.Check(fileGrep.Content.Contains("before") && fileGrep.Content.Contains("after"), "file grep includes requested context");
+            checks.Check(!(await Grep(Path.Combine(searchDir, "missing.txt"))).Success, "missing file path rejected");
+            checks.Check(!(await Grep(searchFile, "[")).Success, "invalid regex rejected for file path");
+            checks.Check(!(await Grep(searchFile, glob: "[" )).Content.Contains("## "), "nonmatching glob filters explicit file");
+            checks.Check(!(await Grep(searchFile, glob: "*.cs")).Content.Contains("## "), "file respects glob exclusion");
+            checks.Check((await Grep(searchFile, glob: "*.txt")).Content.Contains("## "), "file respects matching glob");
+            checks.Check(!(await Grep(searchFile, offset: 1)).Content.Contains("## "), "file respects grouped offset pagination");
+            var bounded = await Grep(searchFile, max: 1);
+            checks.Check(bounded.Success && bounded.Content.Contains("1 处命中"), "file respects match limit");
+            var large = Path.Combine(searchDir, "large.txt");
+            using (var stream = File.Create(large)) stream.SetLength(5 * 1024 * 1024 + 1);
+            var largeResult = await Grep(large);
+            checks.Check(largeResult.Success && largeResult.Content.Contains("超过 5MB"), "large explicit file reports skipped-size guard");
+            var policy = new Fufucode.Core.Security.SecurityPolicyStore(dataRoot);
+            policy.Update(s => s with { FileRules = [new("**/.env", Fufucode.Core.Security.SecurityAction.Deny)] });
+            dispatcher.SecurityEvaluator = new Fufucode.Core.Security.SecurityPolicyEvaluator(policy, workspace);
+            var secret = Path.Combine(workspace, ".env"); await File.WriteAllTextAsync(secret, "needle");
+            var denied = await Grep(secret);
+            checks.Check(!denied.Content.Contains("## ") && !denied.Content.Contains("needle"), "denied file path cannot bypass readable security guard");
+            dispatcher.SecurityEvaluator = null;
+
             // 1) write_file 建文件，再一次 batch edit：多处 replace_all + Unicode + 删除。
             var utf8File = Path.Combine(workspace, "unicode.txt");
             const string content = "header\r\nfoo-α\r\nfoo-😀\r\nOLD中文OLD\r\nDEL keep DEL keep DEL\r\ntail😀\r\n";

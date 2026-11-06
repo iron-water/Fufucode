@@ -1,3 +1,4 @@
+using Fufucode.App.Abstractions.Graph;
 using Fufucode.Core.Automation.Rebirth;
 using static Fufucode.Plugins.AutoDev.Graph.GraphStorage;
 
@@ -57,8 +58,15 @@ public sealed partial class GraphProjectService
                     ("$project", context.AuthorityId), ("$session", sessionId), ("$ticket", ticketId ?? ""));
                 var source = "session:" + sessionId + "/message:" + messageId;
                 if (role == "user")
+                {
                     context.Kernel.RecordHumanInput(command + ":input", context.AuthorityId, ticketId, "human", RebirthInputKind.Query, text, Now(),
                         inputId: "input-" + Hash(command)[..24]);
+                    var organization = Organization(context, c, tx);
+                    var recipient = ticketId is null ? "project-lead" : organization.Responsibilities
+                        .SingleOrDefault(r => r.TicketId == ticketId && r.Role == GraphExecutionRole.Executor)?.Id ?? "project-lead";
+                    SendOrganizationMessage(command + ":addressed", new GraphMessageDraft(recipient, false, "query", text,
+                        ticketId, moduleId, Revision(context, c, tx)));
+                }
                 Entry(context, c, tx, ticketId, moduleId, role == "assistant" ? "claim" : "session-message", text, source,
                     role == "assistant" ? "agent" : "human");
                 Execute(c, tx, "INSERT INTO graph_receipts VALUES($project,$command,$hash,$result)",
@@ -67,7 +75,11 @@ public sealed partial class GraphProjectService
                 Capture(context, c, tx, "Recorded actual " + role + " session message");
                 return true;
             });
-            if (changed) Notify();
+            if (changed)
+            {
+                Notify();
+                if (role == "user") SignalProjectLead(context.Path, "human-message", command);
+            }
             if (conflict) throw new InvalidOperationException("Conflicting session message identity; original text and conflict record were retained.");
         }
     }

@@ -12,6 +12,15 @@ public sealed partial class GraphProjectService
         lock (_gate)
         {
             HumanOnly(); var context = Current;
+            var ticket = Ticket(context, ticketId);
+            var organization = ReadOrganizationSnapshot();
+            if (ticket.Route != "project-planning" && !organization.Responsibilities.Any(r => r.TicketId == ticketId && r.Role == GraphExecutionRole.Executor))
+            {
+                var modules = ReadSnapshot().Tickets.Single(t => t.Id == ticketId).ModuleIds;
+                var responsibility = new GraphResponsibility("executor:" + ticketId, GraphExecutionRole.Executor, modules, ticketId);
+                ApplyOrganization(CommandId(), organization.Version, "Human explicitly selected this work for execution",
+                    [..organization.Responsibilities, responsibility], [responsibility.Id]);
+            }
             return StartManagedRun(context, ticketId, cancellationToken, false).Task;
         }
     }
@@ -35,6 +44,13 @@ public sealed partial class GraphProjectService
                 if (string.IsNullOrWhiteSpace(snapshot.Brief.Brief.Statement)) throw new InvalidOperationException("A human project purpose is required before running work.");
                 if (snapshot.Project.Status != RebirthProjectStatus.Active) throw new InvalidOperationException("The project is not active.");
                 var ticket = Ticket(context, ticketId);
+                var organization = Organization(context, c, tx);
+                if (organization.Dependencies.Any(d => d.TicketId == ticketId && Ticket(context, d.DependsOnTicketId).Status != RebirthTicketStatus.Done))
+                    throw new InvalidOperationException("A required work result is not complete.");
+                var responsibility = ticket.Route == "project-planning"
+                    ? organization.Responsibilities.Single(r => r.Role == GraphExecutionRole.ProjectLead)
+                    : organization.Responsibilities.SingleOrDefault(r => r.TicketId == ticketId && r.Role is GraphExecutionRole.Executor or GraphExecutionRole.ScopeLead or GraphExecutionRole.Verifier)
+                        ?? throw new InvalidOperationException("Work requires an explicit execution delegation from the project responsibility.");
                 if (!automatic && ticket.Status == RebirthTicketStatus.ReplanRequired)
                     ticket = context.Kernel.ResumeTicket(CommandId(), ticketId, "human", Now());
                 if (ticket.Status is not (RebirthTicketStatus.Authorized or RebirthTicketStatus.Proposed))
@@ -57,6 +73,17 @@ public sealed partial class GraphProjectService
                 Execute(c, tx, "INSERT INTO graph_run_links(run_id) VALUES($id)", ("$id", runId));
                 var sessionId = Scalar(c, tx, "SELECT session_id FROM graph_ticket_links WHERE ticket_id=$id", ("$id", ticketId)) as string;
                 var state = CaptureForPrompt(context, c, tx, ticketId);
+                if (responsibility.Role == GraphExecutionRole.ProjectLead)
+                {
+                    var leadContext = ReadLeadCyclePrompt(context.Path, ticketId);
+                    sessionId = leadContext.SessionId ?? sessionId;
+                    state += "\nLead event batch (stored facts):\n" + leadContext.EventsJson;
+                }
+                if (responsibility.Role == GraphExecutionRole.ProjectLead)
+                {
+                    var pending = ReadOrganizationSnapshot().Messages.Count(m => m.Content.HumanRecipient && m.Status is not (GraphMessageStatus.Applied or GraphMessageStatus.Rejected));
+                    state += "\nHuman attention items already open: " + pending + ". Send only actionable questions, core changes, blockers and product acceptance through graph_send with humanRecipient=true. Keep ordinary progress internal.";
+                }
                 request = new GraphRunRequest(runId, ticketId, context.HostId, context.Path, $"""
                     Work on ticket {ticketId} in project {context.HostId}. Run identity: {runId}.
                     Allowed paths: {Serialize(snapshot.Brief.Brief.AllowedPaths)}
@@ -65,11 +92,14 @@ public sealed partial class GraphProjectService
 
                     Read omitted records explicitly before relying on them. graph_read defaults to a bounded index;
                     use its paging parameters or full:true to read complete original records, and graph_context for another focus.
-                    Use graph_* tools to update the architecture, create concrete follow-up tickets, send suggestions and record evidence claims.
-                    Preserve human purpose, budget, vetoes and gates. Never impersonate a human or accept your own ticket.
-                    Bind evidence to this run and the exact acceptance criterion. State unknown and unverified results explicitly.
+                    Your host-issued role is {(ticket.Route == "project-planning" ? "ProjectLead: organize scoped work and maintain project architecture" : "Executor: implement this work; report follow-up suggestions to the project lead instead of creating work or changing global architecture")}.
+                    Use only tools authorized for this role. Read graph_inbox when beginning and before reporting completion; acknowledge actual reading and resolution separately. For delegated work call graph_delegate before it can run. Bind evidence to this run and the exact acceptance criterion. State unknown and unverified results explicitly.
                     A settled execution enters Review; exit code zero alone does not prove settlement. Only the human can accept a ticket.
-                    """, options, sessionId);
+                    """, options, sessionId)
+                {
+                    Identity = new GraphExecutionIdentity(responsibility.Id, responsibility.Role,
+                        responsibility.ModuleIds, ticketId, runId)
+                };
                 cancellation = automatic && context.AutonomyCancellation is not null
                     ? CancellationTokenSource.CreateLinkedTokenSource(context.Lifetime.Token, cancellationToken, context.AutonomyCancellation.Token)
                     : CancellationTokenSource.CreateLinkedTokenSource(context.Lifetime.Token, cancellationToken);
@@ -101,7 +131,7 @@ public sealed partial class GraphProjectService
             ProjectId = context.HostId, Purpose = authority.Brief.Brief.Statement, ProjectStatus = "Running",
             Tickets = graph.Tickets.Select(t => t.Id == ticketId ? t with { Title = current.Title, Goal = current.Goal,
                 Acceptance = current.Acceptance, Status = current.Status.ToString(), UpdatedUtc = current.UpdatedUtc } : t).ToArray(),
-            Entries = graph.Entries.Where(e => !decisionKinds.Contains(e.Kind)).Concat(decisions).ToArray(),
+            Entries = graph.Entries.Where(e => e.Kind != "organization" && !decisionKinds.Contains(e.Kind)).Concat(decisions).ToArray(),
             Runs = authority.Runs.Select(r => new GraphRun(r.Id, r.TicketId, r.Status.ToString(),
                 Scalar(c, tx, "SELECT session_id FROM graph_run_links WHERE run_id=$id", ("$id", r.Id)) as string,
                 r.Detail, r.StartedUtc, r.EndedUtc)).ToArray()
@@ -179,12 +209,21 @@ public sealed partial class GraphProjectService
                         Execute(c, tx, "UPDATE graph_run_links SET session_id=$session WHERE run_id=$id", ("$session", result.SessionId), ("$id", managed.Id));
                         Execute(c, tx, "INSERT INTO graph_ticket_links VALUES($id,$session) ON CONFLICT(ticket_id) DO UPDATE SET session_id=$session", ("$id", managed.TicketId), ("$session", result.SessionId));
                         Execute(c, tx, "INSERT OR IGNORE INTO graph_session_links VALUES($project,$session,$ticket)", ("$project", context.AuthorityId), ("$session", result.SessionId), ("$ticket", managed.TicketId));
+                        if (Ticket(context, managed.TicketId).Route == "project-planning")
+                            BindLeadSession(context.Path, result.SessionId);
                     }
                     Entry(context, c, tx, managed.TicketId, null, "run-result", Serialize(new
                     {
                         managed.Id, status = outcome.ToString(), result.Output, result.Error, result.SessionId,
-                        outputHash = Hash(result.Output ?? ""), producer = "executor"
+                        outputHash = Hash(result.Output ?? ""), producer = "executor", result.CandidateManifestPath
                     }), managed.Id, "executor");
+                    if (result.Error?.StartsWith("NeedsRepositoryAuthorization:", StringComparison.Ordinal) == true ||
+                        result.Error?.StartsWith("BaselineDirty:", StringComparison.Ordinal) == true)
+                    {
+                        SendHostOrganizationMessage("workspace-attention:" + managed.Id, new GraphMessageDraft("human", true,
+                            "question", "工作尚未执行：需要选择有效 Git 仓库，或在明确授权后建立仓库／处理未提交基线。系统没有初始化 Git、提交你的改动或扩大写入范围。\n" + result.Error,
+                            managed.TicketId, null, Revision(context, c, tx)));
+                    }
                     if (outcome == RebirthRunOutcome.Completed)
                     {
                         var claims = Query(c, tx, "SELECT text FROM graph_entries WHERE project_id=$project AND ticket_id=$ticket AND kind='evidence-claim' AND actor='agent'",
@@ -220,6 +259,8 @@ public sealed partial class GraphProjectService
         finally
         {
             lock (_gate) context.Runs.Remove(managed.TicketId);
+            try { SignalProjectLead(context.Path, "run-terminal", managed.Id); }
+            catch (Exception leadError) { persistenceError ??= leadError; }
             // Mark completion outside the lock; StopTicket waits for this acknowledgement, never for Cancel().
             if (persistenceError is not null) managed.Finished.TrySetException(persistenceError);
             else managed.Finished.TrySetResult();
@@ -263,6 +304,14 @@ public sealed partial class GraphProjectService
             });
             managed.StopRequested = true;
         }
+        lock (_gate)
+        {
+            var state = ReadOrganizationSnapshot();
+            var actor = state.Responsibilities.Single(r => r.Role == GraphExecutionRole.ProjectLead);
+            if (state.Responsibilities.FirstOrDefault(r => r.TicketId == managed.TicketId && r.Role == GraphExecutionRole.Executor) is { } execution)
+                actor = execution;
+            SendOrganizationMessage(CommandId(), new GraphMessageDraft(actor.Id, false, "stop", reason, managed.TicketId, null, ReadSnapshot().Revision));
+        }
         managed.Cancellation.Cancel();
     }
 
@@ -303,7 +352,7 @@ public sealed partial class GraphProjectService
                 var planning = context.Kernel.CreateTicket(CommandId(), context.AuthorityId, "Plan: " + snapshot.Project.Title,
                     "Inspect the real project against the human purpose and create concrete scoped follow-up tickets with checkable acceptance conditions. Purpose: " + snapshot.Brief.Brief.Statement,
                     ["Record a plan grounded in actual project sources and create the required follow-up tickets or record why no work is needed."],
-                    "graph", "graph", Now());
+                    "project-planning", "project-lead", Now());
                 Entry(context, c, tx, planning.Id, null, "planning", "Planning ticket created from the human purpose", null, "system");
             }
             return true;
@@ -374,6 +423,9 @@ public sealed partial class GraphProjectService
                     {
                         if (context.Runs.Count >= options.Concurrency) break;
                         if (context.Runs.ContainsKey(ticket.Id) || !context.Kernel.InspectAdmission(ticket.Id, ticket.Owner, Now()).ShouldRun) continue;
+                        var organization = ReadOrganizationSnapshot();
+                        if (ticket.Route != "project-planning" && !organization.Responsibilities.Any(r => r.TicketId == ticket.Id && r.Role is GraphExecutionRole.Executor or GraphExecutionRole.ScopeLead or GraphExecutionRole.Verifier)) continue;
+                        if (organization.Dependencies.Any(d => d.TicketId == ticket.Id && Ticket(context, d.DependsOnTicketId).Status != RebirthTicketStatus.Done)) continue;
                         StartManagedRun(context, ticket.Id, token, true);
                     }
                     work = context.Runs.Values.Select(r => r.Task).ToArray();

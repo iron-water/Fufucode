@@ -64,9 +64,21 @@ public sealed class GraphPropertiesView : GraphContentView
                 GraphUi.Button("取消", vm.CancelRelationEdit, "GraphCancelRelation")));
         GraphUi.Bind(relationEditor, IsVisibleProperty, "IsRelationEditorOpen");
         GraphUi.Bind(relationEditor, IsEnabledProperty, "CanEdit");
+        var responsibilities = new ItemsControl
+        {
+            ItemTemplate = new FuncDataTemplate<GraphResponsibility>((item, _) => item == null ? null : GraphUi.Text(vm.ResponsibilityText(item)))
+        };
+        GraphUi.Bind(responsibilities, ItemsControl.ItemsSourceProperty, "OrganizationResponsibilities");
+        var dependencies = new ItemsControl
+        {
+            ItemTemplate = new FuncDataTemplate<GraphWorkDependency>((item, _) => item == null ? null : GraphUi.Text(vm.DependencyText(item), "caption"))
+        };
+        GraphUi.Bind(dependencies, ItemsControl.ItemsSourceProperty, "WorkDependencies");
+        var organization = new Expander { Header = "组织与工作依赖", HorizontalAlignment = HorizontalAlignment.Stretch,
+            Content = GraphUi.Stack(GraphUi.Value("OrganizationVersion", "caption"), responsibilities, dependencies) };
         var content = GraphUi.Stack(GraphUi.Version(vm), GraphUi.Error(vm), GraphUi.Busy(),
             GraphUi.Value("Snapshot.Title", "bodyStrong"), GraphUi.Value("ProjectStatus", "caption"),
-            GraphUi.Field("目的", purpose), oldPurpose, projectActions, GraphUi.Divider(),
+            GraphUi.Field("目的", purpose), oldPurpose, projectActions, organization, GraphUi.Divider(),
             GraphUi.Value("SelectionLabel", "bodyStrong"), moduleDetails, moduleActions, moduleEditor,
             GraphUi.Divider(), GraphUi.Actions(GraphUi.Text("关系", "bodyStrong"),
                 GraphUi.Button("新增关系", () => vm.BeginRelation(), "GraphNewRelation", true)), relationList, relationEditor);
