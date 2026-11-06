@@ -1,23 +1,17 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fufucode.App.ViewModels" x:Class="Fufucode.App.Views.OverviewView" x:DataType="vm:MainViewModel">
   <Grid RowDefinitions="Auto,Auto,*" Margin="8">
-    <Grid Grid.Row="0" Margin="2,4,2,8">
-      <!-- 一条“新建会话 · 当前后端”：只有一个可用后端时点击直接新建；
-           多个后端时点击展开下拉，选哪个就用哪个新建。 -->
-      <Button x:Name="NewSessionBar" Classes="subtle" HorizontalAlignment="Stretch"
-              HorizontalContentAlignment="Left" Click="NewSessionBar_Click"
-              AutomationProperties.Name="新建会话">
-        <StackPanel Orientation="Horizontal" Spacing="8">
-          <PathIcon Data="{DynamicResource Icon.Add}" Width="14" Height="14"/>
-          <TextBlock Text="新建会话" FontSize="12" VerticalAlignment="Center"/>
-          <TextBlock Text="·" FontSize="12" VerticalAlignment="Center"
-                     Foreground="{DynamicResource AppTextDim}" IsVisible="{Binding Sidebar.HasBackendChoice}"/>
-          <TextBlock Text="{Binding Sidebar.DefaultBackendLabel}" FontSize="12" VerticalAlignment="Center"
-                     IsVisible="{Binding Sidebar.HasBackendChoice}"/>
-          <PathIcon Data="{DynamicResource Icon.ChevronDown}" Width="10" Height="10"
-                    VerticalAlignment="Center" Foreground="{DynamicResource AppTextDim}"
-                    IsVisible="{Binding Sidebar.HasBackendChoice}"/>
-        </StackPanel>
+    <Grid Grid.Row="0" Margin="0,0,0,8">
+      <!-- 新建会话后端选择：只切换“新建时用哪个后端”，创建入口在页头 +。 -->
+      <Button x:Name="NewSessionBar" Classes="backendSwitchBar" HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Stretch" Click="NewSessionBar_Click"
+              AutomationProperties.Name="新建会话后端">
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBlock Text="新建会话后端" FontSize="12" VerticalAlignment="Center"/>
+          <TextBlock Grid.Column="1" Text="{Binding Sidebar.DefaultBackendLabel}" FontSize="12"
+                     VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
+                     Foreground="{DynamicResource AppTextSecondary}"/>
+        </Grid>
       </Button>
     </Grid>
     <StackPanel x:Name="ManagementToolbar" Grid.Row="1" Spacing="4"/>

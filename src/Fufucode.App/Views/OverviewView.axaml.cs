@@ -11,18 +11,11 @@ public partial class OverviewView : UserControl
     public StackPanel Toolbar => ManagementToolbar;
     public StackPanel Body => ManagementBody;
 
-    /// <summary>
-    /// 一条“新建会话 · 当前后端”：只有一个可用后端时点击直接新建；
-    /// 多个后端时点击展开下拉，选哪个就用哪个新建。
-    /// </summary>
+    /// <summary>选择新建会话使用的后端；本控件不创建会话，创建入口在页头 +。</summary>
     private void NewSessionBar_Click(object? sender, RoutedEventArgs e)
     {
         if (sender is not Button button || DataContext is not MainViewModel viewModel) return;
-        if (!viewModel.Sidebar.HasBackendChoice)
-        {
-            viewModel.Sidebar.NewSessionCommand.Execute(null);
-            return;
-        }
+        if (!viewModel.Sidebar.HasBackendChoice) return;
         var flyout = new MenuFlyout();
         foreach (var option in viewModel.Sidebar.NewSessionBackends)
         {

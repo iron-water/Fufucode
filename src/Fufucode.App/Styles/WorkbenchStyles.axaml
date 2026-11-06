@@ -20,6 +20,24 @@
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
 
+  <!-- 新建会话后端选择条：常驻二级色，悬停/按下升到三级色。 -->
+  <Style Selector="Button.backendSwitchBar">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="12,8"/>
+    <Setter Property="MinHeight" Value="36"/>
+  </Style>
+  <Style Selector="Button.backendSwitchBar /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
+  </Style>
+  <Style Selector="Button.backendSwitchBar:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
+  </Style>
+  <Style Selector="Button.backendSwitchBar:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
+  </Style>
+
   <!-- 会话管理的分组标题条：默认与悬停都不铺底色，只有按下时出现二级色。 -->
   <Style Selector="Button.overviewHeading">
     <Setter Property="Background" Value="Transparent"/>
