@@ -121,9 +121,10 @@
     <!-- Both content instances stay alive, keeping independent list scrolling and selection. -->
     <Grid x:Name="FilesContent" Grid.Row="2" IsVisible="{Binding IsFilesSelected}" Background="{DynamicResource AppMicaPageBackground}">
       <Grid.Styles>
-        <!-- 行底色由按钮自身承载：一级卡片是 AppCardBackground，行只有悬停/选中反馈。 -->
+        <!-- 每个条目自带二级色卡片；悬停/选中升到三级色，深层条目也各有边框，不再共用一个外层框。 -->
         <Style Selector="Button.fileTreeRow">
-          <Setter Property="Background" Value="Transparent"/>
+          <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+          <Setter Property="Margin" Value="0,0,0,4"/>
           <Setter Property="BorderThickness" Value="0"/>
           <Setter Property="Padding" Value="0"/>
           <Setter Property="HorizontalAlignment" Value="Stretch"/>
@@ -132,7 +133,7 @@
           <Setter Property="Template">
             <ControlTemplate>
               <Border x:Name="FileRowSurface" Background="{TemplateBinding Background}"
-                      BorderThickness="0" CornerRadius="{DynamicResource ControlCornerRadius}">
+                      BorderThickness="0" CornerRadius="{DynamicResource ControlCornerRadius}" Padding="4,0">
                 <ContentPresenter Content="{TemplateBinding Content}" ContentTemplate="{TemplateBinding ContentTemplate}"
                                   HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center"/>
               </Border>
@@ -171,8 +172,8 @@
                       Focusable="True" AutomationProperties.Name="项目文件树">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="vm:FileTreeSectionViewModel">
-              <Border Classes="fileTreeSection" Background="{DynamicResource AppCardBackground}" CornerRadius="{DynamicResource ControlCornerRadius}"
-                      Padding="4" Margin="0,0,0,6">
+              <Border Classes="fileTreeSection" Background="Transparent"
+                      Padding="0" Margin="0,0,0,6">
                 <views:FileTreeSectionPanel ItemsSource="{Binding Rows}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:WorkspacePanelFileItemViewModel">
