@@ -154,16 +154,17 @@
   </Style>
   <!-- 会话管理只保留三层：页底 → 项目组面板（项目栏与会话同色）→ 悬停高亮。
        不再给单行套卡片/描边，避免多层 box 叠在一起。 -->
+  <!-- 分组只做间距容器；每条项目/会话行自带二级色卡片，悬停与选中升三级色。 -->
   <Style Selector="Border.overviewGroup">
-    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
-    <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
+    <Setter Property="Background" Value="Transparent"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="Padding" Value="4"/>
-    <Setter Property="Margin" Value="0,2,0,4"/>
+    <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,4,0,6"/>
   </Style>
   <Style Selector="Button.overviewProject">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="MinHeight" Value="36"/>
@@ -185,7 +186,8 @@
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
   <Style Selector="Border.overviewSession">
-    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="MinHeight" Value="32"/>
@@ -200,14 +202,6 @@
   <!-- 伪类兜底：覆盖子树，行内任意位置悬停都亮（不依赖手动 PointerEntered）。 -->
   <Style Selector="Border.overviewSession:pointerover">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-  </Style>
-  <!-- 同心圆角：组卡外圆角 4、内缩 4，内层项目/会话行圆角钳到 0。
-       Avalonia 不支持逗号并列选择器，必须拆成两条。 -->
-  <Style Selector="Border.overviewGroup Border.overviewSession">
-    <Setter Property="CornerRadius" Value="0"/>
-  </Style>
-  <Style Selector="Border.overviewGroup Button.overviewProject">
-    <Setter Property="CornerRadius" Value="0"/>
   </Style>
   <!-- 输入区上下文条：项目/后端 chip，与设置行同一层轻质填充，不使用独立卡片。 -->
   <Style Selector="Button.contextChip">
