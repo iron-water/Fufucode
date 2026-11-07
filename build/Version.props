@@ -12,7 +12,7 @@
     用户看到的 exe 版本与"当前构建"版本对不上。
   -->
   <PropertyGroup>
-    <Version Condition="'$(Version)' == ''">1.4.2</Version>
+    <Version Condition="'$(Version)' == ''">1.4.3</Version>
     <!-- 测试/预发布版本（1.4.0-test.1）也必须是合法 SemVer；本仓库统一用 -test.N 后缀。 -->
     <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
   </PropertyGroup>
