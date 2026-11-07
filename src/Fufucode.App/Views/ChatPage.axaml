@@ -399,8 +399,8 @@
                   <Border Classes="changeCard relatedFilesGroup" IsVisible="{Binding HasFiles}" Margin="0,6,0,0"
                           AutomationProperties.AutomationId="MSG-RELATED-FILES-CARD">
                     <StackPanel>
-                      <Button Classes="changeFileRow relatedFileRow" Classes.expanded="{Binding RelatedFilesExpanded}" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
-                              HorizontalContentAlignment="Stretch" Padding="12,8">
+                      <Button Classes="changeFileRow" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
+                              HorizontalContentAlignment="Stretch" Padding="12,10" Margin="0,0,0,8">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                           <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="13" Height="13"
                                     VerticalAlignment="Center" Foreground="{DynamicResource AppEmphasis}"/>
@@ -410,11 +410,12 @@
                         </Grid>
                       </Button>
                       <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
-                        <StackPanel Margin="12,0,0,0">
-                          <ItemsControl ItemsSource="{Binding VisibleRelatedFiles}" Margin="0,2,0,2">
+                        <StackPanel>
+                          <Border Height="1" Background="{DynamicResource AppDividerSubtle}"/>
+                          <ItemsControl ItemsSource="{Binding VisibleRelatedFiles}" Margin="0,2,0,0">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
-                                <Button Classes="changeFileRow relatedFileRow" Click="OnOpenMessageFile" IsEnabled="{Binding Exists}"
+                                <Button Classes="changeFileRow" Click="OnOpenMessageFile" IsEnabled="{Binding Exists}"
                                         HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                         Padding="12,5">
                                   <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="6">

@@ -15,8 +15,7 @@
                    Window.fluentWorkbench Border.navFill:pointerover,
                    Window.fluentWorkbench Border.card:pointerover,
                    Window.fluentWorkbench Border.toolGroupCard:pointerover,
-                   Window.fluentWorkbench Border.toolCard:not(.success):not(.failed):not(.running):pointerover,
-                   Window.fluentWorkbench Border.changeCard:pointerover">
+                   Window.fluentWorkbench Border.toolCard:not(.success):not(.failed):not(.running):pointerover">
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
   </Style>
   <Style Selector="Window.fluentWorkbench Border.settingsRow.pointerHover,

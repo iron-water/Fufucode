@@ -1480,32 +1480,19 @@
   </Style>
   <Style Selector="Button.changeFileRow /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="CornerRadius" Value="0"/>
   </Style>
   <Style Selector="Button.changeFileRow:pointerover /template/ ContentPresenter#PART_ContentPresenter,
                    Button.changeFileRow:pressed /template/ ContentPresenter#PART_ContentPresenter,
                    Button.changeFileRow.expanded /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AppHover}"/>
   </Style>
-  <Style Selector="Button.relatedFileRow">
-    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
-    <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
-    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="Margin" Value="0,0,0,4"/>
+  <Style Selector="Border.relatedFilesGroup Button.changeFileRow">
+    <Setter Property="Background" Value="Transparent"/>
   </Style>
-  <Style Selector="Border.relatedFilesGroup Button.relatedFileRow">
-    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-  </Style>
-  <Style Selector="Button.relatedFileRow /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{TemplateBinding Background}"/>
-    <Setter Property="BorderBrush" Value="{TemplateBinding BorderBrush}"/>
-    <Setter Property="BorderThickness" Value="{TemplateBinding BorderThickness}"/>
-    <Setter Property="CornerRadius" Value="{TemplateBinding CornerRadius}"/>
-  </Style>
-  <Style Selector="Button.relatedFileRow:pointerover /template/ ContentPresenter#PART_ContentPresenter,
-                   Button.relatedFileRow.expanded /template/ ContentPresenter#PART_ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStrokeHover}"/>
+  <Style Selector="Border.relatedFilesGroup Button.changeFileRow:disabled /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
   </Style>
   <Style Selector="Border.diffWell">
     <Setter Property="Background" Value="{DynamicResource AppInnerWell}"/>
