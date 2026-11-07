@@ -1377,7 +1377,9 @@
     <Setter Property="BorderThickness" Value="0"/>
     <Setter Property="Cursor" Value="Hand"/>
   </Style>
-  <Style Selector="Button.toolGroupHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="Button.toolGroupHeader /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.toolGroupHeader:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.toolGroupHeader:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="Transparent"/>
   </Style>
   <!-- 工具状态点：小圆点 + 鲜艳语义色。 -->

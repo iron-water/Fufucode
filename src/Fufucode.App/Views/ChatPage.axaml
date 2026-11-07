@@ -399,7 +399,7 @@
                   <Border Classes="changeCard relatedFilesGroup" IsVisible="{Binding HasFiles}" Margin="0,6,0,0"
                           AutomationProperties.AutomationId="MSG-RELATED-FILES-CARD">
                     <StackPanel>
-                      <Button Classes="changeFileRow" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
+                      <Button Classes="toolGroupHeader" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
                               HorizontalContentAlignment="Stretch" Padding="12,10" Margin="0,0,0,8">
                         <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="8">
                           <PathIcon Grid.Column="0" Data="{DynamicResource Icon.Document}" Width="13" Height="13"
