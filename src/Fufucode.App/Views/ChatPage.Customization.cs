@@ -98,7 +98,7 @@ public partial class ChatPage
                 };
                 // 收藏态沿用刻度样式的 accent 色，圆点不再依赖 TextBlock 的字体颜色。
                 dot.Bind(Border.BackgroundProperty,
-                    new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccentText"));
+                    new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccent"));
                 tick.Children.Add(dot);
             }
             // 统一字阶：刻度数字 10 归入 12，01/02 的轮次编号格式保留。

@@ -51,7 +51,7 @@ public partial class ChatPage
         if (TimelineItems.ContainerFromItem(entry) is Avalonia.Visual container &&
             container.TranslatePoint(new Point(0, 0), TimelineScroller) is { } point)
         {
-            AnimateScrollTo(Math.Max(0, TimelineScroller.Offset.Y + point.Y - 12));
+            AnimateScrollTo(Math.Max(0, TimelineScroller.Offset.Y + point.Y));
             return;
         }
 

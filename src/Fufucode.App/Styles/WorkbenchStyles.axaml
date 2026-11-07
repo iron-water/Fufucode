@@ -1436,7 +1436,7 @@
     <Setter Property="Opacity" Value="1"/>
   </Style>
   <Style Selector="Button.rulerTick.pinned TextBlock">
-    <Setter Property="Foreground" Value="{DynamicResource AppAccentText}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppAccent}"/>
     <Setter Property="FontWeight" Value="SemiBold"/>
   </Style>
 

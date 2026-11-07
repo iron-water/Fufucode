@@ -286,6 +286,37 @@ internal static class NativeChatIconsSelfTest
             await Task.Delay(2900);
             Check(host.Opacity < 0.1, $"停止滚动后自动隐藏“回到最新”（实测 opacity={host.Opacity}）");
 
+            vm.Timeline.Entries.Clear();
+            for (var turn = 1; turn <= 8; turn++)
+            {
+                vm.Timeline.Entries.Add(new UserMessageViewModel { Id = "ruler-fixture-" + turn, Text = "回合 " + turn });
+                vm.Timeline.Entries.Add(new ErrorEntryViewModel { KindText = "填充", Message = string.Join("\n", Enumerable.Repeat("刻度跳转定位内容", 28)) });
+            }
+            page.RefreshRuler();
+            await Settle();
+            foreach (var turn in new[] { 5, 6 })
+            {
+                var tick = page.GetVisualDescendants().OfType<Button>().Single(button =>
+                    Avalonia.Automation.AutomationProperties.GetAutomationId(button) == $"ruler-turn-{turn:00}");
+                tick.Classes.Add("pinned");
+                await Settle();
+                Check(tick.GetVisualDescendants().OfType<Avalonia.Controls.TextBlock>().All(text =>
+                    text.Foreground is ISolidColorBrush brush && brush.Color == accent),
+                    $"收藏刻度{turn:00}使用精确主题色");
+                tick.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+                await Task.Delay(700);
+                main.UpdateLayout();
+                var entry = vm.Timeline.Entries.OfType<UserMessageViewModel>().Single(item => item.Id == "ruler-fixture-" + turn);
+                var items = page.FindControl<ItemsControl>("TimelineItems")!;
+                var target = items.ContainerFromItem(entry)!;
+                var position = target.TranslatePoint(default, scroller)!.Value;
+                Check(Math.Abs(position.Y) <= 1.5, $"点击{turn:00}将同一轮对齐视口顶部，实际Y={position.Y:0.00}");
+                var marker = page.FindControl<Border>("CurrentTurnMarker")!;
+                var track = page.FindControl<Grid>("RulerTrack")!;
+                var tickY = tick.TranslatePoint(default, track)!.Value.Y + (tick.Bounds.Height - marker.Height) / 2;
+                Check(Math.Abs(marker.Margin.Top - tickY) <= 1.5, $"点击{turn:00}后指示条不落到上一轮");
+            }
+
             // 保存真机渲染截图
             Save(main, "chat-colorful-icons.png");
         }
