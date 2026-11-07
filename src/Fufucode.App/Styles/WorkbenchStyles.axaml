@@ -194,6 +194,37 @@
   <Style Selector="Button.overviewProject:pressed /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
+  <Style Selector="Button.overviewHeading, Button.overviewProject">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="Padding" Value="8,2"/>
+    <Setter Property="Margin" Value="0,0,0,4"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Button.overviewHeading /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.overviewProject /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.overviewHeading:focus-visible, Button.overviewProject:focus-visible,
+                   Button.overviewProject.selected">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="FocusAdorner" Value="{x:Null}"/>
+  </Style>
+  <Style Selector="Button.overviewHeading:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.overviewProject:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
+  <Style Selector="Button.overviewHeading:focus-visible /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.overviewProject:focus-visible /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.overviewProject.selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+  </Style>
   <Style Selector="Border.overviewSession">
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="Margin" Value="0,0,0,4"/>
@@ -1216,6 +1247,13 @@
     <Setter Property="Background" Value="Transparent"/>
   </Style>
   <!-- The model picker has one themed surface; its content stays transparent. -->
+  <Style Selector="Button.commandFlyoutItem /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="Transparent"/>
+  </Style>
+  <Style Selector="Button.commandFlyoutItem:pointerover /template/ ContentPresenter#PART_ContentPresenter,
+                   Button.commandFlyoutItem:pressed /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppHover}"/>
+  </Style>
   <Style Selector="FlyoutPresenter.modelPickerFlyout">
     <Setter Property="Background" Value="{DynamicResource AppDialogBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
@@ -1454,6 +1492,9 @@
     <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
     <Setter Property="Margin" Value="0,0,0,4"/>
+  </Style>
+  <Style Selector="Border.relatedFilesGroup Button.relatedFileRow">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
   </Style>
   <Style Selector="Button.relatedFileRow /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{TemplateBinding Background}"/>

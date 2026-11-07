@@ -230,10 +230,10 @@
 
                         <!-- 轻量可折叠思考块 -->
                         <DataTemplate DataType="vm:ThinkingBlockViewModel" x:DataType="vm:ThinkingBlockViewModel">
-                          <Border Classes="thinkingBlock" Margin="0,4" Loaded="OnTransientBlockLoaded">
+                          <Border Classes="toolGroupCard thinkingBlock" Margin="0,4" Loaded="OnTransientBlockLoaded">
                             <StackPanel>
-                              <Button Classes="subtle reasoningHeader" Command="{Binding ToggleExpandedCommand}"
-                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                              <Button Classes="toolGroupHeader reasoningHeader" Command="{Binding ToggleExpandedCommand}"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
                                       Padding="10,7">
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                   <PathIcon Data="{DynamicResource Icon.Brain}" Width="15" Height="15"
@@ -396,7 +396,7 @@
                     </ItemsControl.ItemTemplate>
                   </ItemsControl>
                   <!-- 相关文件与回合变更卡同一层级：整行展开，默认收起，空列表不出现。 -->
-                  <Border Classes="relatedFilesGroup" Background="Transparent" BorderThickness="0" IsVisible="{Binding HasFiles}" Margin="0,6,0,0"
+                  <Border Classes="changeCard relatedFilesGroup" IsVisible="{Binding HasFiles}" Margin="0,6,0,0"
                           AutomationProperties.AutomationId="MSG-RELATED-FILES-CARD">
                     <StackPanel>
                       <Button Classes="changeFileRow relatedFileRow" Classes.expanded="{Binding RelatedFilesExpanded}" Click="OnToggleRelatedFiles" HorizontalAlignment="Stretch"
@@ -411,7 +411,7 @@
                       </Button>
                       <views:CollapsiblePanel IsExpanded="{Binding RelatedFilesExpanded}">
                         <StackPanel Margin="12,0,0,0">
-                          <ItemsControl ItemsSource="{Binding Files}" Margin="0,2,0,2">
+                          <ItemsControl ItemsSource="{Binding VisibleRelatedFiles}" Margin="0,2,0,2">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate DataType="vm:MessageFileViewModel" x:DataType="vm:MessageFileViewModel">
                                 <Button Classes="changeFileRow relatedFileRow" Click="OnOpenMessageFile" IsEnabled="{Binding Exists}"
@@ -433,6 +433,8 @@
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
+                          <Button Classes="subtle" Content="{Binding MoreRelatedFilesLabel}" IsVisible="{Binding HasMoreRelatedFiles}"
+                                  Click="OnToggleMoreRelatedFiles" HorizontalAlignment="Left" Margin="0,2,0,4"/>
                         </StackPanel>
                       </views:CollapsiblePanel>
                     </StackPanel>
@@ -728,8 +730,8 @@
                     IsEnabled="{Binding Extensions.CanUseCommands}">
               <PathIcon Data="{DynamicResource Icon.AppsList}" Width="14" Height="14"/>
               <Button.Flyout>
-                <Flyout Placement="TopEdgeAlignedLeft">
-                  <Border Width="520" MaxWidth="640" Classes="overlayPanel" Padding="12">
+                <Flyout Placement="TopEdgeAlignedLeft" FlyoutPresenterClasses="modelPickerFlyout">
+                  <Border Width="520" MaxWidth="640" Padding="12" Background="Transparent">
                     <StackPanel Spacing="8">
                       <TextBox Classes="searchInput" Text="{Binding Extensions.FlyoutFilter}"
                                PlaceholderText="搜索命令或技能…"/>

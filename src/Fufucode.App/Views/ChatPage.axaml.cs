@@ -55,6 +55,18 @@ public partial class ChatPage : UserControl
     {
         InitializeComponent();
         InitializeComposerTools();
+        foreach (var picker in new[] { ModelButton.Flyout, CommandFlyoutButton.Flyout })
+        {
+            if (picker is not Flyout flyout) continue;
+            flyout.Opened += (_, _) =>
+            {
+                if (flyout.Content is Control surface)
+                {
+                    surface.Focusable = true;
+                    surface.Focus();
+                }
+            };
+        }
         ComposerToolbar.SizeChanged += (_, _) => UpdateComposerToolbar();
         SizeChanged += (_, _) => ApplyResponsiveMetrics();
         InitializeComposerMotion();
@@ -218,6 +230,12 @@ public partial class ChatPage : UserControl
 
         if (TopLevel.GetTopLevel(this) is MainWindow window && window.OpenUrlInBrowser(link.Url)) return;
         if (TopLevel.GetTopLevel(this)?.Launcher is { } launcher) _ = launcher.LaunchUriAsync(uri);
+    }
+
+    private void OnToggleMoreRelatedFiles(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Control { DataContext: AssistantMessageViewModel message }) message.ToggleMoreRelatedFiles();
+        e.Handled = true;
     }
 
     private void OnToggleRelatedFiles(object? sender, RoutedEventArgs e)

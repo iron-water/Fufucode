@@ -298,7 +298,23 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     }
     public string RelatedFilesToggleText => RelatedFilesExpanded ? "收起相关文件" : $"相关文件 · {Files.Count}";
     public string RelatedFilesHeaderText => $"相关文件 · {Files.Count}";
-    public void ToggleRelatedFiles() => RelatedFilesExpanded = !RelatedFilesExpanded;
+    private bool _showAllRelatedFiles;
+    public IEnumerable<MessageFileViewModel> VisibleRelatedFiles => _showAllRelatedFiles ? Files : Files.Take(3);
+    public bool HasMoreRelatedFiles => Files.Count > 3;
+    public string MoreRelatedFilesLabel => _showAllRelatedFiles ? "收起" : $"再显示 {Math.Max(0, Files.Count - 3)} 个文件";
+    public void ToggleMoreRelatedFiles()
+    {
+        _showAllRelatedFiles = !_showAllRelatedFiles;
+        OnPropertyChanged(nameof(VisibleRelatedFiles));
+        OnPropertyChanged(nameof(MoreRelatedFilesLabel));
+    }
+    public void ToggleRelatedFiles()
+    {
+        RelatedFilesExpanded = !RelatedFilesExpanded;
+        OnPropertyChanged(nameof(VisibleRelatedFiles));
+        OnPropertyChanged(nameof(HasMoreRelatedFiles));
+        OnPropertyChanged(nameof(MoreRelatedFilesLabel));
+    }
 
     private string _changeSummary = "", _artifactSummary = "";
     public string ChangeSummary { get => _changeSummary; set { if (SetProperty(ref _changeSummary, value)) OnPropertyChanged(nameof(HasChangeSummary)); } }

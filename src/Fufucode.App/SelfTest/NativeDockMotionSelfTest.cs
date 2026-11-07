@@ -20,6 +20,10 @@ namespace Fufucode.App.SelfTest;
 /// <summary>保留真实计时器的原生回归：动画中途刷新、快速反向、宽窄切换和设置返回。</summary>
 internal static class NativeDockMotionSelfTest
 {
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetCursorPos(int x, int y);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern void mouse_event(uint flags, uint x, uint y, uint data, nuint extra);
     internal static async Task<int> RunAsync(MainWindow window)
     {
         var evidence = Path.GetFullPath("tmp/dock-motion-evidence");
@@ -181,6 +185,36 @@ internal static class NativeDockMotionSelfTest
             var persisted = WorkbenchLayoutState.Restore(window.DockLayoutForTesting.Serialize());
             Check(persisted.Pages[zone].Count == 0 && !persisted.Hidden[zone],
                 zone + " persists its empty visible state symmetrically");
+        }
+        foreach (var destination in Enum.GetValues<DockZone>())
+        {
+            window.OpenDockPage("files", DockZone.Left);
+            var floatingId = window.FloatDockPage("files")!;
+            await Settle();
+            var floatingWindow = window.FloatingDockWindowForTesting(floatingId)!;
+            var dragHandle = floatingWindow.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "FloatingDockDragHandle");
+            window.CustomizationForTesting.SetZoneVisible(destination, false);
+            await Settle();
+            floatingWindow.Activate();
+            await Task.Delay(150);
+            var start = dragHandle.PointToScreen(new Point(Math.Min(50, dragHandle.Bounds.Width / 2), dragHandle.Bounds.Height / 2));
+            var end = window.PointToScreen(destination switch
+            {
+                DockZone.Left => new Point(12, window.Bounds.Height / 2),
+                DockZone.Right => new Point(window.Bounds.Width - 12, window.Bounds.Height / 2),
+                _ => new Point(window.Bounds.Width / 2, window.Bounds.Height - 12),
+            });
+            SetCursorPos(start.X, start.Y);
+            mouse_event(2, 0, 0, 0, 0);
+            for (var step = 1; step <= 16; step++)
+            {
+                SetCursorPos(start.X + (end.X - start.X) * step / 16, start.Y + (end.Y - start.Y) * step / 16);
+                await Task.Delay(20);
+            }
+            mouse_event(4, 0, 0, 0, 0);
+            await Settle();
+            Check(window.DockLayoutForTesting.Find("files") == destination && window.DockLayoutForTesting.FindFloating("files") is null,
+                "native floating title drag docks into hidden " + destination + " region");
         }
         File.WriteAllText(Path.Combine(evidence, "motion-samples.json"), JsonSerializer.Serialize(samples, new JsonSerializerOptions { WriteIndented = true }));
         File.WriteAllText(Path.Combine(evidence, "result.json"), JsonSerializer.Serialize(new { failures, sampleCount = samples.Count }, new JsonSerializerOptions { WriteIndented = true }));

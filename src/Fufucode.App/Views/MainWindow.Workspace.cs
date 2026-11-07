@@ -315,7 +315,7 @@ public partial class MainWindow
     private DockRegionView[] Docks() => [LeftDock,RightDock,BottomDock];
 
     /// <summary>收起状态的停靠区没有可见边界，拖拽时用工作区边缘这段宽度承接。</summary>
-    private const double DockEdgeDropWidth = 36;
+    private const double DockEdgeDropWidth = 72;
 
     private DockZone? DockTargetAt(Point point)
     {
@@ -323,7 +323,8 @@ public partial class MainWindow
             if (border.IsEffectivelyVisible && border.TranslatePoint(default, this) is { } location && new Rect(location, border.Bounds.Size).Contains(point))
                 return zone;
         // 所有区域都已展开时没有额外热点，避免把普通拖放误判成停靠。
-        if (Bounds.Width <= 0 || Bounds.Height <= 0) return null;
+        if (Bounds.Width <= 0 || Bounds.Height <= 0 || point.X < 0 || point.Y < 0 ||
+            point.X > Bounds.Width || point.Y > Bounds.Height) return null;
         if (DockClosed(DockZone.Left) && point.X is >= 0 and <= DockEdgeDropWidth) return DockZone.Left;
         if (DockClosed(DockZone.Right) && point.X <= Bounds.Width && point.X >= Bounds.Width - DockEdgeDropWidth) return DockZone.Right;
         if (DockClosed(DockZone.Bottom) && point.Y <= Bounds.Height && point.Y >= Bounds.Height - DockEdgeDropWidth) return DockZone.Bottom;
@@ -377,6 +378,8 @@ public partial class MainWindow
         var windowOrigin = Avalonia.VisualExtensions.PointToScreen(this, new Point(0, 0));
         var windowWidth = Bounds.Width * scaling;
         var windowHeight = Bounds.Height * scaling;
+        if (screen.X < windowOrigin.X || screen.X > windowOrigin.X + windowWidth ||
+            screen.Y < windowOrigin.Y || screen.Y > windowOrigin.Y + windowHeight) return null;
         var edge = DockEdgeDropWidth * scaling;
         if (DockClosed(DockZone.Left) && screen.X >= windowOrigin.X && screen.X <= windowOrigin.X + edge) return DockZone.Left;
         if (DockClosed(DockZone.Right) && screen.X >= windowOrigin.X + windowWidth - edge && screen.X <= windowOrigin.X + windowWidth) return DockZone.Right;

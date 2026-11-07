@@ -74,6 +74,27 @@ internal static class UiRefinementSelfTest
             var commandBlock = new ToolCallBlockViewModel { InputJson = "{\"command\":\"printf fixture\"}", Output = "fixture output" };
             Check(commandBlock.InputDisplay == "printf fixture" && commandBlock.ShowTextOutput,
                 "command card keeps command input and returned output as separate visible data");
+            foreach (var (extension, source) in new[]
+            {
+                ("cs", "public class Example { string value = \"fixture\"; }"),
+                ("py", "def example():\n    return \"fixture\""),
+                ("js", "const example = () => \"fixture\";"),
+                ("kt", "fun example(): String = \"fixture\""),
+            })
+            {
+                var syntax = SyntaxHighlighter.Highlight(source, extension, true);
+                Check(syntax is not null && syntax.SelectMany(line => line).Any(span => span.Color is not null),
+                    "source preview produces colored tokens for " + extension);
+            }
+            var related = new AssistantMessageViewModel(new RecordingClipboardService());
+            for (var index = 0; index < 12; index++) related.Files.Add(new MessageFileViewModel($"src/file{index}.cs"));
+            related.ToggleRelatedFiles();
+            Check(related.VisibleRelatedFiles.Count() == 3 && related.HasMoreRelatedFiles,
+                "related file card initially reveals only three rows");
+            related.ToggleMoreRelatedFiles();
+            Check(related.VisibleRelatedFiles.Count() == 12, "related file card explicitly expands remaining rows");
+            related.ToggleMoreRelatedFiles();
+            Check(related.VisibleRelatedFiles.Count() == 3, "related file card collapses remaining rows again");
             var preview = new TurnFileChangeViewModel("fixture.cs", 1, 1);
             preview.AddPreview("{\"old_string\":\"old line\",\"new_string\":\"new line\"}");
             preview.ToggleDiff(true);

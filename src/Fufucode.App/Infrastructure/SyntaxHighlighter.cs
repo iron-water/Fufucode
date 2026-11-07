@@ -61,7 +61,7 @@ public static class SyntaxHighlighter
                 var registry = RegistryFor(theme);
                 if (!Grammars.TryGetValue(scope, out var grammar))
                     Grammars[scope] = grammar = Load(registry, scope);
-                if (grammar is null) return null;
+                if (grammar is null) return HighlightLexicalFallback(lines, dark);
                 return Tokenize(grammar, registry, theme, lines);
             }
         }
@@ -70,6 +70,34 @@ public static class SyntaxHighlighter
             // 语法包缺失或 grammar 自身抛错时整体退化为单色；不影响 diff 内容本身。
             return null;
         }
+    }
+
+    // 缺少专用 grammar 时仅识别通用词法，不冒充该语言的完整语法解析。
+    private static readonly Regex LexicalTokens = new(
+        "(?<comment>//[^\\r\\n]*|#[^\\r\\n]*)|(?<literal>\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*')|(?<number>\\b\\d+(?:\\.\\d+)?\\b)|(?<keyword>\\b(?:fun|val|var|class|interface|object|package|import|return|if|else|when|for|while|true|false|null|def|let|const|fn|pub|struct|enum|impl|use|match|async|await|function|public|private|protected|static|void|new|throw|try|catch|in|is|as|override|suspend|data|sealed)\\b)",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
+    private static IReadOnlyList<IReadOnlyList<SyntaxSpan>> HighlightLexicalFallback(string[] lines, bool dark)
+    {
+        var result = new List<IReadOnlyList<SyntaxSpan>>(lines.Length);
+        foreach (var line in lines)
+        {
+            var spans = new List<SyntaxSpan>();
+            var cursor = 0;
+            foreach (Match token in LexicalTokens.Matches(line))
+            {
+                if (token.Index > cursor) spans.Add(new SyntaxSpan(line[cursor..token.Index], null, false));
+                var color = token.Groups["comment"].Success ? (dark ? "#6A9955" : "#008000")
+                    : token.Groups["literal"].Success ? (dark ? "#CE9178" : "#A31515")
+                    : token.Groups["number"].Success ? (dark ? "#B5CEA8" : "#098658")
+                    : (dark ? "#569CD6" : "#0000FF");
+                spans.Add(new SyntaxSpan(token.Value, Color.Parse(color), false));
+                cursor = token.Index + token.Length;
+            }
+            if (cursor < line.Length) spans.Add(new SyntaxSpan(line[cursor..], null, false));
+            result.Add(spans);
+        }
+        return result;
     }
 
     private static Registry RegistryFor(ThemeName theme)
@@ -183,7 +211,19 @@ public static class SyntaxHighlighter
         "axaml" => "text.xml",
         "csproj" or "props" or "targets" => "text.xml",
         "mjs" or "cjs" => "source.js",
-        "hcl" or "tf" => "source.hcl",
+        "hcl" or "tf" or "tfvars" => "source.hcl",
+        "gradle" => "source.groovy",
+        "psm1" or "psd1" => "source.powershell",
+        "dockerfile" => "source.dockerfile",
+        "makefile" or "mk" => "source.makefile",
+        "svelte" => "source.svelte",
+        "ex" or "exs" => "source.elixir",
+        "erl" or "hrl" => "source.erlang",
+        "clj" or "cljs" or "cljc" or "edn" => "source.clojure",
+        "r" or "rprofile" => "source.r",
+        "jl" => "source.julia",
+        "zig" => "source.zig",
+        "nix" => "source.nix",
         "vue" => "text.html.vue",
         _ => null,
     };

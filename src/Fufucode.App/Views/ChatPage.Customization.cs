@@ -158,7 +158,7 @@ public partial class ChatPage
             if (button.Tag is not TimelineEntryViewModel entry) continue;
             if (TimelineItems.ContainerFromItem(entry) is not Visual container) continue;
             if (container.TranslatePoint(default, TimelineScroller) is not { } point) continue;
-            if (point.Y <= TimelineScroller.Viewport.Height * .25) current = button;
+            if (point.Y <= 1) current = button;
             else { current ??= button; break; }
         }
         if (current?.TranslatePoint(default, RulerTrack) is not { } position)

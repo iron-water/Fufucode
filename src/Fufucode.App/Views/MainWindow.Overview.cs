@@ -281,7 +281,7 @@ public partial class MainWindow
             Classes = { "overviewHeading" }, Content = content,
             HorizontalAlignment = HorizontalAlignment.Stretch,
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            Padding = new Thickness(indent + 8, 4), MinHeight = 28,
+            Margin = new Thickness(indent, 0, 0, 4),
         };
         button.Click += (_, _) => { toggle(); RenderOverview(); };
         _overview.Body.Children.Add(button);
@@ -364,6 +364,7 @@ public partial class MainWindow
         Grid.SetColumn(count, 2); content.Children.Add(count);
 
         var row = new Button { Content = content, Classes = { "overviewProject" } };
+        row.Classes.Set("selected", project.Id == _host?.Current.Project.Id);
         Avalonia.Automation.AutomationProperties.SetHelpText(row, settings.Folder + "（点击折叠/展开会话）");
         AutomationProperties.SetAutomationId(row, "project.row." + project.Id);
         row.Click += (_, _) =>

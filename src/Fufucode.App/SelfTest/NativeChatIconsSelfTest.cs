@@ -134,7 +134,7 @@ internal static class NativeChatIconsSelfTest
             var brainIcon = thinkingPanel.GetVisualDescendants().OfType<PathIcon>().First();
             AssertIconColor(brainIcon, emphasis, "思考过程大脑图标");
 
-            var toolCard = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("toolGroupCard"));
+            var toolCard = page.GetVisualDescendants().OfType<Border>().First(b => b.Classes.Contains("toolGroupCard") && !b.Classes.Contains("thinkingBlock"));
             var wrenchIcon = toolCard.GetVisualDescendants().OfType<PathIcon>().First();
             AssertIconColor(wrenchIcon, accent, "工具组扳手图标");
             Check((brainIcon.Foreground as ISolidColorBrush)?.Color != (wrenchIcon.Foreground as ISolidColorBrush)?.Color, "输出中的思考与工具图标颜色不能相同");

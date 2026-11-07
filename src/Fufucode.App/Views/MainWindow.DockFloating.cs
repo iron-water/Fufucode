@@ -122,12 +122,44 @@ public partial class MainWindow
             var title = new TextBlock { Text = window.Title, Margin = new Thickness(12, 0), VerticalAlignment = VerticalAlignment.Center,
                 TextTrimming = Avalonia.Media.TextTrimming.CharacterEllipsis };
             title.Bind(TextBlock.TextProperty, window.GetObservable(TitleProperty));
-            var titleDrag = new Border { Child = title, Background = Avalonia.Media.Brushes.Transparent };
+            var titleDrag = new Border { Name = "FloatingDockDragHandle", Child = title, Background = Avalonia.Media.Brushes.Transparent };
+            PixelPoint? dragStart = null;
+            PixelPoint windowStart = default;
             titleDrag.PointerPressed += (_, e) =>
             {
                 if (!e.GetCurrentPoint(window).Properties.IsLeftButtonPressed) return;
-                if (e.ClickCount == 2) window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
-                else window.BeginMoveDrag(e);
+                if (e.ClickCount == 2)
+                {
+                    window.WindowState = window.WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+                    return;
+                }
+                dragStart = window.PointToScreen(e.GetPosition(window));
+                windowStart = window.Position;
+                e.Pointer.Capture(titleDrag);
+                e.Handled = true;
+            };
+            titleDrag.PointerMoved += (_, e) =>
+            {
+                if (dragStart is not { } start) return;
+                var cursor = window.PointToScreen(e.GetPosition(window));
+                window.Position = new PixelPoint(windowStart.X + cursor.X - start.X, windowStart.Y + cursor.Y - start.Y);
+                UpdateDockDropTargetFromScreen(cursor);
+            };
+            titleDrag.PointerReleased += (_, e) =>
+            {
+                if (dragStart is null) return;
+                var cursor = window.PointToScreen(e.GetPosition(window));
+                dragStart = null;
+                e.Pointer.Capture(null);
+                UpdateDockDropTargetFromScreen(null);
+                if (DockTargetAtScreen(cursor) is { } destination)
+                    DockFloatingRegionAnimated(id, destination);
+                e.Handled = true;
+            };
+            titleDrag.PointerCaptureLost += (_, _) =>
+            {
+                dragStart = null;
+                UpdateDockDropTargetFromScreen(null);
             };
             var dockBack = Views.WorkbenchUi.IconButton("ArrowEnterLeft", "停靠回原栏");
             dockBack.Classes.Add("toolButton");

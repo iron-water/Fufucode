@@ -258,7 +258,8 @@ internal sealed class TextFilePreviewProvider : FilePreviewProviderBase
         "cs", "fs", "vb", "py", "js", "jsx", "ts", "tsx", "java", "kt", "kts", "go", "rs", "c", "h", "cc", "cpp", "cxx", "hpp", "m", "mm", "swift", "php", "rb", "lua", "dart", "toml", "html", "htm", "css", "scss", "less", "sh", "bash", "zsh", "ps1", "bat", "cmd", "sql", "txt", "log", "ini", "conf", "cfg", "env", "gitignore", "editorconfig", "gradle", "properties", "sln", "csproj", "props", "targets"
     };
     public override FilePreviewKind Kind => FilePreviewKind.Text;
-    public override bool CanPreview(FilePreviewRequest request) => Extensions.Contains(Extension(request)) || string.IsNullOrEmpty(Path.GetExtension(request.Path));
+    public override bool CanPreview(FilePreviewRequest request) => Extensions.Contains(Extension(request)) ||
+        Fufucode.App.Infrastructure.SyntaxHighlighter.Supports(Extension(request)) || string.IsNullOrEmpty(Path.GetExtension(request.Path));
 
     public override async Task<FilePreviewResult> LoadAsync(FilePreviewRequest request, CancellationToken cancellationToken)
     {
@@ -269,7 +270,8 @@ internal sealed class TextFilePreviewProvider : FilePreviewProviderBase
     }
 
     public override Control CreateView(FilePreviewResult result) =>
-        new TextPreviewControl(result.Text ?? string.Empty, Path.GetExtension(result.Path));
+        new TextPreviewControl(result.Text ?? string.Empty,
+            string.IsNullOrEmpty(Path.GetExtension(result.Path)) ? Path.GetFileName(result.Path) : Path.GetExtension(result.Path));
 }
 
 internal sealed class BinaryFilePreviewProvider : FilePreviewProviderBase
