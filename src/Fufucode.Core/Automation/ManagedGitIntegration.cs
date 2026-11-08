@@ -45,7 +45,7 @@ public static class ManagedGitIntegration
     }
 
     public static async Task<ManagedIntegrationTransaction> PrepareAsync(ManagedDevelopmentWorkspace workspace,
-        string applicationSandboxRoot, CancellationToken cancellationToken = default)
+        string applicationSandboxRoot, CancellationToken cancellationToken = default, string? transactionId = null)
     {
         var manifest = (await ManagedDevelopmentWorkspace.LoadAsync(workspace.ManifestPath, cancellationToken)).Manifest;
         if (manifest.CandidateCommit is null || manifest.CandidateRef is null)
@@ -66,9 +66,12 @@ public static class ManagedGitIntegration
         var repo = Path.GetFullPath(manifest.RepositoryPath);
         if (root.StartsWith(repo.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase) || root == repo)
             throw new ArgumentException("Integration sandbox must be outside the user repository.");
-        var id = Guid.NewGuid().ToString("N");
+        var id = transactionId ?? Guid.NewGuid().ToString("N");
+        if (id.Length != 32 || !id.All(Uri.IsHexDigit)) throw new ArgumentException("Transaction id must be a unique 32-digit hexadecimal identifier.", nameof(transactionId));
         var directory = Path.Combine(root, "integration-" + id);
         Directory.CreateDirectory(directory);
+        if (File.Exists(Path.Combine(directory, "journal.json")) || Directory.Exists(Path.Combine(directory, "tree")))
+            throw new InvalidOperationException("Transaction already has retained Git state; recover it instead of overwriting it.");
         var tx = new ManagedIntegrationTransaction(id, repo, Path.Combine(directory, "tree"),
             Path.Combine(directory, "journal.json"), manifest.CandidateCommit, baseline, previous, null, ManagedIntegrationStatus.Preparing);
         await Save(tx);
@@ -122,6 +125,9 @@ public static class ManagedGitIntegration
             throw new InvalidOperationException("Integration HEAD drifted after validation.");
         await RequireClean(tx.WorktreePath, cancellationToken);
         var current = await GetIntegratedCommitAsync(tx.RepositoryPath, cancellationToken);
+        if (current is not null && tx.Status is (ManagedIntegrationStatus.Integrated or ManagedIntegrationStatus.Publishing or ManagedIntegrationStatus.Published) &&
+            (await Git(tx.RepositoryPath, ["merge-base", "--is-ancestor", expectedPreparedCommit, current], cancellationToken, true)).Code == 0)
+            return tx; // A previously integrated version remains delivered after later integrations; never rewind the ref.
         if (current == expectedPreparedCommit && tx.Status is ManagedIntegrationStatus.Committing or ManagedIntegrationStatus.Integrated)
         {
             tx = tx with { Status = ManagedIntegrationStatus.Integrated, Error = null };
