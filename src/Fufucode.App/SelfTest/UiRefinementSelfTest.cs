@@ -55,10 +55,22 @@ internal static class UiRefinementSelfTest
             Check(!foldButton.IsVisible && draftInput.OpacityMask is null, "short draft has no fold control or fade");
             draftInput.Text = string.Empty;
             var vm = (MainViewModel)window.DataContext!;
+            var contextPage = draftInput.GetVisualAncestors().OfType<ChatPage>().First();
+            var originalContext = contextPage.SessionContextRequested;
+            contextPage.SessionContextRequested = () => new ChatPage.SessionContextInfo(null, "无项目", true);
+            contextPage.RefreshSessionContext();
+            Check(!contextPage.FindControl<TextBlock>("SessionProjectChipText")!.IsVisible &&
+                contextPage.FindControl<Button>("SessionProjectChip")!.IsVisible,
+                "project picker remains icon-only while project selection is available");
+            contextPage.SessionContextRequested = originalContext;
+            contextPage.RefreshSessionContext();
             var startupMethod = typeof(MainWindow).GetMethod("ShowStartup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
             startupMethod.Invoke(window, new object[] { "正在启动会话…", true });
-            Check(!window.FindControl<Border>("StartupOverlay")!.IsVisible && window.FindControl<ProgressBar>("NavigationProgress")!.IsVisible,
-                "startup progress uses the caption strip without reviving the old centered startup card");
+            Check(window.FindControl<Border>("StartupOverlay")!.IsVisible &&
+                window.FindControl<Border>("StartupOverlay")!.Classes.Contains("startupOverlay") &&
+                window.FindControl<ProgressBar>("StartupProgress")!.IsVisible &&
+                !window.FindControl<ProgressBar>("NavigationProgress")!.IsVisible,
+                "startup follows the opaque loading-card contract introduced in 25577147");
             typeof(MainWindow).GetMethod("HideStartupOverlay", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!.Invoke(window, null);
             await window.ActionsForTesting.ExecuteAsync("commands");
             Check(window.FindControl<Grid>("GlobalOverlay")!.IsVisible, "search action opens the command palette");
