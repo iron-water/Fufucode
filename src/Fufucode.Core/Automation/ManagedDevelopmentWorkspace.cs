@@ -14,7 +14,7 @@ public enum ManagedWorkspaceStatus
 public sealed record ManagedWorkspaceManifest(
     string RepositoryPath, string BaseHead, string WorktreePath, string? Branch,
     string PatchPath, string[] ChangedFiles, string PatchHash, long PatchSize,
-    ManagedWorkspaceStatus Status, string? Error = null);
+    ManagedWorkspaceStatus Status, string? Error = null, string? CandidateCommit = null, string? CandidateRef = null);
 
 public sealed record ManagedWorkspaceCreation(
     ManagedWorkspaceStatus Status, ManagedDevelopmentWorkspace? Workspace, string? Error = null);
@@ -112,8 +112,16 @@ public sealed class ManagedDevelopmentWorkspace
     }
 
     /// <summary>Requires an exact Git root and a clean tracked/untracked baseline. Never initializes Git.</summary>
-    public static async Task<ManagedWorkspaceCreation> CreateAsync(string repositoryPath,
+    public static Task<ManagedWorkspaceCreation> CreateAsync(string repositoryPath,
         string applicationSandboxRoot, string? newBranch = null, CancellationToken cancellationToken = default)
+        => CreateCoreAsync(repositoryPath, applicationSandboxRoot, null, newBranch, cancellationToken);
+
+    public static Task<ManagedWorkspaceCreation> CreateFromBaseAsync(string repositoryPath,
+        string applicationSandboxRoot, string baseCommit, string? newBranch = null, CancellationToken cancellationToken = default)
+        => CreateCoreAsync(repositoryPath, applicationSandboxRoot, baseCommit, newBranch, cancellationToken);
+
+    private static async Task<ManagedWorkspaceCreation> CreateCoreAsync(string repositoryPath,
+        string applicationSandboxRoot, string? baseCommit, string? newBranch, CancellationToken cancellationToken)
     {
         var repo = Path.GetFullPath(repositoryPath);
         var root = Path.GetFullPath(applicationSandboxRoot);
@@ -122,14 +130,16 @@ public sealed class ManagedDevelopmentWorkspace
         var probe = await Git(repo, ["rev-parse", "--show-toplevel"], cancellationToken, allowFailure: true);
         if (probe.Code != 0 || !SamePath(probe.Text.Trim(), repo))
             return new(ManagedWorkspaceStatus.NeedsRepositoryAuthorization, null, "An exact existing Git root is required; repository initialization requires separate host authorization.");
-        if ((await Git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length != 0)
+        if (baseCommit is null && (await Git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length != 0)
             return new(ManagedWorkspaceStatus.BaselineDirty, null, "Repository contains user changes; no baseline was created.");
         if (IsWithin(root, repo) || IsWithin(repo, root))
             throw new ArgumentException("Application sandbox and repository must be disjoint.", nameof(applicationSandboxRoot));
         RejectLinks(root);
         if (newBranch is not null)
             await Git(repo, ["check-ref-format", "--branch", newBranch], cancellationToken);
-        var head = (await Git(repo, ["rev-parse", "--verify", "HEAD^{commit}"], cancellationToken)).Text.Trim();
+        if (baseCommit is not null && (baseCommit.Length is not (40 or 64) || !baseCommit.All(Uri.IsHexDigit)))
+            throw new ArgumentException("An explicit immutable commit SHA is required.", nameof(baseCommit));
+        var head = (await Git(repo, ["rev-parse", "--verify", (baseCommit ?? "HEAD") + "^{commit}"], cancellationToken)).Text.Trim();
         var artifacts = Path.Combine(root, "workspace-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(artifacts);
         var tree = Path.Combine(artifacts, "tree");
@@ -143,8 +153,8 @@ public sealed class ManagedDevelopmentWorkspace
                 : ["worktree", "add", "-b", newBranch, "--", tree, head];
             await Git(repo, args, cancellationToken);
             // Refuse a baseline that changed while worktree creation was underway; preserve the tree.
-            if ((await Git(repo, ["rev-parse", "HEAD"], cancellationToken)).Text.Trim() != head ||
-                (await Git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length != 0)
+            if (baseCommit is null && ((await Git(repo, ["rev-parse", "HEAD"], cancellationToken)).Text.Trim() != head ||
+                (await Git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length != 0))
                 throw new InvalidOperationException("Source baseline changed during creation; isolated worktree retained.");
             return new(ManagedWorkspaceStatus.Ready, workspace);
         }
@@ -179,7 +189,12 @@ public sealed class ManagedDevelopmentWorkspace
             var temporary = Manifest.PatchPath + ".tmp";
             await File.WriteAllBytesAsync(temporary, patch.Bytes, token);
             File.Move(temporary, Manifest.PatchPath, true);
-            Manifest = Manifest with { ChangedFiles = names.Text.Split('\0', StringSplitOptions.RemoveEmptyEntries),
+            var tree = (await Git(Manifest.WorktreePath, ["write-tree"], token, index)).Text.Trim();
+            var commit = (await Git(Manifest.WorktreePath,
+                ["-c", "user.name=AutoDev", "-c", "user.email=autodev@localhost", "commit-tree", tree, "-p", Manifest.BaseHead, "-m", "AutoDev candidate " + Hash(patch.Bytes)], token)).Text.Trim();
+            var candidateRef = "refs/autodev/candidates/" + Path.GetFileName(artifactDirectory) + "/" + commit;
+            await Git(Manifest.RepositoryPath, ["update-ref", candidateRef, commit], token);
+            Manifest = Manifest with { CandidateCommit = commit, CandidateRef = candidateRef, ChangedFiles = names.Text.Split('\0', StringSplitOptions.RemoveEmptyEntries),
                 PatchHash = Hash(patch.Bytes), PatchSize = patch.Bytes.LongLength,
                 Status = ManagedWorkspaceStatus.CandidateReady, Error = null };
             await Save();
@@ -193,42 +208,16 @@ public sealed class ManagedDevelopmentWorkspace
     }
 
     /// <summary>
-    /// Explicit host-approved integration into the original repository only. Requires the fixed base
-    /// HEAD and a clean target, checks patch integrity and git apply --check; never commits or pushes.
-    /// Host approval must be bound to this candidate hash and repository, not parsed from model text.
+    /// Legacy compatibility entry point. Direct patch application to a user's working tree is forbidden.
+    /// Use ManagedGitIntegration to prepare, validate and commit in isolation; publication is separate.
     /// </summary>
-    public async Task<ManagedWorkspaceManifest> IntegrateAsync(bool hostPermissionGranted,
+    public Task<ManagedWorkspaceManifest> IntegrateAsync(bool hostPermissionGranted,
         string approvedPatchHash, CancellationToken cancellationToken = default)
     {
         if (!hostPermissionGranted) throw new UnauthorizedAccessException("Host permission workflow approval required.");
-        await gate.WaitAsync(cancellationToken);
-        try
-        {
-            EnsurePresent();
-            if (Manifest.Status != ManagedWorkspaceStatus.CandidateReady || Manifest.PatchHash != approvedPatchHash)
-                throw new InvalidOperationException("Approval must identify the current candidate.");
-            var bytes = await File.ReadAllBytesAsync(Manifest.PatchPath, cancellationToken);
-            if (Hash(bytes) != Manifest.PatchHash || bytes.LongLength != Manifest.PatchSize)
-                throw new InvalidOperationException("Candidate patch integrity mismatch.");
-            var repo = Manifest.RepositoryPath;
-            if ((await Git(repo, ["rev-parse", "--show-toplevel"], cancellationToken)).Text.Trim() is var actual && !SamePath(actual, repo))
-                throw new InvalidOperationException("Target repository root changed.");
-            if ((await Git(repo, ["rev-parse", "HEAD"], cancellationToken)).Text.Trim() != Manifest.BaseHead)
-                throw new InvalidOperationException("Target HEAD differs from candidate baseline.");
-            if ((await Git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length != 0)
-                throw new InvalidOperationException("Target contains user changes.");
-            if (bytes.Length != 0)
-            {
-                // Pipe the verified bytes, never re-open a mutable patch path between check and apply.
-                await Git(repo, ["apply", "--check", "--binary", "-"], cancellationToken, input: bytes);
-                await Git(repo, ["apply", "--binary", "-"], cancellationToken, input: bytes);
-            }
-            Manifest = Manifest with { Status = ManagedWorkspaceStatus.Integrated, Error = null };
-            await Save();
-            return Manifest;
-        }
-        catch (Exception ex) { await Fail(ex); throw; }
-        finally { gate.Release(); }
+        if (Manifest.PatchHash != approvedPatchHash)
+            throw new InvalidOperationException("Approval must identify the current candidate.");
+        throw new InvalidOperationException("Direct integration is disabled. Use ManagedGitIntegration.PrepareAsync, validate its worktree, then CommitAsync; publish separately.");
     }
 
     /// <summary>
@@ -287,10 +276,10 @@ public sealed class ManagedDevelopmentWorkspace
             if (current.Exists && (current.Attributes & FileAttributes.ReparsePoint) != 0)
                 throw new ArgumentException("Sandbox ancestors cannot be symbolic links or junctions.");
     }
-    private sealed record GitResult(int Code, byte[] Bytes)
+    internal sealed record GitResult(int Code, byte[] Bytes)
     { public string Text => Encoding.UTF8.GetString(Bytes); }
 
-    private static async Task<GitResult> Git(string cwd, string[] arguments, CancellationToken token,
+    internal static async Task<GitResult> Git(string cwd, string[] arguments, CancellationToken token,
         string? index = null, bool allowFailure = false, byte[]? input = null)
     {
         token.ThrowIfCancellationRequested();
