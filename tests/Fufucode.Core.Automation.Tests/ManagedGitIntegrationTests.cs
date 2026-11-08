@@ -3,7 +3,7 @@ using System.Text.Json;
 using Fufucode.Core.Automation;
 
 // Real Git integration regression executable, deliberately independent of App/Kernel fixtures.
-var root = Path.Combine(Environment.GetEnvironmentVariable("FUFUCODE_GIT_TEST_ROOT") ?? Path.GetTempPath(), "managed-git-" + Guid.NewGuid().ToString("N"));
+var root = Path.Combine(Environment.GetEnvironmentVariable("FUFUCODE_GIT_TEST_ROOT") ?? Path.Combine(AppContext.BaseDirectory, "git-test-evidence"), "managed-git-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 var repo = Path.Combine(root, "repo");
 Directory.CreateDirectory(repo);
