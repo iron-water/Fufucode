@@ -174,6 +174,7 @@ public sealed class GraphDevelopmentHost
             await SaveState(intent);
             var transaction = await ManagedGitIntegration.PrepareAsync(workspace, integrationRoot, ct, transactionId);
             await SaveState(intent with { PreparedCommit = transaction.PreparedCommit, Status = transaction.Status.ToString() });
+            lock (live) transactions[result] = transaction;
             if (transaction.PreparedCommit is null)
                 throw new InvalidOperationException("Integration requires repair; retained journal: " + transaction.JournalPath + ": " + transaction.Error);
             var integrated = workspace.Manifest;
@@ -541,6 +542,33 @@ public sealed class GraphDevelopmentHost
             }
         }
         return results.ToArray();
+    }
+
+    public string GetIntegrationJournalPath(GraphCandidateValidation result)
+    {
+        lock (live)
+        {
+            if (!transactions.TryGetValue(result, out var transaction))
+                throw new InvalidOperationException("This candidate has no Host-owned integration transaction.");
+            return CheckedJournal(transaction.JournalPath);
+        }
+    }
+
+    public static async Task<ManagedValidationPolicy> CreateRepositoryValidationPolicyAsync(string repository,
+        CancellationToken ct = default)
+    {
+        var head = await ReadGitAsync(repository, ["rev-parse", "--verify", "HEAD^{commit}"], ct);
+        if (head.Code != 0) throw new InvalidOperationException("A fixed repository commit is required.");
+        var files = await ReadGitAsync(repository, ["ls-tree", "-r", "--name-only", "-z", head.Output.Trim()], ct);
+        if (files.Code != 0) throw new InvalidOperationException("Cannot enumerate versioned project files.");
+        var tracked = files.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries);
+        var directories = tracked.Where(p => p.EndsWith(".csproj", StringComparison.OrdinalIgnoreCase))
+            .SelectMany(p => new[] { "bin", "obj" }.Select(name =>
+            {
+                var parent = p.LastIndexOf('/');
+                return parent < 0 ? name : p[..(parent + 1)] + name;
+            })).Distinct(StringComparer.Ordinal).ToArray();
+        return new ManagedValidationPolicy(directories, protectedFiles: tracked);
     }
 
     public string GetIntegrationJournalPath(GraphIntegratedValidation result)
