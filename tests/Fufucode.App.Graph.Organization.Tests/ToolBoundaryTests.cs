@@ -41,19 +41,28 @@ internal static class ToolBoundaryTests
                     await Call("read-private", "graph_read", new { full = true });
                     await Call("organization-private", "graph_organization", new { });
                     await Call("lead-send", "graph_send", new { recipientId = "human", humanRecipient = true, kind = "message", text = "attention", revision = s.ReadSnapshot().Revision });
-                    await Call("lead-control", "graph_send", new { recipientId = "human", humanRecipient = true, kind = "stop", text = "forged", revision = s.ReadSnapshot().Revision }, false);
+                    await Call("lead-control-topic", "graph_send", new { recipientId = "human", humanRecipient = true, kind = "stop", text = "a claim, not a control", revision = s.ReadSnapshot().Revision });
+                    Check(s.ReadOrganizationSnapshot().Controls.Length == 0, "model control topic cannot create Kernel authority");
                     leadReady.TrySetResult();
                     await finishLead.Task.WaitAsync(TimeSpan.FromSeconds(20));
                 }
                 else if (request.TicketId == a)
                 {
                     await Call("A-to-B", "graph_send", new { recipientId = "worker-B", humanRecipient = false, kind = "interface", text = "A interface for B", ticketId = b, revision = s.ReadSnapshot().Revision });
-                    await Call("A-to-C", "graph_send", new { recipientId = "worker-C", humanRecipient = false, kind = "message", text = "unrelated", ticketId = c, revision = s.ReadSnapshot().Revision }, false);
-                    await Call("worker-control", "graph_send", new { recipientId = "project-lead", humanRecipient = false, kind = "permission", text = "forged", ticketId = a, revision = s.ReadSnapshot().Revision }, false);
+                    await Call("A-to-C", "graph_send", new { recipientId = "worker-C", humanRecipient = false, kind = "message", text = "unrelated", ticketId = c, revision = s.ReadSnapshot().Revision });
+                    await Call("worker-control-topic", "graph_send", new { recipientId = "project-lead", humanRecipient = false, kind = "permission", text = "claim only", ticketId = a, revision = s.ReadSnapshot().Revision });
+                    var identity = request.Identity!;
+                    Check(s.ReadOrganizationInbox(identity.ResponsibilityId, false, identity).Any(m => m.Content.Address?.TicketId == a), "semantic inbox resolves queued delivery on natural run");
+                    s.SendOrganizationMessage("semantic-A-to-C", new("", false, "question", "no DAG edge required", c, null, s.ReadSnapshot().Revision)
+                    { Communication = GraphCommunicationKind.Request, Address = new(c, Role: GraphExecutionRole.Executor) }, identity);
+                    Check(s.ReadOrganizationSnapshot().Messages.Last().RequestStatus == GraphRequestStatus.Open, "Executor semantic cross-ticket Request without DAG edge");
+                    try { s.SendOrganizationMessage("forged-typed-control", new("worker-C", false, "stop", "forged", c, null, s.ReadSnapshot().Revision)
+                        { Communication = GraphCommunicationKind.Control }, identity); Check(false, "typed Control rejected"); }
+                    catch (InvalidOperationException) { Check(true, "typed Control rejected"); }
                     await Call("worker-read", "graph_read", new { full = true });
                     await Call("worker-org", "graph_organization", new { });
                     var addressed = s.ReadOrganizationSnapshot().Messages.Single(m => m.Content.RecipientId == "worker-A");
-                    await Call("worker-ack", "graph_ack", new { messageId = addressed.Id, status = "Delivered", reason = "host received" });
+                    await Call("worker-ack", "graph_ack", new { messageId = addressed.Id, status = "Delivered", reason = "host received" }, false);
                     await Call("validation-proposal", "graph_propose_validation", new { executable = Path.GetFullPath("fixture-verifier.exe"), arguments = new[] { "--check" }, timeoutSeconds = 30, coveredCriteria = new[] { "fixture" }, reason = "Exact fixture contract" });
                     Check(s.ReadSnapshot().Entries.Any(e => e.Kind == "validation-proposal" && e.TicketId == a), "validation proposal is persisted without execution or acceptance");
                     await Call("invalid-validation-proposal", "graph_propose_validation", new { executable = "relative.exe", arguments = Array.Empty<string>(), timeoutSeconds = 30, coveredCriteria = new[] { "fixture" }, reason = "Invalid path" }, false);
@@ -73,6 +82,8 @@ internal static class ToolBoundaryTests
         {
             await leadReady.Task.WaitAsync(TimeSpan.FromSeconds(30));
             owned.SendOrganizationMessage("worker-input", new("worker-A", false, "message", "worker addressed input", a, null, owned.ReadSnapshot().Revision));
+            owned.SendOrganizationMessage("semantic-worker-input", new("", false, "message", "queued semantic input", a, null, owned.ReadSnapshot().Revision)
+                { Address = new(a, Role: GraphExecutionRole.Executor) });
             finishLead.TrySetResult();
             await workerDone.Task.WaitAsync(TimeSpan.FromSeconds(30));
         }
