@@ -37,7 +37,7 @@ internal static class GraphEntryPresentation
             switch (entry.Kind)
             {
                 case "ticket-created":
-                    return Join("工单已建立", Get(data, "title"), Get(data, "goal"));
+                    return Join("邮件已建立", Get(data, "title"), Get(data, "goal"));
                 case "scan":
                     var modules = Get(data, "modules"); var relations = Get(data, "relations");
                     return modules.Length > 0 && relations.Length > 0 ? $"扫描完成 · {modules} 个模块，{relations} 条关系" : "扫描完成";
@@ -70,9 +70,9 @@ internal static class GraphEntryPresentation
     private static string PlainText(GraphEntry entry) => entry.Text switch
     {
         "Linked session" => "会话已关联",
-        "Planning ticket created from the human purpose" => "已根据项目目的建立规划工单",
+        "Planning ticket created from the human purpose" => "已根据项目目的建立规划邮件",
         "Cancellation requested; awaiting executor acknowledgement" => "已请求停止，等待执行者确认",
-        "Source disappeared; identity retained because tickets, child modules or manual relations still reference it." => "来源已移除，关联模块和工单仍保留",
+        "Source disappeared; identity retained because tickets, child modules or manual relations still reference it." => "来源已移除，关联模块和邮件仍保留",
         "Evidence content changed; previous passing evidence invalidated" => "证据内容已变化，先前的通过结果已失效",
         _ => entry.Text
     };
@@ -86,15 +86,15 @@ internal static class GraphEntryPresentation
         {
             "Project opened; automatic execution requires explicit resume" => "项目已打开",
             "Human updated project purpose" => "目的已更新", "Human updated Graph options" => "项目选项已更新",
-            "Scanned real project sources" => "项目扫描完成", "Created work ticket" => "工单已建立",
+            "Scanned real project sources" => "项目扫描完成", "Created work ticket" => "邮件已建立",
             "Added project correspondence" => "往来已记录", "Updated module relation" => "关系已更新",
             "Removed module relation" => "关系已移除", "Removed module" => "模块已移除",
             "Recorded model evidence claim" => "收到证据提交", "Linked execution session" => "会话已关联",
-            "Human reviewed ticket evidence" => "证据已审核", "Human vetoed ticket" => "工单已否决",
+            "Human reviewed ticket evidence" => "证据已审核", "Human vetoed ticket" => "邮件已否决",
             "Human lifted ticket veto" => "否决已解除", "Human reconciled unknown ticket outcome" => "未知结果已核查",
-            "Started managed ticket execution" => "工单已开始运行", "Requested managed execution cancellation" => "已请求停止运行",
+            "Started managed ticket execution" => "邮件已开始运行", "Requested managed execution cancellation" => "已请求停止运行",
             "Execution progress" => "运行进展", "Received managed execution terminal receipt" => "运行结果已记录",
-            "Human stopped queued ticket" => "已停止排队工单", "Human requested ticket stop" => "已请求停止工单",
+            "Human stopped queued ticket" => "已停止排队邮件", "Human requested ticket stop" => "已请求停止邮件",
             "Human enabled autonomous queue advancement" => "自动推进已启用", "Queued work resumed within the existing human mandate" => "队列已恢复",
             "Automatic queue stopped after an error" => "推进因错误停止", "Automatic queue is idle" => "队列空闲",
             "Rebirth authority changed" => "项目状态已更新", "Rejected command identity conflict" => "操作冲突已记录",

@@ -34,7 +34,9 @@ public partial class ChatPage
         if (info is null) return;
 
         SessionProjectChipText.Text = info.ProjectName;
+        SessionProjectChipText.IsVisible = info.CanChangeProject;
         SessionProjectChip.IsVisible = info.CanChangeProject;
+        Avalonia.Automation.AutomationProperties.SetName(SessionProjectChip, "选择会话项目：" + info.ProjectName);
     }
 
     /// <summary>项目选择浮层：本机项目列表、“不在项目中工作”“新建项目”。</summary>
@@ -55,7 +57,6 @@ public partial class ChatPage
         }
         menu.Items.Add(new Separator());
         menu.Items.Add(Item("不在项目中工作", "Icon.Dismiss", () => select(null)));
-        menu.Items.Add(Item("新建项目…", "Icon.Add", async () => await ChangeProjectRequested!() ));
         menu.ShowAt(SessionProjectChip);
 
         MenuItem Item(string title, string iconKey, Func<Task> action)

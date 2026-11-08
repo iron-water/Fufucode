@@ -161,6 +161,9 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         OnPropertyChanged(nameof(DefaultBackendLabel));
     }
 
+    public string? SelectedNewSessionBackendKey => _selectedNewSessionBackend
+        ?? _newSessionBackends.FirstOrDefault(option => option.IsDefault && option.Available)?.Key;
+
     public string DefaultBackendLabel =>
         _newSessionBackends.FirstOrDefault(option => option.Key == _selectedNewSessionBackend)?.Label
         ?? _newSessionBackends.FirstOrDefault(option => option.IsDefault)?.Label ?? string.Empty;

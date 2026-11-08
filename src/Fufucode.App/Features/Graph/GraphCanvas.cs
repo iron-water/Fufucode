@@ -192,7 +192,7 @@ internal sealed class GraphCanvas : Control, IDisposable
                 {
                     Menu("属性", () => _vm.RevealPanel(GraphWorkspaceViewModel.PropertiesPageId)),
                     Menu("展开", () => _vm.DrillInto(hit)), Menu("打开会话", () => _vm.OpenChat(hit, null)),
-                    Menu("新建工单", _vm.BeginTicket, _vm.CanEdit)
+                    Menu("添加邮件", _vm.BeginTicket, _vm.CanEdit)
                 } };
             }
             else ContextMenu = new ContextMenu { ItemsSource = new[]

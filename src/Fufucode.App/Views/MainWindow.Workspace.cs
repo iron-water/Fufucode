@@ -460,8 +460,10 @@ public partial class MainWindow
             var name = organization.Project(project).Name;
             // 只有还没有用户消息的新会话才能改项目；发送第一条后不再显示项目切换。
             var canChange = !HasUserMessage(_host.Current.Session);
+            var scratch = ScratchProject();
+            var isScratch = scratch?.Id == project.Id;
             return new Views.ChatPage.SessionContextInfo(
-                project.Id, string.IsNullOrWhiteSpace(name) ? Path.GetFileName(project.Path) : name,
+                isScratch ? null : project.Id, isScratch ? "无项目" : string.IsNullOrWhiteSpace(name) ? Path.GetFileName(project.Path) : name,
                 canChange);
         };
         _chatPage.ChangeProjectRequested = async () =>
@@ -486,6 +488,8 @@ public partial class MainWindow
     private async Task MoveCurrentSessionToProjectAsync(string? projectId)
     {
         if (_host is null) return;
+        if (HasUserMessage(_host.Current.Session))
+            throw new InvalidOperationException("会话开始后不能更改所属项目。");
         if (_vm?.Input.IsTurnActive == true)
             throw new InvalidOperationException("当前回合进行中，请先停止或等待完成再切换项目。");
         var metadata = _host.Manager.Metadata;
@@ -526,6 +530,7 @@ public partial class MainWindow
         // 切换项目会恢复该项目最近的会话；这里再切回刚才移动的会话。
         if (_host.Current.Session.Id != session.Id)
             await _host.SwitchToAsync(session.Id, _bootstrapCts.Token);
+        AttachRealSession();
         NotifySessionChanged();
     }
 

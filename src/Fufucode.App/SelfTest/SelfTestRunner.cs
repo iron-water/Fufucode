@@ -71,6 +71,13 @@ public static class SelfTestRunner
             return Failures.Count == 0 ? 0 : 1;
         }
 
+        if (args.Contains("--new-session-project-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(() => NewSessionProjectSelfTest.RunAsync(Pass, Fail));
+            Console.WriteLine($"New session project failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--ui-refinement-only"))
         {
             await RunOnHeadlessUiThreadAsync(() =>

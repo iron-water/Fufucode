@@ -119,7 +119,7 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public Task<bool> ValidateCandidateAsync() => ExecuteAsync("候选验证", async token =>
     {
         var ticket = RequireTicket();
-        var manifest = CandidateManifestPath ?? throw new InvalidOperationException("选中工单没有候选清单");
+        var manifest = CandidateManifestPath ?? throw new InvalidOperationException("选中邮件没有候选清单");
         if (!Path.IsPathFullyQualified(ValidationExecutable) || !double.TryParse(ValidationTimeout, out var seconds) ||
             !double.IsFinite(seconds) || seconds <= 0 || seconds > 86400) throw new InvalidOperationException("需要绝对可执行路径及1天以内的正数超时秒数");
         var handler = ValidateCandidateRequested ?? throw new InvalidOperationException("验证宿主未连接");
@@ -215,7 +215,7 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public bool MissingSelectedModule => SelectedModuleId != null && SelectedModule == null;
     public bool MissingSelectedTicket => SelectedTicketId != null && SelectedTicket == null;
     public string SelectionLabel => SelectedModule?.Name ?? (MissingSelectedModule ? "尚未建立" : "未选择模块");
-    public string TicketSelectionLabel => SelectedTicket?.Title ?? (MissingSelectedTicket ? "尚未建立" : "未选择工单");
+    public string TicketSelectionLabel => SelectedTicket?.Title ?? (MissingSelectedTicket ? "尚未建立" : "未选择邮件");
     public string SelectedTicketStatus => SelectedTicket == null ? "" : GraphLabels.Status(SelectedTicket.Status);
     public bool NeedsTicketReconciliation => SelectedTicket?.Status == "NeedsReconciliation";
     public bool HasActiveTicketVeto => SelectedTicketId is { } id && Snapshot.Entries.Any(e => GraphEntryPresentation.IsActiveTicketVeto(e, id));
@@ -602,10 +602,10 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public bool CreateTicket()
     {
         GraphTicket? created = null;
-        var success = Mutate("创建工单", () =>
+        var success = Mutate("创建邮件", () =>
         {
             if (string.IsNullOrWhiteSpace(TicketDraft.Title) || string.IsNullOrWhiteSpace(TicketDraft.Goal))
-                throw new InvalidOperationException("工单主题和目标不能为空");
+                throw new InvalidOperationException("邮件主题和目标不能为空");
             created = _service.CreateTicket(TicketDraft.Title, TicketDraft.Goal, TicketDraft.ModuleIds.ToArray(), Lines(TicketDraft.Acceptance));
         });
         if (success && created != null)
@@ -636,7 +636,7 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         var payload = System.Text.Json.JsonSerializer.Serialize(new { criterion, text, passed });
         _service.AddEntry(RequireTicket(), SelectedModuleId, "evidence", payload, reference);
     });
-    public bool VetoTicket() => Mutate("否决工单", () =>
+    public bool VetoTicket() => Mutate("否决邮件", () =>
     {
         if (string.IsNullOrWhiteSpace(Correspondence.VetoReason)) throw new InvalidOperationException("否决原因不能为空");
         _service.VetoTicket(RequireTicket(), Correspondence.VetoReason);
@@ -648,13 +648,13 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     });
     public bool ReconcileTicket() => Mutate("允许重试", () =>
     {
-        if (!NeedsTicketReconciliation) throw new InvalidOperationException("工单无需核查未知结果");
+        if (!NeedsTicketReconciliation) throw new InvalidOperationException("邮件无需核查未知结果");
         if (!Correspondence.SideEffectsChecked) throw new InvalidOperationException("请先核查副作用");
         if (string.IsNullOrWhiteSpace(Correspondence.RecoveryResolution))
             throw new InvalidOperationException("副作用核查与恢复说明不能为空");
         _service.ReconcileTicket(RequireTicket(), Correspondence.RecoveryResolution);
     });
-    public bool AcceptTicket() => Mutate("验收工单", () =>
+    public bool AcceptTicket() => Mutate("验收邮件", () =>
     {
         if (string.IsNullOrWhiteSpace(Correspondence.AcceptanceEvidence)) throw new InvalidOperationException("验收引用不能为空");
         _service.AcceptTicket(RequireTicket(), Correspondence.AcceptanceEvidence);
@@ -668,23 +668,23 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         string id;
         try { id = RequireTicket(); }
         catch (Exception ex) { Error = ex.Message; return false; }
-        if (_runs.ContainsKey(id)) { Error = "工单正在运行"; return false; }
+        if (_runs.ContainsKey(id)) { Error = "邮件正在运行"; return false; }
         using var run = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token, cancellationToken);
         _runs[id] = run;
-        try { return await ExecuteAsync("运行工单", token => _service.RunTicketAsync(id, token), run.Token); }
+        try { return await ExecuteAsync("运行邮件", token => _service.RunTicketAsync(id, token), run.Token); }
         finally { _runs.Remove(id); }
     }
     public Task<bool> StopTicketAsync(CancellationToken cancellationToken = default)
     {
         var id = SelectedTicketId;
-        if (id == null) { Error = "请选择工单"; return Task.FromResult(false); }
-        return ExecuteAsync("停止工单", token => _service.StopTicketAsync(id, token), cancellationToken);
+        if (id == null) { Error = "请选择邮件"; return Task.FromResult(false); }
+        return ExecuteAsync("停止邮件", token => _service.StopTicketAsync(id, token), cancellationToken);
     }
     public Task<bool> SetAutonomyAsync(bool running, CancellationToken cancellationToken = default) =>
         ExecuteAsync(running ? "启动推进" : "停止推进", token => _service.SetAutonomyAsync(running, token), cancellationToken);
     public Task<bool> StopAllAsync(CancellationToken cancellationToken = default) =>
         ExecuteAsync("停止全部", token => _service.StopAllAsync(token), cancellationToken);
-    private string RequireTicket() => SelectedTicket != null ? SelectedTicket.Id : throw new InvalidOperationException("工单尚未建立");
+    private string RequireTicket() => SelectedTicket != null ? SelectedTicket.Id : throw new InvalidOperationException("邮件尚未建立");
     private bool Mutate(string action, Action command)
     {
         if (!Writable()) return false;

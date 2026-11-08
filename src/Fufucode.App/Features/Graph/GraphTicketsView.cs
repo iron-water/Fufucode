@@ -63,12 +63,12 @@ public sealed class GraphTicketsView : GraphContentView
             })
         };
         GraphUi.Bind(moduleChoices, ItemsControl.ItemsSourceProperty, "Modules");
-        var create = GraphUi.Stack(GraphUi.Text("新建工单", "bodyStrong"),
+        var create = GraphUi.Stack(GraphUi.Text("新建邮件", "bodyStrong"),
             GraphUi.Field("主题", GraphUi.Input("TicketDraft.Title", "GraphTicketTitle")),
             GraphUi.Field("目标", GraphUi.Input("TicketDraft.Goal", "GraphTicketGoal", true)),
             GraphUi.Field("验收条件", GraphUi.Input("TicketDraft.Acceptance", "GraphTicketAcceptance", true)),
             GraphUi.Field("关联模块", moduleChoices),
-            GraphUi.Actions(GraphUi.Button("创建工单", () => vm.CreateTicket(), "GraphCreateTicket", true),
+            GraphUi.Actions(GraphUi.Button("创建邮件", () => vm.CreateTicket(), "GraphCreateTicket", true),
                 GraphUi.Button("取消", vm.CancelTicketEdit, "GraphCancelTicket")));
         GraphUi.Bind(create, IsVisibleProperty, "IsTicketEditorOpen");
         GraphUi.Bind(create, IsEnabledProperty, "CanEdit");
@@ -178,7 +178,10 @@ public sealed class GraphTicketsView : GraphContentView
         _threadScroll.Content = thread;
         _threadScroll.ScrollChanged += (_, _) =>
         { if (!_restoring && _threadKey != null) vm.SaveReadingOffset(_threadKey, _threadScroll.Offset); };
-        var commands = GraphUi.Actions(GraphUi.Button("新建", vm.BeginTicket, "GraphNewTicket", true),
+        var addMailPlaceholder = new Button { Content = "添加邮件", IsEnabled = false };
+        AutomationProperties.SetAutomationId(addMailPlaceholder, "GraphAddMailPlaceholder");
+        var commands = GraphUi.Actions(addMailPlaceholder,
+            GraphUi.Button("新建邮件", vm.BeginTicket, "GraphNewTicket", true),
             GraphUi.AsyncButton("启动推进", () => vm.SetAutonomyAsync(true), "GraphStartAutonomy"),
             GraphUi.AsyncButton("停止推进", () => vm.SetAutonomyAsync(false), "GraphStopAutonomy"),
             GraphUi.AsyncButton("停止全部", () => vm.StopAllAsync(), "GraphStopAll"));

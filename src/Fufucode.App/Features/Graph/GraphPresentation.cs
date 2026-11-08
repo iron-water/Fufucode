@@ -291,7 +291,7 @@ internal static class GraphLabels
     public static string EntryKind(string kind) => kind switch
     {
         "message" or "mail" or "session-message" => "邮件", "evidence" => "证据", "decision" => "决定", "run" => "运行",
-        "ticket-created" => "工单建立", "source" => "来源", "scan" => "扫描", "scan-notice" => "扫描提示",
+        "ticket-created" => "邮件建立", "source" => "来源", "scan" => "扫描", "scan-notice" => "扫描提示",
         "conflict" => "待核对", "module" => "模块变更", "module-removed" => "模块移除", "relation" => "关系变更",
         "relation-removed" => "关系移除", "source-removed" => "来源移除", "suggestion" => "建议", "note" => "备注", "observation" => "观察",
         "evidence-claim" => "证据提交", "evidence-source" => "证据来源", "evidence-rejected" => "证据未通过",

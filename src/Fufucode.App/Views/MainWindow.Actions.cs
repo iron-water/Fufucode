@@ -136,7 +136,18 @@ public partial class MainWindow
     private async Task NewChatAsync()
     {
         if (_host is null) { _vm?.Timeline.Reset(); if (_vm is not null) { _vm.Input.DraftText = ""; _vm.Input.ReferenceContext = ""; } }
-        else await SwitchSessionAsync(null);
+        else
+        {
+            if (_borrowedHost || _switching || _restarting || _closed || _vm?.Input.IsTurnActive == true) return;
+            var backend = _vm?.Sidebar.SelectedNewSessionBackendKey;
+            await NavigateWorkspaceAsync(AppPage.Chat);
+            if (_vm?.IsChatPage != true) return;
+            var scratch = ScratchWorkspace.Ensure(_options.CreateAppDataLayout());
+            await SwitchProjectAsync(scratch);
+            if (_host is null || !RealSessionHost.PathEquals(_host.ProjectPath, scratch)) return;
+            await SwitchSessionAsync(null, backend is null ? null : BackendCapabilities.Parse(backend));
+            await NavigateWorkspaceAsync(AppPage.Chat);
+        }
     }
     internal AppOptions CreateTemporaryOptions()
     {

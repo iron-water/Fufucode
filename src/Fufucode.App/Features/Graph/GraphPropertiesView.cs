@@ -30,7 +30,7 @@ public sealed class GraphPropertiesView : GraphContentView
             GraphUi.Button("删除", () => { if (vm.SelectedModuleId is { } id) vm.RemoveModule(id); }, "GraphRemoveModule", true),
             GraphUi.Button("展开", vm.ExpandSelected, "GraphDrill"),
             GraphUi.Button("打开会话", () => vm.OpenChat(vm.SelectedModuleId, null), "GraphModuleChat"),
-            GraphUi.Button("新建工单", vm.BeginTicket, "GraphModuleTicket", true));
+            GraphUi.Button("添加邮件", vm.BeginTicket, "GraphModuleTicket", true));
         GraphUi.Bind(moduleActions, IsVisibleProperty, "HasSelectedModule");
         var moduleDetails = GraphUi.Stack(GraphUi.Value("SelectedModule.Id", "caption"),
             GraphUi.Value("SelectedModuleSummary"), GraphUi.Field("父模块", GraphUi.Value("SelectedModuleParent")),

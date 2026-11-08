@@ -71,6 +71,8 @@ internal static class UiRefinementSelfTest
             vm.Sidebar.SelectNewSessionBackendCommand.Execute("fixture");
             Check(vm.Sidebar.DefaultBackendLabel == "Fixture" && vm.Timeline.Entries.Count == entryCount,
                 "backend selection changes only the pending backend without creating or resetting a session");
+            Check(vm.Sidebar.SelectedNewSessionBackendKey == "fixture",
+                "new-session routing can preserve the explicitly chosen backend across view-model replacement");
             var commandBlock = new ToolCallBlockViewModel { InputJson = "{\"command\":\"printf fixture\"}", Output = "fixture output" };
             Check(commandBlock.InputDisplay == "printf fixture" && commandBlock.ShowTextOutput,
                 "command card keeps command input and returned output as separate visible data");

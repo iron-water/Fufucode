@@ -173,13 +173,13 @@ public partial class MainWindow
                 var header = OverviewCollapsibleHeading(section.Name, sectionCollapsed, () =>
                 {
                     if (!_collapsedSections.Add(section.Id)) _collapsedSections.Remove(section.Id);
-                }, 8);
+                }, 16);
                 AutomationProperties.SetAutomationId(header, "section.row." + section.Id);
                 header.ContextMenu = OverviewContextMenu();
                 header.ContextMenu.Items.Add(OverviewMenu("重命名", () => EditSectionAsync(section)));
                 if (sectionCollapsed) continue;
                 foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId == section.Id))
-                    OverviewProjectRow(project, organization, all);
+                    OverviewProjectRow(project, organization, all, 32);
                 OverviewSessionGroup(all.Where(s => organization.Placement(s.Id).SectionId == section.Id &&
                     organization.Placement(s.Id).ProjectId is null), organization);
             }
@@ -337,7 +337,7 @@ public partial class MainWindow
         try { await action(); }
         catch (Exception error) { _vm?.Timeline.AddNotification("会话管理：" + error.GetBaseException().Message); }
     }
-    private void OverviewProjectRow(ProjectRecord project, SessionOrganization organization, SessionRecord[] sessions)
+    private void OverviewProjectRow(ProjectRecord project, SessionOrganization organization, SessionRecord[] sessions, double indent = 16)
     {
         var settings = organization.Project(project);
         var collapsed = _collapsedProjects.Contains(project.Id);
@@ -363,7 +363,7 @@ public partial class MainWindow
         Grid.SetColumn(name, 1); content.Children.Add(name);
         Grid.SetColumn(count, 2); content.Children.Add(count);
 
-        var row = new Button { Content = content, Classes = { "overviewProject" } };
+        var row = new Button { Content = content, Classes = { "overviewProject" }, Margin = new Thickness(indent, 0, 0, 4) };
         row.Classes.Set("selected", project.Id == _host?.Current.Project.Id);
         Avalonia.Automation.AutomationProperties.SetHelpText(row, settings.Folder + "（点击折叠/展开会话）");
         AutomationProperties.SetAutomationId(row, "project.row." + project.Id);
@@ -392,10 +392,11 @@ public partial class MainWindow
         }));
         menu.Items.Add(OverviewMenu("新建会话", async () =>
         {
+            var backend = _vm?.Sidebar.SelectedNewSessionBackendKey;
             await SwitchProjectAsync(settings.Folder);
             if (_host is null || !RealSessionHost.PathEquals(_host.ProjectPath, settings.Folder))
                 throw new InvalidOperationException("目标文件夹未打开，不会在原项目新建会话。");
-            await NewChatAsync();
+            await SwitchSessionAsync(null, backend is null ? null : BackendCapabilities.Parse(backend));
             new SessionOrganization(_host.Manager.Metadata).PlaceSession(CurrentSessionId!, project.Id, null);
             RenderOverview();
         }));
@@ -414,7 +415,7 @@ public partial class MainWindow
             var tree = SessionTree(projectSessions);
             var visible = expanded ? tree : tree.Take(ProjectSessionPreview).ToArray();
             foreach (var entry in visible)
-                stack.Children.Add(BuildOverviewSessionRow(entry.Session, organization, 8, null, entry.Depth));
+                stack.Children.Add(BuildOverviewSessionRow(entry.Session, organization, indent + 16, null, entry.Depth));
             if (projectSessions.Length > ProjectSessionPreview)
             {
                 var rest = projectSessions.Length - ProjectSessionPreview;
