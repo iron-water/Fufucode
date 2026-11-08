@@ -234,6 +234,21 @@ using (var automatic = await NewFixture("automatic-delivery"))
     Check(await ManagedGitIntegration.GetIntegratedCommitAsync(automatic.Repo) is not null && await Git(automatic.Repo, "rev-parse", "HEAD") == automaticBase,
         "automatic internal delivery preserves user main without publication authorization");
 }
+using (var vetoDuringValidation = await NewFixture("validation-veto"))
+{
+    var baseCommit = await Git(vetoDuringValidation.Repo, "rev-parse", "HEAD");
+    var candidate = await Candidate(vetoDuringValidation, "veto during validation", baseCommit, "Main.cs",
+        "class Entry { static void Main() { System.Threading.Thread.Sleep(20000); } }\n");
+    var controlledHost = Host(vetoDuringValidation);
+    var validation = controlledHost.ValidateCandidateAsync(candidate.Ticket, candidate.Workspace.ManifestPath, run);
+    await Task.Delay(1200);
+    vetoDuringValidation.Graph.VetoTicket(candidate.Ticket, "Human revoked this running verification");
+    var cancelled = await validation;
+    Check(cancelled.Receipt.Status is ManagedValidationStatus.Cancelled or ManagedValidationStatus.Denied,
+        "unread human Veto cancels in-flight host validation, not only its eventual completion");
+    Check(!controlledHost.VerifyCurrent(cancelled) && await ManagedGitIntegration.GetIntegratedCommitAsync(vetoDuringValidation.Repo) is null,
+        "revoked host process cannot authorize integration");
+}
 Console.WriteLine($"PASS {assertions} Host/Git assertions; evidence {root}");
 
 sealed class Executor : IGraphRunExecutor

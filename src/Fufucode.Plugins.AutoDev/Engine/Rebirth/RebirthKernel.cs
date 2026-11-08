@@ -912,6 +912,28 @@ public sealed class RebirthKernel : IDisposable
                 if (Convert.ToInt64(q.ExecuteScalar()) == 0)
                     throw new InvalidOperationException("Missing valid passing evidence for: " + criterion);
             }
+            // A Graph repository delivery cannot bypass Commit-on-Done by calling the lower-level
+            // completion API. Historical standalone research kernels have no Graph table.
+            using (var table = c.CreateCommand())
+            {
+                table.Transaction = tx;
+                table.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='graph_entries'";
+                if (Convert.ToInt64(table.ExecuteScalar()) != 0)
+                {
+                    using var delivery = c.CreateCommand(); delivery.Transaction = tx;
+                    delivery.CommandText = """
+                        SELECT COUNT(*) FROM graph_entries r WHERE r.ticket_id=$ticket AND r.kind='run-result' AND r.actor='executor'
+                        AND r.entry_id=(SELECT entry_id FROM graph_entries WHERE ticket_id=$ticket AND kind='run-result' AND actor='executor' ORDER BY created_utc DESC,entry_id DESC LIMIT 1)
+                        AND json_valid(r.text) AND json_extract(r.text,'$.candidateManifestPath') IS NOT NULL
+                        AND NOT EXISTS (SELECT 1 FROM graph_entries v WHERE v.ticket_id=$ticket AND v.kind='integration-version' AND v.actor='host'
+                            AND json_valid(v.text) AND json_extract(v.text,'$.runId')=json_extract(r.text,'$.id')
+                            AND length(json_extract(v.text,'$.integrationCommit')) IN (40,64))
+                        """;
+                    delivery.Parameters.AddWithValue("$ticket", ticketId);
+                    if (Convert.ToInt64(delivery.ExecuteScalar()) != 0)
+                        throw new InvalidOperationException("Repository delivery requires a recorded host integration commit before completion.");
+                }
+            }
             Execute(c, tx, "UPDATE rb_tickets SET status='Done',updated_utc=$now WHERE ticket_id=$id",
                 ("$now", nowUtc), ("$id", ticketId));
             TouchProject(c, tx, ticket.ProjectId, nowUtc);

@@ -4,6 +4,7 @@
     <ProjectReference Include="../../src/Fufucode.AutoDev/Fufucode.AutoDev.csproj" />
     <ProjectReference Include="../../src/Fufucode.Core/Fufucode.Core.csproj" />
     <Compile Include="../../src/Fufucode.App/Integration/GraphDeliveryCoordinator.cs" Link="GraphDeliveryCoordinator.cs" />
+    <Compile Include="../../src/Fufucode.App/Integration/GraphValidationAuthorization.cs" Link="GraphValidationAuthorization.cs" />
     <Compile Include="../../src/Fufucode.App/Integration/GraphDevelopmentHost.cs" Link="GraphDevelopmentHost.cs" />
   </ItemGroup>
 </Project>

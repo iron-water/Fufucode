@@ -20,6 +20,7 @@ public sealed partial class GraphProjectService
         lock (_gate)
         {
             HumanOnly(); var context = Current; purpose = Required(purpose, nameof(purpose));
+            var priorPurpose = context.Kernel.ReadSnapshot(context.AuthorityId).Brief.Brief.Statement;
             Change(context, "Human updated project purpose", (c, tx) =>
             {
                 var snapshot = context.Kernel.ReadSnapshot(context.AuthorityId);
@@ -32,9 +33,17 @@ public sealed partial class GraphProjectService
                 Entry(context, c, tx, null, null, "purpose", Serialize(new { before = prior.Statement, after = purpose, beforeVersion = snapshot.Project.BriefVersion, afterVersion = snapshot.Project.BriefVersion + 1 }));
                 foreach (var ticket in snapshot.Tickets.Where(t => t.Status is not (RebirthTicketStatus.Done or RebirthTicketStatus.Cancelled)))
                     if (prior.Statement.Length > 0 && prior.Statement != purpose)
+                    {
                         Entry(context, c, tx, ticket.Id, null, "conflict", "Human purpose changed; the ticket retains its original mandate version. Review its scope against the new purpose.", null, "system");
+                        Entry(context, c, tx, ticket.Id, null, "mandate-invalidated", Serialize(new { prior = snapshot.Project.BriefVersion, current = snapshot.Project.BriefVersion + 1 }), null, "host");
+                    }
                 return true;
             });
+            if (priorPurpose.Length != 0 && priorPurpose != purpose)
+            {
+                foreach (var run in context.Runs.Values.ToArray())
+                    RequestManagedStop(context, run, "Human changed the effective project purpose; old execution requires replanning");
+            }
         }
     }
 
@@ -446,10 +455,10 @@ public sealed partial class GraphProjectService
             HumanOnly(); var context = Current;
             var receipt = ReadSnapshot().Entries.Where(e => e.TicketId == ticketId && e.Kind == "run-result" && e.Actor == "executor")
                 .OrderByDescending(e => e.CreatedUtc).FirstOrDefault();
-            if (receipt is null) throw new InvalidOperationException("缺少可信执行回执；保留未知状态。可停止此任务并创建明确的新任务，不能盲目重放。");
+            if (receipt is null) throw new InvalidOperationException("缺少可信执行回执；保留未知状态。可暂停推进或否决此任务；原结果不会盲目重放。");
             using var receiptData = JsonDocument.Parse(receipt.Text);
             if (!receiptData.RootElement.TryGetProperty("noSideEffectsDispatched", out var safe) || safe.ValueKind != JsonValueKind.True)
-                throw new InvalidOperationException("执行曾派发或副作用无法确认；已保留现场与未知状态。请选择停止该任务，或针对具体外部操作进行恢复，不能直接重试。");
+                throw new InvalidOperationException("执行曾派发或副作用无法确认；已保留现场与未知状态。可暂停推进或否决此任务；需要针对具体外部操作恢复，不能直接重试。");
             resolution = "Kernel verified the host receipt: no side effects were dispatched; no active run may be replayed.";
             Change(context, "Kernel reconciled unknown ticket outcome", (c, tx) =>
             {

@@ -44,6 +44,8 @@ public sealed partial class GraphProjectService
                 if (string.IsNullOrWhiteSpace(snapshot.Brief.Brief.Statement)) throw new InvalidOperationException("A human project purpose is required before running work.");
                 if (snapshot.Project.Status != RebirthProjectStatus.Active) throw new InvalidOperationException("The project is not active.");
                 var ticket = Ticket(context, ticketId);
+                if (ReadSnapshot().Entries.Any(e => e.TicketId == ticketId && e.Kind == "mandate-invalidated" && e.Actor == "host"))
+                    throw new UnauthorizedAccessException("Project purpose changed; create current scoped work rather than replaying the old mandate.");
                 var organization = Organization(context, c, tx);
                 if (organization.Dependencies.Any(d => d.TicketId == ticketId && Ticket(context, d.DependsOnTicketId).Status != RebirthTicketStatus.Done))
                     throw new InvalidOperationException("A required work result is not complete.");
@@ -402,6 +404,7 @@ public sealed partial class GraphProjectService
             if (snapshot.Brief.Brief.Autonomy != RebirthAutonomy.WithinMandate || string.IsNullOrWhiteSpace(snapshot.Brief.Brief.Statement)
                 || snapshot.Project.Status != RebirthProjectStatus.Active || !snapshot.Tickets.Any(t => t.Status == RebirthTicketStatus.Authorized
                     && !snapshot.Runs.Any(r => r.TicketId == t.Id && r.Status == RebirthRunStatus.Unknown)
+                    && !ReadSnapshot().Entries.Any(e => e.TicketId == t.Id && e.Kind == "mandate-invalidated" && e.Actor == "host")
                     && context.Kernel.InspectAdmission(t.Id, t.Owner, Now()).ShouldRun
                     && (t.Route == "project-planning" || organization.Responsibilities.Any(r => r.TicketId == t.Id || t.Route == "scope-planning" && r.Id == t.Owner && r.Role == GraphExecutionRole.ScopeLead))
                     && !organization.Dependencies.Any(d => d.TicketId == t.Id && Ticket(context, d.DependsOnTicketId).Status != RebirthTicketStatus.Done))) return false;
@@ -445,6 +448,7 @@ public sealed partial class GraphProjectService
                         && !snapshot.Runs.Any(r => r.TicketId == t.Id && r.Status == RebirthRunStatus.Unknown))
                         .OrderBy(t => t.Priority).ThenBy(t => t.CreatedUtc).ThenBy(t => t.Id))
                     {
+                        if (ReadSnapshot().Entries.Any(e => e.TicketId == ticket.Id && e.Kind == "mandate-invalidated" && e.Actor == "host")) continue;
                         if (context.Runs.Count >= options.Concurrency) break;
                         if (context.Runs.ContainsKey(ticket.Id) || !context.Kernel.InspectAdmission(ticket.Id, ticket.Owner, Now()).ShouldRun) continue;
                         var organization = ReadOrganizationSnapshot();

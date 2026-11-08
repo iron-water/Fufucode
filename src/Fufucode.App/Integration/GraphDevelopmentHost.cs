@@ -85,6 +85,8 @@ public sealed class GraphDevelopmentHost
         GraphValidationSpec validationSpec, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(validationSpec);
+        using var mandateWatch = new GraphValidationAuthorization(graph, ticketId, ct);
+        ct = mandateWatch.Token;
         if (!Path.IsPathFullyQualified(validationSpec.Executable) || validationSpec.Arguments is null ||
             validationSpec.Arguments.Any(a => a is null) || validationSpec.Timeout <= TimeSpan.Zero ||
             validationSpec.Timeout > TimeSpan.FromDays(1)) throw new ArgumentException("Invalid validation specification.");
@@ -196,6 +198,8 @@ public sealed class GraphDevelopmentHost
         GraphValidationSpec spec, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(spec);
+        using var mandateWatch = new GraphValidationAuthorization(graph, original.TicketId, ct);
+        ct = mandateWatch.Token;
         await serial.WaitAsync(ct);
         try
         {
@@ -382,6 +386,7 @@ public sealed class GraphDevelopmentHost
                     result.Contract.AcceptanceDigest, output, result.Receipt.Producer, coverage,
                     () => { graph.RequireDeliveryAuthorization(result.Original.TicketId); return VerifyIntegratedCurrent(result); }, true,
                     continuation, continuationReason);
+            graph.CompleteLinkedRepairs(result.Original.TicketId, transaction.PreparedCommit!, output);
             await SaveState(state with { Status = "Completed" });
         }
         finally { serial.Release(); }

@@ -61,11 +61,13 @@ public sealed partial class GraphProjectService
                 {
                     context.Kernel.RecordHumanInput(command + ":input", context.AuthorityId, ticketId, "human", RebirthInputKind.Query, text, Now(),
                         inputId: "input-" + Hash(command)[..24]);
-                    var organization = Organization(context, c, tx);
-                    var recipient = ticketId is null ? "project-lead" : organization.Responsibilities
-                        .SingleOrDefault(r => r.TicketId == ticketId && r.Role == GraphExecutionRole.Executor)?.Id ?? "project-lead";
+                    var recipient = ticketId is null ? "project-lead" : "";
                     SendOrganizationMessage(command + ":addressed", new GraphMessageDraft(recipient, false, "query", text,
-                        ticketId, moduleId, Revision(context, c, tx)));
+                        ticketId, moduleId, Revision(context, c, tx))
+                    {
+                        Communication = GraphCommunicationKind.Request,
+                        Address = ticketId is null ? null : new GraphMessageAddress(TicketId: ticketId)
+                    });
                 }
                 Entry(context, c, tx, ticketId, moduleId, role == "assistant" ? "claim" : "session-message", text, source,
                     role == "assistant" ? "agent" : "human");

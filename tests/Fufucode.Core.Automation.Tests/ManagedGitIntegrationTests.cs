@@ -24,6 +24,7 @@ async Task Reject(Func<Task> action, string name) { try { await action(); } catc
 await Git(repo, "init", "-b", "main");
 await Git(repo, "config", "user.name", "Git test"); await Git(repo, "config", "user.email", "test@localhost");
 await File.WriteAllTextAsync(Path.Combine(repo, "base.txt"), "base\n");
+await File.WriteAllLinesAsync(Path.Combine(repo, "regions.txt"), Enumerable.Range(0, 60).Select(i => "line-" + i));
 await Git(repo, "add", "."); await Git(repo, "commit", "-m", "base");
 var baseline = await Git(repo, "rev-parse", "HEAD");
 async Task<ManagedDevelopmentWorkspace> Workspace(string commit)
@@ -86,6 +87,17 @@ Check((await ManagedGitIntegration.PublishAsync(tb, true, baseline)).Status == M
 var interrupted = tb with { Status = ManagedIntegrationStatus.Publishing };
 await File.WriteAllTextAsync(tb.JournalPath, JsonSerializer.Serialize(interrupted));
 Check((await ManagedGitIntegration.RecoverAsync(tb.JournalPath)).Status == ManagedIntegrationStatus.Published, "publication interruption reconciliation");
+var regionLeft = await Workspace(tb.PreparedCommit!); var regionRight = await Workspace(tb.PreparedCommit!);
+var leftLines = await File.ReadAllLinesAsync(Path.Combine(regionLeft.Manifest.WorktreePath, "regions.txt")); leftLines[2] = "left-change";
+var rightLines = await File.ReadAllLinesAsync(Path.Combine(regionRight.Manifest.WorktreePath, "regions.txt")); rightLines[55] = "right-change";
+await File.WriteAllLinesAsync(Path.Combine(regionLeft.Manifest.WorktreePath, "regions.txt"), leftLines);
+await File.WriteAllLinesAsync(Path.Combine(regionRight.Manifest.WorktreePath, "regions.txt"), rightLines);
+await regionLeft.CaptureCandidateAsync(); await regionRight.CaptureCandidateAsync();
+var leftMerged = await ManagedGitIntegration.PrepareAsync(regionLeft, sandbox); await ManagedGitIntegration.CommitAsync(leftMerged, leftMerged.PreparedCommit!, true);
+var rightMerged = await ManagedGitIntegration.PrepareAsync(regionRight, sandbox);
+Check(rightMerged.Status == ManagedIntegrationStatus.Prepared && File.ReadAllText(Path.Combine(rightMerged.WorktreePath, "regions.txt")).Contains("left-change") &&
+    File.ReadAllText(Path.Combine(rightMerged.WorktreePath, "regions.txt")).Contains("right-change"), "same-file disjoint regions merge natively without repair coordination");
+await Reject(() => ManagedGitIntegration.CommitAsync(rightMerged, rightMerged.PreparedCommit!, true, currentAuthorization: () => false), "revoked live authority blocks integrated ref update");
 var c = await Workspace(tb.PreparedCommit!); var d = await Workspace(tb.PreparedCommit!);
 await File.WriteAllTextAsync(Path.Combine(c.Manifest.WorktreePath, "base.txt"), "c\n");
 await File.WriteAllTextAsync(Path.Combine(d.Manifest.WorktreePath, "base.txt"), "d\n");

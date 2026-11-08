@@ -491,6 +491,31 @@ internal static class Program
         }
         using (var reopened = Service(f))
             Check(reopened.ReadOptions().Supervision == GraphSupervisionLevel.Strict, "human supervision survives restart");
+        foreach (var level in Enum.GetValues<GraphSupervisionLevel>())
+        {
+            var repeatedFixture = Fixture("repeated-failure-" + level);
+            using var repeated = Service(repeatedFixture, new CallbackExecutor(_ => Task.FromResult(new GraphRunResult("Failed", "identical compiler diagnostic"))));
+            repeated.SetPurpose("Judge soft repetition under the current human policy");
+            await repeated.SaveOptionsAsync(repeated.ReadOptions() with { Supervision = level });
+            var repeatedTicket = Ticket(repeated);
+            await repeated.RunTicketAsync(repeatedTicket.Id); await repeated.RunTicketAsync(repeatedTicket.Id);
+            var evidence = repeated.ReadSnapshot().Entries.Last(e => e.Kind == "supervision");
+            using var reaction = JsonDocument.Parse(evidence.Text);
+            Check(reaction.RootElement.GetProperty("level").GetString() == level.ToString() &&
+                reaction.RootElement.GetProperty("action").GetString() == (level == GraphSupervisionLevel.Strict ? "pause-and-replan" : "record-warning"),
+                "repeated objective failures follow " + level + " policy without changing it");
+            Check(repeated.ReadOptions().Supervision == level && repeated.ReadSnapshot().Tickets.Single().Status != "Done",
+                "soft supervision never grants completion or changes human policy");
+        }
+        var growingFixture = Fixture("growing-diagnostics"); var attempt = 0;
+        using (var growing = Service(growingFixture, new CallbackExecutor(_ => Task.FromResult(new GraphRunResult("Failed",
+            "compiler diagnostic count " + (++attempt * 5))))))
+        {
+            growing.SetPurpose("Allow technical exploration despite temporarily increasing diagnostics");
+            await growing.SaveOptionsAsync(growing.ReadOptions() with { Supervision = GraphSupervisionLevel.Strict });
+            var growingTicket = Ticket(growing); await growing.RunTicketAsync(growingTicket.Id); await growing.RunTicketAsync(growingTicket.Id);
+            Check(!growing.ReadSnapshot().Entries.Any(e => e.Kind == "supervision"), "increasing error counts alone never decide lack of progress even under strict supervision");
+        }
         var liveFixture = Fixture("live-veto-control"); GraphProjectService? active = null;
         using var live = Service(liveFixture, new CallbackExecutor(request =>
         {

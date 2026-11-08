@@ -108,6 +108,8 @@ public sealed partial class GraphProjectService
             var context = Current;
             var authority = context.Kernel.ReadSnapshot(context.AuthorityId);
             var ticket = authority.Tickets.Single(t => t.Id == ticketId);
+            if (ReadSnapshot().Entries.Any(e => e.TicketId == ticketId && e.Kind == "mandate-invalidated" && e.Actor == "host"))
+                throw new UnauthorizedAccessException("The human project purpose changed; this work needs a new current mandate.");
             var lastRun = authority.Runs.Where(r => r.TicketId == ticketId).OrderByDescending(r => r.StartedUtc).FirstOrDefault();
             if (authority.Decisions.Any(d => d.Kind == RebirthDecisionKind.Stop && d.Status == "Requested" &&
                 d.TicketId == ticketId && (lastRun is null || d.CreatedUtc >= lastRun.StartedUtc)))
@@ -120,6 +122,34 @@ public sealed partial class GraphProjectService
                 authority.Decisions.Any(d => d.Status == "Active" && d.Kind == RebirthDecisionKind.Veto &&
                     (d.TicketId == ticketId || d.Target == "ticket:" + ticketId || d.Target == "route:" + ticket.Route || d.Target == "project:" + context.AuthorityId)))
                 throw new UnauthorizedAccessException("Delivery blocked by current ticket or project control.");
+        }
+    }
+
+    internal void CompleteLinkedRepairs(string originalTicketId, string integrationCommit, string verificationReference)
+    {
+        lock (_gate)
+        {
+            HumanOnly(); var context = Current;
+            foreach (var entry in ReadSnapshot().Entries.Where(e => e.Kind == "integration-repair" && e.TicketId is not null))
+            {
+                using var data = System.Text.Json.JsonDocument.Parse(entry.Text);
+                var parent = data.RootElement.TryGetProperty("OriginalTicketId", out var property) ? property.GetString() : data.RootElement.GetProperty("originalTicketId").GetString();
+                if (parent != originalTicketId) continue;
+                var ticket = Ticket(context, entry.TicketId!);
+                if (ticket.Status != RebirthTicketStatus.Review) continue;
+                var run = context.Kernel.ReadSnapshot(context.AuthorityId).Runs.Where(r => r.TicketId == ticket.Id)
+                    .OrderByDescending(r => r.StartedUtc).FirstOrDefault();
+                if (run?.Status != RebirthRunStatus.Completed) continue;
+                Change(context, "Closed integration repair against verified integration", (c, tx) =>
+                {
+                    foreach (var criterion in ticket.Acceptance)
+                        context.Kernel.AddEvidence(CommandId(), ticket.Id, run.Id, RebirthEvidenceKind.Test, criterion,
+                            verificationReference, true, "host-verifier", Now());
+                    Entry(context, c, tx, ticket.Id, null, "repair-integration-verification", Serialize(new { originalTicketId, integrationCommit, verificationReference }), integrationCommit, "host");
+                    context.Kernel.CompleteTicket(CommandId(), ticket.Id, Now());
+                    return true;
+                });
+            }
         }
     }
 
