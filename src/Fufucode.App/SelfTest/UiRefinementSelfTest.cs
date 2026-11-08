@@ -37,6 +37,23 @@ internal static class UiRefinementSelfTest
             Check(window.TryFindResource("AppAccent", window.ActualThemeVariant, out var accent) &&
                 accent is ISolidColorBrush { Color: var color } && color == Color.Parse("#26FF8E"),
                 "interaction accent preserves the exact selected RGB without whitening");
+            var draftInput = window.GetVisualDescendants().OfType<TextBox>().First(box => box.Name == "InputBox" && box.IsEffectivelyVisible);
+            var foldButton = window.GetVisualDescendants().OfType<Button>().First(button => button.Name == "DraftFoldButton");
+            var draftFixture = string.Join("\n", Enumerable.Repeat("长草稿折叠验证内容", 30));
+            draftInput.Text = draftFixture;
+            await Ready();
+            Check(foldButton.IsVisible && draftInput.OpacityMask is not null, "long draft shows expansion control and bottom fade");
+            foldButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await Ready();
+            Check(draftInput.MaxHeight == 420 && draftInput.OpacityMask is null && draftInput.Text == draftFixture,
+                "expanding reveals draft without changing its content");
+            foldButton.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
+            await Ready();
+            Check(draftInput.MaxHeight == 160 && draftInput.OpacityMask is not null, "draft can collapse again");
+            draftInput.Text = "短草稿";
+            await Ready();
+            Check(!foldButton.IsVisible && draftInput.OpacityMask is null, "short draft has no fold control or fade");
+            draftInput.Text = string.Empty;
             var vm = (MainViewModel)window.DataContext!;
             var startupMethod = typeof(MainWindow).GetMethod("ShowStartup", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
             startupMethod.Invoke(window, new object[] { "正在启动会话…", true });

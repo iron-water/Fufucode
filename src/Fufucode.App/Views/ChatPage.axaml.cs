@@ -55,6 +55,7 @@ public partial class ChatPage : UserControl
     {
         InitializeComponent();
         InitializeComposerTools();
+        InitializeDraftFold();
         foreach (var picker in new[] { ModelButton.Flyout, CommandFlyoutButton.Flyout })
         {
             if (picker is not Flyout flyout) continue;
