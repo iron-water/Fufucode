@@ -1,26 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:imaging="using:Avalonia.Media.Imaging"
              xmlns:vm="using:Fufucode.App.ViewModels"
              xmlns:anim="using:Fufucode.App.Infrastructure"
              xmlns:views="using:Fufucode.App.Views"
              x:Class="Fufucode.App.Views.ChatPage"
              x:DataType="{x:Type vm:MainViewModel}"
              Background="{DynamicResource AppMicaPageBackground}">
-
-  <UserControl.Resources>
-    <ResourceDictionary>
-      <ResourceDictionary.ThemeDictionaries>
-        <!-- 空态插画按主题取对应位图（G 资产，透明底） -->
-        <ResourceDictionary x:Key="Light">
-          <imaging:Bitmap x:Key="EmptyArt">avares://Fufucode.App/Assets/Brand/empty/conversation-light@2x.png</imaging:Bitmap>
-        </ResourceDictionary>
-        <ResourceDictionary x:Key="Dark">
-          <imaging:Bitmap x:Key="EmptyArt">avares://Fufucode.App/Assets/Brand/empty/conversation-dark@2x.png</imaging:Bitmap>
-        </ResourceDictionary>
-      </ResourceDictionary.ThemeDictionaries>
-    </ResourceDictionary>
-  </UserControl.Resources>
 
   <Grid x:Name="ChatRoot" RowDefinitions="Auto,*">
 
@@ -95,11 +80,9 @@
       <Grid x:Name="ReadingColumn" Grid.Column="1" MaxWidth="768" Margin="24,0"
             ColumnDefinitions="40,*">
       <Grid x:Name="TimelineArea" Grid.ColumnSpan="2" ClipToBounds="True">
-        <!-- 空态插画：时间线为空时居中显示（G 资产，按主题切换） -->
+        <!-- 空态文案：时间线为空时居中显示。 -->
         <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
                     Spacing="6" IsVisible="{Binding Timeline.IsEmpty}">
-          <Image Source="{DynamicResource EmptyArt}" Width="160" Height="100"
-                 HorizontalAlignment="Center"/>
           <!-- 术语统一：conversation 一律称“会话”。 -->
           <TextBlock Classes="bodyStrong" Text="新建会话" HorizontalAlignment="Center"/>
           <TextBlock Classes="caption" Foreground="{DynamicResource AppTextSecondary}"
