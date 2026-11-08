@@ -29,6 +29,15 @@ public static class ManagedGitIntegration
         File.Move(temporary, transaction.JournalPath, true);
     }
 
+    private static async Task<FileStream> RepositoryLease(string repo, CancellationToken ct)
+    {
+        var directory = (await Git(repo, ["rev-parse", "--path-format=absolute", "--git-common-dir"], ct)).Text.Trim();
+        // A cross-process exclusion for managed writers. External user Git remains protected by native
+        // locks/ff checks; the host must prevent unmanaged writers during its approval/validation window.
+        return new FileStream(Path.Combine(directory, "autodev-integration.lock"), FileMode.OpenOrCreate,
+            FileAccess.ReadWrite, FileShare.None);
+    }
+
     public static async Task<string?> GetIntegratedCommitAsync(string repositoryPath, CancellationToken cancellationToken = default)
     {
         var result = await Git(repositoryPath, ["rev-parse", "--verify", IntegratedRef + "^{commit}"], cancellationToken, true);
@@ -48,6 +57,7 @@ public static class ManagedGitIntegration
         var recordedPatch = await File.ReadAllBytesAsync(manifest.PatchPath, cancellationToken);
         if (!candidatePatch.Bytes.SequenceEqual(recordedPatch))
             throw new InvalidOperationException("Candidate commit and recorded patch differ.");
+        using var lease = await RepositoryLease(manifest.RepositoryPath, cancellationToken);
         var previous = await GetIntegratedCommitAsync(manifest.RepositoryPath, cancellationToken);
         var baseline = previous ?? manifest.BaseHead;
         // Reject unrelated histories before allocating a merge tree.
@@ -105,6 +115,7 @@ public static class ManagedGitIntegration
     {
         if (!hostValidated) throw new UnauthorizedAccessException("Fresh host integration validation is required.");
         var tx = await LoadAsync(transaction.JournalPath, cancellationToken);
+        using var lease = await RepositoryLease(tx.RepositoryPath, cancellationToken);
         if (tx.PreparedCommit != expectedPreparedCommit || tx.PreparedCommit is null)
             throw new InvalidOperationException("Validation does not identify this prepared version.");
         if (await Head(tx.WorktreePath, "HEAD", cancellationToken) != expectedPreparedCommit)
@@ -133,6 +144,7 @@ public static class ManagedGitIntegration
     {
         if (!hostPermissionGranted) throw new UnauthorizedAccessException("Separate current human publication authorization required.");
         var tx = await LoadAsync(transaction.JournalPath, cancellationToken);
+        using var lease = await RepositoryLease(tx.RepositoryPath, cancellationToken);
         if (tx.Status is not (ManagedIntegrationStatus.Integrated or ManagedIntegrationStatus.Publishing or ManagedIntegrationStatus.Published) || tx.PreparedCommit is null)
             throw new InvalidOperationException("Only an integrated transaction can be published.");
         var targetRef = (await Git(tx.RepositoryPath, ["symbolic-ref", "--quiet", "HEAD"], cancellationToken)).Text.Trim();
@@ -166,6 +178,8 @@ public static class ManagedGitIntegration
             ?? throw new InvalidOperationException("Empty integration journal.");
         if (Path.GetFullPath(tx.JournalPath) != Path.GetFullPath(journalPath) || !Enum.IsDefined(tx.Status))
             throw new InvalidOperationException("Invalid transaction identity.");
+        if (!Directory.Exists(tx.WorktreePath) && tx.Status is ManagedIntegrationStatus.Preparing or ManagedIntegrationStatus.Interrupted)
+            return tx; // Allocation may have been interrupted before Git registered the tree.
         var common = (await Git(tx.RepositoryPath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], cancellationToken)).Text.Trim();
         var treeCommon = (await Git(tx.WorktreePath, ["rev-parse", "--path-format=absolute", "--git-common-dir"], cancellationToken)).Text.Trim();
         if (!string.Equals(common, treeCommon, StringComparison.OrdinalIgnoreCase))
@@ -176,8 +190,33 @@ public static class ManagedGitIntegration
     public static async Task<ManagedIntegrationTransaction> RecoverAsync(string journalPath, CancellationToken cancellationToken = default)
     {
         var tx = await LoadAsync(journalPath, cancellationToken);
-        if (tx.Status == ManagedIntegrationStatus.Committing && await GetIntegratedCommitAsync(tx.RepositoryPath, cancellationToken) == tx.PreparedCommit)
-            tx = tx with { Status = ManagedIntegrationStatus.Integrated };
+        if (tx.Status is ManagedIntegrationStatus.Preparing or ManagedIntegrationStatus.Interrupted)
+        {
+            if (!Directory.Exists(tx.WorktreePath))
+            {
+                tx = tx with { Status = ManagedIntegrationStatus.Interrupted, Error = "Worktree allocation was interrupted; candidate retained. Prepare a new transaction." };
+            }
+            else
+            {
+                var conflicts = await Git(tx.WorktreePath, ["ls-files", "--unmerged", "-z"], cancellationToken);
+                if (conflicts.Bytes.Length != 0)
+                    tx = tx with { Status = ManagedIntegrationStatus.Conflict, Error = "Interrupted merge has unresolved index entries; retained for repair." };
+                else
+                {
+                    var ancestor = await Git(tx.WorktreePath, ["merge-base", "--is-ancestor", tx.CandidateCommit, "HEAD"], cancellationToken, true);
+                    if (ancestor.Code == 0 && (await Git(tx.WorktreePath, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length == 0)
+                        return await RefreshPreparedAsync(tx, cancellationToken);
+                    tx = tx with { Status = ManagedIntegrationStatus.Interrupted, Error = "Incomplete merge retained; repair or prepare a new transaction. Fresh validation required." };
+                }
+            }
+        }
+        if (tx.Status == ManagedIntegrationStatus.Committing && tx.PreparedCommit is not null)
+        {
+            var integrated = await GetIntegratedCommitAsync(tx.RepositoryPath, cancellationToken);
+            if (integrated is not null && (await Git(tx.RepositoryPath,
+                ["merge-base", "--is-ancestor", tx.PreparedCommit, integrated], cancellationToken, true)).Code == 0)
+                tx = tx with { Status = ManagedIntegrationStatus.Integrated };
+        }
         if (tx.Status == ManagedIntegrationStatus.Publishing && await Head(tx.RepositoryPath, "HEAD", cancellationToken) == tx.PreparedCommit &&
             (await Git(tx.RepositoryPath, ["symbolic-ref", "--quiet", "HEAD"], cancellationToken)).Text.Trim() == tx.PublishTargetRef)
         {

@@ -38,8 +38,17 @@ await File.WriteAllTextAsync(Path.Combine(b.Manifest.WorktreePath, "b.txt"), "b\
 await a.CaptureCandidateAsync(); await b.CaptureCandidateAsync();
 Check(a.Manifest.CandidateCommit is not null && a.Manifest.CandidateRef is not null, "candidate is durable commit/ref");
 Check(await Git(repo, "status", "--porcelain") == "", "capture leaves user tree clean");
+using (var stopped = new CancellationTokenSource())
+{
+    stopped.Cancel();
+    try { await ManagedGitIntegration.PrepareAsync(a, sandbox, stopped.Token); throw new Exception("Cancellation expected"); }
+    catch (OperationCanceledException) { Check(File.Exists(a.Manifest.PatchPath) && Directory.Exists(a.Manifest.WorktreePath), "stopped prepare preserves candidate and execution tree"); }
+}
 var ta = await ManagedGitIntegration.PrepareAsync(a, sandbox);
 Check(ta.Status == ManagedIntegrationStatus.Prepared, "prepare independent tree");
+await File.WriteAllTextAsync(ta.JournalPath, JsonSerializer.Serialize(ta with { Status = ManagedIntegrationStatus.Preparing, PreparedCommit = null }));
+ta = await ManagedGitIntegration.RecoverAsync(ta.JournalPath);
+Check(ta.Status == ManagedIntegrationStatus.Prepared && ta.PreparedCommit is not null, "interrupted prepare reconciles merged version without validation authority");
 Check(await ManagedGitIntegration.GetIntegratedCommitAsync(repo) is null, "prepare does not advance integrated ref");
 await Reject(() => ManagedGitIntegration.CommitAsync(ta, ta.PreparedCommit!, false), "validation authority required");
 await Reject(() => ManagedGitIntegration.CommitAsync(ta, baseline, true), "validation version bound");
