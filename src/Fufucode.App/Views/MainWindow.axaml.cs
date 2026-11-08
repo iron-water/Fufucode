@@ -1343,13 +1343,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
     private void ShowStartup(string message, bool inProgress)
     {
-        if (inProgress)
-        {
-            StopStartupAnimation();
-            StartupOverlay.IsVisible = false;
-            NavigationProgress.IsVisible = true;
-            return;
-        }
+        // 启动/切换进行中仍显示启动卡：否则露出半成品工作台，只剩右下角转圈。
         NavigationProgress.IsVisible = false;
         StartupText.Text = message;
         StartupProgress.IsVisible = inProgress;
