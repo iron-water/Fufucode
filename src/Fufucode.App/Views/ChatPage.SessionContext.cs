@@ -34,7 +34,7 @@ public partial class ChatPage
         if (info is null) return;
 
         SessionProjectChipText.Text = info.ProjectName;
-        SessionProjectChipText.IsVisible = info.CanChangeProject;
+        SessionProjectChipText.IsVisible = false;
         SessionProjectChip.IsVisible = info.CanChangeProject;
         Avalonia.Automation.AutomationProperties.SetName(SessionProjectChip, "选择会话项目：" + info.ProjectName);
     }

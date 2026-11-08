@@ -148,6 +148,7 @@ public partial class ChatPage
         _ = new ChatInfoBubble(modeButton, () => ("权限模式", DataContext is MainViewModel current
             ? current.Input.ExecutionMode switch { "manual" => "人工确认", "auto" => "自动审批", "full" => "完全访问", "plan" => "规划模式", var mode => mode }
             : "暂无会话"));
+        _ = new ChatInfoBubble(SessionProjectChip, () => ("会话项目", SessionContextRequested?.Invoke()?.ProjectName ?? "无项目"));
         _ = new ChatInfoBubble(ModelButton, () => ("当前模型", DataContext is MainViewModel current
             ? current.Settings.CurrentModelText : "暂无会话"));
         _ = new ChatInfoBubble(ThinkingButton, () => ("思考等级", DataContext is MainViewModel current
