@@ -25,7 +25,10 @@ public sealed record GraphCandidateIntegration(ManagedWorkspaceManifest Manifest
     public ManagedIntegrationTransaction? Transaction { get; init; }
 }
 public sealed record GraphPublicationPermission(string TicketId, string RunId, string RepositoryPath,
-    string ExpectedTargetHead, string IntegrationCommit);
+    string ExpectedTargetHead, string IntegrationCommit)
+{
+    public string TargetReference { get; init; } = "";
+}
 public sealed record GraphIntegrationRepairBinding(string RepairTicketId, string OriginalTicketId, string OriginalRunId,
     string JournalPath, string WorktreePath, string CandidateCommit, string? PreparedCommit);
 public sealed record GraphPublicationReceipt(string TicketId, string RunId, string IntegrationCommit,
@@ -691,7 +694,11 @@ public sealed class GraphDevelopmentHost
             if (currentIntegrated is null || (await ReadGitAsync(tx.RepositoryPath,
                 ["merge-base", "--is-ancestor", tx.PreparedCommit, currentIntegrated], ct)).Code != 0)
                 throw new InvalidOperationException("Durable database version no longer belongs to the actual integrated ref; reconcile first.");
-            var permission = new GraphPublicationPermission(state.TicketId, state.RunId, tx.RepositoryPath, expectedTargetHead, tx.PreparedCommit);
+            var target = await ReadGitAsync(tx.RepositoryPath, ["symbolic-ref", "--quiet", "HEAD"], ct);
+            if (target.Code != 0) throw new InvalidOperationException("Publication requires an explicit checked-out target branch.");
+            var targetReference = target.Output.Trim();
+            var permission = new GraphPublicationPermission(state.TicketId, state.RunId, tx.RepositoryPath, expectedTargetHead, tx.PreparedCommit)
+                { TargetReference = targetReference };
             if (publicationGate is null || !await publicationGate(permission))
                 throw new UnauthorizedAccessException("Separate current human publication approval required.");
             ct.ThrowIfCancellationRequested();
@@ -699,7 +706,7 @@ public sealed class GraphDevelopmentHost
             if (Bind(state.TicketId, state.ManifestPath) != binding || !HasDatabaseVersion(state, tx) ||
                 graph.ReadSnapshot().Tickets.Single(t => t.Id == state.TicketId).Status != "Done")
                 throw new InvalidOperationException("Graph delivery changed during publication approval.");
-            tx = await ManagedGitIntegration.PublishAsync(tx, true, expectedTargetHead, ct);
+            tx = await ManagedGitIntegration.PublishAsync(tx, true, expectedTargetHead, ct, targetReference);
             graph.RequireDeliveryAuthorization(state.TicketId);
             var receipt = new GraphPublicationReceipt(state.TicketId, state.RunId, tx.PreparedCommit!, tx.JournalPath, tx.Status);
             var path = Path.Combine(Path.GetDirectoryName(tx.JournalPath)!, "publication.json");

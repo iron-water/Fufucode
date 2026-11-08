@@ -107,6 +107,14 @@ File.Delete(Path.Combine(basic.Repo, "private.txt"));
 await File.AppendAllTextAsync(Path.Combine(basic.Repo, "Main.cs"), "// dirty\n"); await Git(basic.Repo, "add", "Main.cs");
 await Reject(() => publisher.PublishIntegratedAsync(ready.Transaction.JournalPath, baseline), "dirty user index blocks publication");
 await File.WriteAllTextAsync(Path.Combine(basic.Repo, "Main.cs"), "class Entry { static void Main() { System.Console.WriteLine(Api.Value()); } }\n"); await Git(basic.Repo, "add", "Main.cs");
+var branchDriftPublisher = Host(basic, async permission =>
+{
+    Check(permission.TargetReference == "refs/heads/main", "publication permission identifies the exact target branch as well as HEAD");
+    await Git(basic.Repo, "checkout", "-b", "unapproved-target"); return true;
+});
+await Reject(() => branchDriftPublisher.PublishIntegratedAsync(ready.Transaction.JournalPath, baseline), "same-HEAD branch switch during approval cannot redirect publication");
+Check(await Git(basic.Repo, "rev-parse", "HEAD") == baseline, "unapproved branch retained unchanged");
+await Git(basic.Repo, "checkout", "main");
 Check(await publisher.ReadTargetHeadAsync() == baseline, "Host reads actual publication target SHA");
 var published = await publisher.PublishIntegratedAsync(ready.Transaction.JournalPath);
 Check(published.Status == ManagedIntegrationStatus.Published && await Git(basic.Repo, "rev-parse", "HEAD") == integratedHead && await Git(basic.Repo, "status", "--porcelain") == "", "authorized native ff publishes synchronized clean main");
@@ -239,14 +247,21 @@ using (var vetoDuringValidation = await NewFixture("validation-veto"))
     var baseCommit = await Git(vetoDuringValidation.Repo, "rev-parse", "HEAD");
     var candidate = await Candidate(vetoDuringValidation, "veto during validation", baseCommit, "Main.cs",
         "class Entry { static void Main() { System.Threading.Thread.Sleep(20000); } }\n");
-    var controlledHost = Host(vetoDuringValidation);
+    var validationEntered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+    var controlledHost = new GraphDevelopmentHost(vetoDuringValidation.Layout, vetoDuringValidation.Graph,
+        _ => { validationEntered.TrySetResult(); return Task.FromResult(true); }, _ => Task.FromResult(true),
+        new ManagedValidationPolicy(["bin", "obj"]));
     var validation = controlledHost.ValidateCandidateAsync(candidate.Ticket, candidate.Workspace.ManifestPath, run);
-    await Task.Delay(1200);
+    await validationEntered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+    await Task.Delay(250);
     vetoDuringValidation.Graph.VetoTicket(candidate.Ticket, "Human revoked this running verification");
-    var cancelled = await validation;
-    Check(cancelled.Receipt.Status is ManagedValidationStatus.Cancelled or ManagedValidationStatus.Denied,
+    GraphCandidateValidation? cancelled = null;
+    var cancellationAcknowledged = false;
+    try { cancelled = await validation; cancellationAcknowledged = cancelled.Receipt.Status is ManagedValidationStatus.Cancelled or ManagedValidationStatus.Denied; }
+    catch (OperationCanceledException) { cancellationAcknowledged = true; }
+    Check(cancellationAcknowledged,
         "unread human Veto cancels in-flight host validation, not only its eventual completion");
-    Check(!controlledHost.VerifyCurrent(cancelled) && await ManagedGitIntegration.GetIntegratedCommitAsync(vetoDuringValidation.Repo) is null,
+    Check((cancelled is null || !controlledHost.VerifyCurrent(cancelled)) && await ManagedGitIntegration.GetIntegratedCommitAsync(vetoDuringValidation.Repo) is null,
         "revoked host process cannot authorize integration");
 }
 Console.WriteLine($"PASS {assertions} Host/Git assertions; evidence {root}");

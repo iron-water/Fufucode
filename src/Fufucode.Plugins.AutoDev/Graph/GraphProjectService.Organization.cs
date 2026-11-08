@@ -65,7 +65,7 @@ public sealed partial class GraphProjectService
         if (member.Role == GraphExecutionRole.ScopeLead)
         {
             var ticket = ReadSnapshot().Tickets.Single(t => t.Id == run.TicketId);
-            if (ticket.ModuleIds.Length == 0 || ticket.ModuleIds.Any(m => !member.ModuleIds.Contains(m)))
+            if (ticket.ModuleIds.Length == 0 || ticket.ModuleIds.Any(m => !IsModuleInScope(member.ModuleIds, m)))
                 throw new InvalidOperationException("ScopeLead run work is outside its module scope.");
         }
         return member.Id;
@@ -108,6 +108,16 @@ public sealed partial class GraphProjectService
         }
     }
 
+    internal bool IsModuleInScope(IEnumerable<string> scope, string moduleId)
+    {
+        var allowed = scope.ToHashSet(StringComparer.Ordinal);
+        var modules = ReadSnapshot().Modules.ToDictionary(m => m.Id, StringComparer.Ordinal);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        for (string? id = moduleId; id is not null && seen.Add(id); id = modules.TryGetValue(id, out var module) ? module.ParentId : null)
+            if (allowed.Contains(id)) return true;
+        return false;
+    }
+
     private void OrganizationScope(GraphExecutionIdentity? identity, string? ticketId, string? moduleId)
     {
         var authority = Current.Kernel.ReadSnapshot(Current.AuthorityId);
@@ -119,11 +129,11 @@ public sealed partial class GraphProjectService
             if (identity.Role == GraphExecutionRole.ScopeLead)
             {
                 var modules = ReadSnapshot().Tickets.Single(t => t.Id == ticketId).ModuleIds;
-                if (modules.Length == 0 || modules.Any(m => !identity.ModuleIds.Contains(m))) throw new InvalidOperationException("Ticket outside delegated module scope.");
+                if (modules.Length == 0 || modules.Any(m => !IsModuleInScope(identity.ModuleIds, m))) throw new InvalidOperationException("Ticket outside delegated module scope.");
             }
             else if (ticketId != identity.TicketId) throw new InvalidOperationException("Ticket outside execution scope.");
         }
-        if (moduleId is not null && !identity.ModuleIds.Contains(moduleId)) throw new InvalidOperationException("Module outside execution scope.");
+        if (moduleId is not null && !IsModuleInScope(identity.ModuleIds, moduleId)) throw new InvalidOperationException("Module outside execution scope.");
         if (ticketId is null && moduleId is null) throw new InvalidOperationException("Scoped execution requires an affected object.");
     }
 

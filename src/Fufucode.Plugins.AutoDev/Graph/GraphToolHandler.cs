@@ -232,7 +232,8 @@ public sealed class GraphToolHandler : IPluginToolHandler
                     .SelectMany(r => new[] { r.SourceId, r.TargetId }).ToArray(),
                 _ => Array.Empty<string>()
             };
-            if (targets.Length == 0 || targets.Any(id => !scope.Contains(id)))
+            if (targets.Length == 0 || targets.Any(id => _service is GraphProjectService scopedService
+                ? !scopedService.IsModuleInScope(scope, id) : !scope.Contains(id)))
                 throw new InvalidOperationException("This change crosses the delegated architecture scope.");
         }
     }

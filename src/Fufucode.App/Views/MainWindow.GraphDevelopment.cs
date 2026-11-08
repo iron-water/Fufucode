@@ -33,7 +33,7 @@ public partial class MainWindow
                 service.RequireDeliveryAuthorization(permission.TicketId);
                 return Task.FromResult(true); // Internal integration is within the current mandate, not publication.
             }, validationPolicy,
-            publicationGate: permission => service.ReadOptions().AutoPublish
+            publicationGate: permission => service.ReadOptions().AutoPublish && (permission.TargetReference is "refs/heads/main" or "refs/heads/master")
                 ? Task.FromResult(true)
                 : ApproveGraphDevelopmentAsync("批准发布到用户主分支", JsonSerializer.Serialize(permission)));
         service.RecoveryProbe = ticket =>

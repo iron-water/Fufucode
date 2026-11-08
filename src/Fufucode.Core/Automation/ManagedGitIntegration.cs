@@ -151,7 +151,8 @@ public static class ManagedGitIntegration
     }
 
     public static async Task<ManagedIntegrationTransaction> PublishAsync(ManagedIntegrationTransaction transaction,
-        bool hostPermissionGranted, string expectedTargetHead, CancellationToken cancellationToken = default)
+        bool hostPermissionGranted, string expectedTargetHead, CancellationToken cancellationToken = default,
+        string? expectedTargetReference = null)
     {
         if (!hostPermissionGranted) throw new UnauthorizedAccessException("Separate current human publication authorization required.");
         var tx = await LoadAsync(transaction.JournalPath, cancellationToken);
@@ -159,6 +160,8 @@ public static class ManagedGitIntegration
         if (tx.Status is not (ManagedIntegrationStatus.Integrated or ManagedIntegrationStatus.Publishing or ManagedIntegrationStatus.Published) || tx.PreparedCommit is null)
             throw new InvalidOperationException("Only an integrated transaction can be published.");
         var targetRef = (await Git(tx.RepositoryPath, ["symbolic-ref", "--quiet", "HEAD"], cancellationToken)).Text.Trim();
+        if (expectedTargetReference is not null && targetRef != expectedTargetReference)
+            throw new InvalidOperationException("Publication target branch changed after authorization.");
         if (targetRef == IntegratedRef) throw new InvalidOperationException("User target must differ from the managed integrated ref.");
         await RequireClean(tx.RepositoryPath, cancellationToken);
         var actual = await Head(tx.RepositoryPath, "HEAD", cancellationToken);
