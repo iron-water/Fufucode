@@ -46,6 +46,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     public string WorkspaceRoot => _workspaceRoot;
     /// <summary>Live host authority, rechecked after approvals immediately before builtin execution.</summary>
     public Func<string, bool>? HostAuthorization { get; set; }
+    public Action<PureToolCall, string, int?>? HostExecutionAudit { get; set; }
     public Security.SecurityPolicyEvaluator? SecurityEvaluator { get; set; }
     public Security.SecurityBackupStore? SecurityBackups { get; set; }
     private bool SecurityReadable(string path) => SecurityEvaluator is null ||
@@ -274,9 +275,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 $"【Plan 规划模式拦截】：当前会话处于只读 Plan 模式，禁止执行变更工具 '{call.Name}'。请先使用 update_plan 整理并确认规划，再由用户切换执行模式。");
         }
 
+        HostExecutionAudit?.Invoke(call, "dispatching", null);
         try
         {
-            return call.Name switch
+            var result = call.Name switch
             {
                 "read_file" => await ExecuteReadFileAsync(call, cancellationToken).ConfigureAwait(false),
                 "write_file" => await ExecuteWriteFileAsync(call, cancellationToken).ConfigureAwait(false),
@@ -288,13 +290,17 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 "update_plan" => ExecuteUpdatePlan(call),
                 _ => new PureToolResult(call.Id, false, $"未知工具：'{call.Name}'。")
             };
+            HostExecutionAudit?.Invoke(call, result.Success ? "completed" : "failed", null);
+            return result;
         }
         catch (OperationCanceledException)
         {
+            HostExecutionAudit?.Invoke(call, IsMutatingTool(call.Name) ? "effects-unknown" : "cancelled", null);
             throw;
         }
         catch (Exception ex)
         {
+            HostExecutionAudit?.Invoke(call, IsMutatingTool(call.Name) ? "effects-unknown" : "failed", null);
             using var errorSpan = PerfTracer.Step("tool.error", "tool", call.Name);
             errorSpan.Fail(ex.GetType().Name);
             return new PureToolResult(call.Id, false, $"工具执行异常：{ex.Message}");
@@ -1715,6 +1721,13 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             span.Fail(ex.GetType().Name);
             return new PureToolResult(call.Id, false, $"进程启动失败：{ex.Message}");
         }
+        try { HostExecutionAudit?.Invoke(call, "process-started", process.Id); }
+        catch
+        {
+            if (!process.HasExited) process.Kill(entireProcessTree: true);
+            await process.WaitForExitAsync(CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
         span.Tag("startMs", (long)System.Diagnostics.Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
 
         // 有界读取：只保留头部 32KB 与尾部 32KB，中间内容边读边丢弃（仍需排空管道，防止子进程因管道写满而卡死）。
@@ -1730,7 +1743,15 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         {
             if (!process.HasExited)
             {
-                try { process.Kill(entireProcessTree: true); } catch { }
+                try
+                {
+                    process.Kill(entireProcessTree: true);
+                    await process.WaitForExitAsync(CancellationToken.None).WaitAsync(TimeSpan.FromSeconds(10)).ConfigureAwait(false);
+                }
+                catch (Exception terminationError)
+                {
+                    throw new IOException("MANAGED_PROCESS_TERMINATION_UNKNOWN: process tree termination was not confirmed.", terminationError);
+                }
                 timedOut = true;
             }
         }

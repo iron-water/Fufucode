@@ -11,13 +11,15 @@ using Microsoft.Data.Sqlite;
 // All executors in this program are TEST-ONLY fakes. No provider, model, CLI backend or network is invoked.
 internal static class Program
 {
-    private static readonly string Sandbox = Path.Combine("C:/tmp/work/2026-11-02-graph-domain", "test-data", Guid.NewGuid().ToString("N"));
+    private static readonly string Sandbox = Path.Combine("C:/tmp/work/2026-11-08-autodev-core", "domain-data", Guid.NewGuid().ToString("N"));
     private static int _passed;
     public static async Task<int> Main(string[] args)
     {
         Directory.CreateDirectory(Sandbox);
         try
         {
+            await Test("scoped blocking events coalesce without successful-run wakeups", ScopedEvents);
+            await Test("persistent human supervision and long-lived controls", SupervisionAndControls);
             await Test("persistence, shared references and immutable history", Persistence);
             await Test("real scan, imports, exclusions and manual conflict", Scanner);
             await Test("legacy path-hash and host identity share one authority", Identity);
@@ -346,6 +348,18 @@ internal static class Program
         var s = service!;
         var handler = new GraphToolHandler(s, request.ProjectPath, request.Identity);
         Check(request.Identity?.Role == GraphExecutionRole.ProjectLead, "mutation fixture uses a real live project lead");
+        var organizationDecision = await handler.ExecuteAsync(new("organization-choice", "graph_organization_decision",
+            "{\"mode\":\"single\",\"reason\":\"Initial plan is tightly coupled\",\"coupling\":\"Shared implementation boundary\",\"coordinationCost\":\"Parallel split adds integration cost\"}"));
+        Check(organizationDecision.Success && s.ReadSnapshot().Entries.Any(e => e.Kind == "organization-decision" && e.Actor == "agent"),
+            "initial organization choice preserves its reason without granting shared-workspace permission");
+        var organizationVersion = s.ReadOrganizationSnapshot().Version;
+        var scoped = await handler.ExecuteAsync(new("scope-create", "graph_delegate", JsonSerializer.Serialize(new
+        { responsibilityId = "temporary-scope", role = "ScopeLead", moduleIds = Array.Empty<string>(), expectedVersion = organizationVersion,
+            reason = "Temporary coordination responsibility before any scoped execution" })));
+        Check(scoped.Success, "lead may add a persistent scoped role without a fake ticket binding");
+        var released = await handler.ExecuteAsync(new("scope-release", "graph_release_responsibility", JsonSerializer.Serialize(new
+        { responsibilityId = "temporary-scope", expectedVersion = s.ReadOrganizationSnapshot().Version, reason = "Coordination no longer necessary" })));
+        Check(released.Success && !s.ReadOrganizationSnapshot().Responsibilities.Any(r => r.Id == "temporary-scope"), "lead may shrink inactive organization without fixed depth or module thresholds");
         var revision = s.ReadSnapshot().Revision;
         var args = JsonSerializer.Serialize(new { name = "Agent sourced module", summary = "real fixture", sourcePaths = Array.Empty<string>(), expectedRevision = revision });
         var call = new PureToolCall("idempotent-module", "graph_upsert_module", args);
@@ -428,17 +442,88 @@ internal static class Program
         s.AcceptTicket(ticket.Id, proof); Check(s.ReadSnapshot().Tickets.Single().Status == "Done", "human can accept settled evidence");
     }
 
+    private static async Task ScopedEvents()
+    {
+        var f = Fixture("scoped-events");
+        using var service = Service(f, new CallbackExecutor(request => Task.FromResult(new GraphRunResult(
+            request.Identity?.Role == GraphExecutionRole.Executor ? "Failed" : "Completed", "TEST-ONLY local blocking diagnostic"))));
+        service.SetPurpose("Coordinate only actual scoped failures");
+        var module = service.UpsertModule(null, null, "Subsystem", "Actual scope fixture", []);
+        var state = service.ReadOrganizationSnapshot();
+        var scope = new GraphResponsibility("local-scope", GraphExecutionRole.ScopeLead, [module.Id]);
+        service.ApplyOrganization("scope-setup", state.Version, "A real local coordination responsibility", [..state.Responsibilities, scope], [scope.Id]);
+        var ticket = service.CreateTicket("local implementation", "Exercise local failure", [module.Id], ["fixture passes"]);
+        await service.RunTicketAsync(ticket.Id);
+        await service.SetAutonomyAsync(true);
+        service.ReconcileScopeCycles(f.Project);
+        await WaitUntil(() => service.ReadSnapshot().Runs.Any(r => service.ReadSnapshot().Tickets.Any(t => t.Id == r.TicketId && t.Title == "Review local blocking work")));
+        await WaitUntil(() => service.ReadSnapshot().ProjectStatus != "Running");
+        var runs = service.ReadSnapshot().Runs.Count;
+        service.ReconcileScopeCycles(f.Project); service.ReconcileLeadCycle(f.Project);
+        Check(service.ReadSnapshot().Runs.Count == runs, "scoped coordinator does not self-excite or replay the event batch");
+        Check(service.ReadSnapshot().Tickets.Count(t => t.Title == "Review local blocking work") == 1,
+            "one failed source event coalesces into one scoped planning item");
+        Check(!service.ReadSnapshot().Tickets.Any(t => t.Title == "Plan project follow-up"),
+            "local failure does not automatically wake global ProjectLead");
+        await service.SetAutonomyAsync(false);
+    }
+
+    private static async Task SupervisionAndControls()
+    {
+        var f = Fixture("supervision-controls");
+        using (var service = Service(f))
+        {
+            service.SetPurpose("Keep human policy and all active controls");
+            foreach (var level in Enum.GetValues<GraphSupervisionLevel>())
+            {
+                await service.SaveOptionsAsync(service.ReadOptions() with { Supervision = level });
+                Check(service.ReadOptions().Supervision == level, "human supervision changes apply immediately");
+            }
+            using (var kernel = new RebirthKernel(Database(f.Data)))
+                for (var i = 0; i < 24; i++)
+                    kernel.RecordVeto("long-control-" + i, "host-project", null, "route:protected-" + i,
+                        "project", "ACTIVE_CONTROL_LITERAL_" + i + new string('c', 1300), "human", i + 1);
+            using var context = JsonDocument.Parse(service.BuildContext(null, null));
+            var controls = context.RootElement.GetProperty("activeControls");
+            Check(controls.GetArrayLength() == 24 && controls.EnumerateArray().All(c => c.GetProperty("text").GetString()!.Length > 1300),
+                "active controls exceed ordinary count and literal budgets without truncation");
+            Check(!service.IsRunAuthorized(f.Project, "missing", "missing"), "no live run means no tool execution authority");
+        }
+        using (var reopened = Service(f))
+            Check(reopened.ReadOptions().Supervision == GraphSupervisionLevel.Strict, "human supervision survives restart");
+        var liveFixture = Fixture("live-veto-control"); GraphProjectService? active = null;
+        using var live = Service(liveFixture, new CallbackExecutor(request =>
+        {
+            Check(active!.IsRunAuthorized(liveFixture.Project, request.TicketId, request.RunId), "live host-issued run initially authorized");
+            active.VetoTicket(request.TicketId, "human stops this scope");
+            Check(!active.IsRunAuthorized(liveFixture.Project, request.TicketId, request.RunId), "unread Veto immediately revokes actual tool authority");
+            return Task.FromResult(new GraphRunResult("Interrupted", "host test acknowledgement"));
+        }));
+        active = live; live.SetPurpose("Hard controls remain enforced under lenient policy");
+        await live.SaveOptionsAsync(live.ReadOptions() with { Supervision = GraphSupervisionLevel.Lenient });
+        var ticket = Ticket(live); await live.RunTicketAsync(ticket.Id);
+        try { live.RequireDeliveryAuthorization(ticket.Id); throw new Exception("delivery unexpectedly allowed"); }
+        catch (UnauthorizedAccessException) { }
+    }
+
     private static async Task HumanRecovery()
     {
         var f = Fixture("human-recovery"); var calls = 0;
         using var s = Service(f, new CallbackExecutor(_ => Task.FromResult(++calls == 1
-            ? new GraphRunResult("unknown", "TEST-ONLY uncertain receipt") : new GraphRunResult("completed", "TEST-ONLY explicit retry receipt"))));
+            ? new GraphRunResult("unknown", "TEST-ONLY host confirms dispatch never began") { NoSideEffectsDispatched = true } : new GraphRunResult("completed", "TEST-ONLY explicit retry receipt"))));
         s.SetPurpose("Reconcile actual effects before a human explicitly retries"); var unknown = Ticket(s);
         await s.RunTicketAsync(unknown.Id); await Rejects(() => s.RunTicketAsync(unknown.Id), "unknown cannot run before reconciliation");
-        Throws(() => s.ReconcileTicket(unknown.Id, " "), "resolution cannot be blank");
-        s.ReconcileTicket(unknown.Id, "  TEST-ONLY human checked the uncertain fixture effects  ");
-        Check(calls == 1 && s.ReadSnapshot().Tickets.Single().Status == "Authorized", "human reconciliation records knowledge without dispatch");
-        Check(s.ReadSnapshot().Entries.Any(e => e.Kind == "reconciliation" && e.Actor == "human" && e.Text == "  TEST-ONLY human checked the uncertain fixture effects  "), "human resolution kept verbatim");
+        s.ReconcileTicket(unknown.Id, "");
+        Check(calls == 1 && s.ReadSnapshot().Tickets.Single().Status == "Authorized", "host proof reconciles without mechanical human declaration or dispatch");
+        Check(s.ReadSnapshot().Entries.Any(e => e.Kind == "reconciliation" && e.Actor == "host" && e.Text.Contains("no side effects")), "host reconciliation keeps its objective basis");
+        var unsafeFixture = Fixture("unknown-external-effects");
+        using (var unsafeService = Service(unsafeFixture, new CallbackExecutor(_ => Task.FromResult(new GraphRunResult("unknown", "external effects unknown")))))
+        {
+            unsafeService.SetPurpose("Preserve unknown external effects"); var unsafeTicket = Ticket(unsafeService);
+            await unsafeService.RunTicketAsync(unsafeTicket.Id);
+            Throws(() => unsafeService.ReconcileTicket(unsafeTicket.Id, "human says safe"), "human text cannot erase unknown external effects");
+            Check(unsafeService.ReadSnapshot().Tickets.Single().Status == "NeedsReconciliation", "unproven effects remain unknown");
+        }
         await s.SetAutonomyAsync(true); await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
         Check(calls == 1, "automatic queue cannot repeat reconciled unknown effects");
         await s.SetAutonomyAsync(false); await s.RunTicketAsync(unknown.Id);
@@ -475,7 +560,7 @@ internal static class Program
     {
         var f = Fixture("bounded-context"); var calls = 0; string? actualPrompt = null;
         using var s = Service(f, new CallbackExecutor(request =>
-        { actualPrompt = request.Prompt; return Task.FromResult(new GraphRunResult(++calls == 1 ? "unknown" : "completed", "TEST-ONLY context fixture receipt")); }));
+        { actualPrompt = request.Prompt; return Task.FromResult(new GraphRunResult(++calls == 1 ? "unknown" : "completed", "TEST-ONLY context fixture receipt") { NoSideEffectsDispatched = true }); }));
         s.SetPurpose("Keep a focused literal view of a large test graph");
         var root = s.UpsertModule(null, null, "Fixture root", "TEST-ONLY root", ["."]);
         var target = s.UpsertModule(null, root.Id, "Focused fixture target", "TARGET_LITERAL_" + new string('x', 20000), ["target/source.cs"]);

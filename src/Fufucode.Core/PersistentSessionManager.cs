@@ -83,6 +83,7 @@ public sealed class PersistentSessionManager
     /// </summary>
     public Func<IReadOnlyList<IPureToolDispatcher>>? NativePluginToolProviders { get; set; }
     public Func<string, bool>? NativeHostToolAllowed { get; set; }
+    public Action<PureToolCall, string, int?>? NativeHostExecutionAudit { get; set; }
     public Func<ProjectRecord, SessionRecord, IReadOnlyList<IPureToolDispatcher>>? NativeSessionToolProviders { get; set; }
 
     /// <summary>组合根提供的插件人格片段（如 Seep 作战协议）；未接线时为 null。</summary>
@@ -640,7 +641,7 @@ public sealed class PersistentSessionManager
                 systemPromptProvider: NativeSystemPromptProvider,
                 pluginProviders: () => (NativePluginToolProviders?.Invoke() ?? [])
                     .Concat(NativeSessionToolProviders?.Invoke(project, session) ?? []).ToArray(),
-                supportsImages: true, hostToolAllowed: NativeHostToolAllowed);
+                supportsImages: true, hostToolAllowed: NativeHostToolAllowed, hostExecutionAudit: NativeHostExecutionAudit);
             if (endpoint is not null && !string.IsNullOrWhiteSpace(resolvedModel))
             {
                 Diagnostics.StartupProbe.Mark("native.image-probe.begin", resolvedModel);

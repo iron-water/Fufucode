@@ -5,7 +5,7 @@ using Fufucode.Core;
 using Fufucode.Core.Automation;
 using Fufucode.Plugins.AutoDev.Graph;
 
-var root = Path.Combine("C:/tmp/work/2026-11-05-graph-report", "host-tests", Guid.NewGuid().ToString("N"));
+var root = Path.Combine("C:/tmp/work/2026-11-08-autodev-core", "legacy-host-tests", Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 var repo = Path.Combine(root, "repo"); Directory.CreateDirectory(repo);
 async Task Git(params string[] args)
@@ -59,33 +59,37 @@ Check(!host.VerifyCurrent(result), "workspace mutation revokes live authority");
 await Reject(() => host.ValidateCandidateAsync(ticket.Id, workspace.ManifestPath, spec));
 await File.WriteAllTextAsync(Path.Combine(workspace.Manifest.WorktreePath, "source.txt"), "candidate\n");
 var integration = await host.IntegrateCandidateAsync(result);
-Check(integration.RequiresPostIntegrationValidation && File.ReadAllText(Path.Combine(repo, "source.txt")).Replace("\r\n", "\n") == "candidate\n", "integration applies but still requires target validation");
-var appliedSource = await File.ReadAllBytesAsync(Path.Combine(repo, "source.txt"));
-await File.AppendAllTextAsync(Path.Combine(repo, "source.txt"), "unexpected\n");
+Check(integration.RequiresPostIntegrationValidation && File.ReadAllText(Path.Combine(repo, "source.txt")).Replace("\r\n", "\n") == "base\n", "integration leaves user tree unchanged and requires isolated target validation");
+var integrationTree = integration.Transaction!.WorktreePath;
+var appliedSource = await File.ReadAllBytesAsync(Path.Combine(integrationTree, "source.txt"));
+await File.AppendAllTextAsync(Path.Combine(integrationTree, "source.txt"), "unexpected\n");
 await Reject(() => host.ValidateIntegratedAsync(result, spec));
-await File.WriteAllBytesAsync(Path.Combine(repo, "source.txt"), appliedSource);
+await File.WriteAllBytesAsync(Path.Combine(integrationTree, "source.txt"), appliedSource);
 var target = await host.ValidateIntegratedAsync(result, spec);
 Check(host.VerifyIntegratedCurrent(target), "integrated target live receipt verifies");
 failGate = true;
 var failedTarget = await host.ValidateIntegratedAsync(result, spec);
 Check(failedTarget.Receipt.Status == ManagedValidationStatus.Failed && !host.VerifyIntegratedCurrent(failedTarget), "failed target validation cannot authorize completion");
 failGate = false;
+Check(!host.VerifyIntegratedCurrent(target), "replacement failed validation invalidates earlier passing capability");
+target = await host.ValidateIntegratedAsync(result, spec);
+Check(host.VerifyIntegratedCurrent(target), "fresh successful revalidation restores current capability");
 Check(!host.VerifyIntegratedCurrent(target with { }), "copied target result has no authority");
 await Reject(() => Task.Run(() => host.CompleteInternalWork(target, ["not an acceptance criterion"], "active_goal", "Fixture validates host plumbing only")));
 host.CompleteInternalWork(target, ["candidate verified"], "active_goal", "Fixture-only accepted coverage; not a real product quality claim");
 Check(graph.ReadSnapshot().Tickets.Single(t => t.Id == ticket.Id).Status == "Done", "explicit host coverage and live target receipt complete internal work");
 graph.SendOrganizationMessage("late-interface-change", new GraphMessageDraft("project-lead", false, "interface",
     "Fixture interface changed after completion", ticket.Id, null, graph.ReadSnapshot().Revision));
-Check(graph.ReadSnapshot().Tickets.Single(t => t.Id == ticket.Id).Status == "Review" &&
-    graph.ReadOrganizationSnapshot().Barriers.Single(b => b.TicketId == ticket.Id).RequiresReview,
-    "late mandatory change revokes Done and restores explicit review");
-await File.AppendAllTextAsync(Path.Combine(repo, "source.txt"), "target mutation\n");
+Check(graph.ReadSnapshot().Tickets.Single(t => t.Id == ticket.Id).Status == "Done" &&
+    !graph.ReadOrganizationSnapshot().Barriers.Single(b => b.TicketId == ticket.Id).RequiresReview,
+    "ordinary interface notification cannot revoke verified completion");
+await File.AppendAllTextAsync(Path.Combine(integrationTree, "source.txt"), "target mutation\n");
 Check(!host.VerifyIntegratedCurrent(target), "target source mutation revokes receipt");
-await File.WriteAllTextAsync(Path.Combine(repo, "source.txt"), "candidate\n");
-await File.WriteAllTextAsync(Path.Combine(repo, "test.txt"), "new test\n");
+await File.WriteAllTextAsync(Path.Combine(integrationTree, "source.txt"), "candidate\n");
+await File.WriteAllTextAsync(Path.Combine(integrationTree, "test.txt"), "new test\n");
 Check(!host.VerifyIntegratedCurrent(target), "target test mutation revokes receipt");
 await Reject(() => host.ValidateIntegratedAsync(result, spec with { Arguments = ["status"] }));
-await Git("add", "."); await Git("commit", "-m", "changed target head");
+await Git("-C", integrationTree, "add", "."); await Git("-C", integrationTree, "commit", "-m", "changed target head");
 Check(!host.VerifyIntegratedCurrent(target), "target HEAD change revokes receipt");
 await Reject(() => host.ValidateIntegratedAsync(result, spec));
 Console.WriteLine("PASS host fixture retained at " + root);

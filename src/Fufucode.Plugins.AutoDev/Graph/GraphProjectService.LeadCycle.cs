@@ -62,10 +62,11 @@ public sealed partial class GraphProjectService
                 "INSERT OR IGNORE INTO graph_lead_cycle_events(project_id,event_key,payload) VALUES($p,$key,$payload)",
                 ("$p", context.AuthorityId), ("$key", key), ("$payload", Serialize(payload)));
             // Include Unknown only as a reconciliation fact, never as permission to replay it.
-            foreach (var run in authority.Runs.Where(r => r.Status is not (RebirthRunStatus.Queued or RebirthRunStatus.Running)))
+            foreach (var run in authority.Runs.Where(r => r.Status is RebirthRunStatus.Failed or RebirthRunStatus.Interrupted or RebirthRunStatus.Unknown))
             {
                 var ticket = authority.Tickets.Single(t => t.Id == run.TicketId);
-                if (ticket.Route == "project-planning") continue; // no self-completion feedback loop
+                if (ticket.Route is "project-planning" or "scope-planning") continue; // no self-completion feedback loop
+                if (ResolveScopeEventLead(ReadSnapshot(), organization, ticket.Id) is not null) continue;
                 Observe("run:" + run.Id, new { run.Id, run.TicketId, run.Status, run.Detail });
             }
             // Explicit human project dialogue is an event. Ordinary Notify/Request storage is not a wake signal.

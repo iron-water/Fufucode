@@ -22,7 +22,8 @@ public static class NativeSessionFactory
         Func<IReadOnlyList<IPureToolDispatcher>>? pluginProviders = null,
         bool supportsImages = true, SkillRegistry? skills = null, McpManager? mcp = null,
         INativeSubagentRuntime? subagents = null,
-        int? maxIterations = null, Func<string, bool>? hostToolAllowed = null)
+        int? maxIterations = null, Func<string, bool>? hostToolAllowed = null,
+        Action<PureToolCall, string, int?>? hostExecutionAudit = null)
     {
         ArgumentNullException.ThrowIfNull(settings);
         var current = settings.Current;
@@ -49,6 +50,7 @@ public static class NativeSessionFactory
         {
             SecurityEvaluator = securityEvaluator,
             HostAuthorization = hostToolAllowed,
+            HostExecutionAudit = hostExecutionAudit,
             SecurityBackups = new Security.SecurityBackupStore(settings.DataRoot)
         };
         var baseDispatcher = toolRegistry
@@ -65,6 +67,8 @@ public static class NativeSessionFactory
         if (resourceDispatcher is not null)
         {
             resourceDispatcher.SecurityEvaluator = securityEvaluator;
+            resourceDispatcher.HostAuthorization = hostToolAllowed;
+            resourceDispatcher.HostExecutionAudit = hostExecutionAudit;
             resourceDispatcher.SecurityBackups = builtin.SecurityBackups;
         }
         securityEvaluator.IsApplicationTool = name => baseDispatcher is Plugins.IApplicationToolCatalog application &&
@@ -82,6 +86,8 @@ public static class NativeSessionFactory
         // 能力链：插件/内置 → Skill → MCP。子代理可按定义白名单使用这些能力。
         IPureToolDispatcher capabilities = new SkillAwareDispatcher(baseDispatcher, skills);
         capabilities = new McpGatewayDispatcher(capabilities, mcp);
+        // Recheck live authority inside the approval wrapper, after any human/policy wait.
+        if (hostToolAllowed is not null) capabilities = new HostToolBoundary(capabilities, hostToolAllowed);
         capabilities = new Security.SecurityToolDispatcher(capabilities, securityEvaluator, securityAudit);
 
         var capabilityDefinitions = new List<PureToolDefinition>();

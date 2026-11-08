@@ -363,6 +363,7 @@ public sealed partial class GraphProjectService
             var accepted = Change(context, "Human reviewed ticket evidence", (c, tx) =>
             {
                 Ticket(context, ticketId);
+                RequireVersionedDelivery(ticketId);
                 var sources = Query(c, tx, """
                     SELECT s.evidence_id,s.file_path,s.content_hash,s.content_size FROM graph_evidence_sources s
                     JOIN rb_evidence e ON e.evidence_id=s.evidence_id WHERE e.ticket_id=$id AND e.valid=1
@@ -411,6 +412,7 @@ public sealed partial class GraphProjectService
             var organization = ReadOrganizationSnapshot();
             var recipient = organization.Responsibilities.FirstOrDefault(r => r.TicketId == ticketId && r.Role == GraphExecutionRole.Executor)?.Id ?? "project-lead";
             SendOrganizationMessage(CommandId(), new GraphMessageDraft(recipient, false, "veto", reason, ticketId, null, ReadSnapshot().Revision));
+            CancelLinkedRepairs(context, ticketId);
             if (context.Runs.TryGetValue(ticketId, out var managed)) managed.Cancellation.Cancel();
         }
     }
@@ -437,6 +439,8 @@ public sealed partial class GraphProjectService
 
     public void ReconcileTicket(string ticketId, string resolution)
     {
+        lock (_gate) HumanOnly();
+        RecoveryProbe?.Invoke(ticketId);
         lock (_gate)
         {
             HumanOnly(); var context = Current;
@@ -454,7 +458,7 @@ public sealed partial class GraphProjectService
                 if (ticket.Status != RebirthTicketStatus.NeedsReconciliation)
                     throw new InvalidOperationException("Only an unknown-outcome ticket can be reconciled.");
                 context.Kernel.ReconcileTicket(CommandId(), ticketId, resolution, Now());
-                Entry(context, c, tx, ticketId, null, "reconciliation", resolution, null, "human");
+                Entry(context, c, tx, ticketId, null, "reconciliation", resolution, null, "host");
                 return true;
             });
             // Reconciliation records knowledge, not permission to repeat effects. No Run or KickQueue.

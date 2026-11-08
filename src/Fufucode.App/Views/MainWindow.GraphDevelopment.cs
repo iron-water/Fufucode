@@ -16,20 +16,31 @@ namespace Fufucode.App;
 
 public partial class MainWindow
 {
-    private void InitializeGraphDevelopment(GraphProjectService service, GraphWorkspaceViewModel model)
+    private readonly List<IDisposable> _graphDeliveryCoordinators = new();
+    private GraphDevelopmentHost InitializeGraphDevelopment(GraphProjectService service, GraphWorkspaceViewModel model)
     {
         // These references are intentionally process-local. Deserialized receipt JSON grants no authority.
         var liveResults = new Dictionary<string, GraphCandidateValidation>(StringComparer.Ordinal);
         var integratedResults = new Dictionary<string, GraphIntegratedValidation>(StringComparer.Ordinal);
+        var validationPolicy = ManagedValidationPolicy.Strict;
+        try { validationPolicy = Task.Run(() => GraphDevelopmentHost.CreateRepositoryValidationPolicyAsync(service.ReadSnapshot().ProjectPath)).GetAwaiter().GetResult(); }
+        catch (Exception error) when (error is InvalidOperationException or System.IO.IOException)
+        { System.Diagnostics.Trace.TraceWarning("Graph validation remains strict: " + error.Message); }
         var host = new GraphDevelopmentHost(GraphLayout, service,
-            permission => ApproveGraphDevelopmentAsync("批准候选验证", JsonSerializer.Serialize(new
+            permission => AuthorizeGraphValidationAsync(permission),
+            permission =>
             {
-                permission.Executable, permission.Arguments, permission.WorkingDirectory,
-                permission.ContractHash, Policy = "Strict", permission.Policy.Digest,
-                permission.Policy.GeneratedDirectories, permission.Policy.GeneratedFiles, permission.Policy.ProtectedFiles
-            }, new JsonSerializerOptions { WriteIndented = true })),
-            permission => ApproveGraphDevelopmentAsync("批准候选集成", JsonSerializer.Serialize(permission,
-                new JsonSerializerOptions { WriteIndented = true })), ManagedValidationPolicy.Strict);
+                service.RequireDeliveryAuthorization(permission.TicketId);
+                return Task.FromResult(true); // Internal integration is within the current mandate, not publication.
+            }, validationPolicy,
+            publicationGate: permission => service.ReadOptions().AutoPublish
+                ? Task.FromResult(true)
+                : ApproveGraphDevelopmentAsync("批准发布到用户主分支", JsonSerializer.Serialize(permission)));
+        service.RecoveryProbe = ticket =>
+        {
+            var inspection = Task.Run(() => GraphRecoveryInspector.InspectAsync(GraphLayout, service, host, ticket)).GetAwaiter().GetResult();
+            service.RecordHostInspection(ticket, inspection);
+        };
         model.ValidateCandidateRequested += async (ticket, manifest, executable, arguments, timeout, token) =>
         {
             liveResults.Remove(ticket);
@@ -55,14 +66,44 @@ public partial class MainWindow
                     ? "宿主回执仍有效；尚需明确验收覆盖范围，未自动进行产品验收。"
                     : "目标验证未形成有效通过依据，工作未标记完成。") + "\n" + verified.Receipt.Error;
         };
-        model.CompleteInternalRequested += (ticket, criteria, continuation, reason, token) =>
+        model.CompleteInternalRequested += async (ticket, criteria, continuation, reason, token) =>
         {
             token.ThrowIfCancellationRequested();
             if (!integratedResults.TryGetValue(ticket, out var verified))
                 throw new InvalidOperationException("需要本进程完成集成后的真实验证，历史 JSON 不能作为完成凭据。");
-            host.CompleteInternalWork(verified, criteria, continuation, reason);
+            await host.CompleteInternalWorkAsync(verified, criteria, continuation, reason, token);
             integratedResults.Remove(ticket);
-            return Task.FromResult("内部工作已依据宿主验证完成；不代表产品或项目验收通过。");
+            if (service.ReadOptions().AutoPublish)
+            {
+                try
+                {
+                    await host.PublishIntegratedAsync(host.GetIntegrationJournalPath(verified), token);
+                    return "内部工作已完成并安全发布；不代表产品或项目验收通过。";
+                }
+                catch (Exception error) when (error is InvalidOperationException or System.IO.IOException or UnauthorizedAccessException)
+                {
+                    return "内部工作已完成，集成成果已保留；发布待处理：" + error.Message;
+                }
+            }
+            return "内部工作已依据宿主验证与集成版本完成；不代表产品或项目验收通过。";
+        };
+        var coordinator = new GraphDeliveryCoordinator(service, host);
+        _graphDeliveryCoordinators.Add(coordinator);
+        Closed += (_, _) => coordinator.Dispose();
+        return host;
+    }
+
+    private Task<bool> AuthorizeGraphValidationAsync(ManagedValidationPermission permission)
+    {
+        static string Quote(string value) => "\"" + value.Replace("\"", "\\\"") + "\"";
+        var command = Quote(permission.Executable) + " " + string.Join(" ", System.Linq.Enumerable.Select(permission.Arguments, Quote));
+        var policy = new Fufucode.Core.Security.SecurityPolicyStore(GraphLayout.Root).Current;
+        var decision = Fufucode.Core.Security.SecurityPolicyEvaluator.EvaluateCommand(command, policy);
+        return decision.Action switch
+        {
+            Fufucode.Core.Security.SecurityAction.Allow => Task.FromResult(true),
+            Fufucode.Core.Security.SecurityAction.Deny => Task.FromResult(false),
+            _ => ApproveGraphDevelopmentAsync("批准受保护的验证命令", JsonSerializer.Serialize(permission))
         };
     }
 

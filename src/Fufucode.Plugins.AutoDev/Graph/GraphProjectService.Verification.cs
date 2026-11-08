@@ -14,6 +14,8 @@ public sealed partial class GraphProjectService
         lock (_gate)
         {
             HumanOnly();
+            RequireDeliveryAuthorization(ticketId);
+            RequireVersionedDelivery(ticketId);
             var context = Current;
             Required(reference, nameof(reference)); Required(producer, nameof(producer));
             if (continuation is not ("active_goal" or "successor" or "no_followup"))

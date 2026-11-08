@@ -173,6 +173,7 @@ public partial class MainWindow
         if (!_graphProjects.TryGetValue(project.Id, out var workspace))
         {
             GraphProjectService? service = null;
+            GraphDevelopmentHost? developmentHost = null;
             var executor = new GraphNativeExecutor(GraphLayout,
                 request => service is null ? null : new GraphToolHandler(service, request.ProjectPath, request.Identity),
                 async session => await Dispatcher.UIThread.InvokeAsync<IDisposable?>(() =>
@@ -181,13 +182,14 @@ public partial class MainWindow
                     dialogs.Attach(session.Chat);
                     return new GraphApprovalLease(dialogs);
                 }), sessionInUse: id => _sideSession?.Session.Id == id,
-                authorize: request => service?.IsRunAuthorized(request.ProjectPath, request.TicketId, request.RunId) == true);
+                authorize: request => service?.IsRunAuthorized(request.ProjectPath, request.TicketId, request.RunId) == true,
+                resolveRepair: request => developmentHost?.GetIntegrationRepairBindingAsync(request.TicketId) ?? Task.FromResult<GraphIntegrationRepairBinding?>(null));
             service = new GraphProjectService(GraphLayout.Root, executor);
             service.SetProject(project.Id, full);
             if (service.ReadOptions().Enabled != GraphEnabled)
                 service.SaveOptionsAsync(service.ReadOptions() with { Enabled = GraphEnabled }).GetAwaiter().GetResult();
             var model = new GraphWorkspaceViewModel(service);
-            InitializeGraphDevelopment(service, model);
+            developmentHost = InitializeGraphDevelopment(service, model);
             var panels = new Dictionary<string, Control>(StringComparer.Ordinal)
             {
                 ["graph-properties"] = new GraphPropertiesView(model),

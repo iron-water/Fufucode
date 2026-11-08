@@ -38,6 +38,7 @@ public sealed record GraphOptions
     public int ScanDepth { get; init; } = 6;
     public int ValidationTimeoutSeconds { get; init; } = 120;
     public GraphSupervisionLevel Supervision { get; init; } = GraphSupervisionLevel.Standard;
+    public bool AutoPublish { get; init; }
 }
 
 public enum GraphExecutionRole { Executor, ProjectLead, ScopeLead, Verifier }

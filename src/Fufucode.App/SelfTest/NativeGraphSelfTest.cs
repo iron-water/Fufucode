@@ -101,6 +101,9 @@ internal static class NativeGraphSelfTest
         window.GraphModelForTesting.SelectTicket(ticket.Id);
         window.OpenGraphPanelForTesting("graph-tickets");
         await Settle();
+        Check(!window.GetVisualDescendants().OfType<Control>().Any(item => AutomationProperties.GetAutomationId(item) is
+            "GraphRecoveryChecked" or "GraphRecoveryResolution" or "GraphLinkSessionId" or "GraphLinkSession"),
+            "原生工单不暴露机械恢复确认或SessionId关联控件");
         Check(service.ReadSnapshot().Tickets.Any(item => item.Id == ticket.Id && item.ModuleIds.Contains(module.Id)), "真实工单和模块关联持久化");
         Check(service.ReadSnapshot().Entries.Any(item => item.TicketId == ticket.Id), "工单往来保存原始来源");
         var organizationService = (Fufucode.Plugins.AutoDev.Graph.GraphProjectService)service;

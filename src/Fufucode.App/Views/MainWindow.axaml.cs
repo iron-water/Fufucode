@@ -1760,6 +1760,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 foreach (var browser in page.Content.GetVisualDescendants().OfType<Views.BrowserViewHost>()) browser.Dispose();
             foreach (var subscription in _graphChatSubscriptions.Values) subscription.Session.Event -= subscription.Handler;
             _graphChatSubscriptions.Clear();
+            foreach (var coordinator in _graphDeliveryCoordinators) coordinator.Dispose();
+            _graphDeliveryCoordinators.Clear();
             foreach (var workspace in _graphProjects.Values)
             {
                 try { await workspace.Service.StopAllAsync(); }

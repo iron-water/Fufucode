@@ -146,6 +146,34 @@ try
     try { backups.Restore(manifest); Check(false, "tampered manifest"); } catch (InvalidDataException) { Check(true, "tampered manifest rejected"); }
     var production = new ProductionToolDispatcher(workspace) { SecurityEvaluator = evaluator, SecurityBackups = backups };
     var direct = new SecurityToolDispatcher(production, evaluator, audit);
+    production.HostAuthorization = _ => false;
+    foreach (var deniedCall in new[] {
+        Call("write_file", new { path = "revoked.txt", content = "must not write" }),
+        Call("edit_file", new { path = "restore.txt", old_text = "changed", new_text = "must not edit" }),
+        Call("run_command", new { command = "exit 0" }) })
+        Check(!(await production.DispatchAsync(deniedCall)).Success, "revoked host authority blocks " + deniedCall.Name);
+    Check(!File.Exists(Path.Combine(workspace, "revoked.txt")), "revoked file tool created no artifact");
+    production.HostAuthorization = null;
+    var processEvents = new List<(string State, int? Pid)>();
+    production.HostExecutionAudit = (_, state, pid) => processEvents.Add((state, pid));
+    using (var stopProcess = new CancellationTokenSource(TimeSpan.FromMilliseconds(500)))
+    {
+        try
+        {
+            await production.DispatchAsync(Call("run_command", new { command = OperatingSystem.IsWindows()
+                ? "ping -n 20 127.0.0.1 >nul" : "sleep 20" }), stopProcess.Token);
+            Check(false, "managed command must observe stop");
+        }
+        catch (OperationCanceledException)
+        {
+            Check(processEvents.Any(e => e.State == "process-started" && e.Pid is not null) &&
+                processEvents.Any(e => e.State == "effects-unknown"), "command stop records real process identity and uncertain effects");
+            var processId = processEvents.Single(e => e.State == "process-started").Pid!.Value;
+            try { using var stopped = System.Diagnostics.Process.GetProcessById(processId); Check(stopped.HasExited, "stopped process was reaped"); }
+            catch (ArgumentException) { Check(true, "stopped process was reaped"); }
+        }
+    }
+    production.HostExecutionAudit = null;
     File.WriteAllText(path, "before");
     var write = Call("write_file", new { path = "restore.txt", content = "after" });
     Check((await direct.ExecuteCheckedAsync(write, (_, _) => Task.FromResult(true), true, () => null, default)).Success && File.ReadAllText(path) == "after", "production write backs up and succeeds");

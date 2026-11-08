@@ -215,13 +215,36 @@ var tr2 = await Prepare(tests, testHost, two, run);
 Check(tr2.Validation.Receipt.Status == ManagedValidationStatus.Failed && tr2.Validation.Receipt.ExitCode != 0, "real runtime integration assertion fails after successful compilation");
 await Reject(() => Task.Run(() => testHost.CompleteInternalWork(tr2.Validation, ["verified"], "active_goal", "must fail")), "failed integration tests cannot complete");
 Check(await ManagedGitIntegration.GetIntegratedCommitAsync(tests.Repo) == tr1.Transaction.PreparedCommit && tests.Graph.ReadSnapshot().Tickets.Single(t => t.Id == two.Ticket).Status == "Review", "integration test failure cannot advance ref or Done");
+using (var automatic = await NewFixture("automatic-delivery"))
+{
+    var automaticBase = await Git(automatic.Repo, "rev-parse", "HEAD");
+    automatic.Executor.OnRun = async request =>
+    {
+        var tools = new GraphToolHandler(automatic.Graph, request.ProjectPath, request.Identity);
+        var proposed = await tools.ExecuteAsync(new Fufucode.Core.Backend.PureToolCall("automatic-proposal", "graph_propose_validation",
+            JsonSerializer.Serialize(new { executable = dotnet, arguments = new[] { "build", "Fixture.csproj", "--nologo", "-v:q" },
+                timeoutSeconds = 60, coveredCriteria = new[] { "verified" }, reason = "Real host compiler verification of the fixture" })));
+        Check(proposed.Success, "live executor can propose verification without declaring success");
+    };
+    var automaticHost = Host(automatic);
+    using var delivery = new GraphDeliveryCoordinator(automatic.Graph, automaticHost);
+    var candidate = await Candidate(automatic, "automatic", automaticBase, "Other.cs", "public static class Other { public static int Value() => 3; }\n");
+    for (var i = 0; i < 1800 && automatic.Graph.ReadSnapshot().Tickets.Single(t => t.Id == candidate.Ticket).Status != "Done"; i++) await Task.Delay(50);
+    Check(automatic.Graph.ReadSnapshot().Tickets.Single(t => t.Id == candidate.Ticket).Status == "Done", "natural terminal checkpoint automatically verifies integrates and completes internal work");
+    Check(await ManagedGitIntegration.GetIntegratedCommitAsync(automatic.Repo) is not null && await Git(automatic.Repo, "rev-parse", "HEAD") == automaticBase,
+        "automatic internal delivery preserves user main without publication authorization");
+}
 Console.WriteLine($"PASS {assertions} Host/Git assertions; evidence {root}");
 
 sealed class Executor : IGraphRunExecutor
 {
     public Dictionary<string, string> Manifests { get; } = [];
-    public Task<GraphRunResult> ExecuteAsync(GraphRunRequest request, Action<string>? progress, CancellationToken cancellationToken)
-        => Task.FromResult(new GraphRunResult("completed", "fixture candidate") { CandidateManifestPath = Manifests[request.TicketId] });
+    public Func<GraphRunRequest, Task>? OnRun { get; set; }
+    public async Task<GraphRunResult> ExecuteAsync(GraphRunRequest request, Action<string>? progress, CancellationToken cancellationToken)
+    {
+        if (OnRun is not null) await OnRun(request);
+        return new GraphRunResult("completed", "fixture candidate") { CandidateManifestPath = Manifests[request.TicketId] };
+    }
 }
 sealed record Fixture(string Root, string Repo, AppDataLayout Layout, Executor Executor, GraphProjectService Graph) : IDisposable
 {

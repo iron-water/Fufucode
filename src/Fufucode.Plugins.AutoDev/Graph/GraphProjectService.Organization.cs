@@ -77,7 +77,7 @@ public sealed partial class GraphProjectService
         lock (_gate)
         {
             var context = Current;
-            return Change(context, "Organization command", (c, tx) =>
+            var result = Change(context, "Organization command", (c, tx) =>
             {
                 if (identity is not null) EnsureAgentMandate(context, c, tx);
                 var before = Organization(context, c, tx);
@@ -101,6 +101,10 @@ public sealed partial class GraphProjectService
                 Entry(context, c, tx, null, null, "organization", Serialize(new { commandId, payload, before, after }), null, actor);
                 return after;
             });
+            // Only actual organization/dependency changes can make runnable work available.
+            // Persisting correspondence never schedules or wakes a model.
+            if (lead) KickQueue(context);
+            return result;
         }
     }
 
@@ -301,6 +305,8 @@ public sealed partial class GraphProjectService
                 if (!Enum.IsDefined(kind)) throw new InvalidOperationException("Unknown control kind.");
                 var decision = Current.Kernel.RecordVeto(commandId + ":kernel", Current.AuthorityId, ticketId,
                     "ticket:" + ticketId, "ticket", reason, "human", Now()).Decision;
+                if (kind == GraphControlKind.Stop)
+                    Current.Kernel.RequestStop(commandId + ":stop-request", ticketId, reason, Now(), "human");
                 if (Current.Runs.TryGetValue(ticketId, out var run))
                 {
                     run.StopRequested = true;
@@ -310,6 +316,7 @@ public sealed partial class GraphProjectService
                     ticketId, kind, reason, GraphControlStatus.Effective)] };
             });
             var issued = result.Controls.Last();
+            CancelLinkedRepairs(Current, ticketId);
             if (Current.Kernel.ReadSnapshot(Current.AuthorityId).Decisions.Any(d => d.Id == issued.DecisionId && d.Status == "Active") &&
                 Current.Runs.TryGetValue(ticketId, out var managed)) managed.Cancellation.Cancel();
             return result;

@@ -114,7 +114,8 @@ public static class ManagedGitIntegration
     }
 
     public static async Task<ManagedIntegrationTransaction> CommitAsync(ManagedIntegrationTransaction transaction,
-        string expectedPreparedCommit, bool hostValidated, CancellationToken cancellationToken = default)
+        string expectedPreparedCommit, bool hostValidated, CancellationToken cancellationToken = default,
+        Func<bool>? currentAuthorization = null)
     {
         if (!hostValidated) throw new UnauthorizedAccessException("Fresh host integration validation is required.");
         var tx = await LoadAsync(transaction.JournalPath, cancellationToken);
@@ -141,6 +142,7 @@ public static class ManagedGitIntegration
             throw new InvalidOperationException("Managed integrated ref is checked out; refusing a ref-only update of a live worktree.");
         tx = tx with { Status = ManagedIntegrationStatus.Committing };
         await Save(tx);
+        if (currentAuthorization?.Invoke() == false) throw new UnauthorizedAccessException("Integration authorization was revoked before the Git commit boundary.");
         await Git(tx.RepositoryPath, ["update-ref", IntegratedRef, expectedPreparedCommit,
             current ?? new string('0', expectedPreparedCommit.Length)], cancellationToken);
         tx = tx with { Status = ManagedIntegrationStatus.Integrated };

@@ -365,7 +365,8 @@ public sealed class GraphDevelopmentHost
                 state.PreparedCommit != transaction.PreparedCommit)
                 throw new InvalidOperationException("Host integration binding changed.");
             graph.RequireDeliveryAuthorization(result.Original.TicketId);
-            transaction = await ManagedGitIntegration.CommitAsync(transaction, transaction.PreparedCommit!, true, ct);
+            transaction = await ManagedGitIntegration.CommitAsync(transaction, transaction.PreparedCommit!, true, ct,
+                () => { graph.RequireDeliveryAuthorization(result.Original.TicketId); return VerifyIntegratedCurrent(result); });
             transactions[result.Original] = transaction;
             await SaveState(state with { Status = "GitIntegrated" });
             graph.RequireDeliveryAuthorization(result.Original.TicketId);
@@ -611,7 +612,17 @@ public sealed class GraphDevelopmentHost
                 throw new InvalidOperationException("Only a current retained integration attempt can produce repair work.");
             var snapshot = graph.ReadSnapshot();
             if (state.RepairTicketId is not null)
-                return await ReadRepairBinding(state.RepairTicketId, ct);
+            {
+                var previousRepair = snapshot.Tickets.Single(t => t.Id == state.RepairTicketId);
+                if (previousRepair.Status is "Authorized" or "Proposed" or "Active")
+                {
+                    graph.AssignHostRepairExecutor(previousRepair.Id);
+                    return await ReadRepairBinding(state.RepairTicketId, ct);
+                }
+                if (previousRepair.Status == "NeedsReconciliation")
+                    throw new InvalidOperationException("The previous repair has unknown effects; automatic replay is forbidden.");
+                graph.SupersedeInternalRepair(previousRepair.Id, "A new host validation diagnostic requires a fresh repair attempt; original evidence retained.");
+            }
             var original = snapshot.Tickets.Single(t => t.Id == state.TicketId);
             if (original.Status != "Review") throw new InvalidOperationException("Only a reviewing delivery can create integration repair work.");
             var repair = graph.CreateTicket("Repair integration: " + original.Title,
@@ -621,6 +632,7 @@ public sealed class GraphDevelopmentHost
                 tx.JournalPath, tx.WorktreePath, tx.CandidateCommit, tx.PreparedCommit);
             await SaveState(state with { RepairTicketId = repair.Id });
             graph.AddEntry(repair.Id, null, "integration-repair", JsonSerializer.Serialize(result), tx.JournalPath);
+            graph.AssignHostRepairExecutor(repair.Id);
             return result;
         }
         finally { serial.Release(); }

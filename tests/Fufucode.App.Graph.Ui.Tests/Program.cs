@@ -533,7 +533,7 @@ void ReceiptPresentation()
     using var vm = new GraphWorkspaceViewModel(service);
     Check(vm.ProjectStatus == "待设置目的" && GraphLabels.Status("Unknown") == "状态未知" &&
         GraphLabels.Status("future-state") == "future-state", "known statuses localize while unknown states stay authoritative");
-    Check(GraphEntryPresentation.Summary(created) == "工单已建立" + Environment.NewLine + "工单" + Environment.NewLine + "目标" && created.Text == payload,
+    Check(GraphEntryPresentation.Summary(created) == "邮件已建立" + Environment.NewLine + "工单" + Environment.NewLine + "目标" && created.Text == payload,
         "ticket creation presents decoded title and goal without changing raw receipt");
     Check(GraphLabels.EntryKind("source") == "来源" && GraphLabels.Actor("human") == "你" &&
         GraphLabels.ModuleSummary("Directory: source") == "目录：source" && GraphLabels.ModuleSummary("File: Alpha.cs") == "文件：Alpha.cs",
@@ -549,7 +549,7 @@ void ReceiptPresentation()
         vm.ShowInternalWork = true;
         vm.SelectTicket("t1"); vm.SelectModule("a"); Pump();
         var visibleText = tickets.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? "").ToArray();
-        Check(visibleText.Any(t => t.Contains("工单已建立") && t.Contains("目标")) && visibleText.All(t => !t.Contains("\\u5DE5") && !t.Contains("ticket-created") && !t.Contains("human")),
+        Check(visibleText.Any(t => t.Contains("邮件已建立") && t.Contains("目标")) && visibleText.All(t => !t.Contains("\\u5DE5") && !t.Contains("ticket-created") && !t.Contains("human")),
             "internal mail view renders readable correspondence without internal JSON or actor ids");
         var raw = tickets.GetVisualDescendants().OfType<Expander>().First(e => e.Header as string == "原始记录");
         Check(!raw.IsExpanded && raw.Content == null, "raw receipt stays collapsed and unmaterialized by default");
@@ -591,34 +591,27 @@ void RecoveryOperations()
         recovery.IsExpanded = true; Pump();
         var retry = Find<Button>(tickets, "GraphAllowRetry");
         var lift = Find<Button>(tickets, "GraphLiftVeto");
-        var resolution = Find<TextBox>(tickets, "GraphRecoveryResolution");
         var reason = Find<TextBox>(tickets, "GraphLiftVetoReason");
-        var effects = Find<CheckBox>(tickets, "GraphRecoveryChecked");
-        Check(vm.NeedsTicketReconciliation && resolution.IsEffectivelyVisible && retry.Content as string == "允许重试" && !retry.IsEnabled,
-            "unknown result state exposes recovery and requires side effect check");
-        Check(!vm.ReconcileTicket() && service.ReconcileCalls == 0 && vm.Error?.Contains("副作用") == true,
-            "unchecked side effects never reach recovery authority");
-        effects.IsChecked = true; Pump();
-        Check(retry.IsEnabled && !vm.ReconcileTicket() && service.ReconcileCalls == 0 && vm.Error?.Contains("说明不能为空") == true,
-            "recovery requires nonempty resolution before command");
-        resolution.Text = "已核查文件写入并撤回未完成改动"; reason.Text = "已确认原否决原因解除"; Pump();
+        var controls = tickets.GetVisualDescendants().OfType<Control>().ToArray();
+        Check(!controls.Any(c => AutomationProperties.GetAutomationId(c) is "GraphRecoveryResolution" or "GraphRecoveryChecked"),
+            "Kernel recovery exposes no mechanical side-effect checkbox or mandatory report");
+        Check(!controls.Any(c => AutomationProperties.GetAutomationId(c) == "GraphLinkSessionId"),
+            "ticket UI does not expose manual session identity input");
+        Check(vm.NeedsTicketReconciliation && retry.IsEnabled, "unknown result exposes one host reconciliation action");
+        reason.Text = "已确认原否决原因解除"; Pump();
         vm.SelectTicket("t2"); Pump();
-        Check(!vm.NeedsTicketReconciliation && !resolution.IsEffectivelyVisible && !recovery.IsVisible,
-            "ordinary ticket hides unknown result recovery entry");
-        vm.Correspondence.RecoveryResolution = "other ticket draft";
+        Check(!vm.NeedsTicketReconciliation && !recovery.IsVisible, "ordinary ticket hides unknown recovery");
         Check(!vm.ReconcileTicket() && service.ReconcileCalls == 0, "ordinary ticket cannot invoke recovery through VM");
         vm.SelectTicket("t1"); Pump();
-        Check(resolution.Text == "已核查文件写入并撤回未完成改动" && reason.Text == "已确认原否决原因解除" && effects.IsChecked == true,
-            "recovery reason resolution and side effect check remain scoped by ticket");
+        Check(reason.Text == "已确认原否决原因解除", "human veto reasons remain scoped by ticket");
         service.Reject = true; Press(retry);
-        Check(service.ReconcileCalls == 0 && vm.Error?.Contains("authority rejected") == true && resolution.Text == "已核查文件写入并撤回未完成改动" &&
-            vm.SelectedTicket?.Status == "NeedsReconciliation", "authority recovery rejection keeps state and draft without success");
-        service.Reject = false;
-        Press(retry);
-        Check(service.ReconcileCalls == 1 && service.RecoveryTicketId == "t1" && service.RecoveryResolution == "已核查文件写入并撤回未完成改动" &&
-            vm.SelectedTicket?.Status == "Authorized", "allow retry submits selected ticket and exact human resolution");
-        Check(!vm.NeedsTicketReconciliation && !resolution.IsEffectivelyVisible && service.RunCalls == 0 && service.AutonomyCalls == 0,
-            "recovery refresh hides entry and never starts execution or queue advancement");
+        Check(service.ReconcileCalls == 0 && vm.Error?.Contains("authority rejected") == true &&
+            vm.SelectedTicket?.Status == "NeedsReconciliation", "host recovery rejection preserves unknown state");
+        service.Reject = false; Press(retry);
+        Check(service.ReconcileCalls == 1 && service.RecoveryTicketId == "t1" && service.RecoveryResolution == "" &&
+            vm.SelectedTicket?.Status == "Authorized", "one recovery action delegates actual inspection to authority without user declaration");
+        Check(!vm.NeedsTicketReconciliation && service.RunCalls == 0 && service.AutonomyCalls == 0,
+            "recovery never starts execution or queue advancement implicitly");
         service.Replace(service.Current with { Tickets = service.Current.Tickets.Select(t => t.Id == "t1"
             ? t with { Status = "ReplanRequired" } : t).ToArray() }); Pump();
         reason.Text = "   "; Pump();
@@ -637,7 +630,7 @@ void RecoveryOperations()
         Check(!lift.IsEnabled && !retry.IsEnabled && !vm.LiftVeto() && !vm.ReconcileTicket() && service.Mutations == mutations,
             "historical recovery buttons and direct VM mutations stay read only");
         vm.ShowRevision(null); Pump();
-        Check(vm.Correspondence.LiftVetoReason == "已核实可恢复原工作" && vm.Correspondence.RecoveryResolution == "已核查文件写入并撤回未完成改动",
+        Check(vm.Correspondence.LiftVetoReason == "已核实可恢复原工作",
             "recovery drafts survive historical round trip");
     }
     finally { window.Close(); }

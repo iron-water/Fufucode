@@ -30,9 +30,11 @@ public sealed class GraphToolHandler : IPluginToolHandler
     [
         Tool("graph_propose_validation", "Propose exact verification commands and criterion coverage for this run. This records a proposal only; the host permission workflow must approve actual execution.", "\"executable\":" + S + ",\"arguments\":" + A + ",\"timeoutSeconds\":{\"type\":\"integer\"},\"coveredCriteria\":" + A + ",\"reason\":" + S, "\"executable\",\"arguments\",\"timeoutSeconds\",\"coveredCriteria\",\"reason\""),
         Tool("graph_organization", "Read current project responsibilities, work dependencies and organization version.", ""),
-        Tool("graph_delegate", "Lead delegates one execution responsibility. Existing responsibilities are preserved. No TicketLead role exists.", "\"responsibilityId\":" + S + ",\"role\":{\"type\":\"string\",\"enum\":[\"Executor\",\"ScopeLead\",\"Verifier\"]},\"ticketId\":" + S + ",\"moduleIds\":" + A + ",\"expectedVersion\":{\"type\":\"integer\"},\"reason\":" + S, "\"responsibilityId\",\"ticketId\",\"moduleIds\",\"expectedVersion\",\"reason\""),
+        Tool("graph_delegate", "Lead delegates one execution responsibility. Existing responsibilities are preserved. No TicketLead role exists.", "\"responsibilityId\":" + S + ",\"role\":{\"type\":\"string\",\"enum\":[\"Executor\",\"ScopeLead\",\"Verifier\"]},\"ticketId\":" + S + ",\"moduleIds\":" + A + ",\"expectedVersion\":{\"type\":\"integer\"},\"reason\":" + S, "\"responsibilityId\",\"moduleIds\",\"expectedVersion\",\"reason\""),
         Tool("graph_dependency", "Lead records an explicit work prerequisite; module relationships are not work dependencies.", "\"ticketId\":" + S + ",\"dependsOnTicketId\":" + S + ",\"remove\":{\"type\":\"boolean\"},\"reason\":" + S, "\"ticketId\",\"dependsOnTicketId\",\"remove\",\"reason\""),
         Tool("graph_send", "Send addressed collaboration or a human attention item. This does not grant authority or prove delivery.", "\"recipientId\":" + S + ",\"communication\":{\"type\":\"string\",\"enum\":[\"Notify\",\"Request\"]},\"targetTicketId\":" + S + ",\"targetModuleId\":" + S + ",\"targetRole\":{\"type\":\"string\",\"enum\":[\"ProjectLead\",\"ScopeLead\",\"Executor\"]},\"humanRecipient\":{\"type\":\"boolean\"},\"ticketId\":" + S + ",\"moduleId\":" + S + ",\"kind\":" + S + ",\"text\":" + S + ",\"revision\":{\"type\":\"integer\"}", "\"humanRecipient\",\"kind\",\"text\",\"revision\""),
+        Tool("graph_release_responsibility", "Lead removes an inactive responsibility to shrink or reorganize a scope. Cannot change the ProjectLead or active execution ownership.", "\"responsibilityId\":" + S + ",\"expectedVersion\":{\"type\":\"integer\"},\"reason\":" + S, "\"responsibilityId\",\"expectedVersion\",\"reason\""),
+        Tool("graph_organization_decision", "Record a reasoned initial or revised single/multiple Agent organization choice after understanding and planning the work. This does not grant permissions or enable shared workspaces.", "\"mode\":{\"type\":\"string\",\"enum\":[\"single\",\"multiple\"]},\"reason\":" + S + ",\"coupling\":" + S + ",\"coordinationCost\":" + S, "\"mode\",\"reason\",\"coupling\",\"coordinationCost\""),
         Tool("graph_resolve_request", "Resolve, decline or cancel a collaboration request. Does not complete work or grant authority.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Resolved\",\"Declined\",\"Cancelled\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
         Tool("graph_inbox", "Read this host-issued responsibility's addressed messages.", ""),
         Tool("graph_ack", "Acknowledge actual consumption or resolution of an addressed message, never another recipient's message.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Delivered\",\"Read\",\"Applied\",\"Rejected\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
@@ -103,6 +105,30 @@ public sealed class GraphToolHandler : IPluginToolHandler
                 return Success(call, GraphStorage.Serialize(new { state.ProjectId, state.Version, state.Responsibilities, state.Dependencies,
                     messageCount = state.Messages.Length, inbox = "Use graph_inbox to read addressed messages; organization does not broadcast private correspondence." }));
             }
+            if (call.Name == "graph_release_responsibility")
+            {
+                var organization = (GraphProjectService)_service;
+                var before = organization.ReadOrganizationSnapshot();
+                var id = Required(data, "responsibilityId");
+                if (!before.Responsibilities.Any(r => r.Id == id)) throw new InvalidOperationException("Unknown responsibility.");
+                var after = organization.ApplyOrganization(call.Id, Integer(data, "expectedVersion")!.Value,
+                    Required(data, "reason"), before.Responsibilities.Where(r => r.Id != id).ToArray(), [id], _identity);
+                return Success(call, GraphStorage.Serialize(new { after.Version, status = "released" }));
+            }
+            if (call.Name == "graph_organization_decision")
+            {
+                if (_identity?.Role is not (GraphExecutionRole.ProjectLead or GraphExecutionRole.ScopeLead))
+                    throw new InvalidOperationException("A live Lead responsibility is required for organization decisions.");
+                var concreteOrganization = (GraphProjectService)_service;
+                var decision = concreteOrganization.ExecuteAgentCommand(call.Id, GraphStorage.Serialize(new { call.Name, arguments = data.Clone() }), null, () =>
+                {
+                    _service.AddEntry(_identity.TicketId, null, "organization-decision", GraphStorage.Serialize(new
+                    { mode = Required(data, "mode"), reason = Required(data, "reason"), coupling = Required(data, "coupling"),
+                        coordinationCost = Required(data, "coordinationCost"), workspaceMode = "isolated", authorityChanged = false }));
+                    return new { status = "recorded", permissionsChanged = false };
+                });
+                return Success(call, decision);
+            }
             if (call.Name is "graph_delegate" or "graph_dependency" or "graph_send" or "graph_inbox" or "graph_ack" or "graph_resolve_request")
             {
                 var organization = (GraphProjectService)_service;
@@ -111,7 +137,9 @@ public sealed class GraphToolHandler : IPluginToolHandler
                 switch (call.Name)
                 {
                     case "graph_delegate":
-                        var member = new GraphResponsibility(Required(data, "responsibilityId"), Text(data, "role") is { } delegatedRole ? Enum.Parse<GraphExecutionRole>(delegatedRole) : GraphExecutionRole.Executor, Strings(data, "moduleIds"), Required(data, "ticketId"));
+                        var member = new GraphResponsibility(Required(data, "responsibilityId"), Text(data, "role") is { } delegatedRole ? Enum.Parse<GraphExecutionRole>(delegatedRole) : GraphExecutionRole.Executor, Strings(data, "moduleIds"), Text(data, "ticketId"));
+                        if (member.Role is GraphExecutionRole.Executor or GraphExecutionRole.Verifier && member.TicketId is null)
+                            throw new InvalidOperationException("Execution delegation requires a ticket; a scoped lead may own a module scope without one.");
                         response = organization.DelegateResponsibility(call.Id, Integer(data, "expectedVersion")!.Value,
                             Required(data, "reason"), member, _identity);
                         break;
@@ -192,7 +220,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
             throw new InvalidOperationException("Executors submit results and suggestions; only a responsible lead can organize work or architecture.");
         if (_identity.Role == GraphExecutionRole.ScopeLead)
         {
-            if (name is "graph_delegate" or "graph_dependency") return; // Domain service checks all proposed affected scopes.
+            if (name is "graph_delegate" or "graph_dependency" or "graph_organization_decision" or "graph_release_responsibility") return; // Domain service checks all proposed affected scopes.
             var scope = _identity.ModuleIds.ToHashSet(StringComparer.Ordinal);
             var targets = name switch
             {

@@ -28,6 +28,23 @@ public sealed partial class GraphProjectService
         if (pause) PauseAutonomy(context, "Current human supervision policy paused repeated identical failures");
     }
 
+    private void PersistWatchdogInspection(ProjectContext context)
+    {
+        var inspection = InProjectScope(context.Path, InspectWatchdog);
+        context.Kernel.Atomic((c, tx) =>
+        {
+            var id = "watchdog:" + context.AuthorityId;
+            var previous = Scalar(c, tx, "SELECT text FROM graph_entries WHERE entry_id=$id", ("$id", id)) as string;
+            if (previous == inspection) return false;
+            Execute(c, tx, """
+                INSERT INTO graph_entries VALUES($id,$project,NULL,NULL,'watchdog','host',$text,NULL,$now,$revision)
+                ON CONFLICT(entry_id) DO UPDATE SET text=$text,created_utc=$now,version=$revision
+                """, ("$id", id), ("$project", context.AuthorityId), ("$text", inspection), ("$now", Now()),
+                ("$revision", Revision(context, c, tx)));
+            return true;
+        });
+    }
+
     /// <summary>Deterministic audit; no model invocation, wall-clock death inference or automatic effect replay.</summary>
     public string InspectWatchdog()
     {

@@ -16,6 +16,7 @@ public sealed class GraphSettingsView : UserControl
 {
     private readonly IGraphProjectService _service;
     private readonly ToggleSwitch _enabled = new();
+    private readonly ToggleSwitch _autoPublish = new();
     private readonly NumericUpDown _budget = Number(0, 1440);
     private readonly NumericUpDown _concurrency = Number(1, 16);
     private readonly NumericUpDown _quota = Number(0, 100);
@@ -35,6 +36,7 @@ public sealed class GraphSettingsView : UserControl
         var rows = new StackPanel { Spacing = 0 };
         rows.Children.Add(SettingsLayout.GroupHeader("工作模式", true));
         rows.Children.Add(SettingsLayout.Group(SettingsLayout.ToggleRow("启用 Graph 与自主开发", null, _enabled, "Automation")));
+        rows.Children.Add(SettingsLayout.Group(SettingsLayout.ToggleRow("自动安全发布到用户主分支", null, _autoPublish, "Automation")));
         rows.Children.Add(SettingsLayout.GroupHeader("项目执行"));
         rows.Children.Add(SettingsLayout.Group(
             SettingsLayout.Row("Kernel 监督策略", null, _supervision, "Automation"),
@@ -64,6 +66,8 @@ public sealed class GraphSettingsView : UserControl
             choices.Add(new(current.Model, current.Model));
         _model.ItemsSource = choices;
         _model.SelectedItem = choices.First(item => item.Id == current.Model);
+        _autoPublish.IsChecked = current.AutoPublish;
+        AutomationProperties.SetAutomationId(_autoPublish, "graph-setting-auto-publish");
         _supervision.SelectedIndex = (int)current.Supervision;
         AutomationProperties.SetAutomationId(_supervision, "graph-setting-supervision");
         _enabled.IsChecked = settings.Current.GraphEnabled;
@@ -84,6 +88,7 @@ public sealed class GraphSettingsView : UserControl
         {
             var options = _service.ReadOptions() with
             {
+                AutoPublish = _autoPublish.IsChecked == true,
                 Supervision = (GraphSupervisionLevel)_supervision.SelectedIndex,
                 Enabled = _enabled.IsChecked == true,
                 BudgetMinutes = (int)(_budget.Value ?? 60),
