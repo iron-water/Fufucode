@@ -20,6 +20,7 @@ public sealed class GraphSettingsView : UserControl
     private readonly NumericUpDown _concurrency = Number(1, 16);
     private readonly NumericUpDown _quota = Number(0, 100);
     private readonly NumericUpDown _depth = Number(0, 20);
+    private readonly ComboBox _supervision = new() { ItemsSource = new[] { "宽松", "标准", "严格" }, MinWidth = 130 };
     private readonly ComboBox _model = new() { MinWidth = 240, MaxWidth = 340 };
     private readonly TextBlock _status = new() { TextWrapping = Avalonia.Media.TextWrapping.Wrap };
     private readonly Button _save = new() { Content = "保存并应用" };
@@ -36,6 +37,7 @@ public sealed class GraphSettingsView : UserControl
         rows.Children.Add(SettingsLayout.Group(SettingsLayout.ToggleRow("启用 Graph 与自主开发", null, _enabled, "Automation")));
         rows.Children.Add(SettingsLayout.GroupHeader("项目执行"));
         rows.Children.Add(SettingsLayout.Group(
+            SettingsLayout.Row("Kernel 监督策略", null, _supervision, "Automation"),
             SettingsLayout.Row("运行预算（分钟）", null, _budget, "History"),
             SettingsLayout.Row("并行运行上限", null, _concurrency, "Automation"),
             SettingsLayout.Row("计算使用比例（%）", null, _quota, "Automation"),
@@ -62,6 +64,8 @@ public sealed class GraphSettingsView : UserControl
             choices.Add(new(current.Model, current.Model));
         _model.ItemsSource = choices;
         _model.SelectedItem = choices.First(item => item.Id == current.Model);
+        _supervision.SelectedIndex = (int)current.Supervision;
+        AutomationProperties.SetAutomationId(_supervision, "graph-setting-supervision");
         _enabled.IsChecked = settings.Current.GraphEnabled;
         _budget.Value = current.BudgetMinutes;
         _concurrency.Value = current.Concurrency;
@@ -80,6 +84,7 @@ public sealed class GraphSettingsView : UserControl
         {
             var options = _service.ReadOptions() with
             {
+                Supervision = (GraphSupervisionLevel)_supervision.SelectedIndex,
                 Enabled = _enabled.IsChecked == true,
                 BudgetMinutes = (int)(_budget.Value ?? 60),
                 Concurrency = (int)(_concurrency.Value ?? 1),

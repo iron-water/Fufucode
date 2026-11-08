@@ -68,10 +68,10 @@ public sealed partial class GraphProjectService
                 if (ticket.Route == "project-planning") continue; // no self-completion feedback loop
                 Observe("run:" + run.Id, new { run.Id, run.TicketId, run.Status, run.Detail });
             }
-            foreach (var message in organization.Messages.Where(m => m.SenderId == "human"
-                && !m.Content.HumanRecipient && m.Content.RecipientId == lead.Id
-                && m.Status != GraphMessageStatus.Rejected))
-                Observe("message:" + message.Id, message);
+            // Explicit human project dialogue is an event. Ordinary Notify/Request storage is not a wake signal.
+            foreach (var input in authority.Inputs.Where(input => input.Actor == "human" &&
+                (input.TicketId is null || authority.Tickets.Any(t => t.Id == input.TicketId && t.Route == "project-planning"))))
+                Observe("human-input:" + input.Id, input);
             var observed = Convert.ToInt64(Scalar(c, tx,
                 "SELECT COALESCE(MAX(sequence),0) FROM graph_lead_cycle_events WHERE project_id=$p", ("$p", context.AuthorityId)));
             var planned = Convert.ToInt64(Scalar(c, tx,

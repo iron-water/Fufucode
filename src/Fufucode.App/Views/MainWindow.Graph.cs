@@ -180,7 +180,8 @@ public partial class MainWindow
                     var dialogs = new ExtensionUiDialogHost(this);
                     dialogs.Attach(session.Chat);
                     return new GraphApprovalLease(dialogs);
-                }), sessionInUse: id => _sideSession?.Session.Id == id);
+                }), sessionInUse: id => _sideSession?.Session.Id == id,
+                authorize: request => service?.IsRunAuthorized(request.ProjectPath, request.TicketId, request.RunId) == true);
             service = new GraphProjectService(GraphLayout.Root, executor);
             service.SetProject(project.Id, full);
             if (service.ReadOptions().Enabled != GraphEnabled)

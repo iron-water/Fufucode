@@ -24,6 +24,8 @@ public sealed record GraphSnapshot(string ProjectId, string ProjectPath, string 
     public GraphOrganizationSnapshot? Organization { get; init; }
 }
 
+public enum GraphSupervisionLevel { Lenient, Standard, Strict }
+
 public sealed record GraphOptions
 {
     public bool Enabled { get; init; } = true;
@@ -35,6 +37,7 @@ public sealed record GraphOptions
     public string Model { get; init; } = "";
     public int ScanDepth { get; init; } = 6;
     public int ValidationTimeoutSeconds { get; init; } = 120;
+    public GraphSupervisionLevel Supervision { get; init; } = GraphSupervisionLevel.Standard;
 }
 
 public enum GraphExecutionRole { Executor, ProjectLead, ScopeLead, Verifier }
@@ -53,6 +56,7 @@ public sealed record GraphRunResult(string Status, string Output, string? Error 
 {
     public string? CandidateManifestPath { get; init; }
     public string? DeliveryStatus { get; init; }
+    public bool NoSideEffectsDispatched { get; init; }
 }
 
 public interface IGraphRunExecutor

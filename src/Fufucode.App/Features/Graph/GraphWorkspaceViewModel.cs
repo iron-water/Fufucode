@@ -649,10 +649,7 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public bool ReconcileTicket() => Mutate("允许重试", () =>
     {
         if (!NeedsTicketReconciliation) throw new InvalidOperationException("邮件无需核查未知结果");
-        if (!Correspondence.SideEffectsChecked) throw new InvalidOperationException("请先核查副作用");
-        if (string.IsNullOrWhiteSpace(Correspondence.RecoveryResolution))
-            throw new InvalidOperationException("副作用核查与恢复说明不能为空");
-        _service.ReconcileTicket(RequireTicket(), Correspondence.RecoveryResolution);
+        _service.ReconcileTicket(RequireTicket(), "");
     });
     public bool AcceptTicket() => Mutate("验收邮件", () =>
     {

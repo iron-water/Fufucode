@@ -105,17 +105,8 @@ public sealed class GraphTicketsView : GraphContentView
             GraphUi.Field("证据引用", GraphUi.Input("Correspondence.EvidenceReference", "GraphEvidenceReference")), passed,
             GraphUi.Button("添加证据", () => vm.AddEvidence(vm.Correspondence.EvidenceCriterion, vm.Correspondence.EvidenceText,
                 vm.Correspondence.EvidencePassed, vm.Correspondence.EvidenceReference), "GraphAddEvidence", true));
-        var checkedEffects = new CheckBox { Content = "已核查副作用" };
-        AutomationProperties.SetAutomationId(checkedEffects, "GraphRecoveryChecked");
-        GraphUi.Bind(checkedEffects, ToggleButton.IsCheckedProperty, "Correspondence.SideEffectsChecked", BindingMode.TwoWay);
         var retry = GraphUi.Button("允许重试", () => vm.ReconcileTicket(), "GraphAllowRetry", true);
-        retry.Bind(IsEnabledProperty, new MultiBinding
-        {
-            Converter = BoolConverters.And,
-            Bindings = { new Binding("CanEdit"), new Binding("Correspondence.SideEffectsChecked") }
-        });
-        var reconcile = GraphUi.Stack(checkedEffects,
-            GraphUi.Field("副作用核查与恢复说明", GraphUi.Input("Correspondence.RecoveryResolution", "GraphRecoveryResolution", true)), retry);
+        var reconcile = GraphUi.Stack(retry);
         GraphUi.Bind(reconcile, IsVisibleProperty, "NeedsTicketReconciliation");
         var liftVeto = GraphUi.Stack(
             GraphUi.Field("解除理由", GraphUi.Input("Correspondence.LiftVetoReason", "GraphLiftVetoReason", true)),
@@ -133,12 +124,10 @@ public sealed class GraphTicketsView : GraphContentView
             GraphUi.Button("否决", () => vm.VetoTicket(), "GraphVetoTicket", true),
             GraphUi.Field("验收引用", GraphUi.Input("Correspondence.AcceptanceEvidence", "GraphAcceptanceEvidence")),
             GraphUi.Button("验收", () => vm.AcceptTicket(), "GraphAcceptTicket", true), recovery);
-        var session = GraphUi.Stack(GraphUi.Field("会话", GraphUi.Input("Correspondence.SessionId", "GraphLinkSessionId")),
-            GraphUi.Button("关联会话", () => vm.LinkSession(vm.Correspondence.SessionId), "GraphLinkSession", true));
         var editing = GraphUi.Stack(
             GraphUi.Actions(GraphUi.AsyncButton("运行", () => vm.RunTicketAsync(), "GraphRunTicket"),
                 GraphUi.AsyncButton("停止", () => vm.StopTicketAsync(), "GraphStopTicket")),
-            send, GraphUi.Divider(), evidence, GraphUi.Divider(), decisions, GraphUi.Divider(), session);
+            send, GraphUi.Divider(), evidence, GraphUi.Divider(), decisions);
         GraphUi.Bind(editing, IsVisibleProperty, "!IsHistorical");
         var development = new Expander
         {
@@ -159,7 +148,7 @@ public sealed class GraphTicketsView : GraphContentView
         GraphUi.Bind(development, IsEnabledProperty, "CanEdit");
         var details = GraphUi.Stack(GraphUi.Value("SelectedTicketStatus", "caption"),
             GraphUi.Value("SelectedTicket.Goal"), GraphUi.Field("验收条件", GraphUi.Value("SelectedTicketAcceptance")),
-            linkedModules, GraphUi.Value("SelectedTicket.SessionId", "caption"),
+            linkedModules,
             GraphUi.Button("打开会话", () => vm.OpenChat(null, vm.SelectedTicketId), "GraphTicketChat"),
             GraphUi.Divider(), entries, runs, development, editing);
         GraphUi.Bind(details, IsVisibleProperty, "HasSelectedTicket");

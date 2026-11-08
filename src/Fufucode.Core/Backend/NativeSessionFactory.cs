@@ -48,6 +48,7 @@ public static class NativeSessionFactory
         var builtin = new ProductionToolDispatcher(workspaceRoot)
         {
             SecurityEvaluator = securityEvaluator,
+            HostAuthorization = hostToolAllowed,
             SecurityBackups = new Security.SecurityBackupStore(settings.DataRoot)
         };
         var baseDispatcher = toolRegistry

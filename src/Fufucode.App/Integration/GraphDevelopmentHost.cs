@@ -33,6 +33,7 @@ public sealed class GraphDevelopmentHost
     private readonly SemaphoreSlim serial = new(1, 1);
     private readonly Dictionary<GraphCandidateValidation, ManagedValidation> live = new(ReferenceEqualityComparer.Instance);
     // Deliberately strict: no model-provided exclusions and no blanket bin/obj allowance.
+    private readonly Dictionary<GraphCandidateValidation, ManagedIntegrationTransaction> transactions = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GraphCandidateValidation, ManagedWorkspaceManifest> integrated = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GraphCandidateValidation, string> integratedFingerprints = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<GraphIntegratedValidation, ManagedValidation> integratedLive = new(ReferenceEqualityComparer.Instance);
@@ -131,10 +132,15 @@ public sealed class GraphDevelopmentHost
             var workspace = await ManagedDevelopmentWorkspace.LoadAsync(result.ManifestPath, ct);
             if (workspace.Manifest != m && JsonSerializer.Serialize(workspace.Manifest) != JsonSerializer.Serialize(m))
                 throw new InvalidOperationException("Manifest changed after validation.");
-            var integrated = await workspace.IntegrateAsync(true, request.PatchHash, ct);
-            var targetFingerprint = ManagedValidation.Fingerprint(integrated.RepositoryPath, policy);
+            var transaction = await ManagedGitIntegration.PrepareAsync(workspace,
+                Path.Combine(layout.Root, "auto-dev", "integration"), ct);
+            if (transaction.PreparedCommit is null)
+                throw new InvalidOperationException("Integration requires repair; retained journal: " + transaction.JournalPath + ": " + transaction.Error);
+            var integrated = workspace.Manifest;
+            var targetFingerprint = ManagedValidation.Fingerprint(transaction.WorktreePath, policy);
             lock (live)
             {
+                transactions[result] = transaction;
                 this.integrated[result] = integrated;
                 integratedFingerprints[result] = targetFingerprint;
             }
@@ -167,10 +173,11 @@ public sealed class GraphDevelopmentHost
             var current = await ManagedDevelopmentWorkspace.LoadAsync(original.ManifestPath, ct);
             if (JsonSerializer.Serialize(current.Manifest) != JsonSerializer.Serialize(manifest))
                 throw new InvalidOperationException("Integrated manifest changed.");
-            await RequireHead(manifest.RepositoryPath, manifest.BaseHead, ct);
+            var transaction = transactions[original];
+            await RequireHead(transaction.WorktreePath, transaction.PreparedCommit!, ct);
             string fingerprint;
             lock (live) fingerprint = integratedFingerprints[original];
-            if (ManagedValidation.Fingerprint(manifest.RepositoryPath, policy) != fingerprint)
+            if (ManagedValidation.Fingerprint(transaction.WorktreePath, policy) != fingerprint)
                 throw new InvalidOperationException("Applied target content changed before validation.");
             var environment = "graph-target/" + Environment.ProcessId;
             var runner = new ManagedValidation(Path.Combine(layout.Root, "auto-dev", "validation", Guid.NewGuid().ToString("N")),
@@ -182,11 +189,11 @@ public sealed class GraphDevelopmentHost
                     token.ThrowIfCancellationRequested();
                     if (Bind(original.TicketId, original.ManifestPath) != binding)
                         throw new InvalidOperationException("Graph changed during target approval.");
-                    await RequireHead(manifest.RepositoryPath, manifest.BaseHead, token);
+                    await RequireHead(transaction.WorktreePath, transaction.PreparedCommit!, token);
                     return approved;
                 }, policy: policy);
             var contract = new ManagedValidationContract(Guid.NewGuid().ToString("N"), original.TicketId, original.RunId,
-                binding.Digest, manifest.RepositoryPath, fingerprint, original.Contract.Executable,
+                binding.Digest, transaction.WorktreePath, fingerprint, original.Contract.Executable,
                 original.Contract.Arguments.ToArray(), original.Contract.Timeout, environment, policy.Digest);
             var receipt = await runner.RunAsync(contract, ct);
             var result = new GraphIntegratedValidation(original, manifest, contract, receipt);
@@ -205,12 +212,12 @@ public sealed class GraphDevelopmentHost
                 if (!integratedLive.TryGetValue(result, out runner!) || !integrated.ContainsKey(result.Original)) return false;
             var binding = Bind(result.Original.TicketId, result.Original.ManifestPath);
             return binding.RunId == result.Contract.RunId && binding.Digest == result.Contract.AcceptanceDigest &&
-                Same(binding.ProjectPath, result.Contract.Workspace) &&
+                Same(transactions[result.Original].WorktreePath, result.Contract.Workspace) &&
                 result.Receipt.Status == ManagedValidationStatus.Passed &&
                 result.Receipt.ContractHash == Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(result.Contract))) &&
                 FileHash(result.Manifest.PatchPath) == result.Manifest.PatchHash &&
                 JsonSerializer.Serialize(JsonSerializer.Deserialize<ManagedWorkspaceManifest>(File.ReadAllText(result.Original.ManifestPath))) == JsonSerializer.Serialize(result.Manifest) &&
-                ReadHead(result.Manifest.RepositoryPath) == result.Manifest.BaseHead && runner.VerifyCurrent(result.Receipt);
+                ReadHead(result.Contract.Workspace) == transactions[result.Original].PreparedCommit && runner.VerifyCurrent(result.Receipt);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or JsonException)
         { return false; }
@@ -279,6 +286,12 @@ public sealed class GraphDevelopmentHost
         string continuation, string continuationReason)
     {
         if (!VerifyIntegratedCurrent(result)) throw new InvalidOperationException("A current integrated host verification is required.");
+        graph.RequireDeliveryAuthorization(result.Original.TicketId);
+        var transaction = transactions[result.Original];
+        transactions[result.Original] = ManagedGitIntegration.CommitAsync(transaction, transaction.PreparedCommit!, true).GetAwaiter().GetResult();
+        graph.RecordIntegratedVersion(result.Original.TicketId, result.Original.RunId,
+            result.Manifest.BaseHead, result.Manifest.CandidateCommit!, transaction.PreparedCommit!, transaction.JournalPath,
+            result.Receipt.ContractHash);
         graph.CompleteHostVerifiedWork(result.Original.TicketId, result.Original.RunId,
             result.Contract.AcceptanceDigest, result.Receipt.StandardOutput?.Path
                 ?? throw new InvalidOperationException("A durable verification output is required."),

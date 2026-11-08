@@ -215,7 +215,8 @@ public sealed partial class GraphProjectService
                     Entry(context, c, tx, managed.TicketId, null, "run-result", Serialize(new
                     {
                         managed.Id, status = outcome.ToString(), result.Output, result.Error, result.SessionId,
-                        outputHash = Hash(result.Output ?? ""), producer = "executor", result.CandidateManifestPath, result.DeliveryStatus
+                        outputHash = Hash(result.Output ?? ""), producer = "executor", result.CandidateManifestPath, result.DeliveryStatus,
+                        result.NoSideEffectsDispatched
                     }), managed.Id, "executor");
                     if (result.DeliveryStatus == "EmptyCandidate")
                     {
@@ -265,7 +266,12 @@ public sealed partial class GraphProjectService
         catch (Exception e) { persistenceError = e; }
         finally
         {
-            lock (_gate) context.Runs.Remove(managed.TicketId);
+            lock (_gate)
+            {
+                context.Runs.Remove(managed.TicketId);
+                try { InspectRepeatedFailure(context, managed.TicketId); }
+                catch (Exception supervisionError) { persistenceError ??= supervisionError; }
+            }
             try { SignalProjectLead(context.Path, "run-terminal", managed.Id); }
             catch (Exception leadError) { persistenceError ??= leadError; }
             // Mark completion outside the lock; StopTicket waits for this acknowledgement, never for Cancel().

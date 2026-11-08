@@ -19,15 +19,17 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
     private readonly Func<GraphRunRequest, IPluginToolHandler?> _tools;
     private readonly Func<PersistentSession, Task<IDisposable?>>? _attachApproval;
     private readonly Func<string, bool>? _sessionInUse;
+    private readonly Func<GraphRunRequest, bool>? _authorize;
 
     public GraphNativeExecutor(AppDataLayout layout, Func<GraphRunRequest, IPluginToolHandler?> tools,
         Func<PersistentSession, Task<IDisposable?>>? attachApproval = null,
-        Func<string, bool>? sessionInUse = null)
+        Func<string, bool>? sessionInUse = null, Func<GraphRunRequest, bool>? authorize = null)
     {
         _layout = layout;
         _tools = tools;
         _attachApproval = attachApproval;
         _sessionInUse = sessionInUse;
+        _authorize = authorize;
     }
 
     public async Task<GraphRunResult> ExecuteAsync(GraphRunRequest request, Action<string>? progress,
@@ -40,19 +42,25 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         {
             var trust = manager.GetProjectTrustStatus(request.ProjectPath);
             if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
-            var created = await Fufucode.Core.Automation.ManagedDevelopmentWorkspace.CreateAsync(request.ProjectPath,
-                System.IO.Path.Combine(_layout.Root, "auto-dev", "workspaces"), cancellationToken: cancellationToken).ConfigureAwait(false);
+            var integratedBase = await Fufucode.Core.Automation.ManagedGitIntegration.GetIntegratedCommitAsync(request.ProjectPath, cancellationToken).ConfigureAwait(false);
+            var created = integratedBase is null
+                ? await Fufucode.Core.Automation.ManagedDevelopmentWorkspace.CreateAsync(request.ProjectPath,
+                    System.IO.Path.Combine(_layout.Root, "auto-dev", "workspaces"), cancellationToken: cancellationToken).ConfigureAwait(false)
+                : await Fufucode.Core.Automation.ManagedDevelopmentWorkspace.CreateFromBaseAsync(request.ProjectPath,
+                    System.IO.Path.Combine(_layout.Root, "auto-dev", "workspaces"), integratedBase, cancellationToken: cancellationToken).ConfigureAwait(false);
             if (created.Status != Fufucode.Core.Automation.ManagedWorkspaceStatus.Ready || created.Workspace is null)
-                return new("Failed", "", created.Status + ": " + (created.Error ?? "Workspace creation did not succeed."));
+                return new("Failed", "", created.Status + ": " + (created.Error ?? "Workspace creation did not succeed.")) { NoSideEffectsDispatched = true };
             workspace = created.Workspace;
             // A generated path must not bypass the original project's trust boundary.
             manager.SetProjectTrustDecision(workspace.Manifest.WorktreePath,
                 trust.Decision ?? ProjectTrustDecision.DoNotTrust);
         }
         var executionPath = workspace?.Manifest.WorktreePath ?? request.ProjectPath;
-        if (request.Identity?.Role is GraphExecutionRole.ProjectLead or GraphExecutionRole.ScopeLead or GraphExecutionRole.Verifier)
-            manager.NativeHostToolAllowed = name => name.StartsWith("graph_", StringComparison.Ordinal) ||
-                name is "read_file" or "list_dir" or "glob_files" or "grep_search" or "update_plan";
+        manager.NativeHostToolAllowed = name => !cancellationToken.IsCancellationRequested &&
+            (_authorize?.Invoke(request) ?? true) &&
+            (request.Identity?.Role is not (GraphExecutionRole.ProjectLead or GraphExecutionRole.ScopeLead or GraphExecutionRole.Verifier) ||
+                name.StartsWith("graph_", StringComparison.Ordinal) ||
+                name is "read_file" or "list_dir" or "glob_files" or "grep_search" or "update_plan");
         var handler = _tools(request);
         manager.NativePluginToolProviders = () => handler is null ? [] : [new GraphApplicationToolDispatcher(handler)];
         PersistentSession? session = null;
@@ -124,7 +132,7 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         }
         catch (OperationCanceledException)
         {
-            if (session is null) return new("Interrupted", Collected(), "派发前已取消。");
+            if (session is null) return new GraphRunResult("Interrupted", Collected(), "派发前已取消。") { NoSideEffectsDispatched = !dispatched };
             try
             {
                 // A cancellation request is not a terminal state until the actual session converges.
@@ -146,7 +154,7 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         }
         catch (Exception failed)
         {
-            return new GraphRunResult(dispatched ? "Unknown" : "Failed", Collected(), failed.Message, session?.Session.Id) { CandidateManifestPath = workspace?.ManifestPath };
+            return new GraphRunResult(dispatched ? "Unknown" : "Failed", Collected(), failed.Message, session?.Session.Id) { CandidateManifestPath = workspace?.ManifestPath, NoSideEffectsDispatched = !dispatched };
         }
         finally
         {

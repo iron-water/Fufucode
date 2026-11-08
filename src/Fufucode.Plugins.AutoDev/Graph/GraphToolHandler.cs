@@ -32,7 +32,8 @@ public sealed class GraphToolHandler : IPluginToolHandler
         Tool("graph_organization", "Read current project responsibilities, work dependencies and organization version.", ""),
         Tool("graph_delegate", "Lead delegates one execution responsibility. Existing responsibilities are preserved. No TicketLead role exists.", "\"responsibilityId\":" + S + ",\"role\":{\"type\":\"string\",\"enum\":[\"Executor\",\"ScopeLead\",\"Verifier\"]},\"ticketId\":" + S + ",\"moduleIds\":" + A + ",\"expectedVersion\":{\"type\":\"integer\"},\"reason\":" + S, "\"responsibilityId\",\"ticketId\",\"moduleIds\",\"expectedVersion\",\"reason\""),
         Tool("graph_dependency", "Lead records an explicit work prerequisite; module relationships are not work dependencies.", "\"ticketId\":" + S + ",\"dependsOnTicketId\":" + S + ",\"remove\":{\"type\":\"boolean\"},\"reason\":" + S, "\"ticketId\",\"dependsOnTicketId\",\"remove\",\"reason\""),
-        Tool("graph_send", "Send addressed collaboration or a human attention item. This does not grant authority or prove delivery.", "\"recipientId\":" + S + ",\"humanRecipient\":{\"type\":\"boolean\"},\"ticketId\":" + S + ",\"moduleId\":" + S + ",\"kind\":" + S + ",\"text\":" + S + ",\"revision\":{\"type\":\"integer\"}", "\"recipientId\",\"humanRecipient\",\"kind\",\"text\",\"revision\""),
+        Tool("graph_send", "Send addressed collaboration or a human attention item. This does not grant authority or prove delivery.", "\"recipientId\":" + S + ",\"communication\":{\"type\":\"string\",\"enum\":[\"Notify\",\"Request\"]},\"targetTicketId\":" + S + ",\"targetModuleId\":" + S + ",\"targetRole\":{\"type\":\"string\",\"enum\":[\"ProjectLead\",\"ScopeLead\",\"Executor\"]},\"humanRecipient\":{\"type\":\"boolean\"},\"ticketId\":" + S + ",\"moduleId\":" + S + ",\"kind\":" + S + ",\"text\":" + S + ",\"revision\":{\"type\":\"integer\"}", "\"humanRecipient\",\"kind\",\"text\",\"revision\""),
+        Tool("graph_resolve_request", "Resolve, decline or cancel a collaboration request. Does not complete work or grant authority.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Resolved\",\"Declined\",\"Cancelled\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
         Tool("graph_inbox", "Read this host-issued responsibility's addressed messages.", ""),
         Tool("graph_ack", "Acknowledge actual consumption or resolution of an addressed message, never another recipient's message.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Delivered\",\"Read\",\"Applied\",\"Rejected\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
         Tool("graph_read", "Read a bounded project graph index by default. Page modules/entries explicitly or request full:true for the entire unabridged snapshot. Counts and omitted fields are explicit; pin revision for stable pages.", "\"revision\":{\"type\":\"integer\"},\"full\":{\"type\":\"boolean\"},\"moduleOffset\":{\"type\":\"integer\"},\"moduleLimit\":{\"type\":\"integer\"},\"includeEntries\":{\"type\":\"boolean\"},\"entryOffset\":{\"type\":\"integer\"},\"entryLimit\":{\"type\":\"integer\"}"),
@@ -102,7 +103,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
                 return Success(call, GraphStorage.Serialize(new { state.ProjectId, state.Version, state.Responsibilities, state.Dependencies,
                     messageCount = state.Messages.Length, inbox = "Use graph_inbox to read addressed messages; organization does not broadcast private correspondence." }));
             }
-            if (call.Name is "graph_delegate" or "graph_dependency" or "graph_send" or "graph_inbox" or "graph_ack")
+            if (call.Name is "graph_delegate" or "graph_dependency" or "graph_send" or "graph_inbox" or "graph_ack" or "graph_resolve_request")
             {
                 var organization = (GraphProjectService)_service;
                 if (_identity is null) throw new InvalidOperationException("Addressed agent communication requires a host-issued identity.");
@@ -115,7 +116,13 @@ public sealed class GraphToolHandler : IPluginToolHandler
                             Required(data, "reason"), member, _identity);
                         break;
                     case "graph_dependency": response = organization.SetWorkDependency(call.Id, Required(data, "ticketId"), Required(data, "dependsOnTicketId"), data.GetProperty("remove").GetBoolean(), Required(data, "reason"), _identity); break;
-                    case "graph_send": response = organization.SendOrganizationMessage(call.Id, new GraphMessageDraft(Required(data, "recipientId"), data.GetProperty("humanRecipient").GetBoolean(), Required(data, "kind"), Required(data, "text"), Text(data, "ticketId"), Text(data, "moduleId"), Integer(data, "revision")!.Value), _identity); break;
+                    case "graph_send": response = organization.SendOrganizationMessage(call.Id, new GraphMessageDraft(Text(data, "recipientId") ?? "", data.GetProperty("humanRecipient").GetBoolean(), Required(data, "kind"), Required(data, "text"), Text(data, "ticketId"), Text(data, "moduleId"), Integer(data, "revision")!.Value)
+                    {
+                        Communication = Text(data, "communication") == "Request" ? GraphCommunicationKind.Request : GraphCommunicationKind.Notify,
+                        Address = Text(data, "targetTicketId") is not null || Text(data, "targetModuleId") is not null || Text(data, "targetRole") is not null
+                            ? new GraphMessageAddress(Text(data, "targetTicketId"), Text(data, "targetModuleId"), Text(data, "targetRole") is { } role ? Enum.Parse<GraphExecutionRole>(role) : null) : null
+                    }, _identity); break;
+                    case "graph_resolve_request": response = organization.ResolveOrganizationRequest(call.Id, Required(data, "messageId"), Enum.Parse<GraphRequestStatus>(Required(data, "status")), Required(data, "reason"), _identity); break;
                     case "graph_inbox": response = organization.ReadOrganizationInbox(_identity.ResponsibilityId, false, _identity); break;
                     default: response = organization.AdvanceOrganizationMessage(call.Id, Required(data, "messageId"), Enum.Parse<GraphMessageStatus>(Required(data, "status")), Required(data, "reason"), _identity); break;
                 }
@@ -168,7 +175,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
         var run = _service.ReadSnapshot().Runs.SingleOrDefault(r => r.Id == _identity.RunId && r.TicketId == _identity.TicketId);
         if (run is null || run.Status != "Running")
             throw new InvalidOperationException("The host execution identity is no longer active.");
-        if (name is "graph_send" or "graph_inbox" or "graph_ack" or "graph_propose_validation") return;
+        if (name is "graph_send" or "graph_inbox" or "graph_ack" or "graph_resolve_request" or "graph_propose_validation") return;
         if (name == "graph_evidence")
         {
             if (Required(data, "ticketId") != _identity.TicketId || Required(data, "runId") != _identity.RunId)

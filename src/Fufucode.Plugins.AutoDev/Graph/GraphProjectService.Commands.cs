@@ -43,6 +43,7 @@ public sealed partial class GraphProjectService
         ArgumentNullException.ThrowIfNull(options);
         if (options.Concurrency is < 1 or > 16 || options.BudgetMinutes is < 0 or > 1440
             || !double.IsFinite(options.ComputeQuota) || options.ComputeQuota is < 0 or > 1
+            || !Enum.IsDefined(options.Supervision)
             || options.ScanDepth is < 0 or > 20 || options.ValidationTimeoutSeconds is < 1 or > 86400)
             throw new ArgumentOutOfRangeException(nameof(options));
         ProjectContext context;
@@ -438,8 +439,15 @@ public sealed partial class GraphProjectService
     {
         lock (_gate)
         {
-            HumanOnly(); var context = Current; Required(resolution, nameof(resolution));
-            Change(context, "Human reconciled unknown ticket outcome", (c, tx) =>
+            HumanOnly(); var context = Current;
+            var receipt = ReadSnapshot().Entries.Where(e => e.TicketId == ticketId && e.Kind == "run-result" && e.Actor == "executor")
+                .OrderByDescending(e => e.CreatedUtc).FirstOrDefault();
+            if (receipt is null) throw new InvalidOperationException("缺少可信执行回执；保留未知状态。可停止此任务并创建明确的新任务，不能盲目重放。");
+            using var receiptData = JsonDocument.Parse(receipt.Text);
+            if (!receiptData.RootElement.TryGetProperty("noSideEffectsDispatched", out var safe) || safe.ValueKind != JsonValueKind.True)
+                throw new InvalidOperationException("执行曾派发或副作用无法确认；已保留现场与未知状态。请选择停止该任务，或针对具体外部操作进行恢复，不能直接重试。");
+            resolution = "Kernel verified the host receipt: no side effects were dispatched; no active run may be replayed.";
+            Change(context, "Kernel reconciled unknown ticket outcome", (c, tx) =>
             {
                 var authority = context.Kernel.ReadSnapshot(context.AuthorityId);
                 var ticket = Ticket(context, ticketId); RejectInFlight(context, authority, ticketId);

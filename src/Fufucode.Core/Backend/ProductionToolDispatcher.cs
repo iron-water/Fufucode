@@ -44,6 +44,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     }
 
     public string WorkspaceRoot => _workspaceRoot;
+    /// <summary>Live host authority, rechecked after approvals immediately before builtin execution.</summary>
+    public Func<string, bool>? HostAuthorization { get; set; }
     public Security.SecurityPolicyEvaluator? SecurityEvaluator { get; set; }
     public Security.SecurityBackupStore? SecurityBackups { get; set; }
     private bool SecurityReadable(string path) => SecurityEvaluator is null ||
@@ -261,6 +263,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     {
         ArgumentNullException.ThrowIfNull(call);
         cancellationToken.ThrowIfCancellationRequested();
+        if (HostAuthorization?.Invoke(call.Name) == false)
+            return new PureToolResult(call.Id, false, "Host authorization was stopped or revoked.");
 
         // Plan 模式权限守卫：只允许明确只读的原生工具与 update_plan。
         // 第三方插件/MCP/子代理无法证明只读，统一按变更性拦截。

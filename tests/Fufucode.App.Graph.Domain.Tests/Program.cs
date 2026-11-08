@@ -312,8 +312,11 @@ internal static class Program
         s.SetPurpose("Retain human planning requests after uncertain lead outcomes");
         await s.SetAutonomyAsync(true);
         await WaitUntil(() => s.ReadSnapshot().Runs.Count == 1 && s.ReadSnapshot().ProjectStatus != "Running");
-        s.SendOrganizationMessage("pending-human-request", new GraphMessageDraft("project-lead", false, "message",
-            "HUMAN_REQUEST_MUST_SURVIVE_UNKNOWN", null, null, s.ReadSnapshot().Revision));
+        s.SendOrganizationMessage("ordinary-notification", new GraphMessageDraft("project-lead", false, "message",
+            "ordinary correspondence is not a wake signal", null, null, s.ReadSnapshot().Revision));
+        s.ReconcileLeadCycle(f.Project);
+        Check(calls == 1, "ordinary Notify does not wake a lead model");
+        s.RecordSessionMessage(null, null, "lead-discussion", "human-request-1", "user", "HUMAN_REQUEST_MUST_SURVIVE_UNKNOWN");
         s.ReconcileLeadCycle(f.Project);
         await WaitUntil(() => s.ReadSnapshot().Runs.Any(r => r.Status == "Unknown") && s.ReadSnapshot().ProjectStatus != "Running");
         var attention = s.ReconcileLeadCycle(f.Project);
@@ -330,7 +333,7 @@ internal static class Program
         Check(s.ReadSnapshot().Runs.Count(r => r.Status == "Unknown") == 1 && calls == before + 1,
             "unknown run is never replayed; only new lead reconciliation executes");
         Check(s.ReconcileLeadCycle(f.Project).State == "idle", "successful reconciliation does not self-excite");
-        Check(s.ReadOrganizationSnapshot().Messages.Single().Status != GraphMessageStatus.Applied,
+        Check(s.ReadOrganizationSnapshot().Messages.All(m => m.Status != GraphMessageStatus.Applied),
             "planning transport never manufactures Applied acknowledgement");
         await s.SetAutonomyAsync(false);
     }

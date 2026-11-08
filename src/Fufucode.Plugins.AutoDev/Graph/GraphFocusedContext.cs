@@ -149,6 +149,11 @@ internal static class GraphFocusedContext
         {
             snapshot.ProjectId, snapshot.ProjectPath, snapshot.Revision, snapshot.IsHistorical,
             title, purpose, snapshot.ProjectStatus,
+            // Hard controls are never subject to the ordinary preview count/text budget.
+            activeControls = decisions.Where(ActiveDecision).ToArray(),
+            currentAcceptance = ticket?.Acceptance,
+            gitVersions = snapshot.Entries.Where(e => e.Kind == "integration-version" &&
+                (ticketId is null || e.TicketId == ticketId)).ToArray(),
             scope = new
             {
                 mode = ticketId is not null ? "focused-ticket" : moduleId is not null ? "focused-module" : "planning-candidates",
@@ -168,7 +173,7 @@ internal static class GraphFocusedContext
                 tickets = snapshot.Tickets.Count - tickets.Length, entries = snapshot.Entries.Count - entries.Length,
                 sources = sources.Length - includedSources.Length, relatedSources = relatedSources.Length - includedSources.Length,
                 relatedRecentEntries = recent.Length - includedRecent.Length, decisions = decisions.Length - includedDecisions.Length,
-                activeDecisions = decisions.Skip(DecisionLimit).Count(ActiveDecision), runs = snapshot.Runs.Count - runs.Length,
+                activeDecisions = 0, runs = snapshot.Runs.Count - runs.Length,
                 relatedRuns = relatedRuns.Length - runs.Length, unknownRuns = relatedRuns.Skip(RunLimit).Count(r => r.Status == "Unknown"),
                 textFields = previews.OmittedFields, textCharacters = previews.OmittedCharacters
             },
