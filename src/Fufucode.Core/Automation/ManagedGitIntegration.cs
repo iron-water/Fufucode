@@ -130,6 +130,9 @@ public static class ManagedGitIntegration
         }
         if (tx.Status != ManagedIntegrationStatus.Prepared || current != tx.PreviousIntegratedCommit)
             throw new InvalidOperationException("Integrated baseline changed; prepare and validate a new merge.");
+        var worktrees = await Git(tx.RepositoryPath, ["worktree", "list", "--porcelain"], cancellationToken);
+        if (worktrees.Text.Split('\n').Any(line => line.TrimEnd('\r') == "branch " + IntegratedRef))
+            throw new InvalidOperationException("Managed integrated ref is checked out; refusing a ref-only update of a live worktree.");
         tx = tx with { Status = ManagedIntegrationStatus.Committing };
         await Save(tx);
         await Git(tx.RepositoryPath, ["update-ref", IntegratedRef, expectedPreparedCommit,
