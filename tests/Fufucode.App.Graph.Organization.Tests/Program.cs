@@ -58,6 +58,9 @@ using (var s = new GraphProjectService(data, new NeverExecutor()))
     var module = s.UpsertModule(null, null, "Subsystem", "fixture", []);
     s.DelegateResponsibility("module-owner", s.ReadOrganizationSnapshot().Version, "module role", new("scope", GraphExecutionRole.ScopeLead, [module.Id]));
     Check(s.ResolveOrganizationRecipients(new(ModuleId: module.Id, Role: GraphExecutionRole.ScopeLead)).SequenceEqual(["scope"]), "module-role semantic addressing");
+    var childModule = s.UpsertModule(null, module.Id, "Nested subsystem", "recursive scope fixture", []);
+    Check(s.ResolveOrganizationRecipients(new(ModuleId: childModule.Id, Role: GraphExecutionRole.ScopeLead)).SequenceEqual(["scope"]),
+        "module semantic addressing respects recursive delegated subtree ownership");
     Reject(() => s.SendOrganizationMessage("unknown-address", semantic with { Address = new("missing") }), "cross-project or unknown ticket rejected");
     Reject(() => s.SendOrganizationMessage("mixed-address", semantic with { RecipientId = "project-lead" }), "mixed physical/semantic address rejected");
     Reject(() => s.ReadOrganizationInbox("worker", false), "human cannot read internal inbox");

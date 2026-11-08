@@ -247,7 +247,7 @@ public sealed partial class GraphProjectService
         if (validate) OrganizationScope(null, address.TicketId, address.ModuleId);
         return state.Responsibilities.Where(r =>
             (address.TicketId is null || r.TicketId == address.TicketId) &&
-            (address.ModuleId is null || r.ModuleIds.Contains(address.ModuleId)) &&
+            (address.ModuleId is null || IsModuleInScope(r.ModuleIds, address.ModuleId)) &&
             (address.Role is null || r.Role == address.Role)).Select(r => r.Id).Order(StringComparer.Ordinal).ToArray();
     }
 
