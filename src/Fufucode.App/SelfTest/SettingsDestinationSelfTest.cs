@@ -41,6 +41,19 @@ public static class SettingsDestinationSelfTest
                 "一级侧栏包含外观，会话与消息收纳在「其他」");
             Check(vm.OtherHubItems.Any(category => category.Id == "config"),
                 "配置文件页收纳在「其他」");
+            // 侧栏偏好晚到（AttachNavPreference 在构造之后才读到 settings-nav.json）：
+            // 一级侧栏必须立即按偏好重排，否则已收纳进「其他」的大功能会在两边重复出现。
+            var navRoot = Path.Combine(root, "nav");
+            Directory.CreateDirectory(navRoot);
+            File.WriteAllText(Path.Combine(navRoot, "settings-nav.json"),
+                """{"version":1,"promoted":[],"demoted":["browser","terminal","files","automation","marketplace"]}""");
+            vm.AttachNavPreference(navRoot);
+            var demoted = new[] { "browser", "terminal", "files", "automation", "marketplace" };
+            Check(demoted.All(id => vm.FilteredCategories.All(category => category.Id != id)) &&
+                demoted.All(id => vm.Categories.All(category => category.Id != id)),
+                "收纳后的大功能不再出现在一级侧栏（偏好晚到也立即重排）");
+            Check(demoted.All(id => vm.OtherHubItems.Any(category => category.Id == id)),
+                "同一批条目只保留在「其他」页，不再两边重复");
             Check(!vm.Categories.Any(category => category.Id is "layout" or "details") &&
                 vm.WorkbenchSectionId == "appearance" && vm.ShowWorkbenchSection,
                 "不再保留 layout/details 旧分类，外观页使用分区控件");

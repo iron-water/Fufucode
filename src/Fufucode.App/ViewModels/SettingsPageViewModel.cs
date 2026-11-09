@@ -83,9 +83,8 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         SelectedModel = ModelChoices[0];
         // 模型清单变化时同步重建选择器的筛选结果与供应商快捷项。
         ModelChoices.CollectionChanged += (_, _) => RebuildFilteredModels();
-        // 侧栏目录与三级架构（D2）：先按目录建全部条目，再按搜索词过滤成侧栏分组。
+        // 侧栏目录与三级架构（D2）：按目录 + 偏好建条目并同步过滤后的侧栏列表。
         RebuildCategories();
-        UpdateCategoryFilter();
         SyncPlugins(null);
     }
 

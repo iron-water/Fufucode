@@ -57,6 +57,10 @@ public sealed partial class SettingsPageViewModel
         Categories.Clear();
         foreach (var item in EnumerateSidebarItems(_navStore.Current))
             Categories.Add(item);
+        // 侧栏 ListBox 绑的是 FilteredCategories：只填 Categories 会让偏好晚到
+        // （AttachNavPreference 加载 settings-nav.json）时留下用内存空偏好构建的旧列表，
+        // 已收纳进「其他」的大功能会同时出现在一级侧栏和「其他」页里。
+        UpdateCategoryFilter();
     }
 
     /// <summary>
@@ -98,7 +102,6 @@ public sealed partial class SettingsPageViewModel
         if (category is null || !SettingsNavPreference.CanMove(category.Id)) return;
         _navStore.Save(_navStore.Current.Toggle(category.Id));
         RebuildCategories();
-        UpdateCategoryFilter();
         OnPropertyChanged(nameof(CurrentCategoryIsPinned));
         OnPropertyChanged(nameof(CurrentCategoryCanPin));
     }
@@ -121,7 +124,6 @@ public sealed partial class SettingsPageViewModel
         if (SelectedCategory is not { } cat || !SettingsNavPreference.CanMove(cat.Id)) return;
         _navStore.Save(_navStore.Current.Toggle(cat.Id));
         RebuildCategories();
-        UpdateCategoryFilter();
         OnPropertyChanged(nameof(CurrentCategoryIsPinned));
     }
 
