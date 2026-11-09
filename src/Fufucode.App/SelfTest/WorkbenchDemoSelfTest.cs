@@ -444,7 +444,7 @@ internal static class WorkbenchDemoSelfTest
                 var temporaryOptions = real.CreateTemporaryOptions();
                 real.OpenDockPage("sidechat", DockZone.Right); await Ready();
                 var sidePage = real.PageForTesting("sidechat");
-                var sideStart = sidePage.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "新建侧边聊天");
+                var sideStart = sidePage.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "新建侧聊");
                 sideStart.RaiseEvent(new Avalonia.Interactivity.RoutedEventArgs(Button.ClickEvent));
                 var sideChat = sidePage.GetVisualDescendants().OfType<Views.ChatPage>().Single();
                 deadline = DateTime.UtcNow.AddSeconds(40);

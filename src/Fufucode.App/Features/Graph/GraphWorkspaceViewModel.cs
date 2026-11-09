@@ -19,7 +19,6 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public const string PageId = "graph";
     public const string PropertiesPageId = "graph-properties";
     public const string TicketsPageId = "graph-tickets";
-    public const string StructurePageId = "graph-structure";
     public const string HistoryPageId = "graph-history";
     public const string MiniMapPageId = "graph-minimap";
     private readonly IGraphProjectService _service;
@@ -364,7 +363,6 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         SyncSelection();
         Notify(null);
         SceneChanged?.Invoke();
-        RevealPanelRequested?.Invoke(PropertiesPageId);
     }
     public void SelectModules(IEnumerable<string> ids, bool additive = false)
     {
@@ -376,7 +374,6 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         SyncSelection();
         Notify(null);
         SceneChanged?.Invoke();
-        if (_state.ModuleId != null) RevealPanelRequested?.Invoke(PropertiesPageId);
     }
     public void NavigateToModule(string moduleId)
     {

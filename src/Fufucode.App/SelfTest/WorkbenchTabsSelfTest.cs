@@ -130,7 +130,7 @@ internal static class WorkbenchTabsSelfTest
             var mainSession = vm.Session;
             window.OpenDockPage("sidechat", DockZone.Right); await Ready();
             var side = window.PageForTesting("sidechat");
-            Click(side.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "新建侧边聊天"));
+            Click(side.GetVisualDescendants().OfType<Button>().Single(b => b.Content as string == "新建侧聊"));
             var sideChat = side.GetVisualDescendants().OfType<ChatPage>().Single();
             await Until(() => sideChat.DataContext is MainViewModel);
             var sideVm = (MainViewModel)sideChat.DataContext!;

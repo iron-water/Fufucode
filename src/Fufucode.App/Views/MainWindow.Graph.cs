@@ -120,7 +120,7 @@ public partial class MainWindow
         {
             if (page == AppPage.Graph && GraphEnabled)
             {
-                _dockLayout.Open("graph-structure", DockZone.Left);
+                _dockLayout.Open("overview", DockZone.Left);
                 _dockLayout.Open("graph-properties", DockZone.Right);
                 _dockLayout.Open("graph-history", DockZone.Bottom);
             }
@@ -152,14 +152,13 @@ public partial class MainWindow
         foreach (var (actionId, pageId, title) in new[]
         {
             ("graph.properties", "graph-properties", "模块属性"),
-            ("graph.tickets", "graph-tickets", "工单"),
-            ("graph.structure", "graph-structure", "项目结构"),
+            ("graph.tickets", "graph-tickets", "邮件"),
             ("graph.history", "graph-history", "结构历史"),
             ("graph.minimap", "graph-minimap", "极简 Graph")
         })
             Register(actionId, title, "Graph", "", title, () =>
             {
-                OpenDockPage(pageId, pageId == "graph-history" ? DockZone.Bottom : pageId == "graph-structure" ? DockZone.Left : DockZone.Right);
+                OpenDockPage(pageId, pageId == "graph-history" ? DockZone.Bottom : DockZone.Right);
                 return Task.CompletedTask;
             }, () => GraphEnabled && _graphWorkspace is not null ? null : "Graph 模式未启用", true);
         Register("graph.resume-lead", "核查后恢复项目负责人", "Graph", "", "在核查未知影响后建立新的负责人复核回合", async () =>
@@ -168,7 +167,7 @@ public partial class MainWindow
             if (await ApproveGraphDevelopmentAsync("恢复项目负责人", "请先核查上次负责人运行的未知副作用。此操作建立新的复核回合，不重放原未知运行。"))
                 service.ResumeLeadCycle(service.ReadSnapshot().ProjectPath);
         }, () => GraphEnabled && _graphWorkspace is not null ? null : "Graph 模式未启用", true);
-        Register("graph.sidechat", "项目侧边会话", "Graph", "", "打开侧边会话",
+        Register("graph.sidechat", "项目侧聊", "Graph", "", "打开侧聊",
             StartGraphSideChatAsync,
             () => GraphEnabled ? null : "Graph 模式已停用", true);
     }
@@ -202,7 +201,6 @@ public partial class MainWindow
             {
                 ["graph-properties"] = new GraphPropertiesView(model),
                 ["graph-tickets"] = new GraphTicketsView(model),
-                ["graph-structure"] = new GraphStructureView(model),
                 ["graph-history"] = new GraphHistoryView(model),
                 ["graph-minimap"] = new GraphMiniMapView(model)
             };
@@ -241,8 +239,8 @@ public partial class MainWindow
         if (_graphPanelSlots.Count != 0) return;
         foreach (var (id, title, glyph) in new[]
         {
-            ("graph-properties", "属性", "Info"), ("graph-tickets", "工单", "Document"),
-            ("graph-structure", "结构", "AppsList"), ("graph-history", "历史", "History"),
+            ("graph-properties", "属性", "Info"), ("graph-tickets", "邮件", "Document"),
+            ("graph-history", "历史", "History"),
             ("graph-minimap", "Graph", "Branch")
         })
         {

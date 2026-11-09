@@ -76,7 +76,7 @@ void DomainBoundaries()
     vm.RevealPanelRequested += requested.Add;
     Check(service.Subscriptions == 1 && vm.Snapshot.Modules.Count == 5, "service snapshot initializes without demo data");
     vm.SelectModule("a"); vm.SelectModule("b", true);
-    Check(vm.SelectedModuleIds.Count == 2 && requested.Last() == "graph-properties", "selection requests existing properties panel");
+    Check(vm.SelectedModuleIds.Count == 2 && requested.Count == 0, "selection changes context without opening a panel");
     vm.ExpandSelected();
     Check(vm.Scene.Nodes.Any(n => n.Module.Id == "a1") && vm.Scene.Nodes.Any(n => n.Module.Id == "b"), "multi expand retains selected leaf");
     Check(vm.Scene.Nodes.Any(n => n.Module.Id == "leaf" && n.IsReference), "cross layer reference preserves real id");
@@ -218,13 +218,17 @@ void NativeInteractions()
         Check(vm.MainViewport.X != original.X && vm.MainViewport.Y != original.Y, "native drag pans viewport");
         var beforeScale = vm.MainViewport.Scale;
         window.MouseWheel(blank, new Vector(0, 1)); Pump();
-        Check(vm.MainViewport.Scale > beforeScale, "native wheel zooms viewport");
+        Check(vm.MainViewport.Scale == beforeScale, "native wheel pans without implicit zoom");
+        window.MouseWheel(blank, new Vector(0, 1), RawInputModifiers.Control); Pump();
+        Check(vm.MainViewport.Scale > beforeScale, "Ctrl wheel explicitly zooms viewport");
         Press(Find<Button>(page, "GraphFit"));
         Check(vm.MainViewport.Scale <= 1.25, "fit button restores visible content");
-        Press(Find<Button>(page, "GraphToggleList"));
+        var toggleList = ((MenuFlyout)Find<Button>(page, "GraphMoreViews").Flyout!).Items.OfType<MenuItem>()
+            .Single(item => AutomationProperties.GetAutomationId(item) == "GraphToggleList");
+        toggleList.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); Pump();
         Check(vm.IsListView && !canvas.IsVisible && Find<Button>(page, "GraphModule-root").IsVisible,
             "list view provides real module names and selectable controls");
-        Press(Find<Button>(page, "GraphToggleList"));
+        toggleList.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); Pump();
         using var mini = new GraphMiniMapView(vm);
         var miniWindow = new Window { Width = 350, Height = 300, Content = mini }; miniWindow.Show(); Pump();
         try
@@ -240,8 +244,10 @@ void NativeInteractions()
                 center.Y * vm.MiniMapViewport.Scale + vm.MiniMapViewport.Y);
             var requested = new List<string>(); vm.RevealPanelRequested += requested.Add;
             Click(miniWindow, miniCanvas.TranslatePoint(local, miniWindow)!.Value);
-            Check(requested.Contains("graph") && vm.SelectedModuleId == vm.Scene.Nodes.First().Module.Id,
-                "mini map click returns to central Graph identity");
+            Check(requested.Count == 0 && vm.SelectedModuleId == vm.Scene.Nodes.First().Module.Id,
+                "mini map click selects without navigating or opening properties");
+            Press(Find<Button>(mini, "GraphMiniOpenMain"));
+            Check(requested.SequenceEqual(new[] { "graph" }), "mini map navigation requires explicit open-in-main");
         }
         finally { miniWindow.Close(); }
         foreach (var dark in new[] { true, false })
@@ -277,20 +283,21 @@ void OrganizationInbox()
         Check(vm.SelectedTicketId == "t1" && vm.SelectedModuleId == "a" && service.Mutations == mutations && service.AcceptCalls == 0 &&
             vm.SelectedHumanMessage?.Status == GraphMessageStatus.Delivered, "opening inbox selects context without advancing or accepting");
         var texts = view.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
-        Check(texts.Contains("Human question") && texts.Contains("Delivered") && texts.Contains("lead"), "inbox renders sender content and real lifecycle status");
+        Check(texts.Contains("Human question") && texts.Contains("已送达") && texts.Contains("lead"), "inbox renders sender content and localized real lifecycle status");
         string? module = "unset", ticket = "unset";
         vm.OpenChatRequested += (m, t, _) => { module = m; ticket = t; };
-        Press(Find<Button>(view, "GraphProjectLeadChat"));
+        vm.OpenProjectLeadChat();
         Check(module == null && ticket == null && service.ContextModule == null && service.ContextTicket == null,
             "project lead chat remains project scoped with active selection");
         Find<TextBox>(view, "GraphOrganizationReply").Text = "Human answer";
         Press(Find<Button>(view, "GraphSendOrganizationReply"));
         Check(vm.Error != null && vm.OrganizationReply == "Human answer" && service.Mutations == mutations,
             "fake without organization capability fails visibly and preserves reply draft");
-        var toggle = view.GetVisualDescendants().OfType<CheckBox>().Single(c => Equals(c.Content, "内部工作"));
-        toggle.IsChecked = true; Pump();
-        Check(vm.ShowInternalWork && Find<Button>(view, "GraphMail-t1") != null, "native internal switch restores legacy ticket rows");
-        toggle.IsChecked = false; Pump();
+        vm.ShowInternalWork = true; Pump();
+        Check(!view.GetVisualDescendants().OfType<CheckBox>().Any(c => Equals(c.Content, "内部工作")) &&
+            !view.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetAutomationId(b) == "GraphMail-t1"),
+            "legacy internal selection cannot reintroduce management forms into human mail");
+        vm.ShowInternalWork = false; Pump();
         var resets = 0;
         vm.HumanInbox.CollectionChanged += (_, e) => { if (e.Action == NotifyCollectionChangedAction.Reset) resets++; };
         service.Current = service.Current with { Organization = organization with { Version = 8 } }; service.RaiseChanged(); Pump();
@@ -332,14 +339,14 @@ void DevelopmentBindings()
     try
     {
         Check(vm.CandidateManifestPath == manifest, "development candidate derives from selected executor run result");
-        var expander = view.GetVisualDescendants().OfType<Expander>().Single(e => Equals(e.Header, "候选验证与集成"));
-        expander.IsExpanded = true; Pump();
-        Find<TextBox>(view, "GraphValidationExecutable").Text = "relative.exe";
+        Check(!view.GetVisualDescendants().OfType<Expander>().Any(e => Equals(e.Header, "候选验证与集成")),
+            "candidate management is not mixed into human correspondence");
+        vm.ValidationExecutable = "relative.exe";
         Check(!vm.ValidateCandidateAsync().GetAwaiter().GetResult() && vm.Error != null, "validation refuses nonabsolute executable before host dispatch");
         var exe = Path.GetFullPath(Path.Combine(Path.GetTempPath(), "trusted-fixture.exe"));
-        Find<TextBox>(view, "GraphValidationExecutable").Text = exe;
-        Find<TextBox>(view, "GraphValidationArguments").Text = "build\nargument with spaces\n\nlast";
-        Find<TextBox>(view, "GraphValidationTimeout").Text = "12";
+        vm.ValidationExecutable = exe;
+        vm.ValidationArguments = "build\nargument with spaces\n\nlast";
+        vm.ValidationTimeout = "12";
         var validations = 0; var integrations = 0;
         vm.ValidateCandidateRequested += (ticket, candidate, executable, arguments, timeout, _) =>
         {
@@ -349,10 +356,10 @@ void DevelopmentBindings()
             validations++; return Task.FromResult("Passed; requires post-integration validation");
         };
         vm.IntegrateCandidateRequested += (ticket, _) => { integrations++; return Task.FromResult("Integrated; target revalidation required"); };
-        Press(Find<Button>(view, "GraphValidateCandidate"));
+        vm.ValidateCandidateAsync().GetAwaiter().GetResult();
         Check(validations == 1 && vm.DevelopmentResult.Contains("Passed") && service.AcceptCalls == 0 && service.Mutations == 0,
             "validation displays host result without product acceptance or graph mutation");
-        Press(Find<Button>(view, "GraphIntegrateCandidate"));
+        vm.IntegrateCandidateAsync().GetAwaiter().GetResult();
         Check(integrations == 1 && vm.DevelopmentResult.Contains("revalidation required") && service.AcceptCalls == 0,
             "integration dispatch remains separate and displays target revalidation requirement");
         service.RaiseChanged(); Pump();
@@ -361,8 +368,8 @@ void DevelopmentBindings()
         Check(vm.CandidateManifestPath == null && vm.DevelopmentResult == "", "development candidate and result are ticket scoped");
         Check(!vm.ValidateCandidateAsync().GetAwaiter().GetResult() && validations == 1, "ticket without candidate cannot dispatch validation");
         vm.SelectTicket("t1"); vm.ShowRevision(2); Pump();
-        Check(!expander.IsEnabled && !vm.ValidateCandidateAsync().GetAwaiter().GetResult() && !vm.IntegrateCandidateAsync().GetAwaiter().GetResult() &&
-            validations == 1 && integrations == 1, "historical development UI and commands reject both writes");
+        Check(!vm.ValidateCandidateAsync().GetAwaiter().GetResult() && !vm.IntegrateCandidateAsync().GetAwaiter().GetResult() &&
+            validations == 1 && integrations == 1, "historical development contracts reject both writes");
     }
     finally { window.Close(); }
 }
@@ -400,10 +407,9 @@ void FormBindings()
     using var vm = new GraphWorkspaceViewModel(service);
     using var properties = new GraphPropertiesView(vm);
     using var tickets = new GraphTicketsView(vm);
-    using var structure = new GraphStructureView(vm);
     using var history = new GraphHistoryView(vm);
-    var columns = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*,*") };
-    var views = new Control[] { properties, tickets, structure, history };
+    var columns = new Grid { ColumnDefinitions = new ColumnDefinitions("*,*,*") };
+    var views = new Control[] { properties, tickets, history };
     for (var i = 0; i < views.Length; i++) { Grid.SetColumn(views[i], i); columns.Children.Add(views[i]); }
     var window = new Window { Width = 1500, Height = 900, Content = columns }; window.Show(); Pump();
     try
@@ -427,41 +433,36 @@ void FormBindings()
         Press(Find<Button>(properties, "GraphSaveRelation"));
         Check(service.Current.Relations.Any(r => r.SourceId == "a" && r.TargetId == "b" && r.Kind == "dataflow" && r.Label == "flow label"),
             "relation form submits typed endpoints and label");
-        vm.ShowInternalWork = true; Pump();
-        Press(Find<Button>(tickets, "GraphNewTicket"));
-        Find<TextBox>(tickets, "GraphTicketTitle").Text = "Form ticket";
-        Find<TextBox>(tickets, "GraphTicketGoal").Text = "Form goal";
-        Find<TextBox>(tickets, "GraphTicketAcceptance").Text = "Criterion one\nCriterion two";
-        Press(Find<Button>(tickets, "GraphCreateTicket"));
+        Check(!tickets.GetVisualDescendants().OfType<Button>().Any(b => AutomationProperties.GetAutomationId(b) == "GraphNewTicket"),
+            "human mail excludes internal work creation controls");
+        vm.BeginTicket();
+        vm.TicketDraft.Title = "Form ticket"; vm.TicketDraft.Goal = "Form goal";
+        vm.TicketDraft.Acceptance = "Criterion one\nCriterion two";
+        vm.CreateTicket();
         Check(service.Current.Tickets.Last().Title == "Form ticket" && service.Current.Tickets.Last().ModuleIds.Contains("a"),
-            "mail create form retains associated module selection");
-        Press(Find<Button>(tickets, "GraphMail-t1"));
-        Check(vm.SelectedTicketId == "t1" && service.AcceptCalls == 0, "native mail row opens thread without acceptance");
-        Find<TextBox>(tickets, "GraphReplyText").Text = "Reply from form";
-        Press(Find<Button>(tickets, "GraphSendEntry"));
+            "internal work creation still retains associated module selection through its VM contract");
+        vm.SelectTicket("t1");
+        Check(vm.SelectedTicketId == "t1" && service.AcceptCalls == 0, "internal selection is not acceptance");
+        vm.Correspondence.Text = "Reply from form"; vm.SendEntry();
         Check(service.AddedEntries.Last().Text == "Reply from form" && service.AddedEntries.Last().Kind == "message",
-            "native mail reply sends real correspondence");
-        vm.Correspondence.EvidenceCriterion = "build"; vm.Correspondence.EvidencePassed = true;
-        Find<TextBox>(tickets, "GraphEvidenceText").Text = "compiled in test";
-        Find<TextBox>(tickets, "GraphEvidenceReference").Text = "build.log";
-        Press(Find<Button>(tickets, "GraphAddEvidence"));
+            "internal correspondence contract remains authoritative");
+        vm.AddEvidence("build", "compiled in test", true, "build.log");
         Check(service.AddedEntries.Last().Reference == "build.log" && service.AddedEntries.Last().Kind == "evidence",
-            "native evidence form adds linked evidence");
+            "evidence contract retains linked evidence outside human mailbox forms");
         service.Reject = true;
-        Find<TextBox>(tickets, "GraphAcceptanceEvidence").Text = "build.log";
-        Press(Find<Button>(tickets, "GraphAcceptTicket"));
+        vm.Correspondence.AcceptanceEvidence = "build.log"; vm.AcceptTicket();
         Check(vm.Error?.Contains("authority rejected") == true && service.AcceptCalls == 0 && vm.SelectedTicket?.Status == "Review",
             "acceptance rejection is visible and status stays authoritative");
         service.Reject = false;
         vm.ShowRevision(1); Pump();
         Check(!Find<Button>(properties, "GraphSavePurpose").IsEnabled &&
-            !Find<Button>(properties, "GraphSaveModule").IsEnabled && !Find<Button>(tickets, "GraphCreateTicket").IsEnabled,
-            "historical forms disable write controls");
+            !Find<Button>(properties, "GraphSaveModule").IsEnabled && !vm.CanEdit && !vm.CreateTicket(),
+            "historical property and mail controls plus internal contracts reject writes");
         var texts = properties.GetVisualDescendants().OfType<TextBlock>().Select(t => t.Text).ToArray();
         Check(texts.Contains("尚未建立"), "missing historical object renders explicit text");
         vm.ShowRevision(null); Pump();
-        var tree = structure.GetVisualDescendants().OfType<TreeView>().Single();
-        Check(tree.Items.Count > 0, "structure panel builds native hierarchy from snapshot");
+        vm.GoBottom();
+        Check(vm.Scene.Groups.Count > 0 && vm.Scene.Nodes.Count > 0, "module hierarchy remains navigable without the retired structure page");
         var slider = history.GetVisualDescendants().OfType<Slider>().Single(); slider.Value = 0; Pump();
         Check(vm.Snapshot.Revision == 1 && vm.IsHistorical, "history native slider selects the same frozen snapshot");
     }
@@ -548,13 +549,17 @@ void ReceiptPresentation()
     {
         vm.ShowInternalWork = true;
         vm.SelectTicket("t1"); vm.SelectModule("a"); Pump();
-        var visibleText = tickets.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? "").ToArray();
+        var visibleText = history.GetVisualDescendants().OfType<TextBlock>().Where(t => t.IsEffectivelyVisible).Select(t => t.Text ?? "").ToArray();
         Check(visibleText.Any(t => t.Contains("邮件已建立") && t.Contains("目标")) && visibleText.All(t => !t.Contains("\\u5DE5") && !t.Contains("ticket-created") && !t.Contains("human")),
-            "internal mail view renders readable correspondence without internal JSON or actor ids");
-        var raw = tickets.GetVisualDescendants().OfType<Expander>().First(e => e.Header as string == "原始记录");
-        Check(!raw.IsExpanded && raw.Content == null, "raw receipt stays collapsed and unmaterialized by default");
-        raw.IsExpanded = true; Pump();
-        Check(raw.GetVisualDescendants().OfType<TextBox>().Any(t => t.Text == payload), "raw receipt expands to unchanged source text");
+            "history renders readable internal receipts outside the human mailbox");
+        var receiptViews = history.GetVisualDescendants().OfType<Expander>().Where(e => e.Header as string == "原始记录" &&
+            AutomationProperties.GetAutomationId(e) != "GraphHistoryRawSources").ToArray();
+        Check(receiptViews.Length > 0 && receiptViews.All(raw => !raw.IsExpanded && raw.Content == null),
+            "raw receipts stay collapsed and unmaterialized by default");
+        foreach (var raw in receiptViews) raw.IsExpanded = true;
+        Pump();
+        Check(receiptViews.Any(raw => raw.Content is TextBox receipt && receipt.Text == payload),
+            "raw receipt expands to unchanged source text");
         var sources = Find<Expander>(history, "GraphHistoryRawSources");
         Check(!sources.IsExpanded && sources.Content == null && !history.GetVisualDescendants().OfType<TextBlock>().Any(t => t.IsEffectivelyVisible &&
             (t.Text?.Contains("retained-hash") == true || t.Text?.Contains("internal-source") == true)),
@@ -584,51 +589,47 @@ void RecoveryOperations()
     {
         vm.ShowInternalWork = true;
         vm.SelectTicket("t1"); Pump();
-        var recovery = Find<Expander>(tickets, "GraphRecovery");
-        Check(!recovery.IsExpanded && recovery.Header as string == "人工恢复", "recovery operations default to a collapsed decision section");
+        Check(!tickets.GetVisualDescendants().OfType<Expander>().Any(e => AutomationProperties.GetAutomationId(e) == "GraphRecovery"),
+            "human mailbox excludes internal recovery management");
         Check(vm.HasActiveTicketVeto && vm.HasTicketRecoveryActions && !GraphEntryPresentation.IsActiveTicketVeto(veto, "t2"),
             "active veto visibility follows authority decision and exact ticket target");
-        recovery.IsExpanded = true; Pump();
-        var retry = Find<Button>(tickets, "GraphAllowRetry");
-        var lift = Find<Button>(tickets, "GraphLiftVeto");
-        var reason = Find<TextBox>(tickets, "GraphLiftVetoReason");
         var controls = tickets.GetVisualDescendants().OfType<Control>().ToArray();
         Check(!controls.Any(c => AutomationProperties.GetAutomationId(c) is "GraphRecoveryResolution" or "GraphRecoveryChecked"),
             "Kernel recovery exposes no mechanical side-effect checkbox or mandatory report");
         Check(!controls.Any(c => AutomationProperties.GetAutomationId(c) == "GraphLinkSessionId"),
             "ticket UI does not expose manual session identity input");
-        Check(vm.NeedsTicketReconciliation && retry.IsEnabled, "unknown result exposes one host reconciliation action");
-        reason.Text = "已确认原否决原因解除"; Pump();
+        Check(vm.NeedsTicketReconciliation, "unknown result retains its host reconciliation capability");
+        vm.Correspondence.LiftVetoReason = "已确认原否决原因解除";
         vm.SelectTicket("t2"); Pump();
-        Check(!vm.NeedsTicketReconciliation && !recovery.IsVisible, "ordinary ticket hides unknown recovery");
+        Check(!vm.NeedsTicketReconciliation, "ordinary ticket has no unknown recovery");
         Check(!vm.ReconcileTicket() && service.ReconcileCalls == 0, "ordinary ticket cannot invoke recovery through VM");
         vm.SelectTicket("t1"); Pump();
-        Check(reason.Text == "已确认原否决原因解除", "human veto reasons remain scoped by ticket");
-        service.Reject = true; Press(retry);
+        Check(vm.Correspondence.LiftVetoReason == "已确认原否决原因解除", "human veto reasons remain scoped by ticket");
+        service.Reject = true; vm.ReconcileTicket();
         Check(service.ReconcileCalls == 0 && vm.Error?.Contains("authority rejected") == true &&
             vm.SelectedTicket?.Status == "NeedsReconciliation", "host recovery rejection preserves unknown state");
-        service.Reject = false; Press(retry);
+        service.Reject = false; vm.ReconcileTicket();
         Check(service.ReconcileCalls == 1 && service.RecoveryTicketId == "t1" && service.RecoveryResolution == "" &&
             vm.SelectedTicket?.Status == "Authorized", "one recovery action delegates actual inspection to authority without user declaration");
         Check(!vm.NeedsTicketReconciliation && service.RunCalls == 0 && service.AutonomyCalls == 0,
             "recovery never starts execution or queue advancement implicitly");
         service.Replace(service.Current with { Tickets = service.Current.Tickets.Select(t => t.Id == "t1"
             ? t with { Status = "ReplanRequired" } : t).ToArray() }); Pump();
-        reason.Text = "   "; Pump();
+        vm.Correspondence.LiftVetoReason = "   ";
         Check(!vm.LiftVeto() && service.LiftVetoCalls == 0 && vm.Error?.Contains("解除理由不能为空") == true,
             "lifting veto requires nonempty human reason");
-        reason.Text = "已核实可恢复原工作"; service.Reject = true; Press(lift);
-        Check(service.LiftVetoCalls == 0 && vm.Error?.Contains("authority rejected") == true && reason.Text == "已核实可恢复原工作",
+        vm.Correspondence.LiftVetoReason = "已核实可恢复原工作"; service.Reject = true; vm.LiftVeto();
+        Check(service.LiftVetoCalls == 0 && vm.Error?.Contains("authority rejected") == true && vm.Correspondence.LiftVetoReason == "已核实可恢复原工作",
             "veto authority failure remains visible and retains reason");
-        service.Reject = false; Press(lift);
+        service.Reject = false; vm.LiftVeto();
         Check(service.LiftVetoCalls == 1 && service.RecoveryTicketId == "t1" && service.LiftVetoReason == "已核实可恢复原工作" &&
             service.RunCalls == 0 && service.AutonomyCalls == 0 && vm.SelectedTicket?.Status == "ReplanRequired",
             "lifting veto submits reason and leaves authoritative replanning state without running");
-        Check(!vm.HasActiveTicketVeto && !recovery.IsVisible && service.Current.Entries.First(e => e.Id == veto.Id).Text.Contains("Lifted"),
-            "lifted decision hides recovery action while retaining original veto identity");
+        Check(!vm.HasActiveTicketVeto && service.Current.Entries.First(e => e.Id == veto.Id).Text.Contains("Lifted"),
+            "lifted decision retains original veto identity");
         vm.ShowRevision(2); Pump(); var mutations = service.Mutations;
-        Check(!lift.IsEnabled && !retry.IsEnabled && !vm.LiftVeto() && !vm.ReconcileTicket() && service.Mutations == mutations,
-            "historical recovery buttons and direct VM mutations stay read only");
+        Check(!vm.LiftVeto() && !vm.ReconcileTicket() && service.Mutations == mutations,
+            "historical direct VM recovery mutations stay read only");
         vm.ShowRevision(null); Pump();
         Check(vm.Correspondence.LiftVetoReason == "已核实可恢复原工作",
             "recovery drafts survive historical round trip");

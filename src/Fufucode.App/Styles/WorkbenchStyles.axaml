@@ -25,6 +25,39 @@
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
 
+  <Style Selector="ListBox.graphMailInbox ListBoxItem">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+    <Setter Property="Padding" Value="0"/>
+  </Style>
+
+  <Style Selector="ListBox.graphMailInbox ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
+    <Setter Property="BorderThickness" Value="2,0,0,0"/>
+  </Style>
+
+  <!-- Graph 统一命令区：沿用工作台表面、边界和按钮反馈，分组可随画布宽度换行。 -->
+  <Style Selector="Border.graphToolbar">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="12,8"/>
+    <Setter Property="Margin" Value="8"/>
+  </Style>
+  <Style Selector="Border.graphToolbarGroup">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
+    <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    <Setter Property="Padding" Value="0,0,12,0"/>
+    <Setter Property="Margin" Value="0,0,12,4"/>
+  </Style>
+  <Style Selector="Button.graphToolCommand">
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="MinHeight" Value="32"/>
+    <Setter Property="MinWidth" Value="32"/>
+  </Style>
+
   <!-- 新建会话后端选择条：常驻二级色，悬停/按下升到三级色。 -->
   <Style Selector="Button.backendSwitchBar">
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>

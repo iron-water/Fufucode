@@ -88,7 +88,7 @@ public static class WorkbenchActionDefaults
         "browser.focus-address" => "Edit", "browser.toggle-full-view" => "FullScreenMaximize",
         "workspace.mode" => "ArrowShuffle",
         "graph" or "graph.minimap" => "Branch",
-        "graph.properties" => "Info", "graph.tickets" => "Document", "graph.structure" => "AppsList",
+        "graph.properties" => "Info", "graph.tickets" => "Document",
         "graph.history" => "History", "graph.sidechat" => "Chat",
         "page.local-review" => "ShieldCheckmark", "page.automation" => "Automation", "library" => "Folder",
         "page.layerfs" => "Branch",

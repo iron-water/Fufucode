@@ -43,8 +43,9 @@ internal static class NativeWorkModesSelfTest
         var module = service.UpsertModule(null, null, "未来架构模块", "TEST-ONLY planned module", []);
         window.GraphModelForTesting!.Refresh();
         window.GraphModelForTesting.SelectModule(module.Id);
-        var graphOnly = new[] { "graph-properties", "graph-structure", "graph-tickets", "graph-history" };
-        Check(graphOnly.All(window.PageAvailableForTesting), "Graph exposes its dedicated panels");
+        var graphOnly = new[] { "graph-properties", "graph-tickets", "graph-history" };
+        Check(graphOnly.All(window.PageAvailableForTesting) && !window.PageAvailableForTesting("graph-structure"),
+            "Graph exposes its dedicated panels and retires the structure page");
         Check(ProjectMenu(window, original.ProjectId).Contains("打开图") && !ProjectMenu(window, original.ProjectId).Contains("新建会话"),
             "Graph project menu opens its unique graph, never creates a Chat");
         Check(!BackendSelectorVisible(window), "Graph project manager hides the Chat backend selector");

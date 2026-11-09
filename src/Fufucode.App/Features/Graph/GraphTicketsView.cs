@@ -1,231 +1,408 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Templates;
-using Avalonia.Data;
 using Avalonia.Data.Converters;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using Fufucode.App.Abstractions.Graph;
 
 namespace Fufucode.App.Features.Graph;
 
-/// <summary>Mailbox and correspondence, with explicit evidence and acceptance commands.</summary>
+/// <summary>Human correspondence. Opening mail changes presentation and selection only.</summary>
 public sealed class GraphTicketsView : GraphContentView
 {
-    private readonly ScrollViewer _threadScroll = new()
-    { HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
-    private string? _threadKey;
-    private bool _restoring;
+    // Presentation belongs to this workspace, including when its dock content is recreated.
+    private static readonly ConditionalWeakTable<GraphWorkspaceViewModel, MailState> States = new();
+    private sealed class MailState
+    {
+        public readonly Dictionary<string, string> Drafts = new(StringComparer.Ordinal);
+        public readonly Dictionary<string, bool> OpenDetails = new(StringComparer.Ordinal);
+        public GridLength ListWidth = new(2, GridUnitType.Star);
+        public GridLength DetailWidth = new(3, GridUnitType.Star);
+    }
+
+    private readonly MailState _state;
+    private readonly ListBox _inbox;
+    private readonly ScrollViewer _detailScroll = new()
+    {
+        HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+    };
+    private readonly Grid _panes = new();
+    private readonly Grid _listPane = new();
+    private readonly Grid _detailPane = new();
+    private readonly GridSplitter _splitter;
+    private readonly Button _back;
+    private readonly TextBlock _emptyList = GraphUi.Text("暂无邮件", "caption");
+    private readonly TextBlock _emptyDetail = GraphUi.Text("选择邮件", "caption");
+    private readonly StackPanel _message;
+    private readonly TextBox _draft;
+    private ScrollViewer? _listScroll;
+    private string? _contextKey, _messageKey;
+    private bool _wide, _detailOpen, _synchronizing, _restoring, _attached;
     private int _restoreGeneration;
+
     public GraphTicketsView(GraphWorkspaceViewModel vm) : base(vm)
     {
+        _state = States.GetValue(vm, _ => new MailState());
         AutomationProperties.SetAutomationId(this, "GraphTickets");
-        var mail = new ItemsControl
+        _inbox = new ListBox
         {
-            ItemTemplate = new FuncDataTemplate<GraphTicketRow>((row, _) => row == null ? null : MailRow(vm, row))
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+            AutoScrollToSelectedItem = false,
+            ItemsSource = vm.HumanInbox,
+            ItemTemplate = new FuncDataTemplate<GraphOrganizationMessage>((mail, _) => mail == null ? null : MailRow(mail))
         };
-        GraphUi.Bind(mail, ItemsControl.ItemsSourceProperty, "TicketRows");
-        GraphUi.Bind(mail, IsVisibleProperty, "ShowInternalWork");
-        var inbox = new ItemsControl
+        _inbox.Classes.Add("graphMailInbox");
+        ScrollViewer.SetHorizontalScrollBarVisibility(_inbox, ScrollBarVisibility.Disabled);
+        ScrollViewer.SetVerticalScrollBarVisibility(_inbox, ScrollBarVisibility.Auto);
+        AutomationProperties.SetAutomationId(_inbox, "GraphHumanInbox");
+        AutomationProperties.SetName(_inbox, "邮件");
+        _inbox.KeyDown += (_, e) =>
         {
-            ItemTemplate = new FuncDataTemplate<GraphOrganizationMessage>((message, _) =>
-            {
-                if (message == null) return null;
-                var button = GraphUi.Button(message.SenderId, () => vm.SelectHumanMessage(message.Id), "GraphInbox-" + message.Id);
-                button.Content = GraphUi.Stack(GraphUi.Text(message.SenderId, "bodyStrong"),
-                    GraphUi.Text(message.Content.Text), GraphUi.Text(message.Status.ToString(), "caption"),
-                    GraphUi.Text(message.Resolution ?? "", "caption"));
-                button.HorizontalAlignment = HorizontalAlignment.Stretch;
-                button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-                return button;
-            })
+            if (e.Key == Key.Enter && _inbox.SelectedItem is GraphOrganizationMessage mail)
+            { OpenHumanMessage(mail.Id); e.Handled = true; }
         };
-        GraphUi.Bind(inbox, ItemsControl.ItemsSourceProperty, "HumanInbox");
-        GraphUi.Bind(inbox, IsVisibleProperty, "ShowHumanInbox");
-        var mailbox = GraphUi.Scroll(GraphUi.Stack(inbox, mail));
-        var moduleChoices = new ItemsControl
+        _emptyList.Margin = new Thickness(16);
+        _listPane.Children.Add(_inbox);
+        _listPane.Children.Add(_emptyList);
+
+        // Drafts are deliberately not bound to the VM's single reply slot. Selection and
+        // snapshot refresh may reset that slot; each message keeps its own presentation draft.
+        _draft = new TextBox
         {
-            ItemTemplate = new FuncDataTemplate<GraphModule>((module, _) =>
-            {
-                if (module == null) return null;
-                var check = new CheckBox { Content = module.Name };
-                GraphUi.Bind(check, ToggleButton.IsCheckedProperty, "TicketDraft.ModuleIds", source: vm,
-                    converter: new FuncValueConverter<IReadOnlyCollection<string>, bool>(ids => ids?.Contains(module.Id) == true));
-                check.Click += (_, _) => vm.TicketDraft.IncludeModule(module.Id, check.IsChecked == true);
-                return check;
-            })
+            AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 96,
+            MaxHeight = 240, HorizontalAlignment = HorizontalAlignment.Stretch
         };
-        GraphUi.Bind(moduleChoices, ItemsControl.ItemsSourceProperty, "Modules");
-        var create = GraphUi.Stack(GraphUi.Text("新建邮件", "bodyStrong"),
-            GraphUi.Field("主题", GraphUi.Input("TicketDraft.Title", "GraphTicketTitle")),
-            GraphUi.Field("目标", GraphUi.Input("TicketDraft.Goal", "GraphTicketGoal", true)),
-            GraphUi.Field("验收条件", GraphUi.Input("TicketDraft.Acceptance", "GraphTicketAcceptance", true)),
-            GraphUi.Field("关联模块", moduleChoices),
-            GraphUi.Actions(GraphUi.Button("创建邮件", () => vm.CreateTicket(), "GraphCreateTicket", true),
-                GraphUi.Button("取消", vm.CancelTicketEdit, "GraphCancelTicket")));
-        GraphUi.Bind(create, IsVisibleProperty, "IsTicketEditorOpen");
-        GraphUi.Bind(create, IsEnabledProperty, "CanEdit");
-        var linkedModules = new ItemsControl
+        _draft.Classes.Add("dialogInput");
+        AutomationProperties.SetAutomationId(_draft, "GraphOrganizationReply");
+        AutomationProperties.SetName(_draft, "回复");
+        _draft.TextChanged += (_, _) =>
         {
-            ItemTemplate = new FuncDataTemplate<GraphModuleOption>((module, _) => module?.Id == null ? null :
-                GraphUi.Button(module.Name, () => vm.NavigateToModule(module.Id)))
+            if (!_synchronizing && _messageKey != null) _state.Drafts[_messageKey] = _draft.Text ?? "";
         };
-        GraphUi.Bind(linkedModules, ItemsControl.ItemsSourceProperty, "TicketModules");
-        var entries = new ItemsControl
-        {
-            ItemTemplate = new FuncDataTemplate<GraphEntry>((entry, _) => entry == null ? null : GraphUi.Entry(entry))
-        };
-        GraphUi.Bind(entries, ItemsControl.ItemsSourceProperty, "ThreadEntries");
-        var runs = new ItemsControl
-        {
-            ItemTemplate = new FuncDataTemplate<GraphRun>((run, _) => run == null ? null : GraphUi.Stack(
-                GraphUi.Text(GraphLabels.Status(run.Status) + " · " + GraphLabels.Time(run.StartedUtc), "caption"),
-                GraphUi.Text(run.Detail ?? "")))
-        };
-        GraphUi.Bind(runs, ItemsControl.ItemsSourceProperty, "SelectedTicketRuns");
-        var send = GraphUi.Stack(
-            GraphUi.Field("往来", GraphUi.Input("Correspondence.Text", "GraphReplyText", true)),
-            GraphUi.Field("引用", GraphUi.Input("Correspondence.Reference", "GraphReplyReference")),
-            GraphUi.Button("发送邮件", () => vm.SendEntry(), "GraphSendEntry", true));
-        var criterion = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        GraphUi.Bind(criterion, ItemsControl.ItemsSourceProperty, "SelectedTicket.Acceptance");
-        GraphUi.Bind(criterion, SelectingItemsControl.SelectedItemProperty, "Correspondence.EvidenceCriterion", BindingMode.TwoWay,
-            converter: new GraphUi.SelectionIdConverter());
-        var passed = new CheckBox { Content = "通过" };
-        GraphUi.Bind(passed, ToggleButton.IsCheckedProperty, "Correspondence.EvidencePassed", BindingMode.TwoWay);
-        var evidence = GraphUi.Stack(
-            GraphUi.Field("验收项", criterion), GraphUi.Field("证据", GraphUi.Input("Correspondence.EvidenceText", "GraphEvidenceText", true)),
-            GraphUi.Field("证据引用", GraphUi.Input("Correspondence.EvidenceReference", "GraphEvidenceReference")), passed,
-            GraphUi.Button("添加证据", () => vm.AddEvidence(vm.Correspondence.EvidenceCriterion, vm.Correspondence.EvidenceText,
-                vm.Correspondence.EvidencePassed, vm.Correspondence.EvidenceReference), "GraphAddEvidence", true));
-        var retry = GraphUi.Button("允许重试", () => vm.ReconcileTicket(), "GraphAllowRetry", true);
-        var reconcile = GraphUi.Stack(retry);
-        GraphUi.Bind(reconcile, IsVisibleProperty, "NeedsTicketReconciliation");
-        var liftVeto = GraphUi.Stack(
-            GraphUi.Field("解除理由", GraphUi.Input("Correspondence.LiftVetoReason", "GraphLiftVetoReason", true)),
-            GraphUi.Button("解除否决", () => vm.LiftVeto(), "GraphLiftVeto", true));
-        GraphUi.Bind(liftVeto, IsVisibleProperty, "HasActiveTicketVeto");
-        var recovery = new Expander
-        {
-            Header = "人工恢复", HorizontalAlignment = HorizontalAlignment.Stretch,
-            Content = GraphUi.Stack(liftVeto, reconcile)
-        };
-        AutomationProperties.SetAutomationId(recovery, "GraphRecovery");
-        GraphUi.Bind(recovery, IsVisibleProperty, "HasTicketRecoveryActions");
-        var decisions = GraphUi.Stack(
-            GraphUi.Field("否决原因", GraphUi.Input("Correspondence.VetoReason", "GraphVetoReason", true)),
-            GraphUi.Button("否决", () => vm.VetoTicket(), "GraphVetoTicket", true),
-            GraphUi.Field("验收引用", GraphUi.Input("Correspondence.AcceptanceEvidence", "GraphAcceptanceEvidence")),
-            GraphUi.Button("验收", () => vm.AcceptTicket(), "GraphAcceptTicket", true), recovery);
-        var editing = GraphUi.Stack(
-            GraphUi.Actions(GraphUi.AsyncButton("运行", () => vm.RunTicketAsync(), "GraphRunTicket"),
-                GraphUi.AsyncButton("停止", () => vm.StopTicketAsync(), "GraphStopTicket")),
-            send, GraphUi.Divider(), evidence, GraphUi.Divider(), decisions);
-        GraphUi.Bind(editing, IsVisibleProperty, "!IsHistorical");
-        var development = new Expander
-        {
-            Header = "候选验证与集成", HorizontalAlignment = HorizontalAlignment.Stretch,
-            Content = GraphUi.Stack(GraphUi.Value("CandidateManifestPath", "caption"),
-                GraphUi.Button("读取模型验证提案", () => vm.LoadValidationProposal(), "GraphLoadValidationProposal", true),
-                GraphUi.Field("可执行文件（绝对路径）", GraphUi.Input("ValidationExecutable", "GraphValidationExecutable")),
-                GraphUi.Field("参数（每行一个，空行作为空参数）", GraphUi.Input("ValidationArguments", "GraphValidationArguments", true)),
-                GraphUi.Field("超时（秒）", GraphUi.Input("ValidationTimeout", "GraphValidationTimeout")),
-                GraphUi.Text("严格策略：不豁免生成物；构建写入也可能被拒绝。集成后必须重新验证，产品验收仍由人决定。", "caption"),
-                GraphUi.Actions(GraphUi.AsyncButton("验证候选", vm.ValidateCandidateAsync, "GraphValidateCandidate"),
-                    GraphUi.AsyncButton("集成候选", vm.IntegrateCandidateAsync, "GraphIntegrateCandidate")),
-                GraphUi.Field("验证覆盖的验收项（逐行精确填写）", GraphUi.Input("CoveredCriteria", "GraphCoveredCriteria", true)),
-                GraphUi.Field("后续工作说明（项目仍继续）", GraphUi.Input("ContinuationReason", "GraphContinuationReason", true)),
-                GraphUi.AsyncButton("完成内部工作", vm.CompleteInternalAsync, "GraphCompleteInternal"),
-                GraphUi.Value("DevelopmentResult"))
-        };
-        GraphUi.Bind(development, IsEnabledProperty, "CanEdit");
-        var details = GraphUi.Stack(GraphUi.Value("SelectedTicketStatus", "caption"),
-            GraphUi.Value("SelectedTicket.Goal"), GraphUi.Field("验收条件", GraphUi.Value("SelectedTicketAcceptance")),
-            linkedModules,
-            GraphUi.Button("打开会话", () => vm.OpenChat(null, vm.SelectedTicketId), "GraphTicketChat"),
-            GraphUi.Divider(), entries, runs, development, editing);
-        GraphUi.Bind(details, IsVisibleProperty, "HasSelectedTicket");
-        var internalThread = GraphUi.Stack(create, GraphUi.Value("TicketSelectionLabel", "bodyStrong"), details);
-        GraphUi.Bind(internalThread, IsVisibleProperty, "ShowInternalWork");
-        var reply = GraphUi.Stack(GraphUi.Field("回复", GraphUi.Input("OrganizationReply", "GraphOrganizationReply", true)),
-            GraphUi.Button("发送回复", () => vm.ReplyToHumanMessage(), "GraphSendOrganizationReply", true));
+        var send = GraphUi.Button("发送回复", SendReply, "GraphSendOrganizationReply", true);
+        var reply = GraphUi.Stack(GraphUi.Field("回复", _draft), GraphUi.Actions(send));
         GraphUi.Bind(reply, IsEnabledProperty, "CanEdit");
-        var humanThread = GraphUi.Stack(GraphUi.Value("SelectedHumanMessage.SenderId", "bodyStrong"),
-            GraphUi.Value("SelectedHumanMessage.Content.Text"), GraphUi.Value("SelectedHumanMessage.Status", "caption"),
-            GraphUi.Value("SelectedHumanMessage.Resolution", "caption"), reply);
-        humanThread.Bind(IsVisibleProperty, new MultiBinding { Converter = BoolConverters.And,
-            Bindings = { new Binding("ShowHumanInbox"), new Binding("HasSelectedHumanMessage") } });
-        var thread = GraphUi.Stack(humanThread, internalThread);
-        thread.Margin = new Thickness(0, 10, 0, 8);
-        _threadScroll.Content = thread;
-        _threadScroll.ScrollChanged += (_, _) =>
-        { if (!_restoring && _threadKey != null) vm.SaveReadingOffset(_threadKey, _threadScroll.Offset); };
-        var addMailPlaceholder = new Button { Content = "添加邮件", IsEnabled = false };
-        AutomationProperties.SetAutomationId(addMailPlaceholder, "GraphAddMailPlaceholder");
-        var commands = GraphUi.Actions(addMailPlaceholder,
-            GraphUi.Button("新建邮件", vm.BeginTicket, "GraphNewTicket", true),
-            GraphUi.AsyncButton("启动推进", () => vm.SetAutonomyAsync(true), "GraphStartAutonomy"),
-            GraphUi.AsyncButton("停止推进", () => vm.SetAutonomyAsync(false), "GraphStopAutonomy"),
-            GraphUi.AsyncButton("停止全部", () => vm.StopAllAsync(), "GraphStopAll"));
-        var internalSwitch = new CheckBox { Content = "内部工作" };
-        GraphUi.Bind(internalSwitch, ToggleButton.IsCheckedProperty, "ShowInternalWork", BindingMode.TwoWay);
-        var top = GraphUi.Stack(GraphUi.Version(vm), GraphUi.Error(vm), GraphUi.Busy(),
-            GraphUi.Actions(GraphUi.Button("项目负责人", vm.OpenProjectLeadChat, "GraphProjectLeadChat"), internalSwitch),
-            commands, GraphUi.Value("ProjectStatus", "caption"));
+        var subject = GraphUi.Text("", "bodyStrong");
+        GraphUi.Bind(subject, TextBlock.TextProperty, "SelectedHumanMessage.Content.Text",
+            converter: new FuncValueConverter<string?, string>(Subject));
+        var kind = GraphUi.Text("", "caption");
+        GraphUi.Bind(kind, TextBlock.TextProperty, "SelectedHumanMessage.Content.Kind",
+            converter: new FuncValueConverter<string?, string>(MessageKind));
+        var status = GraphUi.Text("", "caption");
+        GraphUi.Bind(status, TextBlock.TextProperty, "SelectedHumanMessage.Status",
+            converter: new FuncValueConverter<GraphMessageStatus, string>(value => MessageStatus(value)));
+        var senderName = GraphUi.Value("SelectedHumanMessage.SenderId");
+        GraphUi.Bind(senderName, TextBlock.TextProperty, "SelectedHumanMessage.SenderId",
+            converter: new FuncValueConverter<string?, string>(value => GraphLabels.Actor(value ?? "")));
+        _message = GraphUi.Stack(subject,
+            senderName, kind, status,
+            GraphUi.Divider(), GraphUi.Value("SelectedHumanMessage.Content.Text"),
+            GraphUi.Value("SelectedHumanMessage.Resolution", "caption"),
+            GraphUi.Divider(), reply);
+        _message.Spacing = 12;
+        _message.Margin = new Thickness(16);
+        _message.MaxWidth = 960;
+        _message.HorizontalAlignment = HorizontalAlignment.Stretch;
+        var reading = new Grid();
+        reading.Children.Add(_message);
+        _emptyDetail.Margin = new Thickness(16);
+        reading.Children.Add(_emptyDetail);
+        _detailScroll.Content = reading;
+        AutomationProperties.SetAutomationId(_detailScroll, "GraphMailDetailScroll");
+        _detailScroll.ScrollChanged += (_, _) => SaveDetailOffset();
+        _back = GraphUi.Button("返回", BackToList, "GraphMailBack");
+        var navigation = GraphUi.Actions(_back);
+        navigation.Margin = new Thickness(8, 4, 8, 0);
+        _detailPane.Bind(Panel.BackgroundProperty, new DynamicResourceExtension("AppCardBackground"));
+        _detailPane.RowDefinitions = new RowDefinitions("Auto,*");
+        _detailPane.Children.Add(navigation);
+        Grid.SetRow(_detailScroll, 1);
+        _detailPane.Children.Add(_detailScroll);
+        _splitter = new GridSplitter
+        {
+            Width = 8, HorizontalAlignment = HorizontalAlignment.Stretch,
+            VerticalAlignment = VerticalAlignment.Stretch,
+            ResizeDirection = GridResizeDirection.Columns, ResizeBehavior = GridResizeBehavior.PreviousAndNext
+        };
+        _splitter.Classes.Add("dockSplitter");
+        AutomationProperties.SetAutomationId(_splitter, "GraphMailSplitter");
+        AutomationProperties.SetName(_splitter, "调整邮件列表宽度");
+        _panes.Children.Add(_listPane);
+        _panes.Children.Add(_splitter);
+        _panes.Children.Add(_detailPane);
+        var top = GraphUi.Stack(GraphUi.Version(vm), GraphUi.Error(vm), GraphUi.Busy());
         top.Spacing = 4;
-        var splitter = new GridSplitter { Height = 4, HorizontalAlignment = HorizontalAlignment.Stretch,
-            ResizeDirection = GridResizeDirection.Rows, ResizeBehavior = GridResizeBehavior.PreviousAndNext };
-        splitter.Classes.Add("dockSplitter");
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,170,4,*"), Margin = new Thickness(12, 8), MinHeight = 200 };
-        root.Children.Add(top); Grid.SetRow(mailbox, 1); root.Children.Add(mailbox);
-        Grid.SetRow(splitter, 2); root.Children.Add(splitter);
-        Grid.SetRow(_threadScroll, 3); root.Children.Add(_threadScroll); Content = root;
+        top.Margin = new Thickness(12, 0);
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
+        root.Children.Add(top);
+        Grid.SetRow(_panes, 1);
+        root.Children.Add(_panes);
+        Content = root;
+        SetPaneLayout(false);
+        SizeChanged += (_, _) =>
+        {
+            var wide = Bounds.Width >= 720;
+            if (wide == _wide) return;
+            SaveOffsets();
+            SetPaneLayout(wide);
+            RestoreOffsets();
+        };
+        AttachedToVisualTree += (_, _) =>
+        {
+            _attached = true;
+            vm.HumanInbox.CollectionChanged += InboxChanged;
+            Synchronize();
+            RestoreOffsets();
+        };
+        DetachedFromVisualTree += (_, _) =>
+        {
+            SavePresentation();
+            vm.HumanInbox.CollectionChanged -= InboxChanged;
+            _attached = false;
+            ++_restoreGeneration;
+            _restoring = false;
+        };
+        KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Escape && !_wide && _detailOpen) { BackToList(); e.Handled = true; }
+        };
     }
-    private static Control MailRow(GraphWorkspaceViewModel vm, GraphTicketRow row)
+
+    private Control MailRow(GraphOrganizationMessage mail)
     {
-        var title = GraphUi.Text(row.Ticket.Title, "bodyStrong");
-        title.TextWrapping = TextWrapping.NoWrap; title.TextTrimming = TextTrimming.CharacterEllipsis;
-        var preview = GraphUi.Text(row.Preview, "caption");
-        preview.TextWrapping = TextWrapping.NoWrap; preview.TextTrimming = TextTrimming.CharacterEllipsis;
-        var content = GraphUi.Stack(title, GraphUi.Text(row.Sender, "caption"), preview,
-            GraphUi.Text(row.Status + " · " + row.Time, "caption"));
-        content.Spacing = 3;
-        var indicator = new Border { Width = 2, Margin = new Thickness(0, 0, 8, 0) };
-        indicator.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppAccent"));
-        GraphUi.Bind(indicator, IsVisibleProperty, "SelectedTicketId", source: vm,
-            converter: new FuncValueConverter<string?, bool>(id => id == row.Ticket.Id));
-        var grid = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), Margin = new Thickness(0, 6) };
-        grid.Children.Add(indicator); Grid.SetColumn(content, 1); grid.Children.Add(content);
-        var button = GraphUi.Button(row.Ticket.Title, () => vm.SelectTicket(row.Ticket.Id), "GraphMail-" + row.Ticket.Id);
-        button.Content = grid; button.HorizontalAlignment = HorizontalAlignment.Stretch;
+        var sender = SingleLine(GraphLabels.Actor(mail.SenderId), "bodyStrong");
+        var subject = SingleLine(Subject(mail.Content.Text), "body");
+        var firstLineEnd = mail.Content.Text.TrimStart().IndexOfAny(['\r', '\n']);
+        var remainder = firstLineEnd < 0 ? "" : mail.Content.Text.TrimStart()[(firstLineEnd + 1)..].Trim();
+        var preview = SingleLine(remainder.Replace('\r', ' ').Replace('\n', ' '), "caption");
+        preview.IsVisible = remainder.Length != 0;
+        var metadata = SingleLine(MessageKind(mail.Content.Kind) + " · " + MessageStatus(mail.Status), "caption");
+        var text = GraphUi.Stack(sender, subject, preview, metadata);
+        text.Spacing = 4;
+        var button = GraphUi.Button(mail.SenderId, () => OpenHumanMessage(mail.Id), "GraphInbox-" + mail.Id);
+        button.Content = text;
+        button.HorizontalAlignment = HorizontalAlignment.Stretch;
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
+        button.Padding = new Thickness(12);
+        AutomationProperties.SetName(button, mail.SenderId + " · " + Subject(mail.Content.Text));
         return button;
     }
+
+    private static string Subject(string? text)
+    {
+        var line = (text ?? "").Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value))?.Trim() ?? "";
+        return line.Length > 160 ? line[..160] + "…" : line;
+    }
+
+    private static string MessageKind(string? kind) => kind switch
+    {
+        "question" => "提问", "report" => "报告", "reply" => "回复",
+        "notification" or "notify" => "通知", "request" => "请求",
+        null => "", _ => GraphLabels.EntryKind(kind)
+    };
+
+    private static string MessageStatus(GraphMessageStatus status) =>
+        status == GraphMessageStatus.Rejected ? "已拒绝" : GraphLabels.Status(status.ToString());
+
+    private static TextBlock SingleLine(string text, string style)
+    {
+        var block = GraphUi.Text(text, style);
+        block.TextWrapping = TextWrapping.NoWrap;
+        block.TextTrimming = TextTrimming.CharacterEllipsis;
+        return block;
+    }
+
+    internal void OpenHumanMessage(string id)
+    {
+        if (!Workspace.HumanInbox.Any(mail => mail.Id == id)) return;
+        SavePresentation();
+        _restoring = true;
+        _synchronizing = true;
+        try { Workspace.SelectHumanMessage(id); }
+        finally { _synchronizing = false; }
+        Synchronize();
+        _detailOpen = true;
+        if (_contextKey != null) _state.OpenDetails[_contextKey] = true;
+        UpdateVisibility();
+        RestoreOffsets();
+    }
+
+    internal void BackToList()
+    {
+        SavePresentation();
+        _detailOpen = false;
+        if (_contextKey != null) _state.OpenDetails[_contextKey] = false;
+        UpdateVisibility();
+        RestoreOffsets();
+        Dispatcher.UIThread.Post(() => { if (_attached && !_wide) _inbox.Focus(); }, DispatcherPriority.Loaded);
+    }
+
+    private void SendReply()
+    {
+        if (!Workspace.CanEdit || Workspace.IsHistorical || Workspace.SelectedHumanMessage == null) return;
+        SavePresentation();
+        var key = _messageKey;
+        Workspace.OrganizationReply = _draft.Text ?? "";
+        if (!Workspace.ReplyToHumanMessage()) return;
+        if (key != null) _state.Drafts[key] = "";
+        if (key == _messageKey) _draft.Text = "";
+    }
+
+    private void InboxChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        // Reconciliation can replace the selected record. Wait until the VM has finished
+        // publishing the snapshot before restoring its selection and offsets.
+        Dispatcher.UIThread.Post(() => { if (_attached) Synchronize(); }, DispatcherPriority.Loaded);
+    }
+
     protected override void OnWorkspaceChanged(string? name)
     {
-        var key = Workspace.Snapshot.ProjectId + "/" + Workspace.VersionLabel + "/" +
-            (Workspace.ShowHumanInbox ? Workspace.SelectedHumanMessage?.Id : Workspace.SelectedTicketId);
-        if (key == _threadKey) return;
-        if (_threadKey != null && !_restoring) Workspace.SaveReadingOffset(_threadKey, _threadScroll.Offset);
-        _threadKey = key; _restoring = true;
+        if (!_synchronizing) Synchronize();
+    }
+
+    private void Synchronize()
+    {
+        var context = Workspace.Snapshot.ProjectId + "/" + Workspace.VersionLabel + "/human-mail";
+        var key = Workspace.SelectedHumanMessage is { } mail ? context + "/" + mail.Id : null;
+        var changed = context != _contextKey || key != _messageKey;
+        if (changed)
+        {
+            SavePresentation();
+            if (context != _contextKey)
+                _detailOpen = _state.OpenDetails.TryGetValue(context, out var open) && open;
+            _contextKey = context;
+            _messageKey = key;
+            _synchronizing = true;
+            try { _draft.Text = key != null && _state.Drafts.TryGetValue(key, out var draft) ? draft : ""; }
+            finally { _synchronizing = false; }
+        }
+        _synchronizing = true;
+        try { _inbox.SelectedItem = Workspace.SelectedHumanMessage; }
+        finally { _synchronizing = false; }
+        UpdateVisibility();
+        if (changed) RestoreOffsets();
+    }
+
+    private void SetPaneLayout(bool wide)
+    {
+        if (_wide)
+        {
+            _state.ListWidth = _panes.ColumnDefinitions[0].Width;
+            _state.DetailWidth = _panes.ColumnDefinitions[2].Width;
+        }
+        _wide = wide;
+        _panes.ColumnDefinitions = wide ? new ColumnDefinitions
+        {
+            new ColumnDefinition { Width = _state.ListWidth, MinWidth = 260 },
+            new ColumnDefinition(GridLength.Auto),
+            new ColumnDefinition { Width = _state.DetailWidth, MinWidth = 320 }
+        } : new ColumnDefinitions("*");
+        Grid.SetColumn(_splitter, wide ? 1 : 0);
+        Grid.SetColumn(_detailPane, wide ? 2 : 0);
+        UpdateVisibility();
+    }
+
+    private void UpdateVisibility()
+    {
+        var hasMessage = Workspace.SelectedHumanMessage != null;
+        _listPane.IsVisible = _wide || !_detailOpen || !hasMessage;
+        _detailPane.IsVisible = _wide || (_detailOpen && hasMessage);
+        _splitter.IsVisible = _wide;
+        _back.IsVisible = !_wide;
+        _inbox.IsVisible = Workspace.HumanInbox.Count != 0;
+        _emptyList.IsVisible = Workspace.HumanInbox.Count == 0;
+        _message.IsVisible = hasMessage;
+        _emptyDetail.IsVisible = !hasMessage;
+    }
+
+    private void SaveDetailOffset()
+    {
+        if (!_restoring && _messageKey != null && _detailPane.IsVisible)
+            Workspace.SaveReadingOffset(_messageKey, _detailScroll.Offset);
+    }
+
+    private void ListScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        if (!_restoring && _contextKey != null && _listPane.IsVisible && _listScroll != null)
+            Workspace.SaveReadingOffset(_contextKey + "/list", _listScroll.Offset);
+    }
+
+    private void SaveOffsets()
+    {
+        SaveDetailOffset();
+        if (!_restoring && _contextKey != null && _listPane.IsVisible && _listScroll != null)
+            Workspace.SaveReadingOffset(_contextKey + "/list", _listScroll.Offset);
+    }
+
+    private void SavePresentation()
+    {
+        if (_wide)
+        {
+            _state.ListWidth = _panes.ColumnDefinitions[0].Width;
+            _state.DetailWidth = _panes.ColumnDefinitions[2].Width;
+        }
+        SaveOffsets();
+        if (_messageKey != null) _state.Drafts[_messageKey] = _draft.Text ?? "";
+        if (_contextKey != null) _state.OpenDetails[_contextKey] = _detailOpen;
+    }
+
+    private void RestoreOffsets()
+    {
+        _restoring = true;
         var generation = ++_restoreGeneration;
         Dispatcher.UIThread.Post(() =>
         {
             if (generation != _restoreGeneration) return;
-            _threadScroll.Offset = Workspace.ReadReadingOffset(key);
+            var scroll = _inbox.GetVisualDescendants().OfType<ScrollViewer>().FirstOrDefault();
+            if (scroll != _listScroll)
+            {
+                if (_listScroll != null) _listScroll.ScrollChanged -= ListScrollChanged;
+                _listScroll = scroll;
+                if (_listScroll != null)
+                {
+                    _listScroll.ScrollChanged += ListScrollChanged;
+                    AutomationProperties.SetAutomationId(_listScroll, "GraphMailListScroll");
+                }
+            }
+            if (_contextKey != null && _listScroll != null && _listPane.IsVisible)
+                _listScroll.Offset = Workspace.ReadReadingOffset(_contextKey + "/list");
+            if (_messageKey != null && _detailPane.IsVisible)
+                _detailScroll.Offset = Workspace.ReadReadingOffset(_messageKey);
             _restoring = false;
         }, DispatcherPriority.Loaded);
     }
+
+    internal bool IsWideForTesting => _wide;
+    internal bool IsDetailOpenForTesting => _detailOpen;
+    internal bool IsListVisibleForTesting => _listPane.IsVisible;
+    internal bool IsDetailVisibleForTesting => _detailPane.IsVisible;
+    internal ListBox InboxForTesting => _inbox;
+    internal ScrollViewer? ListScrollForTesting => _listScroll;
+    internal ScrollViewer DetailScrollForTesting => _detailScroll;
+    internal TextBox DraftForTesting => _draft;
+    internal string? SelectedMessageIdForTesting => Workspace.SelectedHumanMessage?.Id;
+
     public override void Dispose()
     {
-        if (_threadKey != null && !_restoring) Workspace.SaveReadingOffset(_threadKey, _threadScroll.Offset);
-        ++_restoreGeneration; base.Dispose();
+        SavePresentation();
+        Workspace.HumanInbox.CollectionChanged -= InboxChanged;
+        if (_listScroll != null) _listScroll.ScrollChanged -= ListScrollChanged;
+        ++_restoreGeneration;
+        _attached = false;
+        base.Dispose();
     }
 }

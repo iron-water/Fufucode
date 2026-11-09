@@ -88,7 +88,7 @@ public partial class MainWindow
         Action("session.archive", "归档当前会话", "会话", ArchiveCurrentAsync, IdleReal);
         Action("session.archives", "已归档会话", "会话", ShowArchivesAsync, () => _host is null ? "Mock 没有归档历史" : null);
         Action("session.fork", "分叉", "会话", () => _chatPage.ChooseForkPointAsync(), IdleReal);
-        Action("session.side", "新建侧边聊天", "会话", StartSideChatAsync, IdleReal);
+        Action("session.side", "新建侧聊", "会话", StartSideChatAsync, IdleReal);
         Action("session.schedule", "添加计划任务", "会话", ShowSchedulesAsync, Ready);
         Action("session.export", "导出为 Markdown", "会话", ExportSessionAsync, Ready);
         Action("session.export.metadata", "导出元数据", "会话", ExportSessionMetadataAsync, Ready);

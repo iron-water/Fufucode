@@ -65,7 +65,7 @@ public sealed class MessageActionsView : UserControl
         // 分叉三件事直接出现在操作条：不再藏进"更多"菜单。
         _fork = WorkbenchUi.IconButton("Branch", "从此消息分叉");
         _retry = WorkbenchUi.IconButton("ArrowClockwise", "分叉并重试");
-        _ask = WorkbenchUi.IconButton("Chat", "在侧边聊天中提问");
+        _ask = WorkbenchUi.IconButton("Chat", "在侧聊中提问");
 
         SetColor(_copy, "AppAccent");
         SetColor(_speak, "AppEmphasis");

@@ -35,7 +35,12 @@ internal sealed class GraphCanvas : Control, IDisposable
     private Point? _panStart, _marqueeStart;
     private Point _lastPointer;
     private Rect? _marquee;
-    private bool _subscribed, _disposed;
+    private bool _subscribed, _disposed, _constraining;
+    private IPointer? _dragPointer;
+    private static readonly Cursor PanCursor = new(StandardCursorType.Hand);
+    private static readonly Cursor DragCursor = new(StandardCursorType.SizeAll);
+    private static readonly Cursor ModuleCursor = new(StandardCursorType.Arrow);
+    private static readonly Cursor SelectionCursor = new(StandardCursorType.Cross);
     internal bool IsSpatialFocusMode { get; private set; }
     internal string? FocusedModuleId { get; private set; }
 
@@ -58,8 +63,13 @@ internal sealed class GraphCanvas : Control, IDisposable
         Bind(AccentProperty, new DynamicResourceExtension("AppAccent"));
         Bind(SelectedSurfaceProperty, new DynamicResourceExtension("AppListSelected"));
         Bind(PageSurfaceProperty, new DynamicResourceExtension("AppMicaPageBackground"));
+        PointerTouchPadGestureMagnify += (_, e) =>
+        {
+            _viewport.Zoom(Math.Exp(e.Delta.Y), e.GetPosition(this));
+            e.Handled = true;
+        };
         AttachedToVisualTree += (_, _) => Subscribe();
-        DetachedFromVisualTree += (_, _) => Unsubscribe();
+        DetachedFromVisualTree += (_, _) => { EndPointerGesture(); Unsubscribe(); };
     }
     private void Subscribe()
     {
@@ -81,13 +91,63 @@ internal sealed class GraphCanvas : Control, IDisposable
     {
         if (FocusedModuleId != null && _vm.Scene.FindBounds(FocusedModuleId) == null) FocusedModuleId = null;
         FitIfNeeded();
+        KeepModuleVisible();
         InvalidateVisual();
     }
-    private void OnViewportChanged(object? sender, PropertyChangedEventArgs e) { FitIfNeeded(); InvalidateVisual(); }
+    private void OnViewportChanged(object? sender, PropertyChangedEventArgs e)
+    { FitIfNeeded(); KeepModuleVisible(); InvalidateVisual(); }
     private void FitIfNeeded() { if (!_viewport.Positioned && Bounds.Width > 0 && Bounds.Height > 0) Fit(); }
-    internal void Fit() => _viewport.Fit(_vm.Scene.Bounds, Bounds.Size);
+    internal void Fit() { _viewport.Fit(_vm.Scene.Bounds, Bounds.Size); KeepModuleVisible(); }
     internal void Zoom(double factor) => _viewport.Zoom(factor, new Point(Bounds.Width / 2, Bounds.Height / 2));
-    protected override void OnSizeChanged(SizeChangedEventArgs e) { base.OnSizeChanged(e); FitIfNeeded(); }
+    protected override void OnSizeChanged(SizeChangedEventArgs e)
+    { base.OnSizeChanged(e); FitIfNeeded(); KeepModuleVisible(); }
+
+    // Constrain the actual canvas, including gaps between nodes, rather than the scene/window bounding box.
+    // A correction is made only when every module would be lost, so ordinary anchored zoom is unchanged.
+    private void KeepModuleVisible()
+    {
+        if (_constraining || Bounds.Width < 1 || Bounds.Height < 1) return;
+        var boxes = _vm.Scene.Nodes.Select(node => node.Bounds).ToArray();
+        if (boxes.Length == 0)
+            boxes = _vm.Scene.Groups.Select(group => new Rect(group.Bounds.TopLeft,
+                new Size(Math.Min(260, group.Bounds.Width), Math.Min(32, group.Bounds.Height)))).ToArray();
+        if (boxes.Length == 0) return;
+        var best = new Vector(double.PositiveInfinity, double.PositiveInfinity);
+        foreach (var box in boxes)
+        {
+            var screen = new Rect(box.X * _viewport.Scale + _viewport.X, box.Y * _viewport.Scale + _viewport.Y,
+                box.Width * _viewport.Scale, box.Height * _viewport.Scale);
+            var width = Math.Min(48, Math.Min(screen.Width, Bounds.Width));
+            var height = Math.Min(32, Math.Min(screen.Height, Bounds.Height));
+            var dx = screen.Right < width ? width - screen.Right :
+                screen.Left > Bounds.Width - width ? Bounds.Width - width - screen.Left : 0;
+            var dy = screen.Bottom < height ? height - screen.Bottom :
+                screen.Top > Bounds.Height - height ? Bounds.Height - height - screen.Top : 0;
+            if (dx == 0 && dy == 0) return;
+            var move = new Vector(dx, dy);
+            if (move.SquaredLength < best.SquaredLength) best = move;
+        }
+        _constraining = true;
+        try { _viewport.Pan(best.X, best.Y); }
+        finally { _constraining = false; }
+    }
+
+    private void UpdatePointerCursor(Point point, KeyModifiers modifiers = KeyModifiers.None)
+    {
+        Cursor = _panStart != null ? DragCursor : _marqueeStart != null ? SelectionCursor :
+            _vm.Scene.Hit(_viewport.ToWorld(point)) != null ? ModuleCursor :
+            modifiers.HasFlag(KeyModifiers.Shift) ? SelectionCursor : PanCursor;
+    }
+    private void EndPointerGesture()
+    {
+        var pointer = _dragPointer;
+        _dragPointer = null;
+        _panStart = _marqueeStart = null;
+        _marquee = null;
+        pointer?.Capture(null);
+        UpdatePointerCursor(_lastPointer);
+        InvalidateVisual();
+    }
 
     public override void Render(DrawingContext context)
     {
@@ -188,12 +248,12 @@ internal sealed class GraphCanvas : Control, IDisposable
             if (hit != null)
             {
                 _vm.SelectModule(hit);
-                ContextMenu = new ContextMenu { ItemsSource = new[]
-                {
-                    Menu("属性", () => _vm.RevealPanel(GraphWorkspaceViewModel.PropertiesPageId)),
-                    Menu("展开", () => _vm.DrillInto(hit)), Menu("打开会话", () => _vm.OpenChat(hit, null)),
-                    Menu("添加邮件", _vm.BeginTicket, _vm.CanEdit)
-                } };
+                var items = new System.Collections.Generic.List<MenuItem>();
+                if (!_mini) items.Add(Menu("属性", () => _vm.RevealPanel(GraphWorkspaceViewModel.PropertiesPageId)));
+                items.Add(Menu("展开", () => _vm.DrillInto(hit)));
+                items.Add(Menu("打开会话", () => _vm.OpenChat(hit, null)));
+                if (_mini) items.Add(Menu("在主图打开", () => _vm.NavigateToModule(hit)));
+                ContextMenu = new ContextMenu { ItemsSource = items };
             }
             else ContextMenu = new ContextMenu { ItemsSource = new[]
             { Menu("展开整图", _vm.ExpandAll), Menu("适应", Fit) } };
@@ -201,15 +261,16 @@ internal sealed class GraphCanvas : Control, IDisposable
         }
         if (!properties.IsLeftButtonPressed && !properties.IsMiddleButtonPressed) return;
         if (properties.IsLeftButtonPressed && e.KeyModifiers.HasFlag(KeyModifiers.Shift) && hit == null)
-        { _marqueeStart = _viewport.ToWorld(point); e.Pointer.Capture(this); }
+        { _marqueeStart = _viewport.ToWorld(point); _dragPointer = e.Pointer; e.Pointer.Capture(this); }
         else if (properties.IsLeftButtonPressed && hit != null)
         {
             var additive = (e.KeyModifiers & (KeyModifiers.Control | KeyModifiers.Shift)) != 0;
+            FocusedModuleId = hit;
             if (e.ClickCount >= 2 && !additive) _vm.DrillInto(hit);
-            else if (_mini && !additive) _vm.NavigateToModule(hit);
             else _vm.SelectModule(hit, additive);
         }
-        else { _panStart = point; e.Pointer.Capture(this); }
+        else { _panStart = point; _dragPointer = e.Pointer; e.Pointer.Capture(this); }
+        UpdatePointerCursor(point, e.KeyModifiers);
         e.Handled = true;
     }
     private static MenuItem Menu(string title, Action action, bool enabled = true)
@@ -240,6 +301,8 @@ internal sealed class GraphCanvas : Control, IDisposable
             var module = _vm.Snapshot.Modules.FirstOrDefault(m => m.Id == id);
             ToolTip.SetTip(this, module == null ? null : module.Name + Environment.NewLine + GraphLabels.ModuleSummary(module.Summary));
         }
+        _lastPointer = point;
+        UpdatePointerCursor(point, e.KeyModifiers);
     }
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
@@ -247,16 +310,25 @@ internal sealed class GraphCanvas : Control, IDisposable
         if (_marquee is { } box)
             _vm.SelectModules(_vm.Scene.Nodes.Where(n => box.Intersects(n.Bounds)).Select(n => n.Module.Id),
                 e.KeyModifiers.HasFlag(KeyModifiers.Control));
-        _panStart = _marqueeStart = null; _marquee = null;
-        e.Pointer.Capture(null);
-        InvalidateVisual();
+        _lastPointer = e.GetPosition(this);
+        EndPointerGesture();
     }
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
-    { base.OnPointerCaptureLost(e); _panStart = _marqueeStart = null; _marquee = null; InvalidateVisual(); }
+    { base.OnPointerCaptureLost(e); EndPointerGesture(); }
     protected override void OnPointerWheelChanged(PointerWheelEventArgs e)
     {
         base.OnPointerWheelChanged(e);
-        _viewport.Zoom(Math.Pow(1.14, e.Delta.Y), e.GetPosition(this));
+        if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
+            _viewport.Zoom(Math.Pow(1.14, e.Delta.Y), e.GetPosition(this));
+        else
+        {
+            // Wheel deltas do not identify mouse versus touchpad; both follow the same pan contract.
+            var delta = e.KeyModifiers.HasFlag(KeyModifiers.Shift) && e.Delta.X == 0
+                ? new Vector(e.Delta.Y, 0) : e.Delta;
+            _viewport.Pan(delta.X * 48, delta.Y * 48);
+        }
+        _lastPointer = e.GetPosition(this);
+        UpdatePointerCursor(_lastPointer, e.KeyModifiers);
         e.Handled = true;
     }
     protected override void OnGotFocus(FocusChangedEventArgs e)
@@ -265,7 +337,7 @@ internal sealed class GraphCanvas : Control, IDisposable
         if (e.NavigationMethod == NavigationMethod.Tab) EnterSpatialFocus();
     }
     protected override void OnLostFocus(FocusChangedEventArgs e)
-    { base.OnLostFocus(e); IsSpatialFocusMode = false; InvalidateVisual(); }
+    { base.OnLostFocus(e); IsSpatialFocusMode = false; EndPointerGesture(); }
     private void EnterSpatialFocus()
     {
         IsSpatialFocusMode = true;
@@ -288,7 +360,7 @@ internal sealed class GraphCanvas : Control, IDisposable
         if (IsSpatialFocusMode)
         {
             if (e.Key == Key.Enter && FocusedModuleId is { } selected)
-            { if (_mini) _vm.NavigateToModule(selected); else _vm.SelectModule(selected); e.Handled = true; }
+            { _vm.SelectModule(selected); e.Handled = true; }
             else if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right)
             { MoveSpatialFocus(e.Key); e.Handled = true; }
             return;
@@ -334,5 +406,5 @@ internal sealed class GraphCanvas : Control, IDisposable
         if (x < 24 || x > Bounds.Width - 24 || y < 24 || y > Bounds.Height - 24)
             _viewport.Pan(Bounds.Width / 2 - x, Bounds.Height / 2 - y);
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; Unsubscribe(); }
+    public void Dispose() { if (_disposed) return; _disposed = true; EndPointerGesture(); Unsubscribe(); }
 }

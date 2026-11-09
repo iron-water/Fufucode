@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
 using System.Threading.Tasks;
@@ -15,7 +14,6 @@ using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Media;
-using Avalonia.Styling;
 using Fufucode.App.Abstractions.Graph;
 
 namespace Fufucode.App.Features.Graph;
@@ -201,7 +199,7 @@ internal static class GraphUi
     {
         var text = Stack(Text(module.Name, "bodyStrong"), Text(GraphLabels.ModuleSummary(module.Summary), "caption"));
         text.Spacing = 3;
-        var button = Button("", () => { if (mini) vm.NavigateToModule(module.Id); else vm.SelectModule(module.Id); });
+        var button = Button("", () => vm.SelectModule(module.Id));
         button.Content = text; button.HorizontalAlignment = HorizontalAlignment.Stretch;
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
         AutomationProperties.SetName(button, module.Name);
@@ -240,20 +238,9 @@ public sealed class GraphPageView : GraphContentView
         empty.HorizontalAlignment = HorizontalAlignment.Center; empty.VerticalAlignment = VerticalAlignment.Center;
         GraphUi.Bind(empty, IsVisibleProperty, "Modules.Count", converter: new FuncValueConverter<int, bool>(count => count == 0));
         empty.IsHitTestVisible = false; diagram.Children.Add(empty);
-        var row = GraphUi.Actions(
-            GraphUi.Button("顶层", vm.GoTop, "GraphTop"), GraphUi.Button("上一层", vm.GoUp, "GraphUp"),
-            GraphUi.Button("展开所选", vm.ExpandSelected, "GraphExpandSelected"),
-            GraphUi.Button("展开整图", vm.ExpandAll, "GraphExpandAll"), GraphUi.Button("最底层", vm.GoBottom, "GraphBottom"),
-            GraphUi.Button("−", () => _canvas.Zoom(1 / 1.2), "GraphZoomOut"),
-            GraphUi.Button("适应", _canvas.Fit, "GraphFit"), GraphUi.Button("+", () => _canvas.Zoom(1.2), "GraphZoomIn"),
-            GraphUi.Button("列表", () => vm.IsListView = !vm.IsListView, "GraphToggleList"));
-        var depth = GraphUi.Value("Depth", "caption");
-        depth.Bind(TextBlock.TextProperty, new Binding("Depth") { StringFormat = "深度 {0}" });
-        var footer = GraphUi.Stack(GraphUi.Error(vm), GraphUi.Actions(
-            GraphUi.Value("Snapshot.Title", "bodyStrong"), depth, GraphUi.Value("VersionLabel", "caption")), row);
-        footer.Spacing = 3; footer.Margin = new Thickness(12, 6);
-        var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
-        root.Children.Add(diagram); Grid.SetRow(footer, 1); root.Children.Add(footer);
+        var toolbar = new GraphToolbar(vm, _canvas);
+        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
+        root.Children.Add(toolbar); Grid.SetRow(diagram, 1); root.Children.Add(diagram);
         Content = root;
     }
     public override void Dispose() { _canvas.Dispose(); base.Dispose(); }
@@ -268,85 +255,12 @@ public sealed class GraphMiniMapView : GraphContentView
         _canvas = new GraphCanvas(vm, true);
         var controls = GraphUi.Actions(GraphUi.Button("适应", _canvas.Fit),
             GraphUi.Button("−", () => _canvas.Zoom(1 / 1.2)), GraphUi.Button("+", () => _canvas.Zoom(1.2)),
-            GraphUi.Button("Graph", () => vm.RevealPanel(GraphWorkspaceViewModel.PageId)));
+            GraphUi.Button("在主图打开", () => vm.RevealPanel(GraphWorkspaceViewModel.PageId), "GraphMiniOpenMain"));
         controls.Margin = new Thickness(8, 4);
         var root = new Grid { RowDefinitions = new RowDefinitions("*,Auto") };
         root.Children.Add(_canvas); Grid.SetRow(controls, 1); root.Children.Add(controls); Content = root;
     }
     public override void Dispose() { _canvas.Dispose(); base.Dispose(); }
-}
-
-internal sealed class GraphStructureItem : GraphObservable
-{
-    private string _name = "";
-    private bool _expanded;
-    internal GraphStructureItem(string id) => Id = id;
-    public string Id { get; }
-    public string Name { get => _name; internal set => Set(ref _name, value); }
-    public bool IsExpanded { get => _expanded; set => Set(ref _expanded, value); }
-    public ObservableCollection<GraphStructureItem> Children { get; } = new();
-}
-
-public sealed class GraphStructureView : GraphContentView
-{
-    private readonly TreeView _tree = new();
-    private readonly ObservableCollection<GraphStructureItem> _roots = new();
-    private readonly Dictionary<string, GraphStructureItem> _items = new(StringComparer.Ordinal);
-    private bool _syncing;
-    public GraphStructureView(GraphWorkspaceViewModel vm) : base(vm)
-    {
-        AutomationProperties.SetAutomationId(this, "GraphStructure");
-        _tree.ItemsSource = _roots;
-        _tree.ItemTemplate = new FuncTreeDataTemplate<GraphStructureItem>((item, _) =>
-        {
-            var label = GraphUi.Text();
-            GraphUi.Bind(label, TextBlock.TextProperty, "Name"); return label;
-        }, item => item.Children);
-        _tree.Styles.Add(new Style(selector => selector.OfType<TreeViewItem>())
-        { Setters = { new Setter(TreeViewItem.IsExpandedProperty, new Binding("IsExpanded") { Mode = BindingMode.TwoWay }) } });
-        _tree.SelectionChanged += (_, _) =>
-        { if (!_syncing && _tree.SelectedItem is GraphStructureItem selected) vm.SelectModule(selected.Id); };
-        _tree.DoubleTapped += (_, e) =>
-        { if (_tree.SelectedItem is GraphStructureItem selected) { vm.DrillInto(selected.Id); e.Handled = true; } };
-        var commands = GraphUi.Actions(GraphUi.Button("新建模块", () => vm.BeginModule(), edit: true),
-            GraphUi.Button("展开所选", vm.ExpandSelected), GraphUi.Button("展开整图", vm.ExpandAll));
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,Auto,*"), Margin = new Thickness(10) };
-        root.Children.Add(GraphUi.Version(vm)); Grid.SetRow(commands, 1); root.Children.Add(commands);
-        Grid.SetRow(_tree, 2); root.Children.Add(_tree); Content = root;
-        UpdateTree();
-    }
-    protected override void OnWorkspaceChanged(string? name) => UpdateTree();
-    private void UpdateTree()
-    {
-        if (_syncing) return;
-        _syncing = true;
-        try
-        {
-            var modules = Workspace.Snapshot.Modules.ToDictionary(m => m.Id, StringComparer.Ordinal);
-            foreach (var module in modules.Values)
-            {
-                if (!_items.TryGetValue(module.Id, out var item)) _items[module.Id] = item = new(module.Id);
-                item.Name = module.Name;
-            }
-            var visited = new HashSet<string>(StringComparer.Ordinal);
-            GraphStructureItem Build(GraphModule module, HashSet<string> path)
-            {
-                var item = _items[module.Id]; visited.Add(module.Id); path.Add(module.Id);
-                var children = modules.Values.Where(m => m.ParentId == module.Id && !path.Contains(m.Id))
-                    .Select(m => Build(m, new HashSet<string>(path, StringComparer.Ordinal))).ToArray();
-                GraphWorkspaceViewModel.Reconcile(item.Children, children, i => i.Id); return item;
-            }
-            var roots = modules.Values.Where(m => m.ParentId == null || !modules.ContainsKey(m.ParentId)).Select(m =>
-                Build(m, new HashSet<string>(StringComparer.Ordinal))).ToList();
-            foreach (var module in modules.Values)
-                if (!visited.Contains(module.Id)) roots.Add(Build(module, new HashSet<string>(StringComparer.Ordinal)));
-            GraphWorkspaceViewModel.Reconcile(_roots, roots, i => i.Id);
-            foreach (var key in _items.Keys.Where(id => !modules.ContainsKey(id)).ToArray()) _items.Remove(key);
-            _tree.SelectedItem = Workspace.SelectedModuleId != null && _items.TryGetValue(Workspace.SelectedModuleId, out var selected)
-                ? selected : null;
-        }
-        finally { _syncing = false; }
-    }
 }
 
 public sealed class GraphHistoryView : GraphContentView

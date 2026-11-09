@@ -162,7 +162,9 @@ internal static class Program
                 var lifetime = (IClassicDesktopStyleApplicationLifetime)Application.Current!.ApplicationLifetime!;
                 lifetime.ShutdownMode = ShutdownMode.OnExplicitShutdown;
                 var code = 1;
-                try { code = args.Contains("--workspace-modes-only")
+                try { code = args.Contains("--graph-interaction-only")
+                    ? await SelfTest.NativeGraphInteractionSelfTest.RunAsync((MainWindow)lifetime.MainWindow!, evidence)
+                    : args.Contains("--workspace-modes-only")
                     ? await SelfTest.NativeWorkModesSelfTest.RunAsync((MainWindow)lifetime.MainWindow!, evidence)
                     : await SelfTest.NativeGraphSelfTest.RunAsync((MainWindow)lifetime.MainWindow!, evidence, args.Contains("--autodev-settings-only")); }
                 catch (Exception error) { Console.WriteLine("Native Graph failed: " + error); }

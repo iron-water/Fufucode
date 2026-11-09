@@ -13,17 +13,31 @@ public partial class MainWindow
         ? _vm.CurrentPage : _vm?.IsSettingsPage == true && _settingsReturnPage is AppPage.Chat or AppPage.Graph
             ? _settingsReturnPage : _lastWorkMode;
 
-    private bool DockPageAllowedInMode(string id) => _graphEntryPending
-        ? id is "overview" or "notifications" or "perf"
-        : !id.StartsWith("graph-", StringComparison.Ordinal) || GraphEnabled && _graphWorkspace is not null &&
-            (id == "graph-minimap" || WorkMode == AppPage.Graph);
+    private bool DockPageAllowedInMode(string id)
+    {
+        if (id == "graph-structure") return false;
+        if (_graphEntryPending) return id is "overview" or "notifications";
+        if (WorkMode == AppPage.Graph)
+            return id is "overview" or "notifications" or "sidechat" ||
+                GraphEnabled && _graphWorkspace is not null && (id is "graph-properties" or "graph-tickets" or "graph-history");
+        return !id.StartsWith("graph-", StringComparison.Ordinal) ||
+            GraphEnabled && _graphWorkspace is not null && id == "graph-minimap";
+    }
 
     private bool CanOpenDockPage(string id) => _workbenchPages.ContainsKey(id) && DockPageAllowedInMode(id);
-    private IEnumerable<Views.WorkbenchPage> ModePages => _workbenchPages.Values.Where(page => DockPageAllowedInMode(page.Id))
-        .Select(page => page.Id == "overview" && WorkMode == AppPage.Graph ? page with { Title = "项目管理" } : page);
+    private IEnumerable<Views.WorkbenchPage> ModePages => _workbenchPages.Values.Where(page => DockPageAllowedInMode(page.Id));
+
+    private static string DockPageActionId(string id) => id switch
+    {
+        "graph.properties" => "graph-properties", "graph.tickets" => "graph-tickets",
+        "graph.history" => "graph-history", "graph.minimap" => "graph-minimap",
+        _ => id.StartsWith("page.", StringComparison.Ordinal) ? id[5..] : id.Split('.')[0]
+    };
+    private bool IsDockPageAction(string id) => _workbenchPages.KnownPageIds.Contains(DockPageActionId(id));
 
     private string? ModeActionUnavailable(string id)
     {
+        if (IsDockPageAction(id) && !DockPageAllowedInMode(DockPageActionId(id))) return "此页面不属于当前工作模式";
         if (id == "session.new" && WorkMode == AppPage.Graph && !GraphEnabled) return "Graph 模式已停用";
         if (id == "session.side" && _graphEntryPending) return "请先选择图所属的项目";
         if (id.StartsWith("graph.", StringComparison.Ordinal) && _graphEntryPending)
