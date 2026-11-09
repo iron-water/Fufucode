@@ -35,7 +35,7 @@ public partial class MainWindow
         var root = Program.SelfTestMode ? Program.SelfTestDataRoot ?? Path.Combine(Path.GetTempPath(), "fufucode-selftest-appdata") : _options.CreateAppDataLayout().Root;
         _customization = new(new WorkbenchAppearanceStore(root));
         _customization.LayoutSnapshot = () => _dockLayout;
-        _customization.PageCatalog = () => _workbenchPages.Values
+        _customization.PageCatalog = () => ModePages
             .Select(page => new WorkbenchPageChoice(page.Id, page.Title)).ToArray();
         _customization.FeatureStatus = FeatureStatusFor;
         RegisterWorkbenchActions();
@@ -252,7 +252,8 @@ public partial class MainWindow
             var effective = placement.Position == UiActionPosition.SessionIsland ? UiActionPosition.MenuLeft : placement.Position;
             if (menus.TryGetValue(effective, out var menu))
             {
-                var item = new MenuItem { Header = action.Title, Command = _actions.GetCommand(action.Id) };
+                var actionTitle = action.Id == "session.new" ? WorkMode == AppPage.Graph ? "新建图" : "新聊天" : action.Title;
+                var item = new MenuItem { Header = actionTitle, Command = _actions.GetCommand(action.Id) };
                 item.Icon = Views.WorkbenchUi.IconButton(WorkbenchActionDefaults.Icon(action.Id), action.Title).Content;
                 // 菜单项本身已显示标题；说明与标题相同（绝大多数动作）时不挂悬浮提示，否则只是把同一句话再弹一遍。
                 if (!string.IsNullOrWhiteSpace(action.Description) &&
@@ -312,7 +313,7 @@ public partial class MainWindow
             }
             else
             {
-                var title = action.Title;
+                var title = action.Id == "session.new" ? WorkMode == AppPage.Graph ? "新建图" : "新聊天" : action.Title;
                 var showToolTip = action.Id is not ("navigate.back" or "navigate.forward" or "session.new" or "settings");
                 var button = Views.WorkbenchUi.IconButton(WorkbenchActionDefaults.Icon(action.Id), title, 46, showToolTip);
                 button.Height = 32; button.MinHeight = 32; button.Classes.Add("captionSlot");

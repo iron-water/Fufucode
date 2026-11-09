@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Fufucode.App.ViewModels" x:Class="Fufucode.App.Views.OverviewView" x:DataType="vm:MainViewModel">
   <Grid RowDefinitions="Auto,Auto,*" Margin="8">
-    <Grid Grid.Row="0" Margin="0,0,0,8">
+    <Grid x:Name="NewSessionRow" Grid.Row="0" Margin="0,0,0,8">
       <!-- 选择后端选择：只切换“新建时用哪个后端”，创建入口在页头 +。 -->
       <Button x:Name="NewSessionBar" Classes="backendSwitchBar" HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Stretch" Click="NewSessionBar_Click"

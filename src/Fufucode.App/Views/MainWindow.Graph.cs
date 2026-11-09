@@ -101,8 +101,15 @@ public partial class MainWindow
 
     private void ApplyWorkModeLayout(AppPage page)
     {
-        if (page is not (AppPage.Chat or AppPage.Graph) || _graphWorkspace is null) return;
-        var project = _graphWorkspace.Service.ReadSnapshot().ProjectId;
+        if (page is not (AppPage.Chat or AppPage.Graph)) return;
+        var project = _graphEntryPending ? null : _graphWorkspace?.Service.ReadSnapshot().ProjectId ?? _host?.Current.Project.Id;
+        if (project is null)
+        {
+            _lastWorkMode = page;
+            RenderDockPages();
+            RefreshWorkModeSurfaces();
+            return;
+        }
         var metadata = new DesktopMetadataStore(GraphLayout);
         if (_modeLayoutProject == project && _lastWorkMode == page) return;
         SaveWorkModeLayout();
@@ -123,11 +130,12 @@ public partial class MainWindow
         _modeLayoutProject = project;
         _lastWorkMode = page;
         RenderDockPages();
+        RefreshWorkModeSurfaces();
     }
 
     private void SaveWorkModeLayout()
     {
-        if (_modeLayoutProject is null) return;
+        if (_modeLayoutProject is null || _graphEntryPending) return;
         var key = "workspace-mode-layout:" + _modeLayoutProject + ":" + _lastWorkMode;
         _modeLayouts[key] = _dockLayout.Serialize();
         new DesktopMetadataStore(GraphLayout).SetPreference(key, _modeLayouts[key]);
@@ -136,7 +144,7 @@ public partial class MainWindow
     private void RegisterGraphActions()
     {
         Register("workspace.mode", "切换 Chat / Graph", "工作模式", "F6", "切换主内容视图",
-            () => NavigateWorkspaceAsync(_vm?.IsGraphPage == true ? AppPage.Chat : AppPage.Graph),
+            () => NavigateWorkspaceAsync(WorkMode == AppPage.Graph ? AppPage.Chat : AppPage.Graph),
             () => !GraphEnabled ? "Graph 模式已停用" : _vm is null ? "请先打开项目" : null,
             hideWhenUnavailable: true);
         Register("graph", "Graph 项目地图", "工作模式", "", "打开项目地图",
@@ -215,8 +223,8 @@ public partial class MainWindow
             {
                 if (ReferenceEquals(_graphWorkspace?.Service, service)) RefreshIsland();
             });
-            if (GraphEnabled && model.Snapshot.Modules.Count == 0) _ = model.ScanAsync();
         }
+        metadata.SetPreference("workspace-graph:" + project.Id, "created");
         _graphWorkspace = workspace;
         _graphMainHost.Child = workspace.Main;
         RegisterGraphPanels();
@@ -396,6 +404,7 @@ public partial class MainWindow
 
     private async Task OpenProjectGraphAsync(string path)
     {
+        if (!GraphEnabled) throw new InvalidOperationException("Graph 模式已停用。");
         var full = Path.GetFullPath(path);
         if (!Directory.Exists(full)) throw new DirectoryNotFoundException(full);
         if (_borrowedHost) throw new InvalidOperationException("请在会话主窗口切换项目。");
@@ -405,6 +414,7 @@ public partial class MainWindow
         var manager = new PersistentSessionManager(string.Empty, string.Empty, GraphLayout);
         manager.Metadata.GetOrCreateProject(full);
         EnsureGraphProject(full);
+        _graphEntryPending = false;
         if (_host is { } old)
         {
             if (_vm is { } previous) old.SaveDraft(previous.Input.ComposePrompt());
@@ -424,11 +434,11 @@ public partial class MainWindow
         {
             _options = _options with { SessionId = id };
             await BootstrapRealAsync();
-        }, async () =>
-        {
-            _options = _options with { SessionId = null, NewSession = true };
-            await BootstrapRealAsync();
-        }, _ => Task.CompletedTask, full, Path.GetFileName(full), string.Empty);
+        }, NewWorkspaceAsync, _ => Task.CompletedTask, full, Path.GetFileName(full), string.Empty,
+            SwitchProjectRequested: SwitchProjectAsync, OpenProjectRequested: OpenProjectAsync,
+            RecentProjects: ProjectPreferences.LoadRecent(manager.Metadata)
+                .Where(candidate => !ProjectArchive.IsArchivedPath(manager.Metadata, candidate) &&
+                    !ScratchWorkspace.Matches(GraphLayout, candidate)).ToArray());
         AttachSession(new UnopenedChatSession(), [], callbacks, initialPage: AppPage.Graph);
         if (!GraphEnabled) { await BootstrapRealAsync(); return; }
         ProjectPreferences.RecordOpened(_projectOnlyManager.Metadata, full);

@@ -81,7 +81,7 @@ public partial class MainWindow
     internal BuiltInModuleViewModel BrowserModuleForTesting => _browserModule;
     internal BuiltInModuleViewModel LibraryModuleForTesting => _libraryModule;
     internal BuiltInModuleViewModel LocalReviewModuleForTesting => _localReviewModule;
-    internal bool PageAvailableForTesting(string id) => _workbenchPages.ContainsKey(id);
+    internal bool PageAvailableForTesting(string id) => CanOpenDockPage(id);
 
     // Resolve synchronously at click time, never after an asynchronous session switch.
     internal string AcceptLibraryCitation(string text)
@@ -411,7 +411,7 @@ public partial class MainWindow
 
     private void FloatPageFromDrag(string id)
     {
-        if (!_workbenchPages.ContainsKey(id) || _dockLayout.FindFloating(id) is not null) return;
+        if (!CanOpenDockPage(id) || _dockLayout.FindFloating(id) is not null) return;
         _animateNextLayout = true;
         FloatDockPage(id);
     }
@@ -552,7 +552,17 @@ public partial class MainWindow
         WireSessionContext(vm);
         var path = _host?.ProjectPath ?? _options.ProjectPath ?? Environment.CurrentDirectory;
         vm.ProjectRootPath = Path.GetFullPath(path);
-        try { EnsureGraphProject(path); }
+        try
+        {
+            var project = MetadataOrMock().TryGetProject(path);
+            if (vm.IsGraphPage || project is not null && HasProjectGraph(project)) EnsureGraphProject(path);
+            else
+            {
+                _graphWorkspace = null;
+                _graphMainHost.Child = null;
+                foreach (var slot in _graphPanelSlots.Values) slot.Child = null;
+            }
+        }
         catch (IOException error) when (!vm.IsGraphPage)
         {
             // Another Graph owner cannot prevent an ordinary Chat window from opening.
@@ -689,7 +699,7 @@ public partial class MainWindow
 
     internal void OpenDockPage(string id, DockZone target)
     {
-        if (!_workbenchPages.ContainsKey(id)) return;
+        if (!CanOpenDockPage(id)) return;
         _dockLayout.Open(id,target);
         if (Bounds.Width < 1100 && _dockLayout.Find(id) is { } drawer && drawer != DockZone.Bottom)
         { _leftDrawerOpen = drawer == DockZone.Left; _rightDrawerOpen = drawer == DockZone.Right; }
@@ -699,7 +709,7 @@ public partial class MainWindow
 
     internal void MoveDockPage(string id, DockZone target)
     {
-        if (!_workbenchPages.ContainsKey(id)) return;
+        if (!CanOpenDockPage(id)) return;
         _dockLayout.Move(id,target);
         if (Bounds.Width < 1100 && target != DockZone.Bottom)
         { _leftDrawerOpen = target == DockZone.Left; _rightDrawerOpen = target == DockZone.Right; }
@@ -760,7 +770,7 @@ public partial class MainWindow
     /// 设置页会把三区强制隐藏，此时按可见性翻转只会关掉逻辑上的开态，用户看到的仍是“没反应”。</summary>
     private async Task ToggleDockFromSettingsAsync(DockZone zone)
     {
-        if (_vm?.NavigateCommand is { } navigate) await navigate.ExecuteAsync(AppPage.Chat);
+        await NavigateWorkspaceAsync(_settingsReturnPage);
         if (_vm?.IsSettingsPage == true) return;
         _animateNextLayout = true;
         _dockLayout.Hidden[zone] = false;
@@ -818,8 +828,9 @@ public partial class MainWindow
         try
         {
             SeedNotificationMigration();
+            _dockLayout.Normalize(_workbenchPages.KnownPageIds.Where(DockPageAllowedInMode));
             SynchronizeFloatingHosts();
-            foreach (var dock in AllDockHosts()) dock.Catalog = _workbenchPages.Values.ToArray();
+            foreach (var dock in AllDockHosts()) dock.Catalog = ModePages.ToArray();
             foreach (var dock in AllDockHosts()) dock.ReleasePages(_dockLayout);
             foreach (var page in _workbenchPages.Values)
             {
@@ -991,6 +1002,8 @@ public partial class MainWindow
 
     private void SaveWorkspaceDimensions()
     {
+        if (_graphEntryPending) return;
+        SaveWorkModeLayout();
         _customization?.SynchronizeLayout(_dockLayout);
         if (_host is null) { LayoutStateText.Text = "演示布局 · 当前窗口"; return; }
         try { _host.Manager.Metadata.SetPreference(LayoutPreferenceKey(),_dockLayout.Serialize()); LayoutStateText.Text = "布局已保存"; }

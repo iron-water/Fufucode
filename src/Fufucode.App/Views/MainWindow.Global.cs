@@ -110,7 +110,9 @@ public partial class MainWindow
 
     private void Register(string id, string title, string group, string shortcut, string description,
         Func<Task> action, Func<string?>? disabled = null, bool hideWhenUnavailable = false) =>
-        _actions.Register(new(id, title, group, shortcut, description, action, disabled, false, hideWhenUnavailable));
+        _actions.Register(new(id, title, group, shortcut, description, action,
+            () => ModeActionUnavailable(id) ?? disabled?.Invoke(), false,
+            hideWhenUnavailable || id.StartsWith("graph.", StringComparison.Ordinal) || id.StartsWith("session.", StringComparison.Ordinal)));
 
     /// <summary>命令面板的会话结果：只列当前项目内仍在会话列表中的条目。</summary>
     private IReadOnlyList<CommandPaletteItemViewModel> PaletteSessions()

@@ -213,9 +213,13 @@ internal static class NativeGraphSelfTest
         apply.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         for (var i = 0; i < 100 && !service.ReadOptions().Enabled; i++) await Task.Delay(50);
         await Settle();
-        check(service.ReadOptions().Enabled && window.PageAvailableForTesting("graph-tickets"), "重新启用恢复能力和已有数据");
+        check(service.ReadOptions().Enabled && !window.PageAvailableForTesting("graph-tickets"),
+            "重新启用恢复服务，Chat 来源的设置仍隔离 Graph 专属面板");
         check(window.CustomizationForTesting.StatusOf("automation").ActionId == "graph",
             "重新启用后的状态指向内建 Graph");
+        await window.NavigateForTestingAsync(AppPage.Graph);
+        await Settle();
+        check(window.PageAvailableForTesting("graph-tickets"), "进入 Graph 后恢复专属面板和已有数据");
     }
 
     private static async Task Settle()

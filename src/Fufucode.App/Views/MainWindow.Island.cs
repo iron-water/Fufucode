@@ -340,7 +340,7 @@ public partial class MainWindow
         var model = vm?.StatusBar.ModelText;
         var usage = vm?.StatusBar.UsageText;
         var hasQueue = vm?.StatusBar.HasQueue == true;
-        if (vm?.IsGraphPage == true && _graphWorkspace is { } graph)
+        if (vm?.IsGraphPage == true && !_graphEntryPending && _graphWorkspace is { } graph)
         {
             var snapshot = graph.Model.Snapshot;
             title = snapshot.Title;
@@ -350,6 +350,14 @@ public partial class MainWindow
             failed = snapshot.Runs.Any(run => run.Status == "Unknown");
             usage = null;
             hasQueue = false;
+        }
+
+        if (vm?.IsGraphPage == true && _graphEntryPending)
+        {
+            title = "新建图";
+            activity = "待选择项目";
+            running = failed = hasQueue = false;
+            model = usage = null;
         }
 
         // ── 紧凑胶囊 ──

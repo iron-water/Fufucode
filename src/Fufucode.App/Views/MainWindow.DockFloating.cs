@@ -41,7 +41,7 @@ public partial class MainWindow
 
     internal string? FloatDockPage(string id, double? preferredWidth = null, double? preferredHeight = null)
     {
-        if (!_workbenchPages.ContainsKey(id)) return null;
+        if (!CanOpenDockPage(id)) return null;
         var floating = _dockLayout.FloatPage(id);
         if (floating is null) return null;
         // 性能页等信息密集型页面需要在首次显示前就有足够画布；已有更大尺寸时保留用户设置。
@@ -219,7 +219,7 @@ public partial class MainWindow
             Grid.SetRow(dock, 1); root.Children.Add(dock); window.Content = root;
             dock.OpenRequested += (pageId, _) =>
             {
-                if (!_workbenchPages.ContainsKey(pageId)) return;
+                if (!CanOpenDockPage(pageId)) return;
                 _dockLayout.OpenInFloating(pageId, id); RenderDockPages(); SaveWorkspaceDimensions();
             };
             dock.SelectRequested += pageId => OpenDockPage(pageId, dock.Zone);

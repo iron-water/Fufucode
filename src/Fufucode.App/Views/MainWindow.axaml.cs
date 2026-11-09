@@ -197,6 +197,9 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             return;
         }
 
+        // Preserve the outgoing mode before attaching a VM whose layout filtering differs.
+        SaveWorkModeLayout();
+        _modeLayoutProject = null;
         Core.Diagnostics.StartupProbe.Mark("attach.vm.begin", "MainViewModel construction");
         var vm = new MainViewModel(
             session,
@@ -412,7 +415,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         {
             AppPage.Extensions => _extensionsPage,
             AppPage.Settings => _settingsPage,
-            AppPage.Graph => _graphMainHost,
+            AppPage.Graph => _graphEntryPending ? _graphEntryHost : _graphMainHost,
             _ => (object)_chatPage,
         };
         ApplyWorkModeLayout(_vm.CurrentPage);
@@ -627,7 +630,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private async Task SwitchProjectAsync(string path)
     {
         if (_switching || _restarting || _closed) return;
-        if (_vm?.IsGraphPage == true || _host is null && _projectOnlyManager is not null)
+        if (WorkMode == AppPage.Graph)
         {
             _switching = true;
             try { await OpenProjectGraphAsync(path); }
@@ -784,7 +787,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         var current = host.Current.Session;
         var callbacks = new SidebarViewModel.Callbacks(
             SwitchRequested: id => SwitchSessionAsync(id),
-            NewSessionRequested: () => SwitchSessionAsync(sessionId: null),
+            NewSessionRequested: () => WorkMode == AppPage.Graph ? NewGraphAsync() : SwitchSessionAsync(sessionId: null),
             RenameRequested: name => RenameSessionAsync(name),
             ProjectText: host.ProjectPath,
             CurrentName: current.Name ?? string.Empty,
@@ -797,8 +800,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                     !ScratchWorkspace.Matches(_options.CreateAppDataLayout(), path))
                 .ToArray(),
             NewSessionBackends: BuildNewSessionBackendOptions(host),
-            NewSessionWithBackendRequested: key =>
-                SwitchSessionAsync(null, BackendCapabilities.Parse(key)));
+            NewSessionWithBackendRequested: key => WorkMode == AppPage.Graph
+                ? NewGraphAsync() : SwitchSessionAsync(null, BackendCapabilities.Parse(key)));
 
         AttachSession(host.Chat, BuildSessionItems(host), callbacks,
             new RealPromptSteering(host), page);

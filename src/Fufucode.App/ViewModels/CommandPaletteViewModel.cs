@@ -142,6 +142,7 @@ public sealed partial class CommandPaletteViewModel : ViewModelBase, IDisposable
         }
 
         Append(Registry.Actions
+            .Where(action => !action.HideWhenUnavailable || action.DisabledReason?.Invoke() is null)
             .Where(action => Matches(query, action.Title, action.Group, action.Shortcut, action.Description))
             .OrderBy(action => action.Group, StringComparer.CurrentCulture)
             .ThenBy(action => action.Title, StringComparer.CurrentCulture)

@@ -82,25 +82,27 @@ public partial class MainWindow
         if (_overview.GetVisualDescendants().OfType<Control>().Any(c => c.ContextMenu?.IsOpen == true))
         { _overviewRefreshPending = true; return; }
         _overviewRefreshPending = false;
+        _overview.SetChatMode(WorkMode == AppPage.Chat);
         var organization = Organization();
         var state = organization.State;
         _overview.Toolbar.Children.Clear();
         _overview.Body.Children.Clear();
         if (organization.RestoreError is { } diagnostic) OverviewEmpty(diagnostic);
         var toolbar = new Grid { ColumnDefinitions = new("*,Auto,Auto"), ColumnSpacing = 4 };
-        var mode = new ToggleSwitch { OffContent = "全部", OnContent = "活动", IsChecked = state.ActivityView, FontSize = 12 };
+        var mode = new ToggleSwitch { OffContent = "全部", OnContent = "活动", IsChecked = state.ActivityView, FontSize = 12, IsVisible = WorkMode != AppPage.Graph };
         mode.IsCheckedChanged += (_, _) => OverviewRun(() =>
         { organization.SetActivity(mode.IsChecked == true); RenderOverview(); return Task.CompletedTask; });
         toolbar.Children.Add(mode);
         var addMenu = OverviewContextMenu();
         addMenu.Items.Add(OverviewMenu("新建分区", () => EditSectionAsync(null)));
-        addMenu.Items.Add(OverviewMenu("添加项目", AddOverviewProjectAsync, _host is not null));
+        addMenu.Items.Add(OverviewMenu("添加项目", AddOverviewProjectAsync, _host is not null || _projectOnlyManager is not null));
         Button add = null!;
         add = OverviewIcon("Add", "新建分区或项目",
             () => { addMenu.Open(add); return Task.CompletedTask; });
         add.ContextMenu = addMenu;
         Grid.SetColumn(add, 1); toolbar.Children.Add(add);
         var options = OverviewIcon("More", "会话视图选项", () => Task.CompletedTask);
+        options.IsVisible = WorkMode == AppPage.Chat;
         var priority = new MenuItem { Header = "显示" };
         foreach (var (id, name) in new[] { ("attention", "优先事项部分"), ("pinned", "置顶"), ("scheduled", "定时任务") })
         {
@@ -125,6 +127,26 @@ public partial class MainWindow
         _overview.Toolbar.Children.Add(toolbar);
         var metadataForArchive = MetadataOrMock();
         var archivedProjects = ProjectArchive.LoadSet(metadataForArchive);
+        if (WorkMode == AppPage.Graph)
+        {
+            foreach (var section in state.Sections)
+            {
+                var collapsed = _collapsedSections.Contains(section.Id);
+                var heading = OverviewCollapsibleHeading(section.Name, collapsed, () =>
+                {
+                    if (!_collapsedSections.Add(section.Id)) _collapsedSections.Remove(section.Id);
+                });
+                heading.ContextMenu = OverviewContextMenu();
+                heading.ContextMenu.Items.Add(OverviewMenu("重命名", () => EditSectionAsync(section)));
+                if (!collapsed)
+                    foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId == section.Id))
+                        OverviewProjectRow(project, organization, [], 16);
+            }
+            OverviewHeading("项目");
+            foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId is null))
+                OverviewProjectRow(project, organization, []);
+            return;
+        }
         // 空会话（还没发第一条消息）不进入会话管理。
         var all = OverviewSessions()
             .Where(s => SessionPresence.IsEstablished(metadataForArchive, s))
@@ -229,7 +251,7 @@ public partial class MainWindow
     private IReadOnlyList<ProjectRecord> OverviewProjects()
     {
         var metadata = MetadataOrMock();
-        var currentProjectId = _host?.Current.Project.Id;
+        var currentProjectId = CurrentWorkProjectId;
         var scratchId = ScratchProject()?.Id;
         var visible = metadata.ListProjects()
             .Where(project => project.Id != scratchId)
@@ -355,7 +377,7 @@ public partial class MainWindow
         };
         var count = new TextBlock
         {
-            Text = $"{projectSessions.Length} 个会话", Classes = { "meta" },
+            Text = WorkMode == AppPage.Graph ? HasProjectGraph(project) ? "1 个图" : "未建图" : $"{projectSessions.Length} 个会话", Classes = { "meta" },
             VerticalAlignment = VerticalAlignment.Center,
         };
         var content = new Grid { ColumnDefinitions = new("Auto,*,Auto"), ColumnSpacing = 8 };
@@ -364,7 +386,7 @@ public partial class MainWindow
         Grid.SetColumn(count, 2); content.Children.Add(count);
 
         var row = new Button { Content = content, Classes = { "overviewProject" }, Margin = new Thickness(indent, 0, 0, 4) };
-        row.Classes.Set("selected", project.Id == _host?.Current.Project.Id);
+        row.Classes.Set("selected", project.Id == CurrentWorkProjectId);
         Avalonia.Automation.AutomationProperties.SetHelpText(row, settings.Folder + "（点击折叠/展开会话）");
         AutomationProperties.SetAutomationId(row, "project.row." + project.Id);
         row.Click += (_, _) =>
@@ -379,18 +401,21 @@ public partial class MainWindow
             sections.Items.Add(OverviewMenu(section.Name, () =>
             { organization.EditProject(project, settings.Name, settings.Folder, section.Id); RenderOverview(); return Task.CompletedTask; }));
         var menu = OverviewContextMenu();
-        menu.Items.Add(OverviewMenu("打开项目", () => SwitchProjectAsync(settings.Folder)));
+        menu.Items.Add(OverviewMenu("打开项目", () => SwitchProjectAsync(WorkMode == AppPage.Graph ? project.Path : settings.Folder)));
         menu.Items.Add(OverviewMenu("在新窗口中打开项目", () =>
         {
             new MainWindow(_options with
             {
-                ProjectPath = settings.Folder,
+                ProjectPath = WorkMode == AppPage.Graph ? project.Path : settings.Folder,
                 SessionId = null,
-                NewSession = true,
+                NewSession = WorkMode == AppPage.Chat,
+                StartGraph = WorkMode == AppPage.Graph,
             }).Show();
             return Task.CompletedTask;
         }));
-        menu.Items.Add(OverviewMenu("新建会话", async () =>
+        if (WorkMode == AppPage.Graph)
+            menu.Items.Add(OverviewMenu(HasProjectGraph(project) ? "打开图" : "新建图", () => SwitchProjectAsync(project.Path)));
+        else menu.Items.Add(OverviewMenu("新建会话", async () =>
         {
             var backend = _vm?.Sidebar.SelectedNewSessionBackendKey;
             await SwitchProjectAsync(settings.Folder);
@@ -408,7 +433,14 @@ public partial class MainWindow
 
         var stack = new StackPanel { Spacing = 2 };
         stack.Children.Add(row);
-        if (!collapsed)
+        if (!collapsed && WorkMode == AppPage.Graph)
+        {
+            var open = new Button { Content = HasProjectGraph(project) ? "打开图" : "新建图", Classes = { "subtle" }, Margin = new Thickness(indent + 16, 0, 0, 4) };
+            AutomationProperties.SetAutomationId(open, "project.graph." + project.Id);
+            open.Click += (_, _) => OverviewRun(() => SwitchProjectAsync(project.Path));
+            stack.Children.Add(open);
+        }
+        else if (!collapsed)
         {
             var expanded = _expandedProjects.Contains(project.Id);
             // 分叉跟随父会话，预览截断也要按树来截，避免只显示子会话。
@@ -768,13 +800,12 @@ public partial class MainWindow
     /// <summary>“添加项目”：选择文件夹并登记为项目；不切换当前会话的工作目录。</summary>
     private async Task AddOverviewProjectAsync()
     {
-        if (_host is null) return;
         var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
         {
             Title = "添加项目", AllowMultiple = false,
         });
         if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
-        var project = _host.Manager.Metadata.GetOrCreateProject(path);
+        var project = MetadataOrMock().GetOrCreateProject(path);
         RenderOverview();
         await EditOverviewProjectAsync(project);
     }

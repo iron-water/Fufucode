@@ -23,14 +23,18 @@ public partial class MainWindow
         if (page == AppPage.Graph)
         {
             if (!GraphEnabled) return;
-            if (_graphWorkspace is null)
+            if (!_graphEntryPending && _graphWorkspace is null)
             {
-                try { EnsureGraphProject(_host?.ProjectPath ?? _options.ProjectPath ?? Environment.CurrentDirectory); }
+                var path = _host?.ProjectPath ?? _options.ProjectPath;
+                if (path is null || ScratchWorkspace.Matches(GraphLayout, path)) { await NewGraphAsync(); return; }
+                try { EnsureGraphProject(path); }
                 catch (Exception error) { vm.Timeline.AddNotification("打开项目地图失败：" + error.Message); return; }
             }
         }
         if (page == AppPage.Chat && _host is null && _options.Mode == Integration.AppSessionMode.Real)
         {
+            if (!await ConfirmLeaveSettingsAsync()) return;
+            _graphEntryPending = false;
             await BootstrapRealAsync();
             return;
         }
@@ -46,6 +50,7 @@ public partial class MainWindow
             NavigationProgress.IsVisible = true;
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             var returning = vm.IsSettingsPage;
+            if (page == AppPage.Chat) _graphEntryPending = false;
             vm.CurrentPage = page;
             if (page is AppPage.Chat or AppPage.Graph)
             {

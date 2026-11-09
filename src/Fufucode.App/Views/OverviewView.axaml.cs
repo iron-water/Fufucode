@@ -10,6 +10,7 @@ public partial class OverviewView : UserControl
     public OverviewView() => InitializeComponent();
     public StackPanel Toolbar => ManagementToolbar;
     public StackPanel Body => ManagementBody;
+    public void SetChatMode(bool isChat) => NewSessionRow.IsVisible = isChat;
 
     /// <summary>选择新建会话使用的后端；本控件不创建会话，创建入口在页头 +。</summary>
     private void NewSessionBar_Click(object? sender, RoutedEventArgs e)

@@ -55,7 +55,7 @@ public partial class MainWindow
         Action("navigate.forward", "前进", "导航", () => MoveHistoryAsync(1), () => _navigationIndex + 1 < _navigationHistory.Count ? null : "没有下一位置");
         Action("session.previous", "上一个会话", "导航", () => AdjacentSessionAsync(-1), IdleReal);
         Action("session.next", "下一个会话", "导航", () => AdjacentSessionAsync(1), IdleReal);
-        Action("session.new", "新聊天", "会话", NewChatAsync, Ready);
+        Action("session.new", "新建", "工作区", NewWorkspaceAsync, Ready);
         // 多窗口：新窗口从一条新会话开始，不抢占当前窗口正在使用的会话租约；
         // 当前窗口即使在忙碌也不受影响。
         Now("window.new", "新建窗口", "窗口", () => new MainWindow(_options with
@@ -135,7 +135,22 @@ public partial class MainWindow
     { _zoom = Math.Clamp(zoom, .75, 1.5); _customization.Change(s => s with { FontSize = 13 * _zoom }); }
     private async Task NewChatAsync()
     {
-        if (_host is null) { _vm?.Timeline.Reset(); if (_vm is not null) { _vm.Input.DraftText = ""; _vm.Input.ReferenceContext = ""; } }
+        if (_host is null)
+        {
+            if (_options.Mode == AppSessionMode.Real)
+            {
+                if (_borrowedHost || _switching || _restarting || _closed || !await ConfirmLeaveSettingsAsync()) return;
+                _graphEntryPending = false;
+                _options = _options with { ProjectPath = ScratchWorkspace.Ensure(GraphLayout), SessionId = null, NewSession = true, StartGraph = false };
+                await BootstrapRealAsync();
+            }
+            else
+            {
+                await NavigateWorkspaceAsync(AppPage.Chat);
+                _vm?.Timeline.Reset();
+                if (_vm is not null) { _vm.Input.DraftText = ""; _vm.Input.ReferenceContext = ""; }
+            }
+        }
         else
         {
             if (_borrowedHost || _switching || _restarting || _closed || _vm?.Input.IsTurnActive == true) return;
