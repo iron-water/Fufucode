@@ -127,7 +127,15 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     private readonly Dictionary<(string MessageId, int Index), BlockViewModel> _blocks = new();
     private readonly List<(string MessageId, int Index)> _blockOrder = new();
     private readonly List<ToolGroupViewModel> _groups = new();
-    private readonly List<string> _messageOrder = new();
+    private readonly Dictionary<string, int> _messageOrder = new(StringComparer.Ordinal);
+    private bool _restoreProjectionPending;
+
+    internal void FlushRestoredProjection()
+    {
+        if (!_restoreProjectionPending) return;
+        _restoreProjectionPending = false;
+        RebuildDisplayBlocks();
+    }
     private string? _model;
     private TurnPhase _phase = TurnPhase.Streaming;
     private bool _isComplete;
@@ -355,12 +363,12 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     /// 合并一条 assistant 消息到本回合。按 (MessageId, index) upsert 块，
     /// 不重建已有块，因此流式刷新与展开状态都不会丢。
     /// </summary>
-    public void MergeMessage(ChatMessage message)
+    public void MergeMessage(ChatMessage message, bool restoring = false)
     {
         Model = message.Model;
         if (message.CumulativeUsage is { } usage) Usage = usage;
 
-        if (!_messageOrder.Contains(message.Id)) _messageOrder.Add(message.Id);
+        var newMessage = _messageOrder.TryAdd(message.Id, _messageOrder.Count);
         if (message.Blocks.Count > 0) IsAwaitingFirstEvent = false;
 
         var alive = new HashSet<int>();
@@ -378,7 +386,8 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
             ApplySnapshot(vm, snapshot);
         }
 
-        foreach (var key in _blocks.Keys.Where(k => k.MessageId == message.Id && !alive.Contains(k.Index)).ToArray())
+        foreach (var key in newMessage ? Array.Empty<(string MessageId, int Index)>() :
+            _blocks.Keys.Where(k => k.MessageId == message.Id && !alive.Contains(k.Index)).ToArray())
         {
             var vm = _blocks[key];
             Blocks.Remove(vm);
@@ -386,8 +395,12 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
             _blockOrder.Remove(key);
         }
 
-        RebuildDisplayBlocks();
-        DetectFinalAnswer(message);
+        if (restoring) _restoreProjectionPending = true;
+        else
+        {
+            RebuildDisplayBlocks();
+            DetectFinalAnswer(message);
+        }
     }
 
     private bool _finalAnswerStarted;
@@ -456,13 +469,19 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     /// <summary>块的全序：先按消息到达顺序，再按消息内 contentIndex。</summary>
     private long OrderOf((string MessageId, int Index) key)
     {
-        var messageIndex = _messageOrder.IndexOf(key.MessageId);
+        var messageIndex = _messageOrder.GetValueOrDefault(key.MessageId);
         return (long)Math.Max(0, messageIndex) * 100_000 + key.Index;
     }
 
     private void InsertBlockInOrder((string MessageId, int Index) key, BlockViewModel vm)
     {
         var order = OrderOf(key);
+        if (_blockOrder.Count == 0 || OrderOf(_blockOrder[^1]) < order)
+        {
+            _blockOrder.Add(key);
+            Blocks.Add(vm);
+            return;
+        }
         var insertAt = 0;
         for (; insertAt < _blockOrder.Count; insertAt++)
         {
@@ -494,13 +513,15 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
                     openGroup = FindOrCreateGroup(tool, groupIndex++);
                     next.Add(openGroup);
                 }
-                if (!openGroup.Contains(tool)) openGroup.Add(tool);
+                if (!openGroup.Contains(tool)) openGroup.Add(tool, deferSummary: true);
                 continue;
             }
 
             openGroup = null;
             next.Add(block);
         }
+
+        foreach (var group in next.OfType<ToolGroupViewModel>()) group.Recompute();
 
         // 消息快照可能替换或移除工具块；先按当前 Blocks 清理组内陈旧条目。
         var liveTools = Blocks.OfType<ToolCallBlockViewModel>().ToHashSet();

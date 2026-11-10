@@ -66,7 +66,7 @@ public partial class MainWindow
             RecordNavigation();
             if (returning) RestoreFocus(_settingsReturnFocus);
         }
-        finally { NavigationProgress.IsVisible = false; _navigationPending = false; }
+        finally { _navigationPending = false; NavigationProgress.IsVisible = _switching; }
     }
 
     private async Task<bool> ConfirmLeaveSettingsAsync()

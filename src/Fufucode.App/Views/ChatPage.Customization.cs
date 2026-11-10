@@ -65,8 +65,10 @@ public partial class ChatPage
     /// 左侧轮次刻度：只列用户轮次，悬停显示这一轮的指令，点击跳转，右键收藏。
     /// 收藏只做原位高亮，不改变顺序——刻度的价值是空间记忆，重排会让位置失去意义。
     /// </summary>
-    internal void RefreshRuler()
+    private int _rulerGeneration;
+    internal async void RefreshRuler()
     {
+        var generation = ++_rulerGeneration;
         MessageRuler.Children.Clear();
         if (DataContext is not MainViewModel vm) return;
 
@@ -83,8 +85,16 @@ public partial class ChatPage
                 item.Entry.IsPinned = pinnedIds.Contains(item.Entry.Id);
         }
 
+        var slice = System.Diagnostics.Stopwatch.StartNew();
         foreach (var (entry, number) in numbered)
         {
+            if (generation != _rulerGeneration || !ReferenceEquals(DataContext, vm)) return;
+            if (slice.ElapsedMilliseconds >= 8)
+            {
+                await System.Threading.Tasks.Task.Delay(1);
+                if (generation != _rulerGeneration || !ReferenceEquals(DataContext, vm)) return;
+                slice.Restart();
+            }
             var tick = new StackPanel { Spacing = 1, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
             // 纯图形不靠字号撑大小：收藏圆点改用 6×6 的 Border（圆角取半径 3）。
             if (entry.IsPinned)

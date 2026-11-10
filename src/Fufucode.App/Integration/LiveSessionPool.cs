@@ -48,7 +48,8 @@ internal static class LiveSessionPool
                 entry.References++;
                 return entry.Session;
             }
-            var session = await manager.ResumeAsync(id, cancellationToken);
+            // Resume 的前半段包含同步 JSON/SQLite/历史解析；不能借已完成的 await 回到 UI 线程。
+            var session = await Task.Run(() => manager.ResumeAsync(id, cancellationToken), cancellationToken).ConfigureAwait(false);
             Register(key, manager, session);
             return session;
         }

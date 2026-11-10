@@ -224,9 +224,17 @@ public partial class ChatPage
             var current = Equals(vm.Settings.SelectedThinking, captured);
             var item = new MenuItem
             {
-                Header = (current ? "✓  " : "    ") + captured.Label,
+                Header = captured.Label,
                 IsEnabled = captured.IsSupported,
+                FontFamily = InputBox.FontFamily,
+                FontSize = 14,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(4),
+                BorderBrush = Avalonia.Media.Brushes.Transparent,
             };
+            item.Classes.Set("permissionSelected", current);
+            if (current)
+                item.Bind(MenuItem.BorderBrushProperty, new Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension("AppAccent"));
             item.Click += (_, _) => { vm.Settings.SelectedThinking = captured; RefreshComposerTools(); };
             menu.Items.Add(item);
         }

@@ -59,7 +59,6 @@ public partial class MainWindow
         // 多窗口：直接打开当前会话的另一个可编辑视图，共享唯一会话写入者；
         // 当前窗口即使在忙碌也不受影响。
         Now("window.new", "新建窗口", "窗口", () => _ = OpenSessionInSharedWindowAsync());
-        Now("window.newProject", "在新窗口中打开项目…", "窗口", () => _ = OpenProjectInNewWindowAsync());
         // 同一会话的同步视图：窗口独立宿主引用，共享会话与事件流。
         Now("window.session", "在新窗口中打开当前会话（同步）", "窗口",
             () => _ = OpenSessionInSharedWindowAsync(),
@@ -192,22 +191,6 @@ public partial class MainWindow
         return Task.CompletedTask;
     }
 
-    /// <summary>在新窗口打开另一个项目：当前窗口的忙碌回合不受影响。</summary>
-    private async Task OpenProjectInNewWindowAsync()
-    {
-        var folders = await StorageProvider.OpenFolderPickerAsync(new FolderPickerOpenOptions
-        {
-            Title = "在新窗口中打开项目",
-            AllowMultiple = false,
-        });
-        if (folders.Count == 0 || folders[0].TryGetLocalPath() is not { } path) return;
-        new MainWindow(_options with
-        {
-            ProjectPath = path,
-            SessionId = null,
-            NewSession = true,
-        }).Show();
-    }
     private Task SwitchChatTabFocusAsync()
     {
         if (_vm?.IsChatPage != true) return NavigateWorkspaceAsync(AppPage.Chat);

@@ -30,6 +30,7 @@ public enum ToolGroupState
 public sealed partial class ToolGroupViewModel : ObservableObject
 {
     private readonly List<ToolCallBlockViewModel> _tools = new();
+    private readonly HashSet<ToolCallBlockViewModel> _toolSet = new();
     private bool _isExpanded;
     private bool _isDetached;
     private ToolGroupState _state = ToolGroupState.Running;
@@ -109,13 +110,14 @@ public sealed partial class ToolGroupViewModel : ObservableObject
     public int Count => _tools.Count;
     public int FailureCount => _tools.Count(tool => tool.Status == ToolCallStatus.Failed || tool.IsErrorOutput);
 
-    public void Add(ToolCallBlockViewModel tool)
+    public void Add(ToolCallBlockViewModel tool, bool deferSummary = false)
     {
+        if (!_toolSet.Add(tool)) return;
         _tools.Add(tool);
         Tools.Add(tool);
         if (IsExpanded) VisibleTools.Add(tool);
         if (!_isDetached) tool.PropertyChanged += OnToolChanged;
-        Recompute();
+        if (!deferSummary) Recompute();
     }
 
     /// <summary>折叠时释放子卡片；展开时按源顺序重新投影。</summary>
@@ -228,12 +230,13 @@ public sealed partial class ToolGroupViewModel : ObservableObject
     public void ToggleExpanded() => IsExpanded = !IsExpanded;
 
     /// <summary>组内是否已经包含某个工具块（重建投影时避免重复添加）。</summary>
-    public bool Contains(ToolCallBlockViewModel tool) => _tools.Contains(tool);
+    public bool Contains(ToolCallBlockViewModel tool) => _toolSet.Contains(tool);
 
     /// <summary>工具块已不在消息里时从组内移除，避免保留陈旧条目。</summary>
     public void Remove(ToolCallBlockViewModel tool)
     {
-        if (!_tools.Remove(tool)) return;
+        if (!_toolSet.Remove(tool)) return;
+        _tools.Remove(tool);
         tool.PropertyChanged -= OnToolChanged;
         Tools.Remove(tool);
         VisibleTools.Remove(tool);

@@ -40,6 +40,55 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private CancellationTokenSource? _submissionCts;
     private bool _disposed;
     private long _historySequence;
+    private bool _restoringHistory;
+    private bool _bufferHistoryEvents;
+    private readonly List<SessionEvent> _historyEvents = new();
+
+    internal void BeginHistoryLoad() => _bufferHistoryEvents = true;
+
+    internal async Task LoadLiveHistoryAsync(Fufucode.App.Integration.LiveSessionPool.TranscriptSnapshot snapshot,
+        CancellationToken cancellationToken = default)
+    {
+        _historySequence = snapshot.Sequence;
+        _restoringHistory = true;
+        _suspendVisibleSync = true;
+        var entries = (BatchObservableCollection<TimelineEntryViewModel>)Entries;
+        entries.BeginUpdate();
+        try
+        {
+            Reset();
+            var slice = System.Diagnostics.Stopwatch.StartNew();
+            foreach (var message in snapshot.Messages)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (_disposed) return;
+                _rebuilder.RestoreMessage(message);
+                ApplyBatch();
+                if (slice.ElapsedMilliseconds < 8) continue;
+                await Task.Delay(1, cancellationToken);
+                slice.Restart();
+            }
+            _currentTurn?.FlushRestoredProjection();
+            if (_session.Activity == SessionActivity.Idle)
+                FinalizeCurrentTurn(_session.LastOutcome ?? SessionOutcome.Unknown, restored: true);
+            RefreshTurnSummaries();
+        }
+        finally
+        {
+            entries.EndUpdate();
+            _restoringHistory = false;
+            _suspendVisibleSync = false;
+            _bufferHistoryEvents = false;
+            if (!_disposed)
+            {
+                RebuildVisible();
+                var buffered = _historyEvents.ToArray();
+                _historyEvents.Clear();
+                foreach (var value in buffered) OnSessionEvent(_session, value);
+                ScrollToEndRequested?.Invoke();
+            }
+        }
+    }
     private string? _projectRoot;
 
     /// <summary>时间线实际渲染的最近条目数；更早的条目仍留在 <see cref="Entries"/> 中，按需加载。</summary>
@@ -61,7 +110,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>全部时间线条目（会话数据，保留用于加载更早、搜索与跳转）。</summary>
-    public ObservableCollection<TimelineEntryViewModel> Entries { get; } = new();
+    public ObservableCollection<TimelineEntryViewModel> Entries { get; } = new BatchObservableCollection<TimelineEntryViewModel>();
 
     /// <summary>界面实际绑定的窗口：最近 <see cref="VisibleEntryLimit"/> 条，或用户手动加载的更早条目。</summary>
     public ObservableCollection<TimelineEntryViewModel> VisibleEntries { get; } = new();
@@ -414,6 +463,12 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (_bufferHistoryEvents)
+        {
+            _historyEvents.Add(e);
+            return;
+        }
+
         switch (e)
         {
             case SessionEvent.ActivityChanged { Activity: SessionActivity.Cancelling }:
@@ -465,8 +520,11 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         var batch = _rebuilder.Flush();
         var hasChanges = batch.AddedEntries.Count > 0 || batch.UpdatedEntryIds.Count > 0;
 
-        foreach (var entry in batch.AddedEntries)
+        var addedIds = batch.AddedEntries.Select(entry => entry.Id).ToHashSet(StringComparer.Ordinal);
+        foreach (var added in batch.AddedEntries)
         {
+            // 使用同批最终快照，避免 start 空壳 + finish 再全量投影两遍。
+            var entry = _rebuilder.GetEntry(added.Id) ?? added;
             // 用户消息是硬边界；若已有本地乐观气泡，则复用它而不是再插一条。
             if (entry.Kind == TimelineEntryKind.UserMessage)
             {
@@ -486,13 +544,14 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             }
 
             vm.Timestamp = entry.Timestamp;
-            if (vm is AssistantMessageViewModel assistant) assistant.ResolveReferencedFiles(_projectRoot);
+            if (!_restoringHistory && vm is AssistantMessageViewModel assistant) assistant.ResolveReferencedFiles(_projectRoot);
             _byId[entry.Id] = vm;
             if (entry.Kind != TimelineEntryKind.AssistantMessage) Entries.Add(vm);
         }
 
         foreach (var id in batch.UpdatedEntryIds)
         {
+            if (addedIds.Contains(id)) continue;
             if (!_byId.TryGetValue(id, out var vm))
             {
                 continue;
@@ -507,7 +566,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             switch (vm, snapshot.Message, snapshot.Error)
             {
                 case (AssistantMessageViewModel assistant, ChatMessage message, _):
-                    assistant.MergeMessage(message);
+                    assistant.MergeMessage(message, restoring: _restoringHistory);
                     break;
                 case (UserMessageViewModel user, ChatMessage message, _):
                     user.UpdateFrom(message);
@@ -524,6 +583,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             return;
         }
 
+        if (_restoringHistory) return;
         if (IsAtBottom)
         {
             ScrollToEndRequested?.Invoke();
@@ -680,6 +740,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         if (_currentTurn is null || _currentTurn.IsComplete)
         {
             _currentTurn = new AssistantMessageViewModel(_clipboard) { Id = entry.Id };
+            _currentTurn.ResolveReferencedFiles(_projectRoot);
             _currentTurnStartedAt = entry.Timestamp;
             _currentTurn.Timestamp = entry.Timestamp;
             Entries.Add(_currentTurn);
@@ -688,7 +749,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         // 后端已开始产出：用户消息视为确认，等待提示停止。
         ConfirmPendingUser();
         _submissionCts?.Cancel();
-        _currentTurn.MergeMessage(message);
+        _currentTurn.MergeMessage(message, restoring: _restoringHistory);
         return _currentTurn;
     }
 
@@ -707,6 +768,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
         if (_currentTurn is not { IsComplete: false } turn) return;
         var elapsed = restored ? TimeSpan.Zero
             : DateTimeOffset.Now - (_currentTurnStartedAt == default ? DateTimeOffset.Now : _currentTurnStartedAt);
+        turn.FlushRestoredProjection();
         turn.FinalizeTurn(outcome, elapsed);
         _currentTurn = null;
         // 结束后本回合不再流式更新；解除工具组订阅（块与投影保留，回合照常显示）。

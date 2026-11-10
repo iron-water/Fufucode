@@ -53,6 +53,13 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--loading-ui-repair-only"))
+        {
+            var code = 1;
+            await RunOnHeadlessUiThreadAsync(async () => code = await LoadingUiRepairSelfTest.RunAsync());
+            return code;
+        }
+
         if (args.Contains("--session-repair-only"))
         {
             await RunOnHeadlessUiThreadAsync(async () =>

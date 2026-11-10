@@ -402,17 +402,6 @@ public partial class MainWindow
             { organization.EditProject(project, settings.Name, settings.Folder, section.Id); RenderOverview(); return Task.CompletedTask; }));
         var menu = OverviewContextMenu();
         menu.Items.Add(OverviewMenu("打开项目", () => SwitchProjectAsync(WorkMode == AppPage.Graph ? project.Path : settings.Folder)));
-        menu.Items.Add(OverviewMenu("在新窗口中打开项目", () =>
-        {
-            new MainWindow(_options with
-            {
-                ProjectPath = WorkMode == AppPage.Graph ? project.Path : settings.Folder,
-                SessionId = null,
-                NewSession = WorkMode == AppPage.Chat,
-                StartGraph = WorkMode == AppPage.Graph,
-            }).Show();
-            return Task.CompletedTask;
-        }));
         if (WorkMode == AppPage.Graph)
             menu.Items.Add(OverviewMenu(HasProjectGraph(project) ? "打开图" : "新建图", () => SwitchProjectAsync(project.Path)));
         else menu.Items.Add(OverviewMenu("新建会话", async () =>
@@ -529,12 +518,14 @@ public partial class MainWindow
                 tail.Children.Add(action);
         }
 
-        var grid = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 2 };
+        // 内容的留白只归内容层；绕边覆盖层必须使用整张卡的尺寸。
+        var grid = new Grid { ColumnDefinitions = new("*,Auto"), ColumnSpacing = 2, Margin = new Thickness(8, 2) };
         grid.Children.Add(button);
         Grid.SetColumn(tail, 1); grid.Children.Add(tail);
         var row = new Border
         {
-            Classes = { "overviewSession" }, Margin = new Thickness(indent + depth * 16, 0, 0, 4), Child = grid,
+            Classes = { "overviewSession" }, Margin = new Thickness(indent + depth * 16, 0, 0, 4),
+            Padding = new Thickness(0), Child = grid,
         };
         row.Classes.Set("selected", isCurrent);
         var live = LiveSessionPool.Find(_host.Manager, session.Id)?.Chat;
@@ -544,6 +535,7 @@ public partial class MainWindow
         if (running || completed)
         {
             var orbit = new SessionOrbit();
+            orbit.Bind(SessionOrbit.CornerRadiusProperty, new Avalonia.Data.Binding(nameof(Border.CornerRadius)) { Source = row });
             orbit.Bind(SessionOrbit.StrokeProperty, new DynamicResourceExtension(running ? "AppAccent" : "AppEmphasis"));
             AutomationProperties.SetAutomationId(orbit, "session.orbit." + session.Id);
             AutomationProperties.SetHelpText(row, running ? "正在运行" : "已完成");

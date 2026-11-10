@@ -75,7 +75,7 @@ public partial class MainWindow
             _sideSession = result.Session; AttachSideSession(result.Session);
             (_sideChatPage.DataContext as MainViewModel)!.Input.DraftText = host.Manager.Metadata.GetDraft(result.Session.Session.Id) ?? "";
         }
-        else AttachRealSession();
+        else await AttachRealSessionLoadedAsync();
         var nextVm = side ? _sideChatPage.DataContext as MainViewModel : _vm;
         if (retry && !string.IsNullOrWhiteSpace(nextVm?.Input.DraftText)) await nextVm.Input.SendCommand.ExecuteAsync(null);
     }

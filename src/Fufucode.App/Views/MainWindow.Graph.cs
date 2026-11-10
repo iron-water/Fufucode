@@ -385,7 +385,7 @@ public partial class MainWindow
             else metadata.SetPreference(key, id);
             metadata.SetPreference("graph-session-link:" + id,
                 JsonSerializer.Serialize(new GraphConversationLink(snapshot.ProjectId, moduleId, ticketId)));
-            AttachRealSession();
+            await AttachRealSessionLoadedAsync();
             SessionPresence.MarkEstablished(metadata, id);
             // A restored draft is the user's work; only a new conversation receives the initial context.
             if (linked is null && _vm is { } target)

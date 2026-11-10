@@ -158,7 +158,7 @@ public partial class MainWindow
             await host.AdoptSessionAsync(side);
             await CloseSideChatAsync(releaseSession: false);
             Integration.SessionWindowRegistry.RegisterOwner(side.Session.Id, host, this);
-            AttachRealSession();
+            await AttachRealSessionLoadedAsync();
             await NavigateWorkspaceAsync(AppPage.Chat);
             if (host.Manager.Metadata.GetPreference("graph-session-link:" + side.Session.Id) is not null)
                 OpenDockPage("graph-minimap", DockZone.Right);

@@ -481,7 +481,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             var host = await ProjectTrustFlow.RunAsync(
                 () => OpenHostForTesting is { } testOpen
                     ? testOpen(_bootstrapCts.Token)
-                    : RealSessionHost.OpenAsync(_options, _bootstrapCts.Token, sessionToolProviders: GraphSessionTools),
+                    : Task.Run(() => RealSessionHost.OpenAsync(_options, _bootstrapCts.Token, sessionToolProviders: GraphSessionTools), _bootstrapCts.Token),
                 AskTrustAsync,
                 (status, decision) => RealSessionHost.SaveTrustDecision(_options, status, decision));
             Core.Diagnostics.StartupProbe.Mark("session.open.end", "RealSessionHost.OpenAsync returned");
@@ -494,7 +494,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             _host = host;
             Integration.SessionWindowRegistry.RegisterOwner(host.Current.Session.Id, host, this);
             _dialogHost = CreateDialogHost(host.ProjectPath);
-            AttachRealSession();
+            await AttachRealSessionLoadedAsync();
             ProjectPreferences.RecordOpened(host.Manager.Metadata, host.ProjectPath);
             HideStartupOverlay();
             StartupPickProject.IsVisible = false;
@@ -629,7 +629,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             ShowStartup("正在打开项目…", inProgress: true);
             var newOptions = _options with { ProjectPath = path, SessionId = null };
             var next = await ProjectTrustFlow.RunAsync(
-                () => RealSessionHost.OpenAsync(newOptions, _bootstrapCts.Token, sessionToolProviders: GraphSessionTools),
+                () => Task.Run(() => RealSessionHost.OpenAsync(newOptions, _bootstrapCts.Token, sessionToolProviders: GraphSessionTools), _bootstrapCts.Token),
                 AskTrustAsync,
                 (status, decision) => RealSessionHost.SaveTrustDecision(newOptions, status, decision));
             if (_closed)
@@ -649,7 +649,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             Integration.SessionWindowRegistry.RegisterOwner(next.Current.Session.Id, next, this);
             _dialogHost = CreateDialogHost(next.ProjectPath);
             _backgroundHosts.Add(previous);
-            AttachRealSession();
+            await AttachRealSessionLoadedAsync();
             ProjectPreferences.RecordOpened(_host.Manager.Metadata, _host.ProjectPath);
             HideStartupOverlay();
             StartupPickProject.IsVisible = false;
@@ -734,7 +734,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     }
 
     /// <summary>按宿主当前会话重建视图模型：历史回放、草稿恢复、审批弹窗与通知接线。</summary>
-    private void AttachRealSession(bool preservePage = false)
+    private void AttachRealSession(bool preservePage = false, bool deferHistory = false)
     {
         // 会话成功打开/重启/切换后，此前的启动失败记录已过时。
         _lastStartupFailure = null;
@@ -767,7 +767,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         Dispatcher.UIThread.Post(RenderOverview, DispatcherPriority.ApplicationIdle);
         Core.Diagnostics.StartupProbe.Mark("session.overview", "overview queued");
         var vm = (MainViewModel)DataContext!;
-        vm.Timeline.LoadLiveHistory(host.CurrentTranscriptSnapshot());
+        if (deferHistory) vm.Timeline.BeginHistoryLoad();
+        else vm.Timeline.LoadLiveHistory(host.CurrentTranscriptSnapshot());
         Core.Diagnostics.StartupProbe.Mark("session.history", "timeline history replayed");
         if (host.Diagnostic is { } diagnostic)
         {
@@ -786,7 +787,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         WireDraftPersistence(vm);
 
         AttachGraphConversation(host.Current);
-        _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, host.CurrentTranscript(), current.Id);
+        _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, deferHistory ? [] : host.CurrentTranscript(), current.Id);
         _dialogHost!.Attach(host.Chat);
         if (!ReferenceEquals(_extensionUiWiredSession, host.Chat))
         {
@@ -879,12 +880,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             {
                 // 已回滚到旧启用列表：会话恢复可用，隐藏遮罩，把失败明细还给 VM 行展示。
                 // 旧Chat已在安全重启中释放；必须重新接恢复后的真实连接，不能留指向已退出进程的VM。
-                if (ReferenceEquals(target, _host) && target.HasLiveSession) AttachRealSession(preservePage: true);
+                if (ReferenceEquals(target, _host) && target.HasLiveSession) await AttachRealSessionLoadedAsync(preservePage: true);
                 HideStartupOverlay();
                 return failure;
             }
 
-            AttachRealSession(preservePage: true);
+            await AttachRealSessionLoadedAsync(preservePage: true);
             HideStartupOverlay();
             ScrollToEnd();
             _startupRetry = null;
@@ -916,7 +917,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             {
                 if (target.HasLiveSession)
                 {
-                    AttachRealSession(preservePage: true);
+                    await AttachRealSessionLoadedAsync(preservePage: true);
                     HideStartupOverlay();
                 }
                 else
@@ -1006,7 +1007,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
             if (_host is not null)
             {
-                AttachRealSession();
+                await AttachRealSessionLoadedAsync();
             }
 
             HideStartupOverlay();
@@ -1120,6 +1121,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
 
         _switching = true;
+        NavigationProgress.IsVisible = true;
         try
         {
             // 新建聊天不再弹后端选择窗：直接使用设置里的默认 Agent 内核。
@@ -1142,7 +1144,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
             // 同上：先停防抖，避免旧 vm 的 Tick 在切换间隙把旧草稿写进新会话。
             _draftDebounce?.Stop();
-            ShowStartup(sessionId is null ? "正在新建会话…" : "正在切换会话…", inProgress: true);
+            // 保留原工作台，用顶栏加载线反馈，并先让出一帧，不能隐藏动画后同步解析历史。
+            await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
             await ProjectTrustFlow.RunAsync<bool>(
                 async () =>
                 {
@@ -1170,7 +1173,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             // 只更新本窗口的发现索引，其他窗口与旧回合均不受影响。
             Integration.SessionWindowRegistry.TryUnregisterOwner(previousSessionId, this);
             Integration.SessionWindowRegistry.RegisterOwner(_host.Current.Session.Id, _host, this);
-            AttachRealSession();
+            await AttachRealSessionLoadedAsync();
             if (backendNote is not null) _vm?.Timeline.AddNotification(backendNote);
             HideStartupOverlay();
             ScrollToEnd();
@@ -1197,6 +1200,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         finally
         {
             _switching = false;
+            NavigationProgress.IsVisible = _navigationPending || _switching;
         }
     }
 
@@ -1352,7 +1356,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     /// <summary>启动页淡出：180ms 透明度过渡期间不阻塞 UI；结束后从可视化树移除。</summary>
     private void HideStartupOverlay()
     {
-        NavigationProgress.IsVisible = _navigationPending;
+        NavigationProgress.IsVisible = _navigationPending || _switching;
         if (!StartupOverlay.IsVisible) return;
         StopStartupAnimation();
         if (Program.SelfTestMode || MotionPreference.ReducedMotion || _closed)

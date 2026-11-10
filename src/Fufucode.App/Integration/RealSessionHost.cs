@@ -384,7 +384,8 @@ public sealed class RealSessionHost : IAsyncDisposable
         BackendId backend = BackendId.NativeCSharp)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var next = await LiveSessionPool.TrackAsync(_manager, await _manager.CreateAsync(_project.Path, name, cancellationToken, backend));
+        var created = await Task.Run(() => _manager.CreateAsync(_project.Path, name, cancellationToken, backend), cancellationToken);
+        var next = await Task.Run(() => LiveSessionPool.TrackAsync(_manager, created), cancellationToken);
         await ReplaceAsync(next);
     }
 
