@@ -648,7 +648,7 @@ public sealed class PersistentSessionManager
                 _ = ProbeImageSupportAsync(chat, endpoint, apiKey, resolvedModel);
             }
             Diagnostics.StartupProbe.Mark("native.factory.end", "NativeSessionFactory.Create returned");
-            var coordinator = new NativeSessionCoordinator(chat, settings: _settings, endpointApiKey: apiKey);
+            var coordinator = new NativeSessionCoordinator(chat, settings: _settings, endpointApiKey: apiKey, credentials: _credentials);
             await coordinator.StartAsync(cancellationToken).ConfigureAwait(false);
             Diagnostics.StartupProbe.Mark("native.coordinator.start", "native coordinator started");
             _metadata.BindBackendSession(session.Id, session.Id);

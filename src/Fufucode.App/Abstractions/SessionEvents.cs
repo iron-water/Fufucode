@@ -50,7 +50,11 @@ public abstract record SessionEvent
     public sealed record ConnectionChanged(SessionConnection Connection) : SessionEvent;
 
     /// <summary>队列变化。QueuedTexts 为当前排队文本的有序只读快照（队列接收成功不等于已执行）。</summary>
-    public sealed record QueueChanged(int QueuedCount, IReadOnlyList<string> QueuedTexts) : SessionEvent;
+    public sealed record QueueChanged(int QueuedCount, IReadOnlyList<string> QueuedTexts) : SessionEvent
+    {
+        /// <summary>可选的逐项投递方式，与 QueuedTexts 同序；旧后端省略时由前端兼容识别。</summary>
+        public IReadOnlyList<bool>? Steering { get; init; }
+    };
 
     /// <summary>停止时被清空的队列内容。订阅者将其保存为待恢复草稿文本，不得覆盖用户已有草稿。</summary>
     public sealed record QueueCleared(IReadOnlyList<string> ClearedTexts) : SessionEvent;

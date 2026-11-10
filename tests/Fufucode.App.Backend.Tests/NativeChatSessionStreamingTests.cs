@@ -128,6 +128,7 @@ internal static class NativeChatSessionStreamingTests
 
     public static async Task RunAsync(Checks checks)
     {
+        await SteeringQueueStopAsync(checks);
         await TextOnlyStreamingSequenceAsync(checks);
         await ToolRoundStreamingSequenceAsync(checks);
         await CancellationSurfacesInterruptedAsync(checks);
@@ -162,7 +163,8 @@ internal static class NativeChatSessionStreamingTests
             checks.Equal("先到", capture.AssistantTextDeltas.Single(), "响应未结束时首个增量已到达订阅端");
             checks.Equal(0, capture.AssistantFinishedMessages.Count, "响应暂停期间尚无 MessageFinished");
             checks.Equal(0, capture.Settles.Count, "响应暂停期间尚无 TurnSettled");
-            checks.Check(!session.CanSend && session.CanStop, "发送已接受但模型仍运行，停止可用且不允许并发发送");
+            checks.Check(session.CanSend && session.CanStop && engine.GetState().IsRunning,
+                "模型仍运行时允许接受后续排队输入，停止可用（不并发启动引擎回合）");
         }
         finally
         {
@@ -320,6 +322,39 @@ internal static class NativeChatSessionStreamingTests
         checks.Equal(1, capture.Settles.Count, "订阅者异常和释放不会重复派发 TurnSettled");
         checks.Equal(0, capture.Errors.Count, "订阅者异常不伪装成 ModelFailed");
         checks.Check(capture.AssistantFinishedMessages.Single().FinalMessage.IsComplete, "释放时部分消息正常收束");
+    }
+
+    private static async Task SteeringQueueStopAsync(Checks checks)
+    {
+        using var stream = new GatedSseStream(
+            Sse.Frame("{\"choices\":[{\"index\":0,\"delta\":{\"content\":\"active\"}}]}"), Sse.Done);
+        using var handler = new ScriptedHttpMessageHandler((_, _) => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StreamContent(stream),
+        });
+        using var http = new HttpClient(handler);
+        await using var session = new NativeCSharpChatSession(new PureCSharpAgentEngine(modelClient:
+            new OpenAiCompatibleModelClient("https://fixture.invalid/v1", defaultModelId: "fixture-free", httpClient: http)));
+        var capture = EventCapture.Attach(session);
+        await session.SendAsync("initial");
+        await stream.Paused.Task.WaitAsync(TimeSpan.FromSeconds(10));
+        checks.Check(session.CanSend, "原生运行中 CanSend 允许提交后续排队消息");
+        await session.SendAsync("same text");
+        await session.SteerAsync("same text");
+        await session.SteerAsync("second steering");
+        var snapshot = session.PendingQueue;
+        checks.Equal(3, session.QueuedCount, "待发计数包含插话与普通排队");
+        checks.Check(snapshot.QueuedTexts.SequenceEqual(new[] { "same text", "second steering", "same text" }) &&
+                     snapshot.Steering!.SequenceEqual(new[] { true, true, false }),
+            "同文本的插话/普通排队仍按真实投递方式区分，插话优先");
+        using var cancelled = new CancellationTokenSource();
+        cancelled.Cancel();
+        await checks.ThrowsAsync<OperationCanceledException>(() => session.SteerAsync("cancelled", cancelled.Token),
+            "取消的插话不得被接受");
+        await session.StopAsync().WaitAsync(TimeSpan.FromSeconds(10));
+        var cleared = capture.RawEvents.OfType<SessionEvent.QueueCleared>().Single();
+        checks.Check(cleared.ClearedTexts.SequenceEqual(snapshot.QueuedTexts), "停止完整退还未消费插话与排队文本");
+        checks.Equal(0, session.PendingQueue.QueuedCount, "停止后待发队列完全清空");
     }
 
     private static void AssertRebuilder(Checks checks, EventCapture capture, string expected)

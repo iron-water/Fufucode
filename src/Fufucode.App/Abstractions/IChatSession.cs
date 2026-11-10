@@ -13,6 +13,12 @@ namespace Fufucode.App.Abstractions;
 /// 订阅者自行封送到 UI 线程，接口本身不依赖任何 UI 框架。
 /// <see cref="SendAsync"/> 在请求被接受时完成（对应 prompt 被接收或处理），不代表 Agent 运行结束。
 /// </remarks>
+/// <summary>可选能力：重新附着视图时恢复待发队列（含插话），不依赖下一次变化事件。</summary>
+public interface IQueuedChatSession
+{
+    SessionEvent.QueueChanged PendingQueue { get; }
+}
+
 public interface IChatSession
 {
     /// <summary>连接状态（计划 §7.1）。</summary>

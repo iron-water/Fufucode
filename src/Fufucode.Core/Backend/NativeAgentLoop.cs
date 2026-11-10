@@ -118,7 +118,7 @@ public sealed class NativeAgentLoop
             // 交互主会话不注入人为的预算提示，也不在最后一轮禁用工具。
             // 没有显式预算时只受取消、模型错误、工具超时和模型自身终态控制。
             // Steer：在下一轮模型请求之前注入用户插队消息。
-            if (takeSteering?.Invoke() is { Length: > 0 } steering)
+            while (takeSteering?.Invoke() is { Length: > 0 } steering)
             {
                 var steerMsg = new PureAgentMessage(PureAgentRole.User, steering);
                 conversationHistory.Add(steerMsg);
@@ -192,6 +192,15 @@ public sealed class NativeAgentLoop
                     Usage: response.Usage) { ReasoningContent = response.ReasoningContent };
                 conversationHistory.Add(finalMsg);
                 onMessageAppended?.Invoke(finalMsg);
+                // 纯文本流期间也允许插话：模型本轮结束不代表在途用户输入已处理。
+                // 先将它入历史，再继续请求，避免留到用户下一次发送才生效。
+                if (takeSteering?.Invoke() is { Length: > 0 } pendingSteering)
+                {
+                    var userMessage = new PureAgentMessage(PureAgentRole.User, pendingSteering);
+                    conversationHistory.Add(userMessage);
+                    onMessageAppended?.Invoke(userMessage);
+                    continue;
+                }
                 return new PureAgentTurnResult(PureAgentTurnStatus.Completed,
                     response with { Text = finalText },
                     allToolResults,

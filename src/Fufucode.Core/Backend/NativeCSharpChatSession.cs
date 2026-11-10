@@ -15,7 +15,7 @@ using Fufucode.Core.Plugins;
 namespace Fufucode.Core.Backend;
 
 /// <summary>将原生引擎的流式文本、工具及轮次边界映射到既有桌面会话事件。</summary>
-public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession, IExecutionModeSession,
+public sealed class NativeCSharpChatSession : IChatSession, IQueuedChatSession, IBackendChatSession, IExecutionModeSession,
     IChatAttachments, IResumableChatSession, IPromptHandledSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly IPureCSharpAgentEngine _engine;
@@ -519,9 +519,26 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     public SessionActivity Activity { get { lock (_gate) return _activity; } }
     public SessionOutcome? LastOutcome { get { lock (_gate) return _lastOutcome; } }
     public string? CurrentModel => _modelId;
-    public bool CanSend { get { lock (_gate) return !_disposed && _activity == SessionActivity.Idle; } }
-    public bool CanStop { get { lock (_gate) return _activity is SessionActivity.Running or SessionActivity.Cancelling || _queue.Count > 0; } }
-    public int QueuedCount { get { lock (_gate) return _queue.Count; } }
+    public bool CanSend { get { lock (_gate) return !_disposed && _activity != SessionActivity.Cancelling; } }
+    public bool CanStop { get { lock (_gate) return _activity is SessionActivity.Running or SessionActivity.Cancelling || _queue.Count > 0 || _steerQueue.Count > 0; } }
+    public int QueuedCount { get { lock (_gate) return _queue.Count + _steerQueue.Count; } }
+    public SessionEvent.QueueChanged PendingQueue
+    {
+        get
+        {
+            lock (_gate)
+            {
+                var texts = _steerQueue.Concat(_queue.Select(entry => entry.Text)).ToArray();
+                return new SessionEvent.QueueChanged(texts.Length, texts)
+                {
+                    Steering = Enumerable.Repeat(true, _steerQueue.Count)
+                        .Concat(Enumerable.Repeat(false, _queue.Count)).ToArray()
+                };
+            }
+        }
+    }
+
+    private void EmitQueueChanged() => Emit(PendingQueue);
     public event EventHandler<SessionEvent>? Event;
 
     /// <summary>
@@ -534,7 +551,8 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
     /// <summary>运行中插队纠偏：在下一轮模型请求之前注入一条用户消息。空闲时退化为普通发送。</summary>
     public Task SteerAsync(string text, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(text);
+        ArgumentException.ThrowIfNullOrWhiteSpace(text);
+        cancellationToken.ThrowIfCancellationRequested();
         bool running;
         lock (_gate)
         {
@@ -544,24 +562,21 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
         }
         if (!running) return SendCoreAsync(text, null, cancellationToken);
 
-        Emit(new SessionEvent.QueueChanged(QueuedTexts().Length, QueuedTexts()));
+        EmitQueueChanged();
         return Task.CompletedTask;
     }
 
     internal string? TakeSteeringMessage()
     {
+        string text;
         lock (_gate)
         {
-            if (_steerQueue.Count == 0) return null;
-            var text = _steerQueue[0];
+            if (_steerQueue.Count == 0 || _stopRequested) return null;
+            text = _steerQueue[0];
             _steerQueue.RemoveAt(0);
-            return text;
         }
-    }
-
-    private string[] QueuedTexts()
-    {
-        lock (_gate) return _queue.Select(entry => entry.Text).ToArray();
+        EmitQueueChanged();
+        return text;
     }
 
     private Task SendCoreAsync(string text, IReadOnlyList<PureImageAttachment>? images, CancellationToken cancellationToken)
@@ -585,7 +600,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             }
         }
 
-        if (queued) Emit(new SessionEvent.QueueChanged(QueuedTexts().Length, QueuedTexts()));
+        if (queued) EmitQueueChanged();
         return Task.CompletedTask;
     }
 
@@ -725,22 +740,32 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
                 }
             }
 
+            var queueAdvanced = false;
             lock (_gate)
             {
                 if (ownsTurn && ReferenceEquals(_activeCts, cts))
                 {
                     _activeCts = null;
                     _activity = SessionActivity.Idle;
-                    if (!_disposed && !_stopRequested && _queue.Count > 0)
+                    // 插话可能恰好在模型终态检查之后抵达；不能静默遗留到下次人工发送。
+                    if (!_disposed && !_stopRequested && _steerQueue.Count > 0)
+                    {
+                        var pending = _steerQueue[0];
+                        _steerQueue.RemoveAt(0);
+                        queueAdvanced = true;
+                        StartTurnLocked(pending, null, CancellationToken.None);
+                    }
+                    else if (!_disposed && !_stopRequested && _queue.Count > 0)
                     {
                         var pending = _queue[0];
                         _queue.RemoveAt(0);
+                        queueAdvanced = true;
                         StartTurnLocked(pending.Text, pending.Images, CancellationToken.None);
                     }
                 }
                 cts.Dispose();
             }
-            Emit(new SessionEvent.QueueChanged(QueuedTexts().Length, QueuedTexts()));
+            if (queueAdvanced) EmitQueueChanged();
         }
     }
 
@@ -874,7 +899,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
             if (_disposed) return;
             turn = _activeTurn;
             _stopRequested = true;
-            cleared = _queue.Select(entry => entry.Text).ToArray();
+            cleared = _steerQueue.Concat(_queue.Select(entry => entry.Text)).ToArray();
             _queue.Clear();
             _steerQueue.Clear();
             cts = _activeCts;
@@ -1005,6 +1030,14 @@ public sealed class NativeCSharpChatSession : IChatSession, IBackendChatSession,
 
         public void OnMessageAppended(PureAgentMessage message)
         {
+            if (message.Role == PureAgentRole.User)
+            {
+                // 初始输入由 RunTurnAsync 回放；循环追加的 User 则是真实插话。
+                CloseMessage();
+                session.ReplayMessage(MessageRole.User, message.Content);
+                session.PersistHistory();
+                return;
+            }
             if (message.Role != PureAgentRole.Assistant) return;
             EnsureMessage();
             // 非流式客户端未必产生 delta：仅在缺失时补真实聚合内容。

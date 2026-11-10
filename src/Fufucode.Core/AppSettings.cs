@@ -32,7 +32,7 @@ public sealed record PerformanceSettings(
 
 /// <summary>
 /// 一个 OpenAI 兼容端点。ModelId 是当前选中的模型；Models 是该端点可用的模型清单
-/// （从 /models 拉取后保存，避免每次重新获取）。
+/// （设置页保存的快照；聊天选择器刷新时仍以端点实时 /models 为准）。
 /// </summary>
 public sealed record CompatibleEndpoint(string ProviderName, string BaseUrl, string ModelId,
     string ApiKeyEnvironmentVariable,

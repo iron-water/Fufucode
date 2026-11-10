@@ -43,9 +43,12 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
     private readonly ModelCatalogClient? _modelCatalog;
     private readonly ModelCatalogClient? _ownedModelCatalog;
     private readonly string? _endpointApiKey;
+    private readonly CompatibleEndpoint? _initialEndpoint;
+    private readonly ICredentialResolver? _credentials;
 
     public NativeSessionCoordinator(NativeCSharpChatSession session, BackendId backend = BackendId.NativeCSharp,
-        AppSettingsStore? settings = null, ModelCatalogClient? modelCatalog = null, string? endpointApiKey = null)
+        AppSettingsStore? settings = null, ModelCatalogClient? modelCatalog = null, string? endpointApiKey = null,
+        ICredentialResolver? credentials = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         Backend = backend;
@@ -54,6 +57,8 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
         // 只释放自己创建的目录客户端；注入实例的生命周期仍归调用方。
         _ownedModelCatalog = modelCatalog is null ? _modelCatalog : null;
         _endpointApiKey = endpointApiKey;
+        _initialEndpoint = settings?.Current.Endpoint;
+        _credentials = credentials;
         _session.Event += OnSessionEvent;
     }
 
@@ -185,19 +190,19 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
                 return new RpcResponse("fumo", "get_available_models", false, null,
                     "未配置模型端点；请在设置中填写 Base URL 后再查询模型。");
 
-            // 优先使用端点上保存的模型清单（用户在设置里勾选的），避免每次查询都打网络；
-            // 没有保存清单时才回退到实时拉取。
-            var saved = endpoint.Models;
-            if (saved is { Count: > 0 })
+            // 保存的清单是设置快照，不是目录的权威来源。每次显式查询都访问端点，
+            // 否则网关新增/删除的提供商和模型会被永久遮蔽；失败如实报告，不冒充刷新成功。
+            // 端点切换后不得向新地址泄漏启动时旧端点的密钥。
+            var sameEndpoint = string.Equals(endpoint.BaseUrl, _initialEndpoint?.BaseUrl, StringComparison.Ordinal) &&
+                string.Equals(endpoint.ApiKeyEnvironmentVariable, _initialEndpoint?.ApiKeyEnvironmentVariable, StringComparison.Ordinal);
+            var apiKey = sameEndpoint ? _endpointApiKey : null;
+            if (!string.IsNullOrWhiteSpace(endpoint.ApiKeyEnvironmentVariable))
             {
-                var savedPayload = saved.Select(id => new { id, name = id }).ToArray();
-                return new RpcResponse("fumo", "get_available_models", true,
-                    JsonSerializer.SerializeToElement(new { models = savedPayload }), null);
+                if (_credentials is not null)
+                    apiKey = await _credentials.ResolveAsync(endpoint.ApiKeyEnvironmentVariable, cancellationToken).ConfigureAwait(false);
+                else if (string.IsNullOrWhiteSpace(apiKey))
+                    apiKey = Environment.GetEnvironmentVariable(endpoint.ApiKeyEnvironmentVariable);
             }
-
-            var apiKey = _endpointApiKey;
-            if (string.IsNullOrWhiteSpace(apiKey) && !string.IsNullOrWhiteSpace(endpoint.ApiKeyEnvironmentVariable))
-                apiKey = Environment.GetEnvironmentVariable(endpoint.ApiKeyEnvironmentVariable);
             var models = await _modelCatalog!.ListAsync(endpoint.BaseUrl, apiKey, cancellationToken)
                 .ConfigureAwait(false);
             // 只回 id/name：设置页会拼成 provider/id，Magpie 的 id 本身已含 "group/..." 前缀，
