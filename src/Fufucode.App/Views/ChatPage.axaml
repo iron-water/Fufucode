@@ -776,7 +776,7 @@
                      >
                 <PathIcon Data="{DynamicResource Icon.Sparkle}" Width="14" Height="14"/>
                 <Button.Flyout>
-                  <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPicker_Opened" FlyoutPresenterClasses="modelPickerFlyout">
+                  <Flyout Placement="TopEdgeAlignedRight" Opened="ModelPickerNavigation_Opened" Closed="ModelPickerNavigation_Closed" FlyoutPresenterClasses="modelPickerFlyout">
                     <Border Width="380" Classes="modelPickerSurface" Padding="10" Background="Transparent">
                       <Border.Styles>
                         <!-- Override the actual Fluent presenter states only inside this picker. -->
@@ -805,7 +805,7 @@
                       <StackPanel Spacing="8">
                         <TextBox x:Name="ModelPickerSearchBox" Classes="searchInput"
                                  Text="{Binding Settings.ModelPickerFilter, UpdateSourceTrigger=PropertyChanged}"
-                                 TextChanged="ModelPickerSearchBox_TextChanged"
+                                 TextChanged="ModelPickerNavigation_SearchChanged"
                                  PlaceholderText="搜索模型…"/>
                         <!-- Natural wrap height keeps every keyword above the separate count row. -->
                         <ItemsControl ItemsSource="{Binding Settings.ModelSearchKeywords}">
@@ -852,7 +852,7 @@
                           <ItemsControl ItemsSource="{Binding Settings.FilteredModelChoices}">
                             <ItemsControl.ItemTemplate>
                               <DataTemplate x:DataType="vm:ModelPickerItem">
-                                <views:ModelChoiceBorder Classes="modelChoiceOutline" Classes.confirmed="{Binding IsConfirmed}" Margin="0,1">
+                                <views:ModelChoiceBorder Classes="modelChoiceOutline" Classes.confirmed="{Binding IsOutlined}" Margin="0,1">
                                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
                                     <Button Grid.Column="0" Classes="commandFlyoutItem modelChoiceRow" Padding="8,5"
                                             HorizontalContentAlignment="Stretch"

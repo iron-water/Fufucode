@@ -56,6 +56,7 @@ internal static class UiRefinementSelfTest
             draftInput.Text = string.Empty;
             var vm = (MainViewModel)window.DataContext!;
             var contextPage = draftInput.GetVisualAncestors().OfType<ChatPage>().First();
+            await ModelPickerNavigationSelfTest.RunAsync(window, pass, fail);
             var originalContext = contextPage.SessionContextRequested;
             contextPage.SessionContextRequested = () => new ChatPage.SessionContextInfo(null, "无项目", true);
             contextPage.RefreshSessionContext();

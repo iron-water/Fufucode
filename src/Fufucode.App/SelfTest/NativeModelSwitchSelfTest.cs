@@ -76,9 +76,9 @@ internal static class NativeModelSwitchSelfTest
             var popup = Popup();
             var confirmed = popup.GetVisualDescendants().OfType<Border>().Single(control => control.Classes.Contains("modelChoiceOutline") && control.Classes.Contains("confirmed"));
             Check(confirmed.DataContext is ModelPickerItem { Value: "auto/other-fixture", IsConfirmed: true } &&
-                Math.Abs(confirmed.BorderThickness.Left * popup.RenderScaling - 1) < 0.001 &&
+                confirmed.BorderThickness == new Thickness(1) &&
                 confirmed.BorderBrush is ISolidColorBrush brush && brush.Color.G > brush.Color.R,
-                "backend-confirmed model row gets a one-screen-pixel green outline");
+                "backend-confirmed model row gets the shared one-DIP green outline");
             CheckOutlinePixels(popup, confirmed);
             Check(!popup.GetVisualDescendants().OfType<TextBlock>().Any(text => text.IsEffectivelyVisible &&
                 text.Text?.StartsWith("已保存", StringComparison.Ordinal) == true), "successful switch adds no explanatory status text to the model picker");
@@ -164,7 +164,8 @@ internal static class NativeModelSwitchSelfTest
                 if (green > red + 20 && green > blue + 20) greenRows++;
             }
             Console.WriteLine($"MODEL OUTLINE scale={scale} stroke={border.BorderThickness.Left} greenPixelRows={greenRows}");
-            Check(greenRows == 1, "rendered confirmed outline is exactly one green screen-pixel row");
+            Check(greenRows >= 1 && greenRows <= Math.Ceiling(scale) + 1,
+                "rendered confirmed outline scales with file/session outlines");
         }
     }
 

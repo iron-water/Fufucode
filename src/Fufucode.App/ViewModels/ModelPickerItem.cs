@@ -10,7 +10,20 @@ namespace Fufucode.App.ViewModels;
 public sealed partial class ModelPickerItem : ObservableObject
 {
     private bool _isPinned;
-    [ObservableProperty] private bool _isConfirmed;
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOutlined))]
+    private bool _isConfirmed;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOutlined))]
+    private bool _isNavigationSelected;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsOutlined))]
+    private bool _isNavigationActive;
+
+    /// <summary>导航期间只标出当前指向，确认成功状态仍由后端单独维护。</summary>
+    public bool IsOutlined => IsNavigationActive ? IsNavigationSelected : IsConfirmed;
 
     public ModelPickerItem(string value, string label, bool isPinned)
     {
