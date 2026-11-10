@@ -41,7 +41,9 @@ public sealed class PerfJsonlWriter : IDisposable
             Interlocked.Increment(ref _dropped);
             if (dropped is TaskCompletionSource barrier) barrier.TrySetResult();
         });
-        _writerTask = WriteLoopAsync(_queue.Reader);
+        // 插件在 UI 线程激活/停用；写入循环不能捕获该线程，否则 Flush/Dispose
+        // 同步等它时会互相等待，开新窗口两次激活各卡满 6 秒超时。
+        _writerTask = Task.Run(() => WriteLoopAsync(_queue.Reader));
     }
 
     public string Directory => _rootDirectory;
@@ -101,7 +103,7 @@ public sealed class PerfJsonlWriter : IDisposable
         {
             using var stream = new MemoryStream(16 * 1024);
             using var writer = new Utf8JsonWriter(stream, WriterOptions);
-            await foreach (var item in reader.ReadAllAsync())
+            await foreach (var item in reader.ReadAllAsync().ConfigureAwait(false))
             {
                 if (item is TaskCompletionSource barrier)
                 {

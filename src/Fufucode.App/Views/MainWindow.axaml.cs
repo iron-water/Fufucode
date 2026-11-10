@@ -90,11 +90,11 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private static AppSettingsStore? _selfTestSettingsStore;
     private static string? _selfTestSettingsRoot;
     // 后台常驻（托盘）：默认关闭。开启后用户关窗只隐藏窗口，进程与会话继续运行。
-    private TrayIconService? _trayIcon;
+    private IDisposable? _trayRegistration;
+    private static bool _applicationExitPending;
     private AppSettingsStore? _backgroundStore;
     private bool _hiddenToTray;
     private bool _exitRequested;
-    private bool _trayUnavailable;
     /// <summary>自测接缝：无头平台没有真实托盘，用它验证关窗/恢复/退出语义。</summary>
     internal bool SimulateTrayAvailableForTesting { get; set; }
     /// <summary>自测接缝：窗口当前是否处于托盘隐藏态。</summary>
@@ -105,8 +105,11 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     {
     }
 
-    public MainWindow(AppOptions options)
+    public MainWindow(AppOptions options) : this(options, null) { }
+
+    internal MainWindow(AppOptions options, RealSessionHost? sharedHost)
     {
+        _host = sharedHost;
         Program.Startup?.Mark("window.ctor.begin", options.Mode.ToString());
         _options = options;
         if (Program.SelfTestMode)
@@ -121,6 +124,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         Core.Diagnostics.StartupProbe.Mark("window.global", "caption and global workspace ready");
         InitializeCustomization();
         Core.Diagnostics.StartupProbe.Mark("window.customization", "customization/skin initialized");
+        // 在任何插件管理器激活前同步随包载荷，避免工具宿主先加载升级前的旧 DLL。
+        PluginBootstrapper.EnsureBundled(new AppDataLayout(_browserSettingsRoot()));
         // BRW-1：在 _customization 就绪后创建浏览器设置，便于一次性迁移旧偏好。
         InitializeBrowserSettings();
         Core.Diagnostics.StartupProbe.Mark("window.browser-settings", "browser settings initialized");
@@ -160,9 +165,15 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         {
             AttachSession(new Mock.MockChatSession(), sessions: null, callbacks: null);
         }
-        else
+        else if (sharedHost is null)
         {
             ShowStartup("正在启动会话…", inProgress: true);
+        }
+        else
+        {
+            // 新窗口是已运行会话的新视图，不显示整套应用启动遮罩。
+            HideStartupOverlay();
+            NavigationProgress.IsVisible = true;
         }
 
         Program.Startup?.Mark("window.ctor.end", "MainWindow constructed");
@@ -422,9 +433,23 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         ApplyMicaOverrides();
         AttachComputerCursorOverlay();
         // 发布渠道构建：启动后台检查 GitHub 新版本，有更新弹提示窗口（自身延迟，不阻塞启动）。
-        _ = CheckForUpdatesOnStartupAsync();
+        if (_host is null) _ = CheckForUpdatesOnStartupAsync();
         if (_options.Mode == AppSessionMode.Real)
         {
+            if (_host is { } sharedHost)
+            {
+                try
+                {
+                    Integration.SessionWindowRegistry.RegisterOwner(sharedHost.Current.Session.Id, sharedHost, this);
+                    _dialogHost = CreateDialogHost(sharedHost.ProjectPath);
+                    await AttachRealSessionLoadedAsync();
+                    HideStartupOverlay();
+                    ScrollToEnd();
+                }
+                catch (OperationCanceledException) { }
+                catch (Exception error) { ShowStartup("打开会话视图失败：" + error.GetBaseException().Message, inProgress: false); }
+                return;
+            }
             // M3.1：无显式 --project 时回退到最近一个仍存在的项目；全部缺失则进入“选择项目”态。
             if (_options.ProjectPath is null)
             {
@@ -1397,7 +1422,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private bool CloseToTrayEnabled => EffectiveSettingsStore.Current.Background?.CloseToTray == true;
 
     /// <summary>托盘入口是否真实可用。创建失败时不隐藏窗口，避免用户失去恢复入口。</summary>
-    private bool TrayAvailable => _trayIcon is not null || SimulateTrayAvailableForTesting;
+    private bool TrayAvailable => ApplicationWindows.TrayAvailable || SimulateTrayAvailableForTesting;
 
     /// <summary>自测接缝：当前窗口生效的设置存储。</summary>
     internal AppSettingsStore BackgroundStoreForTesting => EffectiveSettingsStore;
@@ -1435,24 +1460,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     {
         if (_closed) return;
         EnsureTrayIcon();
-        if (_trayIcon is { } tray) tray.IsVisible = true;
         if (!CloseToTrayEnabled && _hiddenToTray) ShowFromTray();
     }
 
     private void EnsureTrayIcon()
     {
-        if (_trayIcon is not null || _trayUnavailable) return;
-        // 无头自测没有真实托盘实现；用 SimulateTrayAvailableForTesting 接缝验证行为。
-        if (Program.SelfTestMode) return;
-        try
-        {
-            _trayIcon = new TrayIconService(ShowFromTray, FillTrayMenu);
-        }
-        catch (Exception error)
-        {
-            _trayUnavailable = true;
-            System.Diagnostics.Trace.TraceWarning("托盘图标创建失败：{0}", error.Message);
-        }
+        _trayRegistration ??= ApplicationWindows.Register(this, ShowFromTray, FillTrayMenu);
     }
 
     /// <summary>
@@ -1462,6 +1475,16 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private void FillTrayMenu(NativeMenu menu)
     {
         AddTrayAction(menu, "显示主窗口", ShowFromTray);
+        if (ApplicationWindows.OpenWindows.Length > 1)
+        {
+            var windows = new NativeMenu();
+            foreach (var window in ApplicationWindows.OpenWindows)
+            {
+                var target = window;
+                AddTrayAction(windows, target._vm?.Sidebar.CurrentName is { Length: > 0 } name ? name : target.Title ?? "Fufucode", target.ShowFromTray);
+            }
+            menu.Add(new NativeMenuItem("窗口") { Menu = windows });
+        }
         menu.Add(new NativeMenuItemSeparator());
 
         menu.Add(CreateTraySessionMenu("固定会话", pinned: true));
@@ -1639,16 +1662,25 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     }
 
     /// <summary>托盘“退出”：标记为显式退出，交给既有关闭流程释放会话与子进程。</summary>
-    internal void ExitApplication()
+    internal async void ExitApplication()
     {
-        if (_closed) return;
-        _exitRequested = true;
-        if (_hiddenToTray && _vm?.Settings.HasUnsavedChanges == true)
+        if (_closed || _applicationExitPending) return;
+        _applicationExitPending = true;
+        try
         {
-            ShowFromTray();
+            var windows = ApplicationWindows.OpenWindows;
+            foreach (var window in windows)
+            {
+                if (window._hiddenToTray && window._vm?.Settings.HasUnsavedChanges == true) window.ShowFromTray();
+                if (!await window.ConfirmLeaveSettingsAsync()) return;
+            }
+            foreach (var window in windows)
+            {
+                window._exitRequested = true;
+                window.Close();
+            }
         }
-        if (_trayIcon is { } tray) tray.IsVisible = false;
-        Close();
+        finally { _applicationExitPending = false; }
     }
 
     private async void OnClosing(object? sender, WindowClosingEventArgs e)
@@ -1669,7 +1701,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         e.Cancel = true;
         if (_closingInProgress) return;
         _closingInProgress = true;
-        var leaveConfirmed = false;
+        var leaveConfirmed = _exitRequested;
         if (!leaveConfirmed)
         {
             try { leaveConfirmed = await ConfirmLeaveSettingsAsync(); }
@@ -1787,8 +1819,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             _backgroundStore.Changed -= OnBackgroundSettingsChanged;
             _backgroundStore = null;
         }
-        _trayIcon?.Dispose();
-        _trayIcon = null;
+        _trayRegistration?.Dispose();
+        _trayRegistration = null;
     }
 
     private void OnScrollToEndRequested() => ScrollToEnd();

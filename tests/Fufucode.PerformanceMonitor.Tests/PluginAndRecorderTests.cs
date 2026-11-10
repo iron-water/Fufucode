@@ -33,6 +33,11 @@ internal static class RedactorTests
 
 internal static class JsonlTests
 {
+    private sealed class NonPumpingContext : SynchronizationContext
+    {
+        internal int PostCount;
+        public override void Post(SendOrPostCallback callback, object? state) => Interlocked.Increment(ref PostCount);
+    }
     public static void Run()
     {
         var root = Path.Combine(Path.GetTempPath(), "fufucode-perf-tests", Guid.NewGuid().ToString("N"));
@@ -53,6 +58,24 @@ internal static class JsonlTests
                 writer.Flush(TimeSpan.FromSeconds(5));
                 Check(writer.Written == 52, "flush preserves writer for continued live capture");
             }
+
+            // 模拟不会泵消息的 UI 上下文：同步 Flush/Dispose 仍必须由后台写入器完成。
+            var previousContext = SynchronizationContext.Current;
+            var uiContext = new NonPumpingContext();
+            try
+            {
+                SynchronizationContext.SetSynchronizationContext(uiContext);
+                var elapsed = Stopwatch.StartNew();
+                using (var uiWriter = new PerfJsonlWriter(Path.Combine(root, "ui-context"), 8))
+                {
+                    uiWriter.Enqueue(AggregatorTests.Record("ui-context", 1));
+                    uiWriter.Flush(TimeSpan.FromSeconds(1));
+                    Check(uiWriter.Written == 1, "writer flushes on UI thread without pumping its synchronization context");
+                }
+                Check(uiContext.PostCount == 0 && elapsed.Elapsed < TimeSpan.FromSeconds(1),
+                    "writer shutdown does not wait for UI continuations or timeout");
+            }
+            finally { SynchronizationContext.SetSynchronizationContext(previousContext); }
 
             var files = Directory.GetFiles(root, "perf-*.jsonl");
             Check(files.Length == 1, "one segment written");

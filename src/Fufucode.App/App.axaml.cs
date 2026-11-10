@@ -60,6 +60,7 @@ public partial class App : Application
         {
             var window = new MainWindow(_options);
             desktop.MainWindow = window;
+            desktop.ShutdownMode = Avalonia.Controls.ShutdownMode.OnLastWindowClose;
             if (Program.NativeModuleSelfTest) desktop.MainWindow.ShowActivated = false;
 
             // 第二个实例的激活请求：恢复主窗口（可能在托盘隐藏）并退出第二个进程。
@@ -68,9 +69,9 @@ public partial class App : Application
             {
                 singleInstance.ActivationRequested += () =>
                 {
-                    Avalonia.Threading.Dispatcher.UIThread.Post(window.ShowFromTray);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(ApplicationWindows.ShowCurrent);
                     // 系统通知按钮经第二个进程转发：取走投递箱里的审批动作再应答。
-                    Avalonia.Threading.Dispatcher.UIThread.Post(window.OnExternalActivation);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => ApplicationWindows.Current?.OnExternalActivation());
                 };
             }
             desktop.Exit += (_, _) => Program.SingleInstance?.Dispose();

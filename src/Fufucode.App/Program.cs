@@ -186,7 +186,9 @@ internal static class Program
                 try
                 {
                     var window = (MainWindow)lifetime.MainWindow!;
-                    code = args.Contains("--loading-ui-repair-only")
+                    code = args.Contains("--window-runtime-only")
+                        ? await SelfTest.SessionRepairSelfTest.RunNativeAsync()
+                        : args.Contains("--loading-ui-repair-only")
                         ? await SelfTest.LoadingUiRepairSelfTest.RunAsync(native: true)
                         : args.Contains("--chat-icons-only")
                         ? await SelfTest.NativeChatIconsSelfTest.RunAsync(window)

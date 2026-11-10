@@ -26,7 +26,14 @@ namespace Fufucode.App.SelfTest;
 /// <summary>真实窗口/宿主/原生 SSE 接线；只用本机确定性 HTTP 夹具，不调用外部模型。</summary>
 internal static class SessionRepairSelfTest
 {
-    internal static async Task RunAsync(Action<string> pass, Action<string> fail)
+    internal static async Task<int> RunNativeAsync()
+    {
+        var failed = false;
+        await RunAsync(name => Console.WriteLine("PASS " + name), name => { failed = true; Console.WriteLine("FAIL " + name); }, native: true);
+        return failed ? 1 : 0;
+    }
+
+    internal static async Task RunAsync(Action<string> pass, Action<string> fail, bool native = false)
     {
         void Check(bool condition, string name)
         {
@@ -50,6 +57,10 @@ internal static class SessionRepairSelfTest
         manager.SetProjectTrustDecision(project, ProjectTrustDecision.DoNotTrust);
         var options = new AppOptions(AppSessionMode.Real, project, null, null, null, layout.Root, BackendId.NativeCSharp)
             { NewSession = true };
+        var previousTestRoot = Program.SelfTestDataRoot;
+        var previousNativeTray = ApplicationWindows.UseNativeTrayForTesting;
+        Program.SelfTestDataRoot = layout.Root;
+        ApplicationWindows.UseNativeTrayForTesting = native;
         var one = new MainWindow(options);
         MainWindow? two = null;
         one.Show();
@@ -75,11 +86,38 @@ internal static class SessionRepairSelfTest
             Check(leftMenu?.Items.OfType<MenuItem>().Any(item => Equals(item.Header, "新建窗口") &&
                 ReferenceEquals(item.Command, actions.GetCommand("window.new"))) == true,
                 "New Window is directly reachable in the left auxiliary dropdown");
-            Check((await actions.ExecuteAsync("window.new")).Executed, "left auxiliary menu New Window action opens without a picker");
+            var priorProbe = Core.Diagnostics.StartupProbe.Handler;
+            var bootstraps = 0;
+            Core.Diagnostics.StartupProbe.Handler = (name, detail) =>
+            {
+                priorProbe?.Invoke(name, detail);
+                Console.WriteLine($"WINDOW-TRACE {DateTime.UtcNow:HH:mm:ss.fff} {name} {detail}");
+                if (name is "host.runtime" or "host.manager" or "session.open.begin") bootstraps++;
+            };
+            var opening = System.Diagnostics.Stopwatch.StartNew();
+            try { Check((await actions.ExecuteAsync("window.new")).Executed, "left auxiliary menu New Window action opens without a picker"); }
+            finally { Core.Diagnostics.StartupProbe.Handler = priorProbe; }
+            Console.WriteLine($"PERF newWindowActionMs={opening.ElapsedMilliseconds}");
+            Check(opening.ElapsedMilliseconds < 3000, "New Window does not block on plugin writer shutdown timeouts");
+            Check(bootstraps == 0, "New Window does not rerun session bootstrap, runtime probes or manager creation");
             two = lifetime.Windows.OfType<MainWindow>().First(w => !before.Contains(w));
-            await Until(() => two.CurrentSessionId == originalId, "second window opens current session");
+            await Until(() => two.CurrentSessionId == originalId && two.DataContext is MainViewModel, "second window opens current session");
             Check(ReferenceEquals(originalHost.Current, Host(two).Current), "two independent hosts share exactly one persistent session");
             Check(!ReferenceEquals(originalHost, Host(two)), "view selection is owned by each window, not by shared mutable host");
+            Check(ReferenceEquals(originalHost.Manager, Host(two).Manager), "new window reuses the live manager instead of starting application services again");
+            if (native) Check(TrayIcon.GetIcons(Application.Current!)?.Count == 1, "two native windows share exactly one actual application tray icon");
+            var thirdBefore = lifetime.Windows.ToArray();
+            await actions.ExecuteAsync("window.new");
+            var third = lifetime.Windows.OfType<MainWindow>().First(w => !thirdBefore.Contains(w));
+            try
+            {
+                await Until(() => third.DataContext is MainViewModel, "third window attaches");
+                Check(ReferenceEquals(originalHost.Current, Host(third).Current), "repeated New Window shares the same running backend");
+                if (native) Check(TrayIcon.GetIcons(Application.Current!)?.Count == 1, "three native windows still have one tray icon");
+            }
+            finally { third.Close(); }
+            await Until(() => !ApplicationWindows.OpenWindows.Contains(third), "third view releases");
+            if (native) Check(TrayIcon.GetIcons(Application.Current!)?.Count == 1, "closing a secondary window preserves the shared tray icon");
             await Until(() => AssistantText((MainViewModel)two.DataContext!).Contains("first-part"), "second window receives in-flight prefix");
             Check(AssistantText((MainViewModel)two.DataContext!).Split("first-part").Length == 2,
                 "snapshot plus queued deltas never duplicates the streaming prefix");
@@ -152,6 +190,8 @@ internal static class SessionRepairSelfTest
             var shared = Host(two).Current;
             one.Close();
             await Until(() => !one.IsVisible, "first window closes");
+            await Until(() => !ApplicationWindows.OpenWindows.Contains(one), "first window releases");
+            if (native) Check(TrayIcon.GetIcons(Application.Current!)?.Count == 1, "closing the original window transfers the single tray to the remaining window");
             Check(shared.Chat.Connection == SessionConnection.Connected && two.CurrentSessionId == originalId,
                 "closing one window leaves the other editable and connected");
             secondVm.Input.DraftText = "message after other window closed";
@@ -161,13 +201,39 @@ internal static class SessionRepairSelfTest
             two.RenderOverview();
             var orbit = two.GetVisualDescendants().OfType<SessionOrbit>().FirstOrDefault();
             Check(orbit is not null, "completed session has an emphasis orbit in the actual sidebar tree");
+            if (native)
+            {
+                two.BackgroundStoreForTesting.Update(s => s with { Background = new BackgroundSettings(CloseToTray: true) });
+                two.Close();
+                Check(two.HiddenToTrayForTesting && !two.IsVisible, "remaining native window can hide behind the shared tray");
+                ApplicationWindows.ShowCurrent();
+                Check(two.IsVisible && !two.HiddenToTrayForTesting, "process tray restores the remaining window after original owner closed");
+                var beforeExitWindow = lifetime.Windows.ToArray();
+                var secondActions = (Infrastructure.AppActionRegistry)typeof(MainWindow).GetField("_actions", BindingFlags.NonPublic | BindingFlags.Instance)!.GetValue(two)!;
+                await secondActions.ExecuteAsync("window.new");
+                var exitWindow = lifetime.Windows.OfType<MainWindow>().First(w => !beforeExitWindow.Contains(w));
+                await Until(() => exitWindow.DataContext is MainViewModel, "exit sibling attaches");
+                two.ExitApplication();
+                await Until(() => !ApplicationWindows.OpenWindows.Contains(two) && !ApplicationWindows.OpenWindows.Contains(exitWindow), "application exit closes all windows");
+                Check(!ApplicationWindows.OpenWindows.Contains(two) && !ApplicationWindows.OpenWindows.Contains(exitWindow), "one shared tray Exit closes all application windows despite CloseToTray");
+            }
         }
         finally
         {
             server.AllowFinal.TrySetResult();
-            one.Close();
-            two?.Close();
+            if (ApplicationWindows.OpenWindows.Contains(one))
+            {
+                one.BackgroundStoreForTesting.Update(s => s with { Background = new BackgroundSettings(CloseToTray: false) });
+                one.Close();
+            }
+            if (two is not null && ApplicationWindows.OpenWindows.Contains(two))
+            {
+                two.BackgroundStoreForTesting.Update(s => s with { Background = new BackgroundSettings(CloseToTray: false) });
+                two.Close();
+            }
             await Task.Delay(100);
+            ApplicationWindows.UseNativeTrayForTesting = previousNativeTray;
+            Program.SelfTestDataRoot = previousTestRoot;
         }
     }
 

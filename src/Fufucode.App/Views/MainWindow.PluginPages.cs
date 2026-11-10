@@ -35,8 +35,6 @@ public partial class MainWindow
             SelfTest.SelfTestOptionalPlugins.EnsureInstalled(root);
         }
 
-        // 默认随包插件先把载荷同步到数据根，页面宿主的激活扫描才能找到它。
-        PluginBootstrapper.EnsureBundled(new AppDataLayout(root));
         _pluginPageHost = new PluginWorkspacePageHost(root, _workbenchPages,
             () => _options.Mode == AppSessionMode.Mock);
         _chatPage.ComposerPluginHost = new Features.Plugins.PluginComposerHost(this);

@@ -410,8 +410,13 @@ public sealed class PluginPackageManager : IAsyncDisposable
     private void ActivatePluginLocked(string id, string? projectPath = null)
     {
         if (_activePlugins.ContainsKey(id)) return;
-        var (package, loadContext) = ResolvePackage(id, Target(id));
-        ActivatePrepared(id, package, Target(id), loadContext, projectPath);
+        Diagnostics.StartupProbe.Mark("plugin.activate.begin", id);
+        try
+        {
+            var (package, loadContext) = ResolvePackage(id, Target(id));
+            ActivatePrepared(id, package, Target(id), loadContext, projectPath);
+        }
+        finally { Diagnostics.StartupProbe.Mark("plugin.activate.end", id); }
     }
     private void ActivatePrepared(string id, IPluginPackage package, string directory, AssemblyLoadContext? loadContext, string? projectPath = null)
     {

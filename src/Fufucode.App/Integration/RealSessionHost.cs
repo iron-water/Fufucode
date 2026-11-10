@@ -144,6 +144,20 @@ public sealed class RealSessionHost : IAsyncDisposable
         };
     }
 
+    /// <summary>新窗口只取得现有会话的引用；不探测运行时、不重建管理器、不重启后端。</summary>
+    internal async Task<RealSessionHost> CreateWindowViewAsync()
+    {
+        if (_disposed || !HasLiveSession) throw new InvalidOperationException("当前会话正在关闭或重启，请稍后再新建窗口。");
+        var session = await LiveSessionPool.TrackAsync(_manager, _current);
+        return new RealSessionHost(_manager, _project, session)
+        {
+            Diagnostic = Diagnostic,
+            EnabledExtensionPaths = EnabledExtensionPaths.ToArray(),
+            ActiveExtensionPaths = ActiveExtensionPaths.ToArray(),
+            SkippedMissingExtensionPaths = SkippedMissingExtensionPaths.ToArray(),
+        };
+    }
+
     /// <summary>保存项目信任决定（与 <see cref="OpenAsync"/> 相同的运行时与数据根解析），下次会话启动生效。</summary>
     public static void SaveTrustDecision(AppOptions options, ProjectTrustStatus status,
         ProjectTrustDecision decision, AppDataLayout? layout = null)

@@ -58,10 +58,10 @@ public partial class MainWindow
         Action("session.new", "新建", "工作区", NewWorkspaceAsync, Ready);
         // 多窗口：直接打开当前会话的另一个可编辑视图，共享唯一会话写入者；
         // 当前窗口即使在忙碌也不受影响。
-        Now("window.new", "新建窗口", "窗口", () => _ = OpenSessionInSharedWindowAsync());
+        Action("window.new", "新建窗口", "窗口", OpenSessionInSharedWindowAsync);
         // 同一会话的同步视图：窗口独立宿主引用，共享会话与事件流。
-        Now("window.session", "在新窗口中打开当前会话（同步）", "窗口",
-            () => _ = OpenSessionInSharedWindowAsync(),
+        Action("window.session", "在新窗口中打开当前会话（同步）", "窗口",
+            OpenSessionInSharedWindowAsync,
             () => _host is null ? "会话尚未就绪" : null);
         // 朗读只在 service.speech-synthesis 插件激活时存在：未安装时播放类动作整条从菜单消失，
         // 不留一排灰色条目；设置动作始终保留，作为未安装时的说明与安装入口。
@@ -174,21 +174,29 @@ public partial class MainWindow
         return _options with { AppDataRootOverride = root, SessionId = null, ProjectPath = _host?.ProjectPath ?? _options.ProjectPath };
     }
     /// <summary>同一会话的同步视图：新窗口独立选择会话，事实仍归同一个持久会话。</summary>
-    private Task OpenSessionInSharedWindowAsync()
+    private async Task OpenSessionInSharedWindowAsync()
     {
         if (_host is null)
         {
             new MainWindow(_options with { SessionId = null, NewSession = true, ShareSession = false }).Show();
-            return Task.CompletedTask;
+            return;
         }
-        new MainWindow(_options with
+        var sharedHost = await _host.CreateWindowViewAsync();
+        try
         {
-            ProjectPath = _host.ProjectPath,
-            SessionId = _host.Current.Session.Id,
-            NewSession = false,
-            ShareSession = true,
-        }).Show();
-        return Task.CompletedTask;
+            new MainWindow(_options with
+            {
+                ProjectPath = sharedHost.ProjectPath,
+                SessionId = sharedHost.Current.Session.Id,
+                NewSession = false,
+                ShareSession = true,
+            }, sharedHost).Show();
+        }
+        catch
+        {
+            await sharedHost.DisposeAsync();
+            throw;
+        }
     }
 
     private Task SwitchChatTabFocusAsync()
