@@ -12,7 +12,7 @@ namespace Fufucode.App.Integration;
 /// <summary>
 /// 真实会话宿主（M4）：持有 PersistentSessionManager 与当前会话，统一生命周期——
 /// 首次打开（按 --session/最近/新建）、新建、切换、重命名与按会话隔离的草稿。
-/// 切换/新建先打开新会话再释放旧会话：打开失败时旧会话保持可用，不丢现场；
+/// 切换/新建先打开新会话，旧会话保留在后台；打开失败时不改变当前视图；
 /// 进程与会话独占由 Core 的 SessionLease 保证，同一会话不会被两个进程写入。
 /// </summary>
 public sealed class RealSessionHost : IAsyncDisposable
@@ -21,6 +21,7 @@ public sealed class RealSessionHost : IAsyncDisposable
     private readonly ProjectRecord _project;
     private PersistentSession _current;
     private bool _disposed;
+    private readonly Dictionary<string, PersistentSession> _retained = new(StringComparer.Ordinal);
     // 安全重启“先放后开”：旧进程已释放而新进程未就绪时 host 处于无活动会话态，
     // 不得把已释放对象当作活会话继续服务（Send/Rename 等）。
     private bool _sessionReleased;
@@ -31,9 +32,10 @@ public sealed class RealSessionHost : IAsyncDisposable
 
     private RealSessionHost(PersistentSessionManager manager, ProjectRecord project, PersistentSession current)
     {
-        _manager = manager;
+        _manager = LiveSessionPool.ManagerFor(manager, current.Session.Id);
         _project = project;
         _current = current;
+        _retained.Add(current.Session.Id, current);
     }
 
     /// <summary>首次打开：--session 指定 id；否则恢复该项目最近会话（失败如实诊断并新建）；无会话则新建。</summary>
@@ -81,7 +83,7 @@ public sealed class RealSessionHost : IAsyncDisposable
         {
             if (manager.Metadata.GetSession(sessionId).ProjectId != project.Id)
                 throw new InvalidOperationException("会话与指定工作目录不匹配。");
-            session = await manager.ResumeAsync(sessionId, cancellationToken);
+            session = await LiveSessionPool.ResumeAsync(manager, sessionId, cancellationToken);
         }
         else if (options.NewSession)
         {
@@ -92,7 +94,7 @@ public sealed class RealSessionHost : IAsyncDisposable
                 diagnostic = $"默认后端 {BackendCapabilities.For(preferredBackend).Name} 不可用，已回退到 FUMO 原生内核。";
                 preferredBackend = BackendId.NativeCSharp;
             }
-            session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: preferredBackend);
+            session = await LiveSessionPool.TrackAsync(manager, await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: preferredBackend));
         }
         else
         {
@@ -105,13 +107,13 @@ public sealed class RealSessionHost : IAsyncDisposable
                     diagnostic = $"默认后端 {BackendCapabilities.For(preferredBackend).Name} 不可用，已回退到 FUMO 原生内核。";
                     preferredBackend = BackendId.NativeCSharp;
                 }
-                session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: preferredBackend);
+                session = await LiveSessionPool.TrackAsync(manager, await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: preferredBackend));
             }
             else
             {
                 try
                 {
-                    session = await manager.ResumeAsync(existing[0].Id, cancellationToken);
+                    session = await LiveSessionPool.ResumeAsync(manager, existing[0].Id, cancellationToken);
                 }
                 catch (Exception error) when (error is not ProjectTrustDecisionRequiredException
                                               and not UserExtensionLoadException
@@ -125,7 +127,7 @@ public sealed class RealSessionHost : IAsyncDisposable
                         : BackendId.NativeCSharp;
 
                     diagnostic = $"恢复最近会话失败（{error.GetBaseException().Message}），已新建会话。";
-                    session = await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: fallbackBackend);
+                    session = await LiveSessionPool.TrackAsync(manager, await manager.CreateAsync(projectPath, cancellationToken: cancellationToken, backend: fallbackBackend));
                 }
             }
         }
@@ -259,14 +261,15 @@ public sealed class RealSessionHost : IAsyncDisposable
 
         if (!_sessionReleased)
         {
-            await _current.DisposeAsync();
+            await ReleaseCurrentAsync();
             _sessionReleased = true;
         }
 
         try
         {
-            _current = await _manager.ResumeAsync(sessionId, cancellationToken);
+            _current = await LiveSessionPool.ResumeAsync(_manager, sessionId, cancellationToken);
             _sessionReleased = false;
+            _retained[_current.Session.Id] = _current;
             try
             {
                 if (ExtensionsResumedForTesting is { } resumed) await resumed();
@@ -278,7 +281,7 @@ public sealed class RealSessionHost : IAsyncDisposable
             catch
             {
                 _sessionReleased = true;
-                await _current.DisposeAsync();
+                await ReleaseCurrentAsync();
                 throw;
             }
             ActiveExtensionPaths = existing;
@@ -298,8 +301,9 @@ public sealed class RealSessionHost : IAsyncDisposable
                 failure.ExtensionPath, failure.Message);
             // 回滚：恢复旧启用列表并重开原会话；持久列表保持旧值。
             _manager.UserExtensionPaths = active;
-            _current = await _manager.ResumeAsync(sessionId, cancellationToken);
+            _current = await LiveSessionPool.ResumeAsync(_manager, sessionId, cancellationToken);
             _sessionReleased = false;
+            _retained[_current.Session.Id] = _current;
             return failure;
         }
         catch
@@ -357,23 +361,30 @@ public sealed class RealSessionHost : IAsyncDisposable
     public PersistentSessionManager Manager => _manager;
 
     public IReadOnlyList<ChatMessage> CurrentTranscript() =>
-        HistoryMapper.MapTranscript(_current.History.CurrentBranchMessages, Chat.CurrentModel);
+        CurrentTranscriptSnapshot().Messages;
+
+    internal LiveSessionPool.TranscriptSnapshot CurrentTranscriptSnapshot() => LiveSessionPool.Snapshot(_manager, _current);
 
     public async Task<SessionForkResult> ForkAsync(string entryId, CancellationToken cancellationToken = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_current.Session.Backend != BackendId.NativeCSharp)
+            await LiveSessionPool.RequireExclusiveAsync(_manager, _current);
         var result = await _manager.ForkAsync(_current, entryId, cancellationToken);
+        if (_current.Session.Backend != BackendId.NativeCSharp) await ReleaseCurrentAsync();
+        await LiveSessionPool.TrackAsync(_manager, result.Session);
         _current = result.Session;
         _sessionReleased = false;
+        _retained[_current.Session.Id] = _current;
         return result;
     }
 
-    /// <summary>新建会话并切换过去（旧会话在新会话就绪后才释放）。</summary>
+    /// <summary>新建会话并切换过去；旧会话保留到本宿主释放，不取消后台回合。</summary>
     public async Task NewSessionAsync(string? name = null, CancellationToken cancellationToken = default,
         BackendId backend = BackendId.NativeCSharp)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
-        var next = await _manager.CreateAsync(_project.Path, name, cancellationToken, backend);
+        var next = await LiveSessionPool.TrackAsync(_manager, await _manager.CreateAsync(_project.Path, name, cancellationToken, backend));
         await ReplaceAsync(next);
     }
 
@@ -387,7 +398,8 @@ public sealed class RealSessionHost : IAsyncDisposable
             return;
         }
 
-        var next = await _manager.ResumeAsync(sessionId, cancellationToken);
+        var next = _retained.TryGetValue(sessionId, out var retained) ? retained :
+            await LiveSessionPool.ResumeAsync(_manager, sessionId, cancellationToken);
         await ReplaceAsync(next);
     }
 
@@ -405,12 +417,13 @@ public sealed class RealSessionHost : IAsyncDisposable
         var sessionId = _current.Session.Id;
         if (!_sessionReleased)
         {
-            await _current.DisposeAsync();
+            await ReleaseCurrentAsync();
             _sessionReleased = true;
         }
 
-        _current = await _manager.ResumeAsync(sessionId, cancellationToken);
+        _current = await LiveSessionPool.ResumeAsync(_manager, sessionId, cancellationToken);
         _sessionReleased = false;
+        _retained[_current.Session.Id] = _current;
         Diagnostic = null;
     }
 
@@ -437,17 +450,24 @@ public sealed class RealSessionHost : IAsyncDisposable
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (next.Project.Id != _project.Id) throw new InvalidOperationException("侧边会话与主聊天项目不一致。");
         if (ReferenceEquals(next, _current)) return;
+        if (!_retained.ContainsKey(next.Session.Id)) await LiveSessionPool.TrackAsync(_manager, next);
         await ReplaceAsync(next);
     }
 
     private async Task ReplaceAsync(PersistentSession next)
     {
-        var previous = _current;
         _current = next;
         _sessionReleased = false;
+        _retained[_current.Session.Id] = _current;
         ActiveExtensionPaths = next.Session.Backend == BackendId.Pi ? _manager.UserExtensionPaths : [];
         Diagnostic = null;
-        await previous.DisposeAsync();
+        await Task.CompletedTask;
+    }
+
+    private async Task ReleaseCurrentAsync()
+    {
+        await LiveSessionPool.ReleaseAsync(_manager, _current, exclusive: true);
+        _retained.Remove(_current.Session.Id);
     }
 
     public async ValueTask DisposeAsync()
@@ -459,7 +479,11 @@ public sealed class RealSessionHost : IAsyncDisposable
 
         _disposed = true;
         await _extensionApplyGate.WaitAsync();
-        try { await _current.DisposeAsync(); }
+        try
+        {
+            foreach (var session in _retained.Values) await LiveSessionPool.ReleaseAsync(_manager, session);
+            _retained.Clear();
+        }
         finally { _extensionApplyGate.Release(); }
     }
 }

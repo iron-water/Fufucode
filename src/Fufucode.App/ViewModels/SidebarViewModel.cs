@@ -330,7 +330,10 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
     public string RenameDraft
     {
         get => _renameDraft;
-        set => SetProperty(ref _renameDraft, value);
+        set
+        {
+            if (SetProperty(ref _renameDraft, value)) SaveNameCommand.NotifyCanExecuteChanged();
+        }
     }
 
     public bool IsRenaming
@@ -428,7 +431,10 @@ public sealed partial class SidebarViewModel : ViewModelBase, IDisposable
         await _callbacks.RenameRequested(name.Trim());
     }
 
-    private bool CanSaveName() => IsReal && !_operationPending && !string.IsNullOrWhiteSpace(CurrentName);
+    // 名称是元数据操作，不依赖回合/切换闸门；必须检查正在编辑的新名，
+    // 不能用旧 CurrentName 把首次命名的空会话永久禁用。
+    private bool CanSaveName() => IsReal &&
+        (!string.IsNullOrWhiteSpace(RenameDraft) || !string.IsNullOrWhiteSpace(CurrentName));
 
     private async Task RunSwitchAsync(Func<Task> operation)
     {

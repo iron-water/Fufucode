@@ -537,6 +537,19 @@ public partial class MainWindow
             Classes = { "overviewSession" }, Margin = new Thickness(indent + depth * 16, 0, 0, 4), Child = grid,
         };
         row.Classes.Set("selected", isCurrent);
+        var live = LiveSessionPool.Find(_host.Manager, session.Id)?.Chat;
+        var running = live?.Activity is Abstractions.SessionActivity.Running or Abstractions.SessionActivity.Compacting
+            or Abstractions.SessionActivity.Retrying or Abstractions.SessionActivity.Cancelling;
+        var completed = !running && live?.LastOutcome == Abstractions.SessionOutcome.Completed;
+        if (running || completed)
+        {
+            var orbit = new SessionOrbit();
+            orbit.Bind(SessionOrbit.StrokeProperty, new DynamicResourceExtension(running ? "AppAccent" : "AppEmphasis"));
+            AutomationProperties.SetAutomationId(orbit, "session.orbit." + session.Id);
+            AutomationProperties.SetHelpText(row, running ? "正在运行" : "已完成");
+            row.Child = null;
+            row.Child = new Grid { Children = { grid, orbit } };
+        }
         void SetHover(bool on)
         {
             if (on) row.Classes.Add("hover"); else row.Classes.Remove("hover");
@@ -721,7 +734,7 @@ public partial class MainWindow
     }
     private async Task ActivateOverviewSessionAsync(SessionRecord session)
     {
-        if (IdleReal() is { } reason) throw new InvalidOperationException(reason);
+        if (NavigationReady() is { } reason) throw new InvalidOperationException(reason);
         if (_host!.Current.Project.Id != session.ProjectId)
             await SwitchProjectAsync(_host.Manager.Metadata.GetProject(session.ProjectId).Path);
         if (_host.Current.Project.Id != session.ProjectId) throw new InvalidOperationException("目标项目未打开。");

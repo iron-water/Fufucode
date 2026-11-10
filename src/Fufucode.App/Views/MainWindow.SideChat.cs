@@ -144,7 +144,6 @@ public partial class MainWindow
     private async Task PromoteSideChatAsync()
     {
         if (_closed || _switching || _restarting || _sideSession is not { } side || _host is not { } host) return;
-        if (_borrowedHost) throw new InvalidOperationException("请在会话主窗口操作。");
         if (_vm?.Input.IsTurnActive == true || (_sideChatPage.DataContext as MainViewModel)?.Input.IsTurnActive == true)
             throw new InvalidOperationException("请先停止或等待当前聊天结束。");
         if (!await ConfirmLeaveSettingsAsync()) return;
@@ -158,7 +157,6 @@ public partial class MainWindow
             var previousId = host.Current.Session.Id;
             await host.AdoptSessionAsync(side);
             await CloseSideChatAsync(releaseSession: false);
-            Integration.SessionWindowRegistry.CloseFollowers(previousId);
             Integration.SessionWindowRegistry.RegisterOwner(side.Session.Id, host, this);
             AttachRealSession();
             await NavigateWorkspaceAsync(AppPage.Chat);
@@ -179,6 +177,7 @@ public partial class MainWindow
         {
             if (_sideSession is { } current && _host is { } host) host.Manager.Metadata.SetDraft(current.Session.Id, vm.Input.ComposePrompt());
             // 侧聊换会话/关闭：解除旧时间线的会话订阅与工具组订阅，避免旧会话继续驱动。
+            vm.Input.Dispose();
             vm.Timeline.Dispose();
             vm.WorkspacePanel.Dispose(); vm.Sidebar.Dispose();
         }

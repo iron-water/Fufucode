@@ -39,6 +39,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private UserMessageViewModel? _pendingUser;
     private CancellationTokenSource? _submissionCts;
     private bool _disposed;
+    private long _historySequence;
     private string? _projectRoot;
 
     /// <summary>时间线实际渲染的最近条目数；更早的条目仍留在 <see cref="Entries"/> 中，按需加载。</summary>
@@ -293,6 +294,12 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     /// 只放终态消息，不产生流式增量（计划 §7.2：先重建状态，再接收新工作）。
     /// 先清空旧内容：同一时间线重复回放（重连/重启）不得叠加整份记录。
     /// </summary>
+    internal void LoadLiveHistory(Fufucode.App.Integration.LiveSessionPool.TranscriptSnapshot snapshot)
+    {
+        _historySequence = snapshot.Sequence;
+        LoadHistory(snapshot.Messages);
+    }
+
     public void LoadHistory(IReadOnlyList<ChatMessage> messages)
     {
         if (!Dispatcher.UIThread.CheckAccess())
@@ -308,8 +315,7 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
             Reset();
             foreach (var message in messages)
             {
-                _rebuilder.Apply(new SessionEvent.MessageStarted(message.Id, message.Role, message.Model, message.Blocks.Count));
-                _rebuilder.Apply(new SessionEvent.MessageFinished(message.Id, message, message.CumulativeUsage));
+                _rebuilder.RestoreMessage(message);
             }
 
             ApplyBatch();
@@ -399,6 +405,8 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
 
     private void OnSessionEvent(object? sender, SessionEvent e)
     {
+        var sequence = Fufucode.App.Integration.LiveSessionPool.SequenceOf(e);
+        if (sequence > 0 && sequence <= _historySequence) return;
         if (_disposed) return;
         if (!Dispatcher.UIThread.CheckAccess())
         {

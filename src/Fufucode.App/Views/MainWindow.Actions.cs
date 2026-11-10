@@ -29,8 +29,8 @@ public partial class MainWindow
     private double _zoom = 1;
     internal string? CurrentSessionId => _host?.Current.Session.Id;
     private string? Ready() => _vm is null ? "会话尚未就绪" : null;
+    private string? NavigationReady() => _host is null ? "会话尚未就绪" : _switching || _restarting ? "正在切换会话" : null;
     private string? IdleReal() => _host is null ? "Mock 没有持久 Pi 会话"
-        : _borrowedHost ? "此窗口是同一会话的同步视图；请在主窗口操作"
         : _switching || _vm?.Input.IsTurnActive == true ? "请等待当前回合结束" : null;
 
     private void RegisterWorkbenchActions()
@@ -53,22 +53,17 @@ public partial class MainWindow
         Now("summary.toggle", "变更摘要", "布局", () => _customization.Change(s => s with { ShowChangeSummary = !s.ShowChangeSummary }));
         Action("navigate.back", "返回", "导航", () => MoveHistoryAsync(-1), () => _navigationIndex > 0 ? null : "没有上一位置");
         Action("navigate.forward", "前进", "导航", () => MoveHistoryAsync(1), () => _navigationIndex + 1 < _navigationHistory.Count ? null : "没有下一位置");
-        Action("session.previous", "上一个会话", "导航", () => AdjacentSessionAsync(-1), IdleReal);
-        Action("session.next", "下一个会话", "导航", () => AdjacentSessionAsync(1), IdleReal);
+        Action("session.previous", "上一个会话", "导航", () => AdjacentSessionAsync(-1), NavigationReady);
+        Action("session.next", "下一个会话", "导航", () => AdjacentSessionAsync(1), NavigationReady);
         Action("session.new", "新建", "工作区", NewWorkspaceAsync, Ready);
-        // 多窗口：新窗口从一条新会话开始，不抢占当前窗口正在使用的会话租约；
+        // 多窗口：直接打开当前会话的另一个可编辑视图，共享唯一会话写入者；
         // 当前窗口即使在忙碌也不受影响。
-        Now("window.new", "新建窗口", "窗口", () => new MainWindow(_options with
-        {
-            ProjectPath = _host?.ProjectPath ?? _options.ProjectPath,
-            SessionId = null,
-            NewSession = true,
-        }).Show());
+        Now("window.new", "新建窗口", "窗口", () => _ = OpenSessionInSharedWindowAsync());
         Now("window.newProject", "在新窗口中打开项目…", "窗口", () => _ = OpenProjectInNewWindowAsync());
-        // 同一会话的同步视图：共享同一宿主与事件流，保持单写者。
+        // 同一会话的同步视图：窗口独立宿主引用，共享会话与事件流。
         Now("window.session", "在新窗口中打开当前会话（同步）", "窗口",
             () => _ = OpenSessionInSharedWindowAsync(),
-            () => _host is null ? "会话尚未就绪" : _borrowedHost ? "此窗口已是同步视图" : null);
+            () => _host is null ? "会话尚未就绪" : null);
         // 朗读只在 service.speech-synthesis 插件激活时存在：未安装时播放类动作整条从菜单消失，
         // 不留一排灰色条目；设置动作始终保留，作为未安装时的说明与安装入口。
         string? SpeechReady() => SpeechInstalled ? null : "未安装或未启用语音朗读插件，请在插件市场安装 service.speech-synthesis";
@@ -139,7 +134,7 @@ public partial class MainWindow
         {
             if (_options.Mode == AppSessionMode.Real)
             {
-                if (_borrowedHost || _switching || _restarting || _closed || !await ConfirmLeaveSettingsAsync()) return;
+                if (_switching || _restarting || _closed || !await ConfirmLeaveSettingsAsync()) return;
                 _graphEntryPending = false;
                 _options = _options with { ProjectPath = ScratchWorkspace.Ensure(GraphLayout), SessionId = null, NewSession = true, StartGraph = false };
                 await BootstrapRealAsync();
@@ -153,7 +148,7 @@ public partial class MainWindow
         }
         else
         {
-            if (_borrowedHost || _switching || _restarting || _closed || _vm?.Input.IsTurnActive == true) return;
+            if (_switching || _restarting || _closed) return;
             var backend = _vm?.Sidebar.SelectedNewSessionBackendKey;
             await NavigateWorkspaceAsync(AppPage.Chat);
             if (_vm?.IsChatPage != true) return;
@@ -179,10 +174,14 @@ public partial class MainWindow
         }
         return _options with { AppDataRootOverride = root, SessionId = null, ProjectPath = _host?.ProjectPath ?? _options.ProjectPath };
     }
-    /// <summary>同一会话的同步视图：新窗口借用当前窗口的宿主，事件流与单写者都保持不变。</summary>
+    /// <summary>同一会话的同步视图：新窗口独立选择会话，事实仍归同一个持久会话。</summary>
     private Task OpenSessionInSharedWindowAsync()
     {
-        if (_host is null || _borrowedHost) return Task.CompletedTask;
+        if (_host is null)
+        {
+            new MainWindow(_options with { SessionId = null, NewSession = true, ShareSession = false }).Show();
+            return Task.CompletedTask;
+        }
         new MainWindow(_options with
         {
             ProjectPath = _host.ProjectPath,

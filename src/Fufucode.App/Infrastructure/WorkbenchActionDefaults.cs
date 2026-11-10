@@ -33,7 +33,8 @@ public static class WorkbenchActionDefaults
                 "session.fork" => 3, _ => 4,
             }),
         "window.session" => new(UiActionPosition.HeaderMenu),
-        "help.about" or "auth.manage" or "window.new" => new(UiActionPosition.MenuRight),
+        "window.new" => new(UiActionPosition.MenuLeft, -1),
+        "help.about" or "auth.manage" => new(UiActionPosition.MenuRight),
         "perf" or "diagnostics.export" => new(UiActionPosition.MenuRight),
         "layout.reset" or "composer.toggle" or "summary.toggle" => new(UiActionPosition.MenuRight),
         "page.automation" or "page.local-review" => new(UiActionPosition.MenuRight),
@@ -55,7 +56,7 @@ public static class WorkbenchActionDefaults
         "view.fullscreen" or "view.zoomIn" or "view.zoomOut" or "view.zoomReset" or "layout.reset" or "composer.toggle" or "summary.toggle" => "视图与布局",
         _ when id.StartsWith("speech.") => "语音朗读",
         "page.automation" or "page.local-review" or "perf" or "diagnostics.export" or "help.troubleshoot" => "诊断与系统",
-        "help.shortcuts" or "help.update" or "help.about" or "auth.manage" or "window.new" or "window.session" => "帮助与全局",
+        "help.shortcuts" or "help.update" or "help.about" or "auth.manage" or "window.session" => "帮助与全局",
         _ => null,
     };
 

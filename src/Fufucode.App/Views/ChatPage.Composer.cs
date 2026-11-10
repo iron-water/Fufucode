@@ -292,7 +292,12 @@ public partial class ChatPage
     /// <summary>每次打开模型选择器都从空搜索开始，避免上次的关键字把新提供商的模型全部过滤掉。</summary>
     private void ModelPicker_Opened(object? sender, EventArgs e)
     {
-        if (DataContext is MainViewModel vm) vm.Settings.ModelPickerFilter = string.Empty;
+        if (DataContext is MainViewModel vm)
+        {
+            vm.Settings.ModelPickerFilter = string.Empty;
+            if (!vm.Settings.IsModelsLoading && vm.Settings.RefreshModelsCommand.CanExecute(null))
+                vm.Settings.RefreshModelsCommand.Execute(null);
+        }
     }
 
     /// <summary>搜索框显式同步到 VM；不依赖控件的默认绑定触发时机。</summary>

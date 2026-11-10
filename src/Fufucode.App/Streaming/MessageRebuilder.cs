@@ -86,6 +86,24 @@ public sealed class MessageRebuilder
         }
     }
 
+    /// <summary>恢复包含在途消息的快照；未完成消息保留可追加缓冲，不能伪造 message_end。</summary>
+    public void RestoreMessage(ChatMessage message)
+    {
+        Apply(new SessionEvent.MessageStarted(message.Id, message.Role, message.Model, message.Blocks.Count));
+        if (message.IsComplete)
+        {
+            Apply(new SessionEvent.MessageFinished(message.Id, message, message.CumulativeUsage));
+            return;
+        }
+        for (var index = 0; index < message.Blocks.Count; index++)
+        {
+            var block = message.Blocks[index];
+            var tool = block as ToolCallBlock;
+            Apply(new SessionEvent.BlockStarted(message.Id, index, block.Kind, tool?.ToolCallId, tool?.ToolName));
+            Apply(new SessionEvent.BlockFinished(message.Id, index, block));
+        }
+    }
+
     /// <summary>提交累积的变更并返回本次批次，随后清空脏标记。</summary>
     /// <remarks>每个脏消息在此期间只构建一次展示快照（delta 期间只改内部缓冲）。</remarks>
     public TimelineBatch Flush()

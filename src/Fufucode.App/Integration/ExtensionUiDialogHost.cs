@@ -43,6 +43,8 @@ public sealed class ExtensionUiDialogHost
             _session = session;
             _session.ExtensionUiRequestReceived += OnRequest;
             _session.ExtensionUiRequestClosed += OnClosed;
+            // 切换回来/新开窗口时补齐仍有效的审批，不能等待不会再发送的 Received 事件。
+            foreach (var request in session.PendingExtensionUiRequests) OnRequest(request);
         }
     }
 
@@ -71,6 +73,9 @@ public sealed class ExtensionUiDialogHost
             Dispatcher.UIThread.Post(() => OnRequest(request));
             return;
         }
+
+        if (_session is null || _open.ContainsKey(request.Id) ||
+            !_session.PendingExtensionUiRequests.Any(item => item.Id == request.Id)) return;
 
         if (AutoResponder?.Invoke(request) is { } automatic)
         {

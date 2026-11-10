@@ -338,7 +338,6 @@ public partial class MainWindow
     private async Task OpenGraphChatAsync(string? moduleId, string? ticketId, string context)
     {
         if (_closed || _switching || _restarting) return;
-        if (_borrowedHost) throw new InvalidOperationException("请在会话主窗口打开关联讨论。");
         if (!GraphEnabled) throw new InvalidOperationException("Graph 模式已停用。");
         if (_vm?.Input.IsTurnActive == true) throw new InvalidOperationException("当前聊天仍在运行，请先停止或等待结束。");
         if (!await ConfirmLeaveSettingsAsync()) return;
@@ -376,7 +375,6 @@ public partial class MainWindow
                     else await host.NewSessionAsync("Graph / " + name, _bootstrapCts.Token);
                     return true;
                 }, AskTrustAsync, (status, decision) => RealSessionHost.SaveTrustDecision(_options, status, decision));
-                Integration.SessionWindowRegistry.CloseFollowers(previousId);
                 Integration.SessionWindowRegistry.TryUnregisterOwner(previousId, this);
                 Integration.SessionWindowRegistry.RegisterOwner(host.Current.Session.Id, host, this);
             }
@@ -405,7 +403,6 @@ public partial class MainWindow
         if (!GraphEnabled) throw new InvalidOperationException("Graph 模式已停用。");
         var full = Path.GetFullPath(path);
         if (!Directory.Exists(full)) throw new DirectoryNotFoundException(full);
-        if (_borrowedHost) throw new InvalidOperationException("请在会话主窗口切换项目。");
         if (_vm?.Input.IsTurnActive == true) throw new InvalidOperationException("请先停止当前聊天。");
         if (!await ConfirmLeaveSettingsAsync()) return;
         SaveWorkModeLayout();
@@ -418,12 +415,11 @@ public partial class MainWindow
             if (_vm is { } previous) old.SaveDraft(previous.Input.ComposePrompt());
             _draftDebounce?.Stop();
             await CloseSideChatAsync();
-            Integration.SessionWindowRegistry.CloseFollowers(old.Current.Session.Id);
             Integration.SessionWindowRegistry.TryUnregisterOwner(old.Current.Session.Id, this);
             _dialogHost?.Detach();
             foreach (var subscription in _graphChatSubscriptions.Values) subscription.Session.Event -= subscription.Handler;
             _graphChatSubscriptions.Clear();
-            await old.DisposeAsync();
+            _backgroundHosts.Add(old);
             _host = null;
         }
         _options = _options with { ProjectPath = full, SessionId = null };

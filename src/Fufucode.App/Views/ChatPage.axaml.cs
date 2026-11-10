@@ -630,30 +630,16 @@ public partial class ChatPage : UserControl
         {
             // RelayCommand.Execute 不检查 CanExecute；空白输入必须在这里拦住，
             // 否则回车会直接发出一个空消息。
-            var steering = e.KeyModifiers.HasFlag(KeyModifiers.Control) && vm.Input.IsTurnActive;
+            var steering = !e.KeyModifiers.HasFlag(KeyModifiers.Control) && vm.Input.IsTurnActive;
             if (steering ? !vm.Input.CanSteer : !vm.Input.CanSend)
             {
                 e.Handled = true;
                 return;
             }
 
-            // P2-17：Ctrl+Enter —— 运行中插入（steer），空闲等同普通发送（Immediate）；
-            // 与普通 Enter 经过同一个 ImeEnterGuard（组合中不会走到这里）。
-            if (e.KeyModifiers.HasFlag(KeyModifiers.Control))
-            {
-                if (vm.Input.IsTurnActive)
-                {
-                    vm.Input.SteerCommand.Execute(null);
-                }
-                else
-                {
-                    vm.Input.SendCommand.Execute(null);
-                }
-            }
-            else
-            {
-                vm.Input.SendCommand.Execute(null);
-            }
+            // 运行中 Enter 插入、Ctrl+Enter 排队；空闲两者均发送，仍共用 IME 守卫。
+            if (steering) vm.Input.SteerCommand.Execute(null);
+            else vm.Input.SendCommand.Execute(null);
 
             e.Handled = true;
         }

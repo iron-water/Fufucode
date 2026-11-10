@@ -38,20 +38,9 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private bool _closeApproved;
     private bool _closingInProgress;
     private bool _switching;
-    // 多窗口：借用其它窗口的宿主作为同一会话的同步视图，不拥有其生命周期。
-    private bool _borrowedHost;
-    private string? _sharedSessionId;
-    // 宿主释放时被动关闭，跳过设置草稿确认与托盘隐藏。
-    private bool _forceClose;
+    // 视图离开项目不释放后台会话；本窗口关闭时只释放自己持有的引用。
+    private readonly List<RealSessionHost> _backgroundHosts = new();
     internal bool IsClosedForSharing => _closed;
-
-    /// <summary>宿主切换/释放会话时，被动关闭本同步视图（跳过设置草稿确认）。</summary>
-    internal void CloseAsSharedView()
-    {
-        if (_closed) return;
-        _forceClose = true;
-        Close();
-    }
 
     /// <summary>同进程其它窗口改动会话元数据后刷新列表（来源窗口自己忽略）。</summary>
     private void OnSessionMetadataChanged(object? source)
@@ -60,6 +49,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         Dispatcher.UIThread.Post(() =>
         {
             if (_closed || _host is null || _vm is null) return;
+            _vm.Settings.RefreshSharedSessionModel();
             RefreshSessionList();
             RenderOverview();
         });
@@ -223,6 +213,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             _extensionUiWiredSession = null;
             DetachCustomizationSession();
             DetachDraftPersistence();
+            _vm.Input.Dispose();
             _vm.Timeline.Dispose();
             _vm.WorkspacePanel.Dispose();
             _vm.Sidebar.Dispose();
@@ -298,8 +289,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             IsTurnActive: () => vm.Input.IsTurnActive,
             SetModel: host is null || !host.HasLiveSession
                 ? null
-                : (provider, modelId, ct) =>
-                    host.Current.Coordinator.SetModelAsync(provider, modelId, ct),
+                : async (provider, modelId, ct) =>
+                {
+                    var response = await host.Current.Coordinator.SetModelAsync(provider, modelId, ct);
+                    if (response.Success) Integration.SessionChangeBus.Publish(null);
+                    return response;
+                },
             SetThinkingLevel: host is null || !host.HasLiveSession
                 ? null
                 : (level, ct) => host.Current.Coordinator.SetThinkingLevelAsync(level, ct),
@@ -481,32 +476,6 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         try
         {
             StartupRetryButton.IsVisible = false;
-            // 同一会话已在本进程另一个窗口打开：
-            // 共享视图直接借用那个宿主（同一份事件流，单写者不变）；普通打开则聚焦原窗口。
-            if (_options.SessionId is { Length: > 0 } sharedId &&
-                Integration.SessionWindowRegistry.TryGetOwner(sharedId, out var sharedHost, out _) &&
-                sharedHost is not null)
-            {
-                if (!_options.ShareSession)
-                {
-                    Integration.SessionWindowRegistry.FindWindow(sharedId)?.Activate();
-                    _forceClose = true;
-                    Close();
-                    return;
-                }
-                _host = sharedHost;
-                _borrowedHost = true;
-                _sharedSessionId = sharedId;
-                _options = _options with { ProjectPath = sharedHost.ProjectPath };
-                Integration.SessionWindowRegistry.AddFollower(sharedId, this);
-                _dialogHost = CreateDialogHost(sharedHost.ProjectPath);
-                AttachRealSession();
-                HideStartupOverlay();
-                StartupPickProject.IsVisible = false;
-                ScrollToEnd();
-                Program.Startup?.FinishAfterRender();
-                return;
-            }
             ShowStartup("正在启动会话…", inProgress: true);
             Core.Diagnostics.StartupProbe.Mark("session.open.begin", "RealSessionHost.OpenAsync");
             var host = await ProjectTrustFlow.RunAsync(
@@ -640,20 +609,9 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         }
         if (_host is null) return;
 
-        if (_borrowedHost)
-        {
-            (DataContext as MainViewModel)?.Timeline.AddNotification("此窗口是同一会话的同步视图；请在主窗口里切换项目。");
-            return;
-        }
 
         if (RealSessionHost.PathEquals(_host.ProjectPath, path))
         {
-            return;
-        }
-
-        if (DataContext is MainViewModel vm && vm.Input.IsTurnActive)
-        {
-            vm.Timeline.AddNotification("当前回合进行中，请先停止或等待完成再切换项目");
             return;
         }
 
@@ -685,13 +643,12 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             var previousSessionId = previous.Current.Session.Id;
             _options = newOptions;
             await CloseSideChatAsync();
-            // 旧项目会话的同步视图先关闭，再释放旧宿主。
-            Integration.SessionWindowRegistry.CloseFollowers(previousSessionId);
+            // 旧项目宿主保留在后台，其他窗口继续持有各自的引用。
             Integration.SessionWindowRegistry.TryUnregisterOwner(previousSessionId, this);
             _host = next;
             Integration.SessionWindowRegistry.RegisterOwner(next.Current.Session.Id, next, this);
             _dialogHost = CreateDialogHost(next.ProjectPath);
-            await previous.DisposeAsync();
+            _backgroundHosts.Add(previous);
             AttachRealSession();
             ProjectPreferences.RecordOpened(_host.Manager.Metadata, _host.ProjectPath);
             HideStartupOverlay();
@@ -810,7 +767,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         Dispatcher.UIThread.Post(RenderOverview, DispatcherPriority.ApplicationIdle);
         Core.Diagnostics.StartupProbe.Mark("session.overview", "overview queued");
         var vm = (MainViewModel)DataContext!;
-        vm.Timeline.LoadHistory(host.CurrentTranscript());
+        vm.Timeline.LoadLiveHistory(host.CurrentTranscriptSnapshot());
         Core.Diagnostics.StartupProbe.Mark("session.history", "timeline history replayed");
         if (host.Diagnostic is { } diagnostic)
         {
@@ -825,8 +782,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         // 草稿按会话隔离恢复（M4；desktop.db drafts 表）。
         vm.Input.DraftText = host.LoadDraft() ?? string.Empty;
         RestoreGraphDraft(vm.Input, current.Id);
-        // 同步视图不写草稿：草稿归主窗口所有，避免两个窗口互相覆盖。
-        if (!_borrowedHost) WireDraftPersistence(vm);
+        // 每个窗口拥有自己的输入视图；已提交内容由共享会话同步。
+        WireDraftPersistence(vm);
 
         AttachGraphConversation(host.Current);
         _perfWiring?.AttachSession(host.Chat, current.Name ?? current.Id, host.Chat.CurrentModel, host.CurrentTranscript(), current.Id);
@@ -1017,14 +974,11 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _restarting = true;
         // 重启前把输入框草稿显式落盘：AttachRealSession 恢复草稿读的是持久层，
         // 600ms 防抖可能尚未触发（H3 复审 #2）。
-        if (!_borrowedHost && DataContext is MainViewModel preVm && _host is { HasLiveSession: true } liveHost)
+        if (DataContext is MainViewModel preVm && _host is { HasLiveSession: true } liveHost)
         {
             liveHost.SaveDraft(preVm.Input.ComposePrompt());
         }
-        // 重启会替换会话对象：同步视图必须先关闭。
-        if (!_borrowedHost && _host is { } restartHost)
-            Integration.SessionWindowRegistry.CloseFollowers(restartHost.Current.Session.Id);
-
+        // 重启的独占条件由共享会话池检查，不能顺带关闭其他窗口。
         try
         {
             ShowStartup("正在安全重启会话…", inProgress: true);
@@ -1128,6 +1082,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 tokenSummary: null,
                 lastOpened: record.LastOpened);
             item.MarkUnread(SessionPresentation.Load(host.Manager.Metadata, record.Id).Unread);
+            if (Integration.LiveSessionPool.Find(host.Manager, record.Id)?.Chat is { } live)
+                item.UpdateLiveState(live.Activity, live.LastOutcome, live.Connection);
             return item;
         }).ToArray();
     }
@@ -1158,16 +1114,10 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             return;
         }
 
-        if (_borrowedHost)
-        {
-            _vm?.Timeline.AddNotification("此窗口是同一会话的同步视图；请在主窗口里切换会话。");
-            return;
-        }
 
         var previousSessionId = _host.Current.Session.Id;
 
-        if (_vm?.Input.IsTurnActive == true)
-        { _vm.Timeline.AddNotification("当前回合进行中，请先停止或等待完成再切换会话"); return; }
+
 
         _switching = true;
         try
@@ -1217,8 +1167,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
             var presentation = SessionPresentation.Load(_host.Manager.Metadata, _host.Current.Session.Id);
             if (presentation.Unread) SessionPresentation.Save(_host.Manager.Metadata, _host.Current.Session.Id, presentation with { Unread = false });
-            // 旧会话的同步视图先关闭，再把新会话登记为当前宿主。
-            Integration.SessionWindowRegistry.CloseFollowers(previousSessionId);
+            // 只更新本窗口的发现索引，其他窗口与旧回合均不受影响。
+            Integration.SessionWindowRegistry.TryUnregisterOwner(previousSessionId, this);
             Integration.SessionWindowRegistry.RegisterOwner(_host.Current.Session.Id, _host, this);
             AttachRealSession();
             if (backendNote is not null) _vm?.Timeline.AddNotification(backendNote);
@@ -1259,15 +1209,17 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
 
         try
         {
-            await _host.RenameCurrentAsync(name);
-            // 用户手动改名后，自动取名不得再覆盖。
-            var metadata = _host.Manager.Metadata;
-            var id = _host.Current.Session.Id;
+            var targetHost = _host;
+            var targetSession = targetHost.Current;
+            var id = targetSession.Session.Id;
+            await targetSession.RenameAsync(name);
+            // await 期间本窗口可能已经切换，名称和手动命名标记仍属于原目标会话。
+            var metadata = targetHost.Manager.Metadata;
             SessionPresentation.Save(metadata, id,
                 SessionPresentation.Load(metadata, id) with { NameUserSet = true, NameAutoAttempted = true });
             if (DataContext is MainViewModel vm)
             {
-                vm.Sidebar.UpdateSessions(BuildSessionItems(_host), _host.Current.Session.Id, name);
+                vm.Sidebar.UpdateSessions(BuildSessionItems(_host), _host.Current.Session.Id, _host.Current.Session.Name ?? string.Empty);
             }
             Integration.SessionChangeBus.Publish(this);
         }
@@ -1702,8 +1654,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             return;
         }
 
-        // 宿主释放时被动关闭的同步视图：不隐藏到托盘、不问设置草稿。
-        if (!_forceClose && ShouldHideToTray(e.CloseReason))
+        // 托盘与设置草稿确认对所有独立窗口一致。
+        if (ShouldHideToTray(e.CloseReason))
         {
             e.Cancel = true;
             HideToTray();
@@ -1713,7 +1665,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         e.Cancel = true;
         if (_closingInProgress) return;
         _closingInProgress = true;
-        var leaveConfirmed = _forceClose;
+        var leaveConfirmed = false;
         if (!leaveConfirmed)
         {
             try { leaveConfirmed = await ConfirmLeaveSettingsAsync(); }
@@ -1732,15 +1684,6 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
         _closed = true;
         try
         {
-            // 本窗口是某个会话的宿主：先关掉共享视图，避免它们引用已释放的会话。
-            if (!_borrowedHost && _host is { } closingHost)
-            {
-                Integration.SessionWindowRegistry.CloseFollowers(closingHost.Current.Session.Id);
-            }
-            if (_borrowedHost && _sharedSessionId is { Length: > 0 } sharedId)
-            {
-                Integration.SessionWindowRegistry.RemoveFollower(sharedId, this);
-            }
             // 语音服务归插件所有：窗口只解除状态广播订阅，进程由插件管理器在停用时释放。
             Fufucode.Core.Plugins.PluginStateNotifier.Changed -= OnPluginStateChanged;
             // SEEP-1：终止本插件启动的 MCP / 中继子进程，避免退出后残留。
@@ -1785,7 +1728,8 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             if (_workspaceSession is not null) _workspaceSession.Event -= OnWorkspaceSessionEvent;
             _vm?.WorkspacePanel.Dispose();
             _vm?.Sidebar.Dispose();
-            if (!_borrowedHost && DataContext is MainViewModel vm && _host is not null)
+            _vm?.Input.Dispose();
+            if (DataContext is MainViewModel vm && _host is not null)
             {
                 _host.SaveDraft(vm.Input.ComposePrompt());
             }
@@ -1805,18 +1749,15 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
                 // 关闭路径尽力而为；异常不阻止退出。
             }
 
-            // 借用宿主（同步视图）不拥有会话生命周期；由所属主窗口释放。
-            if (!_borrowedHost && _host is not null)
+            // 只释放本窗口的引用，其他窗口仍在使用的会话继续存活。
+            var releasingHosts = _backgroundHosts.ToList();
+            if (_host is not null) releasingHosts.Add(_host);
+            foreach (var releasing in releasingHosts.Distinct())
             {
-                try
-                {
-                    await _host.DisposeAsync();
-                }
-                catch
-                {
-                    // 关闭路径尽力而为；异常不阻止退出。
-                }
+                try { await releasing.DisposeAsync(); }
+                catch (Exception error) { System.Diagnostics.Trace.TraceError("Session host release: {0}", error); }
             }
+            _backgroundHosts.Clear();
         }
         catch (Exception error)
         {
@@ -1833,7 +1774,7 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
     private void OnClosed(object? sender, EventArgs e)
     {
         Integration.SessionChangeBus.Changed -= OnSessionMetadataChanged;
-        if (!_borrowedHost && _host is { } host)
+        if (_host is { } host)
             Integration.SessionWindowRegistry.TryUnregisterOwner(host.Current.Session.Id, this);
         DisposeComputerCursorOverlay();
         _bootstrapCts.Dispose();

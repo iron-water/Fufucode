@@ -240,6 +240,9 @@ public partial class MainWindow
             .ThenBy(action => WorkbenchActionDefaults.SubMenuOrder(action.Id)))
         {
             var placement = settings.Actions.GetValueOrDefault(action.Id, WorkbenchActionDefaults.Placement(action.Id));
+            // 旧配置把“新建窗口”默认放在右侧帮助菜单；迁到用户要求的左辅助入口。
+            if (action.Id == "window.new" && placement.Position == UiActionPosition.MenuRight)
+                placement = placement with { Position = UiActionPosition.MenuLeft };
             if (action.Id == "notifications" && placement.Position == UiActionPosition.TopRight)
                 placement = placement with { Position = UiActionPosition.MenuRight };
             if (placement.Position == UiActionPosition.Hidden) continue;

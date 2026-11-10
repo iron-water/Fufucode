@@ -32,7 +32,7 @@ public sealed record QueuedItemViewModel(string Text, string BadgeText, bool IsL
 /// 输入区：草稿、发送/停止、停止后队列文本的待恢复草稿（计划 §6.5：不覆盖已有草稿）。
 /// 输入法组合状态由 View 通过 <see cref="SetComposing"/> 回写（见 ImeEnterGuard）。
 /// </summary>
-public sealed partial class InputViewModel : ViewModelBase
+public sealed partial class InputViewModel : ViewModelBase, IDisposable
 {
     private readonly IChatSession _session;
     /// <summary>可选能力：能回看最后一条用户消息的后端才提供 restart 入口。</summary>
@@ -43,6 +43,18 @@ public sealed partial class InputViewModel : ViewModelBase
     private bool _isTurnActive;
     // 本地记录 steer 过的文本（同文本按计数）；项离开队列即清理。
     private readonly Dictionary<string, int> _steeredCounts = new(StringComparer.Ordinal);
+    private IReadOnlyList<bool>? _queueSteering;
+    private bool _disposed;
+    private Action<string>? _modeChanged;
+
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _session.Event -= OnSessionEvent;
+        if (_session is IExecutionModeSession modes && _modeChanged is not null)
+            modes.ExecutionModeChanged -= _modeChanged;
+    }
 
     public InputViewModel(IChatSession session)
     {
@@ -51,7 +63,13 @@ public sealed partial class InputViewModel : ViewModelBase
         if (session is IExecutionModeSession modes)
         {
             ExecutionMode = modes.ExecutionMode;
-            modes.ExecutionModeChanged += mode => Dispatcher.UIThread.Post(() => { ExecutionMode = mode; OnPropertyChanged(nameof(ExecutionMode)); });
+            _modeChanged = mode => Dispatcher.UIThread.Post(() =>
+            {
+                if (_disposed) return;
+                ExecutionMode = mode;
+                OnPropertyChanged(nameof(ExecutionMode));
+            });
+            modes.ExecutionModeChanged += _modeChanged;
         }
         _session.Event += OnSessionEvent;
         // 派生属性（HasQueue/QueueSummary/溢出提示）随集合内容变化自动通知，
@@ -60,6 +78,7 @@ public sealed partial class InputViewModel : ViewModelBase
         // H2：附着时若回合已在进行，发送实为排队，按钮文案要立即正确。
         IsTurnActive = session.Activity is SessionActivity.Running
             or SessionActivity.Compacting or SessionActivity.Retrying;
+        if (session is IQueuedChatSession queued) SyncQueue(queued.PendingQueue);
     }
 
     /// <summary>草稿文本（双向绑定输入框）。</summary>
@@ -143,17 +162,30 @@ public sealed partial class InputViewModel : ViewModelBase
 
     public bool HasQueue => QueuedTexts.Count > 0;
 
-    public string QueueSummary => HasQueue ? $"已排队 {QueuedTexts.Count} 条 · 当前回合结束后依次发送" : string.Empty;
+    public string QueueSummary => !HasQueue ? string.Empty :
+        $"待发送 {QueuedTexts.Count} 条 · 插入优先，排队在回合结束后执行" +
+        (HasQueueOverflow ? (IsQueueExpanded ? " · 收起" : $" · 展开其余 {QueuedTexts.Count - 5} 条") : string.Empty);
+    public bool HasQueueOverflow => QueuedTexts.Count > 5;
+    public IEnumerable<QueuedItemViewModel> VisibleQueuedPreview => IsQueueExpanded ? QueuedPreview : QueuedPreview.Take(5);
 
     /// <summary>排队条展示全部排队项（含投递方式徽章）；每项在界面上只占一行。</summary>
     public ObservableCollection<QueuedItemViewModel> QueuedPreview { get; } = new();
 
     /// <summary>排队消息列是否展开；折叠后只留一条汇总，输入框上方不占地方。</summary>
     [ObservableProperty]
-    private bool _isQueueExpanded = true;
+    private bool _isQueueExpanded;
+
+    partial void OnIsQueueExpandedChanged(bool value)
+    {
+        OnPropertyChanged(nameof(VisibleQueuedPreview));
+        OnPropertyChanged(nameof(QueueSummary));
+    }
 
     [RelayCommand]
-    private void ToggleQueue() => IsQueueExpanded = !IsQueueExpanded;
+    private void ToggleQueue()
+    {
+        if (HasQueueOverflow) IsQueueExpanded = !IsQueueExpanded;
+    }
 
     /// <summary>回合活跃（运行/压缩/重试）：此时发送实际进入队列。</summary>
     public bool IsTurnActive
@@ -181,7 +213,7 @@ public sealed partial class InputViewModel : ViewModelBase
     public string SendButtonToolTip => IsTurnActive ? "排队：本回合完全结束后执行" : "发送";
 
     /// <summary>回合活跃时的输入提示（P2-17：Ctrl+Enter 插入）。</summary>
-    public string InputHint => IsTurnActive ? "Enter 排队 · Ctrl+Enter 插入 · Shift+Enter 换行" : string.Empty;
+    public string InputHint => IsTurnActive ? "Enter 插入 · Ctrl+Enter 排队 · Shift+Enter 换行" : string.Empty;
 
     /// <summary>运行中插入（steer）能力：真实会话为 coordinator 旁路，mock 会话自身实现。</summary>
     public IPromptSteering? Steering { get; set; }
@@ -278,17 +310,16 @@ public sealed partial class InputViewModel : ViewModelBase
     [RelayCommand(CanExecute = nameof(CanSteer))]
     private async Task SteerAsync()
     {
+        if (!CanSteer) return;
         var text = ComposePrompt();
         DraftText = string.Empty;
         ReferenceContext = string.Empty;
+        // 在调用后端前登记：后端可能同步发布 QueueChanged；有投递方式快照时以快照为准。
+        lock (_steeredCounts)
+            _steeredCounts[text] = _steeredCounts.TryGetValue(text, out var count) ? count + 1 : 1;
         try
         {
             await Steering!.SteerAsync(text);
-            lock (_steeredCounts)
-            {
-                _steeredCounts[text] = _steeredCounts.TryGetValue(text, out var count) ? count + 1 : 1;
-            }
-
             RefreshQueueBadges();
         }
         catch (Exception ex)
@@ -383,7 +414,7 @@ public sealed partial class InputViewModel : ViewModelBase
     private void OnSessionEvent(object? sender, SessionEvent e)
     {
         // 在排队前过滤：每个文本/思考/工具分片都 Post 到 UI 再走默认分支丢弃，只会放大队列。
-        if (!HandlesSessionEvent(e)) return;
+        if (_disposed || !HandlesSessionEvent(e)) return;
         if (!Dispatcher.UIThread.CheckAccess())
         {
             Dispatcher.UIThread.Post(() => OnSessionEvent(sender, e));
@@ -394,10 +425,10 @@ public sealed partial class InputViewModel : ViewModelBase
         {
             case SessionEvent.QueueCleared cleared:
                 RestoreQueue(cleared);
-                SyncQueue([]);
+                SyncQueue(new SessionEvent.QueueChanged(0, []));
                 break;
             case SessionEvent.QueueChanged queueChanged:
-                SyncQueue(queueChanged.QueuedTexts);
+                SyncQueue(queueChanged);
                 SendCommand.NotifyCanExecuteChanged();
                 StopCommand.NotifyCanExecuteChanged();
                 break;
@@ -424,8 +455,10 @@ public sealed partial class InputViewModel : ViewModelBase
         }
     }
 
-    private void SyncQueue(System.Collections.Generic.IReadOnlyList<string> texts)
+    private void SyncQueue(SessionEvent.QueueChanged snapshot)
     {
+        var texts = snapshot.QueuedTexts;
+        _queueSteering = snapshot.Steering;
         QueuedTexts.Clear();
         foreach (var text in texts)
         {
@@ -462,6 +495,9 @@ public sealed partial class InputViewModel : ViewModelBase
     {
         OnPropertyChanged(nameof(HasQueue));
         OnPropertyChanged(nameof(QueueSummary));
+        OnPropertyChanged(nameof(HasQueueOverflow));
+        if (!HasQueue) IsQueueExpanded = false;
+        OnPropertyChanged(nameof(VisibleQueuedPreview));
     }
 
     /// <summary>
@@ -528,17 +564,17 @@ public sealed partial class InputViewModel : ViewModelBase
         }
 
         QueuedPreview.Clear();
-        foreach (var text in QueuedTexts)
+        for (var index = 0; index < QueuedTexts.Count; index++)
         {
-            var steered = remaining.TryGetValue(text, out var count) && count > 0;
-            if (steered)
-            {
-                remaining[text] = count - 1;
-            }
+            var text = QueuedTexts[index];
+            var inferred = remaining.TryGetValue(text, out var count) && count > 0;
+            var steered = _queueSteering is { } modes && index < modes.Count ? modes[index] : inferred;
+            if (inferred) remaining[text] = count - 1;
 
-            // 队列项一律来自 Core 的 QueueChanged 镜像，界面不拥有它们，故 IsLocallyOwned 恒为 false。
+            // 后端队列的逐项方式是权威；同文本的排队与插话也不能混淆。
             QueuedPreview.Add(new QueuedItemViewModel(text, steered ? "插入" : "排队"));
         }
+        OnPropertyChanged(nameof(VisibleQueuedPreview));
     }
 
     private void RestoreQueue(SessionEvent.QueueCleared cleared)

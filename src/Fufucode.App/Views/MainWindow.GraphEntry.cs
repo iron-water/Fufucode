@@ -29,7 +29,7 @@ public partial class MainWindow
 
     private async Task NewGraphAsync()
     {
-        if (!GraphEnabled || _borrowedHost || _switching || _restarting || _closed || _vm?.Input.IsTurnActive == true) return;
+        if (!GraphEnabled || _switching || _restarting || _closed || _vm?.Input.IsTurnActive == true) return;
         if (!await ConfirmLeaveSettingsAsync()) return;
         if (!_graphEntryPending) SaveWorkModeLayout();
         if (_host is not null && _vm is { } previous) _host.SaveDraft(previous.Input.ComposePrompt());

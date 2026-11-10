@@ -619,7 +619,7 @@
               <!-- 汇总行兼折叠开关：折叠后只剩这一行，输入框上方不占地方。 -->
               <Button Classes="subtle" Padding="4,0" MinHeight="20" HorizontalAlignment="Stretch"
                       HorizontalContentAlignment="Left" Background="Transparent"
-                      Command="{Binding Input.ToggleQueueCommand}"
+                      Command="{Binding Input.ToggleQueueCommand}" IsEnabled="{Binding Input.HasQueueOverflow}"
                       AutomationProperties.Name="展开或折叠排队消息">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                   <PathIcon Data="{DynamicResource Icon.ChevronUp}" Width="11" Height="11" VerticalAlignment="Center"
@@ -630,9 +630,8 @@
                 </StackPanel>
               </Button>
               <!-- 排队项逐条一行（超长省略），条数多时在固定高度内滚动。 -->
-              <ScrollViewer MaxHeight="168" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
-                            IsVisible="{Binding Input.IsQueueExpanded}">
-                <ItemsControl ItemsSource="{Binding Input.QueuedPreview}">
+              <ScrollViewer MaxHeight="168" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Input.VisibleQueuedPreview}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="{x:Type vm:QueuedItemViewModel}">
                       <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="19,0,0,0">

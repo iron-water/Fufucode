@@ -53,6 +53,18 @@ public static class SelfTestRunner
         Program.SelfTestDataRoot = Path.Combine(
             Path.GetTempPath(), "fufucode-selftest-" + Guid.NewGuid().ToString("N"));
 
+        if (args.Contains("--session-repair-only"))
+        {
+            await RunOnHeadlessUiThreadAsync(async () =>
+            {
+                await SessionRepairSelfTest.RunAsync(Pass, Fail);
+                await TestSteerInputAsync();
+                await TestSteerKeyboardAsync();
+            });
+            Console.WriteLine($"Session repair failures: {Failures.Count}");
+            return Failures.Count == 0 ? 0 : 1;
+        }
+
         if (args.Contains("--event-filter-only"))
         {
             TestSessionEventFilter();
@@ -1265,36 +1277,36 @@ public static class SelfTestRunner
 
         await WaitForSettledAsync(vm.Session);
 
-        // 运行中 Ctrl+Enter = steer（mock 的 SteerAsync 入队）；Enter = 排队（SendAsync）
+        // 运行中 Enter = steer；Ctrl+Enter = 排队
         mock.SimulateRunningQueue(Array.Empty<string>());
         await DrainUiQueueAsync();
 
-        window.KeyTextInput("ctrl 插入文本");
-        window.KeyPress(Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter, null);
+        window.KeyTextInput("Enter 插入文本");
+        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
         await Task.Delay(150);
         await DrainUiQueueAsync();
-        var steerBadge = vm.Input.QueuedPreview.FirstOrDefault(i => i.Text == "ctrl 插入文本");
+        var steerBadge = vm.Input.QueuedPreview.FirstOrDefault(i => i.Text == "Enter 插入文本");
         if (steerBadge is { IsSteer: true })
         {
-            Pass("运行中 Ctrl+Enter 走 steer（徽章「插入」）");
+            Pass("运行中 Enter 走 steer（徽章「插入」）");
         }
         else
         {
-            Fail($"运行中 Ctrl+Enter 未走 steer：badge={steerBadge?.BadgeText} queue={mock.QueuedCount}");
+            Fail($"运行中 Enter 未走 steer：badge={steerBadge?.BadgeText} queue={mock.QueuedCount}");
         }
 
         window.KeyTextInput("普通排队文本");
-        window.KeyPress(Key.Enter, RawInputModifiers.None, PhysicalKey.Enter, null);
+        window.KeyPress(Key.Enter, RawInputModifiers.Control, PhysicalKey.Enter, null);
         await Task.Delay(150);
         await DrainUiQueueAsync();
         var followBadge = vm.Input.QueuedPreview.FirstOrDefault(i => i.Text == "普通排队文本");
         if (followBadge is { IsSteer: false } && followBadge.BadgeText == "排队")
         {
-            Pass("运行中 Enter 走排队（徽章「排队」）");
+            Pass("运行中 Ctrl+Enter 走排队（徽章「排队」）");
         }
         else
         {
-            Fail($"运行中 Enter 徽章异常：badge={followBadge?.BadgeText}");
+            Fail($"运行中 Ctrl+Enter 徽章异常：badge={followBadge?.BadgeText}");
         }
 
         // 组合中 Ctrl+Enter 不触发 steer
