@@ -18,7 +18,6 @@ public sealed partial class SettingsPageViewModel
     public bool HasRelatedSettings => RelatedLinks.Count > 0;
 
     private SettingsNavPreferenceStore _navStore = new(null);
-
     /// <summary>侧栏条目重建（搜索或升降级）后触发，供视图按 Id 重新同步选中项。</summary>
     public event EventHandler? NavigationRebuilt;
 
@@ -38,12 +37,28 @@ public sealed partial class SettingsPageViewModel
 
     internal void RaiseNavigationRebuilt() => NavigationRebuilt?.Invoke(this, EventArgs.Empty);
 
-    /// <summary>注入侧栏偏好存储（组合根在 Attach 时给出数据根目录）。</summary>
+    /// <summary>注入侧栏偏好存储（组合根在 Attach 时给出数据根目录）。
+    /// 旧存储的订阅必须退订：否则陈旧实例的偏好变化也会来重建这份列表。</summary>
     public void AttachNavPreference(string? dataRoot)
     {
+        _navStore.Changed -= OnNavPreferenceChanged;
         _navStore = new SettingsNavPreferenceStore(dataRoot);
+        _navStore.Changed += OnNavPreferenceChanged;
         RebuildCategories();
     }
+
+    /// <summary>
+    /// 重新读盘并重排侧栏（进入设置页时调一次）：外部改了 settings-nav.json、
+    /// 或上次读取被占用而沿用了旧偏好时，这里自愈，不必重启应用。
+    /// </summary>
+    public void RefreshNavPreference()
+    {
+        _navStore.Reload();
+        // Reload 只在偏好真的变了才触发 Changed；首次装载/读取失败后恢复都要强制重排。
+        RebuildCategories();
+    }
+
+    private void OnNavPreferenceChanged(SettingsNavPreference preference) => RebuildCategories();
 
     /// <summary>自测接缝：当前生效的升降级偏好。</summary>
     internal SettingsNavPreference NavPreference => _navStore.Current;
@@ -51,15 +66,17 @@ public sealed partial class SettingsPageViewModel
     /// <summary>"其他"占位项 id（不对应目录里任何真实条目，作为一级菜单的杂项入口）。</summary>
     public const string OtherHubId = "other";
 
-    /// <summary>按目录 + 偏好重建全部侧栏条目（所有真实功能平铺 + 「其他」占位）。</summary>
+    /// <summary>按目录 + 偏好重建全部侧栏条目（所有真实功能平铺 + 「其他」占位）。
+    /// 侧栏只有一份集合（FilteredCategories）：以前额外维护一份 Categories，
+    /// 一旦两边步调不一致就会出现“一级侧栏和「其他」里各有一份终端/浏览器”。</summary>
     private void RebuildCategories()
     {
-        Categories.Clear();
-        foreach (var item in EnumerateSidebarItems(_navStore.Current))
-            Categories.Add(item);
-        // 侧栏 ListBox 绑的是 FilteredCategories：只填 Categories 会让偏好晚到
-        // （AttachNavPreference 加载 settings-nav.json）时留下用内存空偏好构建的旧列表，
-        // 已收纳进「其他」的大功能会同时出现在一级侧栏和「其他」页里。
+        // 偏好可能由后台（另一实例通知、文件监视）触发，而集合绑定在 UI 线程上。
+        if (!Avalonia.Threading.Dispatcher.UIThread.CheckAccess())
+        {
+            Avalonia.Threading.Dispatcher.UIThread.Post(RebuildCategories);
+            return;
+        }
         UpdateCategoryFilter();
     }
 
@@ -100,8 +117,8 @@ public sealed partial class SettingsPageViewModel
     private void ToggleNavTier(SettingsCategoryViewModel? category)
     {
         if (category is null || !SettingsNavPreference.CanMove(category.Id)) return;
+        // 保存会触发 store.Changed → RebuildCategories，这里不再重复重建。
         _navStore.Save(_navStore.Current.Toggle(category.Id));
-        RebuildCategories();
         OnPropertyChanged(nameof(CurrentCategoryIsPinned));
         OnPropertyChanged(nameof(CurrentCategoryCanPin));
     }
@@ -123,7 +140,6 @@ public sealed partial class SettingsPageViewModel
     {
         if (SelectedCategory is not { } cat || !SettingsNavPreference.CanMove(cat.Id)) return;
         _navStore.Save(_navStore.Current.Toggle(cat.Id));
-        RebuildCategories();
         OnPropertyChanged(nameof(CurrentCategoryIsPinned));
     }
 

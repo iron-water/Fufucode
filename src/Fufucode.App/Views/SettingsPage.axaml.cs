@@ -46,6 +46,9 @@ public partial class SettingsPage : UserControl
         Loaded += (_, _) =>
         {
             AttachViewModel();
+            // 每次进入设置页都重读一遍侧栏偏好：另一实例/手工改的 settings-nav.json、
+            // 或上次读取被文件占用而沿用的旧值，都能在这里自愈，不用重启应用。
+            _viewModel?.RefreshNavPreference();
             UpdateResponsiveLayout();
             // 首帧渲染后才同步选中——Loaded 时 Items 可能尚未 realize，SelectedItem 写入会被吞。
             Dispatcher.UIThread.Post(SyncNavSelection, DispatcherPriority.Loaded);

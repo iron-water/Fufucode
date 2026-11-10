@@ -88,11 +88,16 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         SyncPlugins(null);
     }
 
-    public ObservableCollection<SettingsCategoryViewModel> Categories { get; } = new();
+    /// <summary>侧栏条目（唯一真源）：搜索过滤、升降级重排都只改这一份集合。</summary>
+    public ObservableCollection<SettingsCategoryViewModel> FilteredCategories { get; } = new();
+
+    /// <summary>兼容旧调用点与自测的别名：与 <see cref="FilteredCategories"/> 是同一份集合。
+    /// 曾经这是两个独立集合（构造时建一份、过滤时重建另一份），两份不同步就会出现
+    /// “一级侧栏和「其他」页各有一份终端/浏览器”的重复条目。</summary>
+    public ObservableCollection<SettingsCategoryViewModel> Categories => FilteredCategories;
     public IReadOnlyList<SettingsSubPageViewModel> SubPages { get; } = [];
     [ObservableProperty]
     private WorkbenchCustomizationViewModel? _customization;
-    public ObservableCollection<SettingsCategoryViewModel> FilteredCategories { get; } = new();
     [ObservableProperty] private IReadOnlyList<BuiltInModuleViewModel> _builtInModules = Array.Empty<BuiltInModuleViewModel>();
     public void AttachBuiltInModules(IReadOnlyList<BuiltInModuleViewModel> modules) => BuiltInModules = modules;
     public event EventHandler? ReturnRequested;

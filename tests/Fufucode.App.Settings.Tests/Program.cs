@@ -132,6 +132,70 @@ try
     Check(demoteVm.Categories.Single(c => c.Id == "appearance").Tier == SettingsNavTier.Basic,
         "基础类条目忽略升降级命令");
 
+    // ================= 2b. 侧栏与偏好单一真源（重复条目回归） =================
+    // 以前接口另存一份 Categories，与 XAML 绑的 FilteredCategories 并立；
+    // 两边步调一乱，已收纳的功能就会同时出现在一级侧栏和「其他」页。
+    Check(ReferenceEquals(demoteVm.Categories, demoteVm.FilteredCategories),
+        "侧栏条目只有一份集合（Categories 与 FilteredCategories 同源）");
+
+    var eventRoot = Path.Combine(root, "store-events");
+    var eventStore = new SettingsNavPreferenceStore(eventRoot);
+    var changedEvents = 0;
+    eventStore.Changed += _ => changedEvents++;
+    eventStore.Save(new SettingsNavPreference { Demoted = ["terminal"] });
+    Check(changedEvents == 1, "保存偏好触发 Changed（侧栏据此重排）");
+    File.WriteAllText(Path.Combine(eventRoot, SettingsNavPreferenceStore.FileName),
+        """{"version":1,"promoted":[],"demoted":["browser"]}""");
+    Check(eventStore.Reload() && eventStore.Current.Demoted.SequenceEqual(new[] { "browser" }) && changedEvents == 2,
+        "重读发现外部改动时同步内存偏好并触发 Changed");
+    Check(!eventStore.Reload() && changedEvents == 2, "内容未变的重读不触发 Changed");
+
+    var externalRoot = Path.Combine(root, "vm-external");
+    Directory.CreateDirectory(externalRoot);
+    var externalNav = Path.Combine(externalRoot, SettingsNavPreferenceStore.FileName);
+    File.WriteAllText(externalNav, """{"version":1,"promoted":[],"demoted":["terminal"]}""");
+    var externalVm = new SettingsPageViewModel();
+    externalVm.AttachNavPreference(externalRoot);
+    Check(externalVm.FilteredCategories.All(c => c.Id != "terminal") &&
+          externalVm.OtherHubItems.Any(c => c.Id == "terminal"),
+        "外部设定的收纳在 Attach 后立即生效（一级侧栏不再列终端）");
+
+    // 运行中另一个实例/手工编辑改盘：进入设置页重读即自愈，不用重启应用。
+    File.WriteAllText(externalNav, """{"version":1,"promoted":[],"demoted":["terminal","browser"]}""");
+    externalVm.RefreshNavPreference();
+    Check(externalVm.FilteredCategories.All(c => c.Id is not ("terminal" or "browser")) &&
+          externalVm.OtherHubItems.Any(c => c.Id == "browser"),
+        "进入设置页重读偏好后新增的收纳立即生效");
+
+    // settings-nav.json 会被扫描器/备份/另一实例短暂独占：读不到时不能把侧栏弹回平铺。
+    using (var hold = new FileStream(externalNav, FileMode.Open, FileAccess.Read, FileShare.None))
+    {
+        externalVm.RefreshNavPreference();
+        Check(externalVm.FilteredCategories.All(c => c.Id is not ("terminal" or "browser")) &&
+              externalVm.OtherHubItems.Any(c => c.Id == "terminal"),
+            "偏好文件被占用时沿用上次成功的偏好，不把收纳条目弹回一级侧栏");
+        Check(externalVm.NavPreference.Demoted.Count == 2, "占用期间内存偏好保持完整");
+    }
+    externalVm.RefreshNavPreference();
+    Check(externalVm.FilteredCategories.All(c => c.Id is not ("terminal" or "browser")),
+        "占用解除后重读不改变已有收纳");
+
+    // 连进程启动时主文件就被占用：用上次成功的快照兜底，而不是把侧栏弹回平铺。
+    var lastGoodRoot = Path.Combine(root, "store-lastgood");
+    var lastGoodStore = new SettingsNavPreferenceStore(lastGoodRoot);
+    lastGoodStore.Save(new SettingsNavPreference { Demoted = ["terminal", "browser"] });
+    Check(File.Exists(Path.Combine(lastGoodRoot, SettingsNavPreferenceStore.LastGoodFileName)),
+        "成功读取/保存后写侧栏兜底快照");
+    using (var startupLock = new FileStream(Path.Combine(lastGoodRoot, SettingsNavPreferenceStore.FileName),
+               FileMode.Open, FileAccess.Read, FileShare.None))
+    {
+        var startupLocked = new SettingsNavPreferenceStore(lastGoodRoot);
+        Check(startupLocked.UsedLastGood && startupLocked.LastLoadError is not null,
+            "启动时主文件被占用会标记回退到兜底快照");
+        Check(startupLocked.Current.Demoted.SequenceEqual(new[] { "terminal", "browser" }),
+            "启动时主文件被占用也从兜底快照恢复收纳，不显示成全部一级");
+    }
+
     // ================= 3. 相关设置跳转命令流转 =================
     Check(SettingsRelatedSettings.For(null).Count == 0, "未知页面没有相关设置");
     var appearanceLinks = SettingsRelatedSettings.For("appearance");

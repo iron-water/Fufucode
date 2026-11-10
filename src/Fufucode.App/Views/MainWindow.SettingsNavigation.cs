@@ -46,6 +46,9 @@ public partial class MainWindow
             {
                 _settingsReturnPage = vm.CurrentPage;
                 _settingsReturnFocus = _overlayReturnFocus ?? FocusManager?.GetFocusedElement() as Control;
+                // 进入设置页即重读侧栏偏好：settings-nav.json 可能被另一实例或用户改过，
+                // 也可能上次读取被文件占用而沿用了旧值；不重读就会和「其他」页的实时偏好对不上。
+                vm.Settings.RefreshNavPreference();
             }
             NavigationProgress.IsVisible = true;
             await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
