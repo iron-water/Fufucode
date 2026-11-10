@@ -26,6 +26,7 @@ if (args.Contains("--crash-repro-only")) { await CrashReproTests.RunAsync(root, 
 if (args.Contains("--worktree-only")) { await ProjectForkTests.RunAsync(root, node, cli); return; }
 if (args.Contains("--adapter-stop-only")) { await AdapterStopTests.RunAsync(root, fake, dotnet); return; }
 if (args.Contains("--adoption-only")) { SessionAdoptionTests.Run(root); ReviewRegressionTests.Run(root); return; }
+if (args.Contains("--import-only")) { ClaudeImportTests.Run(root); return; }
 if (args.Contains("--review-fixes-only")) { ReviewRegressionTests.Run(root); return; }
 if (args.Contains("--nvx-only")) { NvxProtocolTests.Run(); return; }
 if (args.Contains("--settings-only")) { await SettingsAndDiagnosticsTests.RunSettingsAsync(root); return; }

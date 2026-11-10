@@ -438,6 +438,20 @@ public sealed class DesktopMetadataStore
         if (command.ExecuteNonQuery() != 1) throw new KeyNotFoundException(sessionId);
     }
 
+    /// <summary>
+    /// 回填会话的真实活动时间。导入外部历史时用转录自身的最后时间戳，
+    /// 而不是“导入这一刻”，否则一堆历史会话会挤在列表最前面冒充新会话。
+    /// </summary>
+    public void SetSessionLastOpened(string sessionId, DateTimeOffset opened)
+    {
+        using var connection = Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = "UPDATE sessions SET last_opened_utc=$opened WHERE id=$id";
+        command.Parameters.AddWithValue("$opened", opened.ToString("O"));
+        command.Parameters.AddWithValue("$id", sessionId);
+        if (command.ExecuteNonQuery() != 1) throw new KeyNotFoundException(sessionId);
+    }
+
     // Only SessionDeletion may remove metadata; it holds the session lease and validates its file first.
     internal void DeleteSession(SessionRecord expected)
     {

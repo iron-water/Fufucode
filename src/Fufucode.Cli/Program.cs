@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Fufucode.Core;
 using Fufucode.Core.Backend;
+using Fufucode.Core.Imports;
 using Fufucode.Core.Plugins;
 
 namespace Fufucode.Cli;
@@ -149,6 +150,8 @@ public static class Program
             case "sessions" when args.Count == 2 && args[0] == "delete":
                 await CliSessionCommands.DeleteAsync(layout, options.ProjectPath, args[1], options.Json, Console.Out);
                 return 0;
+            case "sessions" when args.Count >= 1 && args[0] == "import-claude":
+                return await ImportClaudeAsync(layout, options, args);
             case "settings":
                 await CliSettingsCommands.RunAsync(args, new AppSettingsStore(layout), Credentials(), options.Json, Console.Out, cancellationToken);
                 return 0;
@@ -211,6 +214,86 @@ public static class Program
         else foreach (var session in sessions)
             Console.Out.WriteLine($"{session.Id}  {BackendCapabilities.StorageId(session.Backend),-6}  {(session.Name ?? "(unnamed)")}  {session.LastOpened.ToLocalTime():g}{(session.WasActive ? "  [interrupted]" : "")}");
         return 0;
+    }
+
+    /// <summary>
+    /// 把 Claude Code 的历史会话导入本机 Fufucode 会话库。
+    /// 默认只扫描 <c>%USERPROFILE%\.claude\projects</c>；原始 jsonl 只读，重复执行幂等。
+    /// </summary>
+    private static async Task<int> ImportClaudeAsync(AppDataLayout layout, CliOptions options,
+        IReadOnlyList<string> args)
+    {
+        var sources = new List<string>();
+        var dryRun = false;
+        var includeSubagents = false;
+        var force = false;
+        var all = false;
+        for (var index = 1; index < args.Count; index++)
+        {
+            switch (args[index])
+            {
+                case "--from" when index + 1 < args.Count:
+                    sources.Add(args[++index]);
+                    break;
+                case "--dry-run":
+                    dryRun = true;
+                    break;
+                case "--include-subagents":
+                    includeSubagents = true;
+                    break;
+                case "--force":
+                    force = true;
+                    break;
+                case "--all":
+                    all = true;
+                    break;
+                default:
+                    throw new ArgumentException(
+                        "Usage: sessions import-claude [--from <dir>]... [--all] [--dry-run] [--include-subagents] [--force] [--project <path>] [--json].");
+            }
+        }
+
+        // 默认只收当前项目之下的历史；--from/--all 表示用户显式要别处的会话。
+        string? scope = null;
+        if (options.ProjectSpecified) scope = options.ProjectPath;
+        else if (!all && sources.Count == 0) scope = options.ProjectPath;
+        var importOptions = new ClaudeImportOptions(
+            SourceDirectories: sources.Count > 0 ? sources : null,
+            // 只有显式 --project 才把整批历史挂到同一个项目；默认项目目录不代表用户选择。
+            ProjectPath: options.ProjectSpecified ? options.ProjectPath : null,
+            DryRun: dryRun, IncludeSubagents: includeSubagents, Force: force, ScopePath: scope);
+        var metadata = new DesktopMetadataStore(layout);
+        var report = ClaudeCodeSessionImport.Run(layout, metadata, importOptions);
+        if (report.Entries.Count == 0)
+        {
+            if (options.Json) await Console.Out.WriteLineAsync(JsonSerializer.Serialize(new { entries = Array.Empty<object>() }));
+            else await Console.Out.WriteLineAsync("No Claude Code transcripts found.");
+            return 0;
+        }
+
+        if (options.Json)
+        {
+            await Console.Out.WriteLineAsync(JsonSerializer.Serialize(new
+            {
+                dryRun, imported = report.Imported, skipped = report.Skipped, failed = report.Failed,
+                entries = report.Entries.Select(entry => new
+                {
+                    transcript = entry.TranscriptPath, id = entry.SessionId, project = entry.ProjectPath,
+                    originalProject = entry.OriginalProjectPath, messages = entry.MessageCount,
+                    bytes = entry.Bytes, status = entry.Status, detail = entry.Detail
+                })
+            }));
+        }
+        else
+        {
+            foreach (var entry in report.Entries)
+                await Console.Out.WriteLineAsync(
+                    $"{entry.Status,-8} {entry.MessageCount,6} msg  {entry.SessionId ?? "-",-34}  {entry.ProjectPath ?? "-"}" +
+                    (entry.Detail is { Length: > 0 } detail ? $"  ({detail})" : ""));
+            await Console.Out.WriteLineAsync(
+                $"{(dryRun ? "[dry-run] " : "")}imported {report.Imported}, skipped {report.Skipped}, failed {report.Failed}.");
+        }
+        return report.Failed == 0 ? 0 : RuntimeError;
     }
 
     private static async Task<int> ThinkingCommandAsync(PersistentSession? active, CliOptions options, CancellationToken cancellationToken)
@@ -649,7 +732,9 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
     int? MaxIterations = null,
     string? ThinkingLevel = null,
     BackendId? Backend = null,
-    bool NewSession = false)
+    bool NewSession = false,
+    /// <summary>用户是否显式给了 --project；默认项目目录不能当成显式指定。</summary>
+    bool ProjectSpecified = false)
 {
     private static readonly HashSet<string> KnownCommands = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -669,6 +754,7 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
           fufucode backends list | use <id> [--json]
           fufucode open [path] [--session ID] [--backend ID]
           fufucode sessions list | show <id> [--live|--offline] | export <id> [--format md|json] [-o <path>] | rename <id> <name> | delete <id> [options]
+          fufucode sessions import-claude [--from <dir>]... [--all] [--dry-run] [--include-subagents] [--force] [options]
           fufucode models list | set <provider/modelId> | thinking [level] [options]
           fufucode settings get [key] | set <key> <value> [options]
           fufucode extensions list | enable <path> | disable <path> [options]
@@ -721,7 +807,7 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
         string? project = null, session = null, data = null, node = null, cli = null;
         string? modelOverride = null, permissionMode = null;
         int? maxIterations = null; string? thinkingLevel = null;
-        BackendId? backend = null; var newSession = false;
+        BackendId? backend = null; var newSession = false; var projectSpecified = false;
         var positional = new List<string>();
         for (var index = 0; index < args.Length; index++)
         {
@@ -730,7 +816,7 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
             {
                 case "--json": json = true; break;
                 case "--help" or "-h": help = true; break;
-                case "--project": project = RequireValue(args, ref index); break;
+                case "--project": project = RequireValue(args, ref index); projectSpecified = true; break;
                 case "--session": session = RequireValue(args, ref index); break;
                 case "--resume" or "-r":
                     if (index + 1 < args.Length && !args[index + 1].StartsWith('-'))
@@ -793,7 +879,7 @@ public sealed record CliOptions(string Command, IReadOnlyList<string> Arguments,
         return new CliOptions(command, commandArgs, json, help,
             Path.GetFullPath(project ?? Environment.CurrentDirectory), session, data, node, cli, literal,
             autoApprove, modelOverride, permissionMode, continueLast, maxIterations, thinkingLevel,
-            backend, newSession);
+            backend, newSession, projectSpecified);
     }
 
     private static BackendId ParseBackend(string value)
