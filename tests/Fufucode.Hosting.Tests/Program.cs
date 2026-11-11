@@ -62,6 +62,32 @@ var git = GitCliEvidence.Shared;
     Check((await other.AuditAsync("run-a")).Verdict == OwnerVerdict.ConfirmedFinished,
         "owner: another host can verify a finished outcome read-only");
     Check(executor.Runs.ListActive().Count == 0, "owner: a terminal run releases the thread");
+
+    // A terminal record includes the HEAD captured after the actual writer exited.
+    // Reusing its old PID must not strand every later dispatch in the same worktree.
+    var stale = DateTimeOffset.UtcNow.AddMinutes(-45);
+    SetOwner(scenario.Database, "run-a", 999_999, stale.ToUnixTimeMilliseconds(),
+        999_999, stale.ToUnixTimeMilliseconds());
+    var recycled = new RunReconciler(store, executor.Runs,
+        new FakeProbe(ProcessLiveness.Alive, DateTimeOffset.UtcNow), git, "other-host");
+    Check((await recycled.AuditAsync("run-a")).Verdict == OwnerVerdict.ConfirmedFinished,
+        "owner: a terminal exit attestation survives later PID reuse");
+    var blind = new RunReconciler(store, executor.Runs,
+        new FakeProbe(ProcessLiveness.Indeterminate), git, "other-host");
+    Check((await blind.AuditAsync("run-a")).Verdict == OwnerVerdict.Unverifiable,
+        "owner: a terminal record does not excuse an uninspectable owner");
+    var unidentified = new RunReconciler(store, executor.Runs,
+        new FakeProbe(ProcessLiveness.Alive), git, "other-host");
+    Check((await unidentified.AuditAsync("run-a")).Verdict == OwnerVerdict.Unverifiable,
+        "owner: missing observed start time cannot be treated as proven PID reuse");
+    var live = new RunReconciler(store, executor.Runs,
+        new FakeProbe(ProcessLiveness.Alive, stale), git, "other-host");
+    Check((await live.AuditAsync("run-a")).Verdict == OwnerVerdict.ActiveElsewhere,
+        "owner: a terminal record cannot override a matching live writer");
+    SetOwner(scenario.Database, "run-a", 999_999, stale.ToUnixTimeMilliseconds(),
+        999_999, stale.ToUnixTimeMilliseconds(), "Unknown");
+    Check((await recycled.AuditAsync("run-a")).Verdict == OwnerVerdict.Unverifiable,
+        "owner: PID reuse cannot settle an Unknown run even with a prior HEAD");
 }
 
 // --------------------------------------------- 1b. claimed run cannot stay Dispatching when evidence setup fails
@@ -183,6 +209,12 @@ var git = GitCliEvidence.Shared;
         "reuse: an unverifiable identity blocks resolution of an Unknown run");
     Check(GetStatus(scenario.Database, "run-reuse") == "Unknown",
         "reuse: a blocked resolution changes nothing in the journal");
+    SetOwner(scenario.Database, "run-reuse", recycled, stale.ToUnixTimeMilliseconds(), recycled,
+        stale.ToUnixTimeMilliseconds(), "Completed");
+    Check((await mismatched.AuditAsync("run-reuse")).Verdict == OwnerVerdict.Unverifiable,
+        "reuse: a terminal label without an exit attestation does not prove the writer stopped");
+    SetOwner(scenario.Database, "run-reuse", recycled, stale.ToUnixTimeMilliseconds(), recycled,
+        stale.ToUnixTimeMilliseconds(), "Unknown");
     var blind = new RunReconciler(store, runs, new FakeProbe(ProcessLiveness.Indeterminate), git,
         "host-A@1");
     Check((await blind.AuditAsync("run-reuse")).Verdict == OwnerVerdict.Unverifiable,

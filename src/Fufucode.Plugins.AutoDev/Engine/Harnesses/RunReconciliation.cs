@@ -17,7 +17,7 @@ public enum OwnerVerdict
     ActiveElsewhere,
     /// <summary>The journaled supervisor and writer are both provably gone: safe to settle.</summary>
     ConfirmedFinished,
-    /// <summary>No identity recorded, pid reused, or liveness unverifiable: never take over or settle.</summary>
+    /// <summary>No identity recorded, unresolved PID reuse, or unverifiable liveness: never take over or settle.</summary>
     Unverifiable
 }
 
@@ -82,12 +82,18 @@ public sealed class RunReconciler(AutomationStore store, HarnessRunStore runs, I
                 run.SupervisorPid, run.SupervisorStartUtc, run.WriterPid, run.WriterStartUtc, false,
                 survivors, run.Worktree, recordedHead, observedHead,
                 "A child of the journaled writer is still alive.", run.ThreadId);
-        if (writer.Unverifiable || supervisor.Unverifiable)
+        // A terminal outcome with a settle HEAD attests that this run's writer exited.
+        // Later PID reuse cannot revoke that evidence. Missing/unreadable identities, a
+        // matching live writer and surviving children still block, as do all Unknown runs.
+        var terminal = run.Status is HarnessRunStatus.Completed or HarnessRunStatus.Failed
+            or HarnessRunStatus.Interrupted;
+        var attestedExit = terminal && run.SettleHead is { } settleHead && GitCliEvidence.IsSha(settleHead);
+        if ((writer.Unverifiable && !(attestedExit && writer.Reused)) ||
+            (supervisor.Unverifiable && !(attestedExit && supervisor.Reused)))
             return new(runId, run.Status, OwnerVerdict.Unverifiable, run.HostId, run.SupervisorPid,
                 run.SupervisorStartUtc, run.WriterPid, run.WriterStartUtc, false, [], run.Worktree,
                 recordedHead, observedHead, writer.Reason + " " + supervisor.Reason, run.ThreadId);
-        if (run.Status is HarnessRunStatus.Completed or HarnessRunStatus.Failed
-            or HarnessRunStatus.Interrupted)
+        if (terminal)
             // Nothing can write any more and the outcome is already journaled, so any host may
             // verify this read-only. Ownership only matters while the outcome is still open.
             return new(runId, run.Status, OwnerVerdict.ConfirmedFinished, run.HostId,
@@ -112,7 +118,7 @@ public sealed class RunReconciler(AutomationStore store, HarnessRunStore runs, I
             run.ThreadId);
     }
 
-    private readonly record struct Inspection(bool Alive, bool Unverifiable, string Reason);
+    private readonly record struct Inspection(bool Alive, bool Unverifiable, string Reason, bool Reused = false);
 
     private static Inspection Inspect(int? pid, long? startMillis, IProcessProbe probe)
     {
@@ -123,9 +129,10 @@ public sealed class RunReconciler(AutomationStore store, HarnessRunStore runs, I
         {
             ProcessLiveness.Indeterminate => new(false, true, $"Process {id} cannot be inspected."),
             ProcessLiveness.Dead => new(false, false, $"Process {id} is gone."),
+            _ when facts.StartUtc is null => new(false, true, $"Process {id} has no observable start time."),
             _ => facts.SameIdentityAs(DateTimeOffset.FromUnixTimeMilliseconds(millis))
                 ? new(true, false, $"Process {id} is alive with the recorded start time.")
-                : new(false, true, $"Pid {id} exists but its start time differs: the pid was reused.")
+                : new(false, true, $"Pid {id} exists but its start time differs: the pid was reused.", Reused: true)
         };
     }
 

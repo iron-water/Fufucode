@@ -15,7 +15,9 @@ public enum ControlAction { DefinePackage, ApprovePackage, SetMode }
 /// </summary>
 public static class ControlExecutionMode
 {
-    public static bool AllowsDispatch(DevelopmentMode mode) => mode != DevelopmentMode.Manual;
+    public static bool AllowsDispatch(DevelopmentMode mode) =>
+        mode is DevelopmentMode.SemiAutomatic or DevelopmentMode.Automatic;
+
     public static bool AllowsDispatch(string persistedMode) =>
         Enum.TryParse<DevelopmentMode>(persistedMode, out var mode) && AllowsDispatch(mode);
 }

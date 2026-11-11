@@ -65,6 +65,12 @@ var path = Path.Combine(root, "project.db");
 var count = 0;
 void Check(bool value, string label)
 { if (!value) throw new Exception("FAIL " + label); count++; Console.WriteLine("PASS " + label); }
+Check(ControlExecutionMode.AllowsDispatch(DevelopmentMode.SemiAutomatic) &&
+    ControlExecutionMode.AllowsDispatch(DevelopmentMode.Automatic), "defined autonomous modes permit dispatch");
+foreach (var mode in new[] { DevelopmentMode.Manual, (DevelopmentMode)99, (DevelopmentMode)(-1) })
+    Check(!ControlExecutionMode.AllowsDispatch(mode), $"non-autonomous or undefined mode {mode} refuses dispatch");
+foreach (var mode in new[] { "Manual", "99", "-1", "", "invalid" })
+    Check(!ControlExecutionMode.AllowsDispatch(mode), $"invalid persisted mode '{mode}' refuses dispatch");
 void Refused<T>(Action action, string label) where T : Exception
 {
     try { action(); } catch (T) { Check(true, label); return; }
