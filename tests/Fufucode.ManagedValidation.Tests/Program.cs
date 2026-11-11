@@ -21,7 +21,7 @@ if (args.Length > 0 && args[0] == "fixture")
         default: Console.Write("hello with spaces & ;"); return 0;
     }
 }
-var root = Path.Combine("C:/tmp/work/2026-11-05-graph-report/validation", "fixture-" + Guid.NewGuid().ToString("N"));
+var root = Path.Combine(Environment.GetEnvironmentVariable("FUFUCODE_TEST_ROOT") ?? Path.GetTempPath(), "fufucode-managed-val-" + Guid.NewGuid().ToString("N"));
 var tree = Path.Combine(root, "tree");
 Directory.CreateDirectory(tree);
 File.WriteAllText(Path.Combine(tree, "candidate.txt"), "original");

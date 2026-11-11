@@ -44,6 +44,7 @@ async Task<(string Repo, string Sandbox)> Fixture()
     await Git(repo, "config", "user.email", "fixture@example.invalid");
     await Git(repo, "config", "user.name", "Managed Workspace Fixture");
     await Git(repo, "config", "core.autocrlf", "false");
+    await Git(repo, "config", "core.longpaths", "true");
     await File.WriteAllTextAsync(Path.Combine(repo, "tracked.txt"), "original\n");
     await File.WriteAllTextAsync(Path.Combine(repo, "delete.txt"), "delete\n");
     await File.WriteAllBytesAsync(Path.Combine(repo, "binary.bin"), [0, 1, 2, 3, 0, 255]);
@@ -78,7 +79,7 @@ await Check("dirty tracked, staged and untracked baselines refused", async () =>
     Assert((await ManagedDevelopmentWorkspace.CreateAsync(repo, sandbox)).Status == ManagedWorkspaceStatus.BaselineDirty, "Untracked dirty accepted.");
     Assert(!Directory.Exists(sandbox), "Dirty check created sandbox.");
 });
-await Check("binary, deletion, untracked and committed diff; private indexes; explicit integration", async () =>
+await Check("binary, deletion and untracked capture; private indexes; direct integration stays disabled", async () =>
 {
     var (repo, sandbox) = await Fixture();
     var workspace = await Create(repo, sandbox, "candidate/test");
@@ -98,37 +99,18 @@ await Check("binary, deletion, untracked and committed diff; private indexes; ex
     Assert(string.IsNullOrEmpty(await Git(repo, "status", "--porcelain")), "User main tree polluted.");
     await Reject(() => workspace.IntegrateAsync(false, manifest.PatchHash));
     await Reject(() => workspace.IntegrateAsync(true, "not approved hash"));
-    manifest = await workspace.CaptureCandidateAsync();
-    await workspace.IntegrateAsync(true, manifest.PatchHash);
-    Assert(await File.ReadAllTextAsync(Path.Combine(repo, "tracked.txt")) == "candidate\n", "Tracked integration failed.");
-    Assert((await File.ReadAllBytesAsync(Path.Combine(repo, "binary.bin"))).SequenceEqual(new byte[] { 0, 255, 42, 0, 100 }), "Binary integration failed.");
-    Assert((await File.ReadAllBytesAsync(Path.Combine(repo, "new binary.bin"))).SequenceEqual(new byte[] { 0, 3, 4, 255 }), "New binary integration failed.");
-    Assert(!File.Exists(Path.Combine(repo, "delete.txt")), "Deletion integration failed.");
-    Assert(string.IsNullOrEmpty(await Git(repo, "diff", "--cached")), "Integration staged changes.");
-    Assert((await Git(repo, "rev-parse", "HEAD")).Trim() == manifest.BaseHead, "Integration committed.");
+    // Integration now requires ManagedGitIntegration's prepare/validate/commit/publish
+    // transaction, covered by Core.Automation.Tests; this legacy entry must never apply.
+    await Reject(() => workspace.IntegrateAsync(true, manifest.PatchHash));
+    Assert(await File.ReadAllTextAsync(Path.Combine(repo, "tracked.txt")) == "original\n", "Legacy entry changed user text.");
+    Assert((await File.ReadAllBytesAsync(Path.Combine(repo, "binary.bin"))).SequenceEqual(new byte[] { 0, 1, 2, 3, 0, 255 }), "Legacy entry changed user binary.");
+    Assert(File.Exists(Path.Combine(repo, "delete.txt")) && !File.Exists(Path.Combine(repo, "new binary.bin")), "Legacy entry applied candidate paths.");
+    Assert(string.IsNullOrEmpty(await Git(repo, "status", "--porcelain")), "Legacy entry changed the user index or tree.");
+    Assert((await Git(repo, "rev-parse", "HEAD")).Trim() == manifest.BaseHead, "Legacy entry changed HEAD.");
     await Reject(() => workspace.RemoveAsync(true));
     Assert(Directory.Exists(tree), "Dirty tree lost.");
     var disk = JsonSerializer.Deserialize<ManagedWorkspaceManifest>(await File.ReadAllTextAsync(workspace.ManifestPath))!;
     Assert(disk.Status == ManagedWorkspaceStatus.Failed && File.Exists(disk.PatchPath), "Failure/candidate not preserved.");
-});
-await Check("HEAD/dirty/integrity guards preserve candidate", async () =>
-{
-    var (repo, sandbox) = await Fixture();
-    var workspace = await Create(repo, sandbox);
-    await File.WriteAllTextAsync(Path.Combine(workspace.Manifest.WorktreePath, "tracked.txt"), "candidate\n");
-    var manifest = await workspace.CaptureCandidateAsync();
-    await File.WriteAllTextAsync(Path.Combine(repo, "user.txt"), "user\n");
-    await Reject(() => workspace.IntegrateAsync(true, manifest.PatchHash));
-    Assert(await File.ReadAllTextAsync(Path.Combine(repo, "tracked.txt")) == "original\n", "Dirty target modified.");
-    await Git(repo, "add", "--", "user.txt");
-    await Git(repo, "commit", "-m", "Moved target");
-    manifest = await workspace.CaptureCandidateAsync();
-    await Reject(() => workspace.IntegrateAsync(true, manifest.PatchHash));
-    Assert(File.Exists(manifest.PatchPath), "HEAD refusal lost patch.");
-    manifest = await workspace.CaptureCandidateAsync();
-    await File.AppendAllTextAsync(manifest.PatchPath, "tampered");
-    await Reject(() => workspace.IntegrateAsync(true, manifest.PatchHash));
-    Assert(Directory.Exists(workspace.Manifest.WorktreePath), "Integrity refusal lost tree.");
 });
 await Check("cancellation retains candidate and worktree", async () =>
 {
@@ -162,7 +144,7 @@ await Check("safe cleanup, detached HEAD, nested-root and sandbox refusal", asyn
     Assert((await ManagedDevelopmentWorkspace.CreateAsync(nested, sandbox)).Status == ManagedWorkspaceStatus.NeedsRepositoryAuthorization, "Subdirectory treated as root.");
     await Reject(() => ManagedDevelopmentWorkspace.CreateAsync(repo, Path.Combine(repo, "sandbox")));
 });
-await Check("restart load preserves identity and requires fresh integration approval", async () =>
+await Check("restart load preserves candidate identity without direct publication", async () =>
 {
     var (repo, sandbox) = await Fixture();
     var original = await Create(repo, sandbox, "restart/candidate");
@@ -173,9 +155,10 @@ await Check("restart load preserves identity and requires fresh integration appr
     var loaded = await ManagedDevelopmentWorkspace.LoadAsync(ready.ManifestPath);
     Assert(loaded.Manifest.PatchHash == candidate.PatchHash, "Candidate identity changed.");
     await Reject(() => loaded.IntegrateAsync(false, candidate.PatchHash));
-    await loaded.IntegrateAsync(true, candidate.PatchHash);
-    Assert(await File.ReadAllTextAsync(Path.Combine(repo, "tracked.txt")) == "restart candidate\n", "Restart integration failed.");
-    Assert((await ManagedDevelopmentWorkspace.LoadAsync(loaded.ManifestPath)).Manifest.Status == ManagedWorkspaceStatus.Integrated, "Integrated reload failed.");
+    await Reject(() => loaded.IntegrateAsync(true, candidate.PatchHash));
+    Assert(await File.ReadAllTextAsync(Path.Combine(repo, "tracked.txt")) == "original\n", "Restart published candidate to user tree.");
+    Assert(await File.ReadAllTextAsync(Path.Combine(loaded.Manifest.WorktreePath, "tracked.txt")) == "restart candidate\n", "Restart lost candidate content.");
+    Assert((await ManagedDevelopmentWorkspace.LoadAsync(loaded.ManifestPath)).Manifest.Status == ManagedWorkspaceStatus.CandidateReady, "Legacy refusal changed candidate state.");
 });
 await Check("load rejects tampered paths, base, repository, metadata and patch without rewriting", async () =>
 {

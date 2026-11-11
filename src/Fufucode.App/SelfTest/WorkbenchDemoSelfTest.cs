@@ -482,12 +482,6 @@ internal static class WorkbenchDemoSelfTest
                 vm = (MainViewModel)real.DataContext!;
                 Check(real.CurrentSessionId == parentBeforeCancel && vm.Timeline.Entries.OfType<UserMessageViewModel>().Any(u => u.Text.Contains("local acceptance marker")),
                     "Tabs: selecting the previous overview row restores its real history");
-                void ClickNative(Button button)
-                {
-                    real.UpdateLayout(); AvaloniaHeadlessPlatform.ForceRenderTimerTick();
-                    var point = button.TranslatePoint(new Point(button.Bounds.Width / 2, button.Bounds.Height / 2), real)!.Value;
-                    real.MouseDown(point, Avalonia.Input.MouseButton.Left); real.MouseUp(point, Avalonia.Input.MouseButton.Left);
-                }
                 await using (var temporary = await RealSessionHost.OpenAsync(temporaryOptions, CancellationToken.None))
                 {
                     Check(temporary.Current.Session.Id != real.CurrentSessionId && temporary.Manager.Settings.Current.SelectedModel == "workbench-local/test-model",

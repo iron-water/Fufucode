@@ -39,7 +39,8 @@ internal static class Program
         _ = typeof(Fufucode.App.MainWindow).Assembly;
         _ = typeof(TerminalScreenControl).Assembly;
         AppBuilder.Configure<SmokeApp>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = true })
+            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+            .UseSkia().WithInterFont().WithAppTypography()
             .SetupWithoutStarting();
         try
         {
@@ -918,6 +919,7 @@ internal static class Program
     {
         public override void Initialize()
         {
+            AppTypography.Initialize();
             Styles.Add(new Avalonia.Themes.Fluent.FluentTheme());
             Styles.Add(new StyleInclude(new Uri("avares://Fufucode.App/"))
             {

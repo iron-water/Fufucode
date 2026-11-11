@@ -59,7 +59,8 @@ internal static class Program
                 {
                     shell.Show();
                     var status = shell.CustomizationForTesting.StatusOf("automation");
-                    var builtIn = status.Detail.Contains("内建") && status.PageId != "marketplace" &&
+                    var builtIn = shell.ActionsForTesting.Contains("graph") &&
+                        shell.ActionsForTesting.Contains("workspace.mode") && status.PageId != "marketplace" &&
                         PluginMarketplaceCatalog.Find("automation.auto-dev") is null &&
                         !shell.PageAvailableForTesting("automation");
                     Console.WriteLine(builtIn

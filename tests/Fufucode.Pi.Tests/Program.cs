@@ -1,9 +1,12 @@
+using System.Reflection;
 using Fufucode.Core;
 using Fufucode.Pi;
 
 var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
-var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin/Debug/net10.0/Fufucode.FakePi.dll");
+var config = typeof(Program).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
+var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin", config, "net10.0/Fufucode.FakePi.dll");
 var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet/dotnet.exe");
+var isOffline = args.Contains("--offline") || Environment.GetEnvironmentVariable("FUFUCODE_OFFLINE_TEST") == "1";
 // 统一工具链模型：系统已有 Pi 时用系统安装，没有才用插件随包的 runtime/。
 var systemNode = Environment.GetEnvironmentVariable("FUFUCODE_PI_NODE")
     ?? Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe");
@@ -100,6 +103,11 @@ try
     Check(unobserved == 0, "concurrent shutdown leaves no unobserved waiter faults");
 }
 finally { TaskScheduler.UnobservedTaskException -= OnUnobserved; }
+if (isOffline)
+{
+    Console.WriteLine("SKIP: --offline 模式，跳过 real Pi node smoke");
+    return 0;
+}
 
 var cli = systemCli;
 var work = Path.Combine(root, "tmp", "real-pi-smoke-" + Guid.NewGuid().ToString("N"));

@@ -5,7 +5,7 @@ using Fufucode.Core;
 using Fufucode.Core.Automation;
 using Fufucode.Plugins.AutoDev.Graph;
 
-var root = Path.Combine("C:/tmp/work/2026-11-08-autodev-core", "legacy-host-tests", Guid.NewGuid().ToString("N"));
+var root = Path.Combine(Environment.GetEnvironmentVariable("FUFUCODE_TEST_ROOT") ?? Path.GetTempPath(), "fufucode-legacy-host-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
 var repo = Path.Combine(root, "repo"); Directory.CreateDirectory(repo);
 async Task Git(params string[] args)

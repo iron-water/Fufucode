@@ -11,7 +11,8 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog | yes |
 | `src/Fufucode.App` | Avalonia UI shell | yes |
 | `src/Fufucode.Cli` | Headless CLI | yes |
-| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, cron, auto-dev, skins) | yes |
+| `src/Fufucode.AutoDev` | Built-in automated development domain and execution services | yes |
+| `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, cron, skins); legacy AutoDev compatibility UI | yes |
 | Backend plugin projects | Protocol adapters compiled by their owning plugins; check the project files before moving shared sources | yes |
 | `tools/` | Native launcher and CLI forwarder | yes |
 | `scripts/packaging/` | Package, installer, toolchain and runtime packaging | yes |
@@ -20,7 +21,6 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | Mobile / desktop pet | Moved outside the active solution; historical paths are not build targets | no |
 | `assets/` | Product visual assets | yes |
 | `extensions/` | Optional extension payloads | yes |
-| `TestApp/` | Legacy initial Avalonia scaffold; not a product entry; build output ignored | source only |
 | `labs/` | Historical packaging experiments and logs | yes |
 | `out/` | Generated build/package output; not a source of truth | ignored |
 | `output/` | Generated screenshot output; use `out/evidence` instead | ignored |
@@ -29,6 +29,18 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `tmp/` | Test artifacts; safe to clean | ignored |
 
 ## Requirements
+
+### Offline regression checks
+
+Most tests are executable harnesses, not `dotnet test` projects. Run the solution's
+offline suites with `pwsh scripts/test-offline.ps1`; use `-NoBuild` only after a
+matching Debug/Release build, or `-Suite Fufucode.Security.Tests` for one suite.
+The runner records per-suite exit codes, timeouts and skipped checks under `tmp/`.
+Live model/project probes are excluded; fake child processes, temporary Git
+repositories and loopback HTTP servers still run. It does not validate native
+desktop interaction or installed-package behavior.
+
+### Build prerequisites
 
 - Windows 10+ (x64)
 - .NET 10 SDK to build. End users need nothing with the self-contained installer; the slim installer requires the **.NET 10 Runtime** (`Microsoft.NETCore.App 10.x`).

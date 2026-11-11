@@ -1,3 +1,4 @@
+using System.Reflection;
 using Fufucode.App.Abstractions;
 using Fufucode.Claude;
 
@@ -12,7 +13,8 @@ internal static class ClaudeSessionTests
     public static async Task RunAsync(Checks checks, string root)
     {
         var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe");
-        var fake = Path.Combine(root, "tests/Fufucode.FakeClaude/bin/Debug/net10.0/Fufucode.FakeClaude.dll");
+        var config = typeof(ClaudeSessionTests).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
+        var fake = Path.Combine(root, "tests/Fufucode.FakeClaude/bin", config, "net10.0/Fufucode.FakeClaude.dll");
         checks.Check(File.Exists(fake), "假 CLI 夹具已构建");
         var scratch = Path.Combine(Path.GetTempPath(), "fufucode-claude-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(scratch);

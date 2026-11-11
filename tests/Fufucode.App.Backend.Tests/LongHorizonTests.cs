@@ -231,7 +231,8 @@ internal static class LongHorizonTests
             new(PureAgentRole.User, "这是一个很长的任务。"),
         };
         for (var i = 0; i < 8; i++)
-            history.Add(new PureAgentMessage(PureAgentRole.Assistant, $"第 {i} 步输出。"));
+            // Overflow recovery requires an actual reduction after summary/ledger insertion.
+            history.Add(new PureAgentMessage(PureAgentRole.Assistant, $"第 {i} 步输出。" + new string('x', 2_000)));
         engine.RestoreHistory(history);
 
         var result = await engine.RunTurnAsync(new PureModelRequest(

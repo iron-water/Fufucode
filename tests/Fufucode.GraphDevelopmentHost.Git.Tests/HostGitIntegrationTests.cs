@@ -8,7 +8,9 @@ using Fufucode.Plugins.AutoDev.Graph;
 
 var root = Path.Combine(Environment.GetEnvironmentVariable("FUFUCODE_GIT_TEST_ROOT") ?? Path.Combine(AppContext.BaseDirectory, "evidence"), "host-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(root);
-var dotnet = OperatingSystem.IsWindows() ? "C:/Program Files/dotnet/dotnet.exe" : "/usr/bin/dotnet";
+var dotnet = Environment.GetEnvironmentVariable("DOTNET_HOST_PATH") ?? (OperatingSystem.IsWindows()
+    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet", "dotnet.exe")
+    : "/usr/bin/dotnet");
 int assertions = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); assertions++; Console.WriteLine("PASS " + name); }
 async Task Reject(Func<Task> work, string name)

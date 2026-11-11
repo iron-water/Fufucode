@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Reflection;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Pi;
@@ -6,10 +7,12 @@ using Fufucode.Pi;
 var root = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "../../../../../"));
 // 本测试直接构造 PersistentSessionManager，不经过插件管理；按生产同一条约定显式登记后端工厂。
 BackendPluginLoader.RegisterRpcClientFactory(BackendId.Pi, spec => new PiRpcClientFactory(spec));
-var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin/Debug/net10.0/Fufucode.FakePi.dll");
+var config = typeof(Program).Assembly.GetCustomAttribute<AssemblyConfigurationAttribute>()?.Configuration ?? "Debug";
+var fake = Path.Combine(root, "tests/Fufucode.FakePi/bin", config, "net10.0/Fufucode.FakePi.dll");
 var dotnet = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "dotnet/dotnet.exe");
 var node = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node.exe");
 var cli = Path.Combine(root, "src/Fufucode.Plugins.Pi/runtime/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js");
+var isOffline = args.Contains("--offline") || Environment.GetEnvironmentVariable("FUFUCODE_OFFLINE_TEST") == "1";
 if (args.Contains("--d1-only")) { await D1BackendTests.RunAsync(root); return; }
 if (args.Contains("--claude-only")) { await ClaudeBackendIntegrationTests.RunAsync(root); return; }
 if (args.Contains("--codex-dsh-only")) { await CodexDshIntegrationTests.RunAsync(root); return; }
@@ -272,7 +275,7 @@ await UserExtensionTests.RunFakeAsync(root, fake, dotnet);
 await SettingsAndDiagnosticsTests.RunAsync(root, fake, dotnet);
 await ExtensionUiTests.RunAsync(root, fake, dotnet);
 
-if (File.Exists(node) && File.Exists(cli))
+if (!isOffline && File.Exists(node) && File.Exists(cli))
 {
     await ExtensionUiTests.RunRealAsync(root, node, cli);
     await BridgeIntegrationTests.RunAsync(root, node, cli);
@@ -319,6 +322,10 @@ await using (var session = PiSessions.Coordinator(new PiRpcOptions(node,
         }
     }
 }
+}
+else if (isOffline)
+{
+    Console.WriteLine("SKIP: --offline 模式，跳过 real Pi node/bridge 套件");
 }
 else
 {

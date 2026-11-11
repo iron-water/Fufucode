@@ -54,18 +54,23 @@ class Checks(unittest.TestCase):
             second.mutate('apply', dict(command, package=dict(command['package'], title='变更')))
         self.assertEqual(second.snapshot(), state)
 
-    def test_stale_and_auto_rejected_without_execution(self):
+    def test_stale_rejected_and_mode_change_does_not_execute_unapproved_package(self):
         self.client.mutate('apply', self.define())
         stale = dict(commandId='stale', expectedRevision=0, decidedBy='human-fixture',
                      action='ApprovePackage', packageId='A', expectedPackageVersion=1)
         with self.assertRaises(ControlError):
             self.client.mutate('apply', stale)
-        with self.assertRaises(ControlError):
-            self.client.mutate('apply', dict(commandId='auto', expectedRevision=1,
-                                            decidedBy='human-fixture', action='SetMode', mode='Automatic'))
+        # Automatic is supported by ControlModels/MaterializeReadyIntents. Selecting
+        # it does not approve this package or create a runtime task on its own.
+        self.client.mutate('apply', dict(commandId='auto', expectedRevision=1,
+                                        decidedBy='human-fixture', action='SetMode', mode='Automatic'))
         current = self.client.snapshot()
-        self.assertEqual(current['inbox']['revision'], 1)
+        self.assertEqual(current['inbox']['revision'], 2)
+        self.assertEqual(current['state']['control']['mode'], 'Automatic')
         self.assertEqual(current['state']['control']['intents'], [])
+        import sqlite3
+        with closing(sqlite3.connect(self.database)) as connection:
+            self.assertEqual(connection.execute('select count(*) from tasks').fetchone()[0], 0)
 
     def test_approval_is_not_execution_and_semi_creates_only_intent(self):
         self.client.mutate('apply', self.define())
