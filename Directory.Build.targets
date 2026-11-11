@@ -1,0 +1,10 @@
+<Project>
+  <!-- Keep the hot-reload runtime available, with one registry generator in the App host. -->
+  <Target Name="KeepHotReloadGeneratorInHost" BeforeTargets="CoreCompile"
+          Condition="'$(MSBuildProjectName)' != 'Fufucode.App' and $([System.String]::Copy('$(MSBuildProjectName)').StartsWith('Fufucode.'))">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)"
+                Condition="'%(Analyzer.Filename)' == 'AvaloniaUI.DiagnosticsSupport.HotReload.Generator'" />
+    </ItemGroup>
+  </Target>
+</Project>

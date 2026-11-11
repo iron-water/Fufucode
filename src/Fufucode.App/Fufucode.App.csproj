@@ -99,7 +99,7 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <!-- E1 内置浏览器：只用 Microsoft.Web.WebView2 的 Core（CoreWebView2Controller + 父窗口 HWND 宿主），
          不引用 WPF/WinForms 宿主控件，因此目标框架仍是 net10.0，无需切到 net10.0-windows。 -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="$(WebView2Version)" PrivateAssets="build;buildTransitive;analyzers" />
   </ItemGroup>
 
   <!--
@@ -138,7 +138,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition="'$(EnableDevTooling)' == 'true' and '$(Configuration)' == 'Debug'">
-    <PackageReference Include="AvaloniaUI.DiagnosticsSupport.HotReload" Version="1.0.1" PrivateAssets="all" />
+    <PackageReference Include="AvaloniaUI.DiagnosticsSupport.HotReload" Version="1.0.1" PrivateAssets="build;buildTransitive;analyzers" />
   </ItemGroup>
 
   <ItemGroup>
