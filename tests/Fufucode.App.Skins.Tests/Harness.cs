@@ -80,8 +80,6 @@ internal sealed class Probe
         _ => null,
     };
 
-    public CornerRadius ResolvedCorner(string key) => Resolved(key) is CornerRadius radius ? radius : default;
-
     /// <summary>选中 ListBoxItem 的模板 ContentPresenter（选择态实际渲染面）。</summary>
     public ContentPresenter? SelectedListPresenter() =>
         ListBox.GetVisualDescendants().OfType<ListBoxItem>()

@@ -70,8 +70,6 @@ internal sealed class Probe
         _ => null,
     };
 
-    public CornerRadius ResolvedCorner(string key) => Resolved(key) is CornerRadius radius ? radius : default;
-
     public static Probe Create(double width, double height)
     {
         var title = new TextBlock { Text = "Fufucode LiquidGlass 工装", Classes = { "subtitle" } };

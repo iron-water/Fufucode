@@ -52,12 +52,11 @@ public sealed class DshSessionFactory : IBackendSessionFactory
         var chat = new DshChatSession(
             request.ExecutablePath, request.ProjectPath, request.PersistFilePath,
             request.ResumeSessionId);
-        var coordinator = new DshSessionCoordinator(chat, settings: request.Settings,
-            diagnosticLog: request.DiagnosticLog);
+        var coordinator = new DshSessionCoordinator(chat);
         await coordinator.StartAsync(cancellationToken).ConfigureAwait(false);
         if (request.SessionIdChanged is not null) chat.SessionIdChanged += id => request.SessionIdChanged(id);
 
-        var messages = DshSessionHistory.Load(request.PersistFilePath);
+        var messages = CliSessionHistory.Load(request.PersistFilePath);
         chat.RestoreHistory(messages);
         var interrupted = request.WasActive ||
             (messages.Count > 0 && messages[^1].Role == PureAgentRole.User);

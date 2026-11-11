@@ -4,21 +4,17 @@ using System.Threading.Tasks;
 
 namespace Fufucode.App.Abstractions;
 
-/// <summary>
-/// 聊天会话契约：发送、停止与事件流。这是轨道 C 外壳与轨道 A 的 Core（真实 Pi 适配）之间的对接点。
-/// 本接口已冻结（见 docs/decisions.md [轨道C] 条目），改动需 A、C 双方同步。
-/// </summary>
-/// <remarks>
-/// 线程约定：<see cref="Event"/> 可在任意线程引发（真实实现通常在 RPC 读取泵线程上引发）；
-/// 订阅者自行封送到 UI 线程，接口本身不依赖任何 UI 框架。
-/// <see cref="SendAsync"/> 在请求被接受时完成（对应 prompt 被接收或处理），不代表 Agent 运行结束。
-/// </remarks>
 /// <summary>可选能力：重新附着视图时恢复待发队列（含插话），不依赖下一次变化事件。</summary>
 public interface IQueuedChatSession
 {
     SessionEvent.QueueChanged PendingQueue { get; }
 }
 
+/// <summary>后端无关的发送、停止与消息事件契约。</summary>
+/// <remarks>
+/// Event 可在任意线程引发，订阅者负责切换到 UI 线程。
+/// SendAsync 在请求被接受时完成，不代表 Agent 运行结束。
+/// </remarks>
 public interface IChatSession
 {
     /// <summary>连接状态（计划 §7.1）。</summary>

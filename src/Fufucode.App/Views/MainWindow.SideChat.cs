@@ -128,7 +128,7 @@ public partial class MainWindow
         vm.Input.IdentityContext = _vm?.Input.IdentityContext ?? "";
         vm.Input.DraftText = _host?.Manager.Metadata.GetDraft(session.Session.Id) ?? "";
         RestoreGraphDraft(vm.Input, session.Session.Id);
-        vm.Timeline.LoadHistory(HistoryMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel));
+        vm.Timeline.LoadHistory(MessageBlockMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel));
         _sideChatPage.ApplyAppearance(_customization.Current);
         if (_host is { } host)
             vm.Extensions.AttachRealSession(new ExtensionCatalog(session.Coordinator, session.Project.Path, host.AgentDirectory), session.Chat,

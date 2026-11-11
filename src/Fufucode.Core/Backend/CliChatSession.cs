@@ -11,10 +11,9 @@ using Fufucode.App.Abstractions;
 namespace Fufucode.Core.Backend;
 
 /// <summary>
-/// Codex 官方 CLI 的协议适配会话：把 `codex exec --json` 输出的事件流
-/// 规范化为统一的 IChatSession 契约与 SessionEvent 事件，并维护本地历史与 --resume 续接。
+/// 外部 CLI 会话的进程、历史与事件生命周期。协议参数和 JSON 解释由后端插件提供。
 /// </summary>
-public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
+public abstract class CliChatSession : IChatSession, IBackendChatSession, IExtensionUiSession, IPresentationProfiled, IAsyncDisposable, IDisposable
 {
     private readonly string _executablePath;
     private readonly string _workingDirectory;
@@ -22,7 +21,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
     private readonly string? _model;
     private readonly object _gate = new();
     private readonly List<PureAgentMessage> _history = [];
-    private string? _threadId;
+    private string? _sessionId;
     private SessionConnection _connection = SessionConnection.Connected;
     private SessionActivity _activity = SessionActivity.Idle;
     private SessionOutcome? _outcome;
@@ -37,33 +36,43 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
     public event Action<PiExtensionErrorEvent>? ExtensionError { add { } remove { } }
     public event Action<string>? SessionIdChanged;
 
-    public CodexChatSession(string executablePath, string workingDirectory,
-        string? persistFilePath = null, string? initialThreadId = null, string? model = null)
+    protected CliChatSession(string executablePath, string workingDirectory,
+        string? persistFilePath, string? initialSessionId, string? model = null)
     {
         _executablePath = executablePath ?? throw new ArgumentNullException(nameof(executablePath));
         _workingDirectory = workingDirectory ?? throw new ArgumentNullException(nameof(workingDirectory));
         _persistFilePath = persistFilePath;
-        _threadId = initialThreadId;
+        _sessionId = initialSessionId;
         _model = model;
     }
 
-    public string BackendId => "codex";
-    public BackendPresentationProfile Presentation => BackendPresentationProfile.Codex;
-    public string BackendName => "Codex";
+    public abstract string BackendId { get; }
+    public abstract BackendPresentationProfile Presentation { get; }
+    public abstract string BackendName { get; }
     public SessionConnection Connection { get { lock (_gate) return _connection; } }
     public SessionActivity Activity { get { lock (_gate) return _activity; } }
     public SessionOutcome? LastOutcome { get { lock (_gate) return _outcome; } }
-    public string? CurrentModel => _model ?? "codex";
+    public string? CurrentModel => _model ?? BackendId;
+    protected virtual string? PersistedModel => _model;
     public string? LastError { get { lock (_gate) return _lastError; } }
     public bool CanSend { get { lock (_gate) return _connection == SessionConnection.Connected && _activity == SessionActivity.Idle; } }
     public bool CanStop { get { lock (_gate) return _activeProcess is not null && !_activeProcess.HasExited; } }
     public int QueuedCount => 0;
 
-    public string? SessionId { get { lock (_gate) return _threadId; } }
+    public string? SessionId { get { lock (_gate) return _sessionId; } }
 
     public IReadOnlyList<ExtensionUiRequest> PendingExtensionUiRequests => [];
     public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Unavailable;
-    public string? ApprovalDiagnostic => "Codex CLI 以 bypass 模式运行；审批桥尚未接入。";
+    public abstract string? ApprovalDiagnostic { get; }
+
+    protected enum EventKind { SessionId, Started, Text, FinalText, Completed, Error }
+    protected readonly record struct ProtocolEvent(EventKind Kind, string? Text = null);
+    protected abstract IReadOnlyList<string> CreateArguments(string text, string? sessionId);
+    protected abstract ProtocolEvent? ReadEvent(JsonElement value);
+
+    protected static string? StringValue(JsonElement value, string property) =>
+        value.ValueKind == JsonValueKind.Object && value.TryGetProperty(property, out var field) &&
+        field.ValueKind == JsonValueKind.String ? field.GetString() : null;
 
     public async Task SendAsync(string text, CancellationToken cancellationToken = default)
     {
@@ -71,7 +80,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
         lock (_gate)
         {
             if (_connection != SessionConnection.Connected)
-                throw new InvalidOperationException("Codex 会话尚未就绪。");
+                throw new InvalidOperationException($"{BackendName} 会话尚未就绪。");
             if (_activity != SessionActivity.Idle)
                 throw new InvalidOperationException("当前回合仍在进行。");
             _activity = SessionActivity.Running;
@@ -82,24 +91,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
         RecordMessage(new PureAgentMessage(PureAgentRole.User, text));
         Emit(new SessionEvent.ActivityChanged(SessionActivity.Running));
 
-        var args = new List<string>();
-        string currentId;
-        lock (_gate) currentId = _threadId ?? string.Empty;
-
-        if (string.IsNullOrEmpty(currentId))
-        {
-            args.AddRange(["exec", "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "--json"]);
-            if (!string.IsNullOrWhiteSpace(_model)) args.AddRange(["-m", _model]);
-            args.Add(text);
-        }
-        else
-        {
-            args.AddRange(["exec", "resume", currentId, "--skip-git-repo-check", "--dangerously-bypass-approvals-and-sandbox", "--json"]);
-            if (!string.IsNullOrWhiteSpace(_model)) args.AddRange(["-m", _model]);
-            args.Add(text);
-        }
-
-        var startInfo = ProcessLauncher.Create(_executablePath, args, _workingDirectory);
+        var startInfo = ProcessLauncher.Create(_executablePath, CreateArguments(text, SessionId), _workingDirectory);
         Process process;
         try
         {
@@ -146,72 +138,52 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
                 {
                     using var doc = JsonDocument.Parse(line);
                     var root = doc.RootElement;
-                    if (!root.TryGetProperty("type", out var typeEl)) continue;
-                    var type = typeEl.GetString();
-
-                    switch (type)
+                    switch (ReadEvent(root))
                     {
-                        case "thread.started":
-                            if (root.TryGetProperty("thread_id", out var tidEl) && tidEl.ValueKind == JsonValueKind.String)
-                            {
-                                var tid = tidEl.GetString()!;
-                                lock (_gate) _threadId = tid;
-                                SessionIdChanged?.Invoke(tid);
-                            }
+                        case { Kind: EventKind.SessionId, Text: { } sessionId }:
+                            lock (_gate) _sessionId = sessionId;
+                            SessionIdChanged?.Invoke(sessionId);
                             break;
-
-                        case "turn.started":
+                        case { Kind: EventKind.Started }:
                             lock (_gate) _activity = SessionActivity.Running;
                             Emit(new SessionEvent.ActivityChanged(SessionActivity.Running));
                             break;
-
-                        case "item.completed":
-                            if (root.TryGetProperty("item", out var itemEl) && itemEl.ValueKind == JsonValueKind.Object)
+                        case { Kind: EventKind.Text or EventKind.FinalText, Text: { } text } output:
+                            if (output.Kind == EventKind.FinalText && assistantEmitted) break;
+                            if (!assistantEmitted)
                             {
-                                var itemType = itemEl.TryGetProperty("type", out var itEl) ? itEl.GetString() : null;
-                                if (itemType == "agent_message" && itemEl.TryGetProperty("text", out var textEl) && textEl.ValueKind == JsonValueKind.String)
-                                {
-                                    var text = textEl.GetString() ?? "";
-                                    if (!assistantEmitted)
-                                    {
-                                        assistantEmitted = true;
-                                        Emit(new SessionEvent.MessageStarted(messageId, MessageRole.Assistant, CurrentModel, 1));
-                                    }
-                                    assistantText.Append(text);
-                                    Emit(new SessionEvent.BlockFinished(messageId, 0, new TextBlock(text)));
-                                }
+                                assistantEmitted = true;
+                                Emit(new SessionEvent.MessageStarted(messageId, MessageRole.Assistant, CurrentModel, 1));
                             }
+                            assistantText.Append(text);
+                            Emit(new SessionEvent.BlockFinished(messageId, 0, new TextBlock(text)));
                             break;
-
-                        case "turn.completed":
-                            bool shouldEmitSettled;
+                        case { Kind: EventKind.Completed }:
                             lock (_gate)
                             {
                                 _activity = SessionActivity.Idle;
                                 _outcome = SessionOutcome.Completed;
-                                shouldEmitSettled = !turnSettledEmitted;
-                                turnSettledEmitted = true;
                             }
                             Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
-                            if (shouldEmitSettled) Emit(new SessionEvent.TurnSettled(SessionOutcome.Completed, null));
-                            break;
-
-                        case "error":
-                            if (root.TryGetProperty("message", out var errEl) && errEl.ValueKind == JsonValueKind.String)
+                            if (!turnSettledEmitted)
                             {
-                                var errText = errEl.GetString() ?? "Codex error";
-                                bool shouldEmitErrorSettled;
-                                lock (_gate)
-                                {
-                                    _lastError = errText;
-                                    _outcome = SessionOutcome.Failed;
-                                    shouldEmitErrorSettled = !turnSettledEmitted;
-                                    turnSettledEmitted = true;
-                                }
-                                try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
-                                Emit(new SessionEvent.SessionError(SessionErrorKind.CommandRejected, errText, null));
-                                Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
-                                if (shouldEmitErrorSettled) Emit(new SessionEvent.TurnSettled(SessionOutcome.Failed, errText));
+                                turnSettledEmitted = true;
+                                Emit(new SessionEvent.TurnSettled(SessionOutcome.Completed, null));
+                            }
+                            break;
+                        case { Kind: EventKind.Error, Text: { } error }:
+                            lock (_gate)
+                            {
+                                _lastError = error;
+                                _outcome = SessionOutcome.Failed;
+                            }
+                            try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { }
+                            Emit(new SessionEvent.SessionError(SessionErrorKind.CommandRejected, error, null));
+                            Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
+                            if (!turnSettledEmitted)
+                            {
+                                turnSettledEmitted = true;
+                                Emit(new SessionEvent.TurnSettled(SessionOutcome.Failed, error));
                             }
                             break;
                     }
@@ -237,7 +209,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
                 if (process.ExitCode != 0 && _outcome != SessionOutcome.Completed)
                 {
                     _outcome = SessionOutcome.Failed;
-                    _lastError = string.IsNullOrWhiteSpace(stderr) ? $"Codex 退出码: {process.ExitCode}" : stderr;
+                    _lastError = string.IsNullOrWhiteSpace(stderr) ? $"{BackendName} 退出码: {process.ExitCode}" : stderr;
                 }
                 else
                 {
@@ -247,6 +219,8 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
 
             if (!turnSettledEmitted)
             {
+                if (_outcome == SessionOutcome.Failed && _lastError is { } error)
+                    Emit(new SessionEvent.SessionError(SessionErrorKind.CommandRejected, error, null));
                 Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
                 Emit(new SessionEvent.TurnSettled(_outcome ?? SessionOutcome.Completed, _lastError));
             }
@@ -262,6 +236,7 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
             if (!turnSettledEmitted)
             {
                 turnSettledEmitted = true;
+                Emit(new SessionEvent.SessionError(SessionErrorKind.CommandRejected, ex.Message, null));
                 Emit(new SessionEvent.ActivityChanged(SessionActivity.Idle));
                 Emit(new SessionEvent.TurnSettled(SessionOutcome.Failed, ex.Message));
             }
@@ -331,16 +306,16 @@ public sealed class CodexChatSession : IChatSession, IBackendChatSession, IExten
                 writer.WriteNumber("version", 2);
                 writer.WritePropertyName("messages");
                 JsonSerializer.Serialize(writer, _history);
-                if (_model is null) writer.WriteNull("modelId");
-                else writer.WriteString("modelId", _model);
-                if (_threadId is null) writer.WriteNull("sessionId");
-                else writer.WriteString("sessionId", _threadId);
+                if (PersistedModel is null) writer.WriteNull("modelId");
+                else writer.WriteString("modelId", PersistedModel);
+                if (_sessionId is null) writer.WriteNull("sessionId");
+                else writer.WriteString("sessionId", _sessionId);
                 writer.WriteEndObject();
             });
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Trace.TraceWarning("Failed to persist Codex session: {0}", ex);
+            System.Diagnostics.Trace.TraceWarning("Failed to persist {0} session: {1}", BackendName, ex);
         }
     }
 

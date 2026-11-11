@@ -82,10 +82,6 @@ internal sealed class Probe
 
     public Color? ResolvedColor(string key) => Resolved(key) is ISolidColorBrush brush ? brush.Color : null;
 
-    public double? ResolvedDouble(string key) => Resolved(key) is double value ? value : null;
-
-    public CornerRadius? ResolvedCorner(string key) => Resolved(key) is CornerRadius radius ? radius : null;
-
     public ContentPresenter? SelectedListPresenter() =>
         ListBox.GetVisualDescendants().OfType<ListBoxItem>()
             .FirstOrDefault(item => item.IsSelected)?

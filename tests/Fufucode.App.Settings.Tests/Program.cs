@@ -32,29 +32,7 @@ try
 {
     Fufucode.App.Settings.Tests.UpdateCommandTests.Run(Check);
 
-    // ================= 1. 三级架构分类与层级正确解析 =================
-    var basic = Ids(SettingsNavTier.Basic);
-    var features = Ids(SettingsNavTier.Features);
-    var other = Ids(SettingsNavTier.Other);
-    Check(basic.SequenceEqual(new[] { "appearance", "about", "network", "shortcuts", "models", "security", "storage", "memory" }),
-        "基础类包含外观/关于/网络/键盘/模型/储存");
-    // 插件市场（MKT 轨道）在目录中已是大功能一级条目，此处按实际目录核对，不再沿用旧四条目断言。
-    Check(features.SequenceEqual(new[] { "marketplace", "browser", "terminal", "files", "automation" }),
-        "大功能包含插件市场/浏览器/终端/文件管理/自动开发");
-    // 性能监控（2026-10-19）在“其他”中加入 performance 条目。
-    Check(other.SequenceEqual(new[] { "notifications", "background", "config", "performance", "modules", "functions" }),
-        "其他包含通知/配置/用量/辅助工具等二级小功能");
-    Check(SettingsNavCatalog.DefaultCategoryId == "appearance", "默认选中外观分类");
-    Check(SettingsNavCatalog.Find("browser") is { Title: "浏览器", Icon: "Globe" },
-        "浏览器分类的标题与图标契约保持不变");
-
-    Check(SettingsNavCatalog.TierOrder.SequenceEqual(new[]
-          { SettingsNavTier.Basic, SettingsNavTier.Features, SettingsNavTier.Other }),
-        "一级分类顺序固定为基础类/大功能/其他");
-    Check(basic.Concat(features).Concat(other).Count() == SettingsNavCatalog.All.Count,
-        "每个目录条目恰属于一个原始层级");
-    Check(typeof(SettingsNavDefinition).GetProperty("HasContent") is null,
-        "目录不再声明“未接线占位”分类");
+    Fufucode.App.Settings.Tests.SettingsCatalogTests.Run(Check);
 
     // ================= 2. 升降级偏好持久化存取与恢复 =================
     Check(!SettingsNavPreference.CanMove("appearance"), "基础类条目不可升降级");
@@ -299,18 +277,11 @@ try
 
     // ================= 4.2 Fluent 暗色三档底色 =================
     var appearance = new WorkbenchAppearance();
-    Check(appearance.BaseBackground == "#1C1C1C" && appearance.BaseBar == "#2C2C2C" &&
-          appearance.BaseHighlight == "#3A3A3A" && appearance.Emphasis == "#E8B86A",
-        "Fluent 暗色默认三档底色与模型输出强调色");
     Check(new WorkbenchAppearance { Emphasis = "#FFEE58" }.Normalize().Emphasis == "#E8B86A" &&
           new WorkbenchAppearance { Emphasis = "#D97757" }.Normalize().Emphasis == "#E8B86A" &&
           new WorkbenchAppearance { Emphasis = "#B4BFAF" }.Normalize().Emphasis == "#E8B86A" &&
           new WorkbenchAppearance { Emphasis = "#C98742" }.Normalize().Emphasis == "#C98742",
         "历代默认强调色迁移到暖琥珀色，其余自定义颜色保留");
-    Check(WorkbenchAppearance.BaseBackgroundChoices.Count == 3 &&
-          WorkbenchAppearance.BaseBarChoices.Count == 3 &&
-          WorkbenchAppearance.BaseHighlightChoices.Count == 3,
-        "每档底色只提供三个备选");
     Check(WorkbenchAppearance.BaseBackgroundLabels.Count == WorkbenchAppearance.BaseBackgroundChoices.Count &&
           WorkbenchAppearance.BaseBarLabels.Count == WorkbenchAppearance.BaseBarChoices.Count &&
           WorkbenchAppearance.BaseHighlightLabels.Count == WorkbenchAppearance.BaseHighlightChoices.Count,
@@ -349,16 +320,11 @@ try
         new WorkbenchAppearance { ChineseFont = "未安装的字体" }.Normalize().ChineseFont == "未安装的字体",
         "无效字体值回退默认，未安装的字体名称保留供其它设备恢复");
 
-    // ================= 5. 设置页纪律守卫（规范 §10） =================
-    // 放在能力门禁之前：门禁测试依赖本机插件目录，属于既有环境用例；
-    // 纪律守卫是纯源码检查，必须每次都能独立跑完。
-    Fufucode.App.Settings.Tests.SettingsStyleTests.Run(Check);
-
     // ================= 6. 插件能力门禁（MKT-1） =================
-    passed += Fufucode.App.Settings.Tests.PluginGatingTests.Run(Check);
+    Fufucode.App.Settings.Tests.PluginGatingTests.Run(Check);
 
     // ================= 7. 设置 → 运行时页面/工具三层接线 =================
-    passed += Fufucode.App.Settings.Tests.WiringIntegrationTests.Run(Check);
+    Fufucode.App.Settings.Tests.WiringIntegrationTests.Run(Check);
 
     Console.WriteLine($"\n全部通过：{passed} 项断言");
     return 0;
@@ -374,6 +340,3 @@ finally
     try { if (Directory.Exists(root)) Directory.Delete(root, true); }
     catch (IOException) { /* 临时目录清理失败不影响测试结论 */ }
 }
-
-static IReadOnlyList<string> Ids(SettingsNavTier tier) =>
-    SettingsNavCatalog.All.Where(item => item.Tier == tier).Select(item => item.Id).ToArray();

@@ -9,43 +9,29 @@ using Fufucode.App.Abstractions;
 namespace Fufucode.Core.Backend;
 
 /// <summary>
-/// DeepSeek Harness (DSH) 后端会话协调器：把 DshChatSession 的事件映射为与 Pi / FUMO 同形的 SessionSnapshot，
-/// 实现统一的 ISessionCoordinator 契约，使 UI、持久化与自动化层无需感知底层是 DSH CLI。
+/// 外部 CLI 的通用状态投影、历史查询和维护门禁；模型目录由插件提供。
 /// </summary>
-public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSession
+public abstract class CliSessionCoordinator : ISessionCoordinator, IExtensionUiSession
 {
-    private readonly DshChatSession _chat;
-    private readonly AppSettingsStore? _settings;
-    private readonly DiagnosticLog? _diagnosticLog;
+    private readonly CliChatSession _chat;
     private readonly object _gate = new();
     private readonly List<PiMessage> _messages = [];
-    private readonly List<PiToolCard> _tools = [];
-    private readonly List<string> _queuedTexts = [];
-    private readonly List<string> _recoverableQueue = [];
-    private ConnectionState _connection = ConnectionState.Connected;
     private ActivityState _activity = ActivityState.Idle;
     private TaskResult _result = TaskResult.Unknown;
     private string? _error;
     private bool _idleMaintenance;
     private bool _disposed;
 
-    private long _usageInput = 0;
-    private long _usageOutput = 0;
-    private long _usageCacheRead = 0;
-    private long _usageCacheWrite = 0;
-    private int _usageMessages = 0;
-
-    public DshSessionCoordinator(DshChatSession chat, AppSettingsStore? settings = null,
-        DiagnosticLog? diagnosticLog = null)
+    protected CliSessionCoordinator(CliChatSession chat)
     {
         _chat = chat ?? throw new ArgumentNullException(nameof(chat));
-        _settings = settings;
-        _diagnosticLog = diagnosticLog;
-
         _chat.Event += OnSessionEvent;
     }
 
-    public BackendId Backend => BackendId.Dsh;
+    public abstract BackendId Backend { get; }
+    protected abstract string ModelProvider { get; }
+    protected abstract (string Id, string Name)[] Models { get; }
+    protected virtual string DefaultThinkingLevel => "off";
     public BackendCapabilities Capabilities => BackendCapabilities.For(Backend);
     public SessionSnapshot Snapshot { get { lock (_gate) return MakeSnapshot(); } }
     public event Action<SessionSnapshot>? SnapshotChanged;
@@ -56,7 +42,7 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
     public event Action<PiExtensionErrorEvent>? ExtensionError { add { } remove { } }
 
     public ApprovalAvailability ApprovalAvailability => ApprovalAvailability.Unavailable;
-    public string? ApprovalDiagnostic => "DeepSeek Harness 审批桥尚未接入。";
+    public string? ApprovalDiagnostic => _chat.ApprovalDiagnostic;
 
     public bool IsInIdleMaintenance { get { lock (_gate) return _idleMaintenance; } }
     public bool CanSendPrompt { get { lock (_gate) return !_idleMaintenance && _chat.CanSend; } }
@@ -65,13 +51,8 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
 
     public SessionUsageReport GetUsage()
     {
-        lock (_gate)
-        {
-            UsageCounter Counter(long total) => new(total, total, _usageMessages, 0);
-            var totals = new UsageTotals(_usageMessages, Counter(_usageInput), Counter(_usageOutput),
-                Counter(_usageCacheRead), Counter(_usageCacheWrite), Counter(_usageInput + _usageOutput));
-            return new SessionUsageReport(totals, [], 0);
-        }
+        var empty = new UsageCounter(0, 0, 0, 0);
+        return new SessionUsageReport(new UsageTotals(0, empty, empty, empty, empty, empty), [], 0);
     }
 
     public Task StartAsync(CancellationToken cancellationToken = default)
@@ -118,39 +99,31 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
             {
                 sessionId = _chat.SessionId ?? "",
                 sessionFile = "",
-                model = new { provider = "deepseek", id = _chat.CurrentModel ?? "dsh" },
+                model = new { provider = ModelProvider, id = _chat.CurrentModel ?? _chat.BackendId },
                 activity = _activity.ToString().ToLowerInvariant(),
             };
-            return Task.FromResult(new RpcResponse("dsh", "get_state", true,
+            return Task.FromResult(new RpcResponse(_chat.BackendId, "get_state", true,
                 JsonSerializer.SerializeToElement(data), null));
         }
     }
 
-    public Task<RpcResponse> QueryAvailableModelsAsync(CancellationToken cancellationToken = default)
-    {
-        var models = new[]
-        {
-            new { id = "deepseek-coder", name = "DeepSeek Coder" },
-            new { id = "deepseek-chat", name = "DeepSeek Chat" },
-            new { id = "deepseek-reasoner", name = "DeepSeek Reasoner" },
-        };
-        return Task.FromResult(new RpcResponse("dsh", "get_available_models", true,
-            JsonSerializer.SerializeToElement(new { models }), null));
-    }
+    public Task<RpcResponse> QueryAvailableModelsAsync(CancellationToken cancellationToken = default) =>
+        Task.FromResult(new RpcResponse(_chat.BackendId, "get_available_models", true,
+            JsonSerializer.SerializeToElement(new { models = Models.Select(model => new { id = model.Id, name = model.Name }) }), null));
 
     public Task<RpcResponse> SetModelAsync(string provider, string modelId, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new RpcResponse("dsh", "set_model", true,
+        Task.FromResult(new RpcResponse(_chat.BackendId, "set_model", true,
             JsonSerializer.SerializeToElement(new { model = new { provider, id = modelId } }), null));
 
     public Task<RpcResponse> SetThinkingLevelAsync(string level, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new RpcResponse("dsh", "set_thinking_level", true,
+        Task.FromResult(new RpcResponse(_chat.BackendId, "set_thinking_level", true,
             JsonSerializer.SerializeToElement(new { thinkingLevel = level }), null));
 
     public Task<ThinkingLevelAvailability> QueryThinkingLevelsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new ThinkingLevelAvailability(["off", "low", "medium", "high"], "off", _chat.CurrentModel));
+        Task.FromResult(new ThinkingLevelAvailability(["off", "low", "medium", "high"], DefaultThinkingLevel, _chat.CurrentModel));
 
     public Task<RpcResponse> QueryCommandsAsync(CancellationToken cancellationToken = default) =>
-        Task.FromResult(new RpcResponse("dsh", "get_commands", true,
+        Task.FromResult(new RpcResponse(_chat.BackendId, "get_commands", true,
             JsonSerializer.SerializeToElement(new { commands = Array.Empty<object>() }), null));
 
     public Task<RpcResponse> QueryEntriesAsync(string? since = null, CancellationToken cancellationToken = default)
@@ -175,15 +148,15 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
             lastId = id;
         }
 
-        return Task.FromResult(new RpcResponse("dsh", "get_entries", true,
+        return Task.FromResult(new RpcResponse(_chat.BackendId, "get_entries", true,
             JsonSerializer.SerializeToElement(new { entries = entryList, leafId = lastId }), null));
     }
 
     public Task<RpcResponse> SetSessionNameAsync(string name, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new RpcResponse("dsh", "set_session_name", true, null, null));
+        Task.FromResult(new RpcResponse(_chat.BackendId, "set_session_name", true, null, null));
 
     public Task<RpcResponse> ForkAsync(string entryId, CancellationToken cancellationToken = default) =>
-        Task.FromResult(new RpcResponse("dsh", "fork", false, null, "DSH backend fork is managed via CLI."));
+        Task.FromResult(new RpcResponse(_chat.BackendId, "fork", false, null, $"{_chat.BackendName} backend fork is managed via CLI."));
 
     public Task SetExecutionModeAsync(string mode, CancellationToken cancellationToken = default) =>
         Task.CompletedTask;
@@ -213,9 +186,9 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
         return new MaintenanceToken(this);
     }
 
-    private sealed class MaintenanceToken(DshSessionCoordinator coordinator) : IDisposable
+    private sealed class MaintenanceToken(CliSessionCoordinator coordinator) : IDisposable
     {
-        private DshSessionCoordinator? _coordinator = coordinator;
+        private CliSessionCoordinator? _coordinator = coordinator;
         public void Dispose()
         {
             var c = Interlocked.Exchange(ref _coordinator, null);
@@ -265,19 +238,19 @@ public sealed class DshSessionCoordinator : ISessionCoordinator, IExtensionUiSes
 
     private SessionSnapshot MakeSnapshot() => new(
         Guid.NewGuid(),
-        _connection,
+        ConnectionState.Connected,
         _activity,
         _result,
         _messages.ToArray(),
-        _tools.ToArray(),
+        [],
         null,
-        _queuedTexts.ToArray(),
-        _recoverableQueue.ToArray(),
+        [],
+        [],
         [],
         _error,
         SessionFaultKind.None,
         ApprovalAvailability.Unavailable,
-        "DeepSeek Harness 审批桥尚未接入。");
+        ApprovalDiagnostic);
 
     public async ValueTask DisposeAsync()
     {

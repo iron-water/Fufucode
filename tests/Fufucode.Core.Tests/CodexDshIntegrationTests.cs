@@ -1,263 +1,133 @@
-using System;
-using System.IO;
-using System.Linq;
-using System.Threading.Tasks;
+using System.Text.Json;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Backend;
 
 internal static class CodexDshIntegrationTests
 {
-    private static void Check(bool condition, string name)
-    {
-        if (!condition) throw new Exception(name);
-        Console.WriteLine("PASS " + name);
-    }
-
-    private static async Task Wait(Func<bool> condition)
-    {
-        var until = DateTime.UtcNow.AddSeconds(60);
-        while (!condition())
-        {
-            if (DateTime.UtcNow > until) throw new TimeoutException("Expected state not reached.");
-            await Task.Delay(20);
-        }
-    }
-
     public static async Task RunAsync(string root)
     {
-        // 后端插件在自己初始化时显式登记工厂；测试直接复用同一登记契约。
         BackendPluginLoader.RegisterSessionFactory(new Fufucode.Plugins.Codex.CodexSessionFactory());
         BackendPluginLoader.RegisterSessionFactory(new Fufucode.Plugins.Dsh.DshSessionFactory());
-
-        var scratch = Path.Combine(root, "tmp", "codex-dsh-tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(scratch);
-        var layout = new AppDataLayout(Path.Combine(scratch, "data"));
-
-        // 1. BackendId 与枚举映射测试
-        EnumAndCapabilitiesTests();
-
-        // 2. 全局默认首选项不回退测试
-        DefaultPreferenceNoFallbackTests(layout);
-
-        // 3. 可用性与路径解析测试
-        AvailabilityAndGuardTests(scratch, layout);
-
-        // 4. DSH 端到端真实会话测试
-        await DshEndToEndTestsAsync(scratch, layout);
-
-        // 5. Codex 端到端真实会话测试
-        await CodexEndToEndTestsAsync(scratch, layout);
+        var scratch = Environment.GetEnvironmentVariable("FUFUCODE_TEST_ROOT") ?? Path.Combine(root, "tmp");
+        foreach (var backend in new[] { BackendId.Codex, BackendId.Dsh })
+            await VerifyBackendAsync(Path.Combine(scratch, "cli-protocol-" + Guid.NewGuid().ToString("N")), backend);
     }
 
-    private static void EnumAndCapabilitiesTests()
+    private static async Task VerifyBackendAsync(string root, BackendId backend)
     {
-        Check(BackendCapabilities.FromEngineId(EngineId.Codex) == BackendId.Codex,
-            "BackendCapabilities.FromEngineId(Codex) 正常映射为 BackendId.Codex（不再返回 null）");
-        Check(BackendCapabilities.FromEngineId(EngineId.Dsh) == BackendId.Dsh,
-            "BackendCapabilities.FromEngineId(Dsh) 正常映射为 BackendId.Dsh（不再返回 null）");
-
-        Check(BackendCapabilities.StorageId(BackendId.Codex) == "codex", "Codex 持久化 StorageId 为 codex");
-        Check(BackendCapabilities.StorageId(BackendId.Dsh) == "dsh", "Dsh 持久化 StorageId 为 dsh");
-
-        Check(BackendCapabilities.Parse("codex") == BackendId.Codex, "Parse(\"codex\") 返回 BackendId.Codex");
-        Check(BackendCapabilities.Parse("dsh") == BackendId.Dsh, "Parse(\"dsh\") 返回 BackendId.Dsh");
-
-        var codexCaps = BackendCapabilities.For(BackendId.Codex);
-        Check(codexCaps.Name == "Codex" && codexCaps.PersistentHistory && codexCaps.ApprovalBridge && !codexCaps.ProjectFork,
-            "Codex 能力声明正确");
-
-        var dshCaps = BackendCapabilities.For(BackendId.Dsh);
-        Check(dshCaps.Name == "DSH" && dshCaps.PersistentHistory && dshCaps.ApprovalBridge && !dshCaps.ProjectFork,
-            "DSH 能力声明正确");
-    }
-
-    private static void DefaultPreferenceNoFallbackTests(AppDataLayout layout)
-    {
-        var store = new BackendPreferenceStore(layout);
-
-        // 设置 Codex 为全局默认后端
-        store.SetDefault(EngineId.Codex);
-        var managerCodex = new PersistentSessionManager("", "", layout);
-        Check(managerCodex.PreferredBackend == BackendId.Codex,
-            "设置页选择 Codex 为默认后端后，PreferredBackend 为 Codex（不再回退 FUMO）");
-
-        // 设置 DSH 为全局默认后端
-        store.SetDefault(EngineId.Dsh);
-        var managerDsh = new PersistentSessionManager("", "", layout);
-        Check(managerDsh.PreferredBackend == BackendId.Dsh,
-            "设置页选择 DSH 为默认后端后，PreferredBackend 为 DSH（不再回退 FUMO）");
-    }
-
-    private static void AvailabilityAndGuardTests(string scratch, AppDataLayout layout)
-    {
-        // 自动探测系统安装的可执行文件
-        var codexPath = PersistentSessionManager.ResolveCodexExecutable();
-        var dshPath = PersistentSessionManager.ResolveDshExecutable();
-
-        Check(codexPath is not null && File.Exists(codexPath), "系统成功探测到 Codex CLI: " + codexPath);
-        Check(dshPath is not null && File.Exists(dshPath), "系统成功探测到 DSH CLI: " + dshPath);
-
-        var manager = new PersistentSessionManager("", "", layout);
-        Check(manager.IsBackendAvailable(BackendId.Codex), "IsBackendAvailable(Codex) 在本机返回 true");
-        Check(manager.IsBackendAvailable(BackendId.Dsh), "IsBackendAvailable(Dsh) 在本机返回 true");
-
-        // 路径缺失守卫测试
-        var missingManager = new PersistentSessionManager("", "", layout,
-            codexExecutablePath: Path.Combine(scratch, "missing-codex.exe"),
-            dshExecutablePath: Path.Combine(scratch, "missing-dsh.cmd"));
-
-        Check(!missingManager.IsBackendAvailable(BackendId.Codex), "路径不存在时 IsBackendAvailable(Codex) 为 false");
-        Check(!missingManager.IsBackendAvailable(BackendId.Dsh), "路径不存在时 IsBackendAvailable(Dsh) 为 false");
-
+        Directory.CreateDirectory(root);
         try
         {
-            missingManager.CreateAsync(scratch, backend: BackendId.Codex).GetAwaiter().GetResult();
-            throw new Exception("应该抛出 FileNotFoundException");
-        }
-        catch (FileNotFoundException ex)
-        {
-            Check(ex.Message.Contains("Codex runtime missing"), "缺失 Codex 时 CreateAsync 抛出清晰引导的 FileNotFoundException");
-        }
+            var executable = Path.Combine(root, "fake.cmd");
+            var arguments = Path.Combine(root, "arguments.txt");
+            var id = backend.ToString().ToLowerInvariant() + "-fixture";
+            string[] events = backend == BackendId.Codex
+                ? ["""{"type":"thread.started","thread_id":"codex-fixture"}""",
+                   """{"type":"turn.started"}""",
+                   """{"type":"item.completed","item":{"type":"agent_message","text":"answer"}}""",
+                   """{"type":"turn.completed"}"""]
+                : ["""{"type":"session","sessionId":"dsh-fixture"}""",
+                   """{"type":"status","phase":"turn_start"}""",
+                   """{"type":"text","text":"answer"}""",
+                   """{"type":"final","text":"answer"}""",
+                   """{"type":"status","phase":"turn_end"}"""];
+            await File.WriteAllLinesAsync(executable,
+                ["@echo off", $"echo %* > \"{arguments}\"", "echo npm fixture noise",
+                 .. events.Select(value => "echo " + value), "exit /b 0"]);
 
+            var manager = new PersistentSessionManager("", "", new AppDataLayout(Path.Combine(root, "data")),
+                codexExecutablePath: executable, dshExecutablePath: executable);
+            string sessionId;
+            await using (var session = await manager.CreateAsync(root, backend: backend))
+            {
+                sessionId = session.Session.Id;
+                Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Unavailable,
+                    backend + " 如实报告审批桥未接入");
+                var state = (await session.Coordinator.QueryStateAsync()).Data!.Value;
+                Check(state.GetProperty("model").GetProperty("provider").GetString() ==
+                      (backend == BackendId.Codex ? "openai" : "deepseek"),
+                    backend + " 状态查询保留后端模型归属");
+                var models = (await session.Coordinator.QueryAvailableModelsAsync()).Data!.Value.GetProperty("models");
+                Check(models.ValueKind == JsonValueKind.Array && models.GetArrayLength() > 0 &&
+                      models.EnumerateArray().All(model => model.GetProperty("id").ValueKind == JsonValueKind.String &&
+                                                          model.GetProperty("name").ValueKind == JsonValueKind.String),
+                    backend + " 模型目录满足调用端的 JSON 契约");
+                using (session.Coordinator.BeginIdleMaintenance())
+                {
+                    Check(!session.Coordinator.CanSendPrompt, backend + " 维护期间不可发送");
+                    try
+                    {
+                        await session.Coordinator.SendPromptAsync("hello");
+                        throw new Exception("维护期间接受了请求");
+                    }
+                    catch (InvalidOperationException) { }
+                }
+                var message = await SendAsync(session);
+                Check(message.Blocks.Single() is TextBlock { Text: "answer" }, backend + " JSONL 输出规范化且 final 不重复");
+                Check(session.Session.BackendSessionId == id &&
+                      session.Coordinator.Snapshot.LastResult == TaskResult.Completed,
+                    backend + " 会话身份和完成状态持久化");
+                var firstArguments = await File.ReadAllTextAsync(arguments);
+                Check(backend == BackendId.Codex ? firstArguments.Contains("\"exec\"") &&
+                      !firstArguments.Contains("\"resume\"") : firstArguments.Contains("\"headless\"") &&
+                      !firstArguments.Contains("\"--session-id\""), backend + " 首轮参数正确");
+            }
+
+            await using (var restored = await manager.ResumeAsync(sessionId))
+            {
+                Check(restored.History.CurrentBranchMessages.Count == 2, backend + " 重开后恢复用户和助手历史");
+                await SendAsync(restored);
+                var resumedArguments = await File.ReadAllTextAsync(arguments);
+                Check(resumedArguments.Contains(id) && resumedArguments.Contains(
+                    backend == BackendId.Codex ? "\"resume\"" : "\"--session-id\""),
+                    backend + " 次轮携带原后端会话 ID");
+            }
+
+            await File.WriteAllLinesAsync(executable, ["@echo off", "echo fixture failure 1>&2", "exit /b 17"]);
+            await using var failed = await manager.CreateAsync(root, backend: backend);
+            var terminal = new TaskCompletionSource<SessionOutcome>(TaskCreationOptions.RunContinuationsAsynchronously);
+            failed.Chat.Event += (_, value) =>
+            {
+                if (value is SessionEvent.TurnSettled settled) terminal.TrySetResult(settled.Outcome);
+            };
+            await failed.Coordinator.SendPromptAsync("hello");
+            Check(await terminal.Task.WaitAsync(TimeSpan.FromSeconds(10)) == SessionOutcome.Failed &&
+                  failed.Coordinator.Snapshot.LastError?.Contains("fixture failure") == true,
+                backend + " 非零退出保留 stderr 和失败状态");
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private static async Task<ChatMessage> SendAsync(PersistentSession session)
+    {
+        var finished = new TaskCompletionSource<ChatMessage>(TaskCreationOptions.RunContinuationsAsynchronously);
+        void OnEvent(object? sender, SessionEvent value)
+        {
+            if (value is SessionEvent.MessageFinished message) finished.TrySetResult(message.FinalMessage);
+        }
+        session.Chat.Event += OnEvent;
         try
         {
-            missingManager.CreateAsync(scratch, backend: BackendId.Dsh).GetAwaiter().GetResult();
-            throw new Exception("应该抛出 FileNotFoundException");
+            await session.Coordinator.SendPromptAsync("hello");
+            var message = await finished.Task.WaitAsync(TimeSpan.FromSeconds(10));
+            // MessageFinished 先于历史写入；等当前输出泵排空后再释放进程。
+            var until = DateTime.UtcNow.AddSeconds(10);
+            while (session.Chat.CanStop && DateTime.UtcNow < until) await Task.Delay(10);
+            return message;
         }
-        catch (FileNotFoundException ex)
+        finally
         {
-            Check(ex.Message.Contains("DSH runtime missing"), "缺失 DSH 时 CreateAsync 抛出清晰引导的 FileNotFoundException");
+            session.Chat.Event -= OnEvent;
         }
     }
 
-    private static async Task DshEndToEndTestsAsync(string scratch, AppDataLayout layout)
+    private static void Check(bool condition, string message)
     {
-        var manager = new PersistentSessionManager("", "", layout);
-        if (!manager.IsBackendAvailable(BackendId.Dsh))
-        {
-            Console.WriteLine("SKIP DshEndToEndTests: dsh CLI 未安装");
-            return;
-        }
-
-        string sessionId;
-        string? backendSessionId;
-
-        await using (var session = await manager.CreateAsync(scratch, "DSH Test", backend: BackendId.Dsh))
-        {
-            sessionId = session.Session.Id;
-            Check(session.Session.Backend == BackendId.Dsh, "DSH 会话创建成功，后端标识为 Dsh");
-            Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Unavailable,
-                "DSH 未接统一审批桥，审批状态如实为 Unavailable");
-
-            var turnSettled = false;
-            session.Chat.Event += (_, ev) =>
-            {
-                if (ev is SessionEvent.TurnSettled)
-                    turnSettled = true;
-            };
-
-            await session.Coordinator.SendPromptAsync("say hello");
-            try
-            {
-                await Wait(() => turnSettled);
-            }
-            catch (TimeoutException)
-            {
-                throw new Exception($"DSH 首轮等待超时。LastResult={session.Coordinator.Snapshot.LastResult}, LastError={session.Coordinator.Snapshot.LastError}, ChatOutcome={session.Chat.LastOutcome}");
-            }
-
-            Check(session.Coordinator.Snapshot.LastResult == TaskResult.Completed,
-                $"DSH 会话首轮对话成功完成 (Result={session.Coordinator.Snapshot.LastResult}, Error={session.Coordinator.Snapshot.LastError})");
-            backendSessionId = session.Session.BackendSessionId;
-            Check(!string.IsNullOrEmpty(backendSessionId), "DSH 会话成功获取并绑定 backendSessionId");
-
-            var historyFile = Path.Combine(layout.ProjectSessionsDirectory(session.Project.Id), "dsh", sessionId + ".json");
-            Check(File.Exists(historyFile), "DSH 会话历史文件落地成功: " + historyFile);
-        }
-
-        // 测试恢复
-        await using (var resumed = await manager.ResumeAsync(sessionId))
-        {
-            Check(resumed.Session.Backend == BackendId.Dsh, "恢复的 DSH 会话后端为 Dsh");
-            Check(resumed.Session.BackendSessionId == backendSessionId, "恢复的 DSH 会话后端会话标识一致");
-
-            var turnSettled = false;
-            resumed.Chat.Event += (_, ev) =>
-            {
-                if (ev is SessionEvent.TurnSettled)
-                    turnSettled = true;
-            };
-
-            await resumed.Coordinator.SendPromptAsync("say hello again");
-            try
-            {
-                await Wait(() => turnSettled);
-            }
-            catch (TimeoutException)
-            {
-                throw new Exception($"DSH 第二轮等待超时。LastResult={resumed.Coordinator.Snapshot.LastResult}, LastError={resumed.Coordinator.Snapshot.LastError}, ChatOutcome={resumed.Chat.LastOutcome}");
-            }
-
-            Check(resumed.Coordinator.Snapshot.LastResult == TaskResult.Completed,
-                $"DSH 恢复会话成功完成第二轮交互 (Result={resumed.Coordinator.Snapshot.LastResult}, Error={resumed.Coordinator.Snapshot.LastError})");
-        }
-    }
-
-    private static async Task CodexEndToEndTestsAsync(string scratch, AppDataLayout layout)
-    {
-        var manager = new PersistentSessionManager("", "", layout);
-        if (!manager.IsBackendAvailable(BackendId.Codex))
-        {
-            Console.WriteLine("SKIP CodexEndToEndTests: codex CLI 未安装");
-            return;
-        }
-
-        string sessionId;
-        string? backendSessionId;
-
-        await using (var session = await manager.CreateAsync(scratch, "Codex Test", backend: BackendId.Codex))
-        {
-            sessionId = session.Session.Id;
-            Check(session.Session.Backend == BackendId.Codex, "Codex 会话创建成功，后端标识为 Codex");
-            Check(session.Coordinator.ApprovalAvailability == ApprovalAvailability.Unavailable,
-                "Codex 未接统一审批桥，审批状态如实为 Unavailable");
-
-            var turnSettled = false;
-            session.Chat.Event += (_, ev) =>
-            {
-                if (ev is SessionEvent.TurnSettled)
-                    turnSettled = true;
-            };
-
-            await session.Coordinator.SendPromptAsync("reply with: PONG");
-            await Wait(() => session.Coordinator.Snapshot.LastResult != TaskResult.Unknown && turnSettled);
-
-            Check(session.Coordinator.Snapshot.LastResult != TaskResult.Unknown, "Codex 会话首轮对话成功处理并结算");
-            backendSessionId = session.Session.BackendSessionId;
-            Check(!string.IsNullOrEmpty(backendSessionId), "Codex 会话成功获取并绑定 thread_id 作为 backendSessionId");
-
-            var historyFile = Path.Combine(layout.ProjectSessionsDirectory(session.Project.Id), "codex", sessionId + ".json");
-            Check(File.Exists(historyFile), "Codex 会话历史文件落地成功: " + historyFile);
-        }
-
-        // 测试恢复
-        await using (var resumed = await manager.ResumeAsync(sessionId))
-        {
-            Check(resumed.Session.Backend == BackendId.Codex, "恢复的 Codex 会话后端为 Codex");
-            Check(resumed.Session.BackendSessionId == backendSessionId, "恢复的 Codex 会话后端会话标识一致");
-
-            var turnSettled = false;
-            resumed.Chat.Event += (_, ev) =>
-            {
-                if (ev is SessionEvent.TurnSettled)
-                    turnSettled = true;
-            };
-
-            await resumed.Coordinator.SendPromptAsync("reply with: PING");
-            await Wait(() => resumed.Coordinator.Snapshot.LastResult != TaskResult.Unknown && turnSettled);
-
-            Check(resumed.Coordinator.Snapshot.LastResult != TaskResult.Unknown, "Codex 恢复会话成功完成第二轮交互并结算");
-        }
+        if (!condition) throw new Exception(message);
+        Console.WriteLine("PASS " + message);
     }
 }

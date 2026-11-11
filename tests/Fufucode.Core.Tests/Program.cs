@@ -36,6 +36,7 @@ if (args.Contains("--settings-only")) { await SettingsAndDiagnosticsTests.RunSet
 PiRpcOptions fakeOptions() => new(dotnet, [fake], root);
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); Console.WriteLine($"PASS {name}"); }
 HistoryMappingTests.Run();
+await CodexDshIntegrationTests.RunAsync(root);
 SessionAdoptionTests.Run(root);
 ReviewRegressionTests.Run(root);
 await AdapterStopTests.RunAsync(root, fake, dotnet);

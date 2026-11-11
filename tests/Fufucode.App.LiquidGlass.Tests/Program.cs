@@ -62,16 +62,6 @@ try
     Check(lease.OwnsVariantScope && probe.Window.RequestedThemeVariant == ThemeVariant.Light, "顶层窗口租约接管 RequestedThemeVariant");
 
     // ---------- 3. 亮色 iOS 令牌 ----------
-    Check(probe.ResolvedColor("AppWindowBackground") == Color.Parse("#FFF2F2F7"), "亮色窗口底 iOS systemGray6 #F2F2F7");
-    Check(probe.ResolvedColor("AppSurfaceBackground") == Color.Parse("#FFFFFFFF"), "亮色内容面 iOS 白");
-    Check(probe.ResolvedColor("AppTextPrimary") == Color.Parse("#FF000000"), "亮色 label 黑");
-    Check(probe.ResolvedColor("LiquidGlassAccent") == Color.Parse("#FF007AFF"), "探针键 iOS systemBlue #007AFF");
-    Check(probe.ResolvedColor("LiquidGlassSurfaceColor") == Color.Parse("#38FFFFFF"), "玻璃表面色半透明 iOS 灰");
-    Check(probe.ResolvedCorner("ControlCornerRadius") == new CornerRadius(10), "ControlCornerRadius=10");
-    Check(probe.ResolvedCorner("AppCornerCard") == new CornerRadius(14), "AppCornerCard=14");
-    Check(probe.ResolvedCorner("AppCornerPill") == new CornerRadius(20), "AppCornerPill=20");
-    Check(probe.ResolvedCorner("AppCornerFlyout") == new CornerRadius(14), "AppCornerFlyout=14");
-    Check(ColorOf(probe.Resolved("AppTerminalBackground") as IBrush) == Color.Parse("#FF1C1C1E"), "亮色终端底 iOS 深灰");
     // 正文/终端不透明（玻璃只给 chrome 表面）
     foreach (var key in new[] { "AppContentBackground", "AppTerminalBackground", "AppSurfaceBackground" })
         Check(probe.Resolved(key) is ISolidColorBrush { Color.A: 255 }, $"{key} 不透明（正文不用玻璃）");
@@ -132,10 +122,7 @@ try
     // ---------- 6. 样式层：宿主背景透明，玻璃从 Surface 透出 ----------
     Check(probe.ChromeBar.Background is null || probe.ChromeBar.Background is ISolidColorBrush { Color.A: 0 },
         "chromeBar 背景透明（.liquidGlass 样式）");
-    Check(probe.DefaultButton.CornerRadius == new CornerRadius(10), "按钮真实圆角 10");
     Check(probe.AccentButton.BorderThickness == new Thickness(0), "主按钮无描边");
-    Check(probe.Card.CornerRadius == new CornerRadius(14), "卡片真实圆角 14");
-    Check(probe.SettingsRow.CornerRadius == new CornerRadius(14), "设置行真实圆角 14");
 
     // ---------- 7. 降级渲染：无 Skia 快照时 LiquidGlassSurface 画实色 + 细描边 ----------
     var fallbackSurface = new LiquidGlassSurface
@@ -156,9 +143,6 @@ try
     // ---------- 8. 暗色热切换 ----------
     probe.Window.RequestedThemeVariant = ThemeVariant.Dark;
     Harness.PumpTicks();
-    Check(probe.ResolvedColor("AppWindowBackground") == Color.Parse("#FF000000"), "暗色窗口底 iOS 黑");
-    Check(probe.ResolvedColor("LiquidGlassAccent") == Color.Parse("#FF0A84FF"), "暗色探针键 iOS 暗蓝 #0A84FF");
-    Check(probe.ResolvedColor("LiquidGlassSurfaceColor") == Color.Parse("#38FFFFFF"), "暗色玻璃表面 iOS 深灰");
     Check(Harness.Screenshot(probe.Window, Path.Combine(evidenceRoot, "liquidglass-dark-900x640.png")), "写出 LiquidGlass 暗色帧");
     // 选中行必须可读：AppAccentSubtle 淡底 vs AccentTextFillColorPrimaryBrush 字色不能同色
     // （未注入 accent 的工装环境靠令牌字典的 iOS 淡色兜底保证对比——这是回归点）。

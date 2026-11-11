@@ -76,7 +76,7 @@ internal static class LiveSessionPool
     private static void Register(string key, PersistentSessionManager manager, PersistentSession session)
     {
         var entry = new Entry(manager, session);
-        foreach (var message in HistoryMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel))
+        foreach (var message in MessageBlockMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel))
             entry.Timeline.RestoreMessage(message);
         entry.Timeline.Flush();
         entry.Changed = (_, value) =>
@@ -104,7 +104,7 @@ internal static class LiveSessionPool
     internal static TranscriptSnapshot Snapshot(PersistentSessionManager manager, PersistentSession session)
     {
         if (!Entries.TryGetValue(Key(manager, session.Session.Id), out var entry))
-            return new(HistoryMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel), 0);
+            return new(MessageBlockMapper.MapTranscript(session.History.CurrentBranchMessages, session.Chat.CurrentModel), 0);
         lock (entry.Sync)
         {
             // Flush 清掉批次标记，重建器仍保留完整状态；快照包含当前流式消息。

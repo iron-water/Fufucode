@@ -52,12 +52,11 @@ public sealed class CodexSessionFactory : IBackendSessionFactory
         var chat = new CodexChatSession(
             request.ExecutablePath, request.ProjectPath, request.PersistFilePath,
             request.ResumeSessionId, request.Settings.Current.SelectedModel);
-        var coordinator = new CodexSessionCoordinator(chat, settings: request.Settings,
-            diagnosticLog: request.DiagnosticLog);
+        var coordinator = new CodexSessionCoordinator(chat);
         await coordinator.StartAsync(cancellationToken).ConfigureAwait(false);
         if (request.SessionIdChanged is not null) chat.SessionIdChanged += id => request.SessionIdChanged(id);
 
-        var messages = BackendSessionHistory.Load(request.PersistFilePath);
+        var messages = CliSessionHistory.Load(request.PersistFilePath);
         chat.RestoreHistory(messages);
         var interrupted = request.WasActive ||
             (messages.Count > 0 && messages[^1].Role == PureAgentRole.User);

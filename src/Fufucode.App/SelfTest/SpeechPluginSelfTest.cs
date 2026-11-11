@@ -104,4 +104,19 @@ internal static class SpeechPluginSelfTest
         await Task.Delay(50);
         await Dispatcher.UIThread.InvokeAsync(() => { }, DispatcherPriority.Background);
     }
+
+    private sealed class SpeechDialogProbe : ISpeechService
+    {
+        public bool IsSpeaking => false;
+        public bool IsPaused => false;
+        public int Rate { get; set; } = 1;
+        public int Volume { get; set; } = 80;
+        public string Status => "就绪（自测替身，未启动语音进程）";
+        public event Action? Changed { add { } remove { } }
+        public Task SpeakAsync(string text) => Task.CompletedTask;
+        public Task PauseAsync() => Task.CompletedTask;
+        public Task ResumeAsync() => Task.CompletedTask;
+        public void Stop() { }
+        public void Dispose() { }
+    }
 }

@@ -1,13 +1,13 @@
 using System.Text.Json;
 using Fufucode.Core.Backend;
 
-namespace Fufucode.Plugins.Codex;
+namespace Fufucode.Core.Backend;
 
 /// <summary>
 /// 协议适配插件共用的本地历史文件读取：{ "messages": [...] }。
 /// 解析失败时把原文件改名为 .corrupt-时间戳 保留现场，不覆盖唯一副本。
 /// </summary>
-internal static class BackendSessionHistory
+public static class CliSessionHistory
 {
     public static List<PureAgentMessage> Load(string file)
     {
