@@ -30,6 +30,8 @@ Check(SingleInstanceGuard.SlotNameForTesting(slotRoot) ==
 
 try
 {
+    Fufucode.App.Settings.Tests.UpdateCommandTests.Run(Check);
+
     // ================= 1. 三级架构分类与层级正确解析 =================
     var basic = Ids(SettingsNavTier.Basic);
     var features = Ids(SettingsNavTier.Features);

@@ -119,6 +119,61 @@ internal static class UpdateDiscoveryTests
             var blocked = deployment.Deploy(releaseSource, target);
             checks.Check(!blocked.Success, "发布渠道构建被拒绝通过本地部署覆盖");
 
+            // 审阅包必须保持独立：既不能作为部署源，也不能被本地部署覆盖。
+            var reviewSource = Path.Combine(root, "review-source");
+            (build with { Review = true, BuiltAtUtc = now.AddYears(1) }).Write(reviewSource);
+            checks.Check(!deployment.Deploy(reviewSource, target).Success,
+                "审阅构建不能作为本地部署源");
+            var previousSource = Environment.GetEnvironmentVariable("FUFUCODE_UPDATE_SOURCE_DIR");
+            try
+            {
+                Environment.SetEnvironmentVariable("FUFUCODE_UPDATE_SOURCE_DIR", reviewSource);
+                checks.Check(deployment.FindLatestBuild(out _)?.Review != true,
+                    "发现本地构建时跳过时间更晚的审阅包");
+                var pointer = Path.Combine(root, "pointer");
+                (build with { SourceDirectory = reviewSource }).Write(pointer);
+                Environment.SetEnvironmentVariable("FUFUCODE_UPDATE_SOURCE_DIR", pointer);
+                checks.Check(deployment.FindLatestBuild(out _)?.Review != true,
+                    "解析本地构建指针后仍排除审阅包");
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable("FUFUCODE_UPDATE_SOURCE_DIR", previousSource);
+            }
+            foreach (var protectedBuild in new[]
+                     {
+                         build with { Review = true },
+                         build with { Channel = "github" },
+                         build with { Channel = "test" },
+                     })
+            {
+                protectedBuild.Write(target);
+                var marker = await File.ReadAllTextAsync(Path.Combine(target, BuildInfo.FileName));
+                await File.WriteAllTextAsync(Path.Combine(target, "b.dll"), "protected");
+                var refused = deployment.Deploy(source, target);
+                checks.Check(!refused.Success && !refused.RestartRequired && refused.Copied == 0,
+                    $"不覆盖受保护构建（{protectedBuild.Channel}, review={protectedBuild.Review}）");
+                checks.Equal(marker, await File.ReadAllTextAsync(Path.Combine(target, BuildInfo.FileName)),
+                    "拒绝部署时保留原构建标记");
+                checks.Equal("protected", await File.ReadAllTextAsync(Path.Combine(target, "b.dll")),
+                    "拒绝部署时保留原程序载荷");
+                if (protectedBuild.Review)
+                {
+                    var pendingPath = Path.Combine(target, "restart-pending.json");
+                    await File.WriteAllTextAsync(pendingPath, JsonSerializer.Serialize(new
+                    {
+                        SourceDirectory = source,
+                        BuildId = build.BuildId,
+                        Files = new[] { "b.dll" },
+                    }));
+                    checks.Check(!deployment.ApplyPendingOnStartup(target) &&
+                                 await File.ReadAllTextAsync(Path.Combine(target, "b.dll")) == "protected" &&
+                                 File.Exists(pendingPath),
+                        "审阅启动不执行既有部署清单，也不丢弃清单");
+                    File.Delete(pendingPath);
+                }
+            }
+
             // 5. 更新只对发布构建启用（正式 github 与实验性 test 两个渠道都算发布构建）。
             checks.Check(!UpdateService.IsReleaseBuild(new BuildInfo("1.4.0", now, "local")),
                 "本地构建不启用更新通道");

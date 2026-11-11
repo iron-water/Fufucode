@@ -14,7 +14,7 @@ namespace Fufucode.Core.Updates;
 /// - 不联网、不下载、不校验 SHA-256；
 /// - 失败语义是"复制不完整，可回滚"，而不是"没拿到新版本，可重试网络"。
 ///
-/// 流程：备份将被覆盖的文件 → 按内容哈希增量复制 → 锁定文件写入待重启清单 → 调用方重启。
+/// 流程：备份将被覆盖的文件 → 按大小和写入时间增量复制 → 锁定文件写入待重启清单 → 调用方重启。
 /// 增量复制让"改完立刻部署"通常只复制几十到几百 KB，可稳定控制在秒级。
 /// </summary>
 public sealed class BuildDeploymentService
@@ -40,7 +40,7 @@ public sealed class BuildDeploymentService
     /// <summary>
     /// 找到最新的本地构建目录。候选：环境变量 FUFUCODE_UPDATE_SOURCE_DIR、
     /// %LOCALAPPDATA%\Fufucode\updates\local、应用目录向上找的 out/app 与 out/build/app。
-    /// 排除当前正在运行的目录与发布渠道构建。
+    /// 排除当前正在运行的目录、审阅构建与发布渠道构建。
     /// </summary>
     public BuildInfo? FindLatestBuild(out string? directory)
     {
@@ -53,14 +53,14 @@ public sealed class BuildDeploymentService
             var full = Path.GetFullPath(candidate);
             if (string.Equals(full, currentDirectory, StringComparison.OrdinalIgnoreCase)) continue;
             var info = BuildInfo.Read(full);
-            if (info is null || !info.IsLocalChannel) continue;
+            if (info is null || info.Review || !info.IsLocalChannel) continue;
             // 指针构建：真实构建目录可能在仓库里，而不是指针文件所在处。
             if (info.SourceDirectory is { Length: > 0 } pointer)
             {
                 var resolved = Path.GetFullPath(pointer);
                 if (!Directory.Exists(resolved)) continue;
                 var realInfo = BuildInfo.Read(resolved);
-                if (realInfo is null || !realInfo.IsLocalChannel) continue;
+                if (realInfo is null || realInfo.Review || !realInfo.IsLocalChannel) continue;
                 full = resolved;
                 info = realInfo;
                 if (string.Equals(full, currentDirectory, StringComparison.OrdinalIgnoreCase)) continue;
@@ -106,7 +106,10 @@ public sealed class BuildDeploymentService
         var build = BuildInfo.Read(sourceDirectory);
         if (build is null)
             return new Result(false, false, "构建目录缺少 build-info.json，无法确认构建身份。", 0, 0, 0, null);
-        if (build.IsReleaseChannel)
+        var targetBuild = BuildInfo.Read(targetDirectory);
+        if (build.Review || targetBuild?.Review == true)
+            return new Result(false, false, "审阅构建不能参与本地部署，请重新发布审阅包。", 0, 0, 0, build);
+        if (build.IsReleaseChannel || targetBuild?.IsReleaseChannel == true)
             return new Result(false, false, "发布渠道构建不能通过本地部署覆盖。", 0, 0, 0, build);
         if (IsAlreadyDeployed(sourceDirectory))
             return new Result(true, false, $"运行中的已是构建 {build.BuildId}，无需部署。", 0, 0, 0, build);
@@ -177,6 +180,7 @@ public sealed class BuildDeploymentService
     public bool ApplyPendingOnStartup(string? targetDirectory = null)
     {
         targetDirectory ??= AppContext.BaseDirectory;
+        if (BuildInfo.Read(targetDirectory)?.Review == true) return false;
         var pendingPath = Path.Combine(targetDirectory, PendingFileName);
         if (!File.Exists(pendingPath)) return false;
 

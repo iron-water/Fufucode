@@ -99,6 +99,11 @@ public sealed partial class SettingsPageViewModel
             UpdateStatusText = "测试模式不部署本地构建。";
             return;
         }
+        if (CurrentBuild.Review)
+        {
+            UpdateStatusText = "审阅构建保持独立，请重新发布审阅包。";
+            return;
+        }
         IsCheckingUpdate = true;
         UpdateProgressText = "正在查找最新构建…";
         try
@@ -198,9 +203,10 @@ public sealed partial class SettingsPageViewModel
         }
     }
 
+    /// <summary>自动检查只走发布更新；本地部署由显式按钮触发。</summary>
     [RelayCommand]
     public Task CheckForUpdatesAsync() =>
-        IsReleaseBuild ? CheckReleaseAsync() : DeployLocalBuildAsync();
+        IsReleaseBuild ? CheckReleaseAsync() : Task.CompletedTask;
 
     [RelayCommand]
     public Task DownloadUpdateAsync() => DownloadUpdateCoreAsync();
@@ -289,7 +295,10 @@ public sealed partial class SettingsPageViewModel
         {
             var exe = Environment.ProcessPath;
             if (exe is null) return;
-            Process.Start(new ProcessStartInfo(exe) { UseShellExecute = true });
+            var start = new ProcessStartInfo(exe) { UseShellExecute = true };
+            foreach (var argument in Environment.GetCommandLineArgs().AsSpan(1))
+                start.ArgumentList.Add(argument);
+            Process.Start(start);
             if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls
                 .ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
             {
