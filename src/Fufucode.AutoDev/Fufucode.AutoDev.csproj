@@ -20,6 +20,7 @@
     <Compile Include="../Fufucode.Plugins.AutoDev/AutoDevToolHandler.cs" Link="AutoDevToolHandler.cs" />
     <InternalsVisibleTo Include="Fufucode.Plugins.AutoDev" />
     <InternalsVisibleTo Include="Fufucode.GraphDevelopmentHost.Tests" />
+    <InternalsVisibleTo Include="Fufucode.GraphDevelopmentHost.Git.Tests" />
     <InternalsVisibleTo Include="Fufucode.App" />
     <InternalsVisibleTo Include="Fufucode.App.Automation.Persistence.Tests" />
     <InternalsVisibleTo Include="Fufucode.App.Automation.V4.Tests" />

@@ -6,9 +6,5 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
-    <PackageReference Include="Avalonia" Version="11.3.11" />
-  </ItemGroup>
-  <ItemGroup>
-    <AvaloniaResource Include="Themes\**\*.axaml" />
   </ItemGroup>
 </Project>
