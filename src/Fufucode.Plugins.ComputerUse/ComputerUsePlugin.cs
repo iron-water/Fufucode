@@ -48,7 +48,7 @@ public sealed partial class ComputerUsePlugin : IPluginToolHandler
 
     private const string KeyboardSchema =
         "{\"type\":\"object\",\"properties\":{" +
-        "\"action\":{\"type\":\"string\",\"enum\":[\"type\",\"key\",\"hotkey\"]}," +
+        "\"action\":{\"type\":\"string\",\"enum\":[\"type\",\"key\",\"hotkey\",\"set_value\"]}," +
         "\"text\":{\"type\":\"string\"},\"key\":{\"type\":\"string\"}," +
         "\"keys\":{\"type\":\"array\",\"items\":{\"type\":\"string\"}}," +
         "\"deliveryMode\":{\"type\":\"string\",\"enum\":[\"background\",\"foreground\"],\"default\":\"background\"}," +
@@ -106,14 +106,17 @@ public sealed partial class ComputerUsePlugin : IPluginToolHandler
             "按目标窗口投递鼠标动作。点击可用 computer_observe 的 elementToken 或截图坐标，二选一；动作后重新观察窗口。",
             MouseSchema, PluginCapability.ComputerControl),
         new PluginToolRegistration(KeyboardTool,
-            "按目标窗口投递键盘动作。后台模式不抢用户键盘焦点；需要目标进程与窗口身份。",
+            "按目标窗口投递键盘动作。set_value 只凭 CUA 的 elementToken 直接替换字段值（text 可为空），不合成按键，不回退到粘贴。",
             KeyboardSchema, PluginCapability.ComputerControl),
         new PluginToolRegistration(ObserveTool,
-            "只读 CUA 观察：只给 processId 列出该进程的候选窗口；再给 windowId 读取精简控件树。用返回的 elementToken 在同一窗口及 session 操作，界面变化或动作后重新观察；自绘区域用窗口截图。",
+            "只给 processId 列出候选窗口；再给 windowId 读控件树。复杂窗口先用 maxDepth 看浅层，或 interactiveOnly 只看有动作的控件，然后按 query 定位。引用只用于原窗口和 session；自绘区域用截图。",
             ObserveSchema, PluginCapability.ComputerControl),
+        new PluginToolRegistration(WaitTool,
+            "只读等待同一窗口中出现精确标签，可附加角色与启用状态。轮询会刷新快照：只用返回的新引用，不重放旧动作。超时不证明控件不存在。",
+            WaitSchema, PluginCapability.ComputerControl),
         new PluginToolRegistration(CapabilitiesTool,
-            "报告后端配置与后台/前台能力（CUA 仅检测 CLI，不代表 daemon 在线），不执行输入。",
-            "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
+            "报告后端配置；probe=true 向现有 Windows CUA 服务查询 UIA/窗口消息能力。不列窗口、不启动服务、不执行输入。",
+            "{\"type\":\"object\",\"properties\":{\"probe\":{\"type\":\"boolean\"}},\"additionalProperties\":false}",
             PluginCapability.ComputerControl),
     ];
 
@@ -131,7 +134,8 @@ public sealed partial class ComputerUsePlugin : IPluginToolHandler
                 MouseTool => await ExecuteMouseAsync(call, cancellationToken).ConfigureAwait(false),
                 KeyboardTool => await ExecuteKeyboardAsync(call, cancellationToken).ConfigureAwait(false),
                 ObserveTool => await ObserveAsync(call, cancellationToken).ConfigureAwait(false),
-                CapabilitiesTool => DescribeCapabilities(call.Id),
+                WaitTool => await WaitAsync(call, cancellationToken).ConfigureAwait(false),
+                CapabilitiesTool => await DescribeCapabilitiesAsync(call, cancellationToken).ConfigureAwait(false),
                 _ => new PureToolResult(call.Id, false, $"未知的电脑操控工具：'{call.Name}'。"),
             };
         }
@@ -269,8 +273,11 @@ public sealed partial class ComputerUsePlugin : IPluginToolHandler
         var text = ReadString(root, "text");
         var key = ReadString(root, "key");
         var keys = ReadStringList(root, "keys");
-        if (action is not ("type" or "key" or "hotkey"))
+        if (action is not ("type" or "key" or "hotkey" or "set_value"))
             return Missing(call.Id, $"不支持的键盘动作 '{action}'。");
+        if (action == "set_value" && (text is null || context.Target?.ElementToken is null ||
+            context.Route != ComputerUseRouteMode.CuaDriver || context.DeliveryMode != ComputerUseDeliveryMode.Background))
+            return Missing(call.Id, "set_value 需要后台 CUA 窗口、elementToken 和字符串 text（空字符串表示清空）。");
         if (action == "type" && string.IsNullOrEmpty(text))
             return Missing(call.Id, "'type' 需要 text。");
         if (action == "key" && string.IsNullOrWhiteSpace(key))
@@ -521,7 +528,7 @@ public sealed partial class ComputerUsePlugin : IPluginToolHandler
 public sealed class ComputerUsePluginPackage : IPluginPackage
 {
     public string Id => "agent.computer-use";
-    public string Version => "1.2.0";
+    public string Version => "1.3.0";
 
     public IPluginToolHandler? CreateToolHandler(PluginPackageContext context)
     {

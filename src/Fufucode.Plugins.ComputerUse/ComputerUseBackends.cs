@@ -234,6 +234,14 @@ public sealed partial class CuaDriverComputerUseBackend : IComputerUseBackend
         string tool;
         switch (request.Action)
         {
+            case "set_value":
+                if (target.ElementToken is not { Length: > 0 } || request.Text is null ||
+                    request.Context.DeliveryMode != ComputerUseDeliveryMode.Background)
+                    return Task.FromResult(Failure("set_value 需要窗口快照引用和字段值。", "invalid_action"));
+                // The driver's semantic tool does not accept delivery_mode. It has no physical-input rung.
+                payload.Remove("delivery_mode");
+                payload["value"] = request.Text;
+                return CallInputAsync("set_value", payload, cancellationToken);
             case "type":
                 tool = "type_text";
                 payload["text"] = request.Text ?? string.Empty;
@@ -279,6 +287,14 @@ public sealed partial class CuaDriverComputerUseBackend : IComputerUseBackend
         CancellationToken cancellationToken)
     {
         var result = await CallAsync(tool, payload, cancellationToken).ConfigureAwait(false);
+        if (!result.Success && tool is "set_value" or "type_text")
+        {
+            // Drivers may echo submitted text in a refusal. Keep remediation, not caller data.
+            var code = result.ErrorCode is "stale_element_token" or "stale_snapshot" or "background_unavailable" or
+                "driver_timeout" or "backend_unavailable" or "target_required" ? result.ErrorCode : "text_delivery_failed";
+            return new(false, "字段写入未确认。请重新观察原窗口，不要直接重发。", ErrorCode: code,
+                RecommendedForeground: tool == "type_text" && result.RecommendedForeground);
+        }
         if (!result.Success) return result;
         using var doc = JsonDocument.Parse(result.RawJson!);
         var root = doc.RootElement.TryGetProperty("structuredContent", out var sc) ? sc : doc.RootElement;

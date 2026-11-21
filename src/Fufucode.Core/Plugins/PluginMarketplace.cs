@@ -124,7 +124,7 @@ public static class PluginMarketplaceCatalog
 
         new("agent.computer-use", "Computer Use 电脑操控", PluginCategory.AgentCapability,
             "通过 Sky、CUA Driver 或显式前台 Win32 后端操控 Windows 应用；后台路径按目标窗口投递，失败时不会静默抢前台。",
-            "1.2.0", "Fufucode Team", ["窗口控件快照与引用", "按窗口后台投递", "屏幕截图获取", "前台显式升级"],
+            "1.3.0", "Fufucode Team", ["窗口控件快照与条件等待", "后台控件赋值", "屏幕截图获取", "前台显式升级"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         // ── 工具扩展（默认未安装，按需从市场安装） ──

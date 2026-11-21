@@ -10,7 +10,7 @@ public sealed partial class ComputerUsePlugin
 {
     public const string ObserveTool = "computer_observe";
     private const string ObserveSchema = """
-        {"type":"object","properties":{"processId":{"type":"integer","minimum":1},"windowId":{"type":"integer","minimum":1},"query":{"type":"string","maxLength":256},"maxElements":{"type":"integer","minimum":1,"maximum":100,"default":40},"session":{"type":"string"}},"required":["processId"],"additionalProperties":false}
+        {"type":"object","properties":{"processId":{"type":"integer","minimum":1},"windowId":{"type":"integer","minimum":1},"query":{"type":"string","maxLength":256},"maxElements":{"type":"integer","minimum":1,"maximum":100,"default":40,"description":"驱动扫描预算，不是命中数"},"maxDepth":{"type":"integer","minimum":1,"maximum":25},"interactiveOnly":{"type":"boolean","description":"仅返回具有引用和已知动作的控件"},"session":{"type":"string"}},"required":["processId"],"additionalProperties":false}
         """;
 
     private async Task<PureToolResult> ObserveAsync(PureToolCall call, CancellationToken ct)
@@ -29,24 +29,39 @@ public sealed partial class ComputerUsePlugin
         var query = ReadString(root, "query");
         if (root.TryGetProperty("query", out _) && (query is null || query.Length > 256))
             return Missing(call.Id, "query 必须是 256 字符以内的字符串。");
-        if (window is null && (query is not null || root.TryGetProperty("maxElements", out _)))
+        var depth = ReadInt(root, "maxDepth");
+        if (root.TryGetProperty("maxDepth", out _) && depth is not (>= 1 and <= 25)) return Missing(call.Id, "maxDepth 必须为 1–25。");
+        if (root.TryGetProperty("interactiveOnly", out var flag) && flag.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
+            return Missing(call.Id, "interactiveOnly 必须是布尔值。");
+        if (window is null && (query is not null || root.TryGetProperty("maxElements", out _) || depth is not null || flag.ValueKind != JsonValueKind.Undefined))
             return Missing(call.Id, "按控件查询需要 windowId。");
 
-        var cua = _backends.OfType<CuaDriverComputerUseBackend>().FirstOrDefault(b => b.IsAvailable);
-        if (cua is null) return Failure(call.Id, new(false, "语义观察需要 CUA Driver，可设置 FUFUCODE_CUA_DRIVER_PATH。", ErrorCode: "backend_unavailable"));
         var target = new ComputerUseTarget(pid, window, Session: ReadString(root, "session"));
-        await using var lease = await _operationGate.EnterAsync(target.HasWindow ? target.ResourceKey : $"windows:{pid}", ct).ConfigureAwait(false);
-        var result = await cua.ObserveAsync(target, query, limit.Value, ct).ConfigureAwait(false);
+        var options = new WindowReadOptions(query, limit.Value, depth, flag.ValueKind == JsonValueKind.True);
+        var result = await ReadObservationAsync(target, options, ct).ConfigureAwait(false);
         return result.Success ? new(call.Id, true, result.Message) : Failure(call.Id, result);
     }
+
+    private CuaDriverComputerUseBackend? CuaObserver => _backends.OfType<CuaDriverComputerUseBackend>().FirstOrDefault(b => b.IsAvailable);
+
+    private async Task<ComputerUseBackendResult> ReadObservationAsync(ComputerUseTarget target, WindowReadOptions options, CancellationToken ct)
+    {
+        if (CuaObserver is not { } cua) return new(false, "需要 CUA Driver，可设置 FUFUCODE_CUA_DRIVER_PATH。", ErrorCode: "backend_unavailable");
+        await using var lease = await _operationGate.EnterAsync(target.HasWindow ? target.ResourceKey : $"windows:{target.ProcessId}", ct).ConfigureAwait(false);
+        return await cua.ObserveAsync(target, options, ct).ConfigureAwait(false);
+    }
 }
+
+internal sealed record WindowCondition(string Label, string? Role, bool? Enabled);
+internal sealed record WindowReadOptions(string? Query, int Limit, int? MaxDepth = null, bool InteractiveOnly = false, WindowCondition? Condition = null);
 
 public sealed partial class CuaDriverComputerUseBackend
 {
     private static readonly JsonSerializerOptions CompactJson = new() { Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) };
 
-    internal async Task<ComputerUseBackendResult> ObserveAsync(ComputerUseTarget target, string? query, int limit, CancellationToken ct)
+    internal async Task<ComputerUseBackendResult> ObserveAsync(ComputerUseTarget target, WindowReadOptions options, CancellationToken ct)
     {
+        var (query, limit, depth, interactiveOnly, condition) = options;
         var payload = new Dictionary<string, object?> { ["pid"] = target.ProcessId };
         if (target.HasWindow)
         {
@@ -54,6 +69,7 @@ public sealed partial class CuaDriverComputerUseBackend
             payload["include_screenshot"] = false;
             payload["include_accessibility_tree"] = true;
             payload["max_elements"] = limit;
+            if (depth is not null) payload["max_depth"] = depth.Value;
             if (query is { Length: > 0 }) payload["query"] = query;
         }
         var result = await CallAsync(target.HasWindow ? "get_window_state" : "list_windows", payload, ct).ConfigureAwait(false);
@@ -78,13 +94,17 @@ public sealed partial class CuaDriverComputerUseBackend
         // Allowlist; never return the redundant Markdown, screenshot, edit values or raw driver response.
         var rows = elements.EnumerateArray().Take(limit).Select(e => new
         {
-            role = Text(e, "role"), label = Text(e, "label"), enabled = Flag(e, "enabled"), selected = Flag(e, "selected"),
+            role = Text(e, "role"), label = Text(e, "label"), depth = Number(e, "depth"), enabled = Flag(e, "enabled"), selected = Flag(e, "selected"),
             actions = ArrayField(e, "actions", out var actions) ? actions.EnumerateArray().Where(a => a.ValueKind == JsonValueKind.String)
                 .Take(12).Select(a => a.GetString()).ToArray() : [],
             elementToken = e.TryGetProperty("element_token", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null,
-        });
+        }).Where(row => (!interactiveOnly || row.actions.Length > 0 && !string.IsNullOrWhiteSpace(row.elementToken)) &&
+            (condition is null || row.label == condition.Label &&
+                (condition.Role is null || string.Equals(row.role, condition.Role, StringComparison.OrdinalIgnoreCase)) &&
+                (condition.Enabled is null || row.enabled == condition.Enabled))).ToArray();
+        if (condition is not null && rows.Length == 0) return Failure("本次观察未见符合条件的控件。", "condition_not_seen");
         return Compact(new { processId = target.ProcessId, windowId = target.WindowId, snapshotId = snapshot.GetString(),
-            complete = Flag(data, "elements_complete") == true && elements.GetArrayLength() <= limit &&
+            complete = !interactiveOnly && condition is null && depth is null && Flag(data, "elements_complete") == true && elements.GetArrayLength() <= limit &&
                 Number(data, "total_element_count") == elements.GetArrayLength(),
             total = Number(data, "total_element_count"), elements = rows });
     }
