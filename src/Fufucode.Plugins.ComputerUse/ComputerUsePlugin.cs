@@ -15,7 +15,7 @@ namespace Fufucode.Plugins.ComputerUse;
 /// 电脑操控插件：优先使用宿主注入的 Sky 后端，其次使用 CUA Driver，
 /// 最后才使用显式前台 Win32 兼容路径。后台模式不会静默降级到 SendInput。
 /// </summary>
-public sealed class ComputerUsePlugin : IPluginToolHandler
+public sealed partial class ComputerUsePlugin : IPluginToolHandler
 {
     public const string ScreenshotTool = "computer_screenshot";
     public const string MouseTool = "computer_mouse";
@@ -103,13 +103,16 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             "截取当前桌面或目标窗口；后台模式不改变用户前台窗口，必要时返回 PNG 数据。",
             ScreenshotSchema, PluginCapability.ComputerControl),
         new PluginToolRegistration(MouseTool,
-            "按目标窗口投递鼠标动作。后台模式不移动用户真实鼠标；目标不可后台投递时返回 background_unavailable。",
+            "按目标窗口投递鼠标动作。点击可用 computer_observe 的 elementToken 或截图坐标，二选一；动作后重新观察窗口。",
             MouseSchema, PluginCapability.ComputerControl),
         new PluginToolRegistration(KeyboardTool,
             "按目标窗口投递键盘动作。后台模式不抢用户键盘焦点；需要目标进程与窗口身份。",
             KeyboardSchema, PluginCapability.ComputerControl),
+        new PluginToolRegistration(ObserveTool,
+            "只读 CUA 观察：只给 processId 列出该进程的候选窗口；再给 windowId 读取精简控件树。用返回的 elementToken 在同一窗口及 session 操作，界面变化或动作后重新观察；自绘区域用窗口截图。",
+            ObserveSchema, PluginCapability.ComputerControl),
         new PluginToolRegistration(CapabilitiesTool,
-            "报告 Sky、CUA Driver 与 Win32 后端的实际可用性和后台/前台能力，不执行输入。",
+            "报告后端配置与后台/前台能力（CUA 仅检测 CLI，不代表 daemon 在线），不执行输入。",
             "{\"type\":\"object\",\"properties\":{},\"additionalProperties\":false}",
             PluginCapability.ComputerControl),
     ];
@@ -127,6 +130,7 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
                 ScreenshotTool => await CaptureAsync(call, cancellationToken).ConfigureAwait(false),
                 MouseTool => await ExecuteMouseAsync(call, cancellationToken).ConfigureAwait(false),
                 KeyboardTool => await ExecuteKeyboardAsync(call, cancellationToken).ConfigureAwait(false),
+                ObserveTool => await ObserveAsync(call, cancellationToken).ConfigureAwait(false),
                 CapabilitiesTool => DescribeCapabilities(call.Id),
                 _ => new PureToolResult(call.Id, false, $"未知的电脑操控工具：'{call.Name}'。"),
             };
@@ -167,7 +171,7 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             context);
         var result = await ExecuteWithFallbackAsync(
             (backend, token) => backend.CaptureAsync(request, token),
-            context,
+            context, isInput: false,
             cancellationToken).ConfigureAwait(false);
         if (!result.Success || result.PngBytes is null)
             return Failure(call.Id, result);
@@ -213,7 +217,10 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         var delta = ReadInt(root, "delta") ?? 0;
         if (action is not ("move" or "click" or "double_click" or "right_click" or "scroll"))
             return Missing(call.Id, $"不支持的鼠标动作 '{action}'。");
-        if (action is not "scroll" && (x is null || y is null))
+        bool byElement = context.Target?.ElementToken is not null;
+        if (byElement && (action == "move" || root.TryGetProperty("x", out _) || root.TryGetProperty("y", out _)))
+            return Missing(call.Id, "elementToken 与像素坐标不能混用；move 需要坐标。");
+        if (!byElement && action is not "scroll" && (x is null || y is null))
             return Missing(call.Id, $"'{action}' 需要 x 与 y。");
         if (context.DeliveryMode == ComputerUseDeliveryMode.Background && context.Target?.HasWindow != true)
             return Missing(call.Id, "后台鼠标动作需要 processId 与 windowId；没有窗口目标时不会触碰用户真实鼠标。");
@@ -233,11 +240,16 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         if (isClick) UpdateVirtualCursor(context, action, screenX, screenY, "按下", pressed: true);
 
         var request = new ComputerUseMouseRequest(action, x, y, delta, context);
-        var result = await ExecuteWithFallbackAsync(
-            (backend, token) => backend.MouseAsync(request, token),
-            context,
-            cancellationToken).ConfigureAwait(false);
-        if (isClick) UpdateVirtualCursor(context, action, screenX, screenY, result.Message, pressed: false);
+        ComputerUseBackendResult? result = null;
+        try
+        {
+            result = await ExecuteWithFallbackAsync((backend, token) => backend.MouseAsync(request, token),
+                context, isInput: true, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (isClick) UpdateVirtualCursor(context, action, screenX, screenY, result?.Message ?? "已结束", pressed: false);
+        }
         return result.Success
             ? new PureToolResult(call.Id, true, result.Message)
             : Failure(call.Id, result);
@@ -275,7 +287,7 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         var request = new ComputerUseKeyboardRequest(action, text, key, keys, context);
         var result = await ExecuteWithFallbackAsync(
             (backend, token) => backend.KeyboardAsync(request, token),
-            context,
+            context, isInput: true,
             cancellationToken).ConfigureAwait(false);
         return result.Success
             ? new PureToolResult(call.Id, true, result.Message)
@@ -285,14 +297,26 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
     private async Task<ComputerUseBackendResult> ExecuteWithFallbackAsync(
         Func<IComputerUseBackend, CancellationToken, Task<ComputerUseBackendResult>> execute,
         ComputerUseActionContext context,
+        bool isInput,
         CancellationToken cancellationToken)
     {
         ComputerUseBackendResult? last = null;
         foreach (var backend in OrderedBackends(context))
         {
+            // Win32 only knows the shared desktop. Neither screenshots nor input may widen a window target.
+            if (backend.Kind == ComputerUseBackendKind.Win32 && context.Target?.HasWindow == true)
+            {
+                last ??= new(false, "Win32 不能保证操作指定窗口。", ErrorCode: "target_unsupported");
+                continue;
+            }
+            if (isInput && backend.Kind == ComputerUseBackendKind.CuaDriver && context.Target?.HasWindow != true)
+            {
+                last ??= new(false, "CUA 输入需要 processId 与 windowId。", ErrorCode: "target_required");
+                continue;
+            }
             if (!backend.IsAvailable)
             {
-                last = new ComputerUseBackendResult(false,
+                last ??= new ComputerUseBackendResult(false,
                     backend.UnavailableReason ?? $"{backend.Kind} 后端不可用。",
                     ErrorCode: "backend_unavailable");
                 continue;
@@ -313,7 +337,8 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             }
 
             last = await execute(backend, cancellationToken).ConfigureAwait(false);
-            if (last.Success) return last;
+            // After dispatch, even a lost reply may mean a click/type took effect. Never replay input.
+            if (last.Success || isInput) return last;
             // An explicit route is a pin, not a preference: do not silently try another stack.
             if (context.Route is not (ComputerUseRouteMode.Auto or ComputerUseRouteMode.Visible))
                 return last;
@@ -403,7 +428,7 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             "电脑操控后端能力：" + string.Join(" | ", descriptions) +
             "。路由：background/auto 优先 CUA 窗口投递；foreground/visible 优先 Sky；显式 route=sky|cua|win32 只走指定后端。" +
             " 并发策略：后台输入按目标窗口分桶、前台输入全局串行；不同窗口截图按目标资源隔离。" +
-            " agentId 存在时会同步虚拟光标 Overlay，不产生系统输入。后台失败不会自动升级前台。");
+            " computer_observe 通过 CUA 读取窗口控件；CUA available 仅表示已找到 CLI，daemon 需另行运行。后台失败不会升级前台，已尝试的输入不自动重放。");
     }
 
     private static ComputerUseActionContext ReadContext(JsonElement root)
@@ -411,7 +436,8 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         var mode = ReadString(root, "deliveryMode")?.ToLowerInvariant() switch
         {
             "foreground" => ComputerUseDeliveryMode.Foreground,
-            _ => ComputerUseDeliveryMode.Background,
+            null or "background" => ComputerUseDeliveryMode.Background,
+            _ => throw new ArgumentException("未知的 deliveryMode。"),
         };
         var route = ReadString(root, "route")?.ToLowerInvariant() switch
         {
@@ -419,11 +445,25 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
             "cua" or "cua-driver" => ComputerUseRouteMode.CuaDriver,
             "win32" => ComputerUseRouteMode.Win32,
             "visible" => ComputerUseRouteMode.Visible,
-            _ => ComputerUseRouteMode.Auto,
+            null or "auto" => ComputerUseRouteMode.Auto,
+            _ => throw new ArgumentException("未知的 route。"),
         };
         var processId = ReadInt(root, "processId") ?? ReadInt(root, "pid");
         var windowId = ReadLong(root, "windowId") ?? ReadLong(root, "window_id");
         var token = ReadString(root, "elementToken") ?? ReadString(root, "element_token");
+        if (root.ValueKind != JsonValueKind.Object) throw new ArgumentException("工具需要参数对象。");
+        if ((root.TryGetProperty("elementToken", out _) || root.TryGetProperty("element_token", out _)) && string.IsNullOrWhiteSpace(token))
+            throw new ArgumentException("elementToken 必须是非空的快照引用。");
+        if ((root.TryGetProperty("processId", out _) || root.TryGetProperty("windowId", out _) ||
+             root.TryGetProperty("pid", out _) || root.TryGetProperty("window_id", out _) || token is not null) &&
+            (processId is not > 0 || windowId is not > 0))
+            throw new ArgumentException("窗口目标需要有效的 processId 和 windowId，不会改用桌面。");
+        if (token is not null && route != ComputerUseRouteMode.Sky)
+        {
+            if (route is ComputerUseRouteMode.Win32 or ComputerUseRouteMode.Visible)
+                throw new ArgumentException("CUA 快照引用不能用于其他路由。");
+            route = ComputerUseRouteMode.CuaDriver;
+        }
         var session = ReadString(root, "session");
         var agentId = ReadString(root, "agentId") ?? ReadString(root, "agent_id");
         var target = processId is not null || windowId is not null || token is not null
@@ -437,6 +477,8 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
         var suffix = result.ErrorCode is { Length: > 0 } code ? $" 错误码：{code}。" : string.Empty;
         if (result.RecommendedForeground)
             suffix += " 该后台路径不可用；如确实允许前台操作，请显式将 deliveryMode 设为 foreground 后重试。";
+        if (result.ErrorCode is "stale_element_token" or "stale_snapshot")
+            suffix += " 请 computer_observe 重新观察原窗口并使用新引用，不要重放旧引用。";
         return new PureToolResult(id, false, result.Message + suffix);
     }
 
@@ -479,7 +521,7 @@ public sealed class ComputerUsePlugin : IPluginToolHandler
 public sealed class ComputerUsePluginPackage : IPluginPackage
 {
     public string Id => "agent.computer-use";
-    public string Version => "1.1.0";
+    public string Version => "1.2.0";
 
     public IPluginToolHandler? CreateToolHandler(PluginPackageContext context)
     {

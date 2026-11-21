@@ -1,7 +1,9 @@
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -116,15 +118,20 @@ public sealed class Win32ComputerUseBackend : IComputerUseBackend
 /// CUA Driver CLI 后端。后台动作按目标窗口投递，失败时保留
 /// background_unavailable，不自行升级到 foreground。
 /// </summary>
-public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
+public sealed partial class CuaDriverComputerUseBackend : IComputerUseBackend
 {
     private readonly string? _executablePath;
     private readonly TimeSpan _timeout;
+    private readonly string? _socket;
 
     public CuaDriverComputerUseBackend(string? executablePath = null, TimeSpan? timeout = null)
+        : this(executablePath, timeout, Environment.GetEnvironmentVariable("FUFUCODE_CUA_DRIVER_SOCKET")) { }
+
+    public CuaDriverComputerUseBackend(string? executablePath, TimeSpan? timeout, string? socket)
     {
         _executablePath = ResolveExecutable(executablePath);
         _timeout = timeout ?? TimeSpan.FromSeconds(30);
+        _socket = socket;
     }
 
     public ComputerUseBackendKind Kind => ComputerUseBackendKind.CuaDriver;
@@ -156,10 +163,7 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
                 ["include_screenshot"] = true,
                 ["include_accessibility_tree"] = false,
             })
-            : new Dictionary<string, object?>
-            {
-                ["include_screenshot"] = true,
-            };
+            : new Dictionary<string, object?>();
         return CallCaptureAsync(tool, payload, cancellationToken);
     }
 
@@ -185,6 +189,9 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         {
             case "move":
                 tool = "move_cursor";
+                payload = new() { ["scope"] = "window", ["target"] = new { kind = "window", pid = target.ProcessId, window_id = target.WindowId },
+                    ["x"] = request.X, ["y"] = request.Y };
+                if (!string.IsNullOrWhiteSpace(target.Session)) payload["session"] = target.Session;
                 break;
             case "click":
                 tool = "click";
@@ -198,8 +205,9 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
                 break;
             case "scroll":
                 tool = "scroll";
-                payload["scrollX"] = 0;
-                payload["scrollY"] = request.Delta;
+                if (request.Delta == 0) return Task.FromResult(Failure("滚动需要非零 delta。", "invalid_action"));
+                payload["direction"] = request.Delta > 0 ? "up" : "down";
+                payload["amount"] = Math.Clamp((Math.Abs((long)request.Delta) + 119) / 120, 1, 50);
                 break;
             default:
                 return Task.FromResult(Failure($"不支持的鼠标动作 '{request.Action}'。", "invalid_action"));
@@ -271,7 +279,14 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         CancellationToken cancellationToken)
     {
         var result = await CallAsync(tool, payload, cancellationToken).ConfigureAwait(false);
-        return result with { Message = result.Success ? $"CUA Driver {tool} 已执行。" : result.Message };
+        if (!result.Success) return result;
+        using var doc = JsonDocument.Parse(result.RawJson!);
+        var root = doc.RootElement.TryGetProperty("structuredContent", out var sc) ? sc : doc.RootElement;
+        var effect = Text(root, "effect");
+        if (effect == "confirmed") return new(true, $"CUA Driver {tool} 已确认生效。");
+        if (effect == "ineffective") return Failure("CUA 未观察到预期效果；请重新观察原窗口。", "effect_ineffective");
+        // Some driver versions return only delivery metadata (or an unknown effect). That is not proof of a UI change.
+        return Failure($"CUA Driver {tool} 的效果未确认，可能已生效。先重新观察原窗口，不要重放输入。", "effect_unverified");
     }
 
     private async Task<ComputerUseBackendResult> CallAsync(
@@ -292,6 +307,7 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
                 RedirectStandardInput = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
+                StandardInputEncoding = new UTF8Encoding(false),
                 StandardOutputEncoding = Encoding.UTF8,
                 StandardErrorEncoding = Encoding.UTF8,
             },
@@ -299,26 +315,33 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         process.StartInfo.ArgumentList.Add("call");
         process.StartInfo.ArgumentList.Add(tool);
         process.StartInfo.ArgumentList.Add("-");
+        if (!string.IsNullOrWhiteSpace(_socket))
+        {
+            process.StartInfo.ArgumentList.Add("--socket");
+            process.StartInfo.ArgumentList.Add(_socket);
+        }
 
         try
         {
             if (!process.Start())
                 return Failure("无法启动 cua-driver。", "process_start_failed");
 
-            var requestJson = JsonSerializer.Serialize(payload);
-            await process.StandardInput.WriteAsync(requestJson).ConfigureAwait(false);
-            await process.StandardInput.FlushAsync().ConfigureAwait(false);
-            process.StandardInput.Close();
-
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(_timeout);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+            var stderrTask = process.StandardError.ReadToEndAsync(timeout.Token);
+            await process.StandardInput.WriteAsync(JsonSerializer.Serialize(payload).AsMemory(), timeout.Token).ConfigureAwait(false);
+            process.StandardInput.Close();
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             var stdout = await stdoutTask.ConfigureAwait(false);
             var stderr = await stderrTask.ConfigureAwait(false);
             var raw = string.IsNullOrWhiteSpace(stdout) ? stderr : stdout;
             return ParseResult(raw, process.ExitCode);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            TryKill(process);
+            return Failure("CUA 等待回执超时；请重新观察窗口，不要重放输入。", "driver_timeout");
         }
         catch (OperationCanceledException)
         {
@@ -341,20 +364,24 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         {
             using var doc = JsonDocument.Parse(raw);
             var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return Failure("CUA 未返回结构化回执。", "invalid_response");
             var isError = root.TryGetProperty("isError", out var error) && error.ValueKind == JsonValueKind.True;
-            var code = FindString(root, "code") ?? FindString(root, "error_code");
-            var message = FindString(root, "message") ?? FindString(root, "error") ?? raw.Trim();
-            var recommendedForeground = string.Equals(code, "background_unavailable", StringComparison.OrdinalIgnoreCase) ||
-                raw.Contains("background_unavailable", StringComparison.OrdinalIgnoreCase);
-            if (isError || exitCode != 0)
-                return new ComputerUseBackendResult(false, message, ErrorCode: code ?? "driver_error",
-                    RecommendedForeground: recommendedForeground, RawJson: raw);
-            return new ComputerUseBackendResult(true, message, RawJson: raw);
+            var data = root.TryGetProperty("structuredContent", out var sc) ? sc : root;
+            if (data.ValueKind != JsonValueKind.Object) return Failure("CUA 未返回结构化内容。", "invalid_response");
+            if (isError || exitCode != 0 || data.TryGetProperty("refusal", out _) || data.TryGetProperty("error", out _) ||
+                Text(data, "status") is "refused" or "error" or "failed" || Flag(data, "ok") == false || Flag(data, "success") == false ||
+                Text(data, "code") is not null || Text(data, "error_code") is not null)
+            {
+                var code = FindString(data, "code") ?? FindString(data, "error_code") ?? "driver_error";
+                var message = FindString(data, "message") ?? Text(data, "error") ?? "CUA 拒绝了请求。";
+                return Failure(message, code);
+            }
+            return new(true, "CUA Driver 已返回回执。", RawJson: raw);
         }
         catch (JsonException)
         {
-            return new ComputerUseBackendResult(exitCode == 0, raw.Trim(),
-                ErrorCode: exitCode == 0 ? null : "invalid_response", RawJson: raw);
+            var detail = raw.Trim();
+            return Failure(detail.Length > 512 ? detail[..512] + "…" : detail, "invalid_response");
         }
     }
 
@@ -365,7 +392,12 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         try
         {
             using var doc = JsonDocument.Parse(raw);
-            return FindPng(doc.RootElement, ref width, ref height, 0);
+            var bytes = FindPng(doc.RootElement, 0);
+            if (bytes is null) return null;
+            // Pixel actions address the returned image, not the window's (possibly scaled) bounds.
+            width = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(16, 4));
+            height = BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(20, 4));
+            return width > 0 && height > 0 ? bytes : null;
         }
         catch (JsonException)
         {
@@ -373,13 +405,11 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         }
     }
 
-    private static byte[]? FindPng(JsonElement value, ref int? width, ref int? height, int depth)
+    private static byte[]? FindPng(JsonElement value, int depth)
     {
         if (depth > 8) return null;
         if (value.ValueKind == JsonValueKind.Object)
         {
-            if (value.TryGetProperty("width", out var w) && w.TryGetInt32(out var wi)) width ??= wi;
-            if (value.TryGetProperty("height", out var h) && h.TryGetInt32(out var hi)) height ??= hi;
             foreach (var name in new[] { "screenshot_png_b64", "screenshot_b64", "png_base64" })
             {
                 if (value.TryGetProperty(name, out var encoded) && encoded.ValueKind == JsonValueKind.String &&
@@ -387,7 +417,7 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
             }
             foreach (var property in value.EnumerateObject())
             {
-                var found = FindPng(property.Value, ref width, ref height, depth + 1);
+                var found = FindPng(property.Value, depth + 1);
                 if (found is not null) return found;
             }
         }
@@ -395,7 +425,7 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         {
             foreach (var item in value.EnumerateArray())
             {
-                var found = FindPng(item, ref width, ref height, depth + 1);
+                var found = FindPng(item, depth + 1);
                 if (found is not null) return found;
             }
         }
@@ -413,7 +443,8 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
         try
         {
             bytes = Convert.FromBase64String(value);
-            return bytes.Length > 8 && bytes[0] == 0x89 && bytes[1] == (byte)'P' && bytes[2] == (byte)'N' && bytes[3] == (byte)'G';
+            return bytes.Length >= 33 && bytes[0] == 0x89 && bytes.AsSpan(1, 7).SequenceEqual("PNG\r\n\x1a\n"u8) &&
+                BinaryPrimitives.ReadInt32BigEndian(bytes.AsSpan(8, 4)) == 13 && bytes.AsSpan(12, 4).SequenceEqual("IHDR"u8);
         }
         catch (FormatException) { return false; }
     }
@@ -471,11 +502,10 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
             candidate = Environment.GetEnvironmentVariable("FUFUCODE_CUA_DRIVER_PATH");
         if (!string.IsNullOrWhiteSpace(candidate) && File.Exists(candidate))
             return Path.GetFullPath(candidate);
-        if (!string.IsNullOrWhiteSpace(explicitPath)) return null;
+        if (!string.IsNullOrWhiteSpace(candidate)) return null;
 
         var path = Environment.GetEnvironmentVariable("PATH");
-        if (string.IsNullOrWhiteSpace(path)) return null;
-        foreach (var directory in path.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
+        foreach (var directory in (path ?? "").Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries))
         {
             foreach (var name in OperatingSystem.IsWindows()
                          ? new[] { "cua-driver.exe", "cua-driver" }
@@ -485,7 +515,20 @@ public sealed class CuaDriverComputerUseBackend : IComputerUseBackend
                 if (File.Exists(full)) return Path.GetFullPath(full);
             }
         }
-        return null;
+        // The Windows installer also keeps native releases here without a PATH shim.
+        // Never guess between parallel installs; pin FUFUCODE_CUA_DRIVER_PATH in that case.
+        var arch = RuntimeInformation.OSArchitecture switch { Architecture.X64 => "x86_64", Architecture.Arm64 => "aarch64", _ => null };
+        if (!OperatingSystem.IsWindows() || arch is null) return null;
+        var releases = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".cua-driver", "packages", "releases");
+        try
+        {
+            if (!Directory.Exists(releases)) return null;
+            var installed = Directory.EnumerateDirectories(releases, $"*-{arch}-pc-windows-msvc")
+                .Select(dir => Path.Combine(dir, "cua-driver.exe")).Where(File.Exists).Take(2).ToArray();
+            return installed.Length == 1 ? installed[0] : null;
+        }
+        catch (IOException) { return null; }
+        catch (UnauthorizedAccessException) { return null; }
     }
 
     private static void TryKill(Process process)

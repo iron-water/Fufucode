@@ -38,7 +38,8 @@ internal static class PluginCapabilityTests
             var store = new PluginStateStore(layout);
             var gateway = new PluginCapabilityGateway(store);
             var registry = new PluginToolRegistry(gateway);
-            var computer = new ComputerUsePlugin(new FakeScreenCapture(), new FakeInput(), Path.Combine(root, "shots"));
+            var computer = new ComputerUsePlugin(outputDirectory: Path.Combine(root, "shots"),
+                backends: [new Win32ComputerUseBackend(new FakeScreenCapture(), new FakeInput())]);
             var browser = new BrowserUsePlugin(new FakeBridge());
             registry.Register(computer);
             registry.Register(browser);
@@ -52,6 +53,7 @@ internal static class PluginCapabilityTests
             await CapabilityMapping(checks);
             await BrowserUseLifecycle(checks, store, gateway, registry, browser);
             await ComputerUseLifecycle(checks, store, gateway, registry, computer, root);
+            await ComputerObservationTests.RunAsync(checks);
             await UninstallRevokes(checks, store, registry, browser, computer, layout);
             await RegistryIsolation(checks, store, gateway, layout);
             await CheckPhysicalPackageLifecycle(checks, layout, store, gateway, registry);
@@ -383,6 +385,23 @@ internal static class PluginCapabilityTests
         checks.Check(sky.MouseCalls == 2 && cua.MouseCalls == 1,
             "显式 route=sky 固定使用 Sky，不静默切到 CUA");
 
+        var lostReply = new FakeComputerBackend { MouseResult = new(false, "lost reply", ErrorCode: "process_failed") };
+        var spare = new FakeComputerBackend(ComputerUseBackendKind.Sky);
+        var safe = new ComputerUsePlugin(backends: [lostReply, spare]);
+        var uncertain = await safe.ExecuteAsync(new("uncertain", ComputerUsePlugin.MouseTool,
+            """{"action":"click","processId":7,"windowId":8,"x":2,"y":3}"""));
+        checks.Check(!uncertain.Success && lostReply.MouseCalls == 1 && spare.MouseCalls == 0,
+            "已尝试的点击即使遗失回执也不会转给第二个后端重放");
+        var desk = new FakeScreenCapture();
+        var physical = new FakeInput();
+        var onlyDesktop = new ComputerUsePlugin(backends: [new Win32ComputerUseBackend(desk, physical)]);
+        var shotTarget = await onlyDesktop.ExecuteAsync(new("scopedShot", ComputerUsePlugin.ScreenshotTool,
+            """{"deliveryMode":"foreground","processId":7,"windowId":8}"""));
+        var keyTarget = await onlyDesktop.ExecuteAsync(new("scopedKey", ComputerUsePlugin.KeyboardTool,
+            """{"deliveryMode":"foreground","action":"key","key":"A","processId":7,"windowId":8}"""));
+        checks.Check(!shotTarget.Success && !keyTarget.Success && desk.Calls.Count == 0 && physical.Calls.Count == 0,
+            "绑定窗口的截图与输入都不得悄悄落到全桌面");
+
         // 虚拟光标：成功鼠标动作更新注册表；纯状态层不产生系统输入。
         var cursors = new ComputerUseVirtualCursorRegistry();
         var cursorPlugin = new ComputerUsePlugin(backends: new[] { new FakeComputerBackend(ComputerUseBackendKind.CuaDriver) },
@@ -519,6 +538,7 @@ internal static class PluginCapabilityTests
         public ComputerUseMouseRequest? LastMouse { get; private set; }
         public int MouseCalls { get; private set; }
         public TimeSpan MouseDelay { get; init; }
+        public ComputerUseBackendResult MouseResult { get; init; } = new(true, "fake mouse");
 
         public Task<ComputerUseBackendResult> CaptureAsync(ComputerUseCaptureRequest request,
             CancellationToken cancellationToken = default) =>
@@ -530,7 +550,7 @@ internal static class PluginCapabilityTests
             LastMouse = request;
             MouseCalls++;
             if (MouseDelay > TimeSpan.Zero) await Task.Delay(MouseDelay, cancellationToken);
-            return new ComputerUseBackendResult(true, "fake mouse");
+            return MouseResult;
         }
 
         public Task<ComputerUseBackendResult> KeyboardAsync(ComputerUseKeyboardRequest request,

@@ -12,6 +12,8 @@ internal static class Program
 {
     private static async Task<int> Main(string[] args)
     {
+        if (args is ["call", var tool, "-", "--socket", ComputerObservationTests.FixtureSocket])
+            return ComputerObservationTests.Reply(tool, await Console.In.ReadToEndAsync());
         // 测试用假 MCP 服务器（stdio）：测试进程以该参数启动自身。
         if (args.Length >= 1 && args[0] == "--fake-mcp-stdio")
             return await FakeMcpServer.RunStdioAsync();
