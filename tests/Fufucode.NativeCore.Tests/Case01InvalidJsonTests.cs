@@ -15,12 +15,55 @@ internal static class Case01InvalidJsonTests
 {
     private const string Prefix = "{\"path\":\"target.txt\",\"content\":\"";
     private const string Suffix = "changed\"}";
+    private static readonly JsonSerializerOptions OmitNullFields = new()
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     public static async Task RunAsync(Checks checks)
     {
         await StreamAsyncFailsOnCorruptFrameAsync(checks);
         await AgentLoopRejectsCorruptToolRoundAsync(checks);
         await HeartbeatsPreserveValidToolCallAsync(checks);
+        await UnindexedParallelCallsAsync(checks);
+    }
+
+    private static async Task UnindexedParallelCallsAsync(Checks checks)
+    {
+        var start = ToolCallFrame("one", "first", "{", null) + ToolCallFrame("two", "second", "[", null);
+        using var client = NewClient(_ => SseResponse(Split(start + ToolCallFrame("two", null, "]", null) +
+            ToolCallFrame("one", null, "}", null) + FinishFrame() + Done, 7)));
+        var indexes = new List<int>();
+        var completion = await client.StreamAsync(NewRequest(), new ModelStreamCallbacks
+        {
+            OnToolCallChunkIndexed = (i, _, _, _) => indexes.Add(i),
+        });
+        var calls = completion.Primary!.ToolCalls;
+        checks.Equal(2, calls.Count, "distinct IDs across SSE frames remain distinct without index");
+        checks.Equal(new StreamedToolCall(0, "one", "first", "{}"), calls[0], "first call receives only its own arguments");
+        checks.Equal(new StreamedToolCall(1, "two", "second", "[]"), calls[1], "second call receives only its own arguments");
+        checks.Check(indexes.SequenceEqual([0, 1, 1, 0]), "streaming callbacks agree with aggregated call identity");
+
+        using var mixed = NewClient(_ => SseResponse(Split(ToolCallFrame("first", "read", "{", 4) +
+            ToolCallFrame(null, null, "}", null) + ToolCallFrame("second", "list", "{}", null) + Done, 7)));
+        var mixedCalls = (await mixed.StreamAsync(NewRequest(), null)).Primary!.ToolCalls;
+        checks.Check(mixedCalls.SequenceEqual([new(4, "first", "read", "{}"), new(5, "second", "list", "{}")]),
+            "a sole nonzero index accepts anonymous continuation and a new ID keeps call order");
+
+        foreach (var invalid in new[] { ToolCallFrame(null, null, "}", null), ToolCallFrame("one", null, "}", 1),
+                     ToolCallFrame("other", null, "}", 0) })
+        {
+            using var ambiguous = NewClient(_ => SseResponse(Split(start + invalid + Done, 7)));
+            try
+            {
+                await ambiguous.StreamAsync(NewRequest(), null);
+                checks.Check(false, "ambiguous or conflicting tool identity must not yield a completion");
+            }
+            catch (ModelClientException error)
+            {
+                checks.Equal("ambiguous_tool_call_chunk", error.ErrorCode, "reject unidentified or conflicting tool fragment");
+            }
+        }
     }
 
     private static async Task StreamAsyncFailsOnCorruptFrameAsync(Checks checks)
@@ -150,7 +193,7 @@ internal static class Case01InvalidJsonTests
     private static string FinishFrame() =>
         Frame("{\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"tool_calls\"}]}");
 
-    private static string ToolCallFrame(string? id, string? name, string arguments, int index) =>
+    private static string ToolCallFrame(string? id, string? name, string arguments, int? index) =>
         Frame(JsonSerializer.Serialize(new
         {
             choices = new[]
@@ -164,7 +207,7 @@ internal static class Case01InvalidJsonTests
                     },
                 },
             },
-        }));
+        }, OmitNullFields));
 
     private const string Done = "data: [DONE]\n\n";
 

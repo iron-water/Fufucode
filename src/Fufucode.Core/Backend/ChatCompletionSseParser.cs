@@ -191,11 +191,6 @@ public sealed class ChatCompletionSseParser
             return;
         }
 
-        // 规范要求每个分片带 index；部分兼容网关会省略后续分片的 index。
-        // 这种情况下只有出现新的 id 才视为新工具调用，否则继续拼接到当前调用，
-        // 不能把同一调用的参数字分片拆成多个调用。
-        var lastIndex = -1;
-        string? lastId = null;
         foreach (var chunk in toolCalls.EnumerateArray())
         {
             if (chunk.ValueKind != JsonValueKind.Object) continue;
@@ -205,14 +200,6 @@ public sealed class ChatCompletionSseParser
             {
                 id = idElement.GetString();
             }
-
-            var explicitIndex = TryReadInt(chunk, "index");
-            var index = explicitIndex ??
-                        (lastIndex >= 0 && (id is null || string.Equals(id, lastId, StringComparison.Ordinal))
-                            ? lastIndex
-                            : Math.Max(lastIndex + 1, 0));
-            lastIndex = index;
-            if (!string.IsNullOrEmpty(id)) lastId = id;
 
             string? name = null;
             string arguments = "";
@@ -230,7 +217,7 @@ public sealed class ChatCompletionSseParser
                 }
             }
 
-            choice.AppendToolCallChunk(index, id, name, arguments);
+            var index = choice.AppendToolCallChunk(TryReadInt(chunk, "index"), id, name, arguments);
 
             // 任务约定的回调签名：id、name、argsFragment（其余分片为空串）。
             callbacks?.OnToolCallChunk?.Invoke(id ?? "", name ?? "", arguments);

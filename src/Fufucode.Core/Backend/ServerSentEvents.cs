@@ -14,7 +14,7 @@ public sealed record ServerSentEvent(string? EventName, string Data, string? Id,
     /// <summary>是否为结束哨兵（data 去除空白后等于 [DONE]）。</summary>
     public bool IsDone => string.Equals(Data.Trim(), "[DONE]", StringComparison.Ordinal);
 
-    /// <summary>是否为只有注释/心跳、没有 data 的占位事件。</summary>
+    /// <summary>事件是否既无文本也无元数据。</summary>
     public bool IsEmpty => Data.Length == 0 && EventName is null && Id is null && Retry is null;
 }
 
@@ -41,6 +41,8 @@ public static class ServerSentEvents
         var decoder = encoding.GetDecoder();
         var charBuffer = new char[encoding.GetMaxCharCount(buffer.Length)];
         var state = new EventState();
+        var atStart = true;
+        var skipLf = false;
 
         while (true)
         {
@@ -48,42 +50,38 @@ public static class ServerSentEvents
 
             var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancellationToken)
                 .ConfigureAwait(false);
-            if (read == 0) break;
-
-            var charCount = decoder.GetChars(buffer, 0, read, charBuffer, 0, flush: false);
-            pending.Append(charBuffer, 0, charCount);
-
-            while (TryTakeLine(pending, out var line))
+            var count = decoder.GetChars(buffer, 0, read, charBuffer, 0, flush: read == 0);
+            var start = atStart && count > 0 && charBuffer[0] == '\uFEFF' ? 1 : 0;
+            if (count > 0) atStart = false;
+            for (var i = start; i < count; i++)
             {
+                var c = charBuffer[i];
+                if (skipLf)
+                {
+                    skipLf = false;
+                    if (c == '\n') { start = i + 1; continue; }
+                }
+                if (c is not ('\n' or '\r')) continue;
+
+                // CR 本身即换行；跨分片时跳过可选 LF，不为已完整的事件等待下次网络读取。
+                skipLf = c == '\r';
+                var line = pending.Length == 0 ? new string(charBuffer, start, i - start)
+                    : pending.Append(charBuffer, start, i - start).ToString();
+                pending.Clear();
+                start = i + 1;
                 if (TryApply(line, state, out var dispatched))
                 {
                     yield return dispatched;
                     if (dispatched.IsDone) yield break;
                 }
             }
+            pending.Append(charBuffer, start, count - start);
+            if (read == 0) break;
         }
-
-        var remaining = decoder.GetChars(Array.Empty<byte>(), 0, 0, charBuffer, 0, flush: true);
-        if (remaining > 0) pending.Append(charBuffer, 0, remaining);
 
         // 流意外结束时，把已累积但尚未以空行收尾的事件一并派发，避免丢最后一块数据。
         if (pending.Length > 0)
-        {
-            while (TryTakeLine(pending, out var lastLine))
-            {
-                if (TryApply(lastLine, state, out var tailLine))
-                {
-                    yield return tailLine;
-                    if (tailLine.IsDone) yield break;
-                }
-            }
-
-            if (TryApply(pending.ToString(), state, out var tail))
-            {
-                yield return tail;
-                if (tail.IsDone) yield break;
-            }
-        }
+            TryApply(pending.ToString(), state, out _);
 
         if (state.HasData)
         {
@@ -96,15 +94,12 @@ public static class ServerSentEvents
     {
         dispatched = default!;
 
-        // 去掉行尾 CR（CRLF 与裸 CR 行尾都会走到这里）。
-        if (line.EndsWith('\r')) line = line[..^1];
-
         if (line.Length == 0)
         {
-            if (!state.HasContent) return false;
-            dispatched = state.Build();
+            var hasData = state.HasData;
+            if (hasData) dispatched = state.Build();
             state.Reset();
-            return true;
+            return hasData;
         }
 
         if (line[0] == ':') return false; // 注释/心跳行
@@ -146,26 +141,6 @@ public static class ServerSentEvents
         return false;
     }
 
-    private static bool TryTakeLine(StringBuilder pending, out string line)
-    {
-        for (var i = 0; i < pending.Length; i++)
-        {
-            var c = pending[i];
-            if (c != '\n' && c != '\r') continue;
-
-            // CRLF 视为一个换行：等下一字符到齐再切，避免把 LF 切成空行。
-            if (c == '\r' && i == pending.Length - 1) break;
-
-            line = pending.ToString(0, i);
-            var consumed = c == '\r' && pending[i + 1] == '\n' ? i + 2 : i + 1;
-            pending.Remove(0, consumed);
-            return true;
-        }
-
-        line = "";
-        return false;
-    }
-
     /// <summary>单条事件的累积状态（多行 data、event/id/retry 字段）。</summary>
     internal sealed class EventState
     {
@@ -175,15 +150,13 @@ public static class ServerSentEvents
         public string? Id { get; set; }
         public string? Retry { get; set; }
 
-        public bool HasData => _data.Length > 0;
-
-        /// <summary>是否已有任何字段内容（决定空行是否派发事件）。</summary>
-        public bool HasContent => _data.Length > 0;
+        public bool HasData { get; private set; }
 
         public void AppendData(string value)
         {
-            if (_data.Length > 0) _data.Append('\n');
+            if (HasData) _data.Append('\n');
             _data.Append(value);
+            HasData = true;
         }
 
         public ServerSentEvent Build() =>
@@ -192,6 +165,7 @@ public static class ServerSentEvents
         public void Reset()
         {
             _data.Clear();
+            HasData = false;
             EventName = null;
             Id = null;
             Retry = null;

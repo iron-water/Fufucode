@@ -88,6 +88,8 @@ public sealed class StreamedChoice
     private readonly System.Text.StringBuilder _text = new();
     private readonly System.Text.StringBuilder _thinking = new();
     private readonly Dictionary<int, ToolCallBuilder> _toolCalls = new();
+    private Dictionary<string, int>? _indexesById;
+    private int _nextImplicitIndex;
 
     /// <summary>聚合后的完整思考/推理文本。</summary>
     public string Thinking => _thinking.ToString();
@@ -120,17 +122,46 @@ public sealed class StreamedChoice
         if (!string.IsNullOrEmpty(reason)) FinishReason = reason;
     }
 
-    internal void AppendToolCallChunk(int index, string? id, string? name, string? argumentsFragment)
+    internal int AppendToolCallChunk(int? explicitIndex, string? id, string? name, string? argumentsFragment)
     {
-        ToolCallChunkCount++;
+        // 有些兼容网关不发 index；ID 与分片的绑定必须跨 SSE 帧、按 choice 保留。
+        if (!string.IsNullOrEmpty(id) && _indexesById is not null && _indexesById.TryGetValue(id, out var known))
+        {
+            if (explicitIndex is not null && explicitIndex != known) throw UnidentifiedToolCall();
+            explicitIndex = known;
+        }
+        var index = explicitIndex ?? InferToolCallIndex(!string.IsNullOrEmpty(id));
         if (!_toolCalls.TryGetValue(index, out var builder))
         {
             builder = new ToolCallBuilder(index);
             _toolCalls[index] = builder;
+            if (index >= _nextImplicitIndex && index < int.MaxValue) _nextImplicitIndex = index + 1;
         }
 
+        if (!string.IsNullOrEmpty(id))
+        {
+            if (builder.Id is not null && builder.Id != id) throw UnidentifiedToolCall();
+            (_indexesById ??= new(StringComparer.Ordinal))[id] = index;
+        }
         builder.Append(id, name, argumentsFragment ?? "");
+        ToolCallChunkCount++;
+        return index;
     }
+
+    private int InferToolCallIndex(bool hasNewId)
+    {
+        if (_toolCalls.Count == 0) return 0;
+        if (hasNewId && _indexesById?.Count == _toolCalls.Count)
+        {
+            if (_toolCalls.ContainsKey(_nextImplicitIndex)) throw UnidentifiedToolCall();
+            return _nextImplicitIndex;
+        }
+        if (_toolCalls.Count == 1) return _toolCalls.Keys.First();
+        throw UnidentifiedToolCall();
+    }
+
+    private static ModelClientException UnidentifiedToolCall() => new(ModelClientErrorKind.StreamError,
+        "模型流式响应的工具分片归属不明确，本次工具调用未执行。", errorCode: "ambiguous_tool_call_chunk");
 
     /// <summary>快照聚合结果：订单号按分片 index 升序，参数为各分片顺序拼接。</summary>
     public IReadOnlyList<StreamedToolCall> ToolCalls
@@ -151,13 +182,13 @@ public sealed class StreamedChoice
     private sealed class ToolCallBuilder(int index)
     {
         private readonly System.Text.StringBuilder _arguments = new();
-        private string? _id;
+        internal string? Id { get; private set; }
         private string? _name;
 
         internal void Append(string? id, string? name, string argumentsFragment)
         {
             // 供应商通常在首个分片给出 id/name，后续分片为空；重复出现的同值不覆盖、不同值不静默改写。
-            if (!string.IsNullOrEmpty(id) && string.IsNullOrEmpty(_id)) _id = id;
+            if (!string.IsNullOrEmpty(id) && Id is null) Id = id;
             if (!string.IsNullOrEmpty(name) && string.IsNullOrEmpty(_name)) _name = name;
             _arguments.Append(argumentsFragment);
         }
@@ -168,7 +199,7 @@ public sealed class StreamedChoice
             if (arguments.Length == 0) arguments = "{}";
             return new StreamedToolCall(
                 index,
-                _id ?? $"call_{index}",
+                Id ?? $"call_{index}",
                 _name ?? "",
                 arguments);
         }

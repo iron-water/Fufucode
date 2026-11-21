@@ -51,20 +51,35 @@ internal static class SseBoundaryTests
             checks.Equal(9, stream.ReadSizes[0], $"first read size for {Display(ending)}");
             checks.Equal(4096, stream.ReadSizes[1], $"boundary read size for {Display(ending)}");
         }
+
+        // Delimiters are complete at CR. A provider may leave the connection open after [DONE].
+        var bom = Encoding.UTF8.GetPreamble();
+        var frames = "data: first\r\nevent: message\r\n\r\nevent: ping\n\ndata:\ndata: next\n\ndata:\n\ndata: [DONE]\r\r";
+        await using var boundary = new ExactChunkStream([bom[..1], bom[1..], Encoding.UTF8.GetBytes(frames)], forbidEofRead: true);
+        var received = new List<ServerSentEvent>();
+        await foreach (var item in ServerSentEvents.ReadAsync(boundary)) received.Add(item);
+        checks.Equal(4, received.Count, "BOM-prefixed frame, multiline data, empty data and DONE are all dispatched");
+        checks.Equal("first", received[0].Data, "fragmented UTF-8 BOM does not swallow the first data field");
+        checks.Equal("\nnext", received[1].Data, "leading empty data line is retained");
+        checks.Check(received[1].EventName is null, "metadata-only heartbeat does not rename the next event");
+        checks.Equal("", received[2].Data, "explicit empty data is distinct from no data field");
+        checks.Check(received[3].IsDone, "bare CR dispatches DONE without another read");
     }
 
     private static string Display(string ending) =>
         ending.Replace("\r", "CR").Replace("\n", "LF");
 
     /// <summary>Returns each scripted chunk verbatim; never coalesces or re-splits.</summary>
-    private sealed class ExactChunkStream(byte[][] chunks) : Stream
+    private sealed class ExactChunkStream(byte[][] chunks, bool forbidEofRead = false) : Stream
     {
         private int _index;
         public List<int> ReadSizes { get; } = [];
         public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (_index == chunks.Length) return ValueTask.FromResult(0);
+            if (_index == chunks.Length) return forbidEofRead
+                ? throw new InvalidOperationException("unexpected network read after CR-delimited [DONE]")
+                : ValueTask.FromResult(0);
             var chunk = chunks[_index++];
             if (chunk.Length > buffer.Length) throw new InvalidOperationException("Read buffer smaller than scripted chunk.");
             chunk.CopyTo(buffer);
