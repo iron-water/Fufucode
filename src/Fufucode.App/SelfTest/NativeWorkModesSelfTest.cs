@@ -189,7 +189,10 @@ internal static class NativeWorkModesSelfTest
 
     private static void CheckSessionDisclosures(MainWindow window, DesktopMetadataStore metadata, string path, Action<bool, string> check)
     {
-        var project = metadata.GetOrCreateProject(path);
+        // Keep synthetic rows out of the active project's recent-session restoration.
+        var fixture = Path.Combine(Path.GetDirectoryName(path)!, "disclosure-fixture");
+        Directory.CreateDirectory(fixture);
+        var project = metadata.GetOrCreateProject(fixture);
         for (var i = 0; i < 32; i++) metadata.CreateSession(project, $"Disclosure fixture {i}");
         window.OpenDockPage("overview", DockZone.Left);
         window.RenderOverview();
@@ -203,11 +206,12 @@ internal static class NativeWorkModesSelfTest
         check(page.Title == "会话", "dock registry retains overview identity with the new title");
         var group = ById("projects.heading");
         var projectRow = ById("project.row." + project.Id);
-        var rows = () => Buttons().Where(b => AutomationProperties.GetAutomationId(b)?.StartsWith("session.row.", StringComparison.Ordinal) == true).ToArray();
-        var preview = rows();
-        var more = Buttons().Single(b => b.Content is string s && s.StartsWith("展开显示", StringComparison.Ordinal));
+        var projectCard = projectRow.GetVisualAncestors().OfType<Border>().First(b => b.Classes.Contains("overviewGroup"));
+        Button[] Rows() => projectCard.GetVisualDescendants().OfType<Button>().Where(b => AutomationProperties.GetAutomationId(b)?.StartsWith("session.row.", StringComparison.Ordinal) == true).ToArray();
+        var preview = Rows();
+        var more = projectCard.GetVisualDescendants().OfType<Button>().Single(b => b.Content is string s && s.StartsWith("展开显示", StringComparison.Ordinal));
         Click(more);
-        var expanded = rows();
+        var expanded = Rows();
         check(expanded.Length > preview.Length && preview.All(expanded.Contains), "show more creates only the additional session rows");
         Click(more);
         check(expanded.Except(preview).All(b => !b.IsEffectivelyVisible), "show less hides only the extra rows");
@@ -222,7 +226,7 @@ internal static class NativeWorkModesSelfTest
             samples.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
         }
         check(ReferenceEquals(header, view.Toolbar.Children.Single()) && ReferenceEquals(group, ById("projects.heading")) &&
-            expanded.SequenceEqual(rows()) && expanded.All(b => b.IsEffectivelyVisible), "repeated disclosures reuse toolbar, headings and all session controls");
+            expanded.SequenceEqual(Rows()) && expanded.All(b => b.IsEffectivelyVisible), "repeated disclosures reuse toolbar, headings and all session controls");
         var target = expanded[^1];
         var menu = target.ContextMenu!;
         check(menu.Items.Count == 0, "folding does not materialize unrequested session menus");
