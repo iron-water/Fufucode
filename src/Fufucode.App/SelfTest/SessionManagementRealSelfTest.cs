@@ -80,11 +80,19 @@ internal static class SessionManagementRealSelfTest
                 "overview plus menu offers new section and add project");
             Button Row(string id) => view.GetVisualDescendants().OfType<Button>()
                 .First(b => AutomationProperties.GetAutomationId(b) == "session.row." + id);
-            MenuItem Menu(string id, string title) => Row(id).ContextMenu!.Items.OfType<MenuItem>().Single(m => (string?)m.Header == title);
+            ContextMenu RowMenu(string id)
+            {
+                var target = Row(id);
+                var menu = target.ContextMenu!;
+                menu.Open(target);
+                menu.Close();
+                return menu;
+            }
+            MenuItem Menu(string id, string title) => RowMenu(id).Items.OfType<MenuItem>().Single(m => (string?)m.Header == title);
             void Invoke(MenuItem item) => item.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-            var row = Row(second.Id);
+            var rowMenu = RowMenu(second.Id);
             Check(new[] { "重命名", "置顶", "标为未读", "项目", "分区", "分叉", "复制", "归档" }
-                .All(title => row.ContextMenu!.Items.OfType<MenuItem>().Any(m => (string?)m.Header == title)),
+                .All(title => rowMenu.Items.OfType<MenuItem>().Any(m => (string?)m.Header == title)),
                 "persisted real rows expose all required context actions");
             var tail = view.GetVisualDescendants().OfType<StackPanel>().Single(stack =>
                 AutomationProperties.GetAutomationId(stack) == "session.tail." + second.Id);

@@ -66,9 +66,6 @@ public partial class MainWindow
 
     private static bool IsQuickAction(string id) => SessionQuickActions.Any(action => action.Id == id);
 
-    /// <summary>会话是否属于“不在项目中工作”的独立工作区。</summary>
-    private bool IsScratchSession(SessionRecord session) =>
-        ScratchProject() is { } scratch && session.ProjectId == scratch.Id;
     /// <summary>真实会话用宿主元数据；mock 用一次性临时库，保证归档页也有一致的空态。</summary>
     private DesktopMetadataStore MetadataOrMock() => _host?.Manager.Metadata ?? _projectOnlyManager?.Metadata ??
         (_mockOrganizationStore ??= new(new AppDataLayout(Path.Combine(Path.GetTempPath(), "Fufucode",
@@ -127,24 +124,24 @@ public partial class MainWindow
         _overview.Toolbar.Children.Add(toolbar);
         var metadataForArchive = MetadataOrMock();
         var archivedProjects = ProjectArchive.LoadSet(metadataForArchive);
+        var body = _overview.Body;
+        var projects = OverviewProjects().ToLookup(p => organization.Project(p).SectionId);
         if (WorkMode == AppPage.Graph)
         {
             foreach (var section in state.Sections)
             {
                 var collapsed = _collapsedSections.Contains(section.Id);
-                var heading = OverviewCollapsibleHeading(section.Name, collapsed, () =>
+                var heading = OverviewCollapsibleHeading(body, section.Name, collapsed, value =>
+                    SetMembership(_collapsedSections, section.Id, value), children =>
                 {
-                    if (!_collapsedSections.Add(section.Id)) _collapsedSections.Remove(section.Id);
+                    foreach (var project in projects[section.Id])
+                        OverviewProjectRow(children, project, organization, [], 16);
                 });
                 heading.ContextMenu = OverviewContextMenu();
                 heading.ContextMenu.Items.Add(OverviewMenu("重命名", () => EditSectionAsync(section)));
-                if (!collapsed)
-                    foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId == section.Id))
-                        OverviewProjectRow(project, organization, [], 16);
             }
             OverviewHeading("项目");
-            foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId is null))
-                OverviewProjectRow(project, organization, []);
+            foreach (var project in projects[null]) OverviewProjectRow(body, project, organization, []);
             return;
         }
         // 空会话（还没发第一条消息）不进入会话管理。
@@ -170,66 +167,51 @@ public partial class MainWindow
             foreach (var day in all.GroupBy(s => SessionActivityAt(s).LocalDateTime.Date).OrderByDescending(g => g.Key))
             {
                 OverviewHeading(day.Key == DateTime.Today ? "今天" : day.Key == DateTime.Today.AddDays(-1) ? "昨天" : day.Key.ToString("MM-dd"));
-                OverviewSessionGroup(day.OrderByDescending(SessionActivityAt), organization);
+                OverviewSessionGroup(body, day.OrderByDescending(SessionActivityAt), organization);
             }
             return;
         }
         // “置顶”“分区”“项目”“会话”四个分组标题同一套交互：
         // 整条可点、按下才出现二级色、箭头指示展开状态；空分组不画占位行。
-        var pinnedHeading = OverviewCollapsibleHeading("置顶", _pinnedCollapsed,
-            () => _pinnedCollapsed = !_pinnedCollapsed);
-        AutomationProperties.SetAutomationId(pinnedHeading, "pinned.heading");
-        if (!_pinnedCollapsed)
+        // Use the records already loaded for this render, not a SQLite lookup per session per project.
+        SessionPlacement Placement(SessionRecord s) => state.Sessions.GetValueOrDefault(s.Id) ?? new(s.ProjectId);
+        var byProject = all.ToLookup(s => Placement(s).ProjectId);
+        var pinnedHeading = OverviewCollapsibleHeading(body, "置顶", _pinnedCollapsed, value => _pinnedCollapsed = value, children =>
         {
-            var pinned = all.Where(s => SessionPresentation.Load(_host!.Manager.Metadata, s.Id).Pinned).ToArray();
-            OverviewSessionGroup(pinned, organization);
-        }
-        var sectionsHeading = OverviewCollapsibleHeading("分区", _allSectionsCollapsed,
-            () => _allSectionsCollapsed = !_allSectionsCollapsed);
-        AutomationProperties.SetAutomationId(sectionsHeading, "sections.heading");
-        if (!_allSectionsCollapsed)
+            OverviewSessionGroup(children, all.Where(s => SessionPresentation.Load(metadataForArchive, s.Id).Pinned), organization);
+        });
+        AutomationProperties.SetAutomationId(pinnedHeading, "pinned.heading");
+        var sectionsHeading = OverviewCollapsibleHeading(body, "分区", _allSectionsCollapsed, value => _allSectionsCollapsed = value, children =>
         {
             foreach (var section in state.Sections)
             {
-                var sectionCollapsed = _collapsedSections.Contains(section.Id);
-                var header = OverviewCollapsibleHeading(section.Name, sectionCollapsed, () =>
+                var header = OverviewCollapsibleHeading(children, section.Name, _collapsedSections.Contains(section.Id),
+                    value => SetMembership(_collapsedSections, section.Id, value), sectionRows =>
                 {
-                    if (!_collapsedSections.Add(section.Id)) _collapsedSections.Remove(section.Id);
+                    foreach (var project in projects[section.Id])
+                        OverviewProjectRow(sectionRows, project, organization, byProject[project.Id], 32);
+                    OverviewSessionGroup(sectionRows, byProject[null].Where(s => Placement(s).SectionId == section.Id), organization);
                 }, 16);
                 AutomationProperties.SetAutomationId(header, "section.row." + section.Id);
                 header.ContextMenu = OverviewContextMenu();
                 header.ContextMenu.Items.Add(OverviewMenu("重命名", () => EditSectionAsync(section)));
-                if (sectionCollapsed) continue;
-                foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId == section.Id))
-                    OverviewProjectRow(project, organization, all, 32);
-                OverviewSessionGroup(all.Where(s => organization.Placement(s.Id).SectionId == section.Id &&
-                    organization.Placement(s.Id).ProjectId is null), organization);
             }
-        }
-        var projectsHeading = OverviewCollapsibleHeading("项目", _allProjectsCollapsed,
-            () => _allProjectsCollapsed = !_allProjectsCollapsed);
+        });
+        AutomationProperties.SetAutomationId(sectionsHeading, "sections.heading");
+        var projectsHeading = OverviewCollapsibleHeading(body, "项目", _allProjectsCollapsed, value => _allProjectsCollapsed = value, children =>
+        {
+            foreach (var project in projects[null]) OverviewProjectRow(children, project, organization, byProject[project.Id]);
+        });
         AutomationProperties.SetAutomationId(projectsHeading, "projects.heading");
-        if (!_allProjectsCollapsed)
-            foreach (var project in OverviewProjects().Where(p => organization.Project(p).SectionId is null))
-                OverviewProjectRow(project, organization, all);
         // “会话”整条可点：收起/展开所有无项目会话（与“项目”同一套交互）。
-        var sessionsHeading = OverviewCollapsibleHeading("会话", _looseSessionsCollapsed,
-            () => _looseSessionsCollapsed = !_looseSessionsCollapsed);
-        AutomationProperties.SetAutomationId(sessionsHeading, "loose-sessions.heading");
-        if (!_looseSessionsCollapsed)
+        var sessionsHeading = OverviewCollapsibleHeading(body, "会话", _looseSessionsCollapsed, value => _looseSessionsCollapsed = value, children =>
         {
             // “会话”列出所有未归入用户项目的会话：显式无项目，以及“不在项目中工作”的独立工作区。
             var scratch = ScratchProject();
-            var loose = all.Where(s =>
-            {
-                var placement = organization.Placement(s.Id);
-                // 放置记录为空或与真实归属不同（存在展示分组）时按放置判断。
-                if (organization.State.Sessions.ContainsKey(s.Id))
-                    return placement.ProjectId is null || placement.ProjectId == scratch?.Id;
-                return s.ProjectId == scratch?.Id;
-            }).OrderByDescending(SessionActivityAt).ToArray();
-            OverviewSessionGroup(loose, organization);
-        }
+            var loose = all.Where(s => Placement(s).ProjectId is not { } id || id == scratch?.Id);
+            OverviewSessionGroup(children, loose, organization);
+        });
+        AutomationProperties.SetAutomationId(sessionsHeading, "loose-sessions.heading");
         if (_host is null)
             foreach (var demo in _vm.Sidebar.Sessions)
             {
@@ -283,11 +265,10 @@ public partial class MainWindow
     }
 
     /// <summary>可折叠分组标题：整行可点，左侧箭头指示展开/收起。</summary>
-    private Button OverviewCollapsibleHeading(string title, bool collapsed, Action toggle, double indent = 0)
+    private static Button OverviewCollapsibleHeading(StackPanel parent, string title, bool collapsed,
+        Action<bool> remember, Action<StackPanel> populate, double indent = 0)
     {
         var chevron = new PathIcon { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
-        chevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension(
-            collapsed ? "Icon.CaretRight" : "Icon.CaretDown"));
         var text = new TextBlock
         {
             Text = title, FontSize = 12, FontWeight = FontWeight.SemiBold,
@@ -305,22 +286,47 @@ public partial class MainWindow
             HorizontalContentAlignment = HorizontalAlignment.Stretch,
             Margin = new Thickness(indent, 0, 0, 4),
         };
-        button.Click += (_, _) => { toggle(); RenderOverview(); };
-        _overview.Body.Children.Add(button);
+        parent.Children.Add(button);
+        var children = new StackPanel { Spacing = parent.Spacing };
+        parent.Children.Add(children);
+        BindOverviewDisclosure(button, children, collapsed, remember, populate, chevron);
         return button;
     }
 
+    private static void SetMembership(HashSet<string> set, string id, bool member)
+    {
+        if (member) set.Add(id); else set.Remove(id);
+    }
+
+    // A disclosure owns only its branch. Build it on first expansion and keep its rows,
+    // focusable header and nested disclosure state until the next actual data refresh.
+    private static void BindOverviewDisclosure(Button button, StackPanel children, bool collapsed,
+        Action<bool> remember, Action<StackPanel> populate, PathIcon? chevron = null)
+    {
+        var built = false;
+        IDisposable? glyph = null;
+        void Apply()
+        {
+            if (!collapsed && !built) { populate(children); built = true; }
+            children.IsVisible = !collapsed && children.Children.Count != 0;
+            glyph?.Dispose();
+            glyph = chevron?.Bind(PathIcon.DataProperty, new DynamicResourceExtension(collapsed ? "Icon.CaretRight" : "Icon.CaretDown"));
+        }
+        Apply();
+        button.Click += (_, _) => { collapsed = !collapsed; remember(collapsed); Apply(); };
+    }
+
     /// <summary>把一组会话行放进分层卡（页底 → 组卡 → 会话行）。</summary>
-    private void OverviewSessionGroup(IEnumerable<SessionRecord> sessions, SessionOrganization organization,
+    private void OverviewSessionGroup(StackPanel parent, IEnumerable<SessionRecord> sessions, SessionOrganization organization,
         double indent = 0)
     {
-        // 独立工作区的会话用「无项目」标记，避免用户看到内部目录名；分叉按父子树缩进。
+        // 分叉按父子树缩进。
         var rows = SessionTree(sessions.ToArray()).Select(entry => BuildOverviewSessionRow(entry.Session,
-            organization, indent, IsScratchSession(entry.Session) ? "不在项目中" : null, entry.Depth)).ToArray();
+            organization, indent, entry.Depth)).ToArray();
         if (rows.Length == 0) return;
         var stack = new StackPanel { Spacing = 2 };
         foreach (var row in rows) stack.Children.Add(row);
-        _overview.Body.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
+        parent.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
     }
     private void OverviewEmpty(string text) => _overview.Body.Children.Add(new TextBlock
     { Text = text, Classes = { "meta" }, Margin = new Thickness(4, 3, 4, 5), TextWrapping = TextWrapping.Wrap });
@@ -357,19 +363,16 @@ public partial class MainWindow
     private async void OverviewRun(Func<Task> action)
     {
         try { await action(); }
-        catch (Exception error) { _vm?.Timeline.AddNotification("会话管理：" + error.GetBaseException().Message); }
+        catch (Exception error) { _vm?.Timeline.AddNotification("会话：" + error.GetBaseException().Message); }
     }
-    private void OverviewProjectRow(ProjectRecord project, SessionOrganization organization, SessionRecord[] sessions, double indent = 16)
+    private void OverviewProjectRow(StackPanel parent, ProjectRecord project, SessionOrganization organization, IEnumerable<SessionRecord> sessions, double indent = 16)
     {
         var settings = organization.Project(project);
         var collapsed = _collapsedProjects.Contains(project.Id);
         // 按会话内容的最后写入时间排序，而不是“最近打开”：切换会话不会把旧会话顶到最前。
-        var projectSessions = sessions.Where(s => organization.Placement(s.Id).ProjectId == project.Id)
-            .OrderByDescending(SessionActivityAt).ToArray();
+        var projectSessions = sessions.ToArray();
 
         var chevron = new PathIcon { Width = 8, Height = 8, VerticalAlignment = VerticalAlignment.Center };
-        chevron.Bind(PathIcon.DataProperty, new DynamicResourceExtension(
-            collapsed ? "Icon.CaretRight" : "Icon.CaretDown"));
         var name = new TextBlock
         {
             Text = settings.Name, FontSize = 12, FontWeight = FontWeight.SemiBold,
@@ -389,11 +392,6 @@ public partial class MainWindow
         row.Classes.Set("selected", project.Id == CurrentWorkProjectId);
         Avalonia.Automation.AutomationProperties.SetHelpText(row, settings.Folder + "（点击折叠/展开会话）");
         AutomationProperties.SetAutomationId(row, "project.row." + project.Id);
-        row.Click += (_, _) =>
-        {
-            if (!_collapsedProjects.Add(project.Id)) _collapsedProjects.Remove(project.Id);
-            RenderOverview();
-        };
         var sections = new MenuItem { Header = "分区" };
         sections.Items.Add(OverviewMenu("无分区", () =>
         { organization.EditProject(project, settings.Name, settings.Folder, null); RenderOverview(); return Task.CompletedTask; }));
@@ -422,41 +420,50 @@ public partial class MainWindow
 
         var stack = new StackPanel { Spacing = 2 };
         stack.Children.Add(row);
-        if (!collapsed && WorkMode == AppPage.Graph)
+        var projectBody = new StackPanel { Spacing = stack.Spacing };
+        stack.Children.Add(projectBody);
+        BindOverviewDisclosure(row, projectBody, collapsed, value => SetMembership(_collapsedProjects, project.Id, value), children =>
         {
-            var open = new Button { Content = HasProjectGraph(project) ? "打开图" : "新建图", Classes = { "subtle" }, Margin = new Thickness(indent + 16, 0, 0, 4) };
-            AutomationProperties.SetAutomationId(open, "project.graph." + project.Id);
-            open.Click += (_, _) => OverviewRun(() => SwitchProjectAsync(project.Path));
-            stack.Children.Add(open);
-        }
-        else if (!collapsed)
-        {
+            if (WorkMode == AppPage.Graph)
+            {
+                var open = new Button { Content = HasProjectGraph(project) ? "打开图" : "新建图", Classes = { "subtle" }, Margin = new Thickness(indent + 16, 0, 0, 4) };
+                AutomationProperties.SetAutomationId(open, "project.graph." + project.Id);
+                open.Click += (_, _) => OverviewRun(() => SwitchProjectAsync(project.Path));
+                children.Children.Add(open);
+                return;
+            }
             var expanded = _expandedProjects.Contains(project.Id);
             // 分叉跟随父会话，预览截断也要按树来截，避免只显示子会话。
             var tree = SessionTree(projectSessions);
-            var visible = expanded ? tree : tree.Take(ProjectSessionPreview).ToArray();
-            foreach (var entry in visible)
-                stack.Children.Add(BuildOverviewSessionRow(entry.Session, organization, indent + 16, null, entry.Depth));
-            if (projectSessions.Length > ProjectSessionPreview)
+            foreach (var entry in tree.Take(ProjectSessionPreview))
+                children.Children.Add(BuildOverviewSessionRow(entry.Session, organization, indent + 16, entry.Depth));
+            if (tree.Count > ProjectSessionPreview)
             {
-                var rest = projectSessions.Length - ProjectSessionPreview;
+                var rest = tree.Count - ProjectSessionPreview;
+                string MoreTitle(bool hidden) => hidden ? $"展开显示（还有 {rest} 个）" : "收起";
                 var more = new Button
                 {
-                    Classes = { "subtle" }, Content = expanded ? "收起" : $"展开显示（还有 {rest} 个）",
+                    Classes = { "subtle" }, Content = MoreTitle(!expanded),
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     HorizontalContentAlignment = HorizontalAlignment.Left,
                     FontSize = 12, Padding = new Thickness(8, 3), Margin = new Thickness(8, 1, 0, 0),
                     Background = Brushes.Transparent, BorderThickness = new Thickness(0),
                 };
-                more.Click += (_, _) =>
+                var extra = new StackPanel { Spacing = stack.Spacing };
+                children.Children.Add(extra);
+                children.Children.Add(more);
+                BindOverviewDisclosure(more, extra, !expanded, hidden =>
                 {
-                    if (!_expandedProjects.Add(project.Id)) _expandedProjects.Remove(project.Id);
-                    RenderOverview();
-                };
-                stack.Children.Add(more);
+                    SetMembership(_expandedProjects, project.Id, !hidden);
+                    more.Content = MoreTitle(hidden);
+                }, rows =>
+                {
+                    foreach (var entry in tree.Skip(ProjectSessionPreview))
+                        rows.Children.Add(BuildOverviewSessionRow(entry.Session, organization, indent + 16, entry.Depth));
+                });
             }
-        }
-        _overview.Body.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
+        }, chevron);
+        parent.Children.Add(new Border { Classes = { "overviewGroup" }, Child = stack });
     }
     /// <summary>按父子关系展开会话树：分叉紧跟父会话，并记录缩进层级。</summary>
     private static IReadOnlyList<(SessionRecord Session, int Depth)> SessionTree(
@@ -484,12 +491,11 @@ public partial class MainWindow
     }
 
     private Control BuildOverviewSessionRow(SessionRecord session, SessionOrganization organization,
-        double indent = 0, string? projectLabel = null, int depth = 0)
+        double indent = 0, int depth = 0)
     {
-        var metadata = _host!.Manager.Metadata;
+        var metadata = MetadataOrMock();
         var presentation = SessionPresentation.Load(metadata, session.Id);
         var title = SessionTitles.Display(session);
-        var projectPath = metadata.GetProject(session.ProjectId).Path;
         var isCurrent = session.Id == CurrentSessionId;
 
         var titleText = new TextBlock
@@ -528,7 +534,7 @@ public partial class MainWindow
             Padding = new Thickness(0), Child = grid,
         };
         row.Classes.Set("selected", isCurrent);
-        var live = LiveSessionPool.Find(_host.Manager, session.Id)?.Chat;
+        var live = _host is null ? null : LiveSessionPool.Find(_host.Manager, session.Id)?.Chat;
         var running = live?.Activity is Abstractions.SessionActivity.Running or Abstractions.SessionActivity.Compacting
             or Abstractions.SessionActivity.Retrying or Abstractions.SessionActivity.Cancelling;
         var completed = !running && live?.LastOutcome == Abstractions.SessionOutcome.Completed;
@@ -558,6 +564,35 @@ public partial class MainWindow
         row.LostFocus += (_, _) => { if (!row.IsPointerOver) SetHover(false); };
 
         var menu = OverviewContextMenu();
+        void EnsureMenu()
+        {
+            if (menu.Items.Count == 0) PopulateSessionMenu(menu, session, presentation, organization);
+        }
+        menu.Opening += (_, _) => EnsureMenu();
+        menu.Opened += (_, _) => EnsureMenu(); // Open(control) also works for non-pointer callers.
+        button.ContextMenu = menu;
+
+        // 分叉关系：子会话缩进，并在左侧画一条竖线（对齐 Claude Code 的分支树）。
+        if (depth > 0)
+        {
+            row.Margin = new Thickness(indent + depth * 14, 0, 0, 0);
+            var guide = new Border
+            {
+                Width = 1, Margin = new Thickness(-9, 3, 0, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                IsHitTestVisible = false,
+            };
+            guide.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppCardStroke"));
+            return new Grid { Children = { guide, row } };
+        }
+        return row;
+    }
+
+    private void PopulateSessionMenu(ContextMenu menu, SessionRecord session, SessionPresentation presentation,
+        SessionOrganization organization)
+    {
+        var projectPath = MetadataOrMock().GetProject(session.ProjectId).Path;
         menu.Items.Add(OverviewMenu("重命名", async () => { await ActivateOverviewSessionAsync(session); await RenameManagedSessionAsync(); }));
         menu.Items.Add(OverviewMenu(presentation.Pinned ? "取消置顶" : "置顶", () =>
         { SetOverviewPresentation(session.Id, p => p with { Pinned = !p.Pinned }); return Task.CompletedTask; }));
@@ -593,24 +628,6 @@ public partial class MainWindow
         menu.Items.Add(OverviewMenu("归档", () => ArchiveOverviewSessionAsync(session)));
         menu.Items.Add(OverviewMenu("永久删除", () => DeleteOverviewSessionAsync(session),
             session.Id != CurrentSessionId));
-        button.ContextMenu = menu;
-
-        // 分叉关系：子会话缩进，并在左侧画一条竖线（对齐 Claude Code 的分支树）。
-        if (depth > 0)
-        {
-            row.Margin = new Thickness(indent + depth * 14, 0, 0, 0);
-            var guide = new Border
-            {
-                Width = 1, Margin = new Thickness(-9, 3, 0, 3),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                IsHitTestVisible = false,
-            };
-            guide.Bind(Border.BackgroundProperty, new DynamicResourceExtension("AppCardStroke"));
-            var host = new Grid { Children = { guide, row } };
-            return host;
-        }
-        return row;
     }
 
     /// <summary>右键菜单里的“固定到栏”：勾选后出现在会话行右侧，最多 4 个。</summary>
@@ -786,7 +803,7 @@ public partial class MainWindow
         var body = new StackPanel
         {
             Spacing = 12,
-            Children = { Views.AppDialog.Field("分区名称", input, "分区用于在会话管理中归类项目与会话。") },
+            Children = { Views.AppDialog.Field("分区名称", input, "分区用于在会话页中归类项目与会话。") },
         };
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto") };
         root.Children.Add(Views.AppDialog.Header("Icon.AppsList", title, "给会话与项目一个固定归类。"));
@@ -845,7 +862,7 @@ public partial class MainWindow
         };
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto") };
         root.Children.Add(Views.AppDialog.Header("Icon.Folder", "编辑项目",
-            "调整项目在会话管理中的显示方式。"));
+            "调整项目在会话页中的显示方式。"));
         var content = Views.AppDialog.Body(Views.AppDialog.Card(body));
         Grid.SetRow(content, 1);
         root.Children.Add(content);

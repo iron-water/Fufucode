@@ -150,7 +150,7 @@ public partial class MainWindow
         };
         ShellGrid.Children.Add(_parkedPages);
         var (files, changes) = WorkspacePanel.TakeDockPages();
-        Add("overview", "会话管理", "AppsList", _overview);
+        Add("overview", "会话", "AppsList", _overview);
         _overview.DataContextChanged += (_, _) => RenderOverview();
         Add("files", "文件", "Folder", files);
         Add("changes", "变更", "Branch", changes);

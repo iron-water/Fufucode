@@ -50,7 +50,7 @@ internal static class NativeGraphInteractionSelfTest
         await Settle();
         var allowed = new[] { "overview", "notifications", "sidechat", "graph-properties", "graph-tickets", "graph-history" };
         Check(window.CustomizationForTesting.Pages.Select(page => page.Id).Order().SequenceEqual(allowed.Order()), "Graph exposes exactly six dock pages");
-        Check(window.CustomizationForTesting.Pages.Single(page => page.Id == "overview").Title == "会话管理" &&
+        Check(window.CustomizationForTesting.Pages.Single(page => page.Id == "overview").Title == "会话" &&
             window.CustomizationForTesting.Pages.Single(page => page.Id == "sidechat").Title == "侧聊" &&
             window.CustomizationForTesting.Pages.Single(page => page.Id == "graph-tickets").Title == "邮件", "shared page names follow the requested vocabulary");
         Check(!(await window.ActionsForTesting.ExecuteAsync("graph.structure")).Executed, "retired structure action cannot execute");

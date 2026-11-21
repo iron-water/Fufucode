@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -13,6 +14,7 @@ using Avalonia.VisualTree;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
+using Fufucode.App.Views;
 using Fufucode.Core;
 
 namespace Fufucode.App.SelfTest;
@@ -91,6 +93,7 @@ internal static class NativeWorkModesSelfTest
         Check(ProjectMenu(window, original.ProjectId).Contains("新建会话") && !ProjectMenu(window, original.ProjectId).Contains("新建图"),
             "Chat project menu retains new-session semantics");
         Check(BackendSelectorVisible(window), "Chat project manager retains its backend selector");
+        CheckSessionDisclosures(window, metadata, original.ProjectPath, Check);
         Screenshot(window, Path.Combine(evidence, "chat-mode.png"));
         await window.NavigateForTestingAsync(AppPage.Settings);
         Check(window.CustomizationForTesting.Pages.All(page => !graphOnly.Contains(page.Id)), "shared settings inherit the originating Chat mode");
@@ -182,6 +185,51 @@ internal static class NativeWorkModesSelfTest
         File.WriteAllText(Path.Combine(evidence, "workspace-modes-result.txt"), report);
         Console.WriteLine(report);
         return 0;
+    }
+
+    private static void CheckSessionDisclosures(MainWindow window, DesktopMetadataStore metadata, string path, Action<bool, string> check)
+    {
+        var project = metadata.GetOrCreateProject(path);
+        for (var i = 0; i < 32; i++) metadata.CreateSession(project, $"Disclosure fixture {i}");
+        window.OpenDockPage("overview", DockZone.Left);
+        window.RenderOverview();
+        window.UpdateLayout();
+        var view = (OverviewView)window.PageForTesting("overview");
+        var header = view.Toolbar.Children.Single();
+        IEnumerable<Button> Buttons() => view.Body.GetVisualDescendants().OfType<Button>();
+        Button ById(string id) => Buttons().Single(b => AutomationProperties.GetAutomationId(b) == id);
+        void Click(Button button) => button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        var page = window.CustomizationForTesting.Pages.Single(p => p.Id == "overview");
+        check(page.Title == "会话", "dock registry retains overview identity with the new title");
+        var group = ById("projects.heading");
+        var projectRow = ById("project.row." + project.Id);
+        var rows = () => Buttons().Where(b => AutomationProperties.GetAutomationId(b)?.StartsWith("session.row.", StringComparison.Ordinal) == true).ToArray();
+        var preview = rows();
+        var more = Buttons().Single(b => b.Content is string s && s.StartsWith("展开显示", StringComparison.Ordinal));
+        Click(more);
+        var expanded = rows();
+        check(expanded.Length > preview.Length && preview.All(expanded.Contains), "show more creates only the additional session rows");
+        Click(more);
+        check(expanded.Except(preview).All(b => !b.IsEffectivelyVisible), "show less hides only the extra rows");
+        Click(projectRow); Click(group); Click(group);
+        check(projectRow.IsEffectivelyVisible && preview.All(b => !b.IsEffectivelyVisible), "parent expansion retains the nested project disclosure state");
+        Click(projectRow); Click(more);
+        var samples = new List<double>();
+        for (var i = 0; i < 20; i++)
+        {
+            var start = Stopwatch.GetTimestamp();
+            Click(group); window.UpdateLayout();
+            samples.Add(Stopwatch.GetElapsedTime(start).TotalMilliseconds);
+        }
+        check(ReferenceEquals(header, view.Toolbar.Children.Single()) && ReferenceEquals(group, ById("projects.heading")) &&
+            expanded.SequenceEqual(rows()) && expanded.All(b => b.IsEffectivelyVisible), "repeated disclosures reuse toolbar, headings and all session controls");
+        var target = expanded[^1];
+        var menu = target.ContextMenu!;
+        check(menu.Items.Count == 0, "folding does not materialize unrequested session menus");
+        menu.Open(target);
+        check(menu.Items.OfType<MenuItem>().Any(i => Equals(i.Header, "归档")), "opening a lazy session menu still provides row actions");
+        menu.Close();
+        Console.WriteLine($"Disclosure: {expanded.Length} session rows, 20 warm toggles including synchronous layout; median {samples.Order().ElementAt(10):F1} ms, max {samples.Max():F1} ms");
     }
 
     private static string[] ProjectMenu(MainWindow window, string projectId)

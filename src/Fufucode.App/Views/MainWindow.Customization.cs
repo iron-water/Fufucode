@@ -276,7 +276,7 @@ public partial class MainWindow
                             "导出" => "ArrowDownload",
                             "分叉" => "Branch",
                             "项目" => "Folder",
-                            "会话管理" => "Chat",
+                            "会话" => "Chat",
                             "编辑" => "Edit",
                             "视图与布局" => "WindowNew",
                             "语音朗读" => "Speaker",

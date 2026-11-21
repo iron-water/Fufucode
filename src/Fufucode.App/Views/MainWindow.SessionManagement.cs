@@ -81,7 +81,7 @@ public partial class MainWindow : ISessionManagement
         var body = new StackPanel
         {
             Spacing = 14,
-            Children = { Views.AppDialog.Field("会话名称", box, "名称会显示在侧栏与会话管理中。") },
+            Children = { Views.AppDialog.Field("会话名称", box, "名称会显示在侧栏与会话页中。") },
         };
         var root = new Grid { RowDefinitions = new("Auto,Auto,Auto") };
         root.Children.Add(Views.AppDialog.Header("Icon.Edit", "重命名会话",

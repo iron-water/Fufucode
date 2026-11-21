@@ -51,7 +51,7 @@ public static class WorkbenchActionDefaults
         "session.export" or "session.export.markdown" or "session.export.metadata" or "session.export.pdf" => "导出",
         "session.fork" or "session.fork.worktree" => "分叉",
         "project.open" or "project.explorer" or "project.openWith" or "library" => "项目",
-        "session.search" or "session.rename" or "session.previous" or "session.next" or "session.pin" or "session.unread" or "session.archive" or "session.archives" or "session.foreground" => "会话管理",
+        "session.search" or "session.rename" or "session.previous" or "session.next" or "session.pin" or "session.unread" or "session.archive" or "session.archives" or "session.foreground" => "会话",
         _ when id.StartsWith("edit.") => "编辑",
         "view.fullscreen" or "view.zoomIn" or "view.zoomOut" or "view.zoomReset" or "layout.reset" or "composer.toggle" or "summary.toggle" => "视图与布局",
         _ when id.StartsWith("speech.") => "语音朗读",
