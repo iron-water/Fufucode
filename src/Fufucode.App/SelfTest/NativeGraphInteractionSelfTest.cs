@@ -81,6 +81,11 @@ internal static class NativeGraphInteractionSelfTest
         Check(ToolbarFits(toolbar), "wide grouped Graph toolbar stays within its own container");
         Click(Find<Button>(toolbar, "GraphShowProperties")); await Settle();
         Check(window.DockLayoutForTesting.Find("graph-properties") != null, "toolbar properties explicitly opens the selected module");
+        Screenshot(window, Path.Combine(evidence, "graph-properties.png"));
+        var currentRevision = window.GetVisualDescendants().OfType<GraphHistoryView>().Single().GetVisualDescendants().OfType<Border>()
+            .Where(border => border.Classes.Contains("graphRowSelected")).ToArray();
+        Check(currentRevision.Length == 1 && currentRevision[0].Background is not null,
+            "history marks the displayed revision with the selected surface");
         window.DockLayoutForTesting.Close("graph-properties"); window.RefreshModeLayoutForTesting(); await Settle();
         Press(canvas, pointer, Center(first.Id), right: true);
         Check(canvas.ContextMenu!.ItemsSource!.Cast<MenuItem>().Any(item => item.Header?.ToString() == "属性"), "main module context menu offers explicit properties");

@@ -497,12 +497,12 @@ void EmptyAndLifetime()
     var window = new Window { Width = 1000, Height = 680, Content = root }; window.Show(); Pump();
     try
     {
-        Check(vm.Scene.Nodes.Count == 0 && page.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "暂无模块" && t.IsVisible),
+        Check(vm.Scene.Nodes.Count == 0 && page.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "暂无模块" && t.IsEffectivelyVisible),
             "empty authority snapshot renders actual empty state");
         Check(!Find<TextBox>(properties, "GraphModuleName").IsEffectivelyVisible,
             "module editor begins closed");
         Task.Run(() => service.Replace(initial)).GetAwaiter().GetResult(); Pump();
-        Check(vm.Scene.Nodes.Count > 0 && page.GetVisualDescendants().OfType<TextBlock>().All(t => t.Text != "暂无模块" || !t.IsVisible),
+        Check(vm.Scene.Nodes.Count > 0 && page.GetVisualDescendants().OfType<TextBlock>().All(t => t.Text != "暂无模块" || !t.IsEffectivelyVisible),
             "background scan result removes empty overlay and updates scene binding");
         vm.BeginRelation("r3"); vm.RelationDraft.Label = "relationship draft";
         vm.ShowRevision(1); vm.ShowRevision(null); vm.BeginRelation("r3");
@@ -574,11 +574,14 @@ void ReceiptPresentation()
         Pump();
         Check(receiptViews.Any(raw => raw.Content is TextBox receipt && receipt.Text == payload),
             "raw receipt expands to unchanged source text");
+        var marked = history.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("graphRowSelected")).ToArray();
+        Check(marked.Length == 1, "history marks exactly the displayed revision as current (found " + marked.Length + ")");
         var sources = Find<Expander>(history, "GraphHistoryRawSources");
         Check(!sources.IsExpanded && sources.Content == null && !history.GetVisualDescendants().OfType<TextBlock>().Any(t => t.IsEffectivelyVisible &&
             (t.Text?.Contains("retained-hash") == true || t.Text?.Contains("internal-source") == true)),
             "history does not materialize scanner source records by default");
-        Check(history.GetVisualDescendants().OfType<Button>().Any(b => b.Content is string value && value.Contains("项目扫描完成")),
+        Check(history.GetVisualDescendants().OfType<Button>().Any(b => (AutomationProperties.GetAutomationId(b) ?? "").StartsWith("GraphRevision-") &&
+                b.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text?.Contains("项目扫描完成") == true)),
             "history revision summary uses human readable change");
         sources.IsExpanded = true; Pump();
         var sourceRecord = sources.GetVisualDescendants().OfType<Expander>().Single(); sourceRecord.IsExpanded = true; Pump();

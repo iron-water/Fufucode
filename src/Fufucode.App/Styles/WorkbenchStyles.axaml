@@ -25,37 +25,173 @@
     <Setter Property="Background" Value="{DynamicResource AppPressed}"/>
   </Style>
 
-  <Style Selector="ListBox.graphMailInbox ListBoxItem">
+  <!-- Graph 列表（邮件、历史版本）：整行拉伸，选中为一级高亮 + 左侧强调指示条。 -->
+  <Style Selector="ListBox.graphList">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="Padding" Value="4"/>
+  </Style>
+  <Style Selector="ListBox.graphList ListBoxItem">
     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
     <Setter Property="Padding" Value="0"/>
+    <Setter Property="Margin" Value="0,0,0,2"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
   </Style>
-
-  <Style Selector="ListBox.graphMailInbox ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+  <Style Selector="ListBox.graphList ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
     <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
-    <Setter Property="BorderBrush" Value="{DynamicResource AppAccent}"/>
-    <Setter Property="BorderThickness" Value="2,0,0,0"/>
+  </Style>
+  <Style Selector="ListBox.graphList Border.navPill, Border.graphRowSelected Border.navPill">
+    <Setter Property="Margin" Value="2,0,0,0"/>
+  </Style>
+  <!-- 非 ListBox 行（历史版本）的当前项：与列表选中同一底色与指示条。 -->
+  <Style Selector="Border.graphRow">
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Border.graphRow.graphRowSelected">
+    <Setter Property="Background" Value="{DynamicResource AppListSelected}"/>
+  </Style>
+  <Style Selector="Border.graphRowSelected Border.navPill">
+    <Setter Property="IsVisible" Value="True"/>
   </Style>
 
-  <!-- Graph 统一命令区：沿用工作台表面、边界和按钮反馈，分组可随画布宽度换行。 -->
-  <Style Selector="Border.graphToolbar">
+  <!-- Graph 页头：面包屑 + 命令栏单行，平铺在页面底色上，以发丝线与画布分隔。 -->
+  <Style Selector="Border.graphHeader">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="BorderThickness" Value="0,0,0,1"/>
+    <Setter Property="Padding" Value="8,4"/>
+    <Setter Property="MinHeight" Value="48"/>
+  </Style>
+  <Style Selector="Button.graphCommand">
+    <Setter Property="Padding" Value="8,0"/>
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="MinWidth" Value="32"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.graphCommand:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphCommand:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphCrumb">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+  </Style>
+  <Style Selector="Button.graphCrumb.current TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppTextPrimary}"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+  </Style>
+  <Style Selector="PathIcon.graphCrumbSeparator">
+    <Setter Property="Width" Value="12"/>
+    <Setter Property="Height" Value="12"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextDim}"/>
+  </Style>
+  <Style Selector="Border.graphCommandSeparator">
+    <Setter Property="Width" Value="1"/>
+    <Setter Property="Height" Value="20"/>
+    <Setter Property="Margin" Value="4,0"/>
+    <Setter Property="Background" Value="{DynamicResource AppDividerSubtle}"/>
+  </Style>
+  <!-- 画布浮动控件（层级、缩放）：浮层圆角与阴影，表面为一般栏。 -->
+  <Style Selector="Border.graphFloat">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource OverlayCornerRadius}"/>
+    <Setter Property="Padding" Value="4"/>
+    <Setter Property="Margin" Value="12"/>
+    <Setter Property="BoxShadow" Value="{DynamicResource FluentPillShadow}"/>
+  </Style>
+  <Style Selector="Border.graphFloat Button.graphCommand:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
+  </Style>
+  <Style Selector="TextBlock.graphReadout">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="MinWidth" Value="44"/>
+    <Setter Property="TextAlignment" Value="Center"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+    <Setter Property="Foreground" Value="{DynamicResource AppTextSecondary}"/>
+    <Setter Property="FontFeatures" Value="{StaticResource AppTabularNumericFeatures}"/>
+  </Style>
+  <!-- Graph 错误条：InfoBar 语义，图标 + 原因 + 关闭。 -->
+  <Style Selector="Border.graphInfoBar">
+    <Setter Property="Background" Value="{DynamicResource AppErrorBackground}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppErrorBorder}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+    <Setter Property="Padding" Value="12,4,4,4"/>
+    <Setter Property="MinHeight" Value="40"/>
+  </Style>
+  <Style Selector="Border.graphInfoBar PathIcon.graphStatusIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppErrorForeground}"/>
+  </Style>
+  <!-- Graph 邮件（参照 Outlook）：人像首字头像、阅读窗格、内联答复卡。 -->
+  <Style Selector="Border.graphAvatar">
+    <Setter Property="Width" Value="32"/>
+    <Setter Property="Height" Value="32"/>
+    <Setter Property="CornerRadius" Value="16"/>
     <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
     <Setter Property="BorderThickness" Value="1"/>
-    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
-    <Setter Property="Padding" Value="12,8"/>
-    <Setter Property="Margin" Value="8"/>
+    <Setter Property="VerticalAlignment" Value="Top"/>
   </Style>
-  <Style Selector="Border.graphToolbarGroup">
-    <Setter Property="BorderBrush" Value="{DynamicResource AppBorderBrush}"/>
-    <Setter Property="BorderThickness" Value="0,0,1,0"/>
-    <Setter Property="Padding" Value="0,0,12,0"/>
-    <Setter Property="Margin" Value="0,0,12,4"/>
+  <Style Selector="Border.graphAvatar.large">
+    <Setter Property="Width" Value="40"/>
+    <Setter Property="Height" Value="40"/>
+    <Setter Property="CornerRadius" Value="20"/>
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
   </Style>
-  <Style Selector="Button.graphToolCommand">
-    <Setter Property="Padding" Value="8,4"/>
-    <Setter Property="MinHeight" Value="32"/>
-    <Setter Property="MinWidth" Value="32"/>
+  <Style Selector="Border.graphAvatar TextBlock">
+    <Setter Property="FontSize" Value="12"/>
+    <Setter Property="FontWeight" Value="SemiBold"/>
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
+  </Style>
+  <Style Selector="Border.graphAvatar.large TextBlock">
+    <Setter Property="FontSize" Value="14"/>
+  </Style>
+  <Style Selector="Border.graphComposer">
+    <Setter Property="Background" Value="{DynamicResource AppBaseDeep}"/>
+    <Setter Property="BorderBrush" Value="{DynamicResource AppCardStroke}"/>
+    <Setter Property="BorderThickness" Value="1"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+    <Setter Property="Padding" Value="12"/>
+  </Style>
+  <Style Selector="Border.graphComposer TextBox">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Padding" Value="0,4"/>
+  </Style>
+  <Style Selector="Border.graphComposer TextBox:focus /template/ Border#PART_BorderElement, Border.graphComposer TextBox:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="BorderThickness" Value="0"/>
+  </Style>
+
+  <!-- Graph 停靠页内容：分区之间 24，分区内 8，页边 16。 -->
+  <Style Selector="StackPanel.graphSections">
+    <Setter Property="Spacing" Value="24"/>
+    <Setter Property="Margin" Value="16"/>
+  </Style>
+  <Style Selector="StackPanel.graphSection">
+    <Setter Property="Spacing" Value="8"/>
+  </Style>
+  <Style Selector="Button.graphDanger">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Button.graphDanger TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Button.graphDanger PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource AppCriticalForeground}"/>
+  </Style>
+  <Style Selector="Button.graphDanger:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphDanger:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
   </Style>
 
   <!-- 新建会话后端选择条：常驻二级色，悬停/按下升到三级色。 -->

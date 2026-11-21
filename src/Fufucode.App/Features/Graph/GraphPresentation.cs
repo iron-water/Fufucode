@@ -149,6 +149,40 @@ public sealed record GraphTicketRow(GraphTicket Ticket, GraphEntry? LastEntry)
     public string Time => GraphLabels.Time(Ticket.UpdatedUtc);
 }
 
+public sealed record GraphCrumb(string? Id, string Name);
+
+public enum GraphActivityKind { Running, Attention }
+
+/// <summary>Work state shown on a module, derived only from the authority's ticket status.
+/// Attention outranks running because it is what needs a person.</summary>
+public sealed record GraphModuleActivity(GraphActivityKind Kind, int Count, string Detail)
+{
+    public string Label => (Kind == GraphActivityKind.Attention ? "待处理" : "运行中") + (Count > 1 ? " " + Count : "");
+    private static readonly HashSet<string> RunningStatus = new(StringComparer.Ordinal)
+    { "running", "Running", "Active", "stopping", "StopRequested" };
+    private static readonly HashSet<string> AttentionStatus = new(StringComparer.Ordinal)
+    {
+        "completed", "Review", "blocked", "failed", "Failed", "Interrupted", "NeedsReconciliation",
+        "ReplanRequired", "WaitingPerson", "Proposed", "NeedsPurpose"
+    };
+    internal static IReadOnlyDictionary<string, GraphModuleActivity> Build(GraphSnapshot snapshot)
+    {
+        var result = new Dictionary<string, GraphModuleActivity>(StringComparer.Ordinal);
+        foreach (var group in snapshot.Tickets
+            .SelectMany(ticket => ticket.ModuleIds.Distinct(StringComparer.Ordinal).Select(id => (id, ticket)))
+            .GroupBy(pair => pair.id, pair => pair.ticket, StringComparer.Ordinal))
+        {
+            var attention = group.Where(t => AttentionStatus.Contains(t.Status)).ToArray();
+            var running = group.Where(t => RunningStatus.Contains(t.Status)).ToArray();
+            var relevant = attention.Length > 0 ? attention : running;
+            if (relevant.Length == 0) continue;
+            result[group.Key] = new(attention.Length > 0 ? GraphActivityKind.Attention : GraphActivityKind.Running, relevant.Length,
+                string.Join(Environment.NewLine, relevant.Select(t => GraphLabels.Status(t.Status) + " · " + t.Title)));
+        }
+        return result;
+    }
+}
+
 public sealed record GraphNode(GraphModule Module, Rect Bounds, bool IsReference);
 public sealed record GraphGroup(GraphModule Module, Rect Bounds);
 public sealed record GraphEdge(GraphRelation Relation, Rect Source, Rect Target, bool IsUpperLevel)

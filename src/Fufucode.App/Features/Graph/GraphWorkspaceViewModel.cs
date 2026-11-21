@@ -504,6 +504,37 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         RebuildScene(true);
     }
     public void GoTop() { SaveViewport(); _state.Scope = null; _state.Depth = 0; RebuildScene(true); }
+    /// <summary>Breadcrumb target: null is the project root; a module opens one level inside it.</summary>
+    public void NavigateScope(string? moduleId)
+    {
+        if (moduleId == null || !Snapshot.Modules.Any(m => m.Id == moduleId)) { GoTop(); return; }
+        var scope = new[] { moduleId };
+        SaveViewport();
+        _state.Scope = scope;
+        _state.Depth = Math.Min(1, MaximumDepth(scope));
+        RebuildScene(true);
+    }
+    public bool CanGoUp => _state.Depth > 0 || _state.Scope != null;
+    public bool CanGoDeeper => _state.Depth < MaximumDepth(_state.Scope);
+    public IReadOnlyList<GraphCrumb> ScopePath
+    {
+        get
+        {
+            var path = new List<GraphCrumb> { new(null, string.IsNullOrWhiteSpace(Snapshot.Title) ? "项目" : Snapshot.Title) };
+            if (_state.Scope is not { Length: > 0 } scope) return path;
+            if (scope.Length > 1) { path.Add(new(null, $"{scope.Length} 个模块")); return path; }
+            var chain = new List<GraphCrumb>();
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            for (var module = Snapshot.Modules.FirstOrDefault(m => m.Id == scope[0]); module != null && seen.Add(module.Id);
+                module = module.ParentId == null ? null : Snapshot.Modules.FirstOrDefault(m => m.Id == module.ParentId))
+                chain.Add(new(module.Id, module.Name));
+            chain.Reverse();
+            path.AddRange(chain);
+            return path;
+        }
+    }
+    private IReadOnlyDictionary<string, GraphModuleActivity> _activity = new Dictionary<string, GraphModuleActivity>();
+    internal GraphModuleActivity? ModuleActivity(string moduleId) => _activity.TryGetValue(moduleId, out var value) ? value : null;
     public void GoBottom()
     {
         SaveViewport(); _state.Scope = null; _state.Depth = MaximumDepth(null); RebuildScene(true);
@@ -511,10 +542,14 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     private void RebuildScene(bool restore)
     {
         Scene = GraphSceneBuilder.Build(Snapshot, _state.Scope, _state.Depth);
+        _activity = GraphModuleActivity.Build(Snapshot);
         Reconcile(VisibleModules, Scene.Groups.Select(g => g.Module).Concat(Scene.Nodes.Select(n => n.Module))
             .DistinctBy(m => m.Id), m => m.Id);
         if (restore) RestoreViewport();
         Notify(nameof(Depth));
+        Notify(nameof(CanGoUp));
+        Notify(nameof(CanGoDeeper));
+        Notify(nameof(ScopePath));
         Notify(nameof(Scene));
         SceneChanged?.Invoke();
     }

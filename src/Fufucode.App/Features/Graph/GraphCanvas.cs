@@ -29,6 +29,25 @@ internal sealed class GraphCanvas : Control, IDisposable
     public IBrush? Accent { get => GetValue(AccentProperty); set => SetValue(AccentProperty, value); }
     public IBrush? SelectedSurface { get => GetValue(SelectedSurfaceProperty); set => SetValue(SelectedSurfaceProperty, value); }
     public IBrush? PageSurface { get => GetValue(PageSurfaceProperty); set => SetValue(PageSurfaceProperty, value); }
+    public static readonly StyledProperty<IBrush?> CardStrokeProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(CardStroke));
+    public static readonly StyledProperty<IBrush?> CardHoverProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(CardHover));
+    public static readonly StyledProperty<IBrush?> DimInkProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(DimInk));
+    public static readonly StyledProperty<IBrush?> PillProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(Pill));
+    public static readonly StyledProperty<IBrush?> FocusVisualProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(FocusVisual));
+    public static readonly StyledProperty<IBrush?> InfoInkProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(InfoInk));
+    public static readonly StyledProperty<IBrush?> WarningInkProperty = AvaloniaProperty.Register<GraphCanvas, IBrush?>(nameof(WarningInk));
+    public static readonly StyledProperty<CornerRadius> CardCornerProperty = AvaloniaProperty.Register<GraphCanvas, CornerRadius>(nameof(CardCorner), new(6));
+    public static readonly StyledProperty<CornerRadius> GroupCornerProperty = AvaloniaProperty.Register<GraphCanvas, CornerRadius>(nameof(GroupCorner), new(8));
+    public IBrush? CardStroke { get => GetValue(CardStrokeProperty); set => SetValue(CardStrokeProperty, value); }
+    public IBrush? CardHover { get => GetValue(CardHoverProperty); set => SetValue(CardHoverProperty, value); }
+    public IBrush? DimInk { get => GetValue(DimInkProperty); set => SetValue(DimInkProperty, value); }
+    public IBrush? Pill { get => GetValue(PillProperty); set => SetValue(PillProperty, value); }
+    public IBrush? FocusVisual { get => GetValue(FocusVisualProperty); set => SetValue(FocusVisualProperty, value); }
+    public IBrush? InfoInk { get => GetValue(InfoInkProperty); set => SetValue(InfoInkProperty, value); }
+    public IBrush? WarningInk { get => GetValue(WarningInkProperty); set => SetValue(WarningInkProperty, value); }
+    public CornerRadius CardCorner { get => GetValue(CardCornerProperty); set => SetValue(CardCornerProperty, value); }
+    public CornerRadius GroupCorner { get => GetValue(GroupCornerProperty); set => SetValue(GroupCornerProperty, value); }
+    private string? _hoverId;
     private readonly GraphWorkspaceViewModel _vm;
     private readonly bool _mini;
     private readonly GraphViewportState _viewport;
@@ -45,7 +64,8 @@ internal sealed class GraphCanvas : Control, IDisposable
     internal string? FocusedModuleId { get; private set; }
 
     static GraphCanvas() => AffectsRender<GraphCanvas>(InkProperty, SecondaryInkProperty, SurfaceProperty,
-        StrokeProperty, AccentProperty, SelectedSurfaceProperty, PageSurfaceProperty);
+        StrokeProperty, AccentProperty, SelectedSurfaceProperty, PageSurfaceProperty, CardStrokeProperty, CardHoverProperty,
+        DimInkProperty, PillProperty, FocusVisualProperty, InfoInkProperty, WarningInkProperty, CardCornerProperty, GroupCornerProperty);
     internal GraphCanvas(GraphWorkspaceViewModel vm, bool mini = false)
     {
         _vm = vm;
@@ -63,6 +83,16 @@ internal sealed class GraphCanvas : Control, IDisposable
         Bind(AccentProperty, new DynamicResourceExtension("AppAccent"));
         Bind(SelectedSurfaceProperty, new DynamicResourceExtension("AppListSelected"));
         Bind(PageSurfaceProperty, new DynamicResourceExtension("AppMicaPageBackground"));
+        Bind(CardStrokeProperty, new DynamicResourceExtension("AppCardStroke"));
+        Bind(CardHoverProperty, new DynamicResourceExtension("AppCardHover"));
+        Bind(DimInkProperty, new DynamicResourceExtension("AppTextDim"));
+        Bind(PillProperty, new DynamicResourceExtension("AccentFillColorDefaultBrush"));
+        Bind(FocusVisualProperty, new DynamicResourceExtension("SystemControlFocusVisualPrimaryBrush"));
+        Bind(InfoInkProperty, new DynamicResourceExtension("AppInfoForeground"));
+        Bind(WarningInkProperty, new DynamicResourceExtension("AppWarningForeground"));
+        Bind(CardCornerProperty, new DynamicResourceExtension("AppCornerCard"));
+        Bind(GroupCornerProperty, new DynamicResourceExtension("OverlayCornerRadius"));
+        PointerExited += (_, _) => SetHover(null);
         PointerTouchPadGestureMagnify += (_, e) =>
         {
             _viewport.Zoom(Math.Exp(e.Delta.Y), e.GetPosition(this));
@@ -156,31 +186,91 @@ internal sealed class GraphCanvas : Control, IDisposable
         using (context.PushTransform(Matrix.CreateScale(_viewport.Scale, _viewport.Scale) *
             Matrix.CreateTranslation(_viewport.X, _viewport.Y)))
         {
+            var groupCorner = GroupCorner.TopLeft;
             foreach (var group in _vm.Scene.Groups)
             {
-                var selected = _vm.SelectedModuleIds.Contains(group.Module.Id);
-                context.DrawRectangle(null, new Pen(selected ? Accent : Stroke, selected ? 2 : 1), group.Bounds, 5, 5);
-                Text(context, group.Module.Name, group.Bounds.TopLeft + new Vector(12, 7), group.Bounds.Width - 24, 14, true);
-                if (IsSpatialFocusMode && FocusedModuleId == group.Module.Id) FocusRing(context, group.Bounds);
+                var id = group.Module.Id;
+                var selected = _vm.SelectedModuleIds.Contains(id);
+                context.DrawRectangle(null, new Pen(Stroke, 1), new RoundedRect(group.Bounds, groupCorner));
+                // The header row is the group's hit target, so it carries hover and selection.
+                var header = new Rect(group.Bounds.X + 1, group.Bounds.Y + 1, group.Bounds.Width - 2, 30);
+                var fill = selected ? SelectedSurface : _hoverId == id ? CardHover : null;
+                if (fill != null) context.DrawRectangle(fill, null, new RoundedRect(header, groupCorner - 1, groupCorner - 1, 0, 0));
+                if (selected) SelectionPill(context, header);
+                var nameWidth = group.Bounds.Width - 24 - Badge(context, id, new Point(group.Bounds.Right - 12, group.Bounds.Y + 8));
+                Text(context, group.Module.Name, group.Bounds.TopLeft + new Vector(12, 7), nameWidth, 12, true, ink: SecondaryInk);
+                if (IsSpatialFocusMode && FocusedModuleId == id) FocusRing(context, group.Bounds, groupCorner);
             }
             for (var i = 0; i < _vm.Scene.Edges.Count; i++) DrawEdge(context, _vm.Scene.Edges[i], i);
+            var corner = CardCorner.TopLeft;
+            var dashed = new DashStyle(new[] { 4d, 3d }, 0);
             foreach (var node in _vm.Scene.Nodes)
             {
-                var selected = _vm.SelectedModuleIds.Contains(node.Module.Id);
-                context.DrawRectangle(Surface, new Pen(selected ? Accent : Stroke, selected ? 2 : 1), node.Bounds, 5, 5);
-                if (selected) context.DrawRectangle(SelectedSurface, null, node.Bounds.Deflate(1), 4, 4);
-                Text(context, (node.IsReference ? "↗ " : "") + node.Module.Name,
-                    node.Bounds.TopLeft + new Vector(12, 11), node.Bounds.Width - 24, 14, true);
-                Text(context, GraphLabels.ModuleSummary(node.Module.Summary), node.Bounds.TopLeft + new Vector(12, 36), node.Bounds.Width - 24, 12, false, 30);
-                if (IsSpatialFocusMode && FocusedModuleId == node.Module.Id) FocusRing(context, node.Bounds);
+                var id = node.Module.Id;
+                var selected = _vm.SelectedModuleIds.Contains(id);
+                var fill = selected ? SelectedSurface : _hoverId == id ? CardHover : Surface;
+                // References live outside the current scope: a dashed outline marks them as borrowed.
+                var pen = node.IsReference ? new Pen(Stroke, 1, dashed) : new Pen(CardStroke, 1);
+                context.DrawRectangle(fill, pen, new RoundedRect(node.Bounds, corner));
+                if (selected) SelectionPill(context, node.Bounds);
+                var titleX = 12.0;
+                if (node.IsReference)
+                {
+                    DrawIcon(context, "Icon.Open", new Rect(node.Bounds.X + 12, node.Bounds.Y + 13, 12, 12), DimInk);
+                    titleX += 18;
+                }
+                var badgeWidth = Badge(context, id, new Point(node.Bounds.Right - 12, node.Bounds.Y + 12));
+                Text(context, node.Module.Name, node.Bounds.TopLeft + new Vector(titleX, 10),
+                    node.Bounds.Width - titleX - 12 - badgeWidth, 14, true);
+                Text(context, GraphLabels.ModuleSummary(node.Module.Summary), node.Bounds.TopLeft + new Vector(12, 36),
+                    node.Bounds.Width - 24, 12, false, 34);
+                if (IsSpatialFocusMode && FocusedModuleId == id) FocusRing(context, node.Bounds, corner);
             }
             if (_marquee is { } marquee)
-                context.DrawRectangle(null, new Pen(Accent, 1.5 / _viewport.Scale), marquee);
+            {
+                IBrush? wash = Accent is ISolidColorBrush accent ? new SolidColorBrush(accent.Color, 0.12) : null;
+                context.DrawRectangle(wash, new Pen(Accent, 1 / _viewport.Scale), marquee);
+            }
         }
     }
-    private void FocusRing(DrawingContext context, Rect bounds) =>
-        context.DrawRectangle(null, new Pen(Accent, 2 / _viewport.Scale,
-            new DashStyle(new[] { 3d, 2d }, 0)), bounds.Inflate(4), 6, 6);
+    /// <summary>Same 3×16 accent pill as list selection, inset inside the left edge.</summary>
+    private void SelectionPill(DrawingContext context, Rect bounds) =>
+        context.DrawRectangle(Pill ?? Accent, null, new RoundedRect(
+            new Rect(bounds.X + 2, bounds.Center.Y - 8, 3, 16), 1.5));
+    /// <summary>Fluent focus visual: solid primary stroke offset outside the element.</summary>
+    private void FocusRing(DrawingContext context, Rect bounds, double corner)
+    {
+        var offset = 3 / _viewport.Scale;
+        context.DrawRectangle(null, new Pen(FocusVisual ?? Ink, 2 / _viewport.Scale),
+            new RoundedRect(bounds.Inflate(offset), corner + offset));
+    }
+    /// <summary>Draws the module's work state right-aligned to <paramref name="topRight"/>; returns the width used.</summary>
+    private double Badge(DrawingContext context, string moduleId, Point topRight)
+    {
+        if (_vm.ModuleActivity(moduleId) is not { } activity) return 0;
+        var ink = activity.Kind == GraphActivityKind.Attention ? WarningInk : InfoInk;
+        var label = Measure(activity.Label, 120, 12, false, 16, ink);
+        var textX = topRight.X - label.Width;
+        context.DrawText(label, new Point(textX, topRight.Y));
+        context.DrawEllipse(ink, null, new Point(textX - 7, topRight.Y + label.Height / 2), 3, 3);
+        return label.Width + 18;
+    }
+    private void DrawIcon(DrawingContext context, string key, Rect target, IBrush? brush)
+    {
+        if (brush == null || !this.TryFindResource(key, ActualThemeVariant, out var value) || value is not Geometry geometry) return;
+        var bounds = geometry.Bounds;
+        if (bounds.Width <= 0 || bounds.Height <= 0) return;
+        var scale = Math.Min(target.Width / bounds.Width, target.Height / bounds.Height);
+        using (context.PushTransform(Matrix.CreateTranslation(-bounds.X, -bounds.Y) * Matrix.CreateScale(scale, scale) *
+            Matrix.CreateTranslation(target.X, target.Y)))
+            context.DrawGeometry(brush, null, geometry);
+    }
+    private void SetHover(string? id)
+    {
+        if (_hoverId == id) return;
+        _hoverId = id;
+        InvalidateVisual();
+    }
     private void DrawEdge(DrawingContext context, GraphEdge edge, int index)
     {
         var right = edge.Target.Center.X >= edge.Source.Center.X;
@@ -204,36 +294,46 @@ internal sealed class GraphCanvas : Control, IDisposable
             path.EndFigure(false);
         }
         var flow = edge.Relation.Kind is "dataflow" or "data-flow" or "data_flow";
-        context.DrawGeometry(null, new Pen(SecondaryInk, 1.4,
-            flow ? new DashStyle(new[] { 5d, 3d }, 0) : null), line);
+        // Relations of the selection step forward; the rest recede to tertiary ink.
+        var related = _vm.SelectedModuleIds.Contains(edge.Relation.SourceId) || _vm.SelectedModuleIds.Contains(edge.Relation.TargetId);
+        var ink = related ? SecondaryInk : DimInk ?? SecondaryInk;
+        var width = related ? 1.6 : 1.2;
+        context.DrawGeometry(null, new Pen(ink, width, flow ? new DashStyle(new[] { 5d, 3d }, 0) : null), line);
         var direction = new Vector(to.X - last.X, to.Y - last.Y);
         if (direction.Length > 0)
         {
             direction /= direction.Length;
             var normal = new Vector(-direction.Y, direction.X);
-            context.DrawLine(new Pen(SecondaryInk, 1.4), to, to - direction * 8 + normal * 4);
-            context.DrawLine(new Pen(SecondaryInk, 1.4), to, to - direction * 8 - normal * 4);
+            var head = new StreamGeometry();
+            using (var path = head.Open())
+            {
+                path.BeginFigure(to, true);
+                path.LineTo(to - direction * 8 + normal * 4);
+                path.LineTo(to - direction * 8 - normal * 4);
+                path.EndFigure(true);
+            }
+            context.DrawGeometry(ink, null, head);
         }
         if (!_mini)
         {
             var center = new Point((from.X + to.X) / 2, (from.Y + to.Y) / 2 - 15 - index % 3 * 14);
-            var label = Measure(edge.Label, 210, 11, false, 17);
-            var labelBounds = new Rect(center.X - label.Width / 2 - 4, center.Y, label.Width + 8, label.Height);
-            context.FillRectangle(PageSurface ?? Surface ?? Brushes.Transparent, labelBounds);
-            context.DrawText(label, labelBounds.TopLeft + new Vector(4, 0));
+            var label = Measure(edge.Label, 210, 12, false, 16, related ? SecondaryInk : DimInk);
+            var labelBounds = new Rect(center.X - label.Width / 2 - 6, center.Y, label.Width + 12, label.Height + 2);
+            context.DrawRectangle(PageSurface ?? Surface ?? Brushes.Transparent, null, new RoundedRect(labelBounds, 4));
+            context.DrawText(label, labelBounds.TopLeft + new Vector(6, 1));
         }
     }
-    private FormattedText Measure(string value, double width, double size, bool strong, double height = 20)
+    private FormattedText Measure(string value, double width, double size, bool strong, double height = 20, IBrush? ink = null)
     {
         var font = TextElement.GetFontFamily(this);
         return new FormattedText(value.Replace('\r', ' ').Replace('\n', ' '), CultureInfo.CurrentUICulture,
             FlowDirection.LeftToRight, new Typeface(font, FontStyle.Normal, strong ? FontWeight.SemiBold : FontWeight.Normal),
-            size, strong ? Ink : SecondaryInk)
+            size, ink ?? (strong ? Ink : SecondaryInk))
         { MaxTextWidth = Math.Max(1, width), MaxTextHeight = height, Trimming = TextTrimming.CharacterEllipsis };
     }
-    private void Text(DrawingContext context, string value, Point point, double width, double size, bool strong, double height = 20)
+    private void Text(DrawingContext context, string value, Point point, double width, double size, bool strong, double height = 20, IBrush? ink = null)
     {
-        if (!string.IsNullOrEmpty(value)) context.DrawText(Measure(value, width, size, strong, height), point);
+        if (!string.IsNullOrEmpty(value) && width > 8) context.DrawText(Measure(value, width, size, strong, height, ink), point);
     }
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -298,8 +398,11 @@ internal sealed class GraphCanvas : Control, IDisposable
         else
         {
             var id = _vm.Scene.Hit(_viewport.ToWorld(point));
+            SetHover(id);
             var module = _vm.Snapshot.Modules.FirstOrDefault(m => m.Id == id);
-            ToolTip.SetTip(this, module == null ? null : module.Name + Environment.NewLine + GraphLabels.ModuleSummary(module.Summary));
+            var activity = id == null ? null : _vm.ModuleActivity(id);
+            ToolTip.SetTip(this, module == null ? null : module.Name + Environment.NewLine + GraphLabels.ModuleSummary(module.Summary) +
+                (activity == null ? "" : Environment.NewLine + activity.Detail));
         }
         _lastPointer = point;
         UpdatePointerCursor(point, e.KeyModifiers);

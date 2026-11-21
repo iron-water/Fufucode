@@ -64,7 +64,7 @@ public sealed class GraphTicketsView : GraphContentView
             ItemsSource = vm.HumanInbox,
             ItemTemplate = new FuncDataTemplate<GraphOrganizationMessage>((mail, _) => mail == null ? null : MailRow(mail))
         };
-        _inbox.Classes.Add("graphMailInbox");
+        _inbox.Classes.Add("graphList");
         ScrollViewer.SetHorizontalScrollBarVisibility(_inbox, ScrollBarVisibility.Disabled);
         ScrollViewer.SetVerticalScrollBarVisibility(_inbox, ScrollBarVisibility.Auto);
         AutomationProperties.SetAutomationId(_inbox, "GraphHumanInbox");
@@ -82,22 +82,25 @@ public sealed class GraphTicketsView : GraphContentView
         // snapshot refresh may reset that slot; each message keeps its own presentation draft.
         _draft = new TextBox
         {
-            AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 96,
-            MaxHeight = 240, HorizontalAlignment = HorizontalAlignment.Stretch
+            AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, MinHeight = 72,
+            MaxHeight = 240, HorizontalAlignment = HorizontalAlignment.Stretch, PlaceholderText = "答复"
         };
-        _draft.Classes.Add("dialogInput");
         AutomationProperties.SetAutomationId(_draft, "GraphOrganizationReply");
         AutomationProperties.SetName(_draft, "回复");
         _draft.TextChanged += (_, _) =>
         {
             if (!_synchronizing && _messageKey != null) _state.Drafts[_messageKey] = _draft.Text ?? "";
         };
-        var send = GraphUi.Button("发送回复", () => SendReply(), "GraphSendOrganizationReply", true);
+        var send = GraphUi.Primary("发送", () => SendReply(), "GraphSendOrganizationReply", true);
         var resolve = GraphUi.Button("答复并解决", () => SendReply(true), "GraphResolveRequest");
         GraphUi.Bind(resolve, IsVisibleProperty, "CanResolveRequest");
-        var reply = GraphUi.Stack(GraphUi.Field("回复", _draft), GraphUi.Actions(send, resolve));
+        // Outlook-style inline compose: the draft and its send actions share one card.
+        var replyActions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        replyActions.Children.Add(send); replyActions.Children.Add(resolve);
+        var reply = new Border { Child = GraphUi.Stack(_draft, replyActions) };
+        reply.Classes.Add("graphComposer");
         GraphUi.Bind(reply, IsEnabledProperty, "CanEdit");
-        var subject = GraphUi.Text("", "bodyStrong");
+        var subject = GraphUi.Text("", "subtitle");
         GraphUi.Bind(subject, TextBlock.TextProperty, "SelectedHumanMessage.Content.Text",
             converter: new FuncValueConverter<string?, string>(Subject));
         var kind = GraphUi.Text("", "caption");
@@ -106,16 +109,32 @@ public sealed class GraphTicketsView : GraphContentView
         var status = GraphUi.Text("", "caption");
         GraphUi.Bind(status, TextBlock.TextProperty, "SelectedHumanMessage",
             converter: new FuncValueConverter<GraphOrganizationMessage?, string>(MessageStatus));
-        var senderName = GraphUi.Value("SelectedHumanMessage.SenderId");
+        var senderName = GraphUi.Text("", "bodyStrong");
         GraphUi.Bind(senderName, TextBlock.TextProperty, "SelectedHumanMessage.SenderId",
             converter: new FuncValueConverter<string?, string>(value => GraphLabels.Actor(value ?? "")));
-        _message = GraphUi.Stack(subject,
-            senderName, kind, status,
-            GraphUi.Divider(), GraphUi.Value("SelectedHumanMessage.Content.Text"),
-            GraphUi.Value("SelectedHumanMessage.Resolution", "caption"),
-            GraphUi.Divider(), reply);
-        _message.Spacing = 12;
-        _message.Margin = new Thickness(16);
+        var senderAvatar = Avatar("", true);
+        GraphUi.Bind((TextBlock)senderAvatar.Child!, TextBlock.TextProperty, "SelectedHumanMessage.SenderId",
+            converter: new FuncValueConverter<string?, string>(value => Initial(GraphLabels.Actor(value ?? ""))));
+        // Kind and lifecycle under the sender; each stays its own text for exact reading.
+        var meta = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6 };
+        meta.Children.Add(kind); meta.Children.Add(GraphUi.Text("·", "caption")); meta.Children.Add(status);
+        var who = GraphUi.Stack(senderName, meta);
+        who.Spacing = 2; who.VerticalAlignment = VerticalAlignment.Center;
+        var sender = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
+        sender.Children.Add(senderAvatar); Grid.SetColumn(who, 1); sender.Children.Add(who);
+        var heading = GraphUi.Stack(subject, sender);
+        heading.Spacing = 16;
+        // The subject is the first line, so the body continues from the second line.
+        var body = GraphUi.Value("SelectedHumanMessage.Content.Text");
+        GraphUi.Bind(body, TextBlock.TextProperty, "SelectedHumanMessage.Content.Text",
+            converter: new FuncValueConverter<string?, string>(Remainder));
+        GraphUi.Bind(body, IsVisibleProperty, "SelectedHumanMessage.Content.Text",
+            converter: new FuncValueConverter<string?, bool>(text => Remainder(text).Length != 0));
+        var resolution = GraphUi.Value("SelectedHumanMessage.Resolution", "caption");
+        GraphUi.Bind(resolution, IsVisibleProperty, "SelectedHumanMessage.Resolution", converter: GraphUi.HasText);
+        _message = GraphUi.Stack(heading, body, resolution, reply);
+        _message.Spacing = 20;
+        _message.Margin = new Thickness(24, 16);
         _message.MaxWidth = 960;
         _message.HorizontalAlignment = HorizontalAlignment.Stretch;
         var reading = new Grid();
@@ -125,9 +144,9 @@ public sealed class GraphTicketsView : GraphContentView
         _detailScroll.Content = reading;
         AutomationProperties.SetAutomationId(_detailScroll, "GraphMailDetailScroll");
         _detailScroll.ScrollChanged += (_, _) => SaveDetailOffset();
-        _back = GraphUi.Button("返回", BackToList, "GraphMailBack");
-        var navigation = GraphUi.Actions(_back);
-        navigation.Margin = new Thickness(8, 4, 8, 0);
+        _back = GraphUi.Command("ArrowLeft", "返回", BackToList, "GraphMailBack");
+        var navigation = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 8, 8, 0) };
+        navigation.Children.Add(_back);
         _detailPane.Bind(Panel.BackgroundProperty, new DynamicResourceExtension("AppCardBackground"));
         _detailPane.RowDefinitions = new RowDefinitions("Auto,*");
         _detailPane.Children.Add(navigation);
@@ -185,22 +204,53 @@ public sealed class GraphTicketsView : GraphContentView
 
     private Control MailRow(GraphOrganizationMessage mail)
     {
-        var sender = SingleLine(GraphLabels.Actor(mail.SenderId), "bodyStrong");
-        var subject = SingleLine(Subject(mail.Content.Text), "body");
-        var firstLineEnd = mail.Content.Text.TrimStart().IndexOfAny(['\r', '\n']);
-        var remainder = firstLineEnd < 0 ? "" : mail.Content.Text.TrimStart()[(firstLineEnd + 1)..].Trim();
-        var preview = SingleLine(remainder.Replace('\r', ' ').Replace('\n', ' '), "caption");
+        // Outlook list row: persona, sender with state on the right, subject, one-line preview.
+        // An open request is what waits for you, so its subject carries the unread weight.
+        var sender = GraphUi.SingleLine(GraphLabels.Actor(mail.SenderId), "body");
+        var kind = GraphUi.SingleLine(MessageKind(mail.Content.Kind), "caption");
+        var status = GraphUi.SingleLine(MessageStatus(mail), "caption");
+        var tags = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 6, VerticalAlignment = VerticalAlignment.Center };
+        tags.Children.Add(kind); tags.Children.Add(GraphUi.Text("·", "caption")); tags.Children.Add(status);
+        var top = GraphUi.HeaderRow(sender, tags);
+        var subject = GraphUi.SingleLine(Subject(mail.Content.Text), mail.IsOpenRequest ? "bodyStrong" : "body");
+        var remainder = Remainder(mail.Content.Text);
+        var preview = GraphUi.SingleLine(remainder.Replace('\r', ' ').Replace('\n', ' '), "caption");
         preview.IsVisible = remainder.Length != 0;
-        var metadata = SingleLine(MessageKind(mail.Content.Kind) + " · " + MessageStatus(mail), "caption");
-        var text = GraphUi.Stack(sender, subject, preview, metadata);
-        text.Spacing = 4;
+        var lines = GraphUi.Stack(top, subject, preview);
+        lines.Spacing = 2;
+        var text = new Grid { ColumnDefinitions = new ColumnDefinitions("Auto,*"), ColumnSpacing = 12 };
+        text.Children.Add(Avatar(Initial(GraphLabels.Actor(mail.SenderId)), false));
+        Grid.SetColumn(lines, 1); text.Children.Add(lines);
         var button = GraphUi.Button(mail.SenderId, () => OpenHumanMessage(mail.Id), "GraphInbox-" + mail.Id);
         button.Content = text;
         button.HorizontalAlignment = HorizontalAlignment.Stretch;
         button.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        button.Padding = new Thickness(12);
+        button.Padding = new Thickness(16, 8, 12, 8);
         AutomationProperties.SetName(button, mail.SenderId + " · " + Subject(mail.Content.Text));
-        return button;
+        var pill = new Border(); pill.Classes.Add("navPill");
+        var row = new Grid(); row.Children.Add(button); row.Children.Add(pill);
+        return row;
+    }
+
+    private static Border Avatar(string initial, bool large)
+    {
+        var avatar = new Border { Child = new TextBlock { Text = initial } };
+        avatar.Classes.Add("graphAvatar");
+        if (large) avatar.Classes.Add("large");
+        return avatar;
+    }
+
+    private static string Initial(string name)
+    {
+        var trimmed = name.Trim();
+        return trimmed.Length == 0 ? "" : System.Globalization.StringInfo.GetNextTextElement(trimmed).ToUpperInvariant();
+    }
+
+    private static string Remainder(string? text)
+    {
+        var trimmed = (text ?? "").TrimStart();
+        var end = trimmed.IndexOfAny(['\r', '\n']);
+        return end < 0 ? "" : trimmed[(end + 1)..].Trim();
     }
 
     private static string Subject(string? text)
@@ -220,14 +270,6 @@ public sealed class GraphTicketsView : GraphContentView
     private static string MessageStatus(GraphOrganizationMessage? mail) => mail?.Content.Communication == GraphCommunicationKind.Request
         ? mail.RequestStatus switch { GraphRequestStatus.Resolved => "已解决", GraphRequestStatus.Declined => "已拒绝", GraphRequestStatus.Cancelled => "已取消", _ => "待答复" }
         : mail == null ? "" : GraphLabels.Status(mail.Status.ToString());
-
-    private static TextBlock SingleLine(string text, string style)
-    {
-        var block = GraphUi.Text(text, style);
-        block.TextWrapping = TextWrapping.NoWrap;
-        block.TextTrimming = TextTrimming.CharacterEllipsis;
-        return block;
-    }
 
     internal void OpenHumanMessage(string id)
     {
