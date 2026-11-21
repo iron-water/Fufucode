@@ -98,7 +98,7 @@ public static class ServerSentEvents
         {
             var hasData = state.HasData;
             if (hasData) dispatched = state.Build();
-            state.Reset();
+            state.ResetEvent();
             return hasData;
         }
 
@@ -128,10 +128,11 @@ public static class ServerSentEvents
                 state.EventName = value;
                 break;
             case "id":
-                state.Id = value;
+                if (!value.Contains('\0')) state.Id = value;
                 break;
             case "retry":
-                state.Retry = value;
+                if (value.Length > 0 && value.AsSpan().IndexOfAnyExceptInRange('0', '9') < 0)
+                    state.Retry = value;
                 break;
             default:
                 // 未知字段按规范忽略。
@@ -162,13 +163,12 @@ public static class ServerSentEvents
         public ServerSentEvent Build() =>
             new(EventName, _data.ToString(), Id, Retry);
 
-        public void Reset()
+        // data 和 event 仅属于一条事件；last-event-id 与 retry 属于整条流。
+        public void ResetEvent()
         {
             _data.Clear();
             HasData = false;
             EventName = null;
-            Id = null;
-            Retry = null;
         }
     }
 }

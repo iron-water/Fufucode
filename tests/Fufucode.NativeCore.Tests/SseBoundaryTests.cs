@@ -54,7 +54,8 @@ internal static class SseBoundaryTests
 
         // Delimiters are complete at CR. A provider may leave the connection open after [DONE].
         var bom = Encoding.UTF8.GetPreamble();
-        var frames = "data: first\r\nevent: message\r\n\r\nevent: ping\n\ndata:\ndata: next\n\ndata:\n\ndata: [DONE]\r\r";
+        var frames = "data: first\r\nevent: message\r\n\r\nevent: ping\nid: checkpoint\nretry: 2000\n\n" +
+            "data:\ndata: next\n\nid: ignored\0id\nretry: invalid\ndata:\n\nid:\ndata: [DONE]\r\r";
         await using var boundary = new ExactChunkStream([bom[..1], bom[1..], Encoding.UTF8.GetBytes(frames)], forbidEofRead: true);
         var received = new List<ServerSentEvent>();
         await foreach (var item in ServerSentEvents.ReadAsync(boundary)) received.Add(item);
@@ -62,6 +63,10 @@ internal static class SseBoundaryTests
         checks.Equal("first", received[0].Data, "fragmented UTF-8 BOM does not swallow the first data field");
         checks.Equal("\nnext", received[1].Data, "leading empty data line is retained");
         checks.Check(received[1].EventName is null, "metadata-only heartbeat does not rename the next event");
+        checks.Equal("checkpoint", received[1].Id, "standalone id survives the metadata-only block");
+        checks.Equal("checkpoint", received[2].Id, "invalid id cannot replace the last event ID");
+        checks.Equal("2000", received[2].Retry, "invalid retry does not replace the stream reconnection time");
+        checks.Equal("", received[3].Id, "explicit empty id resets the last event ID");
         checks.Equal("", received[2].Data, "explicit empty data is distinct from no data field");
         checks.Check(received[3].IsDone, "bare CR dispatches DONE without another read");
     }
