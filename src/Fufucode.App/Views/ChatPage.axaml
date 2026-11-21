@@ -11,7 +11,7 @@
 
     <!-- 会话头：标题/项目/单一活动摘要，连接与模型详情进入局部浮层。 -->
     <Border x:Name="ConversationHeader" Grid.Row="0" MinHeight="64" Padding="20,8,16,8"
-            BorderBrush="{DynamicResource AppBorderBrush}" BorderThickness="0,0,0,1">
+            BorderBrush="{DynamicResource AppDividerSubtle}" BorderThickness="0,0,0,1">
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
         <Grid RowDefinitions="Auto,Auto" RowSpacing="4">
           <Grid ColumnDefinitions="*,Auto">
@@ -22,7 +22,7 @@
             <!-- 图标已表达重命名动作，去掉重复提示，名称保留给无障碍读取。 -->
             <Button Grid.Column="1" Classes="iconButton" Command="{Binding Sidebar.BeginRenameCommand}"
                     IsVisible="{Binding Sidebar.IsReal}" AutomationProperties.Name="重命名会话">
-              <PathIcon Data="{DynamicResource Icon.Edit}" Width="14" Height="14" Foreground="{DynamicResource AppAccent}"/>
+              <PathIcon Data="{DynamicResource Icon.Edit}" Width="16" Height="16" Foreground="{DynamicResource AppAccent}"/>
             </Button>
             <TextBox x:Name="RenameBox" Grid.ColumnSpan="2" MaxWidth="360" HorizontalAlignment="Stretch"
                      Text="{Binding Sidebar.RenameDraft}" IsVisible="{Binding Sidebar.IsRenaming}" KeyDown="RenameBox_KeyDown"/>
@@ -34,14 +34,14 @@
         </Grid>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
           <!-- 会话后端由顶栏会话岛展示（图标 + 名称），这里不再重复徽标。 -->
-          <Button x:Name="HeaderActionsButton" Classes="iconButton" Width="30" Height="30" AutomationProperties.Name="会话操作">
+          <Button x:Name="HeaderActionsButton" Classes="iconButton" AutomationProperties.Name="会话操作" ToolTip.Tip="会话操作">
             <PathIcon Data="{DynamicResource Icon.More}" Width="16" Height="16" Foreground="{DynamicResource AppAccent}"/>
           </Button>
-          <Button Classes="iconButton" Width="30" Height="30" Click="FindConversation_Click">
-            <PathIcon Data="{DynamicResource Icon.Search}" Width="15" Height="15" Foreground="{DynamicResource AppAccent}"/>
+          <Button Classes="iconButton" Click="FindConversation_Click" AutomationProperties.Name="在会话中查找" ToolTip.Tip="在会话中查找">
+            <PathIcon Data="{DynamicResource Icon.Search}" Width="16" Height="16" Foreground="{DynamicResource AppAccent}"/>
           </Button>
-          <Button x:Name="SessionDetailsButton" Classes="iconButton" Width="32" Height="32"
-                  AutomationProperties.Name="会话详情">
+          <Button x:Name="SessionDetailsButton" Classes="iconButton"
+                  AutomationProperties.Name="会话详情" ToolTip.Tip="会话详情">
             <PathIcon Data="{DynamicResource Icon.Info}" Width="16" Height="16" Foreground="{DynamicResource AppAccent}"/>
             <Button.Flyout>
               <Flyout Placement="BottomEdgeAlignedRight">
@@ -428,7 +428,7 @@
                       <StackPanel>
                         <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,10,12,8" ColumnSpacing="10">
                           <Border Grid.Column="0" Classes="changeIcon" Width="28" Height="28" CornerRadius="8">
-                            <PathIcon Data="{DynamicResource Icon.Edit}" Width="14" Height="14"
+                            <PathIcon Data="{DynamicResource Icon.Edit}" Width="16" Height="16"
                                       Foreground="{DynamicResource AppAccent}"/>
                           </Border>
                           <StackPanel Grid.Column="1" VerticalAlignment="Center">
