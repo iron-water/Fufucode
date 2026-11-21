@@ -319,9 +319,23 @@ void OrganizationInbox()
         Check(!replyVm.ReplyToHumanMessage() && proxy.Sends == 0, "blank human reply cannot invoke capable fake");
         replyVm.OrganizationReply = "  Explicit human answer  ";
         Check(replyVm.ReplyToHumanMessage() && proxy.Sends == 1 && proxy.Identity == null &&
-            proxy.Draft is { RecipientId: "lead", HumanRecipient: false, Text: "Explicit human answer", TicketId: "t1", ModuleId: "a", Revision: 3 } &&
+            proxy.Draft is { RecipientId: "lead", HumanRecipient: false, Text: "Explicit human answer", TicketId: "t1", ModuleId: "a", Revision: 3, InReplyTo: "human-message" } &&
             replyVm.OrganizationReply == "" && service.AcceptCalls == 0 && service.Current.Organization!.Messages[0].Status == GraphMessageStatus.Delivered,
             "capable fake receives host human reply to original sender without model impersonation or implicit apply");
+        service.Current = service.Current with { Organization = organization with { Messages = [human with { Content = human.Content with { Communication = GraphCommunicationKind.Request }, RequestStatus = GraphRequestStatus.Open }] } };
+        replyVm.Refresh();
+        using var requestView = new GraphTicketsView(replyVm);
+        var requests = new Window { Width = 850, Height = 650, Content = requestView }; requests.Show(); Pump();
+        try
+        {
+            Press(Find<Button>(requestView, "GraphInbox-human-message"));
+            var resolve = Find<Button>(requestView, "GraphResolveRequest");
+            Check(resolve.IsVisible && requestView.GetVisualDescendants().OfType<TextBlock>().Any(t => t.Text == "待答复"), "open request visibly offers resolution, not a delivery acknowledgement");
+            Find<TextBox>(requestView, "GraphOrganizationReply").Text = "Yes, offline";
+            Press(resolve);
+            Check(proxy.Resolution == (human.Id, GraphRequestStatus.Resolved, "Yes, offline") && proxy.Sends == 1, "resolve button binds the answer to the original request without issuing a second UI command");
+        }
+        finally { requests.Close(); Pump(); }
     }
     finally { window.Close(); }
 }
@@ -656,11 +670,17 @@ public class OrganizationUiProxy : System.Reflection.DispatchProxy
     internal int Sends;
     internal GraphMessageDraft? Draft;
     internal GraphExecutionIdentity? Identity;
+    internal (string, GraphRequestStatus, string)? Resolution;
     protected override object? Invoke(System.Reflection.MethodInfo? method, object?[]? arguments)
     {
         if (method!.Name == nameof(IGraphOrganizationService.SendOrganizationMessage))
         {
             Sends++; Draft = (GraphMessageDraft)arguments![1]!; Identity = (GraphExecutionIdentity?)arguments[2];
+            return Inner.ReadSnapshot().Organization!;
+        }
+        if (method.Name == nameof(IGraphOrganizationService.ResolveOrganizationRequest))
+        {
+            Resolution = ((string)arguments![1]!, (GraphRequestStatus)arguments[2]!, (string)arguments[3]!);
             return Inner.ReadSnapshot().Organization!;
         }
         return method.Invoke(Inner, arguments);

@@ -39,7 +39,6 @@ public sealed partial class GraphProjectService
                 { runId, acceptanceDigest, reference, producer, internalCompletion, continuation, continuationReason }), reference, "host-verifier");
                 if (internalCompletion)
                 {
-                    CloseOrganizationBarrier(CommandId(), ticketId);
                     context.Kernel.CompleteTicket(CommandId(), ticketId, Now());
                 }
                 return true;

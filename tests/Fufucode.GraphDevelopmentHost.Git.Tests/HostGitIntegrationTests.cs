@@ -228,19 +228,27 @@ Check(await ManagedGitIntegration.GetIntegratedCommitAsync(tests.Repo) == tr1.Tr
 using (var automatic = await NewFixture("automatic-delivery"))
 {
     var automaticBase = await Git(automatic.Repo, "rev-parse", "HEAD");
+    const string purpose = "Change Other.Value to 3 without changing the user worktree";
+    automatic.Graph.SetPurpose(purpose);
     automatic.Executor.OnRun = async request =>
     {
+        Check(request.Identity is { OwnsPurposeWork: true, CanWrite: true }, "one purpose owner plans and implements without a delegated ticket");
+        var created = await ManagedDevelopmentWorkspace.CreateForExecutionAsync(automatic.Repo, Path.Combine(automatic.Layout.Root, "auto-dev", "workspaces"));
+        var workspace = created.Workspace ?? throw new Exception(created.Error);
+        await File.WriteAllTextAsync(Path.Combine(workspace.Manifest.WorktreePath, "Other.cs"), "public static class Other { public static int Value() => 3; }\n");
+        await workspace.CaptureCandidateAsync(); automatic.Executor.Manifests[request.TicketId] = workspace.ManifestPath;
         var tools = new GraphToolHandler(automatic.Graph, request.ProjectPath, request.Identity);
         var proposed = await tools.ExecuteAsync(new Fufucode.Core.Backend.PureToolCall("automatic-proposal", "graph_propose_validation",
             JsonSerializer.Serialize(new { executable = dotnet, arguments = new[] { "build", "Fixture.csproj", "--nologo", "-v:q" },
-                timeoutSeconds = 60, coveredCriteria = new[] { "verified" }, reason = "Real host compiler verification of the fixture" })));
+                timeoutSeconds = 60, coveredCriteria = new[] { purpose }, reason = "Real host compiler verification of the fixture" })));
         Check(proposed.Success, "live executor can propose verification without declaring success");
     };
     var automaticHost = Host(automatic);
     using var delivery = new GraphDeliveryCoordinator(automatic.Graph, automaticHost);
-    var candidate = await Candidate(automatic, "automatic", automaticBase, "Other.cs", "public static class Other { public static int Value() => 3; }\n");
-    for (var i = 0; i < 1800 && automatic.Graph.ReadSnapshot().Tickets.Single(t => t.Id == candidate.Ticket).Status != "Done"; i++) await Task.Delay(50);
-    Check(automatic.Graph.ReadSnapshot().Tickets.Single(t => t.Id == candidate.Ticket).Status == "Done", "natural terminal checkpoint automatically verifies integrates and completes internal work");
+    await automatic.Graph.SetAutonomyAsync(true);
+    for (var i = 0; i < 1800 && automatic.Graph.ReadSnapshot().Tickets.Single().Status != "Done"; i++) await Task.Delay(50);
+    Check(automatic.Graph.ReadSnapshot() is { Tickets.Count: 1, Runs.Count: 1 } solo && solo.Tickets.Single().Status == "Done" &&
+        (await Git(automatic.Repo, "show", "refs/heads/autodev/integrated:Other.cs")).Contains("=> 3;"), "one run produced the verified change on the integration branch");
     Check(await ManagedGitIntegration.GetIntegratedCommitAsync(automatic.Repo) is not null && await Git(automatic.Repo, "rev-parse", "HEAD") == automaticBase,
         "automatic internal delivery preserves user main without publication authorization");
 }

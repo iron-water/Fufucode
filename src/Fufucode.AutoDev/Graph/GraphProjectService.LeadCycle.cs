@@ -18,8 +18,7 @@ public sealed partial class GraphProjectService
         return ReconcileLeadCycle(projectPath);
     }
 
-    // Deliberately lazy: this partial owns its schema and needs no shared migration edit.
-    private static void EnsureLeadCycleSchema(SqliteConnection c, SqliteTransaction tx)
+    private static void MigrateCoordinator(SqliteConnection c, SqliteTransaction tx)
     {
         Execute(c, tx, """
             CREATE TABLE IF NOT EXISTS graph_lead_cycle_events(
@@ -31,6 +30,13 @@ public sealed partial class GraphProjectService
             CREATE TABLE IF NOT EXISTS graph_lead_cycle_batches(
               project_id TEXT NOT NULL, ticket_id TEXT PRIMARY KEY, from_watermark INTEGER NOT NULL,
               through_watermark INTEGER NOT NULL, state TEXT NOT NULL DEFAULT 'dispatched');
+            INSERT OR IGNORE INTO graph_lead_cycle_batches(project_id,ticket_id,from_watermark,through_watermark)
+              SELECT project_id,ticket_id,json_extract(text,'$.fromExclusive'),json_extract(text,'$.throughInclusive')
+              FROM graph_entries WHERE kind='lead-cycle' ORDER BY created_utc,entry_id;
+            CREATE TABLE IF NOT EXISTS graph_scope_cycle_events(
+              project_id TEXT NOT NULL, recipient_id TEXT NOT NULL, event_key TEXT NOT NULL,
+              source_ticket TEXT NOT NULL, payload TEXT NOT NULL, coordination_ticket TEXT,
+              PRIMARY KEY(project_id,recipient_id,event_key));
             """);
     }
 
@@ -51,9 +57,9 @@ public sealed partial class GraphProjectService
     private LeadCycleResult ReconcileLeadCycleCore(string projectPath, bool humanRecovery) => InProjectScope(projectPath, () =>
     {
         var context = Current;
+        bool changed = false;
         var result = Change(context, "Reconciled project lead event cycle", (c, tx) =>
         {
-            EnsureLeadCycleSchema(c, tx);
             Execute(c, tx, "INSERT OR IGNORE INTO graph_lead_cycle_preferences(project_id) VALUES($p)", ("$p", context.AuthorityId));
             var authority = context.Kernel.ReadSnapshot(context.AuthorityId);
             var organization = Organization(context, c, tx);
@@ -71,22 +77,12 @@ public sealed partial class GraphProjectService
             }
             // Explicit human project dialogue is an event. Ordinary Notify/Request storage is not a wake signal.
             foreach (var input in authority.Inputs.Where(input => input.Actor == "human" &&
-                (input.TicketId is null || authority.Tickets.Any(t => t.Id == input.TicketId && t.Route == "project-planning"))))
+                (input.TicketId is null || authority.Tickets.Any(t => t.Id == input.TicketId && t.Route is "project-planning" or "project-work"))))
                 Observe("human-input:" + input.Id, input);
             var observed = Convert.ToInt64(Scalar(c, tx,
                 "SELECT COALESCE(MAX(sequence),0) FROM graph_lead_cycle_events WHERE project_id=$p", ("$p", context.AuthorityId)));
             var planned = Convert.ToInt64(Scalar(c, tx,
                 "SELECT planned_watermark FROM graph_lead_cycle_preferences WHERE project_id=$p", ("$p", context.AuthorityId)));
-            // Backfill batches created by the earlier dispatched-watermark-only helper.
-            foreach (var entry in Query(c, tx, "SELECT ticket_id,text FROM graph_entries WHERE project_id=$p AND kind='lead-cycle' ORDER BY created_utc,entry_id",
-                r => (Ticket: r.GetString(0), Json: r.GetString(1)), ("$p", context.AuthorityId)))
-            {
-                using var document = System.Text.Json.JsonDocument.Parse(entry.Json);
-                Execute(c, tx, "INSERT OR IGNORE INTO graph_lead_cycle_batches(project_id,ticket_id,from_watermark,through_watermark) VALUES($p,$ticket,$from,$to)",
-                    ("$p", context.AuthorityId), ("$ticket", entry.Ticket),
-                    ("$from", document.RootElement.GetProperty("fromExclusive").GetInt64()),
-                    ("$to", document.RootElement.GetProperty("throughInclusive").GetInt64()));
-            }
             var batches = Query(c, tx, "SELECT ticket_id,from_watermark,through_watermark,state FROM graph_lead_cycle_batches WHERE project_id=$p",
                 r => (Ticket: r.GetString(0), From: r.GetInt64(1), Through: r.GetInt64(2), State: r.GetString(3)), ("$p", context.AuthorityId));
             foreach (var batch in batches.Where(b => b.State == "dispatched"))
@@ -96,6 +92,7 @@ public sealed partial class GraphProjectService
                 var cancelled = authority.Tickets.Any(t => t.Id == batch.Ticket && t.Status is RebirthTicketStatus.Cancelled or RebirthTicketStatus.ReplanRequired);
                 var state = failed || cancelled ? "attention" : runs.Any(r => r.Status == RebirthRunStatus.Completed) ? "consumed" : "dispatched";
                 if (state == "dispatched") continue;
+                changed = true;
                 Execute(c, tx, "UPDATE graph_lead_cycle_batches SET state=$state WHERE ticket_id=$ticket", ("$state", state), ("$ticket", batch.Ticket));
                 if (state == "attention") Entry(context, c, tx, batch.Ticket, null, "lead-cycle-attention",
                     Serialize(new { batch.From, batch.Through, reason = "Planning did not settle; original events remain pending human reconciliation. No side effects will be replayed." }), null, "system");
@@ -115,7 +112,7 @@ public sealed partial class GraphProjectService
             if (started is not null && Now() - Convert.ToInt64(started) >= options.BudgetMinutes * 60_000L)
                 return Result("budget-exhausted");
             var planning = authority.Tickets.Where(t => t.Route == "project-planning").ToArray();
-            if (planning.Any(t => context.Runs.ContainsKey(t.Id)
+            if (authority.Tickets.Where(t => t.Route is "project-planning" or "project-work").Any(t => context.Runs.ContainsKey(t.Id)
                 || authority.Runs.Any(r => r.TicketId == t.Id && r.Status is RebirthRunStatus.Queued or RebirthRunStatus.Running)))
                 return Result("pending-active-lead");
             // Only reuse an unstarted, already-authorized plan. Never ResumeTicket, retry an
@@ -143,8 +140,9 @@ public sealed partial class GraphProjectService
             Execute(c, tx, "UPDATE graph_lead_cycle_preferences SET planned_watermark=$watermark WHERE project_id=$p",
                 ("$watermark", observed), ("$p", context.AuthorityId));
             planned = observed;
+            changed = true;
             return Result("planning-ready", next.Id);
-        });
+        }, () => changed);
         if (result.State == "planning-ready") KickQueue(context);
         return result;
     });
@@ -156,7 +154,6 @@ public sealed partial class GraphProjectService
         var context = Current;
         return Change(context, "Bound stable project lead session", (c, tx) =>
         {
-            EnsureLeadCycleSchema(c, tx);
             Execute(c, tx, """
                 INSERT INTO graph_lead_cycle_preferences(project_id,session_id) VALUES($p,$session)
                 ON CONFLICT(project_id) DO UPDATE SET session_id=$session
@@ -174,7 +171,6 @@ public sealed partial class GraphProjectService
         var context = Current;
         return context.Kernel.Atomic((c, tx) =>
         {
-            EnsureLeadCycleSchema(c, tx);
             if (Ticket(context, ticketId).Route != "project-planning")
                 throw new InvalidOperationException("Lead context is only available to project planning work.");
             var session = Scalar(c, tx, "SELECT session_id FROM graph_lead_cycle_preferences WHERE project_id=$p", ("$p", context.AuthorityId)) as string;

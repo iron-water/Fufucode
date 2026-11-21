@@ -252,6 +252,7 @@ catch (Exception error)
         Directory.CreateDirectory(workspace);
         var context = new PluginPackageContext("automation.auto-dev", root, workspace, null, root);
         var tools = new AutoDevToolHandler(context);
+        Check(!(await tools.ExecuteAsync(new("legacy-gate", "autodev_gate", "{}"))).Success, "legacy tool cannot impersonate a human gate");
         var status0 = await tools.ExecuteAsync(new PureToolCall("tool-status-0", "autodev_status", "{}"));
         Check(!status0.Success && status0.Content.Contains("not initialized", StringComparison.Ordinal),
             "兼容读取明确报告未初始化，不创建项目");

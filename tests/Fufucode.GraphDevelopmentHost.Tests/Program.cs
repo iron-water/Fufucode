@@ -81,8 +81,8 @@ Check(graph.ReadSnapshot().Tickets.Single(t => t.Id == ticket.Id).Status == "Don
 graph.SendOrganizationMessage("late-interface-change", new GraphMessageDraft("project-lead", false, "interface",
     "Fixture interface changed after completion", ticket.Id, null, graph.ReadSnapshot().Revision));
 Check(graph.ReadSnapshot().Tickets.Single(t => t.Id == ticket.Id).Status == "Done" &&
-    !graph.ReadOrganizationSnapshot().Barriers.Single(b => b.TicketId == ticket.Id).RequiresReview,
-    "ordinary interface notification cannot revoke verified completion");
+    !graph.ReadOrganizationSnapshot().Barriers.Any(b => b.TicketId == ticket.Id),
+    "verified completion creates no message barrier and late notifications cannot revoke it");
 await File.AppendAllTextAsync(Path.Combine(integrationTree, "source.txt"), "target mutation\n");
 Check(!host.VerifyIntegratedCurrent(target), "target source mutation revokes receipt");
 await File.WriteAllTextAsync(Path.Combine(integrationTree, "source.txt"), "candidate\n");

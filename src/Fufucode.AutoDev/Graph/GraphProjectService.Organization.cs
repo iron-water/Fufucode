@@ -20,8 +20,7 @@ public sealed partial class GraphProjectService
 
     private GraphOrganizationSnapshot Organization(ProjectContext context, SqliteConnection c, SqliteTransaction tx)
     {
-        var json = Scalar(c, tx, "SELECT state_json FROM graph_organization WHERE project_id=$p", ("$p", context.AuthorityId)) as string;
-        GraphOrganizationSnapshot state = json is null ? new(context.AuthorityId, 0, [new("project-lead", GraphExecutionRole.ProjectLead, [])], [], [], []) : GraphOrganizationStorage.ReadSnapshot(json);
+        var state = ReadStoredOrganization(context, c, tx);
         var decisions = context.Kernel.ReadSnapshot(context.AuthorityId).Decisions;
         return state with { Controls = state.Controls.Select(control => control with
         {
@@ -77,6 +76,7 @@ public sealed partial class GraphProjectService
         lock (_gate)
         {
             var context = Current;
+            bool changed = false, conflict = false;
             var result = Change(context, "Organization command", (c, tx) =>
             {
                 if (identity is not null) EnsureAgentMandate(context, c, tx);
@@ -87,23 +87,37 @@ public sealed partial class GraphProjectService
                     r => (Hash: r.GetString(0), Json: r.GetString(1)), ("$p", context.AuthorityId), ("$id", Required(commandId, nameof(commandId)))).SingleOrDefault();
                 if (receipt.Json is not null)
                 {
-                    var legacyHash = payload is GraphMessageDraft { Communication: GraphCommunicationKind.Notify, Address: null } draft
+                    var legacyHash = payload is GraphMessageDraft { Communication: GraphCommunicationKind.Notify, Address: null, InReplyTo: null } draft
                         ? Hash(Serialize(new { payload = new { draft.RecipientId, draft.HumanRecipient, draft.Kind, draft.Text,
                             draft.TicketId, draft.ModuleId, draft.Revision }, identity })) : null;
-                    if (receipt.Hash != hash && receipt.Hash != legacyHash) throw new InvalidOperationException("Command content conflict.");
-                    return GraphOrganizationStorage.ReadSnapshot(receipt.Json);
+                    if (receipt.Hash != hash && receipt.Hash != legacyHash)
+                    {
+                        conflict = true;
+                        var reference = commandId + ":" + hash;
+                        if (Scalar(c, tx, "SELECT 1 FROM graph_entries WHERE project_id=$p AND kind='conflict' AND reference=$ref", ("$p",context.AuthorityId),("$ref",reference)) is null)
+                        {
+                            Entry(context, c, tx, null, null, "conflict", Serialize(new { commandId, originalHash = receipt.Hash, rejectedHash = hash }), reference, actor);
+                            changed = true;
+                        }
+                        return before;
+                    }
+                    return GraphOrganizationStorage.ReadStored(c, tx, receipt.Json);
                 }
                 var after = mutate(before, actor) with { Version = checked(before.Version + 1) };
+                changed = true;
+                GraphOrganizationStorage.StoreMail(c, tx, after, after.Messages.Except(before.Messages));
+                var metadata = GraphOrganizationStorage.Metadata(after);
                 Execute(c, tx, "INSERT INTO graph_organization VALUES($p,$v,$s) ON CONFLICT(project_id) DO UPDATE SET version=$v,state_json=$s",
-                    ("$p", context.AuthorityId), ("$v", after.Version), ("$s", Serialize(after)));
+                    ("$p", context.AuthorityId), ("$v", after.Version), ("$s", metadata));
                 Execute(c, tx, "INSERT INTO graph_organization_commands VALUES($p,$id,$hash,$result)",
-                    ("$p", context.AuthorityId), ("$id", commandId), ("$hash", hash), ("$result", Serialize(after)));
-                Entry(context, c, tx, null, null, "organization", Serialize(new { commandId, payload, before, after }), null, actor);
+                    ("$p", context.AuthorityId), ("$id", commandId), ("$hash", hash), ("$result", metadata));
+                Entry(context, c, tx, null, null, "organization", Serialize(new { commandId, payload, beforeVersion = before.Version, afterVersion = after.Version }), null, actor);
                 return after;
-            });
+            }, () => changed);
+            if (conflict) throw new InvalidOperationException("Command content conflict.");
             // Only actual organization/dependency changes can make runnable work available.
             // Persisting correspondence never schedules or wakes a model.
-            if (lead) KickQueue(context);
+            if (lead && changed) KickQueue(context);
             return result;
         }
     }
@@ -161,38 +175,21 @@ public sealed partial class GraphProjectService
             var changed = state.Responsibilities.Select(r => r.Id).Union(responsibilities.Select(r => r.Id)).Where(id =>
                 Serialize(state.Responsibilities.SingleOrDefault(r => r.Id == id)) != Serialize(responsibilities.SingleOrDefault(r => r.Id == id))).ToArray();
             if (!changed.Order().SequenceEqual(affectedIds.Distinct().Order())) throw new InvalidOperationException("Affected responsibilities must exactly describe the change.");
-            foreach (var member in responsibilities)
-            {
-                foreach (var module in member.ModuleIds) OrganizationScope(hostIdentity, member.TicketId, module);
-                if (member.TicketId is not null) OrganizationScope(hostIdentity, member.TicketId, null);
-                if (hostIdentity?.Role == GraphExecutionRole.ScopeLead && member.Role == GraphExecutionRole.ProjectLead) {
-                    if (!state.Responsibilities.Any(r => Serialize(r) == Serialize(member))) throw new InvalidOperationException("ScopeLead cannot create ProjectLead.");
-                }
-            }
+            var graph = ReadSnapshot();
+            var active = graph.Runs.Where(r => r.Status is "Running" or "Queued" or "StopRequested").Select(r => r.TicketId).ToHashSet();
             foreach (var id in changed)
             {
-                if (hostIdentity?.Role == GraphExecutionRole.ScopeLead)
-                {
-                    var affected = responsibilities.SingleOrDefault(r => r.Id == id) ?? state.Responsibilities.Single(r => r.Id == id);
-                    if (affected.Role is GraphExecutionRole.ProjectLead || affected.ModuleIds.Length == 0)
-                        throw new InvalidOperationException("ScopeLead cannot change unscoped responsibility.");
-                }
                 var replacement = responsibilities.SingleOrDefault(r => r.Id == id);
-                var oldResponsibility = state.Responsibilities.SingleOrDefault(r => r.Id == id);
-                var affectedModules = (replacement?.ModuleIds ?? []).Union(oldResponsibility?.ModuleIds ?? []).ToHashSet();
-                var graph = ReadSnapshot();
-                if (Current.Kernel.ReadSnapshot(Current.AuthorityId).Runs.Any(run =>
-                    (run.Status.ToString() is "Running" or "Queued") && graph.Tickets.Any(t => t.Id == run.TicketId && t.ModuleIds.Any(affectedModules.Contains))))
-                    throw new InvalidOperationException("Active run prevents module responsibility changes.");
-                if (replacement?.TicketId is not null && Current.Kernel.ReadSnapshot(Current.AuthorityId).Runs.Any(run =>
-                    (run.Status.ToString() is "Running" or "Queued") && run.TicketId == replacement.TicketId))
-                    throw new InvalidOperationException("Active run prevents assignment changes.");
                 var prior = state.Responsibilities.SingleOrDefault(r => r.Id == id);
-                if (prior is not null)
+                foreach (var member in new[] { prior, replacement }.OfType<GraphResponsibility>())
                 {
-                    foreach (var module in prior.ModuleIds) OrganizationScope(hostIdentity, prior.TicketId, module);
-                    if (prior.TicketId is not null) OrganizationScope(hostIdentity, prior.TicketId, null);
-                    if (Current.Kernel.ReadSnapshot(Current.AuthorityId).Runs.Any(run => run.Status.ToString() is "Running" or "Queued" && (prior.TicketId == run.TicketId || prior.Role == GraphExecutionRole.ProjectLead)))
+                    if (hostIdentity?.Role == GraphExecutionRole.ScopeLead && (member.Role == GraphExecutionRole.ProjectLead || member.ModuleIds.Length == 0))
+                        throw new InvalidOperationException("ScopeLead cannot change unscoped responsibility.");
+                    foreach (var module in member.ModuleIds) OrganizationScope(hostIdentity, member.TicketId, module);
+                    if (member.TicketId is not null) OrganizationScope(hostIdentity, member.TicketId, null);
+                    if (member.TicketId is {} bound && active.Contains(bound) || member.Role == GraphExecutionRole.ProjectLead && active.Count != 0 ||
+                        graph.Tickets.Any(t => active.Contains(t.Id) && (t.Id != hostIdentity?.TicketId || member.Role == GraphExecutionRole.ScopeLead) &&
+                            t.ModuleIds.Any(m => IsModuleInScope(member.ModuleIds, m))))
                         throw new InvalidOperationException("Active run prevents reassignment; stop and reconcile first.");
                 }
             }
@@ -269,18 +266,6 @@ public sealed partial class GraphProjectService
         }
     }
 
-    public GraphOrganizationSnapshot AdvanceOrganizationMessage(string commandId, string messageId, GraphMessageStatus status, string reason, GraphExecutionIdentity? hostIdentity = null) =>
-        OrganizationChange(commandId, new { messageId, status, reason }, hostIdentity, (state, actor) =>
-        {
-            var message = state.Messages.Single(m => m.Id == messageId);
-            if (message.Content.Communication != GraphCommunicationKind.Request)
-                throw new InvalidOperationException("Notify has no acknowledgement lifecycle; controls are resolved through Kernel decisions.");
-            return ResolveOrganizationRequestCore(state, message, actor, hostIdentity,
-                status == GraphMessageStatus.Applied ? GraphRequestStatus.Resolved :
-                status == GraphMessageStatus.Rejected ? GraphRequestStatus.Declined :
-                throw new InvalidOperationException("Use the Request lifecycle: Open -> Resolved/Declined/Cancelled."), reason);
-        });
-
     public GraphOrganizationSnapshot ResolveOrganizationRequest(string commandId, string messageId, GraphRequestStatus status,
         string reason, GraphExecutionIdentity? hostIdentity = null) =>
         OrganizationChange(commandId, new { messageId, status, reason }, hostIdentity, (state, actor) =>
@@ -297,11 +282,19 @@ public sealed partial class GraphProjectService
             message.Content.HumanRecipient == (identity is null && actor == "human") && ResolveMessageRecipients(state, message.Content).Contains(actor);
         if (!authorized) throw new InvalidOperationException("Only the recipient resolves/declines; only the sender cancels.");
         Required(reason, nameof(reason));
-        return state with { Messages = state.Messages.Select(m => m.Id == message.Id ? m with
+        var messages = state.Messages.Select(m => m.Id == message.Id ? m with
         {
             RequestStatus = status, Resolution = reason,
             Status = status == GraphRequestStatus.Resolved ? GraphMessageStatus.Applied : GraphMessageStatus.Rejected
-        } : m).ToArray() };
+        } : m).ToArray();
+        if (actor != message.SenderId && status != GraphRequestStatus.Cancelled)
+        {
+            var recipient = message.SenderId == "host" ? "project-lead" : message.SenderId;
+            var reply = new GraphMessageDraft(recipient, recipient == "human", "reply", reason, message.Content.TicketId, message.Content.ModuleId,
+                Revision(Current, _connection!, _transaction!)) { InReplyTo = message.Id };
+            messages = [..messages, new GraphOrganizationMessage(checked(messages.Max(m => m.Sequence) + 1), Id("message"), actor, reply, GraphMessageStatus.Received, null)];
+        }
+        return state with { Messages = messages };
     }
 
     public GraphOrganizationSnapshot IssueOrganizationControl(string commandId, string ticketId, GraphControlKind kind, string reason)
@@ -343,18 +336,4 @@ public sealed partial class GraphProjectService
             return state with { Controls = state.Controls.Select(c => c.Id == controlId ? c with { Status = GraphControlStatus.Revoked } : c).ToArray() };
         });
 
-    public GraphOrganizationSnapshot CloseOrganizationBarrier(string commandId, string ticketId, GraphExecutionIdentity? hostIdentity = null) =>
-        OrganizationChange(commandId, new { ticketId }, hostIdentity, (state, actor) =>
-        {
-            OrganizationScope(hostIdentity, ticketId, null);
-            // Compatibility checkpoint only. Message topics, unread claims and open requests cannot block completion.
-            // The Kernel owns the actual veto guard, independent of delivery/read state.
-            var authority = Current.Kernel.ReadSnapshot(Current.AuthorityId);
-            var route = authority.Tickets.Single(t => t.Id == ticketId).Route;
-            if (authority.Decisions.Any(d => d.Kind.ToString() == "Veto" && d.Status == "Active" &&
-                (d.TicketId == ticketId || d.Target == "ticket:" + ticketId || d.Target == "project:" + Current.AuthorityId || d.Target == "route:" + route)))
-                throw new InvalidOperationException("Active Kernel control prevents completion.");
-            var barrier = new GraphCompletionBarrier(ticketId, state.Messages.Select(m => m.Sequence).DefaultIfEmpty().Max(), false);
-            return state with { Barriers = [..state.Barriers.Where(b => b.TicketId != ticketId), barrier] };
-        }, true);
 }

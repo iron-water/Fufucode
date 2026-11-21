@@ -35,21 +35,6 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         _resolveRepair = resolveRepair;
     }
 
-    private static async Task<string> ReadCommittedHeadAsync(string repository, CancellationToken token)
-    {
-        var start = new System.Diagnostics.ProcessStartInfo("git") { WorkingDirectory = repository,
-            UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
-        foreach (var key in start.Environment.Keys.Where(k => k.StartsWith("GIT_", StringComparison.OrdinalIgnoreCase)).ToArray()) start.Environment.Remove(key);
-        start.ArgumentList.Add("rev-parse"); start.ArgumentList.Add("--verify"); start.ArgumentList.Add("HEAD^{commit}");
-        using var process = System.Diagnostics.Process.Start(start)!;
-        var output = process.StandardOutput.ReadToEndAsync(); var error = process.StandardError.ReadToEndAsync();
-        try { await process.WaitForExitAsync(token).ConfigureAwait(false); }
-        catch { if (!process.HasExited) process.Kill(entireProcessTree: true); await process.WaitForExitAsync().ConfigureAwait(false); throw; }
-        var value = (await output.ConfigureAwait(false)).Trim(); var detail = await error.ConfigureAwait(false);
-        if (process.ExitCode != 0) throw new InvalidOperationException("Committed repository baseline unavailable: " + detail);
-        return value;
-    }
-
     public async Task<GraphRunResult> ExecuteAsync(GraphRunRequest request, Action<string>? progress,
         CancellationToken cancellationToken)
     {
@@ -59,15 +44,14 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         using var repairLease = repair is null ? null : new System.IO.FileStream(
             System.IO.Path.Combine(System.IO.Path.GetDirectoryName(repair.JournalPath)!, "repair-execution.lock"),
             System.IO.FileMode.OpenOrCreate, System.IO.FileAccess.ReadWrite, System.IO.FileShare.None);
-        // Leads inspect the project. Writing executions always receive a fixed, isolated Git baseline.
-        if (request.Identity?.Role == GraphExecutionRole.Executor && repair is null)
+        // Neither the purpose owner nor a delegated writer may fall back to the main worktree.
+        if (request.Identity is null) throw new InvalidOperationException("A managed run requires a host-issued identity.");
+        if (request.Identity.CanWrite && repair is null)
         {
             var trust = manager.GetProjectTrustStatus(request.ProjectPath);
             if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
-            var integratedBase = await Fufucode.Core.Automation.ManagedGitIntegration.GetIntegratedCommitAsync(request.ProjectPath, cancellationToken).ConfigureAwait(false)
-                ?? await ReadCommittedHeadAsync(request.ProjectPath, cancellationToken).ConfigureAwait(false);
-            var created = await Fufucode.Core.Automation.ManagedDevelopmentWorkspace.CreateFromBaseAsync(request.ProjectPath,
-                System.IO.Path.Combine(_layout.Root, "auto-dev", "workspaces"), integratedBase, cancellationToken: cancellationToken).ConfigureAwait(false);
+            var created = await Fufucode.Core.Automation.ManagedDevelopmentWorkspace.CreateForExecutionAsync(request.ProjectPath,
+                System.IO.Path.Combine(_layout.Root, "auto-dev", "workspaces"), cancellationToken).ConfigureAwait(false);
             if (created.Status != Fufucode.Core.Automation.ManagedWorkspaceStatus.Ready || created.Workspace is null)
                 return new("Failed", "", created.Status + ": " + (created.Error ?? "Workspace creation did not succeed.")) { NoSideEffectsDispatched = true };
             workspace = created.Workspace;
@@ -93,7 +77,7 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         };
         manager.NativeHostToolAllowed = name => !cancellationToken.IsCancellationRequested &&
             (_authorize?.Invoke(request) ?? true) &&
-            (request.Identity?.Role is not (GraphExecutionRole.ProjectLead or GraphExecutionRole.ScopeLead or GraphExecutionRole.Verifier) ||
+            (request.Identity.CanWrite && (workspace is not null || repair is not null) ||
                 name.StartsWith("graph_", StringComparison.Ordinal) ||
                 name is "read_file" or "list_dir" or "glob_files" or "grep_search" or "update_plan");
         var handler = _tools(request);
@@ -106,6 +90,7 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         string? error = null;
         var assistant = false;
         var dispatched = false;
+        bool captured = false;
         void OnEvent(object? sender, SessionEvent item)
         {
             switch (item)
@@ -169,6 +154,7 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
             var delivery = repair is not null ? "IntegrationRepairReady" : workspace is null ? "NoCodeCandidateExpected" :
                 (await workspace.CaptureCandidateAsync(CancellationToken.None).ConfigureAwait(false)).PatchSize > 0
                     ? "CandidateReady" : "EmptyCandidate";
+            captured = true;
             return new GraphRunResult(Volatile.Read(ref unknownExternalEffects) != 0 || error?.Contains("MANAGED_PROCESS_TERMINATION_UNKNOWN", StringComparison.Ordinal) == true ? "Unknown" : result.Outcome.ToString(), Collected(), error ??
                 (result.Outcome == SessionOutcome.Completed ? null : result.Summary), session.Session.Id)
             { CandidateManifestPath = workspace?.ManifestPath, DeliveryStatus = delivery };
@@ -205,7 +191,7 @@ public sealed class GraphNativeExecutor : IGraphRunExecutor
         {
             try
             {
-                if (workspace is not null)
+                if (!captured && workspace is not null)
                 {
                     // Preserve interrupted candidates without allowing capture failure to leak a session lease.
                     await workspace.CaptureCandidateAsync(CancellationToken.None).ConfigureAwait(false);

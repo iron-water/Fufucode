@@ -26,14 +26,9 @@ public sealed partial class GraphProjectService
     public void ReconcileScopeCycles(string projectPath) => InProjectScope(projectPath, () =>
     {
         var context = Current;
+        bool planned = false;
         Change(context, "Reconciled scoped blocking events", (c, tx) =>
         {
-            Execute(c, tx, """
-                CREATE TABLE IF NOT EXISTS graph_scope_cycle_events(
-                    project_id TEXT NOT NULL, recipient_id TEXT NOT NULL, event_key TEXT NOT NULL,
-                    source_ticket TEXT NOT NULL, payload TEXT NOT NULL, coordination_ticket TEXT,
-                    PRIMARY KEY(project_id,recipient_id,event_key));
-                """);
             var authority = context.Kernel.ReadSnapshot(context.AuthorityId);
             var graph = ReadSnapshot(); var organization = Organization(context, c, tx);
             var options = Options(context, c, tx);
@@ -61,6 +56,7 @@ public sealed partial class GraphProjectService
                 var plan = context.Kernel.CreateTicket(CommandId(), context.AuthorityId, "Review local blocking work",
                     "Review these scoped, persisted failures and decide the necessary local repair or replan. Delegate ordinary implementation repair to an Executor; preserve original acceptance and unknown effects. Events: " + Serialize(actionable),
                     ["Record a scoped response to the exact blocking event batch without replaying unknown effects."], "scope-planning", lead.Id, Now());
+                planned = true;
                 foreach (var module in lead.ModuleIds)
                     Execute(c, tx, "INSERT OR IGNORE INTO graph_ticket_modules VALUES($ticket,$module)", ("$ticket", plan.Id), ("$module", module));
                 foreach (var item in actionable)
@@ -68,8 +64,8 @@ public sealed partial class GraphProjectService
                         ("$plan", plan.Id), ("$p", context.AuthorityId), ("$recipient", lead.Id), ("$key", item.Key));
             }
             return true;
-        });
-        KickQueue(context);
+        }, () => planned);
+        if (planned) KickQueue(context);
         return true;
     });
 }

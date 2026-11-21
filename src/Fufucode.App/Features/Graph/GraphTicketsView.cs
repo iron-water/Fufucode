@@ -92,8 +92,10 @@ public sealed class GraphTicketsView : GraphContentView
         {
             if (!_synchronizing && _messageKey != null) _state.Drafts[_messageKey] = _draft.Text ?? "";
         };
-        var send = GraphUi.Button("发送回复", SendReply, "GraphSendOrganizationReply", true);
-        var reply = GraphUi.Stack(GraphUi.Field("回复", _draft), GraphUi.Actions(send));
+        var send = GraphUi.Button("发送回复", () => SendReply(), "GraphSendOrganizationReply", true);
+        var resolve = GraphUi.Button("答复并解决", () => SendReply(true), "GraphResolveRequest");
+        GraphUi.Bind(resolve, IsVisibleProperty, "CanResolveRequest");
+        var reply = GraphUi.Stack(GraphUi.Field("回复", _draft), GraphUi.Actions(send, resolve));
         GraphUi.Bind(reply, IsEnabledProperty, "CanEdit");
         var subject = GraphUi.Text("", "bodyStrong");
         GraphUi.Bind(subject, TextBlock.TextProperty, "SelectedHumanMessage.Content.Text",
@@ -102,8 +104,8 @@ public sealed class GraphTicketsView : GraphContentView
         GraphUi.Bind(kind, TextBlock.TextProperty, "SelectedHumanMessage.Content.Kind",
             converter: new FuncValueConverter<string?, string>(MessageKind));
         var status = GraphUi.Text("", "caption");
-        GraphUi.Bind(status, TextBlock.TextProperty, "SelectedHumanMessage.Status",
-            converter: new FuncValueConverter<GraphMessageStatus, string>(value => MessageStatus(value)));
+        GraphUi.Bind(status, TextBlock.TextProperty, "SelectedHumanMessage",
+            converter: new FuncValueConverter<GraphOrganizationMessage?, string>(MessageStatus));
         var senderName = GraphUi.Value("SelectedHumanMessage.SenderId");
         GraphUi.Bind(senderName, TextBlock.TextProperty, "SelectedHumanMessage.SenderId",
             converter: new FuncValueConverter<string?, string>(value => GraphLabels.Actor(value ?? "")));
@@ -189,7 +191,7 @@ public sealed class GraphTicketsView : GraphContentView
         var remainder = firstLineEnd < 0 ? "" : mail.Content.Text.TrimStart()[(firstLineEnd + 1)..].Trim();
         var preview = SingleLine(remainder.Replace('\r', ' ').Replace('\n', ' '), "caption");
         preview.IsVisible = remainder.Length != 0;
-        var metadata = SingleLine(MessageKind(mail.Content.Kind) + " · " + MessageStatus(mail.Status), "caption");
+        var metadata = SingleLine(MessageKind(mail.Content.Kind) + " · " + MessageStatus(mail), "caption");
         var text = GraphUi.Stack(sender, subject, preview, metadata);
         text.Spacing = 4;
         var button = GraphUi.Button(mail.SenderId, () => OpenHumanMessage(mail.Id), "GraphInbox-" + mail.Id);
@@ -215,8 +217,9 @@ public sealed class GraphTicketsView : GraphContentView
         null => "", _ => GraphLabels.EntryKind(kind)
     };
 
-    private static string MessageStatus(GraphMessageStatus status) =>
-        status == GraphMessageStatus.Rejected ? "已拒绝" : GraphLabels.Status(status.ToString());
+    private static string MessageStatus(GraphOrganizationMessage? mail) => mail?.Content.Communication == GraphCommunicationKind.Request
+        ? mail.RequestStatus switch { GraphRequestStatus.Resolved => "已解决", GraphRequestStatus.Declined => "已拒绝", GraphRequestStatus.Cancelled => "已取消", _ => "待答复" }
+        : mail == null ? "" : GraphLabels.Status(mail.Status.ToString());
 
     private static TextBlock SingleLine(string text, string style)
     {
@@ -251,13 +254,13 @@ public sealed class GraphTicketsView : GraphContentView
         Dispatcher.UIThread.Post(() => { if (_attached && !_wide) _inbox.Focus(); }, DispatcherPriority.Loaded);
     }
 
-    private void SendReply()
+    private void SendReply(bool resolve = false)
     {
         if (!Workspace.CanEdit || Workspace.IsHistorical || Workspace.SelectedHumanMessage == null) return;
         SavePresentation();
         var key = _messageKey;
         Workspace.OrganizationReply = _draft.Text ?? "";
-        if (!Workspace.ReplyToHumanMessage()) return;
+        if (!Workspace.ReplyToHumanMessage(resolve)) return;
         if (key != null) _state.Drafts[key] = "";
         if (key == _messageKey) _draft.Text = "";
     }

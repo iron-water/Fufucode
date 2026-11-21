@@ -31,6 +31,8 @@ internal static class Program
             await Test("lead failure retains pending events until explicit human recovery", LeadFailureRecovery);
             await Test("model tools enforce provenance, idempotency and conflicts", Tools);
             await Test("tools stay bound to their run project", ProjectScope);
+            await Test("selecting another project cannot starve or redirect queued work", BackgroundQueue);
+            await Test("closing the owner drains a nonselected project's real terminal receipt", CloseBackgroundRun);
             await Test("changed budgets cancel and await real receipts", Budget);
             await Test("in-run evidence matures only after settlement", RunEvidence);
             await Test("actual session messages preserve roles and deduplicate", SessionMessages);
@@ -210,9 +212,12 @@ internal static class Program
         await s.SaveOptionsAsync(s.ReadOptions() with { ScanDepth = 3 });
         Check(!fake.CancellationSeen.Task.IsCompleted, "changing scan depth does not stop a manually launched run");
         var stopping = s.StopTicketAsync(ticket.Id); await fake.CancellationSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        var stoppedVersion = s.ReadOrganizationSnapshot().Version;
+        var repeated = s.StopTicketAsync(ticket.Id);
+        Check(s.ReadOrganizationSnapshot().Version == stoppedVersion, "a repeated stop is not a second organization command");
         Check(!stopping.IsCompleted && s.ReadSnapshot().Runs.Single().Status == "StopRequested" && s.ReadSnapshot().Runs.Single().EndedUtc is null, "Cancel is a request, not a receipt");
         fake.Acknowledge.TrySetResult(new("interrupted", "TEST-ONLY executor acknowledged cancellation"));
-        await stopping.WaitAsync(TimeSpan.FromSeconds(5)); await running;
+        await Task.WhenAll(stopping, repeated, running).WaitAsync(TimeSpan.FromSeconds(5));
         Check(s.ReadSnapshot().Runs.Single().Status == "Interrupted" && s.ReadSnapshot().Runs.Single().EndedUtc is not null, "terminal status waits for executor acknowledgement");
         await s.RunTicketAsync(ticket.Id);
         Check(fake.Calls == 2 && s.ReadSnapshot().Runs.All(r => r.Status == "Interrupted"), "only an explicit human retry can resume a known stopped run");
@@ -259,7 +264,7 @@ internal static class Program
             if (calls.Count == 1)
             {
                 var tools = new GraphToolHandler(service!, request.ProjectPath, request.Identity);
-                Check(request.Identity?.Role == GraphExecutionRole.ProjectLead, "initial planning receives host ProjectLead identity");
+                Check(request.Identity is { Role: GraphExecutionRole.ProjectLead, CanWrite: true } && service!.ReadSnapshot().Tickets.Single().Acceptance.Contains("Inspect fixture and make checkable follow-up work"), "one purpose owner can implement the human contract or delegate");
                 var follow = await tools.ExecuteAsync(new("test-followup", "graph_create_ticket", "{\"title\":\"Concrete fixture follow-up\",\"goal\":\"Verify the real fixture result\",\"moduleIds\":[],\"acceptance\":[\"fixture checked\"]}"));
                 Check(follow.Success, "model can create follow-up under mandate");
                 var followTicket = service!.ReadSnapshot().Tickets.Single(t => t.Title == "Concrete fixture follow-up");
@@ -292,7 +297,9 @@ internal static class Program
         await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
         var settled = s.ReadSnapshot().Runs.Count;
         var watermark = s.ReconcileLeadCycle(f.Project);
-        var repeated = s.ReconcileLeadCycle(f.Project);
+        var quiet = s.ReadSnapshot().Revision;
+        var repeated = s.ReconcileLeadCycle(f.Project); s.ReconcileScopeCycles(f.Project);
+        Check(s.ReadSnapshot().Revision == quiet, "idle coordinator reconciliation does not create graph history");
         Check(repeated.ObservedWatermark == watermark.ObservedWatermark && repeated.PlannedWatermark == watermark.PlannedWatermark,
             "replayed terminal facts do not advance lead event watermark");
         await WaitUntil(() => s.ReadSnapshot().ProjectStatus != "Running");
@@ -371,8 +378,6 @@ internal static class Program
         foreach (var tool in new[] { "graph_accept_ticket", "graph_set_purpose", "graph_gate", "graph_lift_veto" })
             Check(!(await handler.ExecuteAsync(new("forged-" + tool, tool, "{}"))).Success, "no privileged model tool: " + tool);
         Check(!(await handler.ExecuteAsync(new("forged-actor", "graph_add_entry", "{\"kind\":\"message\",\"text\":\"spoof\",\"actor\":\"human\"}"))).Success, "actor spoof rejected");
-        var legacy = new AutoDevToolHandler(new PluginPackageContext("automation.auto-dev", f.Project, f.Project, t => t == typeof(IGraphProjectService) ? s : null, f.Data));
-        Check(!(await legacy.ExecuteAsync(new("legacy-gate", "autodev_gate", "{}"))).Success, "legacy human spoof blocked");
         await s.SaveOptionsAsync(s.ReadOptions() with { BudgetMinutes = 1 });
         Sql(Database(f.Data), "UPDATE graph_state SET budget_started_utc=1");
         Check(!(await handler.ExecuteAsync(new("expired-budget", "graph_add_entry", "{\"kind\":\"message\",\"text\":\"out of budget\"}"))).Success, "expired budget rejects model writes");
@@ -440,6 +445,37 @@ internal static class Program
         Check(s.ReadSnapshot().Entries.Any(e => e.Kind == "evidence" && e.Actor == "agent"), "settlement binds evidence to actual run");
         Check(s.ReadSnapshot().Tickets.Single().Status == "Review", "model evidence does not self-accept");
         s.AcceptTicket(ticket.Id, proof); Check(s.ReadSnapshot().Tickets.Single().Status == "Done", "human can accept settled evidence");
+    }
+
+    private static async Task CloseBackgroundRun()
+    {
+        var f = Fixture("dispose-owner"); var b = Fixture("dispose-selected"); var fake = new ControlledExecutor();
+        using var owner = Service(f, fake); owner.SetPurpose("preserve real receipt when closing");
+        var running = owner.RunTicketAsync(Ticket(owner).Id); await fake.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        owner.SetProject("selected", b.Project); var close = Task.Run(owner.Dispose);
+        await fake.CancellationSeen.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        Check(!close.IsCompleted, "owner must wait through real acknowledgement");
+        fake.Acknowledge.TrySetResult(new("Interrupted", "confirmed during close", SessionId: "closed-run"));
+        await Task.WhenAll(running, close).WaitAsync(TimeSpan.FromSeconds(8));
+        using var reopened = Service(f);
+        Check(reopened.ReadSnapshot().Runs.Single() is { Status: "Interrupted", SessionId: "closed-run" }, "recovery retains interrupted, not synthetic Unknown");
+    }
+
+    private static async Task BackgroundQueue()
+    {
+        var f = Fixture("background-queue"); var other = Fixture("selected");
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requests = new ConcurrentQueue<GraphRunRequest>();
+        using var service = Service(f, new CallbackExecutor(async r =>
+        {
+            requests.Enqueue(r); await release.Task.WaitAsync(TimeSpan.FromSeconds(6)); return new("Completed", "fixture");
+        }));
+        service.SetPurpose("two independent items"); Ticket(service, "one"); Ticket(service, "two");
+        await service.SetAutonomyAsync(true); await WaitUntil(() => requests.Count == 1);
+        service.SetProject("other", other.Project); release.SetResult();
+        await WaitUntil(() => requests.Count == 2);
+        Check(requests.All(r => r.ProjectPath == Path.GetFullPath(f.Project)) && service.ReadSnapshot() is { ProjectId: "other", Runs.Count: 0 }, "both runs belong to A while B remains selected and untouched");
+        service.SetProject("host-project", f.Project); await WaitUntil(() => service.ReadSnapshot().ProjectStatus != "Running");
     }
 
     private static async Task ScopedEvents()

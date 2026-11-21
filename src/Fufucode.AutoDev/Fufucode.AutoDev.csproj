@@ -11,13 +11,6 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
   </ItemGroup>
   <ItemGroup>
-    <!-- Shared domain and explicit-database CLI compatibility; the retired package retains only its UI. -->
-    <Compile Include="../Fufucode.Plugins.AutoDev/Engine/**/*.cs" Link="Engine/%(RecursiveDir)%(Filename)%(Extension)" />
-    <Compile Include="../Fufucode.Plugins.AutoDev/Cli/*.cs" Link="Cli/%(Filename)%(Extension)" />
-    <Compile Include="../Fufucode.Plugins.AutoDev/AutoDevCommandHost.cs" Link="AutoDevCommandHost.cs" />
-    <Compile Include="../Fufucode.Plugins.AutoDev/Graph/*.cs" Link="Graph/%(Filename)%(Extension)" />
-    <Compile Include="../Fufucode.Plugins.AutoDev/RebirthPaths.cs" Link="RebirthPaths.cs" />
-    <Compile Include="../Fufucode.Plugins.AutoDev/AutoDevToolHandler.cs" Link="AutoDevToolHandler.cs" />
     <InternalsVisibleTo Include="Fufucode.Plugins.AutoDev" />
     <InternalsVisibleTo Include="Fufucode.GraphDevelopmentHost.Tests" />
     <InternalsVisibleTo Include="Fufucode.GraphDevelopmentHost.Git.Tests" />

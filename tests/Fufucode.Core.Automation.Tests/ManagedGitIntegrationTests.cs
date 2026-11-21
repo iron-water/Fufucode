@@ -21,12 +21,19 @@ async Task<string> Git(string tree, params string[] arguments)
 int assertions = 0;
 void Check(bool condition, string name) { if (!condition) throw new Exception(name); assertions++; Console.WriteLine("PASS " + name); }
 async Task Reject(Func<Task> action, string name) { try { await action(); } catch (InvalidOperationException) { Check(true, name); return; } catch (UnauthorizedAccessException) { Check(true, name); return; } throw new Exception("Expected rejection: " + name); }
+Check((await ManagedDevelopmentWorkspace.CreateForExecutionAsync(repo, sandbox)).Status == ManagedWorkspaceStatus.NeedsRepositoryAuthorization && !Directory.Exists(Path.Combine(repo, ".git")), "first writer cannot initialize a non-repository");
 await Git(repo, "init", "-b", "main");
+Check((await ManagedDevelopmentWorkspace.CreateForExecutionAsync(repo, sandbox)).Status == ManagedWorkspaceStatus.NeedsRepositoryAuthorization, "unborn HEAD needs an explicit committed baseline");
 await Git(repo, "config", "user.name", "Git test"); await Git(repo, "config", "user.email", "test@localhost");
 await File.WriteAllTextAsync(Path.Combine(repo, "base.txt"), "base\n");
 await File.WriteAllLinesAsync(Path.Combine(repo, "regions.txt"), Enumerable.Range(0, 60).Select(i => "line-" + i));
 await Git(repo, "add", "."); await Git(repo, "commit", "-m", "base");
 var baseline = await Git(repo, "rev-parse", "HEAD");
+await File.WriteAllTextAsync(Path.Combine(repo, "base.txt"), "private user edit\n");
+var solo = await ManagedDevelopmentWorkspace.CreateForExecutionAsync(repo, sandbox);
+Check(solo.Status == ManagedWorkspaceStatus.Ready && solo.Workspace!.Manifest.BaseHead == baseline && (await File.ReadAllLinesAsync(Path.Combine(solo.Workspace.Manifest.WorktreePath, "base.txt"))).SequenceEqual(["base"]) &&
+    await File.ReadAllTextAsync(Path.Combine(repo, "base.txt")) == "private user edit\n", "single owner gets its own committed baseline without touching user edits");
+await File.WriteAllTextAsync(Path.Combine(repo, "base.txt"), "base\n");
 async Task<ManagedDevelopmentWorkspace> Workspace(string commit)
 {
     var creation = await ManagedDevelopmentWorkspace.CreateFromBaseAsync(repo, sandbox, commit);

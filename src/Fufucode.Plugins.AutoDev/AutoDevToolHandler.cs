@@ -46,8 +46,16 @@ public sealed class AutoDevToolHandler : IPluginToolHandler
                 throw new InvalidOperationException("Model tools cannot impersonate human decisions, edit purpose, approve gates, reconcile unknown outcomes, or report execution completion. Use the scoped graph_* tools.");
             if (_graph is not null)
             {
-                if (!_graph.ReadOptions().Enabled) throw new InvalidOperationException("Graph is disabled.");
-                var snapshot = _graph.ReadSnapshot();
+                GraphSnapshot Read()
+                {
+                    if (!_graph.ReadOptions().Enabled) throw new InvalidOperationException("Graph is disabled.");
+                    var value = _graph.ReadSnapshot();
+                    if (!string.IsNullOrWhiteSpace(_context.ProjectPath) && GraphStorage.PathKey(value.ProjectPath) != GraphStorage.PathKey(_context.ProjectPath))
+                        throw new InvalidOperationException("The tool's project scope changed.");
+                    return GraphProjectService.WithoutCorrespondence(value);
+                }
+                var snapshot = _graph is GraphProjectService bound && !string.IsNullOrWhiteSpace(_context.ProjectPath)
+                    ? bound.InProjectScope(_context.ProjectPath, Read) : Read();
                 object data = call.Name switch
                 {
                     "autodev_status" => snapshot,

@@ -3,7 +3,7 @@ using Fufucode.App.Abstractions.Automation;
 namespace Fufucode.Plugins.AutoDev;
 
 /// <summary>
-/// 宿主 CLI 的命令入口。CLI 不静态引用本程序集；安装并启用插件后按清单加载本类型。
+/// Explicit-database control/host entry point, not part of the Graph execution authority.
 /// </summary>
 public sealed class AutoDevCommandHost : IAutomationCommandHost
 {

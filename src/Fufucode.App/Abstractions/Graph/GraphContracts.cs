@@ -45,7 +45,14 @@ public enum GraphExecutionRole { Executor, ProjectLead, ScopeLead, Verifier }
 
 /// <summary>Issued by the host, never deserialized from model tool arguments. No TicketLead role exists.</summary>
 public sealed record GraphExecutionIdentity(string ResponsibilityId, GraphExecutionRole Role,
-    string[] ModuleIds, string TicketId, string RunId);
+    string[] ModuleIds, string TicketId, string RunId)
+{
+    // Issued only for the initial work ticket, never inferred from model output or a role name.
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool OwnsPurposeWork { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool CanWrite => Role == GraphExecutionRole.Executor || Role == GraphExecutionRole.ProjectLead && OwnsPurposeWork;
+}
 
 public sealed record GraphRunRequest(string RunId, string TicketId, string ProjectId,
     string ProjectPath, string Prompt, GraphOptions Options, string? SessionId = null)

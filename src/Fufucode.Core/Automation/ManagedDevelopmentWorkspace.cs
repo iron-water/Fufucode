@@ -120,8 +120,12 @@ public sealed class ManagedDevelopmentWorkspace
         string applicationSandboxRoot, string baseCommit, string? newBranch = null, CancellationToken cancellationToken = default)
         => CreateCoreAsync(repositoryPath, applicationSandboxRoot, baseCommit, newBranch, cancellationToken);
 
+    /// <summary>Use the managed integration tip or committed HEAD, never the user's uncommitted files.</summary>
+    public static Task<ManagedWorkspaceCreation> CreateForExecutionAsync(string repositoryPath, string applicationSandboxRoot, CancellationToken cancellationToken = default)
+        => CreateCoreAsync(repositoryPath, applicationSandboxRoot, null, null, cancellationToken, committedBaseline: true);
+
     private static async Task<ManagedWorkspaceCreation> CreateCoreAsync(string repositoryPath,
-        string applicationSandboxRoot, string? baseCommit, string? newBranch, CancellationToken cancellationToken)
+        string applicationSandboxRoot, string? baseCommit, string? newBranch, CancellationToken cancellationToken, bool committedBaseline = false)
     {
         var repo = Path.GetFullPath(repositoryPath);
         var root = Path.GetFullPath(applicationSandboxRoot);
@@ -130,6 +134,16 @@ public sealed class ManagedDevelopmentWorkspace
         var probe = await Git(repo, ["rev-parse", "--show-toplevel"], cancellationToken, allowFailure: true);
         if (probe.Code != 0 || !SamePath(probe.Text.Trim(), repo))
             return new(ManagedWorkspaceStatus.NeedsRepositoryAuthorization, null, "An exact existing Git root is required; repository initialization requires separate host authorization.");
+        if (committedBaseline)
+        {
+            baseCommit = await ManagedGitIntegration.GetIntegratedCommitAsync(repo, cancellationToken);
+            if (baseCommit is null)
+            {
+                var tip = await Git(repo, ["rev-parse", "--verify", "HEAD^{commit}"], cancellationToken, allowFailure: true);
+                if (tip.Code != 0) return new(ManagedWorkspaceStatus.NeedsRepositoryAuthorization, null, "A committed Git baseline is required.");
+                baseCommit = tip.Text.Trim();
+            }
+        }
         if (baseCommit is null && (await Git(repo, ["status", "--porcelain=v1", "-z", "--untracked-files=all"], cancellationToken)).Bytes.Length != 0)
             return new(ManagedWorkspaceStatus.BaselineDirty, null, "Repository contains user changes; no baseline was created.");
         if (IsWithin(root, repo) || IsWithin(repo, root))

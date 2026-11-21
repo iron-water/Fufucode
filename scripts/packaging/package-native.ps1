@@ -89,13 +89,7 @@ foreach ($pattern in @('Avalonia*.dll', 'CommunityToolkit*.dll', '*.pdb')) {
 if (Test-Path (Join-Path $performanceDir 'runtimes')) { Remove-Item -LiteralPath (Join-Path $performanceDir 'runtimes') -Recurse -Force }
 
 # 只并入 CLI 入口相关文件；共享框架程序集以 App 的裁剪结果为准。
-foreach ($name in @('Fufucode.Cli.exe', 'Fufucode.Cli.dll', 'Fufucode.Cli.deps.json',
-        'Fufucode.Cli.runtimeconfig.json', 'Fufucode.Cli.pdb')) {
-    $source = Join-Path $cliStaging $name
-    if (Test-Path -LiteralPath $source) {
-        Copy-Item -LiteralPath $source -Destination (Join-Path $appDir $name) -Force
-    }
-}
+& (Join-Path $PSScriptRoot 'copy-cli-entry.ps1') -From $cliStaging -To $appDir -Symbols
 Remove-Item -LiteralPath $cliStaging -Recurse -Force
 
 # 共享裁剪运行时冒烟：App 的裁剪结果覆盖后面发布的 CLI 时，CLI 必须仍能启动。

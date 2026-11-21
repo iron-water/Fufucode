@@ -19,8 +19,10 @@ using (var s = new GraphProjectService(data, new NeverExecutor()))
     var members = new[] { initial.Responsibilities.Single(), new GraphResponsibility("worker", GraphExecutionRole.Executor, [], ticket) };
     var updated = s.ApplyOrganization("org", 0, "delegation", members, ["worker"]);
     Check(updated.Version == 1, "organization version");
-    Check(s.ApplyOrganization("org", 0, "delegation", members, ["worker"]).Version == 1, "idempotent replay");
+    var orgRevision = s.ReadSnapshot().Revision;
+    Check(s.ApplyOrganization("org", 0, "delegation", members, ["worker"]).Version == 1 && s.ReadSnapshot().Revision == orgRevision, "idempotent replay is not a graph change");
     Reject(() => s.ApplyOrganization("org", 0, "different", members, ["worker"]), "command conflict");
+    Check(s.ReadSnapshot().Entries.Count(e => e.Kind == "conflict") == 1, "rejected command has one durable conflict record");
     Reject(() => s.ApplyOrganization("stale", 0, "stale", members, []), "CAS");
     s.SetWorkDependency("edge", ticket, other, false, "work order");
     Reject(() => s.SetWorkDependency("cycle", other, ticket, false, "cycle"), "dependency cycle");
@@ -29,17 +31,17 @@ using (var s = new GraphProjectService(data, new NeverExecutor()))
     s.SendOrganizationMessage("send", message);
     var received = s.ReadOrganizationInbox("human", true).Single();
     Check(received.Content.Communication == GraphCommunicationKind.Notify, "legacy API defaults to sourced Notify");
-    Reject(() => s.AdvanceOrganizationMessage("ack-notify", received.Id, GraphMessageStatus.Delivered, "read"), "Notify has no acknowledgement state machine");
-    s.CloseOrganizationBarrier("close-unread", ticket);
+    Reject(() => s.ResolveOrganizationRequest("resolve-notify", received.Id, GraphRequestStatus.Resolved, "read"), "Notify has no request lifecycle");
     foreach (var kind in new[] { "interface", "invalidated", "ownership", "veto", "stop", "permission" })
         s.SendOrganizationMessage("late-" + kind, message with { Kind = kind });
-    Check(!s.ReadOrganizationSnapshot().Barriers.Single().RequiresReview, "topic names never invalidate completion/evidence");
+    Check(s.ReadOrganizationSnapshot().Barriers.Length == 0, "topic names never create a completion barrier");
     Check(s.ReadOrganizationSnapshot().Controls.Length == 0, "control-sounding claims create no Kernel authority");
     s.SendOrganizationMessage("request", message with { Communication = GraphCommunicationKind.Request, Kind = "question" });
     var request = s.ReadOrganizationInbox("human", true).Last();
     Check(request.RequestStatus == GraphRequestStatus.Open, "Request begins Open");
-    s.CloseOrganizationBarrier("close-open-request", ticket);
+    var openRevision = s.ReadSnapshot().Revision;
     s.ResolveOrganizationRequest("resolve", request.Id, GraphRequestStatus.Resolved, "answer");
+    Check(s.ReadSnapshot(openRevision).Organization!.Messages.Single(m => m.Id == request.Id).IsOpenRequest, "historical request is still open after resolution");
     Check(s.ReadOrganizationInbox("human", true).Last().RequestStatus == GraphRequestStatus.Resolved, "Request resolves without delivery/read handshake");
     Reject(() => s.ResolveOrganizationRequest("reopen", request.Id, GraphRequestStatus.Open, "reopen"), "terminal request cannot reopen");
     s.SendOrganizationMessage("cancel-request", message with { Communication = GraphCommunicationKind.Request });
@@ -68,11 +70,10 @@ using (var s = new GraphProjectService(data, new NeverExecutor()))
     var control = controlState.Controls.Single();
     Check(control.DecisionId.StartsWith("veto-"), "Control carries actual Kernel decision");
     Check(s.ReadSnapshot().Tickets.Single(t => t.Id == ticket).Status.ToString() == "ReplanRequired", "unread Control immediately changes Kernel ticket state");
-    Reject(() => s.CloseOrganizationBarrier("blocked-real", ticket), "unread Kernel Control blocks target completion");
-    s.CloseOrganizationBarrier("unrelated", other);
+    try { s.RequireDeliveryAuthorization(ticket); throw new Exception("Stop did not block delivery"); }
+    catch (UnauthorizedAccessException) { Check(true, "unread Kernel Control blocks actual host delivery"); }
     Check(s.IssueOrganizationControl("real-stop", ticket, GraphControlKind.Stop, "human stop").Controls.Length == 1, "Control replay does not duplicate decision");
     s.RevokeOrganizationControl("revoke-stop", control.Id, "human revocation");
-    s.CloseOrganizationBarrier("after-revoke", ticket);
     Check(s.ReadOrganizationSnapshot().Controls.Single().Status == GraphControlStatus.Revoked, "explicit revocation lifts Kernel veto");
 }
 using (var reopened = new GraphProjectService(data, new NeverExecutor()))
@@ -90,12 +91,17 @@ using (var reopened = new GraphProjectService(data, new NeverExecutor()))
 }
 // Rewrite the additive envelope to an actual old persisted shape, including its old command hash.
 var database = Directory.GetFiles(Path.Combine(data, "auto-dev", "rebirth"), "kernel.db", SearchOption.AllDirectories).Single();
+string oldState;
+using (var exporting = new GraphProjectService(data, new NeverExecutor()))
+{
+    exporting.SetProject("organization-test", project);
+    oldState = JsonSerializer.Serialize(exporting.ReadOrganizationSnapshot(), new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } });
+}
 using (var connection = new SqliteConnection("Data Source=" + database))
 {
     connection.Open();
-    using var select = connection.CreateCommand();
-    select.CommandText = "SELECT state_json FROM graph_organization";
-    var legacy = System.Text.Json.Nodes.JsonNode.Parse((string)select.ExecuteScalar()!)!;
+    var legacy = System.Text.Json.Nodes.JsonNode.Parse(oldState)!;
     legacy.AsObject().Remove("controls");
     foreach (var item in legacy["messages"]!.AsArray())
     {
@@ -103,9 +109,10 @@ using (var connection = new SqliteConnection("Data Source=" + database))
         item["content"]!.AsObject().Remove("communication");
         item["content"]!.AsObject().Remove("address");
     }
-    foreach (var barrier in legacy["barriers"]!.AsArray()) barrier!["requiresReview"] = true;
+    legacy["barriers"]!.AsArray().Add(new System.Text.Json.Nodes.JsonObject { ["ticketId"] = ticket, ["watermark"] = 1, ["requiresReview"] = true });
     using var update = connection.CreateCommand();
-    update.CommandText = "UPDATE graph_organization SET state_json=$json";
+    // Model a pre-upgrade database: no versioned-mail rows or compact revisions exist yet.
+    update.CommandText = "DELETE FROM graph_mail_versions; DELETE FROM graph_org_revision; UPDATE graph_organization SET state_json=$json";
     update.Parameters.AddWithValue("$json", legacy.ToJsonString()); update.ExecuteNonQuery();
     // Select the original seven-field draft and reproduce its pre-upgrade hash exactly.
     var content = legacy["messages"]![0]!["content"]!.DeepClone();
@@ -120,10 +127,9 @@ using (var legacy = new GraphProjectService(data, new NeverExecutor()))
     legacy.SetProject("organization-test", project);
     var state = legacy.ReadOrganizationSnapshot();
     Check(state.Messages.All(m => m.Content.Communication == GraphCommunicationKind.Notify), "old JSON without channel fields remains readable Notify");
-    Check(state.Barriers.All(b => !b.RequiresReview), "old message-derived review flags cannot survive as authority");
+    Check(state.Barriers.Single().RequiresReview == false, "old message-derived review flags cannot survive as authority");
     var original = state.Messages.First().Content;
     Check(legacy.SendOrganizationMessage("send", original).Messages.Length == 11, "pre-upgrade command hash replay compatible");
-    legacy.CloseOrganizationBarrier("legacy-close", ticket);
 }
 await ToolBoundaryTests.Run(root);
 Console.WriteLine("PASS organization communication; zero model calls; sandbox " + root);

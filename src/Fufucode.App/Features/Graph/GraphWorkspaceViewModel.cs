@@ -152,6 +152,7 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
     public bool ShowHumanInbox => !ShowInternalWork;
     public GraphOrganizationMessage? SelectedHumanMessage => HumanInbox.FirstOrDefault(m => m.Id == _selectedMessageId);
     public bool HasSelectedHumanMessage => SelectedHumanMessage != null;
+    public bool CanResolveRequest => CanEdit && SelectedHumanMessage?.IsOpenRequest == true;
     public string OrganizationReply { get => _organizationReply; set => Set(ref _organizationReply, value); }
     public string OrganizationVersion => Snapshot.Organization is { } organization ? $"组织 v{organization.Version}" : "此快照无组织记录";
     public string ResponsibilityText(GraphResponsibility responsibility) => responsibility.Id + " · " + responsibility.Role + "\n范围：" +
@@ -170,15 +171,20 @@ public sealed class GraphWorkspaceViewModel : GraphObservable, IDisposable
         }
         Notify(null);
     }
-    public bool ReplyToHumanMessage() => Mutate("回复", () =>
+    public bool ReplyToHumanMessage(bool resolve = false) => Mutate("回复", () =>
     {
         var message = SelectedHumanMessage ?? throw new InvalidOperationException("未选择收件消息");
         if (string.IsNullOrWhiteSpace(OrganizationReply)) throw new InvalidOperationException("请输入回复内容");
         if (_service is not IGraphOrganizationService service)
             throw new NotSupportedException("当前服务不支持组织消息");
-        var recipient = message.SenderId == "host" ? "project-lead" : message.SenderId;
-        service.SendOrganizationMessage(Guid.NewGuid().ToString("N"), new GraphMessageDraft(recipient,
-            recipient == "human", "reply", OrganizationReply.Trim(), message.Content.TicketId, message.Content.ModuleId, Snapshot.Revision));
+        var command = Guid.NewGuid().ToString("N");
+        if (resolve) service.ResolveOrganizationRequest(command, message.Id, GraphRequestStatus.Resolved, OrganizationReply.Trim());
+        else
+        {
+            var recipient = message.SenderId == "host" ? "project-lead" : message.SenderId;
+            service.SendOrganizationMessage(command, new GraphMessageDraft(recipient,
+                recipient == "human", "reply", OrganizationReply.Trim(), message.Content.TicketId, message.Content.ModuleId, Snapshot.Revision) { InReplyTo = message.Id });
+        }
         OrganizationReply = "";
     });
     public ObservableCollection<GraphTicketRow> TicketRows { get; } = new();

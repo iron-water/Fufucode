@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" />
+    <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />
+    <InternalsVisibleTo Include="Fufucode.Plugins.AutoDev" />
+    <InternalsVisibleTo Include="Fufucode.App.Automation.Persistence.Tests" />
+    <InternalsVisibleTo Include="Fufucode.App.Automation.V4.Tests" />
+    <InternalsVisibleTo Include="Fufucode.App.Automation.SelfTests" />
+    <InternalsVisibleTo Include="Fufucode.App.Ui1.Tests" />
+  </ItemGroup>
+</Project>

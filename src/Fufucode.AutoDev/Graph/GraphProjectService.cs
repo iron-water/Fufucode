@@ -57,16 +57,21 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
             CheckAlive();
             if (!_projects.TryGetValue(PathKey(projectPath), out var bound))
                 throw new InvalidOperationException("The tool's project is not open in this execution owner.");
-            var selected = _current;
-            _notificationSuppression++;
-            _current = bound;
-            try { return action(); }
-            finally
-            {
-                _current = selected;
-                _notificationSuppression--;
-                if (_notificationSuppression == 0 && _notificationPending) { _notificationPending = false; Notify(); }
-            }
+            return WithContext(bound, action);
+        }
+    }
+
+    // Synchronous, under _gate. An admitted run may persist its terminal receipt during disposal.
+    private T WithContext<T>(ProjectContext bound, Func<T> action)
+    {
+        var selected = _current;
+        _notificationSuppression++;
+        _current = bound;
+        try { return action(); }
+        finally
+        {
+            _current = selected;
+            if (--_notificationSuppression == 0 && _notificationPending) { _notificationPending = false; Notify(); }
         }
     }
     private string? _agentCommand;
@@ -103,6 +108,7 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
                 kernel.Atomic((c, tx) =>
                 {
                     Migrate(c, tx);
+                    MigrateCoordinator(c, tx);
                     if (Scalar(c, tx, "SELECT project_id FROM rb_projects WHERE project_id=$id", ("$id", context.AuthorityId)) is null)
                         kernel.EnsureProjectShell(Id("register"), context.AuthorityId, System.IO.Path.GetFileName(context.Path), Now());
                     Execute(c, tx, """
@@ -131,19 +137,21 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
     }
     private void CheckAlive()
     {
-        if (_disposed || _disposing) throw new ObjectDisposedException(nameof(GraphProjectService));
+        if (_disposed || _disposing && _mutationContext is null) throw new ObjectDisposedException(nameof(GraphProjectService));
     }
 
     private void Notify()
     {
+        if (_disposing || _disposed) return;
         if (_notificationSuppression != 0) { _notificationPending = true; return; }
         if (Changed is null) return;
         foreach (Action subscriber in Changed.GetInvocationList())
             try { subscriber(); } catch { /* A view callback cannot roll back committed authority. */ }
     }
 
-    private T Change<T>(ProjectContext context, string summary, Func<SqliteConnection, SqliteTransaction, T> action)
+    private T Change<T>(ProjectContext context, string summary, Func<SqliteConnection, SqliteTransaction, T> action, Func<bool>? changed = null)
     {
+        if (_current != context) return WithContext(context, () => Change(context, summary, action, changed));
         if (_mutationContext == context) return action(_connection!, _transaction!);
         var result = context.Kernel.Atomic((c, tx) =>
         {
@@ -151,12 +159,12 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
             try
             {
                 var value = action(c, tx);
-                Capture(context, c, tx, summary);
+                if (changed?.Invoke() != false) Capture(context, c, tx, summary);
                 return value;
             }
             finally { _mutationContext = null; _connection = null; _transaction = null; }
         });
-        Notify();
+        if (changed?.Invoke() != false) Notify();
         return result;
     }
 
@@ -183,10 +191,7 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
                     "SELECT kernel_revision FROM graph_state WHERE project_id=$id", ("$id", context.AuthorityId))))
                     Capture(context, c, tx, "Rebirth authority changed");
                 var version = revision ?? Revision(context, c, tx);
-                var json = Scalar(c, tx, "SELECT snapshot_json FROM graph_revisions WHERE project_id=$id AND version=$version",
-                    ("$id", context.AuthorityId), ("$version", version)) as string
-                    ?? throw new KeyNotFoundException("Unknown Graph revision: " + version);
-                var snapshot = Deserialize<GraphSnapshot>(json);
+                var snapshot = LoadRevision(context, c, tx, version);
                 if (!revision.HasValue)
                 {
                     // Live progress is an explicitly sampled preview, not an architecture revision.
@@ -212,10 +217,21 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
         }
     }
 
-    private static GraphOrganizationSnapshot ReadOrganizationSnapshotForCapture(ProjectContext context, SqliteConnection c, SqliteTransaction tx)
+    private static GraphSnapshot LoadRevision(ProjectContext context, SqliteConnection c, SqliteTransaction tx, long version)
+    {
+        var json = Scalar(c, tx, "SELECT snapshot_json FROM graph_revisions WHERE project_id=$p AND version=$v", ("$p", context.AuthorityId), ("$v", version)) as string
+            ?? throw new KeyNotFoundException("Unknown Graph revision: " + version);
+        var snapshot = Deserialize<GraphSnapshot>(json);
+        if (snapshot.Organization is not {} org || Scalar(c, tx, "SELECT org_version FROM graph_org_revision WHERE project_id=$p AND revision=$v", ("$p", context.AuthorityId), ("$v", version)) is null) return snapshot;
+        var events = Query(c, tx, "SELECT entry_id,ticket_id,module_id,actor,text,reference,created_utc FROM graph_entries WHERE project_id=$p AND kind='organization' AND version<=$v",
+            r => new GraphEntry(r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2), "organization", r.GetString(3), r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5), r.GetInt64(6)), ("$p", context.AuthorityId), ("$v", version));
+        return snapshot with { Organization = GraphOrganizationStorage.WithMail(c, tx, org), Entries = snapshot.Entries.Concat(events).OrderBy(e => e.CreatedUtc).ThenBy(e => e.Id).ToArray() };
+    }
+
+    private static GraphOrganizationSnapshot ReadStoredOrganization(ProjectContext context, SqliteConnection c, SqliteTransaction tx)
     {
         var json = Scalar(c, tx, "SELECT state_json FROM graph_organization WHERE project_id=$p", ("$p", context.AuthorityId)) as string;
-        return json is null ? new(context.AuthorityId, 0, [new("project-lead", GraphExecutionRole.ProjectLead, [])], [], [], []) : Deserialize<GraphOrganizationSnapshot>(json);
+        return json is null ? new(context.AuthorityId, 0, [new("project-lead", GraphExecutionRole.ProjectLead, [])], [], [], []) : GraphOrganizationStorage.ReadStored(c, tx, json);
     }
 
     internal void WakeOrganizationQueue()
@@ -223,7 +239,7 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
         lock (_gate) KickQueue(Current);
     }
 
-    private static GraphSnapshot Capture(ProjectContext context, SqliteConnection c, SqliteTransaction tx, string summary)
+    private static void Capture(ProjectContext context, SqliteConnection c, SqliteTransaction tx, string summary)
     {
         var authority = context.Kernel.ReadSnapshot(context.AuthorityId);
         var version = checked(Revision(context, c, tx) + 1);
@@ -243,7 +259,7 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
             ticket.CreatedUtc, ticket.UpdatedUtc)).ToArray();
         var entries = Query(c, tx, """
             SELECT entry_id,ticket_id,module_id,kind,actor,text,reference,created_utc FROM graph_entries
-            WHERE project_id=$id ORDER BY created_utc,entry_id
+            WHERE project_id=$id AND kind<>'organization' ORDER BY created_utc,entry_id
             """, r => new GraphEntry(r.GetString(0), r.IsDBNull(1) ? null : r.GetString(1), r.IsDBNull(2) ? null : r.GetString(2),
                 r.GetString(3), r.GetString(4), r.GetString(5), r.IsDBNull(6) ? null : r.GetString(6), r.GetInt64(7)), ("$id", context.AuthorityId));
         entries.AddRange(Query(c, tx, """
@@ -256,8 +272,6 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
         entries.AddRange(authority.Decisions.Select(d => new GraphEntry(d.Id, d.TicketId, null, d.Kind.ToString(), d.Actor, Serialize(d), d.Target, d.CreatedUtc)));
         entries.AddRange(authority.Inputs.Select(i => new GraphEntry(i.Id, i.TicketId, null, "input:" + i.Kind, i.Actor, i.Text, i.State.ToString(), i.CreatedUtc)));
         entries.AddRange(authority.Attention.Select(a => new GraphEntry(a.Id, a.TicketId, null, "attention", "system", Serialize(a), null, a.CreatedUtc)));
-        var revisions = Query(c, tx, "SELECT version,summary,created_utc FROM graph_revisions WHERE project_id=$id ORDER BY version DESC",
-            r => new GraphRevision(r.GetInt64(0), r.GetString(1), r.GetInt64(2)), ("$id", context.AuthorityId));
         var runs = authority.Runs.Select(run =>
         {
             var link = Query(c, tx, "SELECT session_id,stop_requested FROM graph_run_links WHERE run_id=$id",
@@ -269,12 +283,16 @@ public sealed partial class GraphProjectService : IGraphProjectService, IGraphOr
         var autonomy = Convert.ToInt64(Scalar(c, tx, "SELECT autonomy FROM graph_state WHERE project_id=$id", ("$id", context.AuthorityId))) != 0;
         var status = !options.Enabled ? "Disabled" : string.IsNullOrWhiteSpace(authority.Brief.Brief.Statement) ? "NeedsPurpose"
             : autonomy ? "Running" : authority.Project.Status == RebirthProjectStatus.Active ? "Paused" : authority.Project.Status.ToString();
+        var org = ReadStoredOrganization(context, c, tx);
+        // Bootstrap an old database once; older snapshots/receipts stay self-contained and untouched.
+        if (Scalar(c, tx, "SELECT 1 FROM graph_org_revision WHERE project_id=$p LIMIT 1", ("$p", context.AuthorityId)) is null)
+            GraphOrganizationStorage.StoreMail(c, tx, org, org.Messages);
+        Execute(c, tx, "INSERT INTO graph_org_revision VALUES($p,$v,$org)", ("$p", context.AuthorityId), ("$v", version), ("$org", org.Version));
         var snapshot = new GraphSnapshot(context.HostId, context.Path, authority.Project.Title, authority.Brief.Brief.Statement,
-            status, version, false, modules, relations, tickets, entries.OrderBy(e => e.CreatedUtc).ThenBy(e => e.Id).ToArray(), revisions, runs)
-        { Organization = ReadOrganizationSnapshotForCapture(context, c, tx) };
+            status, version, false, modules, relations, tickets, entries.OrderBy(e => e.CreatedUtc).ThenBy(e => e.Id).ToArray(), [], runs)
+        { Organization = org with { Messages = [] } };
         Execute(c, tx, "UPDATE graph_revisions SET snapshot_json=$json WHERE project_id=$id AND version=$version",
             ("$json", Serialize(snapshot)), ("$id", context.AuthorityId), ("$version", version));
-        return snapshot;
     }
 
     private void Entry(ProjectContext context, SqliteConnection c, SqliteTransaction tx, string? ticketId, string? moduleId,

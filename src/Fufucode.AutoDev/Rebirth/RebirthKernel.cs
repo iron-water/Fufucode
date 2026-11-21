@@ -233,6 +233,8 @@ public sealed class RebirthKernel : IDisposable
         (values ?? []).Select(value => value?.Trim() ?? "").Where(value => value.Length > 0)
             .Distinct(StringComparer.Ordinal).ToArray();
 
+    internal static string AcceptanceDigest(string[] criteria) => Sha(JsonSerializer.Serialize(Clean(criteria), Json));
+
     private static string Required(string value, string name)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value, name);
@@ -505,7 +507,7 @@ public sealed class RebirthKernel : IDisposable
         var selectedPriority = priority ?? (taskClass is RebirthTaskClass.UserGate or RebirthTaskClass.Blocker
             ? RebirthPriority.P0 : RebirthPriority.P1);
         if (!Enum.IsDefined(selectedPriority)) throw new ArgumentOutOfRangeException(nameof(priority));
-        var digest = Sha(JsonSerializer.Serialize(criteria, Json));
+        var digest = AcceptanceDigest(criteria);
         var id = string.IsNullOrWhiteSpace(ticketId) ? "ticket-" + Guid.NewGuid().ToString("N")[..12] : ticketId!;
         var payload = JsonSerializer.Serialize(new { projectId, title, goal, acceptance = criteria, route = normalizedRoute,
             owner, planVersion, ticketId = id, taskClass, priority = selectedPriority, resumeWhen = normalizedResume, validationCommand }, Json);

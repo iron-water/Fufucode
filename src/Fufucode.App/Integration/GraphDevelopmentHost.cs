@@ -760,9 +760,7 @@ public sealed class GraphDevelopmentHost
         var run = snapshot.Runs.Single(r => r.Id == runId && r.TicketId == ticketId);
         if (entry.Reference != runId || run.EndedUtc is null || run.Status != "Completed")
             throw new InvalidOperationException("A matched completed ticket/run is required.");
-        // Exact kernel canonicalization: Clean(criteria), Web JSON string array, UTF8 SHA256 uppercase.
-        var criteria = ticket.Acceptance.Select(v => v?.Trim() ?? "").Where(v => v.Length != 0).Distinct(StringComparer.Ordinal).ToArray();
-        var digest = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(criteria, new JsonSerializerOptions(JsonSerializerDefaults.Web))));
+        var digest = Fufucode.Core.Automation.Rebirth.RebirthKernel.AcceptanceDigest(ticket.Acceptance);
         return new(path, Path.GetFullPath(snapshot.ProjectPath), runId, digest);
     }
     private static bool Matches(GraphEntry entry, string path)

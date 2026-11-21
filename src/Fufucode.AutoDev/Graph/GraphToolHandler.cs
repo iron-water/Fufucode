@@ -37,7 +37,6 @@ public sealed class GraphToolHandler : IPluginToolHandler
         Tool("graph_organization_decision", "Record a reasoned initial or revised single/multiple Agent organization choice after understanding and planning the work. This does not grant permissions or enable shared workspaces.", "\"mode\":{\"type\":\"string\",\"enum\":[\"single\",\"multiple\"]},\"reason\":" + S + ",\"coupling\":" + S + ",\"coordinationCost\":" + S, "\"mode\",\"reason\",\"coupling\",\"coordinationCost\""),
         Tool("graph_resolve_request", "Resolve, decline or cancel a collaboration request. Does not complete work or grant authority.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Resolved\",\"Declined\",\"Cancelled\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
         Tool("graph_inbox", "Read this host-issued responsibility's addressed messages.", ""),
-        Tool("graph_ack", "Acknowledge actual consumption or resolution of an addressed message, never another recipient's message.", "\"messageId\":" + S + ",\"status\":{\"type\":\"string\",\"enum\":[\"Delivered\",\"Read\",\"Applied\",\"Rejected\"]},\"reason\":" + S, "\"messageId\",\"status\",\"reason\""),
         Tool("graph_read", "Read a bounded project graph index by default. Page modules/entries explicitly or request full:true for the entire unabridged snapshot. Counts and omitted fields are explicit; pin revision for stable pages.", "\"revision\":{\"type\":\"integer\"},\"full\":{\"type\":\"boolean\"},\"moduleOffset\":{\"type\":\"integer\"},\"moduleLimit\":{\"type\":\"integer\"},\"includeEntries\":{\"type\":\"boolean\"},\"entryOffset\":{\"type\":\"integer\"},\"entryLimit\":{\"type\":\"integer\"}"),
         Tool("graph_context", "Read project context focused on a module or ticket; historical data stays at its revision.", "\"moduleId\":" + S + ",\"ticketId\":" + S + ",\"revision\":{\"type\":\"integer\"}"),
         Tool("graph_upsert_module", "Propose a sourced module definition within the human project mandate. Changes are attributed to agent.", "\"id\":" + S + ",\"parentId\":" + S + ",\"name\":" + S + ",\"summary\":" + S + ",\"sourcePaths\":" + A + "," + V, "\"name\",\"summary\",\"sourcePaths\",\"expectedRevision\""),
@@ -81,13 +80,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
             var revision = Integer(data, "revision");
             if (call.Name == "graph_read")
             {
-                var snapshot = _service.ReadSnapshot(revision);
-                // Architecture reads are not a back door to other recipients' communication.
-                snapshot = snapshot with
-                {
-                    Organization = snapshot.Organization is { } organizationView ? organizationView with { Messages = [] } : null,
-                    Entries = snapshot.Entries.Where(e => e.Kind != "organization").ToArray()
-                };
+                var snapshot = GraphProjectService.WithoutCorrespondence(_service.ReadSnapshot(revision));
                 var full = data.TryGetProperty("full", out var fullValue) && fullValue.GetBoolean();
                 if (full)
                 {
@@ -129,7 +122,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
                 });
                 return Success(call, decision);
             }
-            if (call.Name is "graph_delegate" or "graph_dependency" or "graph_send" or "graph_inbox" or "graph_ack" or "graph_resolve_request")
+            if (call.Name is "graph_delegate" or "graph_dependency" or "graph_send" or "graph_inbox" or "graph_resolve_request")
             {
                 var organization = (GraphProjectService)_service;
                 if (_identity is null) throw new InvalidOperationException("Addressed agent communication requires a host-issued identity.");
@@ -152,7 +145,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
                     }, _identity); break;
                     case "graph_resolve_request": response = organization.ResolveOrganizationRequest(call.Id, Required(data, "messageId"), Enum.Parse<GraphRequestStatus>(Required(data, "status")), Required(data, "reason"), _identity); break;
                     case "graph_inbox": response = organization.ReadOrganizationInbox(_identity.ResponsibilityId, false, _identity); break;
-                    default: response = organization.AdvanceOrganizationMessage(call.Id, Required(data, "messageId"), Enum.Parse<GraphMessageStatus>(Required(data, "status")), Required(data, "reason"), _identity); break;
+                    default: throw new InvalidOperationException("Unknown organization operation.");
                 }
                 if (call.Name is "graph_delegate" or "graph_dependency") organization.WakeOrganizationQueue();
                 return Success(call, GraphStorage.Serialize(response is GraphOrganizationSnapshot updated
@@ -203,7 +196,7 @@ public sealed class GraphToolHandler : IPluginToolHandler
         var run = _service.ReadSnapshot().Runs.SingleOrDefault(r => r.Id == _identity.RunId && r.TicketId == _identity.TicketId);
         if (run is null || run.Status != "Running")
             throw new InvalidOperationException("The host execution identity is no longer active.");
-        if (name is "graph_send" or "graph_inbox" or "graph_ack" or "graph_resolve_request" or "graph_propose_validation") return;
+        if (name is "graph_send" or "graph_inbox" or "graph_resolve_request" or "graph_propose_validation") return;
         if (name == "graph_evidence")
         {
             if (Required(data, "ticketId") != _identity.TicketId || Required(data, "runId") != _identity.RunId)

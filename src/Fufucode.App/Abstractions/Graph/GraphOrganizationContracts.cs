@@ -3,6 +3,7 @@ namespace Fufucode.App.Abstractions.Graph;
 public interface IGraphOrganizationService
 {
     GraphOrganizationSnapshot SendOrganizationMessage(string commandId, GraphMessageDraft message, GraphExecutionIdentity? hostIdentity = null);
+    GraphOrganizationSnapshot ResolveOrganizationRequest(string commandId, string messageId, GraphRequestStatus status, string reason, GraphExecutionIdentity? hostIdentity = null);
 }
 
 public sealed record GraphValidationProposal(string TicketId, string RunId, string Executable,
@@ -20,10 +21,14 @@ public sealed record GraphMessageDraft(string RecipientId, bool HumanRecipient, 
     // Kind is a topic, never an authority claim. Old payloads remain ordinary notifications.
     public GraphCommunicationKind Communication { get; init; } = GraphCommunicationKind.Notify;
     public GraphMessageAddress? Address { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? InReplyTo { get; init; }
 }
 public sealed record GraphOrganizationMessage(long Sequence, string Id, string SenderId, GraphMessageDraft Content, GraphMessageStatus Status, string? Resolution)
 {
     public GraphRequestStatus? RequestStatus { get; init; }
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool IsOpenRequest => Content.Communication == GraphCommunicationKind.Request && RequestStatus is null or GraphRequestStatus.Open;
 }
 public sealed record GraphOrganizationControl(string Id, string DecisionId, string TicketId, GraphControlKind Kind,
     string Reason, GraphControlStatus Status);
