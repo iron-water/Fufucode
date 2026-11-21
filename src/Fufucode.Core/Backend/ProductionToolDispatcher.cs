@@ -1198,14 +1198,12 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (!singleFile && !Directory.Exists(targetDir))
             return new PureToolResult(call.Id, false, $"路径不存在：'{relPath}'。");
 
-        Regex regex;
+        GrepSearchPage page;
         try
         {
-            var options = RegexOptions.Compiled;
-            if (!caseSensitive) options |= RegexOptions.IgnoreCase;
-            regex = new Regex(pattern, options, TimeSpan.FromSeconds(5));
+            page = new GrepSearchPage(pattern, caseSensitive, maxMatches, contextLines, offset);
         }
-        catch (Exception ex)
+        catch (ArgumentException ex)
         {
             return new PureToolResult(call.Id, false, $"正则表达式无效：{ex.Message}");
         }
@@ -1214,21 +1212,17 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         if (ReferenceEquals(globRegex, NeverMatch))
             return new PureToolResult(call.Id, false, $"无效的 glob 模式：'{globPattern}'。");
 
-        // 纯字面量查询走 span/IndexOf 快路径，避免正则引擎开销；含元字符时才用 Regex。
-        var lineMatcher = BuildLineMatcher(pattern, caseSensitive, regex);
-        var collector = new GrepCollector(maxMatches);
         try
         {
             await Task.Run(() =>
             {
-                var indexed = SearchIndexedFiles(targetDir, lineMatcher, globRegex, collector, contextLines, ct, singleFile);
+                var indexed = SearchIndexedFiles(targetDir, globRegex, page, ct, singleFile);
                 if (!singleFile && !indexed)
                 {
                     // 索引在 30 秒 TTL 内可能不含外部创建/经 run_command 生成的大文件；
                     // 该子树在索引里一条都没有时回退到磁盘真实枚举，
                     // 否则"跳过大文件"的提示会被漏掉，未找到就成了假阴性。
-                    SearchDirectoryRecursive(targetDir, regex, globRegex, collector, contextLines,
-                        IgnoreMatcher(), ct);
+                    SearchDirectoryRecursive(targetDir, globRegex, page, IgnoreMatcher(), ct);
                 }
             }, ct).ConfigureAwait(false);
         }
@@ -1238,119 +1232,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 "正则匹配超时（灾难性回溯），搜索已中止。请简化正则表达式后重试。");
         }
 
-        var skippedNote = collector.SkippedLargeFiles > 0
-            ? $"\n[另有 {collector.SkippedLargeFiles} 个超过 {GrepMaxFileBytes / (1024 * 1024)}MB 的文件未参与检索" +
-              $"（合计 {collector.SkippedLargeBytes / (1024 * 1024)}MB）；若目标可能在其中，请缩小 path 后重试]"
-            : string.Empty;
-
-        if (collector.Hits.Count == 0)
-            return new PureToolResult(call.Id, true,
-                "未找到匹配项。" + (skippedNote.Length > 0 ? skippedNote : string.Empty));
-
-        return new PureToolResult(call.Id, true,
-            FormatGroupedGrepOutput(collector.Hits, maxMatches, offset) + skippedNote);
-    }
-
-    /// <summary>一条检索命中；上下文行与命中行分开记录，便于分组输出。</summary>
-    private readonly record struct GrepHit(string File, int Line, string Text, bool IsMatch);
-
-    /// <summary>检索结果收集器：单独维护命中计数，避免每次判断都遍历列表。</summary>
-    private sealed class GrepCollector(int maxMatches)
-    {
-        public List<GrepHit> Hits { get; } = new();
-        public int MatchCount { get; private set; }
-        public bool IsFull => MatchCount >= maxMatches;
-
-        /// <summary>因体积过大被跳过的文件数：必须回报，否则"未找到匹配"会变成假阴性。</summary>
-        public int SkippedLargeFiles { get; private set; }
-        public long SkippedLargeBytes { get; private set; }
-
-        public void AddContext(string file, int line, string text) =>
-            Hits.Add(new GrepHit(file, line, text, false));
-
-        public void AddMatch(string file, int line, string text)
-        {
-            Hits.Add(new GrepHit(file, line, text, true));
-            MatchCount++;
-        }
-
-        public void SkipLarge(long bytes)
-        {
-            SkippedLargeFiles++;
-            SkippedLargeBytes += bytes;
-        }
-    }
-
-    /// <summary>
-    /// 按文件分组、按相关度排序、支持游标分页的检索输出。
-    ///
-    /// 平铺输出的问题是：前 N 条可能全来自同一个大文件，真正需要的另一个文件永远排不到。
-    /// 这里先按"文件被多个不同位置命中"的程度排序（命中越密集越可能是定义处），
-    /// 同一文件内按行号升序，再分页返回；输出比平铺更短，且第一页信息密度更高。
-    /// </summary>
-    private static string FormatGroupedGrepOutput(List<GrepHit> hits, int maxMatches, int offset)
-    {
-        var groups = hits
-            .GroupBy(hit => hit.File, StringComparer.Ordinal)
-            .Select(group => new
-            {
-                File = group.Key,
-                Hits = group.OrderBy(hit => hit.Line).ToArray(),
-                MatchCount = group.Count(hit => hit.IsMatch),
-            })
-            // 命中次数多的文件更可能是目标；同分时按路径稳定排序，保证结果可复现。
-            .OrderByDescending(group => group.MatchCount)
-            .ThenBy(group => group.File, StringComparer.Ordinal)
-            .ToArray();
-
-        var emittedGroups = 0;
-        var emittedHits = 0;
-        var builder = new StringBuilder();
-        // offset 语义是"跳过前 N 个已看过的文件"，与续页提示中的 offset 一致。
-        var skipGroups = offset;
-
-        foreach (var group in groups)
-        {
-            if (emittedHits >= maxMatches) break;
-            if (skipGroups > 0)
-            {
-                skipGroups--;
-                continue;
-            }
-
-            emittedGroups++;
-            builder.Append("## ").Append(group.File).Append(" (").Append(group.MatchCount).AppendLine(" 处命中)");
-            foreach (var hit in group.Hits)
-            {
-                if (emittedHits >= maxMatches) break;
-                var separator = hit.IsMatch ? ": " : "- ";
-                builder.Append(hit.Line).Append(separator).AppendLine(hit.Text);
-                if (hit.IsMatch) emittedHits++;
-            }
-        }
-
-        if (emittedGroups == 0)
-            return $"[offset {offset} 超出结果范围；共 {groups.Length} 个文件、{hits.Count} 行命中]";
-
-        var totalMatches = hits.Count(hit => hit.IsMatch);
-        if (skipGroups == 0 && offset + emittedGroups < groups.Length)
-        {
-            builder.AppendLine()
-                .Append($"[已返回 {emittedGroups} 个文件、{emittedHits} 行命中（共 {groups.Length} 个文件、{totalMatches} 行）。")
-                .Append($"使用 offset: {offset + emittedGroups} 继续查看后续文件；")
-                .AppendLine("或加 glob / 缩小 path / 把正则写得更具体来收窄范围]");
-        }
-
-        return builder.ToString().TrimEnd();
-    }
-
-    private static Func<string, bool> BuildLineMatcher(string pattern, bool caseSensitive, Regex regex)
-    {
-        const string metacharacters = "\\\\.^$|?*+()[]{}";
-        var literal = pattern.IndexOfAny(metacharacters.ToCharArray()) < 0 ? pattern : null;
-        if (literal is null) return regex.IsMatch;
-        var comparison = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-        return line => line.Contains(literal, comparison);
+        return new PureToolResult(call.Id, true, page.Format());
     }
 
     /// <summary>
@@ -1359,8 +1241,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     /// 此时索引给不出可信的"跳过了哪些大文件"，调用方必须回退磁盘真实枚举，
     /// 否则"未找到匹配项"是假阴性。前缀判定在 glob 过滤之前，避免 glob 无命中被误判为目录缺失。
     /// </summary>
-    private bool SearchIndexedFiles(string targetDir, Func<string, bool> matches, Regex? globRegex,
-        GrepCollector results, int contextLines, CancellationToken ct, bool singleFile = false)
+    private bool SearchIndexedFiles(string targetDir, Regex? globRegex, GrepSearchPage page,
+        CancellationToken ct, bool singleFile = false)
     {
         var prefix = Relative(targetDir).TrimEnd('/');
         if (prefix == ".") prefix = string.Empty;
@@ -1371,7 +1253,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         foreach (var relative in singleFile ? new[] { Relative(targetDir) } : WorkspaceFiles(ct))
         {
             ct.ThrowIfCancellationRequested();
-            if (results.IsFull) return inScope > 0;
+            if (page.Done) break;
             if (!singleFile && prefixWithSeparator.Length > 0 &&
                 !relative.StartsWith(prefixWithSeparator, StringComparison.Ordinal)) continue;
             inScope++;
@@ -1383,66 +1265,24 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
             var full = Path.Combine(_workspaceRoot, relative.Replace('/', Path.DirectorySeparatorChar));
             if (!SecurityReadable(full)) continue;
-            try
-            {
-                var fileLength = new FileInfo(full).Length;
-                if (fileLength > GrepMaxFileBytes)
-                {
-                    results.SkipLarge(fileLength);
-                    continue;
-                }
-                if (contextLines > 0)
-                {
-                    var lines = File.ReadLines(full).ToList();
-                    for (var i = 0; i < lines.Count; i++)
-                    {
-                        if (!matches(lines[i])) continue;
-                        var start = Math.Max(0, i - contextLines);
-                        var end = Math.Min(lines.Count - 1, i + contextLines);
-                        for (var c = start; c <= end; c++)
-                        {
-                            if (c == i) results.AddMatch(relative, c + 1, lines[c].TrimEnd());
-                            else results.AddContext(relative, c + 1, lines[c].TrimEnd());
-                        }
-                        if (results.IsFull) return true;
-                        i = end;
-                    }
-                }
-                else
-                {
-                    var lineNum = 0;
-                    foreach (var line in File.ReadLines(full))
-                    {
-                        lineNum++;
-                        if (!matches(line)) continue;
-                        results.AddMatch(relative, lineNum, line.TrimEnd());
-                        if (results.IsFull) return true;
-                    }
-                }
-            }
-            catch (RegexMatchTimeoutException) { throw; }
-            catch (OperationCanceledException) { throw; }
-            catch
-            {
-                // 单个文件读取失败（权限/占用/编码）时跳过，不中止整个搜索。
-            }
+            page.Scan(full, relative, ct);
         }
 
         return inScope > 0;
     }
 
-    private void SearchDirectoryRecursive(string currentDir, Regex regex, Regex? globRegex,
-        GrepCollector results, int contextLines, GitIgnoreMatcher ignore, CancellationToken ct)
+    private void SearchDirectoryRecursive(string currentDir, Regex? globRegex, GrepSearchPage page,
+        GitIgnoreMatcher ignore, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        if (results.IsFull) return;
+        if (page.Done) return;
 
         try
         {
-            foreach (var file in Directory.EnumerateFiles(currentDir))
+            foreach (var file in Directory.EnumerateFiles(currentDir).Order(StringComparer.Ordinal))
             {
                 ct.ThrowIfCancellationRequested();
-                if (results.IsFull) return;
+                if (page.Done) return;
 
                 if (!SecurityReadable(file)) continue;
                 var fileName = Path.GetFileName(file);
@@ -1452,53 +1292,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                     !WildcardMatches(globRegex, fileName) && !WildcardMatches(globRegex, relative))
                     continue;
 
-                try
-                {
-                    var fileLength = new FileInfo(file).Length;
-                    if (fileLength > GrepMaxFileBytes)
-                    {
-                        results.SkipLarge(fileLength);
-                        continue;
-                    }
-                    if (contextLines > 0)
-                    {
-                        var lines = File.ReadLines(file).ToList();
-                        for (var i = 0; i < lines.Count; i++)
-                        {
-                            if (regex.IsMatch(lines[i]))
-                            {
-                                var start = Math.Max(0, i - contextLines);
-                                var end = Math.Min(lines.Count - 1, i + contextLines);
-                                for (var c = start; c <= end; c++)
-                                {
-                                    if (c == i) results.AddMatch(relative, c + 1, lines[c].TrimEnd());
-                                    else results.AddContext(relative, c + 1, lines[c].TrimEnd());
-                                }
-                                if (results.IsFull) return;
-                                i = end;
-                            }
-                        }
-                    }
-                    else
-                    {
-                        var lineNum = 0;
-                        foreach (var line in File.ReadLines(file))
-                        {
-                            lineNum++;
-                            if (regex.IsMatch(line))
-                            {
-                                results.AddMatch(relative, lineNum, line.TrimEnd());
-                                if (results.IsFull) return;
-                            }
-                        }
-                    }
-                }
-                catch (RegexMatchTimeoutException) { throw; }
-                catch (OperationCanceledException) { throw; }
-                catch
-                {
-                    // 单个文件读取失败（权限/占用/编码）时跳过，不中止整个搜索。
-                }
+                page.Scan(file, relative, ct);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -1511,10 +1305,10 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
 
         try
         {
-            foreach (var subDir in Directory.EnumerateDirectories(currentDir))
+            foreach (var subDir in Directory.EnumerateDirectories(currentDir).Order(StringComparer.Ordinal))
             {
                 ct.ThrowIfCancellationRequested();
-                if (results.IsFull) return;
+                if (page.Done) return;
 
                 var dirName = Path.GetFileName(subDir);
                 if (ExcludedDirectories.Contains(dirName) || !SecurityReadable(subDir)) continue;
@@ -1522,7 +1316,7 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 if (new DirectoryInfo(subDir).Attributes.HasFlag(FileAttributes.ReparsePoint)) continue;
                 if (ignore.IsIgnored(Relative(subDir) + "/")) continue;
 
-                SearchDirectoryRecursive(subDir, regex, globRegex, results, contextLines, ignore, ct);
+                SearchDirectoryRecursive(subDir, globRegex, page, ignore, ct);
             }
         }
         catch (OperationCanceledException) { throw; }
@@ -1785,10 +1579,6 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
         return new PureToolResult(call.Id, process.ExitCode == 0, output);
     }
 
-    // 超过该体积的文件不参与逐行正则扫描（内存与耗时随体积线性增长）；
-    // 跳过时会在结果里明确告知，避免模型把"跳过"误读成"不存在"。
-    private const long GrepMaxFileBytes = 5 * 1024 * 1024;
-
     private const int CommandOutputHeadChars = 32 * 1024;
     private const int CommandOutputTailChars = 32 * 1024;
 
@@ -2049,54 +1839,48 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     private static readonly PureToolDefinition[] BuiltinDefinitions =
     [
         new("read_file",
-            "读取工作区内的文本文件，返回内容（分页时带行号前缀）。改动文件前先读它确认现状；" +
-            "不要用它读二进制文件或大目录。超过上限会按行截断并给出 offset。也可在 path 末尾直接写行选区：" +
-            "file:50、file:10-20、file:10+5（第 10 行再带 5 行）、file:-50、file:5-16,960-973；选区与 offset/limit 二选一。",
+            "已知路径直接读文本，改前先读。独立文件可同轮并行读取。按行分页（带行号）或在路径后选行（:N、:A-B、:A+C、:-N、:1-3,8），二选一。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "相对路径或绝对路径；可带行选区，如 src/foo.ts:50-200" },
-                    "offset": { "type": "integer", "description": "起始行号（从 1 开始），可选；不能与行选区同用" },
-                    "limit": { "type": "integer", "description": "读取的最大行数，可选，默认 2000；不能与行选区同用" }
+                    "path": { "type": "string", "description": "相对或绝对文件路径" },
+                    "offset": { "type": "integer", "description": "起始行，1 起" },
+                    "limit": { "type": "integer", "description": "分页行数，默认 2000，上限 5000" }
                 },
                 "required": ["path"]
             }
             """),
         new("write_file",
-            "写入整个文件（覆盖），父目录不存在会自动创建。适合新建文件或整体重写；" +
-            "已有文件的小改动一律用 edit_file，避免覆盖掉未读到的内容。",
+            "新建或整篇覆盖文件，自动建父目录。已有文件的局部修改用 edit_file。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "文件相对路径" },
-                    "content": { "type": "string", "description": "待写入的完整内容" }
+                    "path": { "type": "string" },
+                    "content": { "type": "string" }
                 },
                 "required": ["path", "content"]
             }
             """),
         new("edit_file",
-            "把文件中的原文精确替换为新文本，自动适配 CRLF/LF。单条编辑用 old_string/new_string；" +
-            "同一文件多处修改优先用 edits 数组一次提交：所有锚点都按原始文件匹配、互不重叠，任一条失败则整体不写盘。" +
-            "old_string 必须逐字一致且唯一；多处命中会拒绝并报行号，补上下文或设 replace_all。成功后返回局部 diff。",
+            "精确替换，成功返回落盘 diff，适配 CRLF/LF。用 old_string/new_string 或批量 edits（二选一）。用相邻原文使锚点唯一，仅全部替换时用 replace_all。批量最多 20 条，均匹配原文件，不得重叠，失败不写盘。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "待修改的文件相对路径" },
-                    "old_string": { "type": "string", "description": "单条编辑：待替换的原文本，必须精确且唯一匹配" },
-                    "new_string": { "type": "string", "description": "单条编辑：替换后的新文本" },
-                    "replace_all": { "type": "boolean", "description": "单条编辑：是否替换所有出现的实例（默认 false）" },
+                    "path": { "type": "string" },
+                    "old_string": { "type": "string" },
+                    "new_string": { "type": "string" },
+                    "replace_all": { "type": "boolean" },
                     "edits": {
                         "type": "array",
-                        "description": "批量编辑（最多 20 条）。与 old_string/new_string 二选一；所有编辑对原始文件求值且不得重叠",
                         "items": {
                             "type": "object",
                             "properties": {
                                 "old_string": { "type": "string" },
                                 "new_string": { "type": "string" },
-                                "replace_all": { "type": "boolean", "description": "默认 false" }
+                                "replace_all": { "type": "boolean" }
                             },
                             "required": ["old_string", "new_string"]
                         }
@@ -2106,83 +1890,76 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             }
             """),
         new("list_dir",
-            "列出目录下的直接子项，标记 [DIR]/[FILE]，不递归。适合先看项目结构；" +
-            "按名字找文件用 glob_files，按内容找用 grep_search——它们会递归并遵守 .gitignore。",
+            "列出目录直接子项，不递归。已知路径无需先列目录；按名找用 glob_files，按内容找用 grep_search。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "path": { "type": "string", "description": "目录相对路径，默认为当前根目录" }
+                    "path": { "type": "string", "description": "目录，默认工作区根" }
                 }
             }
             """),
         new("grep_search",
-            "用正则在工作区文件内容中检索。结果按文件分组、命中越多越靠前，每组返回行号与内容；" +
-            "自动跳过 .git/bin/obj/node_modules 并遵守 .gitignore。命中很多时用 offset 分页查看后续文件。" +
-            "已知符号名时优先用它定位；需要看函数上下文就设 context_lines（0-20）。结果为空是正常结论，不代表工具失败。",
+            "查找符号或字段时直接按正则搜索文本，可附带上下文。指定单文件或递归目录（遵守 .gitignore）。返回文件、行号、匹配附近原文；页内按命中数排序。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "pattern": { "type": "string", "description": "正则表达式模式" },
-                    "path": { "type": "string", "description": "搜索起始子目录，默认根目录" },
-                    "glob": { "type": "string", "description": "文件名过滤模式，例如 *.cs" },
-                    "case_sensitive": { "type": "boolean", "description": "是否区分大小写（默认 false）" },
-                    "context_lines": { "type": "integer", "description": "匹配行周围附带的上下文行数（0-20，默认 0）" },
-                    "max_matches": { "type": "integer", "description": "本页最大匹配行数（默认 100）" },
-                    "offset": { "type": "integer", "description": "按文件分页的游标：跳过前 N 个命中文件，用于查看后续文件（默认 0）" }
+                    "pattern": { "type": "string" },
+                    "path": { "type": "string", "description": "文件或目录，默认工作区根" },
+                    "glob": { "type": "string", "description": "如 *.cs" },
+                    "case_sensitive": { "type": "boolean", "description": "默认 false" },
+                    "context_lines": { "type": "integer", "description": "前后各 0–20 行，默认 0" },
+                    "max_matches": { "type": "integer", "description": "每页命中行数，默认 100" },
+                    "offset": { "type": "integer", "description": "跳过的命中文件数，默认 0" }
                 },
                 "required": ["pattern"]
             }
             """),
         new("glob_files",
-            "按路径通配符递归查找文件，返回相对路径列表（如 **/*.cs、src/**/*.json）。" +
-            "适合确认某类文件是否存在；不知道内容在哪时用 grep_search 而不是逐个 glob。",
+            "递归按通配符找文件，遵守 .gitignore，返回相对路径。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "pattern": { "type": "string", "description": "通配符模式，例如 **/*.cs 或 src/**/*.json" },
-                    "path": { "type": "string", "description": "起始相对目录，默认根目录" },
-                    "max_results": { "type": "integer", "description": "最大返回数量（默认 100）" }
+                    "pattern": { "type": "string", "description": "如 **/*.cs" },
+                    "path": { "type": "string", "description": "起始目录，默认工作区根" },
+                    "max_results": { "type": "integer", "description": "默认 100" }
                 },
                 "required": ["pattern"]
             }
             """),
         new("run_command",
-            "在工作区内执行一条 shell 命令，返回 ExitCode 与标准输出/错误。用于构建、测试、git 等内置工具做不到的事；" +
-            "读写文件优先用内置工具。超时会终止整个进程树，输出过长只保留头尾并标注折叠。",
+            "工作区内执行构建、测试等 shell 命令，返回退出码和输出头尾。超时终止进程树。读写优先用文件工具。",
             """
             {
                 "type": "object",
                 "properties": {
-                    "command": { "type": "string", "description": "Shell 命令（CLI 及其参数）" },
-                    "cwd": { "type": "string", "description": "工作目录（相对工作区，可选）" },
-                    "timeout_seconds": { "type": "integer", "description": "超时秒数，1-3600，默认 300" }
+                    "command": { "type": "string" },
+                    "cwd": { "type": "string", "description": "相对工作区" },
+                    "timeout_seconds": { "type": "integer", "description": "1–3600，默认 300" }
                 },
                 "required": ["command"]
             }
             """),
         new("update_plan",
-            "创建或更新结构化执行计划，用于多步骤任务追踪进度。同一时刻只能有 1 个步骤是 in_progress；" +
-            "每完成一步就更新一次。计划会在后续回合保留，长任务里它是防止偏离的锚点。",
+            "更新多步任务计划；最多一项 in_progress，完成一步即更新。",
             """
             {
                 "type": "object",
                 "properties": {
                     "steps": {
                         "type": "array",
-                        "description": "任务执行步骤列表",
                         "items": {
                             "type": "object",
                             "properties": {
-                                "title": { "type": "string", "description": "步骤简述" },
-                                "status": { "type": "string", "enum": ["pending", "in_progress", "completed"], "description": "步骤状态" }
+                                "title": { "type": "string" },
+                                "status": { "type": "string", "enum": ["pending", "in_progress", "completed"] }
                             },
                             "required": ["title", "status"]
                         }
                     },
-                    "notes": { "type": "string", "description": "整体计划补充说明或风险备忘（可选）" }
+                    "notes": { "type": "string" }
                 },
                 "required": ["steps"]
             }
