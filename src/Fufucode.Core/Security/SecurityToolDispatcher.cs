@@ -79,23 +79,30 @@ public sealed class SecurityToolDispatcher : IPureToolDispatcher
         try
         {
             var result = await Inner.DispatchAsync(call, cancellationToken).ConfigureAwait(false);
-            var settings = Evaluator.Store.Current;
-            if (!settings.Enabled) return result;
-            var content = result.Content;
-            if (settings.SensitiveDataProtectionEnabled) content = SecurityContentScanner.Redact(content, settings);
-            if (settings.InjectionProtectionEnabled && SecurityContentScanner.ContainsInjection(content))
-            {
-                _audit.Record("injection", SecurityAction.Deny, "工具结果命中本地提示注入规则，已阻止回填。", settings);
-                return new(call.Id, false, "[安全中心：工具结果命中本地提示注入规则，内容已隐藏。规则检测有局限，不是 AI 判定。]");
-            }
-            _audit.Record(decision.Category, decision.Action, decision.Summary, settings);
-            return result with { Content = content };
+            return FilterOutput(result, decision);
         }
         catch (SecurityPolicyException) { return new(call.Id, false, "安全策略读取失败，工具结果已隐藏。"); }
         catch (OperationCanceledException) { throw; }
         catch (Exception ex)
         { return new(call.Id, false, "安全执行失败（" + ex.GetType().Name + "），工具结果已隐藏。"); }
         finally { AuthorizationSlot.Value = prior; }
+    }
+
+    /// <summary>筛整份结果再取预览/分页，避免从规则命中区间中途切片绕过保护。使用当前策略。</summary>
+    public PureToolResult FilterOutput(PureToolResult result) => FilterOutput(result, null);
+
+    private PureToolResult FilterOutput(PureToolResult result, SecurityDecision? decision)
+    {
+        var settings = Evaluator.Store.Current;
+        if (!settings.Enabled) return result;
+        var content = settings.SensitiveDataProtectionEnabled ? SecurityContentScanner.Redact(result.Content, settings) : result.Content;
+        if (settings.InjectionProtectionEnabled && SecurityContentScanner.ContainsInjection(content))
+        {
+            _audit.Record("injection", SecurityAction.Deny, "工具结果命中本地提示注入规则，已阻止回填。", settings);
+            return new(result.Id, false, "[安全中心：工具结果命中本地提示注入规则，内容已隐藏。规则检测有局限，不是 AI 判定。]");
+        }
+        if (decision is not null) _audit.Record(decision.Category, decision.Action, decision.Summary, settings);
+        return result with { Content = content };
     }
     private string Snapshot() => JsonSerializer.Serialize(Evaluator.Store.Current, SecurityPolicyStore.Json);
     private PureToolResult Reject(PureToolCall call, SecurityDecision decision)

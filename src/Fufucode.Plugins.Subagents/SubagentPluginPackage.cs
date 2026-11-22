@@ -17,7 +17,7 @@ public sealed class SubagentPluginPackage : IPluginPackage
     private SubagentGeneration? _generation;
 
     public string Id => PluginId;
-    public string Version => "1.0.0";
+    public string Version => "1.1.0";
 
     public Task InitializeAsync(PluginPackageContext context, CancellationToken cancellationToken = default)
     {
@@ -90,6 +90,7 @@ public sealed class SubagentPluginPackage : IPluginPackage
 
         /// <summary>Shutdown 撤销后立即为 false；旧会话的声明与执行都读取这同一状态。</summary>
         public bool IsActive => _generation.IsActive;
+        public PureToolDefinition ToolDefinition => SubagentDispatcher.Definition;
 
         public Func<PureToolCall, CancellationToken, Task<bool>>? ApprovalGate
         {

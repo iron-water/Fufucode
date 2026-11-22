@@ -113,8 +113,8 @@ public static class PluginMarketplaceCatalog
 
         // ── 智能体高级能力（默认未安装，按需从市场安装） ──
         new("workspace.subagents", "Subagent 子代理", PluginCategory.AgentCapability,
-            "可选子代理运行时：安装后提供单一、默认开启的只读/补丁子代理能力，无档位选择。",
-            "1.0.0", "Fufucode Team", ["模型调用", "独立 Agent 上下文"],
+            "只读或在隔离工作树中生成候选补丁；可把原始证据交给下一位子代理复核。",
+            "1.1.0", "Fufucode Team", ["模型调用", "独立 Agent 上下文"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("agent.browser-use", "Browser Use 浏览器控制", PluginCategory.AgentCapability,

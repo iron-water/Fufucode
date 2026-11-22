@@ -382,7 +382,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IQueuedChatSession, 
         if (!planOnly)
         {
             if (_mcp?.HasServers == true) list.Add(McpGatewayDispatcher.Definition);
-            if (_subagents is { IsActive: true }) list.Add(NativeSubagentContract.Definition);
+            if (_subagents is { IsActive: true } runtime) list.Add(runtime.ToolDefinition);
             if (_skills?.HasModelInvocableSkills == true) list.Add(SkillRegistry.Definition);
         }
 

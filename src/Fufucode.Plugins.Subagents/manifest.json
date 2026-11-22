@@ -1,7 +1,7 @@
 {
   "id": "workspace.subagents",
   "name": "Subagent 子代理",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "entryAssembly": "Fufucode.Plugins.Subagents.dll",
   "packageType": "Fufucode.Plugins.Subagents.SubagentPluginPackage",
   "capabilities": ["Subagents"]

@@ -35,15 +35,11 @@ internal static class PluginDistributionInstallTests
             Directory.CreateDirectory(distribution);
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fufucode.Plugins.Subagents.dll"),
                 Path.Combine(distribution, "Fufucode.Plugins.Subagents.dll"), true);
-            File.WriteAllText(Path.Combine(distribution, "manifest.json"), JsonSerializer.Serialize(new
-            {
-                id = PluginId,
-                name = "Subagent 子代理",
-                version = "1.0.0",
-                entryAssembly = "Fufucode.Plugins.Subagents.dll",
-                packageType = "Fufucode.Plugins.Subagents.SubagentPluginPackage",
-                capabilities = new[] { "Subagents" },
-            }));
+            var manifest = Path.Combine(distribution, "manifest.json");
+            File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "subagent-manifest.json"), manifest);
+            using var metadata = JsonDocument.Parse(File.ReadAllText(manifest));
+            checks.Check(PluginMarketplaceCatalog.Find(PluginId)?.Version == metadata.RootElement.GetProperty("version").GetString(),
+                "市场版本与真实 Subagent 分发清单一致");
 
             checks.Check(!File.Exists(Path.Combine(layout.PluginDirectory(PluginId), "manifest.json")),
                 "前提：plugins 目录里还没有该插件载荷（只有 distribution 有）");

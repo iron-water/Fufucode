@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,7 +16,7 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
     /// 复用 Core 的唯一 Schema：父会话与嵌套子代理必须声明同一套参数，
     /// 否则模型在两层拿到的 `context`、`action` 能力不一致。
     /// </summary>
-    public static PureToolDefinition Definition => NativeSubagentContract.Definition;
+    public static PureToolDefinition Definition => NativeSubagentContract.WithEvidence;
 
     private readonly IPureToolDispatcher _inner;
     private readonly SubagentRunner _runner;
@@ -48,13 +47,11 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
     private static PureToolResult Revoked(PureToolCall call) =>
         new(call.Id, false, "子代理插件已卸载，调用被拒绝。");
 
-    internal static Task<PureToolResult> HandleForegroundAsync(PureToolCall call, SubagentRunner runner,
-        CancellationToken cancellationToken) => HandleAsync(call, runner, cancellationToken);
-
-    private static async Task<PureToolResult> HandleAsync(PureToolCall call, SubagentRunner runner,
-        CancellationToken cancellationToken)
+    internal static async Task<PureToolResult> HandleAsync(PureToolCall call, SubagentRunner? runner,
+        CancellationToken cancellationToken, IReadOnlyDictionary<string, SubagentEvidence>? inherited = null)
     {
-        if (runner.Lifetime is { IsActive: false })
+        cancellationToken.ThrowIfCancellationRequested();
+        if (runner?.Lifetime is { IsActive: false })
             return Revoked(call);
         JsonElement root;
         try
@@ -67,14 +64,23 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
             return new PureToolResult(call.Id, false, "subagent 参数 JSON 无效：" + error.Message);
         }
 
+        if (root.ValueKind != JsonValueKind.Object) return new(call.Id, false, "subagent 参数必须是对象。");
         var action = String(root, "action");
+        if (action is "read_evidence")
+        {
+            var id = SubagentEvidenceStore.Id(root);
+            var item = id is null ? null : inherited?.GetValueOrDefault(id) ?? runner?.Evidence.Find(id);
+            return item?.Page(call.Id, root) ?? new(call.Id, false, SubagentEvidenceStore.Unavailable);
+        }
+        if (runner is null) return new(call.Id, false, "仅授权 read_evidence，不能派发或列出子代理。");
         if (action is "list")
             return Listing(call, runner);
         if (action is not null and not "run")
-            return new PureToolResult(call.Id, false, $"未知 action '{action}'；只支持 run/list。");
+            return new PureToolResult(call.Id, false, $"未知 action '{action}'；只支持 run/list/read_evidence。");
 
         var prompt = String(root, "prompt");
-        if (string.IsNullOrWhiteSpace(prompt)) return Listing(call, runner);
+        if (string.IsNullOrWhiteSpace(prompt)) return root.TryGetProperty("contextRefs", out _) || root.TryGetProperty("baseRef", out _)
+            ? new(call.Id, false, "转交证据时需要任务 prompt。") : Listing(call, runner);
 
         var requestedMode = String(root, "mode")?.ToLowerInvariant() switch
         {
@@ -98,13 +104,20 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
 
         var context = String(root, "context");
         if (!string.IsNullOrWhiteSpace(context))
-            prompt = $"{prompt}\n\n## 已知线索（父会话提供，已验证可直接使用）\n{context}";
+            prompt = $"{prompt}\n\n## 父代理提供的线索（不是运行时验证）\n{context}";
 
         try
         {
-            var result = await runner.RunAsync(definition.Name, prompt, String(root, "model"),
-                cancellationToken, Bool(root, "fork"), requestedMode).ConfigureAwait(false);
-            return ToToolResult(call, result);
+            var grant = runner.Evidence.Bind(root, inherited);
+            if (grant?.Basis is not null && definition.Mode != SubagentMode.Patch) return new(call.Id, false, "baseRef 需要 patch 工作副本；只读审查请用 contextRefs。");
+            var result = await runner.RunWithEvidenceAsync(definition.Name, prompt, String(root, "model"),
+                cancellationToken, root.TryGetProperty("fork", out var f) && f.ValueKind == JsonValueKind.True, requestedMode, grant).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (runner.Lifetime is { IsActive: false }) return Revoked(call);
+            var item = new SubagentEvidence(result, runner.Security);
+            var card = item.Card(call.Id, result);
+            runner.Evidence.Publish(item);
+            return card;
         }
         catch (OperationCanceledException) { throw; }
         catch (Exception error)
@@ -117,83 +130,9 @@ public sealed class SubagentDispatcher : IPureToolDispatcher, INativeSubagentDis
         new(call.Id, true, "可用子代理：\n" + string.Join("\n", runner.Agents.Select(agent =>
             $"- {agent.Name} [{agent.Mode.ToString().ToLowerInvariant()}]: {agent.Description}")));
 
-    private static PureToolResult ToToolResult(PureToolCall call, SubagentResult result)
-    {
-        if (!result.Success)
-        {
-            var failed = new StringBuilder($"子代理 {result.AgentName} 失败：{result.Error}");
-            // 失败也要交回已经收集到的证据，否则父会话只能原样重试。
-            if (result.ToolTrace is { Count: > 0 } failedTrace)
-            {
-                failed.AppendLine();
-                failed.AppendLine("已执行工具：");
-                foreach (var item in failedTrace.Take(12))
-                    failed.Append("- ").Append(item.Success ? "[成功] " : "[失败] ")
-                        .Append(item.Tool).Append(' ')
-                        .AppendLine(TruncateInline(item.ArgumentsJson, 160));
-            }
-            if (result.Mode == SubagentMode.Patch)
-            {
-                failed.AppendLine();
-                AppendPatch(failed, result);
-            }
-            return new PureToolResult(call.Id, false, Clamp(failed.ToString()));
-        }
-
-        var mode = result.Mode == SubagentMode.Patch ? "patch" : "read";
-        var builder = new StringBuilder();
-        builder.Append("[子代理 ").Append(result.AgentName).Append(" · ").Append(mode).Append(']')
-            .Append("（工具调用 ").Append(result.ToolCalls).Append(" 次");
-        if (result.DurationMs is { } duration) builder.Append("，").Append(duration).Append(" ms");
-        builder.AppendLine("）");
-        if (result.Truncated)
-            builder.AppendLine("[注意：子代理达到轮次上限，结论可能不完整；需要时请拆分任务或改用更具体的提示重试。]");
-        builder.AppendLine(result.Content);
-
-        if (result.Mode == SubagentMode.Patch)
-            AppendPatch(builder, result);
-
-        return new PureToolResult(call.Id, true, Clamp(builder.ToString()));
-    }
-
-    private static void AppendPatch(StringBuilder builder, SubagentResult result)
-    {
-        if (result.ChangedFiles is { Count: > 0 } files)
-            builder.Append("改动文件：").AppendLine(string.Join(", ", files));
-        if (result.BaseHead is { Length: > 0 } head)
-            builder.Append("基线 HEAD：").AppendLine(head[..Math.Min(head.Length, 12)]);
-        if (result.ToolTrace is { Count: > 0 } trace)
-        {
-            var verifications = trace.Where(item => item.Tool == "run_command").ToArray();
-            if (verifications.Length > 0)
-            {
-                builder.AppendLine("验证命令：");
-                foreach (var item in verifications)
-                    builder.Append("- ").Append(item.Success ? "[通过] " : "[失败] ")
-                        .AppendLine(item.ArgumentsJson);
-            }
-        }
-        if (result.PatchPath is { Length: > 0 } patchPath)
-            builder.Append("补丁文件：").AppendLine(patchPath);
-        if (result.Patch is { Length: > 0 } patch)
-            builder.AppendLine("```diff").AppendLine(patch).AppendLine("```");
-        builder.Append("以上为候选补丁，未写入父工作区；由父会话审阅后决定是否应用或升级为线程。");
-    }
-
-    private static string Clamp(string text)
-    {
-        text = text.TrimEnd();
-        return text.Length <= 64 * 1024 ? text : text[..65_536] + "\n... [子代理输出已截断]";
-    }
-
-    private static string TruncateInline(string value, int length) =>
-        value.Length <= length ? value : value[..length] + "…";
-
     private static string? String(JsonElement root, string name) =>
         root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String
             ? value.GetString()
             : null;
 
-    private static bool Bool(JsonElement root, string name) =>
-        root.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
 }

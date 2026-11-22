@@ -15,6 +15,8 @@ public interface INativeSubagentRuntime
     /// Shutdown 必须先置 false 再取消在途调用。
     /// </summary>
     bool IsActive => true;
+    /// <summary>旧插件默认只声明它实际支持的 run/list。</summary>
+    PureToolDefinition ToolDefinition => NativeSubagentContract.Definition;
     IPureToolDispatcher Wrap(IPureToolDispatcher inner);
     IReadOnlyList<NativeSubagentDescriptor> Agents { get; }
     string BuildPromptSection();
@@ -74,21 +76,39 @@ public static class NativeSubagentContract
 {
     public const string ToolName = "subagent";
 
+    private const string EvidenceProperties = """
+            "jobId": { "type": "string", "description": "交付卡中的任务 ID，不是文件路径" },
+            "section": { "type": "string", "enum": ["report", "patch", "commands", "files", "trace"], "description": "默认 report；commands 是工具实录，不是验收结论" },
+            "offset": { "type": "integer", "minimum": 0, "description": "续读上页给出的 nextOffset；默认 0" }
+        """;
+
+    // A delegated evidence reader has no list/run action, even in a patch worktree.
+    public static PureToolDefinition EvidenceReader { get; } = new(ToolName, "只读父代理明确转交的证据；不能派发子代理。",
+        $$"""
+        { "type": "object", "required": ["action", "jobId"], "properties": {
+            "action": { "type": "string", "enum": ["read_evidence"] },
+            {{EvidenceProperties}}
+        } }
+        """);
+
     /// <summary>
     /// 父会话与嵌套子代理共用的唯一 Schema。
-    /// `action` 支持 list（列出可用代理）与 run（默认）；`context` 用于预取已知线索，
-    /// 让子代理不必从零开始发现文件。
+    /// `contextRefs` 显式转交当前父会话的结果，读取证据不启动模型或授予执行权限。
     /// </summary>
-    public static PureToolDefinition Definition { get; } = new(
+    public static PureToolDefinition Definition { get; } = Build(false);
+    public static PureToolDefinition WithEvidence { get; } = Build(true);
+
+    private static PureToolDefinition Build(bool handoff) => new(
         ToolName,
         "派发一个隔离上下文的子代理。read 模式只读、快速，适合搜索、定位与审查；" +
         "patch 模式在临时 git worktree 中修改并返回候选补丁（不直接写入父工作区）。" +
-        "省略 agent 时按 mode 选择内置代理；省略 prompt 时列出可用代理。",
-        """
+        (handoff ? "完成后用 jobId 回读原始证据，或通过 contextRefs 转交下一位子代理；不要复制整段报告。" : "省略 prompt 时列出可用子代理。"),
+        $$"""
         {
           "type": "object",
           "properties": {
-            "action": { "type": "string", "enum": ["run", "list"], "description": "run 执行任务（默认）；list 列出可用子代理" },
+            "action": { "type": "string", "enum": ["run", "list"{{(handoff ? ", \"read_evidence\"" : "")}}], "description": "默认 run；list 列出代理" },
+            {{(handoff ? HandoffProperties : "")}}
             "agent": { "type": "string", "description": "子代理名称；read 默认 explore，patch 默认 general" },
             "prompt": { "type": "string", "description": "任务说明；省略时列出可用子代理" },
             "mode": { "type": "string", "enum": ["read", "patch"], "description": "覆盖代理模式；与代理定义冲突时会被拒绝" },
@@ -98,6 +118,11 @@ public static class NativeSubagentContract
           }
         }
         """);
+
+    private const string HandoffProperties = EvidenceProperties + ",\n" + """
+            "contextRefs": { "type": "array", "items": { "type": "string" }, "description": "run 时明确交给本次子代理的 jobId 列表，按需读取，不复制历史" },
+            "baseRef": { "type": "string", "description": "仅 patch：转交此候选 jobId，并从它的原始提交开临时 worktree 复测；不自动应用补丁" },
+        """;
 }
 
 public interface INativeSubagentDispatcher

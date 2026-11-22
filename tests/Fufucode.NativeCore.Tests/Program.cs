@@ -2,6 +2,7 @@ using Fufucode.NativeCore.Tests;
 
 // Explicit opt-in; the normal suite never contacts a model or times a benchmark.
 if (args is ["--bench-grep"]) return await NativeTaskBench.MeasureGrepAsync();
+if (args is ["--live-subagent-handoff", var routerModel]) return await SubagentHandoffLiveProbe.RunAsync(routerModel);
 if (args is ["--live-task-bench", var model, var sample] && int.TryParse(sample, out var seed) && seed >= 0)
     return await NativeTaskBench.RunLiveAsync(model, seed);
 
@@ -11,7 +12,7 @@ for (var i = 0; i < args.Length; i++)
 {
     if (args[i] == "--all")
     {
-        requested.AddRange(Enumerable.Range(1, 17).Select(n => n.ToString("00")));
+        requested.AddRange(Enumerable.Range(1, 18).Select(n => n.ToString("00")));
         requested.Add("shared");
         continue;
     }
@@ -27,7 +28,7 @@ if (requested.Count == 0) requested.Add("12");
 
 var implemented = new HashSet<string>(StringComparer.Ordinal)
 {
-    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "shared",
+    "01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12", "13", "14", "15", "16", "17", "18", "shared",
 };
 var failures = 0;
 var passed = new HashSet<string>(StringComparer.Ordinal);
@@ -60,7 +61,7 @@ foreach (var name in requested.Distinct(StringComparer.Ordinal))
 if (args.Contains("--all"))
 {
     var cases = passed.Where(name => name != "shared").Count();
-    if (cases < 17) failures = Math.Max(failures, 1);
+    if (cases < 18) failures = Math.Max(failures, 1);
 }
 return failures == 0 ? 0 : 1;
 
@@ -83,6 +84,7 @@ static Task RunCaseAsync(string name, Checks checks) => name switch
     "15" => Case15BatchEditTests.RunAsync(checks),
     "16" => Case16ReasoningTests.RunAsync(checks),
     "17" => Case17GrepEvidenceTests.RunAsync(checks),
+    "18" => Case18SubagentEvidenceTests.RunAsync(checks),
     "shared" => RunSharedAsync(checks),
     _ => throw new InvalidOperationException("unknown case " + name),
 };
