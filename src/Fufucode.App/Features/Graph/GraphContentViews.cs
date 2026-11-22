@@ -298,58 +298,41 @@ internal static class GraphUi
     }
 }
 
-/// <summary>Floating canvas controls: hierarchy depth and zoom, with live read-outs.</summary>
+/// <summary>Floating mini-map controls; the main page carries these in its command bar.</summary>
 internal sealed class GraphViewControls : Border
 {
     protected override Type StyleKeyOverride => typeof(Border);
-    private readonly GraphViewportState _viewport;
-    private readonly TextBlock _zoom;
-    internal GraphViewControls(GraphWorkspaceViewModel vm, GraphCanvas canvas, bool mini)
+    internal GraphViewControls(GraphWorkspaceViewModel vm, GraphCanvas canvas)
     {
         Classes.Add("graphFloat");
         HorizontalAlignment = HorizontalAlignment.Right;
         VerticalAlignment = VerticalAlignment.Bottom;
-        AutomationProperties.SetAutomationId(this, mini ? "GraphMiniViewControls" : "GraphViewControls");
-        _viewport = mini ? vm.MiniMapViewport : vm.MainViewport;
+        AutomationProperties.SetAutomationId(this, "GraphMiniViewControls");
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
-        if (!mini)
-        {
-            row.Children.Add(GraphUi.Command("ChevronUp", null, vm.GoUp, "GraphUp", "上一层", nameof(vm.CanGoUp)));
-            var depth = GraphUi.Value(nameof(vm.Depth), "graphReadout");
-            depth.Bind(TextBlock.TextProperty, new Binding(nameof(vm.Depth)) { StringFormat = "深度 {0}" });
-            AutomationProperties.SetAutomationId(depth, "GraphDepth");
-            row.Children.Add(depth);
-            row.Children.Add(GraphUi.Command("ChevronDown", null, vm.GoDeeper, "GraphDeeper", "下一层", nameof(vm.CanGoDeeper)));
-            row.Children.Add(GraphUi.Separator());
-        }
-        row.Children.Add(GraphUi.Command("ZoomOut", null, () => canvas.Zoom(1 / 1.2), mini ? "GraphMiniZoomOut" : "GraphZoomOut", "缩小"));
-        _zoom = GraphUi.Text("", "graphReadout");
-        _zoom.IsVisible = !mini;
-        AutomationProperties.SetAutomationId(_zoom, "GraphZoomLevel");
-        row.Children.Add(_zoom);
-        row.Children.Add(GraphUi.Command("ZoomIn", null, () => canvas.Zoom(1.2), mini ? "GraphMiniZoomIn" : "GraphZoomIn", "放大"));
-        row.Children.Add(GraphUi.Command("FullScreenMaximize", null, canvas.Fit, mini ? "GraphMiniFit" : "GraphFit", "适应"));
-        if (mini)
-        {
-            row.Children.Add(GraphUi.Separator());
-            row.Children.Add(GraphUi.Command("Open", null, () => vm.RevealPanel(GraphWorkspaceViewModel.PageId), "GraphMiniOpenMain", "在主图打开"));
-        }
+        row.Children.Add(GraphUi.Command("ZoomOut", null, () => canvas.Zoom(1 / 1.2), "GraphMiniZoomOut", "缩小"));
+        row.Children.Add(GraphUi.Command("ZoomIn", null, () => canvas.Zoom(1.2), "GraphMiniZoomIn", "放大"));
+        row.Children.Add(GraphUi.Command("FullScreenMaximize", null, canvas.Fit, "GraphMiniFit", "适应"));
+        row.Children.Add(GraphUi.Separator());
+        row.Children.Add(GraphUi.Command("Open", null, () => vm.RevealPanel(GraphWorkspaceViewModel.PageId), "GraphMiniOpenMain", "在主图打开"));
         Child = row;
-        AttachedToVisualTree += (_, _) => { _viewport.PropertyChanged += ViewportChanged; UpdateZoom(); };
-        DetachedFromVisualTree += (_, _) => _viewport.PropertyChanged -= ViewportChanged;
     }
-    private void ViewportChanged(object? sender, PropertyChangedEventArgs e) => UpdateZoom();
-    private void UpdateZoom() => _zoom.Text = Math.Round(_viewport.Scale * 100).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
 }
 
 public sealed class GraphPageView : GraphContentView
 {
     private readonly GraphCanvas _canvas;
-    public GraphPageView(GraphWorkspaceViewModel vm) : base(vm)
+    private readonly GraphCommandBarSettings _bar;
+    private readonly GraphToolbar _toolbar;
+    private readonly Border _restore;
+    private readonly PathIcon _restoreIcon;
+    private readonly Grid _root = new();
+    private readonly Grid _diagram = new();
+    public GraphPageView(GraphWorkspaceViewModel vm, GraphCommandBarSettings? commandBar = null) : base(vm)
     {
+        _bar = commandBar ?? new GraphCommandBarSettings();
         AutomationProperties.SetAutomationId(this, "GraphPage");
         _canvas = new GraphCanvas(vm);
-        var diagram = new Grid();
+        var diagram = _diagram;
         GraphUi.Bind(_canvas, IsVisibleProperty, "!IsListView");
         diagram.Children.Add(_canvas);
         var moduleList = new ItemsControl
@@ -372,20 +355,44 @@ public sealed class GraphPageView : GraphContentView
         GraphUi.Bind(relationList, ItemsControl.ItemsSourceProperty, "Scene.Edges");
         var list = GraphUi.Scroll(GraphUi.Sections(GraphUi.Section("模块", moduleList), GraphUi.Section("关系", relationList)));
         GraphUi.Bind(list, IsVisibleProperty, "IsListView"); diagram.Children.Add(list);
-        var controls = new GraphViewControls(vm, _canvas, false);
-        GraphUi.Bind(controls, IsVisibleProperty, "!IsListView");
-        diagram.Children.Add(controls);
         diagram.Children.Add(EmptyState(vm));
         var error = GraphUi.Error(vm);
         error.Margin = new Thickness(12); error.VerticalAlignment = VerticalAlignment.Top;
         diagram.Children.Add(error);
         var busy = GraphUi.Busy(); busy.VerticalAlignment = VerticalAlignment.Top;
         diagram.Children.Add(busy);
-        var toolbar = new GraphToolbar(vm);
-        var root = new Grid { RowDefinitions = new RowDefinitions("Auto,*") };
-        root.Children.Add(toolbar); Grid.SetRow(diagram, 1); root.Children.Add(diagram);
-        Content = root;
+        _toolbar = new GraphToolbar(vm, _canvas, _bar);
+        // A hidden bar leaves one small button at the edge it was docked to.
+        var show = GraphUi.Command("ChevronDown", null, () => _bar.IsHidden = false, "GraphShowCommandBar", "显示命令栏 (Ctrl+F1)");
+        _restoreIcon = (PathIcon)((StackPanel)show.Content!).Children[0];
+        show.ContextFlyout = GraphToolbar.OptionsMenu(_bar);
+        _restore = new Border { Child = show, HorizontalAlignment = HorizontalAlignment.Right };
+        _restore.Classes.Add("graphFloat");
+        diagram.Children.Add(_restore);
+        _root.Children.Add(_toolbar); _root.Children.Add(diagram);
+        Content = _root;
+        KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.F1 && e.KeyModifiers == KeyModifiers.Control) { _bar.IsHidden = !_bar.IsHidden; e.Handled = true; }
+        };
+        AttachedToVisualTree += (_, _) => { _bar.PropertyChanged += BarChanged; ApplyBar(); };
+        DetachedFromVisualTree += (_, _) => _bar.PropertyChanged -= BarChanged;
+        ApplyBar();
     }
+    private void BarChanged(object? sender, PropertyChangedEventArgs e) => ApplyBar();
+    private void ApplyBar()
+    {
+        var bottom = _bar.Placement == GraphCommandBarPlacement.Bottom;
+        _root.RowDefinitions = new RowDefinitions(bottom ? "*,Auto" : "Auto,*");
+        Grid.SetRow(_toolbar, bottom ? 1 : 0);
+        Grid.SetRow(_diagram, bottom ? 0 : 1);
+        _toolbar.Classes.Set("bottom", bottom);
+        _toolbar.IsVisible = !_bar.IsHidden;
+        _restore.IsVisible = _bar.IsHidden;
+        _restore.VerticalAlignment = bottom ? VerticalAlignment.Bottom : VerticalAlignment.Top;
+        _restoreIcon.Bind(PathIcon.DataProperty, new DynamicResourceExtension(bottom ? "Icon.ChevronUp" : "Icon.ChevronDown"));
+    }
+    internal GraphCommandBarSettings CommandBarForTesting => _bar;
     private static Control EmptyState(GraphWorkspaceViewModel vm)
     {
         var icon = GraphUi.Icon("Branch", 32);
@@ -413,7 +420,7 @@ public sealed class GraphMiniMapView : GraphContentView
     {
         AutomationProperties.SetAutomationId(this, "GraphMiniMap");
         _canvas = new GraphCanvas(vm, true);
-        var controls = new GraphViewControls(vm, _canvas, true);
+        var controls = new GraphViewControls(vm, _canvas);
         controls.Margin = new Thickness(8);
         var root = new Grid();
         root.Children.Add(_canvas); root.Children.Add(controls); Content = root;

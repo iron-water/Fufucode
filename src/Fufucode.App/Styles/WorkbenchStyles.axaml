@@ -54,12 +54,26 @@
     <Setter Property="IsVisible" Value="True"/>
   </Style>
 
-  <!-- Graph 页头：面包屑 + 命令栏单行，平铺在页面底色上，以发丝线与画布分隔。 -->
-  <Style Selector="Border.graphHeader">
+  <!-- Graph 命令栏（参照 Office 功能区）：一般栏表面，分组带底部标题，组间发丝竖线；可停靠顶部或底部。 -->
+  <Style Selector="Border.graphRibbon">
+    <Setter Property="Background" Value="{DynamicResource AppCardBackground}"/>
     <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
     <Setter Property="BorderThickness" Value="0,0,0,1"/>
-    <Setter Property="Padding" Value="8,4"/>
-    <Setter Property="MinHeight" Value="48"/>
+    <Setter Property="Padding" Value="4,4,4,2"/>
+  </Style>
+  <Style Selector="Border.graphRibbon.bottom">
+    <Setter Property="BorderThickness" Value="0,1,0,0"/>
+  </Style>
+  <Style Selector="Border.graphRibbonGroup">
+    <Setter Property="BorderBrush" Value="{DynamicResource AppDividerSubtle}"/>
+    <Setter Property="BorderThickness" Value="0,0,1,0"/>
+    <Setter Property="Padding" Value="4,0"/>
+    <Setter Property="Margin" Value="0,0,4,0"/>
+    <Setter Property="ClipToBounds" Value="True"/>
+  </Style>
+  <Style Selector="TextBlock.graphRibbonCaption">
+    <Setter Property="HorizontalAlignment" Value="Center"/>
+    <Setter Property="VerticalAlignment" Value="Center"/>
   </Style>
   <Style Selector="Button.graphCommand">
     <Setter Property="Padding" Value="8,0"/>
@@ -71,10 +85,48 @@
     <Setter Property="HorizontalContentAlignment" Value="Center"/>
     <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
   </Style>
+  <!-- 功能区内两行堆叠的小命令，单独定义，不与 graphCommand 的 32 高叠加。 -->
+  <Style Selector="Button.graphSmallCommand">
+    <Setter Property="Height" Value="26"/>
+    <Setter Property="MinWidth" Value="28"/>
+    <Setter Property="Padding" Value="6,0"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.graphSmallCommand:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphSmallCommand:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphLargeCommand">
+    <Setter Property="MinWidth" Value="52"/>
+    <Setter Property="Height" Value="52"/>
+    <Setter Property="Padding" Value="6,4"/>
+    <Setter Property="BorderThickness" Value="0"/>
+    <Setter Property="Background" Value="Transparent"/>
+    <Setter Property="VerticalContentAlignment" Value="Center"/>
+    <Setter Property="HorizontalContentAlignment" Value="Center"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Button.graphLargeCommand TextBlock">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+  <Style Selector="Border.graphRibbon Button.subtle:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource AppBaseHighlight}"/>
+  </Style>
   <Style Selector="Button.graphCommand:disabled PathIcon">
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
   </Style>
   <Style Selector="Button.graphCommand:disabled TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphLargeCommand:disabled PathIcon">
+    <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
+  </Style>
+  <Style Selector="Button.graphLargeCommand:disabled TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource TextFillColorDisabledBrush}"/>
   </Style>
   <Style Selector="Button.graphCrumb">

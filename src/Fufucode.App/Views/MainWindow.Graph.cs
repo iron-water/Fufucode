@@ -35,6 +35,23 @@ public partial class MainWindow
     private string? _modeLayoutProject;
     private readonly Dictionary<string, string> _modeLayouts = new(StringComparer.Ordinal);
     private bool GraphEnabled => EffectiveSettingsStore.Current.GraphEnabled;
+    private const string GraphCommandBarKey = "graph:command-bar:v1";
+    private GraphCommandBarSettings? _graphCommandBar;
+    /// <summary>One command-bar placement for every project's Graph page, persisted as a desktop preference.</summary>
+    private GraphCommandBarSettings GraphCommandBar
+    {
+        get
+        {
+            if (_graphCommandBar != null) return _graphCommandBar;
+            var settings = GraphCommandBarSettings.Parse(new DesktopMetadataStore(GraphLayout).GetPreference(GraphCommandBarKey));
+            settings.PropertyChanged += (_, _) =>
+            {
+                try { new DesktopMetadataStore(GraphLayout).SetPreference(GraphCommandBarKey, settings.Serialize()); }
+                catch (Exception error) { System.Diagnostics.Trace.TraceWarning("Graph command bar: " + error.Message); }
+            };
+            return _graphCommandBar = settings;
+        }
+    }
     internal IGraphProjectService? GraphServiceForTesting => _graphWorkspace?.Service;
     internal GraphWorkspaceViewModel? GraphModelForTesting => _graphWorkspace?.Model;
     internal Task OpenGraphChatForTestingAsync(string? module, string? ticket, string context) => OpenGraphChatAsync(module, ticket, context);
@@ -204,7 +221,7 @@ public partial class MainWindow
                 ["graph-history"] = new GraphHistoryView(model),
                 ["graph-minimap"] = new GraphMiniMapView(model)
             };
-            workspace = new(service, model, new GraphPageView(model), panels);
+            workspace = new(service, model, new GraphPageView(model, GraphCommandBar), panels);
             _graphProjects.TryAdd(project.Id, workspace);
             model.RevealPanelRequested += page => Dispatcher.UIThread.Post(() =>
             {

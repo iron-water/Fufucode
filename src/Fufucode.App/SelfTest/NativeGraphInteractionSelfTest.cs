@@ -138,6 +138,16 @@ internal static class NativeGraphInteractionSelfTest
         Screenshot(window, Path.Combine(evidence, "graph-toolbar-900.png"));
         window.Width = 1500; window.Height = 950; await Settle(); canvas.Fit();
         Screenshot(window, Path.Combine(evidence, "graph-toolbar-wide.png"));
+        var bar = window.GetVisualDescendants().OfType<GraphPageView>().Single().CommandBarForTesting;
+        bar.Placement = GraphCommandBarPlacement.Bottom; await Settle();
+        Check(toolbar.TranslatePoint(default, window)!.Value.Y > canvas.TranslatePoint(default, window)!.Value.Y && ToolbarFits(toolbar),
+            "native command bar docks below the canvas");
+        Screenshot(window, Path.Combine(evidence, "graph-toolbar-bottom.png"));
+        bar.IsHidden = true; await Settle();
+        Check(!toolbar.IsEffectivelyVisible && Find<Button>(window, "GraphShowCommandBar").IsEffectivelyVisible && ModuleVisible(canvas, vm),
+            "hidden command bar leaves a restore button and a usable canvas");
+        Screenshot(window, Path.Combine(evidence, "graph-toolbar-hidden.png"));
+        bar.IsHidden = false; bar.Placement = GraphCommandBarPlacement.Top; await Settle();
         vm.RevealPanelRequested -= Revealed;
         await window.NavigateForTestingAsync(AppPage.Chat); await Settle();
         window.OpenDockPage("graph-minimap", DockZone.Right); await Settle();

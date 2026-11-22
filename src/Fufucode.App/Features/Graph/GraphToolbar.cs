@@ -5,131 +5,255 @@ using System.Linq;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Data.Converters;
+using Avalonia.Input;
 using Avalonia.Layout;
-using Avalonia.Media;
 
 namespace Fufucode.App.Features.Graph;
 
-/// <summary>A Graph command. Higher priority stays visible longest when the bar narrows;
-/// secondary commands always live in the overflow menu. New AutoDev capabilities add entries here.</summary>
-internal sealed record GraphCommand(string Id, string Icon, string Label, Action Execute,
-    string? EnabledPath = null, int Priority = 0);
+/// <summary>A Graph command, shown as a ribbon button and, when its group collapses, as a menu item.
+/// New AutoDev capabilities add commands or whole groups to <see cref="GraphToolbar"/>.</summary>
+internal sealed record GraphCommand(string Id, string Icon, string Label, Action Execute, string? EnabledPath = null);
 
-/// <summary>Single-row page header: scope breadcrumb on the left, a command bar with
-/// WinUI-style dynamic overflow on the right.</summary>
+public enum GraphCommandBarPlacement { Top, Bottom }
+
+/// <summary>Where the Graph command bar sits and whether it is hidden. One instance is shared by every
+/// project's Graph page; the host persists it.</summary>
+public sealed class GraphCommandBarSettings : GraphObservable
+{
+    private GraphCommandBarPlacement _placement;
+    private bool _hidden;
+    public GraphCommandBarPlacement Placement { get => _placement; set => Set(ref _placement, value); }
+    public bool IsHidden { get => _hidden; set => Set(ref _hidden, value); }
+    public string Serialize() => (Placement == GraphCommandBarPlacement.Bottom ? "bottom" : "top") + (IsHidden ? "-hidden" : "");
+    public static GraphCommandBarSettings Parse(string? value) => new()
+    {
+        Placement = value?.StartsWith("bottom", StringComparison.Ordinal) == true ? GraphCommandBarPlacement.Bottom : GraphCommandBarPlacement.Top,
+        IsHidden = value?.EndsWith("-hidden", StringComparison.Ordinal) == true
+    };
+}
+
+/// <summary>Office-style ribbon for the Graph page: captioned groups in one bar. When the bar narrows,
+/// the lowest-priority groups collapse into a single dropdown button each.</summary>
 internal sealed class GraphToolbar : Border
 {
     protected override Type StyleKeyOverride => typeof(Border);
-    private sealed record Slot(GraphCommand Command, Button Button, TextBlock Label, MenuItem Overflow);
-    private readonly List<Slot> _slots = new();
-    private readonly Control _context;
-    private readonly Button _more;
-    private readonly Separator _overflowSeparator = new();
+    private sealed record Group(Border Root, Control Expanded, Button Collapsed, TextBlock Caption, int Priority);
+    private readonly List<Group> _groups = new();
+    private readonly Border _location;
+    private readonly Button _options;
+    private readonly GraphViewportState _viewport;
+    private readonly TextBlock _zoom;
     private bool _arranging;
 
-    internal GraphToolbar(GraphWorkspaceViewModel vm)
+    internal GraphToolbar(GraphWorkspaceViewModel vm, GraphCanvas canvas, GraphCommandBarSettings settings)
     {
-        Classes.Add("graphHeader");
+        Classes.Add("graphRibbon");
         AutomationProperties.SetAutomationId(this, "GraphToolbar");
-        var primary = new[]
-        {
-            new GraphCommand("GraphShowProperties", "Info", "属性",
-                () => vm.RevealPanel(GraphWorkspaceViewModel.PropertiesPageId), nameof(vm.HasSelectedModule), 4),
-            new GraphCommand("GraphExpandSelected", "Branch", "展开", vm.ExpandSelected, nameof(vm.HasSelectedModule), 3),
-            new GraphCommand("GraphSelectedChat", "Chat", "会话", () => vm.OpenChat(), nameof(vm.HasSelectedModule), 2),
-            new GraphCommand("GraphToolbarNewModule", "Add", "新建模块", () => vm.BeginModule(), nameof(vm.CanEdit), 1),
-        };
-        var secondary = new[]
-        {
-            new GraphCommand("GraphExpandAll", "Branch", "展开整图", vm.ExpandAll),
-            new GraphCommand("GraphBottom", "ArrowDown", "展开到最底层", vm.GoBottom),
-            new GraphCommand("GraphToggleList", "AppsList", "列表视图", () => vm.IsListView = !vm.IsListView),
-        };
+        _viewport = vm.MainViewport;
+        var groups = new StackPanel { Orientation = Orientation.Horizontal };
 
-        var commands = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
-        var menu = new MenuFlyout();
-        foreach (var command in primary)
-        {
-            var button = GraphUi.Command(command.Icon, command.Label, command.Execute, command.Id, command.Label, command.EnabledPath);
-            var label = ((StackPanel)button.Content!).Children.OfType<TextBlock>().Single();
-            var item = MenuItemFor(command);
-            item.IsVisible = false;
-            _slots.Add(new(command, button, label, item));
-            commands.Children.Add(button);
-            menu.Items.Add(item);
-        }
-        _overflowSeparator.IsVisible = false;
-        menu.Items.Add(_overflowSeparator);
-        foreach (var command in secondary)
-        {
-            var item = MenuItemFor(command);
-            if (command.Id == "GraphToggleList")
-                GraphUi.Bind(item, MenuItem.HeaderProperty, nameof(vm.IsListView),
-                    converter: new FuncValueConverter<bool, string>(list => list ? "图视图" : "列表视图"));
-            menu.Items.Add(item);
-        }
-        _more = GraphUi.Command("More", null, () => { }, "GraphMoreViews", "更多");
-        _more.Flyout = menu;
-        _more.VerticalAlignment = VerticalAlignment.Center;
+        // 位置: where you are in the hierarchy and in history. It never collapses; crumbs trim instead.
+        var depth = GraphUi.Text("", "caption");
+        depth.Bind(TextBlock.TextProperty, new Binding(nameof(vm.Depth)) { StringFormat = "深度 {0}" });
+        depth.VerticalAlignment = VerticalAlignment.Center;
+        AutomationProperties.SetAutomationId(depth, "GraphDepth");
+        var state = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, Margin = new Thickness(8, 0, 0, 0) };
+        state.Children.Add(depth);
+        state.Children.Add(GraphUi.Version(vm));
+        var place = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Spacing = 2 };
+        place.Children.Add(new GraphBreadcrumb(vm)); place.Children.Add(state);
+        _location = GroupFrame("GraphGroupLocation", "位置", place, out _);
+        _location.MaxWidth = 360;
+        groups.Children.Add(_location);
 
-        _context = Context(vm);
-        var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto,Auto"), ColumnSpacing = 4 };
-        layout.Children.Add(_context);
-        Grid.SetColumn(commands, 1); layout.Children.Add(commands);
-        Grid.SetColumn(_more, 2); layout.Children.Add(_more);
+        // 模块: actions on the selection, as large buttons.
+        var module = new[]
+        {
+            new GraphCommand("GraphShowProperties", "Info", "属性", () => vm.RevealPanel(GraphWorkspaceViewModel.PropertiesPageId), nameof(vm.HasSelectedModule)),
+            new GraphCommand("GraphExpandSelected", "Branch", "展开", vm.ExpandSelected, nameof(vm.HasSelectedModule)),
+            new GraphCommand("GraphSelectedChat", "Chat", "会话", () => vm.OpenChat(), nameof(vm.HasSelectedModule)),
+            new GraphCommand("GraphToolbarNewModule", "Add", "新建模块", () => vm.BeginModule(), nameof(vm.CanEdit)),
+        };
+        var large = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        foreach (var command in module) large.Children.Add(Large(command));
+        AddGroup(groups, "GraphGroupModule", "模块", "PuzzlePiece", 3, large, module);
+
+        // 层级: move through the module hierarchy.
+        var up = new GraphCommand("GraphUp", "ChevronUp", "上一层", vm.GoUp, nameof(vm.CanGoUp));
+        var deeper = new GraphCommand("GraphDeeper", "ChevronDown", "下一层", vm.GoDeeper, nameof(vm.CanGoDeeper));
+        var all = new GraphCommand("GraphExpandAll", "Branch", "展开整图", vm.ExpandAll);
+        var bottom = new GraphCommand("GraphBottom", "ArrowDown", "最底层", vm.GoBottom);
+        AddGroup(groups, "GraphGroupHierarchy", "层级", "Branch", 2,
+            Rows(Row(Small(up, true), Small(deeper, true)), Row(Small(all, true), Small(bottom, true))), up, deeper, all, bottom);
+
+        // 视图: zoom with a live read-out, fit, and the list alternative.
+        var zoomOut = new GraphCommand("GraphZoomOut", "ZoomOut", "缩小", () => canvas.Zoom(1 / 1.2));
+        var zoomIn = new GraphCommand("GraphZoomIn", "ZoomIn", "放大", () => canvas.Zoom(1.2));
+        var fit = new GraphCommand("GraphFit", "FullScreenMaximize", "适应", canvas.Fit);
+        var list = new GraphCommand("GraphToggleList", "AppsList", "列表视图", () => vm.IsListView = !vm.IsListView);
+        _zoom = GraphUi.Text("", "graphReadout");
+        AutomationProperties.SetAutomationId(_zoom, "GraphZoomLevel");
+        var listButton = Small(list, true);
+        var listLabel = ((StackPanel)listButton.Content!).Children.OfType<TextBlock>().Single();
+        GraphUi.Bind(listLabel, TextBlock.TextProperty, nameof(vm.IsListView), converter: ListLabel);
+        var viewGroup = AddGroup(groups, "GraphGroupView", "视图", "ZoomIn", 1,
+            Rows(Row(Small(zoomOut, false), _zoom, Small(zoomIn, false)), Row(Small(fit, true), listButton)), zoomOut, zoomIn, fit, list);
+        var listItem = ((MenuFlyout)viewGroup.Collapsed.Flyout!).Items.OfType<MenuItem>().Last();
+        GraphUi.Bind(listItem, MenuItem.HeaderProperty, nameof(vm.IsListView), converter: ListLabel);
+
+        _options = GraphUi.Command("More", null, () => { }, "GraphCommandBarOptions", "命令栏选项");
+        _options.Classes.Remove("graphCommand");
+        _options.Classes.Add("graphSmallCommand");
+        _options.VerticalAlignment = VerticalAlignment.Top;
+        _options.Flyout = OptionsMenu(settings);
+
+        var layout = new Grid { ColumnDefinitions = new ColumnDefinitions("*,Auto") };
+        layout.Children.Add(groups);
+        Grid.SetColumn(_options, 1); layout.Children.Add(_options);
         Child = layout;
-        SizeChanged += (_, _) => ArrangeCommands();
-        AttachedToVisualTree += (_, _) => ArrangeCommands();
+        SizeChanged += (_, _) => ArrangeGroups();
+        AttachedToVisualTree += (_, _) => { _viewport.PropertyChanged += ViewportChanged; UpdateZoom(); ArrangeGroups(); };
+        DetachedFromVisualTree += (_, _) => _viewport.PropertyChanged -= ViewportChanged;
+    }
+
+    private static readonly FuncValueConverter<bool, string> ListLabel = new(list => list ? "图视图" : "列表视图");
+
+    internal static MenuFlyout OptionsMenu(GraphCommandBarSettings settings)
+    {
+        var menu = new MenuFlyout();
+        MenuItem Placement(string title, GraphCommandBarPlacement placement, string id)
+        {
+            var item = new MenuItem { Header = title, ToggleType = MenuItemToggleType.Radio, GroupName = "GraphCommandBarPlacement" };
+            AutomationProperties.SetAutomationId(item, id);
+            item.Click += (_, _) => { settings.Placement = placement; settings.IsHidden = false; };
+            return item;
+        }
+        var top = Placement("位于顶部", GraphCommandBarPlacement.Top, "GraphCommandBarTop");
+        var bottom = Placement("位于底部", GraphCommandBarPlacement.Bottom, "GraphCommandBarBottom");
+        var hide = new MenuItem { Header = "隐藏命令栏", Icon = GraphUi.Icon("Dismiss"), InputGesture = new KeyGesture(Key.F1, KeyModifiers.Control) };
+        AutomationProperties.SetAutomationId(hide, "GraphCommandBarHide");
+        hide.Click += (_, _) => settings.IsHidden = true;
+        menu.Opening += (_, _) =>
+        {
+            top.IsChecked = settings.Placement == GraphCommandBarPlacement.Top;
+            bottom.IsChecked = settings.Placement == GraphCommandBarPlacement.Bottom;
+        };
+        menu.Items.Add(top); menu.Items.Add(bottom); menu.Items.Add(new Separator()); menu.Items.Add(hide);
+        return menu;
+    }
+
+    private static Border GroupFrame(string id, string title, Control content, out TextBlock caption)
+    {
+        caption = GraphUi.SingleLine(title, "caption");
+        caption.Classes.Add("graphRibbonCaption");
+        var body = new Grid { RowDefinitions = new RowDefinitions("52,16") };
+        body.Children.Add(content);
+        Grid.SetRow(caption, 1); body.Children.Add(caption);
+        var frame = new Border { Child = body };
+        frame.Classes.Add("graphRibbonGroup");
+        AutomationProperties.SetAutomationId(frame, id);
+        return frame;
+    }
+
+    private Group AddGroup(Panel host, string id, string title, string icon, int priority, Control expanded, params GraphCommand[] commands)
+    {
+        var menu = new MenuFlyout();
+        foreach (var command in commands) menu.Items.Add(MenuItemFor(command));
+        var collapsed = Large(new GraphCommand(id + "Collapsed", icon, title, () => { }));
+        collapsed.Flyout = menu;
+        collapsed.IsVisible = false;
+        expanded.VerticalAlignment = VerticalAlignment.Center;
+        var slot = new Panel();
+        slot.Children.Add(expanded); slot.Children.Add(collapsed);
+        var frame = GroupFrame(id, title, slot, out var caption);
+        host.Children.Add(frame);
+        var group = new Group(frame, expanded, collapsed, caption, priority);
+        _groups.Add(group);
+        return group;
     }
 
     private static MenuItem MenuItemFor(GraphCommand command)
     {
         var item = new MenuItem { Header = command.Label, Icon = GraphUi.Icon(command.Icon) };
-        AutomationProperties.SetAutomationId(item, command.Id + (command.Priority > 0 ? "Menu" : ""));
+        AutomationProperties.SetAutomationId(item, command.Id + "Menu");
         if (command.EnabledPath != null) GraphUi.Bind(item, IsEnabledProperty, command.EnabledPath);
         item.Click += (_, _) => command.Execute();
         return item;
     }
 
-    private static Control Context(GraphWorkspaceViewModel vm)
+    /// <summary>Icon above its label, the ribbon's primary button form.</summary>
+    private static Button Large(GraphCommand command)
     {
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, VerticalAlignment = VerticalAlignment.Center, ClipToBounds = true };
-        row.Children.Add(new GraphBreadcrumb(vm));
-        var version = GraphUi.Version(vm);
-        version.VerticalAlignment = VerticalAlignment.Center;
-        row.Children.Add(version);
+        var button = GraphUi.Button(command.Label, command.Execute, command.Id);
+        button.Classes.Add("graphLargeCommand");
+        var stack = new StackPanel { Spacing = 4, HorizontalAlignment = HorizontalAlignment.Center };
+        var icon = GraphUi.Icon(command.Icon, 20);
+        icon.HorizontalAlignment = HorizontalAlignment.Center;
+        stack.Children.Add(icon);
+        stack.Children.Add(new TextBlock { Text = command.Label, HorizontalAlignment = HorizontalAlignment.Center });
+        button.Content = stack;
+        ToolTip.SetTip(button, command.Label);
+        if (command.EnabledPath != null) GraphUi.Bind(button, IsEnabledProperty, command.EnabledPath);
+        return button;
+    }
+
+    private static Button Small(GraphCommand command, bool label)
+    {
+        var button = GraphUi.Command(command.Icon, label ? command.Label : null, command.Execute, command.Id, command.Label, command.EnabledPath);
+        button.Classes.Remove("graphCommand");
+        button.Classes.Add("graphSmallCommand");
+        button.ClearValue(MinHeightProperty); // the shared factory's 32px floor would break two stacked rows
+        button.HorizontalContentAlignment = HorizontalAlignment.Left;
+        return button;
+    }
+
+    private static StackPanel Row(params Control[] controls)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 2 };
+        foreach (var control in controls) row.Children.Add(control);
         return row;
     }
 
-    /// <summary>Labels first, then icon-only, then lowest priority into the overflow menu.</summary>
-    private void ArrangeCommands()
+    private static StackPanel Rows(params Control[] rows)
+    {
+        var stack = new StackPanel();
+        foreach (var row in rows) stack.Children.Add(row);
+        return stack;
+    }
+
+    private void ViewportChanged(object? sender, PropertyChangedEventArgs e) => UpdateZoom();
+    private void UpdateZoom() => _zoom.Text = Math.Round(_viewport.Scale * 100).ToString(System.Globalization.CultureInfo.InvariantCulture) + "%";
+
+    /// <summary>Collapse groups from the lowest priority until the bar fits; the location group trims last.</summary>
+    private void ArrangeGroups()
     {
         if (_arranging || Bounds.Width < 1) return;
         _arranging = true;
         try
         {
             var infinite = new Size(double.PositiveInfinity, double.PositiveInfinity);
-            _context.Measure(infinite);
-            var available = Bounds.Width - Padding.Left - Padding.Right - 40 - Math.Min(_context.DesiredSize.Width, 200);
-            double Width(Slot slot, bool label)
+            double Width(Control control) { control.InvalidateMeasure(); control.Measure(infinite); return control.DesiredSize.Width; }
+            void Collapse(Group group, bool collapsed)
             {
-                slot.Label.IsVisible = label;
-                slot.Button.Measure(infinite);
-                return slot.Button.DesiredSize.Width + 2;
+                group.Expanded.IsVisible = !collapsed;
+                group.Collapsed.IsVisible = collapsed;
+                group.Caption.IsVisible = !collapsed;
             }
-            var labelled = _slots.Sum(slot => Width(slot, true));
-            var showLabels = labelled <= available;
-            var used = 0.0;
-            foreach (var slot in _slots.OrderByDescending(s => s.Command.Priority))
+            var available = Bounds.Width - Padding.Left - Padding.Right - Width(_options);
+            _location.MaxWidth = 360;
+            var location = Math.Min(Width(_location), 360);
+            foreach (var group in _groups) Collapse(group, false);
+            var used = location + _groups.Sum(group => Width(group.Root));
+            foreach (var group in _groups.OrderBy(g => g.Priority))
             {
-                var width = Width(slot, showLabels);
-                var fits = used + width <= available;
-                if (fits) used += width;
-                slot.Button.IsVisible = fits;
-                slot.Overflow.IsVisible = !fits;
+                if (used <= available) break;
+                var before = Width(group.Root);
+                Collapse(group, true);
+                used -= before - Width(group.Root);
             }
-            _overflowSeparator.IsVisible = _slots.Any(slot => slot.Overflow.IsVisible);
+            if (used > available) _location.MaxWidth = Math.Max(96, location - (used - available));
         }
         finally { _arranging = false; }
     }
@@ -168,7 +292,7 @@ internal sealed class GraphBreadcrumb : StackPanel
                 Children.Add(separator);
             }
             var text = GraphUi.SingleLine(crumb.Name, "body");
-            text.MaxWidth = 220;
+            text.MaxWidth = 200;
             text.VerticalAlignment = VerticalAlignment.Center;
             var id = i == 0 ? null : crumb.Id;
             var button = GraphUi.Button(crumb.Name, () => _vm.NavigateScope(id), i == 0 ? "GraphCrumbRoot" : "GraphCrumb-" + crumb.Id);

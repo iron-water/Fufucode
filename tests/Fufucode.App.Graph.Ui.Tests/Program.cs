@@ -223,12 +223,37 @@ void NativeInteractions()
         Check(vm.MainViewport.Scale > beforeScale, "Ctrl wheel explicitly zooms viewport");
         Press(Find<Button>(page, "GraphFit"));
         Check(vm.MainViewport.Scale <= 1.25, "fit button restores visible content");
-        var toggleList = ((MenuFlyout)Find<Button>(page, "GraphMoreViews").Flyout!).Items.OfType<MenuItem>()
-            .Single(item => AutomationProperties.GetAutomationId(item) == "GraphToggleList");
-        toggleList.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); Pump();
+        var toggleList = Find<Button>(page, "GraphToggleList");
+        Press(toggleList); Pump();
         Check(vm.IsListView && !canvas.IsVisible && Find<Button>(page, "GraphModule-root").IsVisible,
             "list view provides real module names and selectable controls");
-        toggleList.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent)); Pump();
+        Press(toggleList); Pump();
+        var ribbon = page.GetVisualDescendants().OfType<GraphToolbar>().Single();
+        var bar = page.CommandBarForTesting;
+        Check(ribbon.TranslatePoint(default, page)!.Value.Y < canvas.TranslatePoint(default, page)!.Value.Y,
+            "command bar docks above the canvas by default");
+        bar.Placement = GraphCommandBarPlacement.Bottom; Pump();
+        Check(ribbon.TranslatePoint(default, page)!.Value.Y > canvas.TranslatePoint(default, page)!.Value.Y && ribbon.IsEffectivelyVisible,
+            "command bar moves below the canvas");
+        canvas.Focus(); canvas.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.F1, KeyModifiers = KeyModifiers.Control });
+        Pump();
+        var restore = Find<Button>(page, "GraphShowCommandBar");
+        Check(bar.IsHidden && !ribbon.IsEffectivelyVisible && restore.IsEffectivelyVisible, "Ctrl+F1 hides the bar and leaves a restore button");
+        Press(restore); Pump();
+        Check(!bar.IsHidden && ribbon.IsEffectivelyVisible && !restore.IsEffectivelyVisible && bar.Placement == GraphCommandBarPlacement.Bottom,
+            "restore brings the bar back at its docked edge");
+        Check(GraphCommandBarSettings.Parse(bar.Serialize()) is { Placement: GraphCommandBarPlacement.Bottom, IsHidden: false } &&
+            GraphCommandBarSettings.Parse("top-hidden").IsHidden && GraphCommandBarSettings.Parse(null).Placement == GraphCommandBarPlacement.Top,
+            "command bar placement round-trips through its preference text");
+        bar.Placement = GraphCommandBarPlacement.Top; Pump();
+        var wideWidth = window.Width;
+        window.Width = 560; Pump();
+        var collapsed = ribbon.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible &&
+            (AutomationProperties.GetAutomationId(b) ?? "").EndsWith("Collapsed")).ToArray();
+        Check(collapsed.Length > 0 && ribbon.GetVisualDescendants().OfType<Button>().Where(b => b.IsEffectivelyVisible).All(b =>
+                b.TranslatePoint(default, ribbon) is { } p && p.X + b.Bounds.Width <= ribbon.Bounds.Width + 1),
+            "narrow bar collapses groups into dropdowns and stays inside its bounds");
+        window.Width = wideWidth; Pump();
         using var mini = new GraphMiniMapView(vm);
         var miniWindow = new Window { Width = 350, Height = 300, Content = mini }; miniWindow.Show(); Pump();
         try
