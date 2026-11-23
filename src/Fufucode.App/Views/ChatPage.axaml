@@ -156,7 +156,7 @@
 
                         <!-- 文本块（含代码块分段） -->
                         <DataTemplate DataType="vm:TextBlockViewModel" x:DataType="vm:TextBlockViewModel">
-                          <ItemsControl ItemsSource="{Binding Segments}"
+                          <ItemsControl ItemsSource="{Binding Segments}" views:SmoothShrink.IsEnabled="True"
                                         Classes.absorbed="{Binding IsAbsorbed}">
                             <ItemsControl.DataTemplates>
                               <!-- 富文本：Markdown 表格、LaTeX、Mermaid、图片与 SVG 由同一个渲染器处理。 -->
@@ -203,7 +203,7 @@
 
                         <!-- 轻量可折叠思考块 -->
                         <DataTemplate DataType="vm:ThinkingBlockViewModel" x:DataType="vm:ThinkingBlockViewModel">
-                          <Border Classes="toolGroupCard thinkingBlock" Margin="0,4" Loaded="OnTransientBlockLoaded">
+                          <Border Classes="toolGroupCard thinkingBlock" Margin="0,4" Loaded="OnTransientBlockLoaded" views:SmoothShrink.IsEnabled="True">
                             <StackPanel>
                               <Button Classes="toolGroupHeader reasoningHeader" Command="{Binding ToggleExpandedCommand}"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
@@ -226,7 +226,7 @@
 
                         <!-- 工具组：连续工具调用折叠成一行；运行中显示动态状态 -->
                         <DataTemplate DataType="vm:ToolGroupViewModel" x:DataType="vm:ToolGroupViewModel">
-                          <Border Classes="toolGroupCard" Margin="0,4" Loaded="OnTransientBlockLoaded">
+                          <Border Classes="toolGroupCard" Margin="0,4" Loaded="OnTransientBlockLoaded" views:SmoothShrink.IsEnabled="True">
                             <StackPanel>
                               <Button Classes="toolGroupHeader" Click="OnToolGroupClicked"
                                       HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"

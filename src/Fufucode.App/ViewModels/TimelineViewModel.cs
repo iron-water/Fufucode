@@ -687,7 +687,8 @@ public sealed partial class TimelineViewModel : ViewModelBase, IDisposable
     private async Task ShowAwaitingAfterAsync(AssistantMessageViewModel turn,
         BackendPresentationProfile profile, CancellationToken cancellationToken)
     {
-        var delay = profile.HasSlowStartup ? 0 : profile.AwaitFirstEventGraceMs;
+        // 150ms 以内的等待人眼感知不到；即便慢启动后端也先等这一下，首事件来得快就不必出现指示器。
+        var delay = Math.Max(150, profile.HasSlowStartup ? 0 : profile.AwaitFirstEventGraceMs);
         if (delay > 0)
         {
             try { await Task.Delay(delay, cancellationToken); }

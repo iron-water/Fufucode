@@ -42,7 +42,7 @@ public static class TextSegmenter
                 // 否则闭合的一瞬间会从代码块切换成图表，产生一次跳变。
                 var openLanguage = FirstLine(afterFence);
                 if (IsRichFence(openLanguage)) AddPlain(segments, remaining[fenceStart..]);
-                else AddCode(segments, afterFence, string.Empty);
+                else AddCode(segments, OpenFenceBody(afterFence), openLanguage);
                 break;
             }
 
@@ -79,6 +79,22 @@ public static class TextSegmenter
         {
             segments.Add(new TextSegment(true, code.Trim('\r', '\n'), language));
         }
+    }
+
+    /// <summary>
+    /// 流式中尚未闭合的围栏：与闭合后保持同一形状，避免闭合瞬间代码块缩一截。
+    /// 语言行不算代码；末行若只是正在到达的闭合反引号（1–3 个）也先不显示。
+    /// </summary>
+    private static string OpenFenceBody(string afterFence)
+    {
+        var newline = afterFence.IndexOfAny(new[] { '\n', '\r' });
+        if (newline < 0) return string.Empty; // 还在输入语言名
+        var body = afterFence[(newline + 1)..];
+        var lastBreak = body.LastIndexOf('\n');
+        var lastLine = (lastBreak < 0 ? body : body[(lastBreak + 1)..]).TrimEnd('\r');
+        if (lastLine.Trim().Length > 0 && lastLine.Trim().Trim('`').Length == 0)
+            body = lastBreak < 0 ? string.Empty : body[..lastBreak];
+        return body;
     }
 
     /// <summary>这些语言由 Markdown 渲染器处理（图表等），不按代码块切分。</summary>

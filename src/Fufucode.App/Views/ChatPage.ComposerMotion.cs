@@ -21,6 +21,13 @@ public partial class ChatPage
         ComposerCard.RenderTransform = _composerOffset;
         ComposerRevealButton.RenderTransform = _composerRevealOffset;
         ComposerCard.SizeChanged += (_, _) => { UpdateComposerClearance(); UpdateComposerResponsive(); };
+        _inputMinHeight = InputBox.MinHeight;
+        InputBox.SizeChanged += OnInputSizeChanged;
+        foreach (var button in new Control[] { SendButton, StopButton, RestartButton })
+            button.PropertyChanged += (_, change) =>
+            {
+                if (change.Property == IsVisibleProperty && change.NewValue is true) MorphIn(button);
+            };
         ComposerCard.PropertyChanged += (_, change) =>
         {
             if (change.Property == IsVisibleProperty || change.Property == MarginProperty ||
@@ -72,6 +79,40 @@ public partial class ChatPage
             else FinishComposerMotion();
         }
         topLevel.RequestAnimationFrame(Frame);
+    }
+
+    private double _inputMinHeight;
+    private IDisposable? _inputHeightAnimation;
+    private bool _inputHeightHeld;
+
+    /// <summary>
+    /// 输入框变矮（发送清空、删除多行）时从原高度缓降到新高度，输入卡与时间线留白随之平滑移动，
+    /// 而不是一帧跳 24px。变高保持即时：限制增高会裁掉或滚动正在输入的文字。
+    /// </summary>
+    private void OnInputSizeChanged(object? sender, SizeChangedEventArgs e)
+    {
+        if (_inputHeightHeld || !e.HeightChanged || e.PreviousSize.Height <= 0) return;
+        var from = e.PreviousSize.Height;
+        var to = e.NewSize.Height;
+        if (to >= from - 1 || Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects || !_composerExpanded) return;
+        _inputHeightAnimation?.Dispose();
+        _inputHeightHeld = true;
+        InputBox.MinHeight = from;
+        _inputHeightAnimation = Motion.AnimateValue(from, Math.Max(to, _inputMinHeight), Motion.Base,
+            height => InputBox.MinHeight = height, () =>
+            {
+                _inputHeightHeld = false;
+                _inputHeightAnimation = null;
+                InputBox.MinHeight = _inputMinHeight;
+            }, TopLevel.GetTopLevel(this));
+    }
+
+    /// <summary>发送/停止/重发共用一个位置：新出现的按钮淡入，切换读作一次交叉淡化而不是硬切。</summary>
+    private static void MorphIn(Control button)
+    {
+        if (Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects) return;
+        _ = Motion.AnimateValue(0, 1, Motion.Base, value => button.Opacity = value,
+            () => button.Opacity = 1, TopLevel.GetTopLevel(button));
     }
 
     private void ApplyComposerProgress(double progress)

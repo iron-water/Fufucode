@@ -190,6 +190,8 @@ internal static class Program
                         ? await SelfTest.SessionRepairSelfTest.RunNativeAsync()
                         : args.Contains("--loading-ui-repair-only")
                         ? await SelfTest.LoadingUiRepairSelfTest.RunAsync(native: true)
+                        : args.Contains("--stream-smoothness-only")
+                        ? await SelfTest.NativeStreamSmoothnessSelfTest.RunAsync(window)
                         : args.Contains("--skeleton-only")
                         ? await SelfTest.NativeSkeletonSelfTest.RunAsync(window)
                         : args.Contains("--chat-icons-only")

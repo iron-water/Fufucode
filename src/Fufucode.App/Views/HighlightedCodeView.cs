@@ -95,6 +95,8 @@ public sealed class HighlightedCodeView : ContentControl
         };
         // 自带标题栏（语言名 + 换行/复制）与聊天页卡片头部重复，挂载后隐藏，
         // 复制与折叠仍由聊天页自己的卡片提供。模板若变更，最多表现为多一条标题栏。
+        // 模板一生成就隐藏（首帧测量之前）；等 Loaded 再藏会让新代码块先高出一行、下一帧再缩回。
+        _block.TemplateApplied += (_, _) => HideBuiltInHeader();
         _block.Loaded += (_, _) =>
         {
             HideBuiltInHeader(); HookInnerScroll();
@@ -116,8 +118,7 @@ public sealed class HighlightedCodeView : ContentControl
         base.OnPropertyChanged(change);
         if (change.Property == CodeProperty)
         {
-            _block.Code = change.NewValue as string ?? string.Empty;
-            ClearTokenBackgrounds();
+            ScheduleCode();
         }
         else if (change.Property == LanguageProperty)
         {
@@ -128,6 +129,34 @@ public sealed class HighlightedCodeView : ContentControl
         {
             ApplyHeight(animate: _heightAttached && !Motion.Reduced);
         }
+    }
+
+    // 流式输出时代码逐片到达；每片都整块重新做语法高亮会卡住界面。
+    // 首片与间隔足够的更新立即应用，其余合并到下一个 120ms 窗口，最终文本一定落地。
+    private static readonly TimeSpan CodeApplyInterval = TimeSpan.FromMilliseconds(120);
+    private long _lastCodeApply;
+    private bool _codeApplyPending;
+
+    private void ScheduleCode()
+    {
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_lastCodeApply);
+        if (_lastCodeApply == 0 || elapsed >= CodeApplyInterval)
+        {
+            ApplyCode();
+            return;
+        }
+        if (_codeApplyPending) return;
+        _codeApplyPending = true;
+        Avalonia.Threading.DispatcherTimer.RunOnce(ApplyCode, CodeApplyInterval - elapsed);
+    }
+
+    private void ApplyCode()
+    {
+        _codeApplyPending = false;
+        _lastCodeApply = System.Diagnostics.Stopwatch.GetTimestamp();
+        if (_block.Code == Code) return;
+        _block.Code = Code;
+        ClearTokenBackgrounds();
     }
 
     /// <summary>在收起的预览高度与完整内容高度之间做过渡。</summary>

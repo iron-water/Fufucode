@@ -141,6 +141,7 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     private bool _isComplete;
     private bool _isAwaitingFirstEvent = true;
     private bool _showAwaitingIndicator;
+    private long _awaitingShownAt;
     private string _awaitingText = "正在等待响应…";
 
     public AssistantMessageViewModel(IClipboardService clipboard)
@@ -243,7 +244,12 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
         {
             if (!SetProperty(ref _isAwaitingFirstEvent, value)) return;
             if (value) return;
-            ShowAwaitingIndicator = false;
+            // 已出现的等待指示器至少停留到最短可见时长，避免一闪而过。
+            var shown = System.Diagnostics.Stopwatch.GetElapsedTime(_awaitingShownAt).TotalMilliseconds;
+            var remaining = Presentation.MinIndicatorVisibleMs - shown;
+            if (!_showAwaitingIndicator || remaining <= 0 || _awaitingShownAt == 0) { ShowAwaitingIndicator = false; return; }
+            Avalonia.Threading.DispatcherTimer.RunOnce(() => { if (!IsAwaitingFirstEvent) ShowAwaitingIndicator = false; },
+                TimeSpan.FromMilliseconds(remaining));
         }
     }
 
@@ -251,7 +257,11 @@ public sealed class AssistantMessageViewModel : TimelineEntryViewModel
     public bool ShowAwaitingIndicator
     {
         get => _showAwaitingIndicator;
-        set => SetProperty(ref _showAwaitingIndicator, value);
+        set
+        {
+            if (SetProperty(ref _showAwaitingIndicator, value) && value)
+                _awaitingShownAt = System.Diagnostics.Stopwatch.GetTimestamp();
+        }
     }
 
     /// <summary>等待文案：慢启动后端显示具体名称，其余显示通用文案。</summary>
