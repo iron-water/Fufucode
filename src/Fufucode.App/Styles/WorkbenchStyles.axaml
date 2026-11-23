@@ -1501,6 +1501,14 @@
     <Setter Property="Padding" Value="28,26"/>
     <Setter Property="BoxShadow" Value="{DynamicResource FluentCardShadow}"/>
   </Style>
+  <!-- 加载骨架（参照 Microsoft Store）：暗色骨块 + 同步扫光，扫光由 SkeletonSurface 绘制。 -->
+  <Style Selector="Border.skeletonBone">
+    <Setter Property="Background" Value="{DynamicResource AppSkeletonBone}"/>
+    <Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/>
+  </Style>
+  <Style Selector="Border.skeletonBone.block">
+    <Setter Property="CornerRadius" Value="{DynamicResource AppCornerCard}"/>
+  </Style>
   <Style Selector="Border.startupBadge">
     <Setter Property="Width" Value="48"/>
     <Setter Property="Height" Value="48"/>

@@ -64,6 +64,9 @@
                     <StaticResource x:Key="AppPressed"            ResourceKey="SubtleFillColorTertiaryBrush"/>
                     <StaticResource x:Key="AppListHover"          ResourceKey="SubtleFillColorSecondaryBrush"/>
                     <SolidColorBrush x:Key="AppListSelected" Color="#12000000"/>
+                    <!-- 加载骨架：骨块为半透明灰，扫光为半透明白；不新增不透明底色。 -->
+                    <SolidColorBrush x:Key="AppSkeletonBone" Color="#0F000000"/>
+                    <SolidColorBrush x:Key="AppSkeletonShimmer" Color="#B3FFFFFF"/>
                     <SolidColorBrush x:Key="AppNavAccentBrush" Color="{DynamicResource SystemAccentColorDark2}"/>
                     <!-- Win11 设置侧栏面（浅色）：白底浮起。 -->
                     <SolidColorBrush x:Key="AppSettingsNavBackground" Color="#FAFAFA"/>
@@ -174,6 +177,9 @@
                     <StaticResource x:Key="AppPressed"            ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="AppListHover"          ResourceKey="AppBaseHighlight"/>
                     <StaticResource x:Key="AppListSelected"       ResourceKey="AppBaseHighlight"/>
+                    <!-- 加载骨架：骨块落在高亮档，扫光为半透明白。 -->
+                    <StaticResource x:Key="AppSkeletonBone"       ResourceKey="AppBaseHighlight"/>
+                    <SolidColorBrush x:Key="AppSkeletonShimmer" Color="#1FFFFFFF"/>
                     <SolidColorBrush x:Key="AppNavAccentBrush" Color="{DynamicResource SystemAccentColorLight2}"/>
                     <StaticResource x:Key="AppSettingsNavBackground" ResourceKey="AppBaseBar"/>
                     <SolidColorBrush x:Key="AppUserBubble" Color="{DynamicResource SystemAccentColorLight2}" Opacity="0.42"/>

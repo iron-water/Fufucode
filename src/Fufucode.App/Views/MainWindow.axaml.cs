@@ -1339,51 +1339,32 @@ public partial class MainWindow : Window, Features.Plugins.IBrowserPageFactory,
             StartupOpenOtherButton.IsVisible = false;
         }
 
+        // 进行中只显示页面骨架与顶边进度；结果与选择留给中央卡片。状态文字仍供无障碍读取。
+        _startupSkeleton ??= CreateStartupSkeleton();
+        _startupSkeleton.IsVisible = inProgress;
+        StartupCard.IsVisible = !inProgress;
+        Avalonia.Automation.AutomationProperties.SetName(_startupSkeleton, message);
         StartupOverlay.Opacity = 1;
         StartupOverlay.IsVisible = true;
-        if (inProgress) StartStartupAnimation(); else StopStartupAnimation();
+        if (inProgress) _startupSkeleton.Restart();
     }
 
-    private DispatcherTimer? _startupPulseTimer;
+    private Views.SkeletonSurface? _startupSkeleton;
+
+    private Views.SkeletonSurface CreateStartupSkeleton()
+    {
+        var skeleton = Views.WorkbenchSkeleton.Create();
+        StartupSkeletonHost.Child = skeleton;
+        return skeleton;
+    }
+
     private DispatcherTimer? _startupFadeTimer;
-
-    /// <summary>
-    /// 启动动画只做一次 900ms 的透明度呼吸，不跑逐帧布局：开销可忽略，也不会推迟会话打开。
-    /// 系统开启“减少动画”或自测模式下直接静态显示。
-    /// </summary>
-    private void StartStartupAnimation()
-    {
-        if (Program.SelfTestMode || MotionPreference.ReducedMotion) return;
-        if (StartupWordmark.Transitions is not { Count: > 0 })
-            StartupWordmark.Transitions = new Transitions
-            {
-                new DoubleTransition { Property = OpacityProperty, Duration = TimeSpan.FromMilliseconds(450), Easing = new CubicEaseOut() },
-            };
-        _startupPulseTimer ??= CreatePulseTimer();
-        StartupWordmark.Opacity = 0.55;
-        _startupPulseTimer.Start();
-    }
-
-    private DispatcherTimer CreatePulseTimer()
-    {
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(900) };
-        timer.Tick += (_, _) =>
-            StartupWordmark.Opacity = StartupWordmark.Opacity > 0.7 ? 0.55 : 1.0;
-        return timer;
-    }
-
-    private void StopStartupAnimation()
-    {
-        _startupPulseTimer?.Stop();
-        StartupWordmark.Opacity = 1;
-    }
 
     /// <summary>启动页淡出：180ms 透明度过渡期间不阻塞 UI；结束后从可视化树移除。</summary>
     private void HideStartupOverlay()
     {
         NavigationProgress.IsVisible = _navigationPending || _switching;
         if (!StartupOverlay.IsVisible) return;
-        StopStartupAnimation();
         if (Program.SelfTestMode || MotionPreference.ReducedMotion || _closed)
         {
             StartupOverlay.IsVisible = false;

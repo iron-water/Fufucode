@@ -40,6 +40,7 @@
       </StackPanel>
       <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Margin="16,0,16,16" Spacing="16">
+          <Border x:Name="UsageSkeletonHost" IsVisible="False"/>
           <ItemsControl ItemsSource="{Binding Counters}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="vm:UsageCounterViewModel">

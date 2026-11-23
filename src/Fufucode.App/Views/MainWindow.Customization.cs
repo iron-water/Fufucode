@@ -403,7 +403,7 @@ public partial class MainWindow
 
     private static readonly string[] FluentHighlightKeys =
     [
-        "AppHover", "AppPressed", "AppListHover", "AppListSelected", "AppTabSelectedBackground",
+        "AppHover", "AppPressed", "AppListHover", "AppListSelected", "AppTabSelectedBackground", "AppSkeletonBone",
         "AppSubtleBackground", "AppInnerWell", "CardBackgroundFillColorSecondaryBrush",
         "SubtleFillColorSecondaryBrush", "SubtleFillColorTertiaryBrush",
         "ListBoxItemBackgroundSelected", "ListBoxItemBackgroundSelectedPointerOver",

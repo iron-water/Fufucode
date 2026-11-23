@@ -48,6 +48,11 @@ internal sealed class GraphCanvas : Control, IDisposable
     public CornerRadius CardCorner { get => GetValue(CardCornerProperty); set => SetValue(CardCornerProperty, value); }
     public CornerRadius GroupCorner { get => GetValue(GroupCornerProperty); set => SetValue(GroupCornerProperty, value); }
     private string? _hoverId;
+    // Store-style entrance: modules that were not in the previous scene fade and rise into place.
+    private GraphScene? _lastScene;
+    private System.Collections.Generic.HashSet<string> _entering = new(StringComparer.Ordinal);
+    private double _reveal = 1;
+    private IDisposable? _revealAnimation;
     private readonly GraphWorkspaceViewModel _vm;
     private readonly bool _mini;
     private readonly GraphViewportState _viewport;
@@ -120,10 +125,42 @@ internal sealed class GraphCanvas : Control, IDisposable
     private void OnSceneChanged()
     {
         if (FocusedModuleId != null && _vm.Scene.FindBounds(FocusedModuleId) == null) FocusedModuleId = null;
+        RevealNewModules();
         FitIfNeeded();
         KeepModuleVisible();
         InvalidateVisual();
     }
+    private void RevealNewModules()
+    {
+        var scene = _vm.Scene;
+        if (ReferenceEquals(scene, _lastScene)) return;
+        var previous = _lastScene;
+        _lastScene = scene;
+        // The first scene after attaching is already where the user expects it; only later changes animate.
+        if (previous == null || Views.Motion.Reduced || Integration.MemoryProfile.DisableVisualEffects) return;
+        var before = previous.Nodes.Select(n => n.Module.Id).Concat(previous.Groups.Select(g => g.Module.Id))
+            .ToHashSet(StringComparer.Ordinal);
+        var entering = scene.Nodes.Select(n => n.Module.Id).Concat(scene.Groups.Select(g => g.Module.Id))
+            .Where(id => !before.Contains(id)).ToHashSet(StringComparer.Ordinal);
+        if (entering.Count == 0) return;
+        _revealAnimation?.Dispose();
+        _entering = entering;
+        _reveal = 0;
+        _revealAnimation = Views.Motion.AnimateValue(0, 1, Views.Motion.Slow, value => { _reveal = value; InvalidateVisual(); },
+            () => { _entering.Clear(); _revealAnimation = null; }, TopLevel.GetTopLevel(this));
+    }
+    private IDisposable? Entering(DrawingContext context, string id)
+    {
+        if (_reveal >= 1 || !_entering.Contains(id)) return null;
+        var opacity = context.PushOpacity(_reveal);
+        var rise = context.PushTransform(Matrix.CreateTranslation(0, 12 * (1 - _reveal)));
+        return new Pop(rise, opacity);
+    }
+    private sealed class Pop(IDisposable inner, IDisposable outer) : IDisposable
+    {
+        public void Dispose() { inner.Dispose(); outer.Dispose(); }
+    }
+    internal bool IsRevealingForTesting => _reveal < 1 && _entering.Count > 0;
     private void OnViewportChanged(object? sender, PropertyChangedEventArgs e)
     { FitIfNeeded(); KeepModuleVisible(); InvalidateVisual(); }
     private void FitIfNeeded() { if (!_viewport.Positioned && Bounds.Width > 0 && Bounds.Height > 0) Fit(); }
@@ -190,6 +227,7 @@ internal sealed class GraphCanvas : Control, IDisposable
             foreach (var group in _vm.Scene.Groups)
             {
                 var id = group.Module.Id;
+                using var entering = Entering(context, id);
                 var selected = _vm.SelectedModuleIds.Contains(id);
                 context.DrawRectangle(null, new Pen(Stroke, 1), new RoundedRect(group.Bounds, groupCorner));
                 // The header row is the group's hit target, so it carries hover and selection.
@@ -201,12 +239,19 @@ internal sealed class GraphCanvas : Control, IDisposable
                 Text(context, group.Module.Name, group.Bounds.TopLeft + new Vector(12, 7), nameWidth, 12, true, ink: SecondaryInk);
                 if (IsSpatialFocusMode && FocusedModuleId == id) FocusRing(context, group.Bounds, groupCorner);
             }
-            for (var i = 0; i < _vm.Scene.Edges.Count; i++) DrawEdge(context, _vm.Scene.Edges[i], i);
+            for (var i = 0; i < _vm.Scene.Edges.Count; i++)
+            {
+                var edge = _vm.Scene.Edges[i];
+                // A relation appears with whichever endpoint is new.
+                using var entering = Entering(context, _entering.Contains(edge.Relation.SourceId) ? edge.Relation.SourceId : edge.Relation.TargetId);
+                DrawEdge(context, edge, i);
+            }
             var corner = CardCorner.TopLeft;
             var dashed = new DashStyle(new[] { 4d, 3d }, 0);
             foreach (var node in _vm.Scene.Nodes)
             {
                 var id = node.Module.Id;
+                using var entering = Entering(context, id);
                 var selected = _vm.SelectedModuleIds.Contains(id);
                 var fill = selected ? SelectedSurface : _hoverId == id ? CardHover : Surface;
                 // References live outside the current scope: a dashed outline marks them as borrowed.
@@ -509,5 +554,11 @@ internal sealed class GraphCanvas : Control, IDisposable
         if (x < 24 || x > Bounds.Width - 24 || y < 24 || y > Bounds.Height - 24)
             _viewport.Pan(Bounds.Width / 2 - x, Bounds.Height / 2 - y);
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; EndPointerGesture(); Unsubscribe(); }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        _revealAnimation?.Dispose();
+        EndPointerGesture(); Unsubscribe();
+    }
 }

@@ -60,8 +60,10 @@ public partial class MainWindow
                 RefreshIsland();
             }
             // 内容宿主只保留这一段过渡；先完成停靠区恢复和正文布局，避免淡入末尾再重排。
+            // Store 式入场：新页上浮淡入；从设置返回只淡入，不叠加位移。
             UpdateLayout();
             Views.SurfaceMotion.Reset(PageHost);
+            Views.SurfaceMotion.Show(PageHost, offsetY: returning ? 0 : 16);
             await Task.Delay(180);
             RecordNavigation();
             if (returning) RestoreFocus(_settingsReturnFocus);
