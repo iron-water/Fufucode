@@ -22,7 +22,7 @@ internal static class SelfTestOptionalPlugins
             var target = Path.Combine(dataRoot, "plugins", plugin.Id);
             if (File.Exists(Path.Combine(target, "manifest.json")) &&
                 File.Exists(Path.Combine(target, plugin.Dll))) continue;
-            var dll = LocatePayload(plugin.Project, plugin.Dll);
+            var dll = LocatePayload(plugin.Id, plugin.Project, plugin.Dll);
             if (dll is null) continue;
             Directory.CreateDirectory(target);
             File.Copy(dll, Path.Combine(target, plugin.Dll), true);
@@ -34,15 +34,17 @@ internal static class SelfTestOptionalPlugins
         }
     }
 
-    private static string? LocatePayload(string project, string dllName)
+    private static string? LocatePayload(string id, string project, string dllName)
     {
+        // A published app must exercise its own plugin, not a nearby developer checkout.
+        var packaged = Path.Combine(AppContext.BaseDirectory, "plugins-dist", id, dllName);
+        if (File.Exists(packaged)) return packaged;
         var directory = new DirectoryInfo(AppContext.BaseDirectory);
         while (directory is not null)
         {
             var dev = Path.Combine(directory.FullName, "src", project, "bin", "Debug", "net10.0", dllName);
             if (File.Exists(dev)) return dev;
-            var dist = Path.Combine(directory.FullName, "out", "plugins-dist",
-                project.Replace("Fufucode.Plugins.", "workspace.").ToLowerInvariant(), dllName);
+            var dist = Path.Combine(directory.FullName, "out", "plugins-dist", id, dllName);
             if (File.Exists(dist)) return dist;
             directory = directory.Parent;
         }
