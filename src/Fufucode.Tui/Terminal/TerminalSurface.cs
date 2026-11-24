@@ -1,0 +1,171 @@
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+using System.Text;
+
+namespace Fufucode.Tui;
+
+internal sealed class TerminalSurface : IDisposable
+{
+    private readonly TerminalLayout _layout = new();
+    private readonly PasteKeys _keys = new();
+    private readonly bool _color = Environment.GetEnvironmentVariable("NO_COLOR") is null;
+    private readonly object _gate = new();
+    private TextWriter _output = Console.Out;
+    private Encoding? _encoding;
+    private WindowsModes? _modes;
+    private TerminalFrame? _previous;
+    private bool _alt, _changedCtrlC, _disposed;
+    private bool _oldCursorVisible = true;
+
+    public static bool IsSupported => !Console.IsInputRedirected && !Console.IsOutputRedirected &&
+        (OperatingSystem.IsWindows() ? WindowsModes.Attached :
+            !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase));
+
+    public TerminalSurface()
+    {
+        if (!IsSupported) throw new InvalidOperationException("TUI 需要交互式终端。");
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                _modes = new();
+                _modes.Enable();
+                _oldCursorVisible = Console.CursorVisible;
+            }
+            if (Console.OutputEncoding.CodePage != Encoding.UTF8.CodePage)
+            {
+                _encoding = Console.OutputEncoding;
+                Console.OutputEncoding = new UTF8Encoding(false);
+                _output = Console.Out;
+            }
+            if (!Console.TreatControlCAsInput)
+            {
+                Console.TreatControlCAsInput = true;
+                _changedCtrlC = true;
+            }
+            AppDomain.CurrentDomain.ProcessExit += Exit;
+            AppDomain.CurrentDomain.UnhandledException += Crash;
+            _alt = true;
+            Write("\x1b[?25s\x1b[?2004s\x1b[?1049h\x1b[?2004h\x1b[?25l");
+        }
+        catch { Dispose(); throw; }
+    }
+
+    public int ViewportRows => _previous?.ViewportRows ?? 0;
+    public int MaxScroll => _previous?.MaxScroll ?? 0;
+    public bool SizeChanged => _previous is null || (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight)) !=
+        (_previous.Width, _previous.Rows.Length);
+
+    public void Draw(TuiView view)
+    {
+        lock (_gate)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            var frame = _layout.Arrange(view, Console.WindowWidth, Console.WindowHeight);
+            var paint = Diff(_previous, frame, _color);
+            if (paint.Length > 0) Write(paint);
+            _previous = frame;
+        }
+    }
+
+    public ConsoleKeyInfo? PollKey()
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (_keys.Read() is { } queued) return queued;
+        // No blocking ReadKey on idle. Bound a marker-only or large paste read so the controller can drain model events.
+        for (var i = 0; i < 512 && Console.KeyAvailable; i++)
+        {
+            _keys.Feed(Console.ReadKey(intercept: true), Environment.TickCount64);
+            if (_keys.Read() is { } key) return key;
+        }
+        _keys.FlushExpired(Environment.TickCount64);
+        return _keys.Read();
+    }
+
+    internal static string Diff(TerminalFrame? old, TerminalFrame next, bool color)
+    {
+        var reset = old is null || old.Width != next.Width || old.Rows.Length != next.Rows.Length;
+        var paint = new StringBuilder();
+        if (reset) paint.Append("\x1b[2J");
+        for (var i = 0; i < next.Rows.Length; i++)
+        {
+            var row = next.Rows[i];
+            if (!reset && row == old!.Rows[i]) continue;
+            if (reset && row.Text.Length == 0) continue;
+            paint.Append("\x1b[").Append(i + 1).Append(";1H");
+            if (color && row.Ink != Ink.Plain) paint.Append(Color(row.Ink));
+            paint.Append(row.Text);
+            if (color && row.Ink != Ink.Plain) paint.Append("\x1b[0m");
+            if (!reset) paint.Append("\x1b[K"); // remove remnants when a line contracts
+        }
+        var paintedRows = paint.Length != 0;
+        if (!paintedRows && old!.CursorRow == next.CursorRow && old.CursorColumn == next.CursorColumn) return "";
+        if (next.CursorRow >= 0)
+            paint.Append("\x1b[").Append(next.CursorRow + 1).Append(';').Append(next.CursorColumn + 1).Append('H');
+        if (reset || (old!.CursorRow < 0) != (next.CursorRow < 0)) paint.Append(next.CursorRow >= 0 ? "\x1b[?25h" : "\x1b[?25l");
+        // One host write; terminals supporting synchronized output don't expose intermediate cursor moves.
+        return paintedRows ? "\x1b[?2026h" + paint + "\x1b[?2026l" : paint.ToString();
+    }
+
+    private static string Color(Ink ink) => ink switch
+    {
+        Ink.Header => "\x1b[1;36m", Ink.User => "\x1b[36m", Ink.Tool => "\x1b[34m", Ink.Quiet or Ink.Status => "\x1b[2m",
+        Ink.Error => "\x1b[1;31m", Ink.Approval => "\x1b[1;33m", Ink.Composer => "\x1b[1m", _ => "\x1b[0m"
+    };
+
+    private void Write(string value) { _output.Write(value); _output.Flush(); }
+    private void Exit(object? sender, EventArgs args) => Dispose();
+    private void Crash(object? sender, UnhandledExceptionEventArgs args) => Dispose();
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            AppDomain.CurrentDomain.ProcessExit -= Exit;
+            AppDomain.CurrentDomain.UnhandledException -= Crash;
+            // Each restoration is independent: a disconnected stdout must not leave input modes changed.
+            if (_alt) TryRestore(() => Write("\x1b[?2026l\x1b[0m\x1b[?2004l\x1b[?1049l" +
+                (_oldCursorVisible ? "\x1b[?25h" : "\x1b[?25l") + "\x1b[?25r\x1b[?2004r"));
+            if (_changedCtrlC) TryRestore(() => Console.TreatControlCAsInput = false);
+            if (_encoding is not null) TryRestore(() => Console.OutputEncoding = _encoding);
+            _modes?.Restore();
+        }
+    }
+
+    private static void TryRestore(Action action)
+    {
+        try { action(); }
+        catch (Exception ex) when (ex is IOException or InvalidOperationException or NotSupportedException) { }
+    }
+
+    private sealed class WindowsModes
+    {
+        private readonly nint _input = GetStdHandle(-10), _output = GetStdHandle(-11);
+        private uint _oldInput, _oldOutput;
+        private bool _saved;
+
+        internal static bool Attached => GetConsoleMode(GetStdHandle(-10), out _) && GetConsoleMode(GetStdHandle(-11), out _);
+
+        internal void Enable()
+        {
+            if (!GetConsoleMode(_input, out _oldInput) || !GetConsoleMode(_output, out _oldOutput)) throw new Win32Exception();
+            _saved = true;
+            const uint processedOutput = 1, vtOutput = 4, lineInput = 2, echoInput = 4, quickEdit = 64, extendedFlags = 128, vtInput = 512;
+            if (!SetConsoleMode(_output, _oldOutput | processedOutput | vtOutput) ||
+                !SetConsoleMode(_input, (_oldInput | extendedFlags | vtInput) & ~(lineInput | echoInput | quickEdit))) throw new Win32Exception();
+        }
+
+        internal void Restore()
+        {
+            if (!_saved) return;
+            SetConsoleMode(_input, _oldInput);
+            SetConsoleMode(_output, _oldOutput);
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern nint GetStdHandle(int handle);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool GetConsoleMode(nint handle, out uint mode);
+        [DllImport("kernel32.dll", SetLastError = true)] private static extern bool SetConsoleMode(nint handle, uint mode);
+    }
+}

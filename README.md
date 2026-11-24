@@ -11,6 +11,7 @@ Fufucode renders the session: streaming timeline, tool cards, approval gate, bui
 | `src/Fufucode.Core` | Sessions, persistence, trust, diffs, updates, plugin host, toolchain catalog | yes |
 | `src/Fufucode.App` | Avalonia UI shell | yes |
 | `src/Fufucode.Cli` | Headless CLI | yes |
+| [`src/Fufucode.Tui`](src/Fufucode.Tui/README.md) | Standalone `fufucode-tui` full-screen FUMO client; the lower-level CLI stays scriptable | yes |
 | `src/Fufucode.AutoDev` | Built-in automated development domain and execution services | yes |
 | `src/Fufucode.Plugins.*` | Backend and feature plugins (Pi, OMP, Claude, Codex, DSH, browser, computer, speech, cron, skins); legacy AutoDev compatibility UI | yes |
 | Backend plugin projects | Protocol adapters compiled by their owning plugins; check the project files before moving shared sources | yes |
