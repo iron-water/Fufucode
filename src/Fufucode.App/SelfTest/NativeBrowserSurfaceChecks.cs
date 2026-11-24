@@ -15,6 +15,47 @@ namespace Fufucode.App.SelfTest;
 /// <summary>Read the composited result, not just DOM/controller visibility. Both windows and the HTTP site belong to the fixture.</summary>
 internal static class NativeBrowserSurfaceChecks
 {
+    internal static async Task CheckReplacementAsync(BrowserView browser, Action<bool, string> check)
+    {
+        var vm = browser.ViewModel;
+        var probe = vm.CreateTab();
+        var releaseA = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var releaseB = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var seed = NativeBrowserModuleSelfTest.LoopbackSite.Start("COMMITTED", "seed");
+        using var a = NativeBrowserModuleSelfTest.LoopbackSite.Start("SUPERSEDED", "A", releaseA.Task);
+        using var b = NativeBrowserModuleSelfTest.LoopbackSite.Start("LATEST", "B", releaseB.Task);
+        void Go(string address) { vm.AddressText = address; vm.NavigateCommand.Execute(null); }
+        try
+        {
+            Go(seed.Url);
+            await UntilAsync(() => vm.DocumentTitle == "COMMITTED" && !vm.IsLoading);
+            var host = browser.HostForTesting;
+            var core = (await host.EnsureCoreAsync())!;
+            ulong first = 0, second = 0;
+            bool cancelled = false, waiting = false, endedEarly = false;
+            core.NavigationStarting += (_, e) => { if (e.Uri == a.Url) first = e.NavigationId; if (e.Uri == b.Url) second = e.NavigationId; };
+            core.NavigationCompleted += (_, e) => { if (first != 0 && first == e.NavigationId) cancelled = !e.IsSuccess; };
+            host.NavigationStateChanged += (_, e) => { if (waiting && !e.Loading) endedEarly = true; };
+            Go(a.Url);
+            await UntilAsync(() => first != 0);
+            waiting = true;
+            Go(b.Url);
+            await UntilAsync(() => second != 0 && cancelled);
+            check(!endedEarly && vm.IsLoading && vm.AddressText == b.Url, "Cancelled predecessor cannot settle a replacement or roll back its address");
+            waiting = false;
+            releaseB.TrySetResult();
+            await UntilAsync(() => vm.DocumentTitle == "LATEST" && !vm.IsLoading);
+            check(vm.AddressText == b.Url, "Replacement commits its own address and title");
+        }
+        finally { releaseA.TrySetResult(); releaseB.TrySetResult(); vm.CloseTab(probe); }
+    }
+
+    private static async Task UntilAsync(Func<bool> condition)
+    {
+        var deadline = Environment.TickCount64 + 25000;
+        while (!condition()) { if (Environment.TickCount64 > deadline) throw new TimeoutException("Navigation fixture did not settle"); await Task.Delay(30); }
+    }
+
     internal static async Task RunAsync(string root, Action<bool, string> check)
     {
         var backing = new Window { Title = "Browser layer fixture", Width = 540, Height = 500,

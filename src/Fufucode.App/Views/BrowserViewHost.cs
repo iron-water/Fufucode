@@ -201,6 +201,11 @@ public sealed class BrowserViewHost : Control, IDisposable
         _explicitNavigationId = null;
     }
 
+    private bool WaitingForExplicitStart => _explicitNavigation is not null && _explicitNavigationId is null;
+    private static bool SameAddress(string requested, string actual) => string.Equals(requested, actual, StringComparison.Ordinal) ||
+        (Uri.TryCreate(requested, UriKind.Absolute, out var a) && Uri.TryCreate(actual, UriKind.Absolute, out var b) &&
+         string.Equals(a.AbsoluteUri, b.AbsoluteUri, StringComparison.Ordinal));
+
     /// <summary>页面请求打开新窗口；视图层创建页签后把真实 CoreWebView2 交回，保留 opener 关系。</summary>
     public event EventHandler<BrowserNewWindowRequest>? NewWindowRequested;
     internal event EventHandler? WindowCloseRequested;
@@ -647,8 +652,8 @@ public sealed class BrowserViewHost : Control, IDisposable
         void OnNavigationStarting(object? _, CoreWebView2NavigationStartingEventArgs e)
         {
             _currentNavigationId = e.NavigationId;
-            if (_explicitNavigation is not null && _explicitNavigationId is null &&
-                (_explicitNavigation.Length == 0 || string.Equals(_explicitNavigation, e.Uri, StringComparison.OrdinalIgnoreCase)))
+            if (_explicitNavigation is { } requested && _explicitNavigationId is null &&
+                (requested.Length == 0 || SameAddress(requested, e.Uri)))
                 _explicitNavigationId = e.NavigationId;
             var explicitNavigation = _explicitNavigationId == e.NavigationId;
             if (_openLinksExternally && !explicitNavigation && e.IsUserInitiated &&
@@ -664,7 +669,10 @@ public sealed class BrowserViewHost : Control, IDisposable
             RaiseState(loading: true, includeSource: false);
         }
         void OnHistoryChanged(object? _, object __) => RaiseState(loading: _loading, includeSource: false);
-        void OnSourceChanged(object? _, CoreWebView2SourceChangedEventArgs __) => RaiseState(loading: _loading);
+        void OnSourceChanged(object? _, CoreWebView2SourceChangedEventArgs __)
+        {
+            if (!WaitingForExplicitStart) RaiseState(loading: _loading);
+        }
         void OnContentLoading(object? _, CoreWebView2ContentLoadingEventArgs e)
         {
             if (e.NavigationId != _currentNavigationId) return;
@@ -778,7 +786,9 @@ public sealed class BrowserViewHost : Control, IDisposable
         var stopped = e.NavigationId == _stoppedNavigationId;
         if (download) _downloadNavigationId = null;
         if (stopped) _stoppedNavigationId = null;
-        if (e.NavigationId != _currentNavigationId) return; // A replaced navigation cannot finish or fail its successor.
+        // WebView2 can finish A either before or after it raises NavigationStarting for B. In the
+        // former case A is still the current SDK ID, but the address bar already belongs to B.
+        if (e.NavigationId != _currentNavigationId || WaitingForExplicitStart) return;
         RaiseState(loading: false);
         var source = SafeSource();
         var title = _core?.DocumentTitle;

@@ -64,6 +64,8 @@ internal static class NativeBrowserModuleSelfTest
         await Until(() => !browser.ViewModel.IsLoading && browser.ViewModel.DocumentTitle == "NATIVE_MODULE_OK");
         Check(browser.HostForTesting.IsReady, "Native browser refresh keeps its document and controller");
 
+        await NativeBrowserSurfaceChecks.CheckReplacementAsync(browser, Check);
+
         // ---- 2. 多页签：两个独立 controller、独立 DOM/历史、切换不串页 ----
         var tabA = browser.ViewModel.ActiveTab;
         var tabAAddress = tabA.NavigationAddress;
