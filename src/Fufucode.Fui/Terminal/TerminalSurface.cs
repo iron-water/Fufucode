@@ -53,6 +53,8 @@ internal sealed class TerminalSurface : IDisposable
 
     public int ViewportRows => _previous?.ViewportRows ?? 0;
     public int MaxScroll => _previous?.MaxScroll ?? 0;
+    public int PickerRows => _previous?.PickerRows ?? 0;
+    public int ScrollToLine(int transcriptIndex) => _layout.ScrollToLine(transcriptIndex);
     public bool SizeChanged => _previous is null || (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight)) !=
         (_previous.Width, _previous.Rows.Length);
 
@@ -110,7 +112,9 @@ internal sealed class TerminalSurface : IDisposable
     private static string Color(Ink ink) => ink switch
     {
         Ink.Header => "\x1b[1;36m", Ink.User => "\x1b[36m", Ink.Tool => "\x1b[34m", Ink.Quiet or Ink.Status => "\x1b[2m",
-        Ink.Error => "\x1b[1;31m", Ink.Approval => "\x1b[1;33m", Ink.Composer => "\x1b[1m", _ => "\x1b[0m"
+        Ink.Error => "\x1b[1;31m", Ink.Approval => "\x1b[1;33m", Ink.Composer => "\x1b[1m",
+        Ink.PanelTitle => "\x1b[1;36m", Ink.Selection => "\x1b[7m", Ink.Heading => "\x1b[1;33m", Ink.Code => "\x1b[36m",
+        Ink.CodeFence => "\x1b[2;36m", _ => "\x1b[0m"
     };
 
     private void Write(string value) { _output.Write(value); _output.Flush(); }

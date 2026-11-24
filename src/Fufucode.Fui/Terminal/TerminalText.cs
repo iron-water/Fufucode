@@ -127,12 +127,13 @@ internal static class TerminalText
     internal static string Clip(string text, int limit, bool tail = false)
     {
         if (limit <= 0) return "";
-        if (Width(text) <= limit) return text;
         if (!tail)
         {
+            if (IndexAtColumn(text, limit) == text.Length) return text;
             var pos = IndexAtColumn(text, limit - 1);
             return text[..pos] + "…";
         }
+        if (Width(text) <= limit) return text;
         var starts = StringInfo.ParseCombiningCharacters(text);
         var end = text.Length;
         var remaining = limit - 1;

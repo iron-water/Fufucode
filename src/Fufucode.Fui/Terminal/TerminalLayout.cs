@@ -1,13 +1,21 @@
 namespace Fufucode.Fui;
 
-internal enum Ink { Plain, Header, User, Tool, Quiet, Error, Status, Approval, Composer }
+internal enum Ink { Plain, Header, User, Tool, Quiet, Error, Status, Approval, Composer, PanelTitle, Selection, Heading, Code, CodeFence }
 internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain);
-internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll);
+internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll, int PickerRows = 0);
 
 internal sealed class TerminalLayout
 {
     private readonly List<MessageBlock> _blocks = [];
     private int _columns;
+    private int _total, _bodyRows;
+
+    internal int ScrollToLine(int transcriptIndex)
+    {
+        if (_blocks.Count == 0) return 0;
+        var index = Math.Clamp(transcriptIndex, 0, _blocks.Count - 1);
+        return Math.Clamp(_total - _bodyRows - _blocks[index].First, 0, Math.Max(0, _total - _bodyRows));
+    }
 
     internal TerminalFrame Arrange(TuiView view, int width, int height)
     {
@@ -25,8 +33,9 @@ internal sealed class TerminalLayout
         var caretStart = draftLines[caretLine].Start;
         var caretCell = Math.Min(draftWidth, TerminalText.Width(draft.AsSpan(caretStart, cursor - caretStart)));
 
-        var headerRows = height >= 4 ? 1 : 0;
-        var statusRows = height >= 5 ? 1 : 0;
+        var overlay = view.Approval is null ? view.Overlay : null;
+        var headerRows = height >= (overlay is null ? 4 : 6) ? 1 : 0;
+        var statusRows = height >= (overlay is null ? 5 : 7) ? 1 : 0;
         var keepTranscript = height >= 3 ? 1 : 0;
         var approval = new List<TerminalText.Slice>();
         if (view.Approval is not null) TerminalText.Wrap(TerminalText.Clean(view.Approval), Math.Max(1, columns - 2), 0, approval);
@@ -34,9 +43,12 @@ internal sealed class TerminalLayout
         var approvalRows = Math.Min(approval.Count, Math.Min(3, approvalRoom));
         var remaining = height - headerRows - statusRows - approvalRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
-        var bodyRows = remaining - draftRows;
+        var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), Math.Min(Math.Max(1, height / 2),
+            Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0))));
+        var bodyRows = remaining - draftRows - panelRows;
 
-        var total = UpdateTranscript(view.Lines, columns);
+        var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking);
+        (_total, _bodyRows) = (total, bodyRows);
         var maxScroll = Math.Max(0, total - bodyRows);
         var scroll = Math.Clamp(view.Scroll, 0, maxScroll);
         var end = Math.Max(0, total - scroll);
@@ -59,7 +71,7 @@ internal sealed class TerminalLayout
             if (scroll > 0) label = $"↑ {scroll}  {label}";
             label = TerminalText.Clip("─ " + label + " ", columns);
             var room = columns - TerminalText.Width(label);
-            var shortcuts = view.Approval is not null ? "" : view.Busy ? " F1 帮助 · Esc 停止" : " F1 帮助 · Enter 发送";
+            var shortcuts = view.Approval is not null || overlay is not null ? "" : view.Busy ? " Ctrl+P 命令 · F1 帮助 · Esc 停止" : " Ctrl+P 命令 · F1 帮助 · Enter 发送";
             if (room < TerminalText.Width(shortcuts) + 3) shortcuts = "";
             rows[row++] = new(label + new string('─', Math.Max(0, room - TerminalText.Width(shortcuts))) + shortcuts, Ink.Status);
         }
@@ -70,6 +82,13 @@ internal sealed class TerminalLayout
             rows[row++] = new(TerminalText.Clip(text, columns), Ink.Approval);
         }
 
+        var pickerRows = 0;
+        if (overlay is not null)
+        {
+            pickerRows = PickerPanel.Paint(overlay, rows.AsSpan(row, panelRows), columns);
+            row += panelRows;
+        }
+
         var start = Math.Clamp(caretLine - draftRows + 1, 0, Math.Max(0, draftLines.Count - draftRows));
         var cursorRow = draftRows == 0 ? -1 : row + caretLine - start;
         for (var i = 0; i < draftRows; i++)
@@ -77,7 +96,7 @@ internal sealed class TerminalLayout
             var prefix = start + i == 0 ? prompt : new string(' ', prompt.Length);
             rows[row++] = new(columns == 0 ? "" : prefix + draftLines[start + i].Text, Ink.Composer);
         }
-        return new(width, rows, cursorRow, Math.Min(width - 1, prompt.Length + caretCell), bodyRows, maxScroll);
+        return new(width, rows, cursorRow, Math.Min(width - 1, prompt.Length + caretCell), bodyRows, maxScroll, pickerRows);
     }
 
     private static string Header(TuiView view, int columns)
@@ -97,7 +116,7 @@ internal sealed class TerminalLayout
         return TerminalText.Clip(title, columns);
     }
 
-    private int UpdateTranscript(IReadOnlyList<TuiLine> lines, int columns)
+    private int UpdateTranscript(IReadOnlyList<TuiLine> lines, int columns, bool expandTools, bool showThinking)
     {
         if (columns != _columns) { _blocks.Clear(); _columns = columns; }
         if (_blocks.Count > lines.Count) _blocks.RemoveRange(lines.Count, _blocks.Count - lines.Count);
@@ -106,7 +125,7 @@ internal sealed class TerminalLayout
         {
             if (_blocks.Count == i) _blocks.Add(new());
             var block = _blocks[i];
-            block.Update(lines[i], columns);
+            block.Update(lines[i], columns, expandTools, showThinking);
             block.First = row;
             row += block.Pieces.Count;
         }
@@ -119,26 +138,49 @@ internal sealed class TerminalLayout
         internal int First;
         private TuiLine? _line;
         private bool _plain;
+        private bool _hidden, _collapsed;
+        private MarkdownLines? _markdown;
         private string _label = "", _indent = "";
         private Ink _ink;
 
-        internal ScreenRow Visible(int index, int columns) => new(columns == 0 ? "" : (index == 0 ? _label : _indent) + Pieces[index].Text, _ink);
+        internal ScreenRow Visible(int index, int columns) => new(columns == 0 ? "" : (index == 0 ? _label : _indent) + Pieces[index].Text, _markdown?[index] ?? _ink);
 
-        internal void Update(TuiLine line, int columns)
+        internal void Update(TuiLine line, int columns, bool expandTools, bool showThinking)
         {
-            if (ReferenceEquals(line, _line) || (_line is not null && _line.Kind == line.Kind && ReferenceEquals(_line.Text, line.Text))) return;
+            var hidden = line.Kind == "thinking" && !showThinking;
+            var collapsed = line.Kind == "tool" && !expandTools;
+            if (hidden == _hidden && collapsed == _collapsed && (ReferenceEquals(line, _line) ||
+                (_line is not null && _line.Kind == line.Kind && ReferenceEquals(_line.Text, line.Text)))) return;
             var old = _line;
             _line = line;
+            if (_hidden != hidden || _collapsed != collapsed) _plain = false;
+            (_hidden, _collapsed) = (hidden, collapsed);
+            if (hidden) { Pieces.Clear(); return; }
             var (label, ink) = line.Kind switch
             {
                 "user" => ("你 › ", Ink.User), "assistant" => ("FUMO › ", Ink.Plain),
-                "tool" => ("工具 › ", Ink.Tool), "thinking" => ("思考 › ", Ink.Quiet),
+                "tool" => (collapsed ? "工具 ▸ " : "工具 ▾ ", Ink.Tool), "thinking" => ("思考 › ", Ink.Quiet),
                 "error" => ("错误 › ", Ink.Error), _ => ("· ", Ink.Quiet)
             };
             _ink = ink;
             _label = TerminalText.Width(label) + 2 <= columns ? label : "";
             _indent = new(' ', TerminalText.Width(_label));
             var contentWidth = Math.Max(1, columns - _indent.Length);
+            if (line.Kind == "assistant") _markdown ??= new(); else _markdown = null;
+            if (collapsed)
+            {
+                var preview = TerminalText.Clean(line.Text);
+                var newline = preview.IndexOf('\n');
+                if (newline >= 0)
+                {
+                    var visible = TerminalText.IndexAtColumn(preview.AsSpan(0, newline), Math.Max(0, contentWidth - 2));
+                    preview = preview[..visible] + " …";
+                }
+                Pieces.Clear();
+                Pieces.Add(new(0, TerminalText.Clip(preview, contentWidth)));
+                _plain = false;
+                return;
+            }
             // A token may complete the previous grapheme. Reflow the final two rows, not the whole answer.
             // A control sequence split across chunks instead needs the full sanitizer state; never emit its suffix raw.
             if (_plain && old is not null && old.Kind == line.Kind && line.Text.StartsWith(old.Text, StringComparison.Ordinal))
@@ -150,6 +192,7 @@ internal sealed class TerminalLayout
                     var start = Pieces[keep].Start;
                     Pieces.RemoveRange(keep, Pieces.Count - keep);
                     TerminalText.Wrap(line.Text, contentWidth, start, Pieces);
+                    _markdown?.Project(line.Text, Pieces, keep, rebuild: false);
                     return;
                 }
             }
@@ -157,6 +200,7 @@ internal sealed class TerminalLayout
             _plain = ReferenceEquals(clean, line.Text);
             Pieces.Clear();
             TerminalText.Wrap(clean, contentWidth, 0, Pieces);
+            _markdown?.Project(clean, Pieces, 0, rebuild: true);
         }
     }
 }

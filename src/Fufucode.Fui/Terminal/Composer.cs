@@ -15,6 +15,8 @@ internal sealed class Composer
 
     public string Text => _snapshot ??= _buffer.ToString();
     public int Cursor { get; private set; }
+    private IReadOnlyList<string>? _historyView;
+    public IReadOnlyList<string> History => _historyView ??= _history.AsReadOnly();
 
     public void Edit(ConsoleKeyInfo key)
     {
@@ -34,6 +36,9 @@ internal sealed class Composer
             case ConsoleKey.Enter when key.Modifiers != 0: Insert('\n'); return;
             case ConsoleKey.A when control: Cursor = LineStart(); return;
             case ConsoleKey.E when control: Cursor = LineEnd(); return;
+            case ConsoleKey.U when control: Remove(LineStart(), Cursor); return;
+            case ConsoleKey.K when control: Remove(Cursor, LineEnd()); return;
+            case ConsoleKey.W when control: Remove(WordLeft(), Cursor); return;
         }
 
         // Key 0 is literal paste/IME input, never a command. VT paste newlines do not submit.
@@ -56,6 +61,15 @@ internal sealed class Composer
     public void Clear()
     {
         Set("", 0);
+        _historyIndex = _history.Count;
+        _unfinished = ("", 0);
+    }
+
+    // Replacing a draft is not a submission. Never leave a caret inside a surrogate pair or combining cluster.
+    public void Replace(string text, int? cursor = null)
+    {
+        Set(text, Math.Clamp(cursor ?? text.Length, 0, text.Length));
+        Cursor = Ceiling(Cursor);
         _historyIndex = _history.Count;
         _unfinished = ("", 0);
     }
