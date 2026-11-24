@@ -1,9 +1,10 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Fufucode.Core.Security;
 
 namespace Fufucode.Fui.Tests;
 
-internal static class WorkbenchFlowTests
+internal static partial class WorkbenchFlowTests
 {
     public static async Task RunAsync()
     {
@@ -37,6 +38,7 @@ internal static class WorkbenchFlowTests
             Check(files.List("src/", default).Items.All(c => !c.Value.EndsWith(".cs")), "denied entry not offered");
             await Reject<UnauthorizedAccessException>(() => files.ComposeAsync("review", [snapshot], default));
             permissions.Update(_ => original);
+            await CheckGitPreviewAsync(project, files);
 
             using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(12));
             var s = new Session(project, "first"); var ui = new TuiController(s, cts.Token, data);
@@ -58,7 +60,7 @@ internal static class WorkbenchFlowTests
                 await Until(v => v.Session == "child"); Check(ui.View().Draft == "" && !ui.View().Status.Contains("附件"), "new session has its own context");
                 Type("/resume first"); Key(ConsoleKey.Enter); await Until(v => v.Session == "first");
                 Check(ui.View().Draft == "saved draft" && ui.View().Status.Contains("附件 1"), "switch restores unsent draft plus files");
-                Key(ConsoleKey.Enter); await Until(v => v.Draft == "");
+                Key(ConsoleKey.Enter); await Until(v => v.Draft == "" && !v.Busy);
                 Check(s.Created.Last().Sent.Single().Contains("[项目文件：src/hello world.cs]\nother fixture"), "attached file sent to correct session only");
                 Type("//unknown"); Key(ConsoleKey.Enter); await Until(_ => s.Created.Last().Sent.Count == 2);
                 Check(s.Created.Last().Sent.Last() == "/unknown", "literal slash escape");
@@ -69,11 +71,47 @@ internal static class WorkbenchFlowTests
             }
             finally { cts.Cancel(); await ui.FinishAsync(); }
             Check(s.Created.All(x => x.Disposals == 1), "all acquired sessions disposed exactly once");
+            await ApprovalOverlapAsync(project, data);
         }
-        finally { root.Delete(true); } // Only this test's fresh GUID directory.
+        finally
+        {
+            // Git marks loose objects read-only on Windows. Clear those flags only inside this fixture.
+            var objects = Path.Combine(root.FullName, "project", ".git", "objects");
+            if (OperatingSystem.IsWindows() && Directory.Exists(objects))
+                foreach (var obj in new DirectoryInfo(objects).EnumerateFiles("*", SearchOption.AllDirectories))
+                    obj.IsReadOnly = false;
+            root.Delete(true);
+        }
     }
 
     private static void Check(bool passed, string label) { if (!passed) throw new InvalidDataException(label); }
+    private static async Task CheckGitPreviewAsync(string project, ProjectFiles files)
+    {
+        async Task Git(params string[] args)
+        {
+            var start = new ProcessStartInfo("git") { WorkingDirectory = project, UseShellExecute = false, CreateNoWindow = true };
+            foreach (var arg in args) start.ArgumentList.Add(arg);
+            using var proc = Process.Start(start) ?? throw new IOException("git did not start");
+            await proc.WaitForExitAsync();
+            Check(proc.ExitCode == 0, "Git fixture " + args[0]);
+        }
+        const string file = "例 [1].txt";
+        var full = Path.Combine(project, file);
+        await Git("init", "-q");
+        await File.WriteAllTextAsync(full, "tracked\n");
+        await Git("--literal-pathspecs", "add", "--", file);
+        await Git("-c", "user.name=FUI", "-c", "user.email=fui@example.invalid", "-c", "commit.gpgsign=false",
+            "-c", "core.hooksPath=.no-hooks", "commit", "-qm", "fixture");
+        await File.WriteAllTextAsync(full, "changed\n");
+        // Use another matching path to exercise literal pathspecs as well as UTF-8 attribute output.
+        await File.WriteAllTextAsync(Path.Combine(project, "例 1.txt"), "other\n");
+        Check((await files.DiffAsync(file, default)).Contains("+changed"), "tracked literal file diff");
+        await File.WriteAllTextAsync(Path.Combine(project, ".gitattributes"), "*.txt filter=fixture\n");
+        await Git("config", "--local", "filter.fixture.required", "true");
+        await Git("config", "--local", "filter.fixture.clean", "exit 1");
+        try { await files.DiffAsync(file, default); throw new InvalidDataException("filtered diff was offered"); }
+        catch (IOException e) when (e.Message.Contains("Git 过滤器", StringComparison.Ordinal)) { }
+    }
     private static async Task Reject<T>(Func<Task> f) where T : Exception
     { try { await f(); } catch (T) { return; } throw new InvalidOperationException("Expected " + typeof(T).Name); }
 
@@ -89,11 +127,21 @@ internal static class WorkbenchFlowTests
         public IReadOnlyList<TuiLine> History => [];
         private readonly Channel<TuiEvent> _events = Channel.CreateUnbounded<TuiEvent>();
         public ChannelReader<TuiEvent> Events => _events.Reader;
-        public Task SendAsync(string text, CancellationToken ct) { Sent.Add(text); _events.Writer.TryWrite(new TuiEvent.Status("已完成", false)); return Task.CompletedTask; }
+        public void Emit(TuiEvent item) => _events.Writer.TryWrite(item);
+        public Func<CancellationToken, Task<IReadOnlyList<FuiChoice>>>? ReadChoices { get; set; }
+        public Func<Task<FuiActionResult>>? Action { get; set; }
+        public bool RejectSend { get; set; }
+        public Task SendAsync(string text, CancellationToken ct)
+        {
+            if (RejectSend) return Task.FromException(new InvalidOperationException("测试发送拒绝"));
+            Sent.Add(text);
+            Emit(new TuiEvent.Status("已完成", false));
+            return Task.CompletedTask;
+        }
         public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
         public Task RespondAsync(string id, bool allow, CancellationToken ct) => Task.CompletedTask;
-        public Task<IReadOnlyList<FuiChoice>> ChoicesAsync(string action, CancellationToken ct) => Task.FromResult<IReadOnlyList<FuiChoice>>([new("one", "one"), new("second", "second")]);
-        public Task<FuiActionResult> ExecuteAsync(string action, string argument, CancellationToken ct) => Task.FromResult(action switch
+        public Task<IReadOnlyList<FuiChoice>> ChoicesAsync(string action, CancellationToken ct) => ReadChoices?.Invoke(ct) ?? Task.FromResult<IReadOnlyList<FuiChoice>>([new("one", "one"), new("second", "second")]);
+        public Task<FuiActionResult> ExecuteAsync(string action, string argument, CancellationToken ct) => Action?.Invoke() ?? Task.FromResult(action switch
         { "new" => new(Replacement: new Session(Project, "child", Created)), "resume" => new(Replacement: new Session(Project, argument, Created)), _ => new FuiActionResult(action + "=" + argument) });
         public ValueTask DisposeAsync() { Disposals++; return ValueTask.CompletedTask; }
     }

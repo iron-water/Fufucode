@@ -48,9 +48,22 @@ internal sealed partial class TuiController
         if (_job is { } job)
         {
             if ((key.Key == ConsoleKey.Escape || ctrl && key.Key == ConsoleKey.C) && job.Cancellable)
-            { job.Lifetime.Cancel(); _mentionStart = -1; return true; }
+            { job.Lifetime.Cancel(); ClosePicker(); return true; }
             if (ctrl && key.Key == ConsoleKey.C && _busy) { Stop(); return true; }
-            if (job.Id == "send-files" || _mentionStart >= 0) return true;
+            if (job.Id == "send-files" || _mentionStart >= 0)
+            {
+                // The user can still edit a pending @ mention or file submission. An edit supersedes
+                // the read that was prepared against the old text/caret.
+                var revision = _composer.Revision;
+                var cursorBefore = _composer.Cursor;
+                _composer.Edit(key);
+                if (_composer.Revision != revision || _composer.Cursor != cursorBefore)
+                {
+                    job.Lifetime.Cancel();
+                    ClosePicker();
+                }
+                return true;
+            }
         }
         if (ctrl && key.Key is (ConsoleKey.P or ConsoleKey.R or ConsoleKey.F))
         {
@@ -109,7 +122,7 @@ internal sealed partial class TuiController
             case "skills": _composer.Replace("/" + choice.Value.TrimStart('/') + " " + _composer.Text); return;
             case "capabilities": Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail)); return;
             default:
-                if (FuiCommands.Get(action) is { } command && CanRun(command)) Run(command, choice.Value);
+                if (FuiCommands.Get(action) is { } command && CanRun(command, choice.Value)) Run(command, choice.Value);
                 return;
         }
     }

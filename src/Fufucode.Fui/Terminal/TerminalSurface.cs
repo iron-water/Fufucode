@@ -54,6 +54,7 @@ internal sealed class TerminalSurface : IDisposable
     public int ViewportRows => _previous?.ViewportRows ?? 0;
     public int MaxScroll => _previous?.MaxScroll ?? 0;
     public int PickerRows => _previous?.PickerRows ?? 0;
+    public bool CanApprove => _previous?.CanApprove == true;
     public int ScrollToLine(int transcriptIndex) => _layout.ScrollToLine(transcriptIndex);
     public bool SizeChanged => _previous is null || (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight)) !=
         (_previous.Width, _previous.Rows.Length);

@@ -16,25 +16,32 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
     private readonly Dictionary<int, StringBuilder> _deltas = [];
     private readonly List<TuiEvent.Approval> _approvals = [];
     private string? _paintedApproval, _answeredApproval;
+    private bool _canApprove, _approvalFocusChanged, _stopping;
     private string _status = "就绪";
     private bool _busy;
     private int _scroll;
-    private Task? _send, _stop, _reply;
+    private sealed record Submission(Task Acknowledged, long DraftRevision, FileAttachment[] Files);
+    private Submission? _send;
+    private Task? _stop, _reply;
     private ITuiSession _active = session;
 
     public bool Dirty { get; private set; } = true;
     public bool Exiting { get; private set; }
 
     public TuiView View() => new(_active.Project, _active.Id, _active.Model ?? "未配置模型", StatusText, _lines,
-        _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault() is { } a
-            ? $"F2 允许 · F3 拒绝\n{a.Text}" : null, _busy, Overlay(), _expandTools, _showThinking);
+        _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault()?.Text,
+        _busy, Overlay(), _expandTools, _showThinking);
 
-    public void Painted(int maxScroll)
+    public void Painted(int maxScroll, bool canApprove)
     {
         _paintedApproval = _approvals.FirstOrDefault()?.Id;
+        _canApprove = canApprove;
+        _approvalFocusChanged = false;
         _scroll = Math.Clamp(_scroll, 0, maxScroll);
         Dirty = false;
     }
+
+    public void InvalidateApprovalFrame() => _canApprove = false;
 
     public void Update()
     {
@@ -45,14 +52,20 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             switch (ev)
             {
                 case TuiEvent.Message m: Message(m); break;
-                case TuiEvent.Status s: (_status, _busy) = (s.Text, s.Busy); break;
+                case TuiEvent.Status s:
+                    (_status, _busy) = (s.Text, s.Busy);
+                    if (!s.Busy) _stopping = false;
+                    else if (_job?.Id == "send-files") _job.Lifetime.Cancel();
+                    break;
                 case TuiEvent.Approval a when !_approvals.Exists(x => x.Id == a.Id):
-                    ClosePicker();
+                    PreemptWorkbench();
+                    if (_approvals.Count == 0) _approvalFocusChanged = true;
                     _approvals.Add(a);
                     _lines.Add(new("info", a.Text)); // Full arguments stay available via scrollback.
                     _scroll = 0;
                     break;
                 case TuiEvent.ApprovalClosed a:
+                    if (_approvals.FirstOrDefault()?.Id == a.Id) _approvalFocusChanged = true;
                     _approvals.RemoveAll(x => x.Id == a.Id);
                     if (_answeredApproval == a.Id) _answeredApproval = null;
                     break;
@@ -60,10 +73,11 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         }
         foreach (var (i, delta) in _deltas) _lines[i] = _lines[i] with { Text = _lines[i].Text + delta };
         _deltas.Clear();
-        Observe(ref _send, () => { _busy = false; _status = "发送失败"; });
-        Observe(ref _stop, () => _status = "停止失败");
+        ObserveSend();
+        Observe(ref _stop, () => { _stopping = false; _status = "停止失败"; });
         Observe(ref _reply, () => _answeredApproval = null);
-        UpdateWorkbench();
+        // There may still be an approval behind a large batch of streaming events.
+        if (!_active.Events.TryPeek(out _)) UpdateWorkbench();
     }
 
     private void Message(TuiEvent.Message m)
@@ -101,6 +115,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             if (ctrl && key.Key == ConsoleKey.C) { Stop(); return; }
             // A buffered key must not approve a newly arrived or newly revealed request before it was painted.
             if (key.Modifiers == 0 && key.Key is (ConsoleKey.F2 or ConsoleKey.F3 or ConsoleKey.Escape) &&
+                !_approvalFocusChanged && !_stopping && (key.Key != ConsoleKey.F2 || _canApprove) &&
                 _paintedApproval == approval.Id && _answeredApproval != approval.Id && _reply is null)
             {
                 _answeredApproval = approval.Id;
@@ -108,6 +123,8 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             }
             return;
         }
+        // The terminal still shows the old approval until the next frame. Its Enter/Esc cannot operate the draft.
+        if (_approvalFocusChanged) return;
         if (WorkbenchKey(key, pickerRows)) return;
         if (ctrl && key.Key == ConsoleKey.C)
         {
@@ -133,16 +150,41 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         }
         if (_busy || _send is not null || _stop is not null || _job is not null) return; // Keep the next draft editable.
         if (_attachments.Count != 0) { SendWithContext(text); return; }
+        Send(text);
+    }
+
+    private void Send(string text)
+    {
         _scroll = 0;
         _busy = true;
         _status = "发送中";
-        _composer.Take();
-        _send = Invoke(() => _active.SendAsync(text, token));
+        _send = new(Invoke(() => _active.SendAsync(text, token)), _composer.Revision, [.. _attachments]);
+        ObserveSend();
+    }
+
+    private void ObserveSend()
+    {
+        if (_send is not { Acknowledged.IsCompleted: true } sent) return;
+        _send = null;
+        Dirty = true;
+        try
+        {
+            sent.Acknowledged.GetAwaiter().GetResult();
+            if (_composer.Revision == sent.DraftRevision) _composer.Take();
+            foreach (var file in sent.Files) _attachments.Remove(file);
+        }
+        catch (Exception error)
+        {
+            _busy = false;
+            _status = "发送失败";
+            Error(error.GetBaseException().Message);
+        }
     }
 
     private void Stop()
     {
-        if (!_busy || _stop is not null) return;
+        if ((!_busy && _approvals.Count == 0) || _stopping || _stop is not null) return;
+        _stopping = true;
         _status = "正在停止";
         _stop = Invoke(() => _active.StopAsync(token));
     }
@@ -170,21 +212,23 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 
     public async Task FinishAsync()
     {
-        // This controller owns the current lease, including any replacement which completed during exit.
         try
         {
-            if (_job is not null)
-            {
-                try { var result = await _job.Task; if (result.Action?.Replacement is { } fresh && !ReferenceEquals(fresh, _active)) await fresh.DisposeAsync(); }
-                catch (OperationCanceledException) when (token.IsCancellationRequested || _job.Lifetime.IsCancellationRequested) { }
-            }
-            foreach (var t in new[] { _reply, _send, _stop, _release })
-            {
-                if (t is null) continue;
-                try { await t; }
-                catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-            }
+            var finishJob = _job is { } job ? FinishJobAsync(job) : Task.CompletedTask;
+            await Task.WhenAll(new[] { finishJob, _reply, _send?.Acknowledged, _stop, _release }.OfType<Task>());
         }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
         finally { _job?.Lifetime.Dispose(); await _active.DisposeAsync(); }
+    }
+
+    private async Task FinishJobAsync(Job job)
+    {
+        if (job.Cancellable) job.Lifetime.Cancel();
+        try
+        {
+            var result = await job.Task;
+            if (result.Action?.Replacement is { } next && !ReferenceEquals(next, _active)) await next.DisposeAsync();
+        }
+        catch (OperationCanceledException) when (job.Lifetime.IsCancellationRequested) { }
     }
 }

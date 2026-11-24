@@ -2,7 +2,8 @@ namespace Fufucode.Fui;
 
 internal enum Ink { Plain, Header, User, Tool, Quiet, Error, Status, Approval, Composer, PanelTitle, Selection, Heading, Code, CodeFence }
 internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain);
-internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll, int PickerRows = 0);
+internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll,
+    int PickerRows = 0, bool CanApprove = false);
 
 internal sealed class TerminalLayout
 {
@@ -38,9 +39,11 @@ internal sealed class TerminalLayout
         var statusRows = height >= (overlay is null ? 5 : 7) ? 1 : 0;
         var keepTranscript = height >= 3 ? 1 : 0;
         var approval = new List<TerminalText.Slice>();
-        if (view.Approval is not null) TerminalText.Wrap(TerminalText.Clean(view.Approval), Math.Max(1, columns - 2), 0, approval);
+        if (view.Approval is not null) TerminalText.Wrap(TerminalText.Clean(view.Approval).Trim(), Math.Max(1, columns - 2), 0, approval);
         var approvalRoom = Math.Max(1, height - headerRows - statusRows - keepTranscript - 1);
-        var approvalRows = Math.Min(approval.Count, Math.Min(3, approvalRoom));
+        var approvalRows = view.Approval is null ? 0 : Math.Min(1 + approval.Count, Math.Min(3, approvalRoom));
+        const string allowKeys = "! F2 允许 · F3 拒绝";
+        var canApprove = approvalRows >= 2 && columns >= TerminalText.Width(allowKeys) && !string.IsNullOrWhiteSpace(approval[0].Text);
         var remaining = height - headerRows - statusRows - approvalRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
         var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), Math.Min(Math.Max(1, height / 2),
@@ -75,10 +78,12 @@ internal sealed class TerminalLayout
             if (room < TerminalText.Width(shortcuts) + 3) shortcuts = "";
             rows[row++] = new(label + new string('─', Math.Max(0, room - TerminalText.Width(shortcuts))) + shortcuts, Ink.Status);
         }
-        for (var i = 0; i < approvalRows; i++)
+        if (approvalRows > 0)
+            rows[row++] = new(TerminalText.Clip(canApprove ? allowKeys : "! F3 拒绝 · 放大窗口查看请求", columns), Ink.Approval);
+        for (var i = 0; i < approvalRows - 1; i++)
         {
-            var text = (i == 0 ? "! " : "  ") + approval[i].Text;
-            if (i + 1 == approvalRows && approval.Count > approvalRows) text = TerminalText.Clip(text, columns - 1) + "…";
+            var text = "  " + approval[i].Text;
+            if (i + 2 == approvalRows && approval.Count > i + 1) text = TerminalText.Clip(text, columns - 1) + "…";
             rows[row++] = new(TerminalText.Clip(text, columns), Ink.Approval);
         }
 
@@ -96,7 +101,7 @@ internal sealed class TerminalLayout
             var prefix = start + i == 0 ? prompt : new string(' ', prompt.Length);
             rows[row++] = new(columns == 0 ? "" : prefix + draftLines[start + i].Text, Ink.Composer);
         }
-        return new(width, rows, cursorRow, Math.Min(width - 1, prompt.Length + caretCell), bodyRows, maxScroll, pickerRows);
+        return new(width, rows, cursorRow, Math.Min(width - 1, prompt.Length + caretCell), bodyRows, maxScroll, pickerRows, canApprove);
     }
 
     private static string Header(TuiView view, int columns)

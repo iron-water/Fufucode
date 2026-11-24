@@ -30,6 +30,7 @@ internal static class Program
                 {
                     lifetime.Token.ThrowIfCancellationRequested();
                     controller.Update();
+                    if (surface.SizeChanged) controller.InvalidateApprovalFrame();
                     for (var n = 0; n < 128 && !controller.Exiting && surface.PollKey() is { } key; n++)
                         controller.Key(key, surface.ViewportRows, surface.MaxScroll, surface.PickerRows);
                     if (controller.Dirty || surface.SizeChanged)
@@ -40,7 +41,7 @@ internal static class Program
                             controller.ScrollTo(surface.ScrollToLine(target));
                             surface.Draw(controller.View());
                         }
-                        controller.Painted(surface.MaxScroll);
+                        controller.Painted(surface.MaxScroll, surface.CanApprove);
                     }
                     if (!controller.Exiting) await Task.Delay(30, lifetime.Token);
                 }

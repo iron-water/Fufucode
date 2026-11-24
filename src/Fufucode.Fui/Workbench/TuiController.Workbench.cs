@@ -18,9 +18,12 @@ internal sealed partial class TuiController
     private Task? _release;
     private sealed record Result(FuiActionResult? Action = null, IReadOnlyList<FuiChoice>? Choices = null,
         string? Title = null, FileAttachment? File = null, string? Prompt = null);
-    private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable);
+    private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable)
+    {
+        public bool PreemptedByApproval { get; set; }
+    }
     private Job? _job;
-    private string StatusText => (_job is null ? _status : FuiCommands.Get(_job.Id)?.Label ?? "读取上下文") +
+    private string StatusText => (_job is null || _approvals.Count != 0 ? _status : FuiCommands.Get(_job.Id)?.Label ?? "读取上下文") +
         (_attachments.Count == 0 ? "" : $" · 附件 {_attachments.Count}");
 
     public int? TakeScrollTarget() { var target = _scrollTarget; _scrollTarget = null; return target; }
@@ -37,6 +40,15 @@ internal sealed partial class TuiController
         Dirty = true;
     }
 
+    private void PreemptWorkbench()
+    {
+        ClosePicker();
+        _scrollTarget = null;
+        if (_job is not { } job) return;
+        job.PreemptedByApproval = true;
+        if (job.Cancellable) job.Lifetime.Cancel();
+    }
+
     private void UpdateWorkbench()
     {
         Observe(ref _release, () => { });
@@ -46,11 +58,22 @@ internal sealed partial class TuiController
         try
         {
             var result = done.Task.GetAwaiter().GetResult();
-            if (result.Action?.Replacement is { } replacement && !ReferenceEquals(replacement, _active)) SwitchTo(replacement);
+            if (result.Action?.Replacement is { } replacement && !ReferenceEquals(replacement, _active))
+            {
+                // A committed new/fork may already exist on disk. Keep the approval's session and release
+                // the unused lease, even if its approval opened and closed while the switch was running.
+                if (done.PreemptedByApproval || done.Lifetime.IsCancellationRequested)
+                {
+                    _release = Invoke(() => replacement.DisposeAsync().AsTask());
+                    _lines.Add(new("info", $"保留当前会话。可用 /resume {replacement.Id} 打开目标会话。"));
+                    return;
+                }
+                SwitchTo(replacement);
+            }
             if (done.Lifetime.IsCancellationRequested) return;
-            if (result.Choices is { } choices && _approvals.Count == 0)
+            if (result.Choices is { } choices)
                 OpenPicker(done.Id, result.Title ?? FuiCommands.Get(done.Id)?.Label ?? done.Id, choices);
-            if (result.Prompt is not null) { _attachments.Clear(); _composer.Take(); }
+            if (result.Prompt is { } prompt) Send(prompt);
             if (result.File is { } file)
             {
                 if (_attachments.Count >= ProjectFiles.MaxAttachments && !_attachments.Any(x => SamePath(x.Path, file.Path)))
@@ -65,11 +88,20 @@ internal sealed partial class TuiController
                 _mentionStart = -1;
                 Info($"已附加 {file.Path}");
             }
-            if (result.Action?.Notice is { Length: > 0 } notice) Info(notice);
+            if (result.Action?.Notice is { Length: > 0 } notice)
+            {
+                if (done.PreemptedByApproval) _lines.Add(new("info", notice));
+                else Info(notice);
+            }
             else if (result.Action?.Replacement is not null) Info(done.Id switch { "fork" => "已打开分叉会话。", "new" => "已新建会话。", _ => "已恢复会话。" });
         }
-        catch (OperationCanceledException) when (done.Lifetime.IsCancellationRequested) { _mentionStart = -1; }
-        catch (Exception ex) { _mentionStart = -1; Error(ex.GetBaseException().Message); }
+        catch (Exception) when (done.Cancellable && done.Lifetime.IsCancellationRequested) { ClosePicker(); }
+        catch (Exception ex)
+        {
+            ClosePicker();
+            if (done.PreemptedByApproval) _lines.Add(new("error", ex.GetBaseException().Message));
+            else Error(ex.GetBaseException().Message);
+        }
         finally { done.Lifetime.Dispose(); }
     }
 
@@ -80,7 +112,6 @@ internal sealed partial class TuiController
             _drafts[prior.Id] = (_composer.Text, _composer.Cursor, [.. _attachments]);
         _active = next;
         ClosePicker(); _composer.Clear(); _attachments.Clear(); _lines.Clear(); _indices.Clear(); _deltas.Clear();
-        _approvals.Clear(); _paintedApproval = _answeredApproval = null;
         if (_drafts.Remove(next.Id, out var saved)) { _composer.Replace(saved.Text, saved.Cursor); _attachments.AddRange(saved.Files); }
         _files = null; _lines.AddRange(next.History); _scroll = 0; _scrollTarget = null; _busy = false; _status = "就绪";
         _release = Invoke(() => prior.DisposeAsync().AsTask());
@@ -90,14 +121,8 @@ internal sealed partial class TuiController
 
     private void SendWithContext(string prompt)
     {
-        var attached = _attachments.ToArray(); var active = _active;
-        Begin("send-files", async ct =>
-        {
-            var full = await Files().ComposeAsync(prompt, attached, ct);
-            // The token lives through the FUMO turn, not just the file-read job's acknowledgement.
-            await active.SendAsync(full, token);
-            return new(Prompt: full);
-        });
+        var attached = _attachments.ToArray();
+        Begin("send-files", async ct => new(Prompt: await Files().ComposeAsync(prompt, attached, ct)), cancellable: true);
     }
 
     private void SubmitCommand(string text)
@@ -105,26 +130,27 @@ internal sealed partial class TuiController
         var words = text.AsSpan(1).TrimEnd();
         var sep = words.IndexOfAny(" \t\r\n");
         var id = (sep < 0 ? words : words[..sep]).ToString();
-        if (id.Length == 0) { _composer.Take(); Commands(); return; }
+        if (id.Length == 0) id = "commands";
         if (FuiCommands.Get(id) is not { } command) { Error($"未知命令 /{id}；按 Tab 补全，或用 // 发送以 / 开头的原文。"); return; }
         var argument = sep < 0 ? "" : words[(sep + 1)..].Trim().ToString();
         if (command.NeedsText && argument.Length == 0) { Error($"用法：/{command.Id} {command.Argument}"); return; }
         if (argument.Length != 0 && command.Argument.Length == 0) { Error($"/{command.Id} 不接受参数。"); return; }
-        if (!CanRun(command)) return;
+        if (!CanRun(command, argument)) return;
         _composer.Take();
         Run(command, argument);
     }
 
-    private bool CanRun(FuiCommand c)
+    private bool CanRun(FuiCommand c, string argument = "")
     {
         if (c.Id is "stop" or "quit") return true;
         if (_job is not null) { Error("上一项操作尚未结束。"); return false; }
         if (c.Kind == CommandKind.Session && _active is not IFuiWorkbenchSession) { Error("当前会话未提供此操作。"); return false; }
         if (c.Id == "steer" && !_busy) { Error("仅能向运行中的回合插话。"); return false; }
-        if (c.Id is "new" or "resume" or "fork" or "rename" or "export" or "model" or "thinking")
+        var browsing = c.Picker && argument.Length == 0 && c.Id != "fork";
+        if (!browsing && c.Id is ("new" or "resume" or "fork" or "rename" or "export" or "model" or "thinking"))
         {
             Observe(ref _release, () => { });
-            if (_busy || _send is not null || _stop is not null || _release is not null)
+            if (_busy || _send is not null || _stop is not null || _reply is not null || _release is not null)
             { Error("请在回合和上次切换结束后再执行此操作。"); return false; }
         }
         return true;
@@ -137,7 +163,8 @@ internal sealed partial class TuiController
             var backend = (IFuiWorkbenchSession)_active;
             if (c.Picker && argument.Length == 0)
                 Begin(c.Id, async ct => new(Choices: await backend.ChoicesAsync(c.Id, ct)), cancellable: true);
-            else Begin(c.Id, async ct => new(Action: await backend.ExecuteAsync(c.Id, argument, ct)));
+            else Begin(c.Id, async ct => new(Action: await backend.ExecuteAsync(c.Id, argument, ct)),
+                cancellable: c.Id == "usage" || (c.Id == "queue" && argument.Length == 0));
             return;
         }
         if (c.Kind == CommandKind.Files)

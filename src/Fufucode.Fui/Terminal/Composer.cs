@@ -15,6 +15,7 @@ internal sealed class Composer
 
     public string Text => _snapshot ??= _buffer.ToString();
     public int Cursor { get; private set; }
+    public long Revision { get; private set; }
     private IReadOnlyList<string>? _historyView;
     public IReadOnlyList<string> History => _historyView ??= _history.AsReadOnly();
 
@@ -76,6 +77,7 @@ internal sealed class Composer
 
     private void Set(string text, int cursor)
     {
+        Revision++;
         _buffer.Clear().Append(text);
         _snapshot = text;
         _boundaries = null;
@@ -101,6 +103,7 @@ internal sealed class Composer
 
     private void Changed()
     {
+        Revision++;
         _snapshot = null;
         _boundaries = null;
         _historyIndex = _history.Count;

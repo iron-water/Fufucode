@@ -74,7 +74,7 @@ internal static class WorkbenchWidgetTests
         }
         var empty = layout.Arrange(model with { Overlay = new("查找", "none", [], 10, "没有结果") }, 40, 9);
         Eq(true, empty.Rows.Any(r => r.Text.Contains("没有结果")), "empty panel message");
-        var approval = layout.Arrange(model with { Approval="F2 允许 · F3 拒绝\n真实请求" }, 60, 17);
+        var approval = layout.Arrange(model with { Approval="真实请求" }, 60, 17);
         Eq(true, approval.Rows.Any(r=>r.Ink==Ink.Approval) && approval.Rows.All(r=>r.Ink is not (Ink.PanelTitle or Ink.Selection)) && approval.PickerRows==0, "approval preempts picker");
     }
 

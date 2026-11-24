@@ -81,9 +81,18 @@ public static class DiffQuery
         }
     }
 
-    public static async Task<FileDiff> FileAsync(string projectPath, string relativePath,
+    public static Task<FileDiff> FileAsync(string projectPath, string relativePath,
         int contextLines = DefaultContextLines, int maximumLines = MaximumDiffLines,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default) =>
+        ReadFileAsync(projectPath, relativePath, contextLines, maximumLines, backgroundPreview: false, cancellationToken);
+
+    /// <summary>Preview a single literal path in the background without invoking configured clean/process filters.</summary>
+    public static Task<FileDiff> PreviewFileAsync(string projectPath, string relativePath, int maximumLines,
+        CancellationToken cancellationToken = default) =>
+        ReadFileAsync(projectPath, relativePath, DefaultContextLines, maximumLines, backgroundPreview: true, cancellationToken);
+
+    private static async Task<FileDiff> ReadFileAsync(string projectPath, string relativePath,
+        int contextLines, int maximumLines, bool backgroundPreview, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         if (contextLines < 0 || contextLines > MaximumContextLines)
@@ -98,20 +107,39 @@ public static class DiffQuery
             var full = Resolve(project, relativePath, out var display);
             if (full is null) return Failed(display, false, "path-escapes-project");
             if (HasReparsePoint(full, project)) return Failed(display, false, "reparse-point-refused");
+            var path = Path.GetRelativePath(root, full).Replace('\\', '/');
+            var options = new List<string>();
+            if (backgroundPreview)
+            {
+                options.AddRange(["--literal-pathspecs", "--no-lazy-fetch", "-c", "core.untrackedCache=false"]);
+                var attrs = await GitAsync(root, [.. options, "check-attr", "-z", "filter", "--", path], cancellationToken);
+                var values = attrs.Output.Split('\0');
+                if (attrs.Code != 0 || values.Length != 4 || values[0] != path || values[1] != "filter")
+                    return Failed(display, false, "git-attributes-unavailable");
+                if (values[2] is not ("unspecified" or "unset" or "set")) return Failed(display, false, "git-filtered-file");
+
+                // Git can apply clean/process filters to a worktree diff even with --no-ext-diff and
+                // --no-textconv. Neutralize every configured driver in the child in case attributes change.
+                var filters = await GitAsync(root, [.. options, "config", "--null", "--name-only", "--get-regexp",
+                    @"^filter\..*\.(clean|process|required)$"], cancellationToken);
+                if (filters.Code is not (0 or 1)) return Failed(display, false, "git-config-unavailable");
+                foreach (var key in filters.Output.Split('\0', StringSplitOptions.RemoveEmptyEntries).Distinct(StringComparer.Ordinal))
+                    options.AddRange(["-c", key + (key.EndsWith(".required", StringComparison.Ordinal) ? "=false" : "=")]);
+            }
             var head = await GitAsync(root, ["rev-parse", "--verify", "HEAD"], cancellationToken);
-            var tracked = await GitAsync(root, ["ls-files", "--error-unmatch", "--", Path.GetRelativePath(root, full).Replace('\\', '/')], cancellationToken);
+            var tracked = await GitAsync(root, [.. options, "ls-files", "--error-unmatch", "--", path], cancellationToken);
             if (head.Code != 0 || tracked.Code != 0)
             {
                 if (!File.Exists(full)) return new(display, null, null, false, [], null);
-                var added = await GitAsync(root, ["diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-color", $"-U{contextLines}", "--", OperatingSystem.IsWindows() ? "NUL" : "/dev/null", full], cancellationToken);
+                var added = await GitAsync(root, [.. options, "diff", "--no-index", "--no-ext-diff", "--no-textconv", "--no-color", $"-U{contextLines}", "--", OperatingSystem.IsWindows() ? "NUL" : "/dev/null", full], cancellationToken);
                 return added.Code is 0 or 1 ? Parse(display, added.Output, maximumLines) : Failed(display, false, "git-diff-failed");
             }
             var args = new List<string> { "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color",
                 $"-U{contextLines}" };
             args.Add("HEAD");
             args.Add("--");
-            args.Add(Path.GetRelativePath(root, full).Replace('\\', '/'));
-            var diff = await GitAsync(root, args, cancellationToken);
+            args.Add(path);
+            var diff = await GitAsync(root, [.. options, .. args], cancellationToken);
             if (diff.Code != 0) return Failed(display, false, "git-diff-failed");
             return Parse(display, diff.Output, maximumLines);
         }

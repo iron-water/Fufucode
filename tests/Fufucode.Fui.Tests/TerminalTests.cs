@@ -126,9 +126,12 @@ internal static class TerminalTests
         var diff = TerminalSurface.Diff(frame, next, true);
         Eq(true, diff.Contains("message-13 revised") && !diff.Contains("message-08") && !diff.Contains("\x1b[2J") && !diff.Contains("示例"), "only changed line is painted");
         Eq(true, TerminalSurface.Diff(next, layout.Arrange(view, 35, 8), true).Contains("\x1b[2J"), "resize clears stale geometry");
-        var approval = view with { Approval = "F2 允许 · F3 拒绝\n" + new string('中', 240) };
+        var approval = view with { Approval = new string('中', 240) };
         var prompt = layout.Arrange(approval, 38, 11);
         Eq(true, prompt.Rows.Any(r => r.Ink == Ink.Approval && r.Text.StartsWith("! F2")), "approval action visible");
+        Eq(true, prompt.CanApprove, "painted request details enable an explicit grant");
+        Eq(false, layout.Arrange(approval, 80, 2).CanApprove, "keys alone cannot arm a grant");
+        Eq(false, layout.Arrange(approval, 7, 20).CanApprove, "clipped action keys cannot arm a grant");
         foreach (var (w, h) in new[] { (1, 1), (2, 2), (9, 4), (38, 11), (100, 25) })
         {
             var tiny = layout.Arrange(approval with { Draft = "中\n\t👩‍💻", Cursor = 100 }, w, h);

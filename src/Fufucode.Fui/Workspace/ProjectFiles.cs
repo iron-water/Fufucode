@@ -84,7 +84,8 @@ internal sealed class ProjectFiles
     public async Task<string> DiffAsync(string path, CancellationToken ct)
     {
         var full = Resolve(path, allowDeleted: true);
-        var result = await DiffQuery.FileAsync(_root, Relative(full), maximumLines: 1000, cancellationToken: ct);
+        var result = await DiffQuery.PreviewFileAsync(_root, Relative(full), maximumLines: 1000, cancellationToken: ct);
+        if (result.Error == "git-filtered-file") throw new IOException("此路径使用 Git 过滤器，无法后台预览差异。");
         if (result.Error is { } error) throw new IOException($"无法读取 Git 差异：{error}");
         var text = new StringBuilder(result.Path);
         if (result.IsBinary == true) text.Append(" · 二进制文件");
