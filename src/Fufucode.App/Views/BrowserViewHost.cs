@@ -127,6 +127,7 @@ public sealed class BrowserViewHost : Control, IDisposable
     private System.Drawing.Rectangle? _documentBounds;
     private bool _hasPlacement;
     private bool _presented;
+    private bool _hasDocument;
     private readonly List<Action> _coreDetachers = new();
     internal Func<uint, KeyModifiers, bool>? AcceleratorHandler { get; set; }
     private bool _initializeRequested;
@@ -664,6 +665,12 @@ public sealed class BrowserViewHost : Control, IDisposable
         }
         void OnHistoryChanged(object? _, object __) => RaiseState(loading: _loading, includeSource: false);
         void OnSourceChanged(object? _, CoreWebView2SourceChangedEventArgs __) => RaiseState(loading: _loading);
+        void OnContentLoading(object? _, CoreWebView2ContentLoadingEventArgs e)
+        {
+            if (e.NavigationId != _currentNavigationId) return;
+            _hasDocument = true;
+            UpdateVisibility();
+        }
         void OnTitleChanged(object? _, object __) => DocumentTitleChanged?.Invoke(this, core.DocumentTitle);
         void OnCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e) => OnNavigationCompleted(sender, e);
         void OnNewWindow(object? sender, CoreWebView2NewWindowRequestedEventArgs e) => OnNewWindowRequested(sender, e);
@@ -682,6 +689,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         core.NavigationStarting += OnNavigationStarting;
         core.HistoryChanged += OnHistoryChanged;
         core.SourceChanged += OnSourceChanged;
+        core.ContentLoading += OnContentLoading;
         core.DocumentTitleChanged += OnTitleChanged;
         core.NavigationCompleted += OnCompleted;
         core.NewWindowRequested += OnNewWindow;
@@ -696,6 +704,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         _coreDetachers.Add(() => core.NavigationStarting -= OnNavigationStarting);
         _coreDetachers.Add(() => core.HistoryChanged -= OnHistoryChanged);
         _coreDetachers.Add(() => core.SourceChanged -= OnSourceChanged);
+        _coreDetachers.Add(() => core.ContentLoading -= OnContentLoading);
         _coreDetachers.Add(() => core.DocumentTitleChanged -= OnTitleChanged);
         _coreDetachers.Add(() => core.NavigationCompleted -= OnCompleted);
         _coreDetachers.Add(() => core.NewWindowRequested -= OnNewWindow);
@@ -1195,7 +1204,9 @@ public sealed class BrowserViewHost : Control, IDisposable
     private void UpdateVisibility()
     {
         if (_controller is null || _site is null) return;
-        var visible = !_occluded && !_contentHidden && _hasPlacement && IsEffectivelyVisible && VisualRoot is not null;
+        // A new renderer has no painted surface while waiting for its first response. Keep the
+        // Avalonia background in front of it until WebView2 has a document, not merely a controller.
+        var visible = _hasDocument && !_occluded && !_contentHidden && _hasPlacement && IsEffectivelyVisible && VisualRoot is not null;
         if (_presented == visible) return;
         try
         {
@@ -1273,7 +1284,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         _site?.Dispose();
         _site = null;
         _documentBounds = null;
-        _hasPlacement = _presented = false;
+        _hasPlacement = _presented = _hasDocument = false;
         _environment = null;
         _coreReady?.TrySetResult(null);
         _coreReady = null;

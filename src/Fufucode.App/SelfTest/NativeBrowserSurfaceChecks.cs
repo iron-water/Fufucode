@@ -43,6 +43,7 @@ internal static class NativeBrowserSurfaceChecks
             box.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
             var host = browser.HostForTesting;
             await host.EnsureCoreAsync().WaitAsync(TimeSpan.FromSeconds(25));
+            check(host.IsReady && !host.IsControllerVisibleForTesting, "Pending first document does not expose an unpainted child HWND");
             await MatchAsync(host, new Point(65, 60), Colors.MidnightBlue, "First navigation paints an opaque surface before the HTTP response", check);
             check(browser.ViewModel.AddressText == site.Url && browser.ViewModel.IsLoading, "Uncommitted startup about:blank does not replace the typed address");
             respond.TrySetResult();
