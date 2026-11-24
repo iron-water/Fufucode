@@ -94,11 +94,12 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
                 case SessionEvent.TurnSettled settled:
                     if (settled.Outcome == SessionOutcome.Failed && settled.Summary is { Length: > 0 } reason && reason != _lastError)
                         Notice("error", reason);
-                    writer.TryWrite(new TuiEvent.Status(settled.Outcome switch
+                    var queued = sender is IChatSession chat ? chat.QueuedCount : 0;
+                    writer.TryWrite(new TuiEvent.Status(queued > 0 ? $"运行中 · 排队 {queued}" : settled.Outcome switch
                     {
                         SessionOutcome.Completed => "已完成", SessionOutcome.Failed => "失败", SessionOutcome.Interrupted => "已中断",
                         SessionOutcome.Truncated => settled.Summary ?? "结果不完整", _ => settled.Summary ?? "结果未知"
-                    }, false));
+                    }, queued > 0));
                     break;
                 case SessionEvent.QueueChanged { QueuedCount: > 0 } queue:
                     writer.TryWrite(new TuiEvent.Status($"运行中 · 排队 {queue.QueuedCount}", true));

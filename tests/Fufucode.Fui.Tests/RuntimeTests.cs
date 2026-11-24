@@ -172,22 +172,22 @@ internal static class RuntimeTests
         }
     }
 
-    private static async Task Reject<T>(Func<Task> operation) where T : Exception
+    internal static async Task Reject<T>(Func<Task> operation) where T : Exception
     {
         try { await operation(); }
         catch (T) { return; }
         throw new InvalidOperationException($"expected {typeof(T).Name}");
     }
 
-    private static void Check(bool condition, string message)
+    internal static void Check(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
     }
 
-    private static Task<List<TuiEvent>> Settled(ITuiSession session, CancellationToken ct) =>
+    internal static Task<List<TuiEvent>> Settled(ITuiSession session, CancellationToken ct) =>
         Until(session, e => e is TuiEvent.Status { Busy: false }, ct);
 
-    private static async Task<List<TuiEvent>> Until(ITuiSession session, Predicate<TuiEvent> predicate, CancellationToken ct, Loopback? fixture = null)
+    internal static async Task<List<TuiEvent>> Until(ITuiSession session, Predicate<TuiEvent> predicate, CancellationToken ct, Loopback? fixture = null)
     {
         List<TuiEvent> events = [];
         while (true)
@@ -209,11 +209,11 @@ internal static class RuntimeTests
         return rows.Values;
     }
 
-    private static string Frame(object delta, string? finish = null) => "data: " + JsonSerializer.Serialize(
+    internal static string Frame(object delta, string? finish = null) => "data: " + JsonSerializer.Serialize(
         new { choices = new[] { new { index = 0, delta, finish_reason = finish } } }) + "\n\n";
 
     /// <summary>Real HTTP/SSE on an ephemeral loopback port. No paid model, HTTP.sys URL ACL, or external service.</summary>
-    private sealed class Loopback : IAsyncDisposable
+    internal sealed class Loopback : IAsyncDisposable
     {
         private sealed record Reply(string First, Task Gate, string Last);
         private readonly ConcurrentDictionary<(string Prompt, bool AfterTool), Reply> _replies = new();
@@ -222,6 +222,8 @@ internal static class RuntimeTests
         private readonly Task _server;
         public string Url { get; }
         public ConcurrentQueue<string> Requests { get; } = new();
+        public ConcurrentQueue<(string Prompt, string Model, string? Effort)> Choices { get; } = new();
+        public string Models { get; init; } = "{\"data\":[{\"id\":\"fixture-model\"}]}";
 
         public Loopback()
         {
@@ -270,7 +272,7 @@ internal static class RuntimeTests
                 Task Write(string text) => stream.WriteAsync(Encoding.UTF8.GetBytes(text), ct).AsTask();
                 if (request.StartsWith("GET /v1/models ", StringComparison.Ordinal))
                 {
-                    await Write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\n\r\n{\"data\":[{\"id\":\"fixture-model\"}]}");
+                    await Write($"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(Models)}\r\n\r\n" + Models);
                     return;
                 }
                 Check(request.StartsWith("POST /v1/chat/completions ", StringComparison.Ordinal), "unexpected fixture route");
@@ -280,6 +282,8 @@ internal static class RuntimeTests
                 var latest = messages.LastOrDefault(m => m.GetProperty("role").GetString() == "user");
                 var prompt = latest.ValueKind == JsonValueKind.Object ? latest.GetProperty("content").ToString() : "";
                 var afterTool = messages[^1].GetProperty("role").GetString() == "tool";
+                Choices.Enqueue((prompt, packet.RootElement.GetProperty("model").GetString()!,
+                    packet.RootElement.TryGetProperty("reasoning_effort", out var effort) ? effort.GetString() : null));
                 Requests.Enqueue($"{prompt[..Math.Min(40, prompt.Length)]}/{messages[^1].GetProperty("role").GetString()}");
                 if (!_replies.TryGetValue((prompt, afterTool), out var reply))
                 {

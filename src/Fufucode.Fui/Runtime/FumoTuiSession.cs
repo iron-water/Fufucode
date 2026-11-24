@@ -4,14 +4,15 @@ using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Approvals;
 using Fufucode.Core.Backend;
-using Fufucode.Core.Plugins;
 
 namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
-internal sealed class FumoTuiSession : ITuiSession
+internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
 {
     private readonly PersistentSession _session;
+    private readonly FumoProjectRuntime _project;
+    private readonly SemaphoreSlim _operations = new(1, 1);
     private readonly IExtensionUiSession _ui;
     private readonly SharedApprovalGate _approvals;
     private readonly Channel<TuiEvent> _events = Channel.CreateUnbounded<TuiEvent>(
@@ -22,10 +23,14 @@ internal sealed class FumoTuiSession : ITuiSession
     private readonly HashSet<string> _visibleApprovals = new(StringComparer.Ordinal);
     private Task? _shutdown;
     private bool _closing;
+    // Native code emits TurnSettled before releasing its worker's CTS/activity. Track a fresh submission
+    // separately so idle work can follow a settled event immediately but never races an unannounced run.
+    private volatile bool _workerPending;
 
-    private FumoTuiSession(PersistentSession session, PluginPackageManager plugins)
+    private FumoTuiSession(PersistentSession session, FumoProjectRuntime project)
     {
         _session = session;
+        _project = project;
         _ui = session.Chat as IExtensionUiSession
             ?? throw new InvalidOperationException("FUMO 会话没有原生审批入口。");
         _projection = new(_events.Writer);
@@ -35,10 +40,11 @@ internal sealed class FumoTuiSession : ITuiSession
         _approvals.Decided += OnDecision;
         _ui.ExtensionUiRequestReceived += OnNativeRequest;
         session.Chat.Event += OnSessionEvent;
-        foreach (var (id, reason) in plugins.LoadErrors)
+        foreach (var (id, reason) in project.Plugins.LoadErrors)
             _events.Writer.TryWrite(new TuiEvent.Message("plugin:" + id, "info", $"插件 {id}：{reason}"));
         if (session.Coordinator.Snapshot.LastResult == TaskResult.Interrupted)
             _events.Writer.TryWrite(new TuiEvent.Status("上次运行已中断", false));
+        project.Retain();
     }
 
     public string Project => _session.Project.Path;
@@ -54,49 +60,52 @@ internal sealed class FumoTuiSession : ITuiSession
         if (sessionId is not null && resumeLatest)
             throw new ArgumentException("--session 与 --continue 不能同时使用。");
         project = AppDataLayout.NormalizeProjectPath(project);
-        var layout = new AppDataLayout(dataRoot);
-        FileChangeJournal.Configure(layout.Root);
-        // null requests toolchain discovery; explicit empty paths disable it entirely.
-        var manager = new PersistentSessionManager("", "", layout, ompExecutablePath: "",
-            claudeExecutablePath: "", codexExecutablePath: "", dshExecutablePath: "");
-        var selected = SelectSession(manager, project, sessionId, resumeLatest);
-        var hadMessages = selected is not null && CheckPersistedHistory(layout, selected);
-        var trust = manager.GetProjectTrustStatus(project);
-        if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
-
-        var state = new PluginStateStore(layout);
-        var tools = new PluginToolRegistry(new PluginCapabilityGateway(state));
-        var plugins = new PluginPackageManager(layout, tools, state);
-        PersistentSession? opened = null;
+        var host = new FumoProjectRuntime(new AppDataLayout(dataRoot));
         try
         {
-            plugins.InitializeInstalledPlugins(project, seedDefaults: false);
-            manager.NativePluginToolProviders = () => [tools];
-            manager.NativeSystemPromptProvider = new PluginStateSystemPromptProvider(state);
-            ct.ThrowIfCancellationRequested();
-            opened = selected is null
-                ? await manager.CreateAsync(project, backend: BackendId.NativeCSharp, cancellationToken: ct)
-                : await manager.ResumeAsync(selected.Id, ct);
+            var selected = SelectSession(host.Manager, project, sessionId, resumeLatest);
+            var trust = host.Manager.GetProjectTrustStatus(project);
+            if (trust.RequiresDecision) throw new ProjectTrustDecisionRequiredException(trust);
+            host.Plugins.InitializeInstalledPlugins(project, seedDefaults: false);
+            return await OpenSelectedAsync(host, project, selected, ct);
+        }
+        finally { await host.ReleaseAsync(); }
+    }
+
+    private static async Task<FumoTuiSession> OpenSelectedAsync(FumoProjectRuntime host, string project, SessionRecord? selected, CancellationToken ct)
+    {
+        var hadMessages = selected is not null && CheckPersistedHistory(host.Manager.Layout, selected);
+        ct.ThrowIfCancellationRequested();
+        var opened = selected is null
+            ? await host.Manager.CreateAsync(project, backend: BackendId.NativeCSharp, cancellationToken: ct)
+            : await host.Manager.ResumeAsync(selected.Id, ct);
+        return await AttachAsync(host, opened, selected is null, hadMessages, ct);
+    }
+
+    private static async Task<FumoTuiSession> AttachAsync(FumoProjectRuntime host, PersistentSession opened, bool isNew, bool hadMessages, CancellationToken ct,
+        Func<Task>? configure = null)
+    {
+        try
+        {
             // PersistentSession owns the chat and lease; the separate native coordinator also owns a model catalogue.
             opened.Disposables.Add(opened.Coordinator);
-            opened.Disposables.Add(plugins);
-            if (selected is not null && (!File.Exists(opened.Session.FilePath) ||
+            if (!isNew && (!File.Exists(opened.Session.FilePath) ||
                 (hadMessages && opened.History.Entries.Count == 0)))
                 throw new InvalidDataException("FUMO 未能恢复已有历史；未打开替代会话。");
-            if (selected is null && !File.Exists(opened.Session.FilePath) && opened.Chat is IExecutionModeSession modes)
+            if (isNew && !File.Exists(opened.Session.FilePath) && opened.Chat is IExecutionModeSession modes)
             {
                 // Core normally first persists on a turn. Even a newly opened empty TUI must be resumable;
                 // ask the native serializer to persist its *existing* mode, never elect a permission mode here.
                 await modes.SetExecutionModeAsync(modes.ExecutionMode, ct);
                 if (!File.Exists(opened.Session.FilePath)) throw new IOException("未能保存新的 FUMO 会话。");
             }
+            if (configure is not null) await configure();
             ct.ThrowIfCancellationRequested();
-            return new FumoTuiSession(opened, plugins);
+            return new FumoTuiSession(opened, host);
         }
         catch
         {
-            if (opened is not null) await opened.DisposeAsync();
-            else await plugins.DisposeAsync();
+            await opened.DisposeAsync();
             throw;
         }
     }
@@ -139,7 +148,12 @@ internal sealed class FumoTuiSession : ITuiSession
         lock (_lifecycle)
         {
             ObjectDisposedException.ThrowIf(_closing, this);
-            return _session.Chat.SendAsync(text, ct);
+            if (_session.Coordinator.IsInIdleMaintenance) throw new InvalidOperationException("会话正在进行工作台操作。");
+            ct.ThrowIfCancellationRequested();
+            var prior = _workerPending;
+            _workerPending = true;
+            try { return _session.Chat.SendAsync(text, ct); }
+            catch { _workerPending = prior; throw; }
         }
     }
 
@@ -194,8 +208,11 @@ internal sealed class FumoTuiSession : ITuiSession
 
     private void OnSessionEvent(object? sender, SessionEvent ev)
     {
+        if (ev is SessionEvent.ActivityChanged { Activity: not SessionActivity.Idle } or SessionEvent.QueueChanged { QueuedCount: > 0 })
+            _workerPending = true;
         if (ev is SessionEvent.TurnSettled)
         {
+            _workerPending = _session.Chat.QueuedCount != 0;
             // Native tool cancellation and its approval waiter are independent tasks: Closed can race
             // behind TurnSettled. Invalidate the UI token before publishing the turn's terminal status.
             lock (_approvalLock)
@@ -232,6 +249,7 @@ internal sealed class FumoTuiSession : ITuiSession
     private async Task ShutdownAsync()
     {
         _closing = true;
+        await _operations.WaitAsync();
         // Losing the terminal must not remove the native approval listener while tools can still run.
         try { await _session.Chat.StopAsync(CancellationToken.None); }
         finally
@@ -245,6 +263,8 @@ internal sealed class FumoTuiSession : ITuiSession
                 _approvals.Decided -= OnDecision;
                 _approvals.Dispose();
                 _events.Writer.TryComplete();
+                try { await _project.ReleaseAsync(); }
+                finally { _operations.Release(); }
             }
         }
     }
