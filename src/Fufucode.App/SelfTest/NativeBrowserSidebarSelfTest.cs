@@ -31,6 +31,7 @@ internal static class NativeBrowserSidebarSelfTest
         Directory.CreateDirectory(evidence);
         Console.WriteLine("Sidebar evidence: " + evidence);
         main.Hide();
+        await NativeBrowserSurfaceChecks.RunAsync(root, Check);
         using var browser = new BrowserView(new BrowserBookmarkStore(root), new BrowserHistoryStore(root), new BrowserDownloadHistory(root));
         var window = new Window { Title = "Browser sidebar review", Width = 320, Height = 720, Content = browser, Topmost = true };
         try
@@ -150,10 +151,12 @@ internal static class NativeBrowserSidebarSelfTest
             Capture(window, Path.Combine(evidence, "dark-320-error-fixture.png"));
             tab.PageError = "";
             browser.RefreshNativeVisibilityForTesting();
+            browser.ViewModel.ApplyZoom(125);
             await browser.DiscardTabForTestingAsync(tab);
             await browser.ActivateTabForTestingAsync(tab);
             await Until(() => host.IsReady && !tab.IsRestoring && !tab.IsLoading);
             Check(tab.DocumentTitle == "Sidebar native fixture" && host.IsControllerVisibleForTesting, "Discarded tab restores the real document and visible HWND");
+            Check(Math.Abs(host.ZoomFactor - 1.25) < 0.01 && tab.ZoomPercent == 125, "Recreated controller and tab keep the same zoom");
             using var site = NativeBrowserModuleSelfTest.LoopbackSite.Start("CONTROL_INPUT", """
                 <input id="entry" value="old" oninput="this.dataset.trusted=event.isTrusted">
                 <input id="upload" type="file"><input id="check" type="checkbox">
@@ -220,7 +223,7 @@ internal static class NativeBrowserSidebarSelfTest
     }
 
     // 截取本测试窗口客户区；不读取桌面其它区域。包含原生子 HWND 与原生浮窗。
-    private static void Capture(Window window, string path)
+    internal static void Capture(Window window, string path)
     {
         var hwnd = window.TryGetPlatformHandle()!.Handle;
         GetClientRect(hwnd, out var rect);

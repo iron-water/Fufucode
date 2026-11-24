@@ -318,9 +318,6 @@ public sealed partial class BrowserViewModel : ViewModelBase, IDisposable
         if (ReferenceEquals(tab, ActiveTab)) OnPropertyChanged(nameof(StatusText));
     }
 
-    /// <summary>活动页签的门面属性统一重发一次，供宿主在直接改页签后刷新绑定。</summary>
-    public void RefreshFacade() => NotifyFacade();
-
     public void ApplyRuntimeProbe(BrowserRuntimeProbe probe)
     {
         RuntimeState = probe.State;
@@ -366,7 +363,7 @@ public sealed partial class BrowserViewModel : ViewModelBase, IDisposable
         }
         if (Suggestions.Count > 12) while (Suggestions.Count > 12) Suggestions.RemoveAt(Suggestions.Count - 1);
         IsSuggestionsOpen = Suggestions.Count > 0;
-        SelectedSuggestion = Suggestions.FirstOrDefault();
+        SelectedSuggestion = null; // Enter submits the typed address unless the user picks a suggestion.
     }
 
     private static bool Matches(string address, string title, string? query)
@@ -384,7 +381,7 @@ public sealed partial class BrowserViewModel : ViewModelBase, IDisposable
     {
         if (!IsSuggestionsOpen || Suggestions.Count == 0) return false;
         var current = SelectedSuggestion is null ? -1 : Suggestions.IndexOf(SelectedSuggestion);
-        var next = Math.Clamp(current + delta, 0, Suggestions.Count - 1);
+        var next = current < 0 ? (delta < 0 ? Suggestions.Count - 1 : 0) : Math.Clamp(current + delta, 0, Suggestions.Count - 1);
         SelectedSuggestion = Suggestions[next];
         return true;
     }

@@ -114,18 +114,19 @@ public sealed class BrowserNewWindowRequest
 /// <summary>
 /// 在 Avalonia 里承载 WebView2：只用 Microsoft.Web.WebView2 的 Core（CoreWebView2Controller + 父窗口 HWND），
 /// 不引入 WPF/WinForms 宿主，因此不需要改动目标框架。
-/// 已知代价：WebView2 是真实子窗口（airspace），靠 Bounds 与 IsVisible 与 Avalonia 布局对齐。
-///
-/// 父窗口归属：控件被停靠页在“主窗口 ↔ 浮动窗口”之间搬移时，视觉树会先脱离再重挂。
-/// 这里不用“回调时 VisualRoot 是否为空”判断，而是比对 controller 的实际父 HWND：
-/// 重挂后若父 HWND 变化，就用官方 controller.ParentWindow 重挂同一 controller（保留页面 DOM/历史），
-/// 只有确实悬空（未重挂且无 TopLevel）才释放。
+/// WebView2 始终挂在自己的不透明裁剪子窗内，不直接挂顶层窗口。
+/// 停靠/浮动时整体移动子窗，保留同一 controller、DOM 和历史。
 /// </summary>
 public sealed class BrowserViewHost : Control, IDisposable
 {
     private CoreWebView2Environment? _environment;
     private CoreWebView2Controller? _controller;
     private CoreWebView2? _core;
+    private BrowserNativeViewport? _site;
+    private Rect? _effectiveViewport;
+    private System.Drawing.Rectangle? _documentBounds;
+    private bool _hasPlacement;
+    private bool _presented;
     private readonly List<Action> _coreDetachers = new();
     internal Func<uint, KeyModifiers, bool>? AcceleratorHandler { get; set; }
     private bool _initializeRequested;
@@ -201,6 +202,7 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     /// <summary>页面请求打开新窗口；视图层创建页签后把真实 CoreWebView2 交回，保留 opener 关系。</summary>
     public event EventHandler<BrowserNewWindowRequest>? NewWindowRequested;
+    internal event EventHandler? WindowCloseRequested;
 
     public bool IsReady => _core is not null;
     internal bool IsDisposedForTesting => _disposed;
@@ -215,6 +217,8 @@ public sealed class BrowserViewHost : Control, IDisposable
     private string? _lastReleaseTrace;
     internal bool IsControllerVisibleForTesting => SafeControllerVisible();
     internal IntPtr ParentWindowForTesting => SafeControllerParent();
+    internal IntPtr ViewportForTesting => _site?.Handle ?? IntPtr.Zero;
+    internal IntPtr ViewportParentForTesting => _site?.Parent ?? IntPtr.Zero;
     internal IntPtr IntendedParentForTesting => _intendedParentInParent;
     internal IntPtr OwnerWindowForTesting => _ownerWindowHandle;
     internal bool IsInitializingForTesting => _initializing;
@@ -225,10 +229,16 @@ public sealed class BrowserViewHost : Control, IDisposable
         base.OnAttachedToVisualTree(e);
         _attachGeneration++;
         _attachedWindow = TopLevel.GetTopLevel(this) as Window;
+        if (_attachedWindow is not null)
+        {
+            _attachedWindow.PositionChanged += OnWindowMoved;
+            _attachedWindow.ScalingChanged += OnScalingChanged;
+        }
+        LayoutUpdated += OnLayoutUpdated;
         CaptureOwnerWindow();
         EffectiveViewportChanged -= OnEffectiveViewportChanged;
         EffectiveViewportChanged += OnEffectiveViewportChanged;
-        // 重挂到另一个窗口时，先把已有 controller 重挂到新父 HWND，再按需惰性初始化。
+        // 重挂到另一个窗口时先移动整个原生视口，再按需初始化。
         Dispatcher.UIThread.Post(SynchronizeWithParent, DispatcherPriority.Loaded);
         EnsureInitialized();
     }
@@ -237,23 +247,24 @@ public sealed class BrowserViewHost : Control, IDisposable
     {
         base.OnDetachedFromVisualTree(e);
         EffectiveViewportChanged -= OnEffectiveViewportChanged;
-        UpdateVisibility();
-        // 关键时序：浮动窗（被主窗拥有的 owned window）关闭会销毁它的子 HWND，
-        // 进而销毁 WebView 的子窗口。脱离时若根是被拥有的浮动窗，立刻把 controller 重挂到 Owner（主窗）；
-        // 停靠区内部搬移时根是无 Owner 的主窗，保持不变。之后再异步处理最终挂载/释放。
-        // 浮动窗的关闭与页面脱离在同一同步批次里，异步回调会晚于 HWND 销毁。
-        // 因此这里用挂载时捕获的窗口，立刻把 controller 重挂到它的 Owner（主窗）。
+        LayoutUpdated -= OnLayoutUpdated;
+        if (_attachedWindow is not null)
+        {
+            _attachedWindow.PositionChanged -= OnWindowMoved;
+            _attachedWindow.ScalingChanged -= OnScalingChanged;
+        }
+        _hasPlacement = false;
+        _effectiveViewport = null;
+        UpdateVisibility(); // Hide synchronously before the old top-level can be painted or destroyed.
+        // 浮动窗可能在当前同步批次销毁。先把已隐藏的视口停放到 Owner，保住 WebView 子窗。
         var ownerHandle = _attachedWindow?.Owner?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
-        if (_controller is not null)
+        if (_site is not null)
         {
             if (IsValidWindow(ownerHandle)) ReparentTo(ownerHandle);
             else if (VisualRoot is not null && IsValidWindow(_ownerWindowHandle)) ReparentTo(_ownerWindowHandle);
         }
         _attachedWindow = null;
         var generation = _attachGeneration;
-        // 同一批里可能马上挂到另一个 Window。浮动窗关闭时它的子 HWND 会随之销毁，
-        // 因此先在脱离回调里把 controller 重挂到所属主窗口（Owner），保住 DOM/历史，
-        // 之后真正挂到新停靠位时再对齐父 HWND；只有确实没有可归依窗口才释放。
         Dispatcher.UIThread.Post(() =>
         {
             if (_disposed || generation != _attachGeneration) return;
@@ -261,10 +272,9 @@ public sealed class BrowserViewHost : Control, IDisposable
             // 停靠返回不是“同批重挂”：页面会先停放在 _parkedPages，随后才挂回主窗停靠位。
             // Owner 主窗仍存活时保留 controller（DOM/历史），等下一次挂载再由 SynchronizeWithParent 归位；
             // 只有 Owner 也不可用（主窗关闭）或 controller 已失效才释放。
-            if (_controller is not null && IsValidWindow(_ownerWindowHandle))
+            if (_site is not null && IsValidWindow(_ownerWindowHandle))
             {
-                if (SafeControllerParent() != _ownerWindowHandle) ReparentTo(_ownerWindowHandle);
-                return;
+                if (IsValidWindow(_site.Handle) && ReparentTo(_ownerWindowHandle)) return;
             }
             ReleaseController();
         }, DispatcherPriority.Loaded);
@@ -283,18 +293,19 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     private bool ReparentTo(IntPtr parent)
     {
-        if (_controller is null || !IsValidWindow(parent)) return false;
-        if (SafeControllerParent() == parent) { _intendedParentInParent = parent; return true; }
+        if (_site is null || !IsValidWindow(parent)) return false;
+        if (_site.Parent == parent) { _intendedParentInParent = parent; return true; }
         try
         {
-            _controller.ParentWindow = parent;
+            _hasPlacement = false;
+            UpdateVisibility();
+            _site.Reparent(parent);
             _intendedParentInParent = parent;
             _reparentCount++;
-            UpdateBounds();
-            UpdateVisibility();
+            _controller?.NotifyParentWindowPositionChanged();
             return true;
         }
-        catch (Exception error) when (IsControllerGone(error))
+        catch (Exception error) when (IsControllerGone(error) || error is System.ComponentModel.Win32Exception)
         {
             _reparentFailureCount++;
             _lastReparentFailure = error.GetType().Name + ": " + error.Message + " hresult=0x" + (error.HResult & 0xFFFFFFFF).ToString("X8");
@@ -307,23 +318,29 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     private void OnEffectiveViewportChanged(object? sender, EffectiveViewportChangedEventArgs e)
     {
-        UpdateBounds();
-        UpdateVisibility();
-        if (_controller is not null) { SynchronizeWithParent(); return; }
-        EnsureInitialized();
+        _effectiveViewport = e.EffectiveViewport;
+        SynchronizeWithParent();
+    }
+
+    private void OnLayoutUpdated(object? sender, EventArgs e) => UpdateBounds();
+    private void OnScalingChanged(object? sender, EventArgs e) => UpdateBounds();
+    private void OnWindowMoved(object? sender, PixelPointEventArgs e)
+    {
+        try { _controller?.NotifyParentWindowPositionChanged(); }
+        catch (Exception error) when (IsControllerGone(error)) { }
     }
 
     /// <summary>
     /// 让原生 controller 的父 HWND、Bounds、可见性与当前视觉树一致：
-    /// 父窗口变化时用 controller.ParentWindow 重挂（保留 controller/DOM/历史），而不是重建。
+    /// 父窗口变化时重挂整个原生视口，而不是重建 controller。
     /// </summary>
     private void SynchronizeWithParent()
     {
         if (_disposed) return;
         var parent = TryGetParentWindow();
         if (parent == IntPtr.Zero) return;
-        if (_controller is null) { EnsureInitialized(); return; }
-        if (SafeControllerParent() != parent && !ReparentTo(parent))
+        if (_site is null) { EnsureInitialized(); return; }
+        if (_site.Parent != parent && !ReparentTo(parent))
         {
             // 重挂失败只在确实无法复用 controller 时释放，交给下一次挂载重建。
             ReleaseController();
@@ -331,7 +348,7 @@ public sealed class BrowserViewHost : Control, IDisposable
             return;
         }
         UpdateBounds();
-        UpdateVisibility();
+        EnsureInitialized();
     }
 
     /// <summary>惰性初始化：只有真正可见且有尺寸时才创建 WebView2，无头自测因此完全不触碰运行时。</summary>
@@ -355,10 +372,10 @@ public sealed class BrowserViewHost : Control, IDisposable
         _initializeRequested = true;
         _initializing = true;
         var token = ++_lifecycleToken;
-        _ = InitializeAsync(token, parent);
+        _ = InitializeAsync(token);
     }
 
-    private async Task InitializeAsync(int token, IntPtr parent)
+    private async Task InitializeAsync(int token)
     {
         try
         {
@@ -375,14 +392,19 @@ public sealed class BrowserViewHost : Control, IDisposable
             if (_occluded || _discarded) { DeferInitialization(); return; }
             _environment = environment;
 
-            var controller = await environment.CreateCoreWebView2ControllerAsync(parent);
+            // The dock may have moved while the environment was starting. Never create against a stale top-level.
+            var parent = TryGetParentWindow();
+            if (parent == IntPtr.Zero) { DeferInitialization(); return; }
+            _site ??= new BrowserNativeViewport(parent);
+            var controller = await environment.CreateCoreWebView2ControllerAsync(_site.Handle);
             if (Abandon(token)) { controller.Close(); return; }
             if (_occluded || _discarded) { controller.Close(); DeferInitialization(); return; }
-            if (this.TryFindResource("AppWindowBackground", out var background) && background is Avalonia.Media.ISolidColorBrush brush)
-                controller.DefaultBackgroundColor = System.Drawing.Color.FromArgb(brush.Color.A, brush.Color.R, brush.Color.G, brush.Color.B);
             _controller = controller;
+            controller.IsVisible = false;
+            if (this.TryFindResource("AppWindowBackground", ActualThemeVariant, out var background) && background is Avalonia.Media.ISolidColorBrush brush)
+                controller.DefaultBackgroundColor = System.Drawing.Color.FromArgb(brush.Color.R, brush.Color.G, brush.Color.B);
             controller.AcceleratorKeyPressed += OnAcceleratorKeyPressed;
-            _intendedParentInParent = SafeControllerParent();
+            _intendedParentInParent = _site.Parent;
             _controllerCreateCount++;
             _core = controller.CoreWebView2;
             WireCore(_core);
@@ -391,7 +413,7 @@ public sealed class BrowserViewHost : Control, IDisposable
             _ = LoadExtensionsAsync(folder);
             ApplyMemoryUsageTarget();
 
-            // 创建期间父窗口可能已经换了（同一批跨窗搬移）：这里再对齐一次，改动的是同一 controller。
+            // 创建期间可能已跨窗搬移；同步原生视口后再消费待发导航。
             SynchronizeWithParent();
             // 创建前的早期缩放必须进入真实 controller。
             if (_pendingZoomPercent is { } earlyZoom) controller.ZoomFactor = earlyZoom / 100.0;
@@ -406,7 +428,6 @@ public sealed class BrowserViewHost : Control, IDisposable
             }
             else
             {
-                RaiseState(loading: false);
                 switch (_pendingNavigation)
                 {
                     case (true, var document):
@@ -419,10 +440,7 @@ public sealed class BrowserViewHost : Control, IDisposable
                         BeginExplicitNavigation(address);
                         _core.Navigate(address);
                         break;
-                    default:
-                        BeginExplicitNavigation("about:blank");
-                        _core.Navigate("about:blank");
-                        break;
+                    // A controller requested for NewWindow must not navigate before WebView2 takes it over.
                 }
             }
         }
@@ -499,7 +517,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         {
             try { if (core.IsSuspended) core.Resume(); } catch (Exception e) when (IsControllerGone(e)) { }
         }
-        UpdateVisibility();
+        UpdateBounds();
         EnsureInitialized();
     }
 
@@ -642,13 +660,18 @@ public sealed class BrowserViewHost : Control, IDisposable
                 Dispatcher.UIThread.Post(() => OpenExternallyRequested?.Invoke(this, externalAddress));
                 return;
             }
-            RaiseState(loading: true);
+            RaiseState(loading: true, includeSource: false);
         }
-        void OnHistoryChanged(object? _, object __) => RaiseState(loading: _loading);
+        void OnHistoryChanged(object? _, object __) => RaiseState(loading: _loading, includeSource: false);
         void OnSourceChanged(object? _, CoreWebView2SourceChangedEventArgs __) => RaiseState(loading: _loading);
         void OnTitleChanged(object? _, object __) => DocumentTitleChanged?.Invoke(this, core.DocumentTitle);
         void OnCompleted(object? sender, CoreWebView2NavigationCompletedEventArgs e) => OnNavigationCompleted(sender, e);
         void OnNewWindow(object? sender, CoreWebView2NewWindowRequestedEventArgs e) => OnNewWindowRequested(sender, e);
+        void OnWindowClose(object? _, object __) => Dispatcher.UIThread.Post(() =>
+        {
+            // Close only after leaving the SDK callback, and never close a replacement controller.
+            if (ReferenceEquals(core, _core)) WindowCloseRequested?.Invoke(this, EventArgs.Empty);
+        });
         void OnDownload(object? sender, CoreWebView2DownloadStartingEventArgs e) => OnDownloadStarting(sender, e);
         void OnContextMenu(object? sender, CoreWebView2ContextMenuRequestedEventArgs e) => OnContextMenuRequested(e);
         void OnPermission(object? sender, CoreWebView2PermissionRequestedEventArgs e) => OnPermissionRequested(e);
@@ -662,6 +685,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         core.DocumentTitleChanged += OnTitleChanged;
         core.NavigationCompleted += OnCompleted;
         core.NewWindowRequested += OnNewWindow;
+        core.WindowCloseRequested += OnWindowClose;
         core.DownloadStarting += OnDownload;
         core.ContextMenuRequested += OnContextMenu;
         core.PermissionRequested += OnPermission;
@@ -675,6 +699,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         _coreDetachers.Add(() => core.DocumentTitleChanged -= OnTitleChanged);
         _coreDetachers.Add(() => core.NavigationCompleted -= OnCompleted);
         _coreDetachers.Add(() => core.NewWindowRequested -= OnNewWindow);
+        _coreDetachers.Add(() => core.WindowCloseRequested -= OnWindowClose);
         _coreDetachers.Add(() => core.DownloadStarting -= OnDownload);
         _coreDetachers.Add(() => core.ContextMenuRequested -= OnContextMenu);
         _coreDetachers.Add(() => core.PermissionRequested -= OnPermission);
@@ -740,14 +765,15 @@ public sealed class BrowserViewHost : Control, IDisposable
             _explicitNavigation = null;
             _explicitNavigationId = null;
         }
-        RaiseState(loading: false);
-        var source = SafeSource();
-        var title = _core?.DocumentTitle;
-        NavigationCompleted?.Invoke(this, new BrowserHostNavigationCompleted(e.IsSuccess, source, title));
         var download = e.NavigationId == _downloadNavigationId;
         var stopped = e.NavigationId == _stoppedNavigationId;
         if (download) _downloadNavigationId = null;
         if (stopped) _stoppedNavigationId = null;
+        if (e.NavigationId != _currentNavigationId) return; // A replaced navigation cannot finish or fail its successor.
+        RaiseState(loading: false);
+        var source = SafeSource();
+        var title = _core?.DocumentTitle;
+        NavigationCompleted?.Invoke(this, new BrowserHostNavigationCompleted(e.IsSuccess, source, title));
         // SDK 对转入附件下载、Stop 和替换导航都报告 ConnectionAborted；下载事件可能晚于完成事件。
         // 保留 NavigationCompleted.IsSuccess=false，但取消不显示成页面故障。
         var aborted = e.WebErrorStatus == CoreWebView2WebErrorStatus.ConnectionAborted;
@@ -1098,12 +1124,12 @@ public sealed class BrowserViewHost : Control, IDisposable
     /// <summary>按百分比设置缩放；未就绪时先记住，初始化完成后写入真实 controller。</summary>
     public void SetZoomPercent(double percent)
     {
+        _pendingZoomPercent = percent; // 休眠释放 controller 后，重建的页面也要沿用页签显示的比例。
         if (_controller is { } controller)
         {
-            try { controller.ZoomFactor = percent / 100.0; return; }
+            try { controller.ZoomFactor = percent / 100.0; }
             catch (Exception e) when (IsControllerGone(e)) { }
         }
-        _pendingZoomPercent = percent;
     }
 
     internal async Task<string?> ExecuteScriptForTestingAsync(string script)
@@ -1134,11 +1160,11 @@ public sealed class BrowserViewHost : Control, IDisposable
     private static bool IsControllerGone(Exception error) =>
         error is COMException or InvalidOperationException or ObjectDisposedException or SEHException;
 
-    private void RaiseState(bool loading)
+    private void RaiseState(bool loading, bool includeSource = true)
     {
         _loading = loading;
         NavigationStateChanged?.Invoke(this, new BrowserHostNavigationState(
-            SafeCanGoBack(), SafeCanGoForward(), loading, SafeSource()));
+            SafeCanGoBack(), SafeCanGoForward(), loading, includeSource ? SafeSource() : null));
     }
 
     private bool SafeCanGoBack() { try { return _core?.CanGoBack ?? false; } catch (Exception e) when (IsControllerGone(e)) { return false; } }
@@ -1147,25 +1173,37 @@ public sealed class BrowserViewHost : Control, IDisposable
 
     public void UpdateBounds()
     {
-        if (_controller is null) return;
-        var topLevel = VisualRoot as TopLevel ?? TopLevel.GetTopLevel(this);
-        if (topLevel is null) return;
-        var origin = Avalonia.VisualExtensions.TranslatePoint(this, default, topLevel);
-        if (origin is null) return;
-        var scaling = topLevel.RenderScaling;
-        var x = (int)Math.Round(origin.Value.X * scaling);
-        var y = (int)Math.Round(origin.Value.Y * scaling);
-        var width = (int)Math.Max(0, Math.Round(Bounds.Width * scaling));
-        var height = (int)Math.Max(0, Math.Round(Bounds.Height * scaling));
-        try { _controller.Bounds = new System.Drawing.Rectangle(x, y, width, height); }
-        catch (Exception error) when (IsControllerGone(error)) { }
+        if (_controller is null || _site is null || _occluded) return;
+        var placed = false;
+        if (_attachedWindow is { } window && _effectiveViewport is { } viewport &&
+            this.TranslatePoint(default, window) is { } origin &&
+            BrowserNativeViewport.PlaceIn(new Rect(origin, Bounds.Size), viewport, window.ClientSize, window.RenderScaling) is { } bounds)
+        {
+            try
+            {
+                if (_site.Place(bounds.Site)) _controller.NotifyParentWindowPositionChanged();
+                if (_documentBounds != bounds.Document) _controller.Bounds = bounds.Document;
+                _documentBounds = bounds.Document;
+                placed = true;
+            }
+            catch (Exception error) when (IsControllerGone(error) || error is System.ComponentModel.Win32Exception) { }
+        }
+        _hasPlacement = placed;
+        UpdateVisibility();
     }
 
     private void UpdateVisibility()
     {
-        if (_controller is null) return;
-        var visible = !_occluded && !_contentHidden && IsEffectivelyVisible && Bounds.Width > 0 && Bounds.Height > 0 && VisualRoot is not null;
-        try { _controller.IsVisible = visible; }
+        if (_controller is null || _site is null) return;
+        var visible = !_occluded && !_contentHidden && _hasPlacement && IsEffectivelyVisible && VisualRoot is not null;
+        if (_presented == visible) return;
+        try
+        {
+            if (!visible) _site.SetVisible(false);
+            _controller.IsVisible = visible;
+            if (visible) _site.SetVisible(true);
+            _presented = visible;
+        }
         catch (Exception error) when (IsControllerGone(error)) { }
         ApplyMemoryUsageTarget();
     }
@@ -1232,6 +1270,10 @@ public sealed class BrowserViewHost : Control, IDisposable
         try { if (_controller is { } controller) { controller.AcceleratorKeyPressed -= OnAcceleratorKeyPressed; controller.Close(); } }
         catch (Exception error) when (IsControllerGone(error)) { }
         _controller = null;
+        _site?.Dispose();
+        _site = null;
+        _documentBounds = null;
+        _hasPlacement = _presented = false;
         _environment = null;
         _coreReady?.TrySetResult(null);
         _coreReady = null;
@@ -1252,7 +1294,8 @@ public sealed class BrowserViewHost : Control, IDisposable
     {
         if (_occluded == value) return;
         _occluded = value;
-        UpdateVisibility();
+        if (value) UpdateVisibility();
+        else UpdateBounds();
         ApplyMemoryUsageTarget();
     }
 
@@ -1299,6 +1342,7 @@ public sealed class BrowserViewHost : Control, IDisposable
         FaviconChanged = null;
         AudioStateChanged = null;
         NewWindowRequested = null;
+        WindowCloseRequested = null;
         ContextMenuActionRequested = null;
         DownloadRequested = null;
         DownloadProgressChanged = null;

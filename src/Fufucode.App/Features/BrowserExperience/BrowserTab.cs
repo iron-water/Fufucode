@@ -236,7 +236,8 @@ public sealed partial class BrowserTab : ObservableObject
         if (loading) StatusText = "正在加载…";
         if (source is { Length: > 0 })
         {
-            NavigationAddress = source == "about:blank" ? null : source;
+            // 没有访问过的页签才是空页；已提交的 about:blank 可能是有内容的弹窗文档。
+            NavigationAddress = IsFileMode && source == "about:blank" ? null : source;
             // 用户改过地址栏且未提交时保留草稿，不被后台导航回写覆盖。
             if (Mode == BrowserSurfaceMode.Free && !_addressDirty) SetAddressFromNavigation(source);
             ApplySecurityFromAddress(Mode == BrowserSurfaceMode.Free ? source : null);

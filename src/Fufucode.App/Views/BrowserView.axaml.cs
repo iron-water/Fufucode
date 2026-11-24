@@ -925,6 +925,7 @@ public partial class BrowserView : UserControl, IDisposable
         host.RuntimeProbeCompleted += (_, probe) => _viewModel.ApplyRuntimeProbe(probe);
         // 页面弹出新窗口 → 新页签接管同一个 CoreWebView2，保留 opener/postMessage/OAuth 弹窗关系。
         host.NewWindowRequested += (_, request) => _ = HandleNewWindowAsync(request);
+        host.WindowCloseRequested += (_, _) => _viewModel.CloseTab(tab);
         _hosts[tab.Id] = host;
         _hostLayer.Children.Add(host);
         _lastHost = host;
@@ -945,7 +946,6 @@ public partial class BrowserView : UserControl, IDisposable
 
     private void UpdateHostVisibility()
     {
-        _viewModel.RefreshFacade();
         foreach (var entry in _hosts)
         {
             var tab = _viewModel.Tabs.FirstOrDefault(candidate => candidate.Id == entry.Key);
@@ -966,6 +966,10 @@ public partial class BrowserView : UserControl, IDisposable
 
     private void OnTabSelectionChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
+        if (e.PropertyName is (nameof(BrowserViewModel.IsPageEmpty) or nameof(BrowserViewModel.HasPageError) or
+            nameof(BrowserViewModel.IsRestoring) or nameof(BrowserViewModel.HasRuntimeNotice)) &&
+            _hosts.TryGetValue(_viewModel.ActiveTab.Id, out var activeHost))
+            activeHost.SetContentHidden(_viewModel.IsPageEmpty || _viewModel.HasPageError || _viewModel.IsRestoring || _viewModel.HasRuntimeNotice);
         if (e.PropertyName == nameof(BrowserViewModel.StatusText)) ShowBrowserFeedback(_viewModel.StatusText);
         if (e.PropertyName == nameof(BrowserViewModel.IsFindOpen) && _viewModel.IsFindOpen)
             Dispatcher.UIThread.Post(() => this.FindControl<TextBox>("FindBox")?.Focus());

@@ -2,6 +2,8 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using System.Linq;
+using Avalonia.Controls;
+using Avalonia.Input;
 using Fufucode.App.Features.BrowserExperience;
 using Fufucode.App.Infrastructure;
 using Fufucode.App.Infrastructure.Browser;
@@ -269,8 +271,17 @@ internal static class BrowserUsabilityTests
 
             view.ViewModel.RefreshSuggestions("book");
             check(view.ViewModel.Suggestions.Any(s => s.Address == "https://book.example/"), "按文字过滤候选");
+            var box = view.FindControl<TextBox>("AddressBox")!;
+            void Enter() => box.RaiseEvent(new KeyEventArgs { RoutedEvent = InputElement.KeyDownEvent, Key = Key.Enter });
+            view.ViewModel.AddressText = "book";
+            check(view.ViewModel.SelectedSuggestion is null, "刚输入文字不擅自选中历史或收藏");
+            Enter();
+            check(view.ViewModel.ActiveTab.NavigationAddress == BrowserAddressResolver.Resolve("book").Address,
+                "直接回车提交原输入，不跳到匹配的收藏");
+            view.ViewModel.RefreshSuggestions("book");
             view.ViewModel.MoveSuggestion(1);
-            check(view.ViewModel.SelectedSuggestion is not null, "键盘可在候选间移动");
+            Enter();
+            check(view.ViewModel.ActiveTab.NavigationAddress == "https://book.example/", "方向键选中后回车才打开该候选");
         }
         finally { view.Dispose(); }
 

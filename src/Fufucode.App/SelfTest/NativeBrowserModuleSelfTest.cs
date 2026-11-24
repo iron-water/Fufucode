@@ -98,28 +98,29 @@ internal static class NativeBrowserModuleSelfTest
         // ---- 3. 真实父 HWND：浮动窗口往返必须重挂同一 controller 并保留 DOM ----
         var mainHandle = window.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         Check(mainHandle != IntPtr.Zero, "Main window exposes a real HWND");
-        Check(hostA.ParentWindowForTesting == mainHandle && hostB.ParentWindowForTesting == mainHandle,
-            "Both controllers initially parent to the main window HWND");
+        bool InWindow(BrowserViewHost host, IntPtr hwnd) => hwnd != IntPtr.Zero && host.ViewportForTesting != IntPtr.Zero &&
+            host.ParentWindowForTesting == host.ViewportForTesting && host.ViewportParentForTesting == hwnd;
+        bool BothIn(IntPtr hwnd) => InWindow(hostA, hwnd) && InWindow(hostB, hwnd);
+        Check(BothIn(mainHandle) && hostA.ViewportForTesting != hostB.ViewportForTesting,
+            "Each controller initially parents to its own viewport inside the main HWND");
         var reparentBefore = hostA.ReparentCountForTesting + hostB.ReparentCountForTesting;
         var floatingId = window.FloatDockPage("browser");
         Check(floatingId is not null, "Browser page can float into its own window");
         var floatingWindow = floatingId is null ? null : window.FloatingDockWindowForTesting(floatingId);
         await Until(() => floatingWindow?.TryGetPlatformHandle()?.Handle is { } handle && handle != IntPtr.Zero &&
-                          hostA.ParentWindowForTesting == handle && hostB.ParentWindowForTesting == handle);
+                          BothIn(handle));
         var floatingHandle = floatingWindow?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         Check(floatingHandle != IntPtr.Zero && floatingHandle != mainHandle, "Floating window exposes a distinct HWND");
-        Check(hostA.ParentWindowForTesting == floatingHandle && hostB.ParentWindowForTesting == floatingHandle,
-            "Real controller ParentWindow moved to the floating window HWND");
+        Check(BothIn(floatingHandle), "Both native viewports moved to the floating window HWND");
         Check(hostA.ReparentCountForTesting + hostB.ReparentCountForTesting > reparentBefore,
-            "Reparent is recorded on the real controller rather than a mock");
+            "Reparent is recorded on the real viewport rather than a mock");
         Check(hostA.ControllerCreateCountForTesting == 1 && hostB.ControllerCreateCountForTesting == 1,
             "Floating did not recreate controllers (DOM/history preserved by design)");
         Check(await TitleAsync(hostA) == "NATIVE_MODULE_OK" && await TitleAsync(hostB) == "LOOPBACK_TAB_OK",
             "DOM survives the cross-window reparent");
         if (floatingId is not null) window.DockFloatingRegion(floatingId);
-        await Until(() => hostA.ParentWindowForTesting == mainHandle && hostB.ParentWindowForTesting == mainHandle);
-        Check(hostA.ParentWindowForTesting == mainHandle && hostB.ParentWindowForTesting == mainHandle,
-            "Docking back restores the main window parent HWND");
+        await Until(() => BothIn(mainHandle));
+        Check(BothIn(mainHandle), "Docking back restores the native viewports to the main HWND");
         Note($"dock-back evidence: create A/B={hostA.ControllerCreateCountForTesting}/{hostB.ControllerCreateCountForTesting} " +
              $"releases A/B={hostA.ReleaseCountForTesting}/{hostB.ReleaseCountForTesting} " +
              $"reparents A/B={hostA.ReparentCountForTesting}/{hostB.ReparentCountForTesting} " +
@@ -137,18 +138,17 @@ internal static class NativeBrowserModuleSelfTest
         Check(regionId is not null, "Whole auxiliary region (including browser) floats into one window");
         var regionWindow = regionId is null ? null : window.FloatingDockWindowForTesting(regionId);
         await Until(() => regionWindow?.TryGetPlatformHandle()?.Handle is { } handle && handle != IntPtr.Zero &&
-                          hostA.ParentWindowForTesting == handle && hostB.ParentWindowForTesting == handle);
+                          BothIn(handle));
         var regionHandle = regionWindow?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         Check(regionHandle != IntPtr.Zero && regionHandle != mainHandle &&
-              hostA.ParentWindowForTesting == regionHandle && hostB.ParentWindowForTesting == regionHandle,
-            "Whole-region float reparents both controllers to the region window HWND");
+              BothIn(regionHandle), "Whole-region float reparents both viewports to the region window HWND");
         Check(hostA.ControllerCreateCountForTesting + hostB.ControllerCreateCountForTesting == regionBefore,
             "Whole-region float does not recreate controllers");
         Check(await TitleAsync(hostA) == "NATIVE_MODULE_OK" && await TitleAsync(hostB) == "LOOPBACK_TAB_OK",
             "Whole-region float preserves both tabs' DOM");
         if (regionId is not null) window.DockFloatingRegion(regionId);
-        await Until(() => hostA.ParentWindowForTesting == mainHandle && hostB.ParentWindowForTesting == mainHandle);
-        Check(hostA.ParentWindowForTesting == mainHandle && hostB.ParentWindowForTesting == mainHandle &&
+        await Until(() => BothIn(mainHandle));
+        Check(BothIn(mainHandle) &&
               hostA.ControllerCreateCountForTesting + hostB.ControllerCreateCountForTesting == regionBefore,
             "Docking the whole region back keeps the same controllers on the main HWND");
         Check(await TitleAsync(hostA) == "NATIVE_MODULE_OK" && await TitleAsync(hostB) == "LOOPBACK_TAB_OK",
@@ -157,19 +157,19 @@ internal static class NativeBrowserModuleSelfTest
         // ---- 3c. 隐藏浮动窗后重开：窗口先隐藏，再显式重开仍复用同一 controller ----
         var hideId = window.FloatDockPage("browser");
         var hideWindow = hideId is null ? null : window.FloatingDockWindowForTesting(hideId);
-        await Until(() => hideWindow?.IsVisible == true && hostA.ParentWindowForTesting == (hideWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero));
+        await Until(() => hideWindow?.IsVisible == true && InWindow(hostA, hideWindow.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero));
         var hideHandle = hideWindow?.TryGetPlatformHandle()?.Handle ?? IntPtr.Zero;
         if (hideWindow is not null) hideWindow.Hide();
         await Task.Delay(200);
         Check(hideWindow?.IsVisible == false && hostA.IsReady && hostA.ControllerCreateCountForTesting == 1,
             "Hiding the floating window keeps the controller (no black screen, no recreate)");
         window.OpenDockPage("browser", DockZone.Right);   // 对浮动页调用 = 重新显示该浮动窗
-        await Until(() => hideWindow?.IsVisible == true && hostA.ParentWindowForTesting == hideHandle);
-        Check(hideWindow?.IsVisible == true && hostA.ParentWindowForTesting == hideHandle &&
+        await Until(() => hideWindow?.IsVisible == true && InWindow(hostA, hideHandle));
+        Check(hideWindow?.IsVisible == true && InWindow(hostA, hideHandle) &&
               hostA.ControllerCreateCountForTesting == 1 && await TitleAsync(hostA) == "NATIVE_MODULE_OK",
             "Reopening the hidden floating window reuses the same controller, parent HWND and DOM");
         if (hideId is not null) window.DockFloatingRegion(hideId);
-        await Until(() => hostA.ParentWindowForTesting == mainHandle);
+        await Until(() => InWindow(hostA, mainHandle));
 
         // ---- 4. 页内查找与有界缩放 ----
         browser.ViewModel.SelectTab(tabB);
@@ -464,24 +464,24 @@ internal static class NativeBrowserModuleSelfTest
         private readonly CancellationTokenSource _cts = new();
         private readonly Task _pump;
 
-        private LoopbackSite(TcpListener listener, string body)
+        private LoopbackSite(TcpListener listener, string body, Task? responseGate)
         {
             _listener = listener;
             Url = $"http://127.0.0.1:{((IPEndPoint)listener.LocalEndpoint).Port}/";
-            _pump = Task.Run(() => PumpAsync(body, _cts.Token));
+            _pump = Task.Run(() => PumpAsync(body, responseGate, _cts.Token));
         }
 
         public string Url { get; }
 
-        public static LoopbackSite Start(string title, string marker)
+        public static LoopbackSite Start(string title, string marker, Task? responseGate = null)
         {
             var listener = new TcpListener(IPAddress.Loopback, 0);
             listener.Start();
             return new LoopbackSite(listener,
-                $"<!doctype html><title>{title}</title><h1>{title}</h1><p>{marker}</p>");
+                $"<!doctype html><title>{title}</title><h1>{title}</h1><p>{marker}</p>", responseGate);
         }
 
-        private async Task PumpAsync(string body, CancellationToken token)
+        private async Task PumpAsync(string body, Task? responseGate, CancellationToken token)
         {
             var payload = Encoding.UTF8.GetBytes(body);
             while (!token.IsCancellationRequested)
@@ -498,6 +498,7 @@ internal static class NativeBrowserModuleSelfTest
                         var read = 0;
                         try { read = await stream.ReadAsync(buffer, token); } catch (Exception e) when (e is IOException or OperationCanceledException) { }
                         var request = Encoding.ASCII.GetString(buffer, 0, Math.Max(0, read));
+                        if (responseGate is not null) await responseGate.WaitAsync(token);
                         var isDownload = request.Contains("/blocked-download.bin", StringComparison.OrdinalIgnoreCase);
                         var bodyBytes = isDownload ? Encoding.ASCII.GetBytes("blocked") : payload;
                         var header = "HTTP/1.1 200 OK\r\n" +
