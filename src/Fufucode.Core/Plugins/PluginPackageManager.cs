@@ -303,7 +303,11 @@ public sealed class PluginPackageManager : IAsyncDisposable
             finally { _changing = false; }
         }
     }
-    public void InitializeInstalledPlugins(string? projectPath = null)
+    public void InitializeInstalledPlugins(string? projectPath = null) =>
+        InitializeInstalledPlugins(projectPath, seedDefaults: true);
+
+    /// <summary>A standalone host with no bundled packages activates installed plugins without installing defaults.</summary>
+    public void InitializeInstalledPlugins(string? projectPath, bool seedDefaults)
     {
         lock (_gate)
         {
@@ -311,15 +315,18 @@ public sealed class PluginPackageManager : IAsyncDisposable
             // 之后按正常安装状态加载。缺载荷只记录错误，不影响其它插件。
             // 注意不能先判断 IsActive：状态库把"没有载荷"视为未安装，
             // 那样默认插件永远等不到播种。这里只按"默认安装且用户没做过显式选择"处理。
-            foreach (var def in PluginMarketplaceCatalog.All.Where(d => d.DefaultInstalled && !d.IsCoreBuiltin && !_stateStore.HasExplicitState(d.Id)))
+            if (seedDefaults)
             {
-                if (HasPhysicalPayload(def.Id)) continue;
-                try
+                foreach (var def in PluginMarketplaceCatalog.All.Where(d => d.DefaultInstalled && !d.IsCoreBuiltin && !_stateStore.HasExplicitState(d.Id)))
                 {
-                    InstallPackage(def.Id);
-                    if (def.DefaultEnabled) _stateStore.SetEnabled(def.Id, true);
+                    if (HasPhysicalPayload(def.Id)) continue;
+                    try
+                    {
+                        InstallPackage(def.Id);
+                        if (def.DefaultEnabled) _stateStore.SetEnabled(def.Id, true);
+                    }
+                    catch (Exception error) { _loadErrors[def.Id] = error.Message; }
                 }
-                catch (Exception error) { _loadErrors[def.Id] = error.Message; }
             }
 
             foreach (var def in PluginMarketplaceCatalog.All.Where(d => _stateStore.IsActive(d.Id) && HasPhysicalPayload(d.Id)))

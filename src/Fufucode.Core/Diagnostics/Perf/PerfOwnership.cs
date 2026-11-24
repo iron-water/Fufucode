@@ -1,7 +1,5 @@
 using System;
-using System.Runtime.Loader;
-using Fufucode.Core.Diagnostics;
-using Fufucode.Core.Diagnostics.Perf;
+using System.Reflection;
 
 namespace Fufucode.Core.Diagnostics.Perf;
 
@@ -16,7 +14,7 @@ public static class PerfOwnership
 {
     private static readonly object Gate = new();
 
-    /// <summary>当前接收端所属程序集的完整路径；未启用时为 null。</summary>
+    /// <summary>当前接收端所属程序集的磁盘路径；未启用或程序集无磁盘位置时为 null。</summary>
     public static string? OwnerAssemblyPath => Volatile.Read(ref s_ownerPath);
 
     private static string? s_ownerPath;
@@ -27,20 +25,20 @@ public static class PerfOwnership
     public static string? TryInstall(IPerfSink sink, IPerfModeProvider? modeProvider = null)
     {
         ArgumentNullException.ThrowIfNull(sink);
-        var path = sink.GetType().Assembly.Location;
+        var assembly = sink.GetType().Assembly;
         lock (Gate)
         {
             var existing = PerfTracer.Sink;
             if (existing is null)
             {
                 PerfTracer.Attach(sink, modeProvider);
-                Volatile.Write(ref s_ownerPath, path);
+                Volatile.Write(ref s_ownerPath, AssemblyFiles.Location(assembly));
                 return null;
             }
-            var existingPath = existing.GetType().Assembly.Location;
-            if (string.Equals(existingPath, path, StringComparison.OrdinalIgnoreCase))
+            var owner = existing.GetType().Assembly;
+            if (SameOwner(owner, assembly))
                 return null;
-            return $"已有性能接收端处于激活状态（来自 {existingPath}），性能监控插件不重复安装。";
+            return $"已有性能接收端处于激活状态（来自 {AssemblyFiles.Location(owner) ?? owner.GetName().Name}），性能监控插件不重复安装。";
         }
     }
 
@@ -51,12 +49,20 @@ public static class PerfOwnership
         {
             var existing = PerfTracer.Sink;
             if (existing is null) return false;
-            var sameAssembly = string.Equals(existing.GetType().Assembly.Location, sink.GetType().Assembly.Location,
-                StringComparison.OrdinalIgnoreCase);
-            if (!sameAssembly) return false;
+            if (!SameOwner(existing.GetType().Assembly, sink.GetType().Assembly)) return false;
             var removed = PerfTracer.Detach(existing);
             if (removed) Volatile.Write(ref s_ownerPath, null);
             return removed;
         }
+    }
+
+    private static bool SameOwner(Assembly left, Assembly right)
+    {
+        if (left == right) return true;
+        var a = AssemblyFiles.Location(left);
+        var b = AssemblyFiles.Location(right);
+        if (a is not null || b is not null)
+            return string.Equals(a, b, OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+        return left.ManifestModule.ModuleVersionId == right.ManifestModule.ModuleVersionId && left.FullName == right.FullName;
     }
 }

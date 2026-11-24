@@ -133,8 +133,8 @@ public sealed record BuildInfo(
                             ?? "0.0.0";
         var (version, commit) = SplitInformationalVersion(informational);
 
-        var path = assembly.Location;
-        var builtAt = path.Length > 0 && File.Exists(path)
+        var path = AssemblyFiles.Location(assembly) ?? Environment.ProcessPath;
+        var builtAt = File.Exists(path)
             ? new DateTimeOffset(File.GetLastWriteTimeUtc(path), TimeSpan.Zero)
             : DateTimeOffset.UtcNow;
         return new BuildInfo(version, builtAt, "local", Commit: commit);
