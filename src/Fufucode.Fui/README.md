@@ -10,6 +10,20 @@ fui --project C:\work\demo --session <ID>
 
 `Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令。长审批参数可在对话区翻阅。
 
+## 在工作台里操作
+
+`Ctrl+P` 打开可搜索的命令面板；方向键选项、`Enter` 确认、`Esc` 返回草稿。输入 `/` 可看到命令，`Tab` 补全。`//` 发送字面斜杠；`/skill:name` 仍由 FUMO 处理。
+
+| 要做什么 | 操作 |
+|---|---|
+| 管理会话 | `/new` 新建；`/resume` 搜索同项目 FUMO 会话；`/rename 名称` 改名；`/fork` 从选中的用户消息分叉；`/export [路径]` 导出 Markdown，不覆盖已有文件。切换后可找回本次打开期间原会话的未发草稿与附件。 |
+| 切模型、查看用量 | `/model` 从实际端点目录选择；`/thinking` 选当前模型可请求的等级；`/usage` 显示历史中报告的数量，未知不按字数估算。`/skills` 填入技能调用；`/capabilities` 浏览已注册能力，不执行工具。 |
+| 在运行中补充输入 | `/steer 文本` 插话，`/queue 文本` 追加下一轮，`/queue` 查看队列。若正在写草稿，可从命令面板选插话或跟进，再按 Enter 提交。 |
+| 浏览项目和带入上下文 | `/preview` 选择 UTF-8 文件，只在本机显示；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择文件附到下一条消息；`/context` 查看，`/detach` 移除。每条最多 4 个文件，每个最多 64 KiB；发送前复核内容和安全规则，文件已改不会悄悄发送新内容。 |
+| 阅读和找回输入 | `Ctrl+F` 或 `/find` 搜索并跳到对话里的消息；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`/tools` 展开/折叠工具，`/thoughts` 显示/隐藏思考。`Ctrl+U` / `Ctrl+K` 删至行首/尾，`Ctrl+W` 删除前一个词。 |
+
+例如，先输入 `请解释 @src/`，按 `Tab` 选中源码文件，确认状态栏出现「附件 1」后按 `Enter`。FUI 只附上选中的文件，不扫描并发送整个项目。
+
 `--app-data <目录>` 可隔离设置和会话，也可设 `FUFUCODE_DATA_ROOT`。会话 ID 可在 `/session` 查看，或用同一项目、同一数据根的 `fufucode sessions list --json` 查询。管道、批处理、设置管理和 JSON 输出仍使用底层 CLI `fufucode`。
 
 从仓库根开发运行：

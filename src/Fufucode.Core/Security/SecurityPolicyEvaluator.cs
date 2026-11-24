@@ -69,6 +69,17 @@ public sealed class SecurityPolicyEvaluator(SecurityPolicyStore store, string wo
         try { return FileAction(path, operation, store.Current); }
         catch { return SecurityAction.Deny; }
     }
+
+    /// <summary>Filter a read-only directory listing against one policy snapshot. Recheck FileAction before opening a file.</summary>
+    public Func<string, bool> ReadablePathsForListing()
+    {
+        var settings = store.Current;
+        return path =>
+        {
+            try { return FileAction(path, "read", settings) == SecurityAction.Allow; }
+            catch { return false; }
+        };
+    }
     private SecurityAction FileAction(string path, string operation, SecuritySettings settings)
     {
         if (!settings.Enabled) return SecurityAction.Allow;

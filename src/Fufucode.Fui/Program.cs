@@ -21,10 +21,9 @@ internal static class Program
             var layout = new AppDataLayout(options.AppData);
             // Also isolate tools which consult the process environment rather than the session's layout.
             Environment.SetEnvironmentVariable(AppDataLayout.RootEnvironmentVariable, layout.Root);
-            await using var session = await FumoTuiSession.OpenAsync(options.Project, layout.Root,
-                options.SessionId, options.Continue, lifetime.Token);
             using var surface = new TerminalSurface();
-            var controller = new TuiController(session, lifetime.Token);
+            var session = await FumoTuiSession.OpenAsync(options.Project, layout.Root, options.SessionId, options.Continue, lifetime.Token);
+            var controller = new TuiController(session, lifetime.Token, layout.Root);
             try
             {
                 while (!controller.Exiting)
@@ -32,10 +31,15 @@ internal static class Program
                     lifetime.Token.ThrowIfCancellationRequested();
                     controller.Update();
                     for (var n = 0; n < 128 && !controller.Exiting && surface.PollKey() is { } key; n++)
-                        controller.Key(key, surface.ViewportRows, surface.MaxScroll);
+                        controller.Key(key, surface.ViewportRows, surface.MaxScroll, surface.PickerRows);
                     if (controller.Dirty || surface.SizeChanged)
                     {
                         surface.Draw(controller.View());
+                        if (controller.TakeScrollTarget() is { } target)
+                        {
+                            controller.ScrollTo(surface.ScrollToLine(target));
+                            surface.Draw(controller.View());
+                        }
                         controller.Painted(surface.MaxScroll);
                     }
                     if (!controller.Exiting) await Task.Delay(30, lifetime.Token);
@@ -69,7 +73,7 @@ internal sealed record TuiOptions(string Project, string? AppData, string? Sessi
         fui [--project <目录>] [--app-data <目录>] [--session <ID> | --continue]
 
         默认新建 FUMO 会话；--continue 恢复本项目最近的 FUMO 会话。
-        F1 查看按键与命令。无界面、管道和 JSON 输出使用独立的 fufucode CLI。
+        Ctrl+P 打开命令面板，F1 查看按键。无界面、管道和 JSON 输出使用独立的 fufucode CLI。
         """;
 
     internal static TuiOptions Parse(string[] args)

@@ -3,11 +3,12 @@ using System.Text;
 namespace Fufucode.Fui;
 
 // Only the terminal loop mutates view state. Backend callbacks and commands never write to the screen.
-internal sealed class TuiController(ITuiSession session, CancellationToken token)
+internal sealed partial class TuiController(ITuiSession session, CancellationToken token, string? dataRoot = null)
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
-        "审批：F2 允许 · F3 / Esc 拒绝\n/help  按键　/session  会话　/stop  停止　/quit  退出";
+        "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
+        "Ctrl+U / Ctrl+K 删除至行首 / 行尾 · Ctrl+W 删除前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
     private readonly Composer _composer = new();
     private readonly List<TuiLine> _lines = [.. session.History];
@@ -19,13 +20,14 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
     private bool _busy;
     private int _scroll;
     private Task? _send, _stop, _reply;
+    private ITuiSession _active = session;
 
     public bool Dirty { get; private set; } = true;
     public bool Exiting { get; private set; }
 
-    public TuiView View() => new(session.Project, session.Id, session.Model ?? "未配置模型", _status, _lines,
+    public TuiView View() => new(_active.Project, _active.Id, _active.Model ?? "未配置模型", StatusText, _lines,
         _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault() is { } a
-            ? $"F2 允许 · F3 拒绝\n{a.Text}" : null, _busy);
+            ? $"F2 允许 · F3 拒绝\n{a.Text}" : null, _busy, Overlay(), _expandTools, _showThinking);
 
     public void Painted(int maxScroll)
     {
@@ -37,7 +39,7 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
     public void Update()
     {
         // Bound each batch so an always-ready token producer cannot starve keys or resize.
-        for (var n = 0; n < 2048 && session.Events.TryRead(out var ev); n++)
+        for (var n = 0; n < 2048 && _active.Events.TryRead(out var ev); n++)
         {
             Dirty = true;
             switch (ev)
@@ -45,6 +47,7 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
                 case TuiEvent.Message m: Message(m); break;
                 case TuiEvent.Status s: (_status, _busy) = (s.Text, s.Busy); break;
                 case TuiEvent.Approval a when !_approvals.Exists(x => x.Id == a.Id):
+                    ClosePicker();
                     _approvals.Add(a);
                     _lines.Add(new("info", a.Text)); // Full arguments stay available via scrollback.
                     _scroll = 0;
@@ -60,6 +63,7 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
         Observe(ref _send, () => { _busy = false; _status = "发送失败"; });
         Observe(ref _stop, () => _status = "停止失败");
         Observe(ref _reply, () => _answeredApproval = null);
+        UpdateWorkbench();
     }
 
     private void Message(TuiEvent.Message m)
@@ -81,12 +85,12 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
         }
     }
 
-    public void Key(ConsoleKeyInfo key, int viewportRows, int maxScroll)
+    public void Key(ConsoleKeyInfo key, int viewportRows, int maxScroll, int pickerRows = 5)
     {
         Dirty = true;
         var ctrl = key.Modifiers.HasFlag(ConsoleModifiers.Control);
         if (ctrl && key.Key == ConsoleKey.D) { Exiting = true; return; }
-        if (key.Key is ConsoleKey.PageUp or ConsoleKey.PageDown)
+        if ((_approvals.Count != 0 || _picker is null) && key.Key is (ConsoleKey.PageUp or ConsoleKey.PageDown))
         {
             var step = Math.Max(1, viewportRows - 1);
             _scroll = key.Key == ConsoleKey.PageUp ? (int)Math.Min((long)_scroll + step, maxScroll) : Math.Max(0, _scroll - step);
@@ -100,10 +104,11 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
                 _paintedApproval == approval.Id && _answeredApproval != approval.Id && _reply is null)
             {
                 _answeredApproval = approval.Id;
-                _reply = Invoke(() => session.RespondAsync(approval.Id, key.Key == ConsoleKey.F2, token));
+                _reply = Invoke(() => _active.RespondAsync(approval.Id, key.Key == ConsoleKey.F2, token));
             }
             return;
         }
+        if (WorkbenchKey(key, pickerRows)) return;
         if (ctrl && key.Key == ConsoleKey.C)
         {
             if (_busy) Stop();
@@ -112,7 +117,7 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
             return;
         }
         if (key.Key == ConsoleKey.Escape) { Stop(); return; }
-        if (key.Key == ConsoleKey.F1) { Info(KeyHelp); return; }
+        if (key.Key == ConsoleKey.F1) { Info(FuiCommands.Help); return; }
         if (key.Key == ConsoleKey.Enter && key.Modifiers == 0) { Submit(); return; }
         _composer.Edit(key);
     }
@@ -121,26 +126,25 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
     {
         var text = _composer.Text;
         if (string.IsNullOrWhiteSpace(text)) return;
-        switch (text.Trim())
+        if (text.StartsWith('/'))
         {
-            case "/help": _composer.Take(); Info(KeyHelp); return;
-            case "/session": _composer.Take(); Info($"FUMO · {session.Id}\n{session.Project}\n{session.Model ?? "未配置模型"}"); return;
-            case "/stop": _composer.Take(); Stop(); return;
-            case "/quit": _composer.Take(); Exiting = true; return;
+            if (text.StartsWith("//", StringComparison.Ordinal)) text = text[1..];
+            else if (!text.StartsWith("/skill:", StringComparison.Ordinal)) { SubmitCommand(text); return; }
         }
-        if (_busy || _send is not null || _stop is not null) return; // Keep the next draft editable.
+        if (_busy || _send is not null || _stop is not null || _job is not null) return; // Keep the next draft editable.
+        if (_attachments.Count != 0) { SendWithContext(text); return; }
         _scroll = 0;
         _busy = true;
         _status = "发送中";
         _composer.Take();
-        _send = Invoke(() => session.SendAsync(text, token));
+        _send = Invoke(() => _active.SendAsync(text, token));
     }
 
     private void Stop()
     {
         if (!_busy || _stop is not null) return;
         _status = "正在停止";
-        _stop = Invoke(() => session.StopAsync(token));
+        _stop = Invoke(() => _active.StopAsync(token));
     }
 
     private void Info(string text) { _lines.Add(new("info", text)); _scroll = 0; }
@@ -166,11 +170,21 @@ internal sealed class TuiController(ITuiSession session, CancellationToken token
 
     public async Task FinishAsync()
     {
-        foreach (var t in new[] { _reply, _send, _stop })
+        // This controller owns the current lease, including any replacement which completed during exit.
+        try
         {
-            if (t is null) continue;
-            try { await t; }
-            catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            if (_job is not null)
+            {
+                try { var result = await _job.Task; if (result.Action?.Replacement is { } fresh && !ReferenceEquals(fresh, _active)) await fresh.DisposeAsync(); }
+                catch (OperationCanceledException) when (token.IsCancellationRequested || _job.Lifetime.IsCancellationRequested) { }
+            }
+            foreach (var t in new[] { _reply, _send, _stop, _release })
+            {
+                if (t is null) continue;
+                try { await t; }
+                catch (OperationCanceledException) when (token.IsCancellationRequested) { }
+            }
         }
+        finally { _job?.Lifetime.Dispose(); await _active.DisposeAsync(); }
     }
 }
