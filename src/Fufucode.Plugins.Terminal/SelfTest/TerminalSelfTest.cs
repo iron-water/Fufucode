@@ -156,14 +156,7 @@ public static class TerminalSelfTest
         }
     }
 
-    /// <summary>
-    /// <summary>
-    /// Real ConPTY check for the P0 VT features. PowerShell writes the sequences deterministically, after a
-    /// serial round trip has confirmed the command was read: enter the alternate screen, write, leave it, ask
-    /// for a cursor report, then write to the restored primary screen. ConPTY reflects the reply on its input
-    /// path before answering the query (the shell shows the echoed report line), so the checks accept the
-    /// report when it was parsed from the output (that path does not echo) or when the echo came back.
-    /// </summary>
+    /// <summary>Require primary and alternate-screen output and a cursor report read by the child itself.</summary>
     public static async Task<string> RunConPtyP0SmokeAsync(string workingDirectory)
     {
         if (!OperatingSystem.IsWindows()) return "SKIP: Windows ConPTY is unavailable on this platform.";
@@ -171,57 +164,34 @@ public static class TerminalSelfTest
         Directory.CreateDirectory(shellDirectory);
         try
         {
-            using var session = new ConPtyTerminalSession();
+            var shell = ShellProfiles.Resolve(ShellProfiles.Find("powershell")!) ?? throw new InvalidOperationException("Windows PowerShell missing");
+            const string script = "[Console]::WriteLine('READY-P0'); [Console]::Write([char]27+'[?1049h'+[char]27+'[HALT-P0'); "
+                + "Start-Sleep -Milliseconds 300; [Console]::Write([char]27+'[?1049l'+[char]27+'[6n'); "
+                + "$r=''; while ($r.Length -lt 32 -and !$r.EndsWith('R')) { $r += [Console]::ReadKey($true).KeyChar }; "
+                + "if ($r -notmatch ('^'+[char]27+'\\[[0-9]+;[0-9]+R$')) { exit 9 }; [Console]::WriteLine('PRIMARY-P0')";
+            using var session = new ConPtyTerminalSession($"\"{shell}\" -NoLogo -NoProfile -Command \"{script}\"");
             var collected = new TerminalBuffer(80, 15);
-            var reportParsed = 0;
-            var raw = new System.Collections.Concurrent.ConcurrentQueue<string>();
-            var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-            var prompted = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            var sawAlt = false;
+            var completed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             session.Output += text =>
             {
-                lock (raw)
+                lock (collected)
                 {
-                    raw.Enqueue(text);
                     collected.Append(text);
-                    if (collected.TakePendingResponse().Length > 0) reportParsed++;
-                    if (collected.PlainText.Contains("READY-P0", StringComparison.Ordinal)) ready.TrySetResult(true);
-                    if (collected.PlainText.Contains("PRIMARY-P0", StringComparison.Ordinal)) prompted.TrySetResult(true);
+                    if (collected.TakePendingResponse() is { Length: > 0 } reply) session.Write(reply);
+                    var lines = collected.PlainText.Split('\n');
+                    if (collected.AlternateScreen && lines.Contains("ALT-P0")) sawAlt = true;
+                    if (!collected.AlternateScreen && lines.Contains("READY-P0") && lines.Contains("PRIMARY-P0")) completed.TrySetResult();
                 }
             };
+            var exited = new TaskCompletionSource<int?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            session.Exited += (code, _) => exited.TrySetResult(code);
             session.Start(shellDirectory, 80, 15);
-            const string script = "$null = 'READY-P0' | Out-Host; "
-                + "[Console]::Write([char]27+'[?1049h'); [Console]::Write('ALT-P0'); Start-Sleep -Milliseconds 300; "
-                + "[Console]::Write([char]27+'[?1049l'); [Console]::Write([char]27+'[6n'); "
-                + "Start-Sleep -Milliseconds 200; [Console]::Write('PRIMARY-P0')";
-            session.Write($"powershell -NoLogo -NoProfile -Command \"{script}\"\r");
-            await ready.Task.WaitAsync(TimeSpan.FromSeconds(25));
-            await prompted.Task.WaitAsync(TimeSpan.FromSeconds(25));
-            await Task.Delay(800);
-            TerminalSnapshot snapshot;
-            string rawText;
-            int parsed;
-            lock (raw)
-            {
-                snapshot = collected.Snapshot();
-                rawText = string.Join(string.Empty, raw);
-                parsed = reportParsed;
-            }
-            session.Write("exit\r");
-            // cmd echoes the report as ^[[<row>;<col>R; the row depends on the prompt position.
-            var echoed = rawText.Contains(";1R", StringComparison.Ordinal) && rawText.Contains("[", StringComparison.Ordinal);
-            // The echo line proves the reply reached the shell's own input path. ALT-P0 is only meaningful in
-            // the alternate-screen frames (PowerShell's on-exit repaint echoes the whole command line).
-            var echoRow = snapshot.Lines.ToList().FindIndex(line =>
-                string.Concat(line.Select(cell => cell.Text)).Contains(";1R", StringComparison.Ordinal));
-            if (parsed == 0 && echoRow < 0 && !echoed)
-                throw new InvalidOperationException("The shell's cursor report was not answered. raw=" + Escaped(rawText));
-            var row = FindRow(snapshot, "READY-P0");
-            if (row < 0 || FindRow(snapshot, "PRIMARY-P0") < 0)
-                throw new InvalidOperationException("Primary-screen output was lost after the alternate screen: " + snapshot.Lines.Length + " rows");
-            // Real-shell faithfulness beyond this point: what matters is that the app's buffer answered the
-            // report and that the prompt is intact; the frame split is verified by the headless P0 checks.
-            return $"PASS: real ConPTY answered the cursor report (parsed={parsed}, echoedAt={echoRow}); "
-                + $"primary kept 'PRIMARY-P0' at row {row}.";
+            var code = await exited.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            if (code != 0) throw new InvalidOperationException("Child did not receive a valid cursor report: exit " + code);
+            await completed.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (!sawAlt) throw new InvalidOperationException("Alternate-screen marker not observed on alternate screen");
+            return "PASS: real alternate screen, restored primary output, child verified cursor report and exited 0.";
         }
         finally
         {
@@ -255,7 +225,7 @@ public static class TerminalSelfTest
                 lock (gate)
                 {
                     collected.Append(text);
-                    if (collected.PlainText.Contains("AUTO-SHELL-OK", StringComparison.Ordinal)) ready.TrySetResult(true);
+                    if (collected.PlainText.Split('\n').Contains("AUTO-SHELL-OK")) ready.TrySetResult(true);
                 }
             };
             session.Exited += (code, error) => exited.TrySetResult(code);
@@ -263,7 +233,7 @@ public static class TerminalSelfTest
             session.Write("echo AUTO-SHELL-OK\r");
             await ready.Task.WaitAsync(TimeSpan.FromSeconds(20));
             session.Write("exit\r");
-            try { await exited.Task.WaitAsync(TimeSpan.FromSeconds(8)); } catch (TimeoutException) { }
+            if (await exited.Task.WaitAsync(TimeSpan.FromSeconds(15)) != 0) throw new InvalidOperationException("Auto shell did not exit successfully");
             return $"PASS: auto profile '{profile.Id}' ({executable}) started and executed the echo.";
         }
         finally
@@ -273,9 +243,6 @@ public static class TerminalSelfTest
             catch (UnauthorizedAccessException) { }
         }
     }
-
-    private static string Escaped(string text) =>
-        text.Replace("\u001b", "ESC").Replace("\r", "").Replace("\n", "<LF>");
 
     /// Output-selection / find / command-draft models against real <see cref="TerminalSnapshot"/>
     /// instances. These checks stay independent of the pane so they cannot "pass" by mirroring the
