@@ -174,7 +174,7 @@ public static class PluginMarketplaceCatalog
 
         new("workspace.terminal", "交互终端", PluginCategory.ToolExtension,
             "项目级交互式终端：ConPTY 原生 shell、备用屏与全屏 TUI、滚动区域、查找、选中复制、IME 与命令历史。",
-            "2.0.0", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],
+            "2.0.1", "Fufucode Team", ["启动本机 shell 进程", "读写项目工作目录", "系统剪贴板"],
             DefaultInstalled: false, DefaultEnabled: false),
 
         new("sandbox.nvx", "NVX 微虚拟机沙箱", PluginCategory.AgentCapability,

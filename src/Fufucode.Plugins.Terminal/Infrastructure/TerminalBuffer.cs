@@ -56,6 +56,7 @@ public sealed class TerminalBuffer
     private int _column;                    // 0-based; stays on the last column while a wrap is pending
     private int _row;                       // 0-based
     private int _savedColumn, _savedRow;
+    private int _mainRow, _mainSavedRow, _mainSavedColumn;
     private int _top, _bottom;              // inclusive scroll region, 0-based
     private int _foreground = DefaultForeground, _background = DefaultBackground;
     private bool _bold, _underline, _italic, _reverse, _dim, _conceal, _strike;
@@ -70,7 +71,7 @@ public sealed class TerminalBuffer
     private int _lastCellRow = -1, _lastCellColumn = -1, _lastCellEndColumn = -1;
     private char? _pendingSurrogate;
     private string _lastChar = string.Empty;
-    private string _replySequence = string.Empty;   // CSI reply queued by the last escape sequence
+    private readonly StringBuilder _replies = new();
 
     public TerminalBuffer(int columns = 100, int rows = 12)
     {
@@ -107,15 +108,14 @@ public sealed class TerminalBuffer
 
     /// <summary>
     /// Reply bytes requested by DSR/DA (for example <c>CSI 6n</c>). The session must write them back to the
-    /// shell: prompt frameworks and full-screen applications wait for the answer. A reply is always queued for
-    /// the rest of the sequence it belongs to, because ConPTY feeds one reply through its input path and the
-    /// rest through its output painting pass.
+    /// shell: prompt frameworks and full-screen applications wait for the answer. Preserve all queries in
+    /// wire order even when the OS delivers several queries and a repaint in one read.
     /// </summary>
     public string TakePendingResponse()
     {
-        if (_replySequence.Length == 0) return string.Empty;
-        var reply = _replySequence;
-        _replySequence = string.Empty;
+        if (_replies.Length == 0) return string.Empty;
+        var reply = _replies.ToString();
+        _replies.Clear();
         return reply;
     }
 
@@ -144,7 +144,6 @@ public sealed class TerminalBuffer
                 case 2:
                     if (character >= '@' && character <= '~')
                     {
-                        _replySequence = string.Empty;
                         ApplyCsi(_sequence.ToString(), character);
                         _sequence.Clear();
                         _parseState = 0;
@@ -188,19 +187,39 @@ public sealed class TerminalBuffer
         columns = Math.Clamp(columns, 10, 400);
         rows = Math.Clamp(rows, 3, 160);
         if (columns == Columns && rows == Rows) return;
-        ResizeScreen(_screen, _history, columns, rows);
-        if (AlternateScreen) ResizeScreen(_mainScreen, _mainHistory, columns, rows);
+        var shift = ResizeScreen(_screen, AlternateScreen ? null : _history, columns, rows, _row);
+        _row -= shift;
+        _savedRow = Math.Clamp(_savedRow - shift, 0, rows - 1);
+        if (AlternateScreen)
+        {
+            var mainShift = ResizeScreen(_mainScreen, _mainHistory, columns, rows, _mainRow);
+            _mainRow -= mainShift;
+            _mainSavedRow = Math.Clamp(_mainSavedRow - mainShift, 0, rows - 1);
+        }
         Columns = columns;
         Rows = rows;
-        _row = Math.Clamp(_row, 0, Rows - 1);
         _column = Math.Clamp(_column, 0, Columns - 1);
+        _lastCellRow = -1;
         _top = 0; _bottom = Rows - 1; _wrapPending = false;
         Changed?.Invoke();
     }
 
-    private void ResizeScreen(List<TerminalCell[]> screen, List<TerminalCell[]> history, int columns, int rows)
+    private int ResizeScreen(List<TerminalCell[]> screen, List<TerminalCell[]>? history, int columns, int rows, int cursorRow)
     {
-        var limit = _scrollbackLimit;
+        // ConPTY repaints the resized viewport from its top-left. Shrink from the bottom unless
+        // that would clip the cursor. Only rows actually scrolled past the top belong in history.
+        // Growing appends rows below; ConPTY does not pull old scrollback into the repaint.
+        var shift = Math.Max(0, cursorRow - (rows - 1));
+        if (shift > 0)
+        {
+            if (history is not null)
+            {
+                history.AddRange(screen.GetRange(0, shift));
+                if (history.Count > _scrollbackLimit) history.RemoveRange(0, history.Count - _scrollbackLimit);
+            }
+            screen.RemoveRange(0, shift);
+        }
+        if (screen.Count > rows) screen.RemoveRange(rows, screen.Count - rows);
         for (var i = 0; i < screen.Count; i++)
         {
             var line = screen[i];
@@ -222,13 +241,8 @@ public sealed class TerminalBuffer
             }
             screen[i] = line;
         }
-        while (screen.Count > rows)
-        {
-            history.Add(screen[0]);
-            screen.RemoveAt(0);
-            if (history.Count > limit) history.RemoveRange(0, history.Count - limit);
-        }
         while (screen.Count < rows) screen.Add(BlankLine(columns));
+        return shift;
     }
 
     // Scrollback rows stop changing when they leave the screen; only the live screen needs copies.
@@ -340,7 +354,7 @@ public sealed class TerminalBuffer
         {
             var removed = _screen[_top];
             _screen.RemoveAt(_top);
-            if (_top == 0 && _bottom == Rows - 1)
+            if (!AlternateScreen && _top == 0 && _bottom == Rows - 1)
             {
                 _history.Add(removed);
                 if (_history.Count > _scrollbackLimit) _history.RemoveRange(0, _history.Count - _scrollbackLimit);
@@ -383,11 +397,15 @@ public sealed class TerminalBuffer
     private void EnterAlternateScreen(bool clear)
     {
         if (AlternateScreen) return;
+        _mainRow = _row;
+        (_mainSavedRow, _mainSavedColumn) = (_savedRow, _savedColumn);
+        _savedRow = _savedColumn = 0;
         (_screen, _mainScreen) = (_mainScreen, _screen);
         (_history, _mainHistory) = (_mainHistory, _history);
         _screen.Clear();
         for (var i = 0; i < Rows; i++) _screen.Add(BlankLine());
-        if (clear) _history.Clear();
+        if (clear) { _row = _column = 0; }
+        _top = 0; _bottom = Rows - 1; _lastCellRow = -1;
         AlternateScreen = true;
         _wrapPending = false;
     }
@@ -397,6 +415,8 @@ public sealed class TerminalBuffer
         if (!AlternateScreen) return;
         (_screen, _mainScreen) = (_mainScreen, _screen);
         (_history, _mainHistory) = (_mainHistory, _history);
+        (_savedRow, _savedColumn) = (_mainSavedRow, _mainSavedColumn);
+        _lastCellRow = -1;
         AlternateScreen = false;
         _top = 0; _bottom = Rows - 1;
         _row = Math.Clamp(_row, 0, Rows - 1);
@@ -518,6 +538,16 @@ public sealed class TerminalBuffer
         _top = 0; _bottom = Rows - 1; _row = 0; _column = 0; _wrapPending = false;
     }
 
+    internal void ResetSession()
+    {
+        Reset();
+        _history.Clear(); _mainHistory.Clear(); _mainScreen.Clear();
+        _osc.Clear(); _sequence.Clear(); _replies.Clear(); _parseState = 0;
+        _savedRow = _savedColumn = 0; _lastCellRow = -1; _pendingSurrogate = null;
+        _title = _lastChar = string.Empty;
+        Changed?.Invoke();
+    }
+
     private void ResetAttributes()
     {
         _foreground = DefaultForeground; _background = DefaultBackground;
@@ -527,7 +557,7 @@ public sealed class TerminalBuffer
     private void ApplyCsi(string sequence, char command)
     {
         if (sequence.StartsWith('?')) { ApplyPrivate(sequence, command); return; }
-        if (sequence.StartsWith('>')) { if (command == 'c') _replySequence = "\u001b[>0;276;0c"; return; }
+        if (sequence.StartsWith('>')) { if (command == 'c') _replies.Append("\u001b[>0;276;0c"); return; }
 
         var values = sequence.Length == 0 ? Array.Empty<int>() : sequence.Trim().Split(';')
             .Select(value => int.TryParse(value.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var number) ? number : 0)
@@ -581,15 +611,15 @@ public sealed class TerminalBuffer
             case 'l': foreach (var value in values) if (value == 4) _insertMode = false; break;
             case 'm': ApplyColors(values); break;
             case 'n':
-                if (values.Length > 0 && values[0] == 5) _replySequence = "\u001b[0n";
-                else if (values.Length > 0 && values[0] == 6) _replySequence = $"\u001b[{_row + 1};{_column + 1}R";
+                if (values.Length > 0 && values[0] == 5) _replies.Append("\u001b[0n");
+                else if (values.Length > 0 && values[0] == 6) _replies.Append($"\u001b[{_row + 1};{_column + 1}R");
                 break;
             case 'q':
                 // DECSCUSR: 0..6; out-of-range values fall back to the default block cursor.
                 if (values.Length > 0 && values[0] is >= 0 and <= 6) _cursorStyle = values[0];
                 break;
             case 'c':
-                if (values.Length == 0 || values[0] == 0) _replySequence = "\u001b[?1;2c";
+                if (values.Length == 0 || values[0] == 0) _replies.Append("\u001b[?1;2c");
                 break;
         }
     }
@@ -629,8 +659,8 @@ public sealed class TerminalBuffer
                     if (set) EnterAlternateScreen(clear: false); else LeaveAlternateScreen();
                     break;
                 case 1049:
-                    if (set) { SaveCursor(); EnterAlternateScreen(clear: true); }
-                    else { LeaveAlternateScreen(); RestoreCursor(); }
+                    if (set && !AlternateScreen) { SaveCursor(); EnterAlternateScreen(clear: true); }
+                    else if (!set && AlternateScreen) { LeaveAlternateScreen(); RestoreCursor(); }
                     break;
                 case 2004: _bracketedPaste = set; break;
                 case 1000: case 1002: case 1003: case 1006:

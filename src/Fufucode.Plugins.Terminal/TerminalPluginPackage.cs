@@ -7,7 +7,7 @@ namespace Fufucode.Plugins.Terminal;
 public sealed class TerminalPluginPackage : IPluginPackage
 {
     public string Id => "workspace.terminal";
-    public string Version => "2.0.0";
+    public string Version => "2.0.1";
 
     public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => null;
 

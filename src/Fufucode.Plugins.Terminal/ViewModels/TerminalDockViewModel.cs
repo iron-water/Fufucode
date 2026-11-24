@@ -14,8 +14,8 @@ namespace Fufucode.Plugins.Terminal.ViewModels;
 public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
 {
     private readonly bool _useMock;
-    private readonly Func<ITerminalSession> _factory;
-    private readonly TerminalSettings _settings;
+    private readonly Func<ITerminalSession>? _factory;
+    private TerminalSettings _settings;
     private int _nextNumber;
     private bool _disposed;
 
@@ -25,23 +25,24 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
         _useMock = useMock;
         _settings = (settings ?? TerminalSettings.Default).Normalize();
         WorkspacePath = Directory.Exists(workspacePath) ? workspacePath! : Environment.CurrentDirectory;
-        _factory = sessionFactory ?? DefaultSessionFactory;
+        _factory = sessionFactory;
     }
 
     /// <summary>当前终端设置（字号、回滚、shell 配置等）；由页面在设置变化时整体替换。</summary>
     public TerminalSettings Settings => _settings;
+    internal void ConfigureNewTabs(TerminalSettings settings) => _settings = settings;
 
     /// <summary>默认会话工厂：按设置解析 shell 配置；不可用时把原因带给标签页，而不是静默回退。</summary>
-    private ITerminalSession DefaultSessionFactory()
+    private ITerminalSession DefaultSessionFactory(TerminalSettings settings)
     {
         if (_useMock) return new TerminalMockSession();
-        var profile = string.Equals(_settings.ShellProfile, ShellProfiles.AutoId, StringComparison.OrdinalIgnoreCase)
+        var profile = string.Equals(settings.ShellProfile, ShellProfiles.AutoId, StringComparison.OrdinalIgnoreCase)
             ? ShellProfiles.ResolveAuto()
-            : ShellProfiles.Find(_settings.ShellProfile) ?? ShellProfiles.ResolveAuto();
+            : ShellProfiles.Find(settings.ShellProfile) ?? ShellProfiles.ResolveAuto();
         var executable = ShellProfiles.Resolve(profile);
         if (executable is null)
             return new UnavailableSession($"所选 shell 不可用：{profile.DisplayName}。请在终端设置中选择已安装的 shell。");
-        var commandLine = ShellProfiles.BuildCommandLine(profile, executable, _settings.CommandOverride);
+        var commandLine = ShellProfiles.BuildCommandLine(profile, executable, settings.CommandOverride);
         return new ConPtyTerminalSession(commandLine);
     }
 
@@ -55,6 +56,17 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
     public string OwnershipTooltip => "终端属于当前项目容器。Agent 工具执行与这些交互 shell 的实例归属将在后续接线。";
     [ObservableProperty] private bool _isVisible;
     [ObservableProperty] private TerminalTabViewModel? _selectedTab;
+    public bool HasRunningTab => SelectedTab?.IsRunning == true;
+    partial void OnSelectedTabChanged(TerminalTabViewModel? oldValue, TerminalTabViewModel? newValue)
+    {
+        if (oldValue is not null) oldValue.PropertyChanged -= OnTabStateChanged;
+        if (newValue is not null) newValue.PropertyChanged += OnTabStateChanged;
+        OnPropertyChanged(nameof(HasRunningTab));
+    }
+    private void OnTabStateChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TerminalTabViewModel.IsRunning)) OnPropertyChanged(nameof(HasRunningTab));
+    }
     /// <summary>Mirrors the selected tab's output selection so the copy entry can reflect availability.</summary>
     [ObservableProperty] private bool _hasOutputSelection;
     public bool HasTabs => Tabs.Count > 0;
@@ -73,21 +85,20 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
     [RelayCommand] public void CreateTerminal()
     {
         if (_disposed) return;
-        // Set visibility before the tab selection event: the host reacts to SelectedTab and must see
-        // the page as visible, otherwise it would close the dock page it is currently opening.
-        IsVisible = true;
-        var tab = new TerminalTabViewModel(++_nextNumber, _useMock, _factory(), _settings);
+        var settings = _settings;
+        var tab = new TerminalTabViewModel(++_nextNumber, _useMock, _factory ?? (() => DefaultSessionFactory(settings)), settings);
         Tabs.Add(tab); SelectedTab = tab;
         OnPropertyChanged(nameof(HasTabs));
         tab.Start(WorkspacePath);
+        IsVisible = true; // Publish the open request only after the tab exists; Show is reentrant via the host.
     }
     [RelayCommand] public void CloseTerminal(TerminalTabViewModel? tab)
     {
         tab ??= SelectedTab;
         if (tab is null || !Tabs.Contains(tab)) return;
         var index = Tabs.IndexOf(tab);
-        tab.Dispose(); Tabs.Remove(tab);
-        if (ReferenceEquals(SelectedTab, tab)) SelectedTab = Tabs.Count == 0 ? null : Tabs[Math.Min(index, Tabs.Count - 1)];
+        if (ReferenceEquals(SelectedTab, tab)) SelectedTab = Tabs.Count == 1 ? null : Tabs[index + 1 < Tabs.Count ? index + 1 : index - 1];
+        Tabs.Remove(tab); tab.Dispose();
         if (Tabs.Count == 0) IsVisible = false;
         OnPropertyChanged(nameof(HasTabs));
     }
@@ -101,21 +112,35 @@ public sealed partial class TerminalDockViewModel : ViewModelBase, IDisposable
 
 public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
 {
-    private readonly ITerminalSession _session;
+    private readonly Func<ITerminalSession> _factory;
+    private ITerminalSession _session;
+    private Action<string>? _outputHandler;
+    private Action<int?, string?>? _exitHandler;
     private bool _disposed;
     private TerminalSnapshot? _snapshot;
-    public TerminalTabViewModel(int number, bool isMock, ITerminalSession session, TerminalSettings? settings = null)
+    public TerminalTabViewModel(int number, bool isMock, Func<ITerminalSession> sessionFactory, TerminalSettings? settings = null)
     {
         TerminalSessionId = Guid.NewGuid().ToString("N");
         _title = $"终端 {number}";
         IsMock = isMock;
-        _session = session;
+        _factory = sessionFactory;
+        _session = _factory();
         Settings = (settings ?? TerminalSettings.Default).Normalize();
         Buffer.ScrollbackLimit = Settings.ScrollbackLines;
         Buffer.Bell += OnBell;
-        _session.Output += OnOutput;
-        _session.Exited += OnExited;
+        AttachSession(_session);
         Buffer.Changed += () => _snapshot = null;
+    }
+
+    private void AttachSession(ITerminalSession session)
+    {
+        session.Output += _outputHandler = text => Dispatch(() => { if (!_disposed && ReferenceEquals(_session, session)) OnOutput(text); });
+        session.Exited += _exitHandler = (code, error) => Dispatch(() => { if (!_disposed && ReferenceEquals(_session, session)) OnExited(code, error); });
+    }
+    private void ReleaseSession()
+    {
+        _session.Output -= _outputHandler; _session.Exited -= _exitHandler;
+        _session.Dispose();
     }
 
     public TerminalSettings Settings { get; }
@@ -184,20 +209,22 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
         }
     }
 
-    /// <summary>重启当前 shell（退出后使用）；会话实例按标签页保留，重启沿用同一项目目录。</summary>
+    /// <summary>保留页签和项目目录；每一轮 shell 独占自己的管道、进程与输入队列。</summary>
     public void Restart()
     {
         if (_disposed || IsRunning) return;
-        try { _session.Start(RestartDirectory, Buffer.Columns, Buffer.Rows); IsRunning = _session.IsRunning; StatusText = "已重启"; }
-        catch (Exception error) when (error is System.ComponentModel.Win32Exception or PlatformNotSupportedException or IOException or System.Runtime.InteropServices.COMException)
-        {
-            StatusText = "启动失败";
-            Buffer.Append("\u001b[31m终端重启失败：" + error.Message + "\u001b[0m\r\n");
-        }
+        ReleaseSession();
+        _session = _factory();
+        AttachSession(_session);
+        ClearOutputInteraction();
+        Buffer.ResetSession();
+        OnPropertyChanged(nameof(ShellTitle));
+        FollowOutput = true;
+        Start(RestartDirectory);
     }
     private string RestartDirectory { get; set; } = Environment.CurrentDirectory;
 
-    private void OnOutput(string text) => Dispatch(() =>
+    private void OnOutput(string text)
     {
         if (_disposed) return;
         var titleBefore = Buffer.Title;
@@ -206,14 +233,14 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
         // Answer DSR/DA queries (for example CSI 6n) so prompt frameworks and full-screen apps do not wait.
         var reply = Buffer.TakePendingResponse();
         if (reply.Length > 0) SendRaw(reply);
-    });
-    private void OnExited(int? code, string? diagnostic) => Dispatch(() =>
+    }
+    private void OnExited(int? code, string? diagnostic)
     {
         if (_disposed) return;
         IsRunning = false;
         StatusText = diagnostic is null ? $"已退出 {code?.ToString() ?? "?"}" : "连接错误";
         if (diagnostic is not null) Buffer.Append("\r\n\u001b[31m终端连接错误：" + diagnostic + "\u001b[0m\r\n");
-    });
+    }
     private static void Dispatch(Action action) { if (Dispatcher.UIThread.CheckAccess()) action(); else Dispatcher.UIThread.Post(action); }
 
     [RelayCommand] public void SendInput()
@@ -314,7 +341,7 @@ public sealed partial class TerminalTabViewModel : ViewModelBase, IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        _session.Output -= OnOutput; _session.Exited -= OnExited; _session.Dispose(); IsRunning = false;
+        ReleaseSession(); IsRunning = false;
         _snapshot = null;
         ClearOutputInteraction();
     }

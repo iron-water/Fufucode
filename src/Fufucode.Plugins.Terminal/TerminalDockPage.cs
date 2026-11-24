@@ -48,6 +48,7 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
     {
         _settings = settings.Normalize();
         _settingsStore?.Save(_settings);
+        foreach (var project in _projects.Values) project.ConfigureNewTabs(_settings);
         _view.ApplyDisplaySettings(_settings);
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -58,7 +59,7 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
 
     public bool IsVisible => _current?.IsVisible == true;
     public bool HasTabs => _current?.HasTabs == true;
-    public bool HasRunningTab => _current?.SelectedTab?.IsRunning == true;
+    public bool HasRunningTab => _current?.HasRunningTab == true;
     public bool HasOutputSelection => _current?.HasOutputSelection == true;
     public Control? CommandInput => _view.CommandInputControl;
 
@@ -85,7 +86,7 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
         _useMock = useMock;
         _view.DataContext = next;
         next.PropertyChanged += OnCurrentChanged;
-        if (wasVisible) next.Show();
+        if (wasVisible) next.Show(); else next.Hide();
         StateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -112,6 +113,7 @@ public sealed class TerminalDockPage : IPluginWorkspacePage
     {
         if (e.PropertyName is nameof(TerminalDockViewModel.IsVisible)
             or nameof(TerminalDockViewModel.SelectedTab)
+            or nameof(TerminalDockViewModel.HasRunningTab)
             or nameof(TerminalDockViewModel.HasOutputSelection))
             StateChanged?.Invoke(this, EventArgs.Empty);
     }

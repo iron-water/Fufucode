@@ -34,6 +34,7 @@ public partial class MainWindow
     private readonly WorkbenchPageRegistry _workbenchPages = new();
     private Features.Plugins.PluginWorkspacePageHost? _pluginPageHost;
     private Features.Plugins.IPluginWorkspacePage? _terminalPage;
+    private bool _terminalPageVisible;
     private BuiltInModuleViewModel _browserModule = null!;
     private BuiltInModuleViewModel _libraryModule = null!;
     private BuiltInModuleViewModel _localReviewModule = null!;
@@ -686,15 +687,13 @@ public partial class MainWindow
     private void OnPluginPageStateChanged(object? sender, EventArgs e)
     {
         _actions.RefreshCapabilities();
-        if (_syncingDockState || _renderingDockPages || _terminalPage is null) return;
-        if (_terminalPage.IsVisible)
-        {
-            // 用户点“收起”后，插件在下架视图时仍可能回报 IsVisible=true；
-            // 此时不能再把底栏自动打开，否则表现为“收起无效”。
-            if (_dockLayout.Hidden[DockZone.Bottom] && _dockLayout.Find("terminal") == DockZone.Bottom) return;
-            OpenDockPage("terminal", DockZone.Bottom);
-        }
-        else if (_dockLayout.Find("terminal") is not null) CloseDockPage("terminal");
+        if (_terminalPage is null || _terminalPageVisible == _terminalPage.IsVisible) return;
+        _terminalPageVisible = _terminalPage.IsVisible;
+        if (_syncingDockState || _renderingDockPages) return;
+        // A selection, shell exit or clipboard capability change is not a request to open a page.
+        var placed = _dockLayout.Find("terminal") is not null || _dockLayout.FindFloating("terminal") is not null;
+        if (_terminalPageVisible && !placed) OpenDockPage("terminal", DockZone.Bottom);
+        else if (!_terminalPageVisible && placed) CloseDockPage("terminal");
     }
 
     internal void OpenDockPage(string id, DockZone target)
@@ -714,6 +713,7 @@ public partial class MainWindow
         if (Bounds.Width < 1100 && target != DockZone.Bottom)
         { _leftDrawerOpen = target == DockZone.Left; _rightDrawerOpen = target == DockZone.Right; }
         RenderDockPages(); SaveWorkspaceDimensions();
+        if (id == "terminal") _terminalPage?.Show();
     }
 
     private void CloseDockPage(string id)
@@ -726,6 +726,7 @@ public partial class MainWindow
         // Closing a workspace page only removes its view, never kills the project-owned terminal.
         var zone = _dockLayout.Find(id);
         _dockLayout.Close(id);
+        if (id == "terminal" && _dockLayout.Find(id) is null && _dockLayout.FindFloating(id) is null) _terminalPage?.Hide();
         if (zone is not null && _dockLayout.Pages.TryGetValue(zone.Value, out var pages) && pages.Count == 0) _dockLayout.Hidden[zone.Value] = true;
         RenderDockPages(); SaveWorkspaceDimensions();
     }
@@ -848,8 +849,6 @@ public partial class MainWindow
             try
             {
                 _vm?.SetRightPanelOpen(!_dockLayout.Hidden[DockZone.Right]);
-                if (_dockLayout.Find("terminal") is { } zone && !_dockLayout.Hidden[zone] &&
-                    _terminalPage?.IsVisible == true) _terminalPage?.Show();
             }
             finally { _syncingDockState = false; }
             ApplyWorkspaceLayout();

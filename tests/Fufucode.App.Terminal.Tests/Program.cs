@@ -26,7 +26,7 @@ namespace Fufucode.App.Terminal.Tests;
 //   dotnet run   --project tests/Fufucode.App.Terminal.Tests
 // 覆盖：首字符/焦点捕获原子性、剪贴板复制粘贴往返与右键菜单、命令历史导航、
 //       IME 组合预览与组合期回车守卫。真实 IME 候选框跟随、原生指针与 ConPTY 由原生验收覆盖。
-internal static class Program
+internal static partial class Program
 {
     private static int _passed;
 
@@ -38,12 +38,16 @@ internal static class Program
         // 解析会命中错误程序集并使 FufucodeTheme.axaml 无法预编译加载。先显式触达产品类型。
         _ = typeof(Fufucode.App.MainWindow).Assembly;
         _ = typeof(TerminalScreenControl).Assembly;
-        AppBuilder.Configure<SmokeApp>()
-            .UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false })
+        var app = AppBuilder.Configure<SmokeApp>();
+        if (args.Contains("--native-dock")) app.UsePlatformDetect();
+        else app.UseHeadless(new AvaloniaHeadlessPlatformOptions { UseHeadlessDrawing = false });
+        app
             .UseSkia().WithInterFont().WithAppTypography()
             .SetupWithoutStarting();
         try
         {
+            if (args.Contains("--dock-host")) { RunMainWindowPluginIntegration(); return 0; }
+            if (args.Contains("--conpty-dock") || args.Contains("--native-dock")) { RunLiveDockChecks(); return 0; }
             if (args.Contains("--conpty-shell"))
             {
                 Console.WriteLine(Task.Run(() => Fufucode.Plugins.Terminal.SelfTest.TerminalSelfTest
@@ -373,7 +377,7 @@ internal static class Program
 
         // The view model must answer a DSR query by writing the reply back to the shell.
         var recording = new RecordingSession();
-        using (var tab = new TerminalTabViewModel(1, isMock: false, recording))
+        using (var tab = new TerminalTabViewModel(1, isMock: false, () => recording))
         {
             tab.Start(Environment.CurrentDirectory);
             recording.Emit("\u001b[1;1H\u001b[6n");
@@ -390,7 +394,8 @@ internal static class Program
         alt.Append("\u001b[?1049h");
         Check(alt.AlternateScreen && alt.PlainText.Length == 0, "terminal-alt-screen-starts-empty");
         alt.Append("\u001b[1;1Hvim-screen\r\nrow2\r\nrow3\r\nrow4\r\nrow5");
-        Check(alt.PlainText.StartsWith("vim-screen", StringComparison.Ordinal), "terminal-alt-screen-renders");
+        Check(alt.PlainText == "row2\nrow3\nrow4\nrow5" && alt.Snapshot().Lines.Length == alt.Rows,
+            "terminal-alt-screen-renders-only-live-rows");
         alt.Append("\u001b[?1049l");
         Check(!alt.AlternateScreen && alt.PlainText == primaryText && alt.Snapshot().Lines.Length == primaryLines,
             "terminal-alt-screen-restores-primary");
@@ -457,10 +462,12 @@ internal static class Program
         Check(RowText(resized, 0) == "keep-this-te" && RowText(resized, 1) == "second-line" && RowText(resized, 2) == "third"
             && resized.Lines.All(line => line.Length == 12),
             "terminal-resize-crops-trailing-blank-cells-first");
-        shrinking.Resize(12, 2);
+        shrinking.Append("\r\nfourth");
+        shrinking.Resize(12, 3);
         var shrunk = shrinking.Snapshot();
-        Check(shrunk.Lines.Length == 4 && RowText(shrunk, 0) == "keep-this-te" && RowText(shrunk, 2) == "third",
+        Check(shrunk.Lines.Length == 4 && RowText(shrunk, 0) == "keep-this-te" && RowText(shrunk, 2) == "third" && shrunk.CursorLine == 3,
             "terminal-resize-shrinks-into-scrollback");
+        RunViewportChecks();
 
         // Origin mode (DECOM): cursor addressing is relative to the scroll region.
         var origin = new TerminalBuffer(12, 6);
@@ -580,23 +587,29 @@ internal static class Program
         var profile = ShellProfiles.Find("definitely-not-installed");
         Check(profile is null, "terminal-unknown-shell-profile-is-null");
         var unavailable = new UnavailableSession("所选 shell 不可用：测试");
-        using var unavailableTab = new TerminalTabViewModel(1, isMock: false, unavailable);
+        using var unavailableTab = new TerminalTabViewModel(1, isMock: false, () => unavailable);
         unavailableTab.Start(Environment.CurrentDirectory);
         Check(!unavailableTab.IsRunning && unavailableTab.Buffer.PlainText.Contains("所选 shell 不可用", StringComparison.Ordinal),
             "terminal-unavailable-shell-reports-reason");
+        unavailableTab.Restart();
+        Check(!unavailableTab.IsRunning && unavailableTab.StatusText == "shell 不可用", "terminal-unavailable-shell-retry-never-claims-success");
 
         // The plugin page persists settings and applies display values.
         var pageRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "fufucode-terminal-page-" + Guid.NewGuid().ToString("N"));
         try
         {
             using var page = new Fufucode.Plugins.Terminal.TerminalDockPage(pageRoot);
+            page.SetProject(Environment.CurrentDirectory, useMock: true);
+            page.Show();
+            var dock = (TerminalDockViewModel)page.View.DataContext!;
+            var previousTab = dock.SelectedTab!;
             page.ApplySettings(TerminalSettings.Default with { FontSize = 18, ScrollbackLines = 42, ShellProfile = "powershell" });
             var persisted = new TerminalSettingsStore(pageRoot).Load();
             Check(persisted.FontSize == 18 && persisted.ScrollbackLines == 42 && persisted.ShellProfile == "powershell",
                 "terminal-page-persists-settings");
-            page.SetProject(Environment.CurrentDirectory, useMock: true);
             page.CreateTerminal();
-            Check(page.HasTabs, "terminal-page-uses-settings-for-new-tab");
+            Check(dock.SelectedTab!.Buffer.ScrollbackLimit == 42 && previousTab.Buffer.ScrollbackLimit == TerminalSettings.Default.ScrollbackLines,
+                "terminal-page-uses-updated-settings-only-for-new-tab");
         }
         finally
         {
@@ -606,7 +619,7 @@ internal static class Program
         }
 
         // Tab titles are user-editable; the shell title remains separate.
-        using (var titled = new TerminalTabViewModel(1, isMock: true, new TerminalMockSession()))
+        using (var titled = new TerminalTabViewModel(1, isMock: true, () => new TerminalMockSession()))
         {
             titled.Title = "构建终端";
             Check(titled.Title == "构建终端", "terminal-tab-title-renamable");
@@ -622,7 +635,8 @@ internal static class Program
     private static void RunPluginPageChecks()
     {
         var package = new Fufucode.Plugins.Terminal.TerminalPluginPackage();
-        Check(package.Id == "workspace.terminal" && package.Version == "2.0.0", "terminal-plugin-identity");
+        Check(package.Id == "workspace.terminal" && package.Version == Fufucode.Core.Plugins.PluginMarketplaceCatalog.Find(package.Id)?.Version,
+            "terminal-plugin-identity-and-catalog-version");
         var contribution = package.CreatePageContribution(
             new Fufucode.Core.Plugins.PluginPackageContext("workspace.terminal", Environment.CurrentDirectory, null));
         Check(contribution is { PageId: "terminal", Title: "终端", IconKey: "Terminal" }, "terminal-plugin-page-contribution");
@@ -734,11 +748,59 @@ internal static class Program
             window.OpenDockPage("terminal", Fufucode.App.Infrastructure.DockZone.Bottom);
             Dispatcher.UIThread.RunJobs();
             var page = window.TerminalPageForTesting!;
+            var tabs = ((UserControl)page.View).FindControl<ListBox>("TerminalTabs")!;
+            Check(tabs.ItemCount == 1, $"host-open-creates-exactly-one-tab (actual {tabs.ItemCount})");
+            PumpHost();
+            var viewport = ((UserControl)page.View).FindControl<ScrollViewer>("OutputScroller")!;
+            var startHeight = viewport.Viewport.Height;
+            var splitter = window.FindControl<GridSplitter>("TerminalSplitter")!;
+            var grip = splitter.TranslatePoint(new Point(splitter.Bounds.Width / 2, splitter.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(grip, MouseButton.Left);
+            for (var dy = 6; dy <= 96; dy += 6) window.MouseMove(grip.WithY(grip.Y - dy), RawInputModifiers.LeftMouseButton);
+            window.MouseUp(grip.WithY(grip.Y - 96), MouseButton.Left);
+            PumpHost();
+            Check(viewport.Viewport.Height > startHeight + 40 && tabs.ItemCount == 1,
+                $"host-dragged-bottom-splitter-enlarges-terminal ({startHeight} -> {viewport.Viewport.Height})");
+            var first = tabs.SelectedItem!;
             page.CreateTerminal();
             Dispatcher.UIThread.RunJobs();
-            Check(page.HasTabs && page.HasRunningTab, "host-terminal-page-owns-a-running-tab");
+            var second = tabs.SelectedItem!;
+            Check(tabs.ItemCount == 2 && !ReferenceEquals(first, second) && page.HasRunningTab, "host-new-creates-exactly-one-more-tab");
+            CloseWithDialog("取消");
+            Check(tabs.ItemCount == 2 && ReferenceEquals(tabs.SelectedItem, second) && page.HasRunningTab, "host-cancel-close-keeps-shell");
+            CloseWithDialog("结束并关闭");
+            Check(ReferenceEquals(tabs.SelectedItem, first) && tabs.ItemCount == 1 && page.HasRunningTab, "host-close-selects-surviving-tab");
+            var outerClose = window.GetVisualDescendants().OfType<Button>().Single(b => Avalonia.Automation.AutomationProperties.GetAutomationId(b) == "dock-close-terminal");
+            var x = outerClose.TranslatePoint(new Point(outerClose.Bounds.Width / 2, outerClose.Bounds.Height / 2), window)!.Value;
+            window.MouseDown(x, MouseButton.Left); window.MouseUp(x, MouseButton.Left);
+            Dispatcher.UIThread.RunJobs();
+            Check(!page.IsVisible && window.DockLayoutForTesting.Find("terminal") is null && page.HasRunningTab, "host-panel-x-hides-without-killing-shell");
+            window.MoveDockPage("terminal", DockZone.Bottom); // dock's “+” uses this path, not the global open action
+            Check(ReferenceEquals(tabs.SelectedItem, first) && tabs.ItemCount == 1, "host-panel-reopen-restores-same-shell");
+            CloseWithDialog("结束并关闭");
+            Dispatcher.UIThread.RunJobs();
+            Check(!page.HasTabs && !page.IsVisible && window.DockLayoutForTesting.Find("terminal") is null,
+                "host-close-last-shell-does-not-respawn");
             window.Close();
             Dispatcher.UIThread.RunJobs();
+
+            void PumpHost()
+            {
+                using var interval = new CancellationTokenSource(250);
+                Dispatcher.UIThread.MainLoop(interval.Token);
+                window.UpdateLayout();
+            }
+
+            void CloseWithDialog(string choice)
+            {
+                var closing = page.CloseSelectedAsync();
+                Dispatcher.UIThread.RunJobs();
+                var dialog = window.OwnedWindows.Single(w => w.Title == "关闭终端");
+                var button = dialog.GetVisualDescendants().OfType<Button>().Single(b => Equals(b.Content, choice));
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Dispatcher.UIThread.RunJobs();
+                Check(closing.IsCompletedSuccessfully, "host-close-dialog-" + choice);
+            }
         }
         finally
         {

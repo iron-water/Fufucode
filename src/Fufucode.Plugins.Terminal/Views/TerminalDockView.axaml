@@ -4,12 +4,6 @@
              xmlns:views="using:Fufucode.Plugins.Terminal.Views"
              x:Class="Fufucode.Plugins.Terminal.Views.TerminalDockView"
              x:DataType="vm:TerminalDockViewModel">
-    <UserControl.Resources>
-        <ContextMenu x:Key="TerminalTabMenu">
-            <MenuItem Header="重命名页签" Click="RenameTab_Click"/>
-            <MenuItem Header="重启 shell" Click="RestartTab_Click"/>
-        </ContextMenu>
-    </UserControl.Resources>
     <UserControl.Styles>
         <Style Selector="ListBox.terminalTabs"><Setter Property="Background" Value="Transparent"/><Setter Property="BorderThickness" Value="0"/></Style>
         <Style Selector="ListBox.terminalTabs ListBoxItem"><Setter Property="Padding" Value="10,5"/><Setter Property="Margin" Value="0,0,2,0"/><Setter Property="MinHeight" Value="30"/><Setter Property="CornerRadius" Value="{DynamicResource ControlCornerRadius}"/></Style>
@@ -42,11 +36,22 @@
     <Border Background="{DynamicResource AppDockBackground}">
         <Grid RowDefinitions="40,Auto,*,36">
             <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="6,0">
-                <ListBox Grid.Column="0" x:Name="TerminalTabs" Classes="terminalTabs" FontSize="13" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab}" HorizontalAlignment="Left" VerticalAlignment="Center">
+                <ListBox Grid.Column="0" x:Name="TerminalTabs" Classes="terminalTabs" FontSize="13" ItemsSource="{Binding Tabs}" SelectedItem="{Binding SelectedTab, Mode=TwoWay}" ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Disabled" HorizontalAlignment="Left" VerticalAlignment="Center">
                     <ListBox.ItemsPanel><ItemsPanelTemplate><StackPanel Orientation="Horizontal"/></ItemsPanelTemplate></ListBox.ItemsPanel>
                     <ListBox.ItemTemplate>
                         <DataTemplate x:DataType="vm:TerminalTabViewModel">
-                            <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.HelpText="{Binding ShellTitle}" ContextMenu="{StaticResource TerminalTabMenu}"><PathIcon Data="{DynamicResource Icon.Terminal}" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/><TextBlock Text="{Binding Title}" VerticalAlignment="Center"/><TextBlock Text="{Binding StatusText}" Classes="meta" VerticalAlignment="Center"/></StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8" AutomationProperties.HelpText="{Binding ShellTitle}">
+                                <StackPanel.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Header="重命名页签" Click="RenameTab_Click"/>
+                                        <MenuItem Header="重启 shell" Click="RestartTab_Click" IsEnabled="{Binding !IsRunning}"/>
+                                        <MenuItem Header="关闭终端" Click="CloseTab_Click"/>
+                                    </ContextMenu>
+                                </StackPanel.ContextMenu>
+                                <PathIcon Data="{DynamicResource Icon.Terminal}" Width="14" Height="14" VerticalAlignment="Center" Foreground="{DynamicResource AppTextSecondary}"/>
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/><TextBlock Text="{Binding StatusText}" Classes="meta" VerticalAlignment="Center"/>
+                                <Button Classes="iconButton dockTabClose" Click="CloseTab_Click" ToolTip.Tip="关闭终端" AutomationProperties.Name="{Binding Title, StringFormat='关闭 {0}'}"><PathIcon Data="{DynamicResource Icon.Dismiss}" Width="14" Height="14"/></Button>
+                            </StackPanel>
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>

@@ -60,7 +60,7 @@ public partial class MainWindow
         }
         // AutoDev is now built in. Its retired package is absent from the activation catalog;
         // legacy payload and state remain on disk for history without starting a second owner.
-        _pluginPageHost.Start(_layoutContext);
+        _pluginPageHost.Start(_host?.ProjectPath ?? _options.ProjectPath ?? Environment.CurrentDirectory);
         // 语音服务没有页面贡献，页面事件不会通知宿主；改用全局插件状态广播，
         // 安装/启用/停用/卸载后立即刷新朗读按钮、菜单与设置面板。
         PluginStateNotifier.Changed += OnPluginStateChanged;
@@ -141,18 +141,17 @@ public partial class MainWindow
         {
             if (_terminalPage is not null) _terminalPage.StateChanged -= OnPluginPageStateChanged;
             _terminalPage = next;
+            _terminalPageVisible = next?.IsVisible == true;
             if (_terminalPage is not null)
             {
                 _terminalPage.StateChanged += OnPluginPageStateChanged;
-                _terminalPage.SetProject(_layoutContext, _options.Mode == AppSessionMode.Mock);
                 _terminalPage.ShortcutMatches = (id, e) => _shortcutActions.FirstOrDefault(action => action.Id == id) is { } action &&
                     _shortcuts.EffectiveGestures(action).Any(gesture => gesture.Key == e.Key && gesture.Modifiers == e.KeyModifiers);
             }
         }
         // 默认不预置终端页签；插件安装/启用后才把它放进底部停靠区。
         // 只在“从无到有”时打开一次，用户之后手动关闭不再强行弹回。
-        if (gained && _dockLayout.Find("terminal") is null) OpenDockPage("terminal", DockZone.Bottom);
-        else _terminalPage?.SetProject(_layoutContext, _options.Mode == AppSessionMode.Mock);
+        if (gained && _dockLayout.Find("terminal") is null && _dockLayout.FindFloating("terminal") is null) OpenDockPage("terminal", DockZone.Bottom);
         if (_shortcuts is not null) UpdateShortcutLabels();
         _actions.RefreshCapabilities();
     }

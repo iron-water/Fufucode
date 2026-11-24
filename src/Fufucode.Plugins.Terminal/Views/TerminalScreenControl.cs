@@ -24,7 +24,8 @@ public sealed class TerminalScreenControl : Control
 {
     internal Func<string, KeyEventArgs, bool>? ShortcutMatches { get; set; }
     public const double OriginX = 10;
-    public const double OriginY = 8;
+    public const double OriginY = 0;
+    internal event Action? CellMetricsChanged;
 
     /// <summary>Glyph size in DIP; the fixed cell advances scale with it (monospace metrics).</summary>
     public double FontSizeDip
@@ -61,6 +62,15 @@ public sealed class TerminalScreenControl : Control
             _cellWidth = Math.Round(_fontSizeDip * 0.6, 2);
             _cellHeight = Math.Round(_fontSizeDip * 1.385, 2);
         }
+        CellMetricsChanged?.Invoke();
+    }
+
+    internal (int Columns, int Rows)? GridForViewport(Size viewport)
+    {
+        var width = viewport.Width - 2 * OriginX;
+        var height = viewport.Height - OriginY;
+        if (!double.IsFinite(width) || !double.IsFinite(height) || width < 10 * CellWidth || height < 3 * CellHeight) return null;
+        return ((int)Math.Min(400, Math.Floor(width / CellWidth)), (int)Math.Min(160, Math.Floor(height / CellHeight)));
     }
 
     /// <summary>Cursor blink; the style comes from the shell's DECSCUSR, this only stops the animation.</summary>
@@ -189,7 +199,7 @@ public sealed class TerminalScreenControl : Control
         OnBufferChanged();
     }
     private void OnBufferChanged() { _snapshot = Session?.Snapshot; InvalidateMeasure(); InvalidateVisual(); }
-    protected override Size MeasureOverride(Size availableSize) => new(double.IsFinite(availableSize.Width) ? availableSize.Width : (Session?.Buffer.Columns ?? 100) * CellWidth + 20, Math.Max(54, (_snapshot?.Lines.Length ?? 3) * CellHeight + 16));
+    protected override Size MeasureOverride(Size availableSize) => new(double.IsFinite(availableSize.Width) ? availableSize.Width : (Session?.Buffer.Columns ?? 100) * CellWidth + 2 * OriginX, OriginY + (_snapshot?.Lines.Length ?? 3) * CellHeight);
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -198,7 +208,7 @@ public sealed class TerminalScreenControl : Control
             context.FillRectangle(BellFlashBrush, new Rect(Bounds.Size));
         if (_snapshot is null) return;
         var scroller = this.FindAncestorOfType<ScrollViewer>();
-        var firstRow = scroller is null ? 0 : Math.Max(0, (int)((scroller.Offset.Y - 8) / CellHeight));
+        var firstRow = scroller is null ? 0 : Math.Max(0, (int)((scroller.Offset.Y - OriginY) / CellHeight));
         var lastRow = scroller is null || scroller.Viewport.Height <= 0 ? _snapshot.Lines.Length : Math.Min(_snapshot.Lines.Length, firstRow + (int)Math.Ceiling(scroller.Viewport.Height / CellHeight) + 2);
         var selection = Session?.OutputSelection;
         var activeSelection = selection is { } candidate && candidate.IsOnSnapshot(_snapshot) && candidate.HasRange ? candidate : null;

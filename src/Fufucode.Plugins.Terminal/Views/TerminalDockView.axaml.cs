@@ -26,6 +26,9 @@ public partial class TerminalDockView : UserControl
     private bool _followOutput = true;
     private bool _restoringScroll;
     private long _scrollGeneration;
+    // A resize causes a full asynchronous ConPTY repaint. Commit the settled viewport, not every
+    // intermediate splitter/animation frame (whose repaint can arrive after the next shrink).
+    private readonly DispatcherTimer _resizeTimer = new() { Interval = TimeSpan.FromMilliseconds(80) };
     private bool _confirmingClose;
     internal Func<TerminalTabViewModel, Task<bool>>? ConfirmCloseForTesting { get; set; }
 
@@ -53,7 +56,7 @@ public partial class TerminalDockView : UserControl
         _bellVisual = CurrentSettings.Bell == "visual";
         TerminalSurface.InvalidateMeasure();
         TerminalSurface.InvalidateVisual();
-        Dispatcher.UIThread.Post(ResizeTerminal, DispatcherPriority.Loaded);
+        ScheduleResize();
     }
 
     private bool _bellVisual = true;
@@ -152,12 +155,12 @@ public partial class TerminalDockView : UserControl
 
     private void RestartTab_Click(object? sender, RoutedEventArgs e)
     {
-        if (TerminalTabs.SelectedItem is TerminalTabViewModel tab) tab.RestartSessionCommand.Execute(null);
+        if (sender is Control { DataContext: TerminalTabViewModel tab }) tab.Restart();
     }
 
     private async void RenameTab_Click(object? sender, RoutedEventArgs e)
     {
-        if (TerminalTabs.SelectedItem is not TerminalTabViewModel tab) return;
+        if (sender is not Control { DataContext: TerminalTabViewModel tab }) return;
         if (TopLevel.GetTopLevel(this) is not Window owner) return;
         var box = new TextBox { Text = tab.Title, MinWidth = 260 };
         var cancel = new Button { Content = "取消", MinWidth = 80 };
@@ -194,14 +197,19 @@ public partial class TerminalDockView : UserControl
     }
 
     private async void CloseTerminal_Click(object? sender, RoutedEventArgs e) => await CloseSelectedAsync();
-    internal async Task CloseSelectedAsync()
+    private async void CloseTab_Click(object? sender, RoutedEventArgs e)
     {
-        if (_confirmingClose || _dock?.SelectedTab is not { } tab) return;
-        var dock = _dock;
+        e.Handled = true;
+        if (sender is Control { DataContext: TerminalTabViewModel tab }) await CloseTabAsync(tab);
+    }
+    internal Task CloseSelectedAsync() => CloseTabAsync(_dock?.SelectedTab);
+    private async Task CloseTabAsync(TerminalTabViewModel? tab)
+    {
+        if (_confirmingClose || tab is null || _dock is not { } dock || !dock.Tabs.Contains(tab)) return;
         _confirmingClose = true;
         try
         {
-            if (tab.IsRunning && !await ConfirmCloseAsync(tab)) return;
+            if (tab.IsRunning && CurrentSettings.ConfirmClose && !await ConfirmCloseAsync(tab)) return;
             dock.CloseTerminal(tab);
         }
         finally { _confirmingClose = false; }
@@ -247,15 +255,19 @@ public partial class TerminalDockView : UserControl
         _composition.Changed += UpdateCompositionPreview;
         TerminalContextMenu.Opening += OnContextMenuOpening;
         TerminalSurface.PointerPressed += (_, e) => _surfacePointer = e.GetPosition(TerminalSurface);
-        Loaded += (_, _) => { HookPreedit(); ResizeTerminal(); };
-        SizeChanged += (_, _) => ResizeTerminal();
-        OutputScroller.SizeChanged += (_, _) => ResizeTerminal();
+        _resizeTimer.Tick += (_, _) => { _resizeTimer.Stop(); ResizeTerminal(); };
+        TerminalSurface.CellMetricsChanged += ScheduleResize;
+        OutputScroller.SizeChanged += (_, _) => ScheduleResize();
+        Loaded += (_, _) => { HookPreedit(); ScheduleResize(); };
         DataContextChanged += (_, _) => AttachDock();
         AttachedToVisualTree += (_, _) => AttachDock();
         DetachedFromVisualTree += (_, _) => DetachDock();
-        OutputScroller.ScrollChanged += (_, _) =>
+        OutputScroller.ScrollChanged += (_, e) =>
         {
-            if (!_restoringScroll)
+            if (e.ViewportDelta != default) ScheduleResize();
+            // An extent/viewport change is not a user scroll. Do not turn off following just
+            // because new output or a shorter panel temporarily moved the bottom away.
+            if (!_restoringScroll && e.OffsetDelta.Y != 0 && e.ViewportDelta == default && e.ExtentDelta == default)
             {
                 _followOutput = OutputScroller.Extent.Height - OutputScroller.Viewport.Height - OutputScroller.Offset.Y < 36;
                 if (_tab is not null) { _tab.FollowOutput = _followOutput; _tab.ScrollOffsetY = OutputScroller.Offset.Y; }
@@ -274,19 +286,20 @@ public partial class TerminalDockView : UserControl
     private void DetachDock()
     {
         _scrollGeneration++;
+        _resizeTimer.Stop();
         if (_tab is not null && !_restoringScroll)
         {
             _tab.ScrollOffsetY = OutputScroller.Offset.Y;
             _tab.FollowOutput = _followOutput;
         }
         if (_dock is not null) _dock.PropertyChanged -= OnDockChanged;
-        if (_tab is not null) { _tab.Buffer.Changed -= OnOutputChanged; _tab.PropertyChanged -= OnTabChanged; }
+        if (_tab is not null) { _tab.Buffer.Changed -= OnOutputChanged; _tab.PropertyChanged -= OnTabChanged; _tab.BellRequested -= OnBellRequested; }
         _dock = null; _tab = null;
     }
     private void OnDockChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName == nameof(TerminalDockViewModel.SelectedTab)) AttachTab();
-        if (e.PropertyName is nameof(TerminalDockViewModel.SelectedTab) or nameof(TerminalDockViewModel.IsVisible)) Dispatcher.UIThread.Post(ResizeTerminal, DispatcherPriority.Loaded);
+        if (e.PropertyName == nameof(TerminalDockViewModel.IsVisible)) ScheduleResize();
     }
     private void AttachTab()
     {
@@ -313,7 +326,7 @@ public partial class TerminalDockView : UserControl
         Dispatcher.UIThread.Post(() =>
         {
             if (generation != _scrollGeneration || !ReferenceEquals(targetTab, _tab)) return;
-            ResizeTerminal();
+            ScheduleResize();
             if (targetTab?.FollowOutput == true) OutputScroller.ScrollToEnd();
             else OutputScroller.Offset = new Vector(0, targetTab?.ScrollOffsetY ?? 0);
             _restoringScroll = false;
@@ -345,10 +358,16 @@ public partial class TerminalDockView : UserControl
             if (generation == _scrollGeneration && ReferenceEquals(targetTab, _tab) && targetTab.FollowOutput) OutputScroller.ScrollToEnd();
         }, DispatcherPriority.Loaded);
     }
+    private void ScheduleResize()
+    {
+        _resizeTimer.Stop();
+        if (_dock?.IsVisible == true && IsEffectivelyVisible) _resizeTimer.Start();
+    }
+
     private void ResizeTerminal()
     {
-        if (_dock?.IsVisible != true || Bounds.Width < 100 || Bounds.Height < 100) return;
-        _dock.SelectedTab?.Resize((int)Math.Max(10, OutputScroller.Viewport.Width / TerminalSurface.CellWidth), (int)Math.Max(3, OutputScroller.Viewport.Height / TerminalSurface.CellHeight));
+        if (_dock?.IsVisible != true || !IsEffectivelyVisible || TerminalSurface.GridForViewport(OutputScroller.Viewport) is not { } grid) return;
+        _dock.SelectedTab?.Resize(grid.Columns, grid.Rows);
     }
     private void HookPreedit()
     {
@@ -598,7 +617,7 @@ public partial class TerminalDockView : UserControl
     /// <summary>Scroll a fixed-cell row into view; programmatic scrolling never re-enables follow output.</summary>
     internal void ScrollToRow(int row)
     {
-        var centered = 8 + row * TerminalSurface.CellHeight - Math.Max(0, (OutputScroller.Viewport.Height - TerminalSurface.CellHeight) / 2);
+        var centered = TerminalScreenControl.OriginY + row * TerminalSurface.CellHeight - Math.Max(0, (OutputScroller.Viewport.Height - TerminalSurface.CellHeight) / 2);
         var max = Math.Max(0, OutputScroller.Extent.Height - OutputScroller.Viewport.Height);
         OutputScroller.Offset = new Vector(0, Math.Clamp(centered, 0, max));
         if (_tab is not null) _tab.ScrollOffsetY = OutputScroller.Offset.Y;

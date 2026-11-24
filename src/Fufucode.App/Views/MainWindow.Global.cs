@@ -81,7 +81,7 @@ public partial class MainWindow
         Register("files", "文件", "工作区", "Ctrl+P", "浏览项目文件，完整路径可复制", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Files), WorkAreaUnavailable);
         Register("changes", "变更", "工作区", "", "查看工作树或会话直接写入范围", () => OpenWorkspaceTabAsync(WorkspacePanelKind.Changes), WorkAreaUnavailable);
         Register("terminal", "交互终端", "工作区", "Ctrl+J", "独立于 Agent RPC 的项目终端（终端插件提供）",
-            () => { if (_terminalPage is null) return Task.CompletedTask; OpenDockPage("terminal", DockZone.Bottom); _terminalPage.Show(); return Task.CompletedTask; },
+            () => { OpenDockPage("terminal", DockZone.Bottom); return Task.CompletedTask; },
             () => _terminalPage is null ? "未安装或未启用交互终端插件" : WorkAreaUnavailable(), hideWhenUnavailable: true);
         string? TerminalMissing() => _terminalPage is null ? "未安装或未启用交互终端插件" : _terminalPage.HasTabs ? null : "请先打开终端";
         Register("terminal.copy", "复制终端选区", "终端", "", "复制固定输出快照中的选择，退出后仍可用", () => _terminalPage?.CopySelectionAsync() ?? Task.CompletedTask,
@@ -92,7 +92,7 @@ public partial class MainWindow
         Register("terminal.copy-or-interrupt", "终端复制或中断", "终端", "", "输出有选区时复制，否则中断；命令框文字选择由编辑器复制", () => _terminalPage?.CopyOrInterruptAsync() ?? Task.CompletedTask, TerminalMissing);
         Register("terminal.interrupt", "中断终端命令", "终端", "", "中断当前终端的 shell 命令", () => { _terminalPage?.Interrupt(); return Task.CompletedTask; },
             () => _terminalPage?.HasRunningTab == true ? null : "没有运行中的终端");
-        Register("terminal.new", "新建终端", "终端", "", "在当前项目新增独立终端", () => { _terminalPage?.CreateTerminal(); return Task.CompletedTask; },
+        Register("terminal.new", "新建终端", "终端", "", "在当前项目新增独立终端", () => { _terminalPage?.CreateTerminal(); OpenDockPage("terminal", DockZone.Bottom); return Task.CompletedTask; },
             () => _terminalPage is null ? "未安装或未启用交互终端插件" : null);
         Register("notifications", "通知中心", "全局", "", "显示或关闭通知页", () => { ToggleNotificationCenter(); return Task.CompletedTask; });
         Register("browser", "浏览器", "工作区", "", "内置浏览器", () => { OpenDockPage("browser", DockZone.Right); return Task.CompletedTask; },
