@@ -1,6 +1,6 @@
 using Fufucode.Core;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 internal static class Program
 {
@@ -11,7 +11,7 @@ internal static class Program
         catch (ArgumentException error) { return Fail(error.Message, 2); }
         if (options.Help) { Console.WriteLine(TuiOptions.Usage); return 0; }
         if (!TerminalSurface.IsSupported)
-            return Fail("fufucode-tui 需要交互终端；脚本和管道请使用 fufucode（CLI）。", 2);
+            return Fail("FUI 需要交互终端；脚本和管道请使用 fufucode（CLI）。", 2);
 
         using var lifetime = new CancellationTokenSource();
         ConsoleCancelEventHandler cancel = (_, e) => { e.Cancel = true; lifetime.Cancel(); };
@@ -64,9 +64,9 @@ internal static class Program
 internal sealed record TuiOptions(string Project, string? AppData, string? SessionId, bool Continue, bool Help)
 {
     internal const string Usage = """
-        fufucode-tui · FUMO
+        FUI · FUMO
 
-        fufucode-tui [--project <目录>] [--app-data <目录>] [--session <ID> | --continue]
+        fui [--project <目录>] [--app-data <目录>] [--session <ID> | --continue]
 
         默认新建 FUMO 会话；--continue 恢复本项目最近的 FUMO 会话。
         F1 查看按键与命令。无界面、管道和 JSON 输出使用独立的 fufucode CLI。

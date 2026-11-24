@@ -7,7 +7,7 @@ using Fufucode.Core;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Security;
 
-namespace Fufucode.Tui.Tests;
+namespace Fufucode.Fui.Tests;
 
 internal static class RuntimeTests
 {
@@ -15,7 +15,7 @@ internal static class RuntimeTests
     {
         var root = Environment.GetEnvironmentVariable("FUFUCODE_TEST_ROOT") is { Length: > 0 } fixtures
             ? Directory.CreateDirectory(Path.Combine(fixtures, "tui-" + Guid.NewGuid().ToString("N")))
-            : Directory.CreateTempSubdirectory("fufucode-tui-test-");
+            : Directory.CreateTempSubdirectory("fui-test-");
         var previousRoot = Environment.GetEnvironmentVariable(AppDataLayout.RootEnvironmentVariable);
         var previousJournal = FileChangeJournal.Root;
         var layout = new AppDataLayout(Path.Combine(root.FullName, "data"));

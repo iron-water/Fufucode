@@ -1,4 +1,4 @@
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 internal enum Ink { Plain, Header, User, Tool, Quiet, Error, Status, Approval, Composer }
 internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain);
@@ -85,7 +85,7 @@ internal sealed class TerminalLayout
         var project = TerminalText.SingleLine(view.Project);
         var model = TerminalText.SingleLine(view.Model);
         var session = TerminalText.SingleLine(view.Session);
-        var brand = columns >= 18 ? "FUMO  " : "";
+        var brand = columns >= 18 ? "FUI  " : "";
         var available = Math.Max(0, columns - brand.Length - 3);
         var sessionLimit = columns >= 60 && session.Length > 0 ? Math.Min(14, available / 5) : 0;
         if (sessionLimit > 0) available -= sessionLimit + 3;

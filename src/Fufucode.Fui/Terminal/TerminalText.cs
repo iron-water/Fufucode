@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 // All dynamic strings cross this boundary before they reach the terminal. Never measure SGR text.
 internal static class TerminalText

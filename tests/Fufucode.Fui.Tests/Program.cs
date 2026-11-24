@@ -1,4 +1,4 @@
-using Fufucode.Tui.Tests;
+using Fufucode.Fui.Tests;
 
 try
 {

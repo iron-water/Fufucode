@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 internal sealed class TerminalSurface : IDisposable
 {
@@ -23,7 +23,7 @@ internal sealed class TerminalSurface : IDisposable
 
     public TerminalSurface()
     {
-        if (!IsSupported) throw new InvalidOperationException("TUI 需要交互式终端。");
+        if (!IsSupported) throw new InvalidOperationException("FUI 需要交互式终端。");
         try
         {
             if (OperatingSystem.IsWindows())

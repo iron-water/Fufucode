@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 // Decode bracketed paste before converting VT function keys; native ConsoleKey events retain host modifiers.
 // A pasted CR, LF, escape sequence or function key is never handed to the command dispatcher as a key press.

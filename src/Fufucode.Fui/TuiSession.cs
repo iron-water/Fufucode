@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 internal sealed record TuiLine(string Kind, string Text);
 

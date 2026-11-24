@@ -9,9 +9,9 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Core", "src\Fufuco
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Cli", "src\Fufucode.Cli\Fufucode.Cli.csproj", "{D922D040-8859-4DA9-B8C3-D3CD23BBD8FD}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Tui", "src\Fufucode.Tui\Fufucode.Tui.csproj", "{33EA1A4B-31E8-4824-A354-0A662ED43D67}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Fui", "src\Fufucode.Fui\Fufucode.Fui.csproj", "{33EA1A4B-31E8-4824-A354-0A662ED43D67}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Tui.Tests", "tests\Fufucode.Tui.Tests\Fufucode.Tui.Tests.csproj", "{82643D7B-7593-4569-98BB-A48EE056FF65}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Fufucode.Fui.Tests", "tests\Fufucode.Fui.Tests\Fufucode.Fui.Tests.csproj", "{82643D7B-7593-4569-98BB-A48EE056FF65}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05-4346-4AA6-1389-037BE0695223}"
 EndProject

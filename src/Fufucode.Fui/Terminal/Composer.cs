@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Text;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 internal sealed class Composer
 {

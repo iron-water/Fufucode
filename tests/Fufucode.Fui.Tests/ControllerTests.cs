@@ -1,6 +1,6 @@
 using System.Threading.Channels;
 
-namespace Fufucode.Tui.Tests;
+namespace Fufucode.Fui.Tests;
 
 internal static class ControllerTests
 {

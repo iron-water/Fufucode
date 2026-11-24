@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 // Only the terminal loop mutates view state. Backend callbacks and commands never write to the screen.
 internal sealed class TuiController(ITuiSession session, CancellationToken token)

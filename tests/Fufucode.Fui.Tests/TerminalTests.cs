@@ -1,7 +1,7 @@
 using System.Text;
-using Fufucode.Tui;
+using Fufucode.Fui;
 
-namespace Fufucode.Tui.Tests;
+namespace Fufucode.Fui.Tests;
 
 internal static class TerminalTests
 {
@@ -115,6 +115,7 @@ internal static class TerminalTests
         Eq(true, frame.Rows[1].Text.EndsWith("message-08"), "follow newest");
         Eq(true, frame.Rows[6].Text.EndsWith("message-13"), "last visible message");
         Eq(true, frame.Rows[0].Text.Contains("示例") && frame.Rows[0].Text.Contains("model-a") && frame.Rows[0].Text.Contains("session-abc"), "header metadata");
+        Eq(true, frame.Rows[0].Text.StartsWith("FUI ", StringComparison.Ordinal), "terminal client brand");
         Eq(5, frame.CursorColumn, "caret cell counts CJK, not UTF-16");
         Eq("", TerminalSurface.Diff(frame, layout.Arrange(view, 80, 9), true), "idle frame writes nothing");
         var older = layout.Arrange(view with { Scroll = int.MaxValue }, 80, 9);

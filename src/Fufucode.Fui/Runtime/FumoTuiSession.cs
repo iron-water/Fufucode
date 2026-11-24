@@ -6,7 +6,7 @@ using Fufucode.Core.Approvals;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Plugins;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
 internal sealed class FumoTuiSession : ITuiSession
@@ -165,7 +165,7 @@ internal sealed class FumoTuiSession : ITuiSession
                 string.Equals($"{r.Generation:N}:{r.Id}", id, StringComparison.Ordinal));
             if (request is null || DateTimeOffset.UtcNow >= request.ReceivedAt + request.Timeout)
                 throw new InvalidOperationException("审批不存在或已失效。");
-            decision = _approvals.DecideAsync(id, allow, "TUI", ct);
+            decision = _approvals.DecideAsync(id, allow, "FUI", ct);
         }
         var result = await decision;
         if (!result.Accepted) throw new InvalidOperationException(result.Message ?? "审批已失效。");

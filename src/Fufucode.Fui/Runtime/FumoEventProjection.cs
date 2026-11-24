@@ -3,7 +3,7 @@ using System.Threading.Channels;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 
-namespace Fufucode.Tui;
+namespace Fufucode.Fui;
 
 /// <summary>Projects block deltas using stable row ids. History is read once, never on a token callback.</summary>
 internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
