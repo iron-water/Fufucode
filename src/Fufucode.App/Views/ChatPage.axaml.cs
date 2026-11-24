@@ -97,7 +97,7 @@ public partial class ChatPage : UserControl
             PluginContentBridge.Reset();
             _animatedEntries.Clear();
             if (_attachedViewModel is { } previous)
-            { previous.Input.FocusRequested -= OnInputFocusRequested; previous.Input.PropertyChanged -= ComposerChanged; previous.Timeline.Entries.CollectionChanged -= TimelineChanged; previous.Timeline.ScrollToEndSmoothRequested -= AnimateScrollToEnd; }
+            { previous.Timeline.VisibleEntries.CollectionChanged -= VisibleEntriesChanged; previous.Input.FocusRequested -= OnInputFocusRequested; previous.Input.PropertyChanged -= ComposerChanged; previous.Timeline.Entries.CollectionChanged -= TimelineChanged; previous.Timeline.ScrollToEndSmoothRequested -= AnimateScrollToEnd; }
             _attachedViewModel = DataContext as MainViewModel;
             // 命令填入后聚焦输入框（H3 命令 Flyout / 扩展页「填入」）。
             if (DataContext is MainViewModel vm)
@@ -105,6 +105,8 @@ public partial class ChatPage : UserControl
                 vm.Input.FocusRequested += OnInputFocusRequested;
                 vm.Input.PropertyChanged += ComposerChanged;
                 vm.Timeline.Entries.CollectionChanged += TimelineChanged;
+                vm.Timeline.VisibleEntries.CollectionChanged += VisibleEntriesChanged;
+                MarkEntriesPresent(vm.Timeline.VisibleEntries);
                 vm.Timeline.ScrollToEndSmoothRequested += AnimateScrollToEnd;
                 // 富内容插件只拿到这两个窄回调：提交一段文本、填入输入框。
                 PluginContentBridge.SubmitAsync = text => vm.Input.SubmitExternalAsync(text);
@@ -164,6 +166,32 @@ public partial class ChatPage : UserControl
         // 虚拟化滚动会重新实例化容器；按条目 id 记账，避免来回滑动时反复淡入闪烁。
         if (control.DataContext is TimelineEntryViewModel entry && !_animatedEntries.Add(entry.Id)) return;
         Motion.AnimateIn(control);
+    }
+
+    /// <summary>
+    /// 已在时间线上的条目视为已呈现：会话切换、历史回放、“加载更早”一次性出现的条目不播放进入动画，
+    /// 否则整段对话会同时从透明淡入，看起来就是主页面闪了一下。只有在末尾逐条追加的实时消息才淡入。
+    /// </summary>
+    private void MarkEntriesPresent(System.Collections.IEnumerable? entries)
+    {
+        if (entries is null) return;
+        foreach (var item in entries)
+            if (item is TimelineEntryViewModel present) _animatedEntries.Add(present.Id);
+    }
+
+    private bool _replayingVisible;
+
+    private void VisibleEntriesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        // 清空后在同一轮调度里逐条追加的是历史回放（切换会话、重建可见段），不是实时到达。
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset && !_replayingVisible)
+        {
+            _replayingVisible = true;
+            Avalonia.Threading.Dispatcher.UIThread.Post(() => _replayingVisible = false, Avalonia.Threading.DispatcherPriority.Background);
+        }
+        var appendedOne = e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add &&
+            e.NewItems is { Count: 1 } && sender is System.Collections.IList list && e.NewStartingIndex == list.Count - 1;
+        if (!appendedOne || _replayingVisible) MarkEntriesPresent(sender as System.Collections.IEnumerable);
     }
 
     /// <summary>
@@ -402,6 +430,8 @@ public partial class ChatPage : UserControl
     {
         if (sender is not Control control) return;
         control.Loaded -= OnTransientBlockLoaded;
+        // 只在消息仍在输出时淡入；历史里的思考/工具卡随消息一起直接出现。
+        if (!RichMarkdownView.GetIsStreaming(control)) return;
         Motion.AnimateIn(control, offsetY: 3, Motion.StandardDuration);
     }
 

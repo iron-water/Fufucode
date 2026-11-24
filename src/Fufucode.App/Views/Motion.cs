@@ -60,6 +60,9 @@ internal static class Motion
     /// 消息进入：淡入并轻微上移。只在元素第一次挂到可视树时调用，
     /// 流式刷新不会重播。
     /// </summary>
+    /// <summary>进入动画实际启动的次数，供原生回归判断某次操作是否触发了淡入。</summary>
+    internal static int AnimateInCountForTesting { get; private set; }
+
     public static void AnimateIn(Control control, double offsetY = 6, TimeSpan? duration = null)
     {
         if (Reduced)
@@ -69,6 +72,7 @@ internal static class Motion
             return;
         }
 
+        AnimateInCountForTesting++;
         var time = duration ?? EnterDuration;
         var translate = new TranslateTransform(0, offsetY);
         control.RenderTransform = translate;

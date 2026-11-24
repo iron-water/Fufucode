@@ -168,7 +168,7 @@ public sealed class MessageActionsView : UserControl
             // 底部卡只在回合结束后出现；出现时做一次淡入，避免突然插入造成滚动跳动。
             if (e.Property == IsVisibleProperty && IsVisible) Motion.AnimateFooter(this);
         };
-        AttachedToVisualTree += (_, _) => { if (IsVisible) Motion.AnimateFooter(this); };
+        // 挂载时已可见（历史消息、切换会话）直接显示：整页消息底部卡同时淡入就是主页面闪一下。
     }
 
     private void ObserveEntry(object? dataContext)

@@ -10,6 +10,7 @@ using Avalonia.Media;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using Fufucode.App.Abstractions;
 using Fufucode.App.Integration;
 using Fufucode.App.ViewModels;
 using Fufucode.App.Views;
@@ -82,10 +83,56 @@ internal static class NativeSkeletonSelfTest
         }
         await navigation;
         await Task.Delay(300);
-        Check(minOpacity < .9 && Math.Abs(host.Opacity - 1) < .01, $"page switch runs an entrance and settles fully visible (min {minOpacity:0.00})");
+        Check(minOpacity > .99 && Math.Abs(host.Opacity - 1) < .01, $"page switch never blanks the main page (min {minOpacity:0.00})");
         await window.NavigateForTestingAsync(AppPage.Chat);
         await Task.Delay(400);
         Check(Math.Abs(host.Opacity - 1) < .01, "returning page settles fully visible");
+
+        // 切换会话等于整段历史一次性换上来：每一帧消息都应完全可见，不从透明淡入。
+        var vm = (MainViewModel)window.DataContext!;
+        var history = new List<ChatMessage>();
+        for (var i = 0; i < 12; i++)
+        {
+            history.Add(new ChatMessage("hist-user-" + i, MessageRole.User, null,
+                new MessageBlock[] { new Fufucode.App.Abstractions.TextBlock("第 " + i + " 轮问题") }, null, true));
+            history.Add(new ChatMessage("hist-assistant-" + i, MessageRole.Assistant, "fixture-model", new MessageBlock[]
+            {
+                new ThinkingBlock("先想一下"),
+                new Fufucode.App.Abstractions.TextBlock("第 " + i + " 轮回答，包含一段说明。"),
+            }, null, true));
+        }
+        var items = window.GetVisualDescendants().OfType<ChatPage>().First().FindControl<ItemsControl>("TimelineItems")!;
+        double minEntry = 1;
+        var historyFrames = 0;
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        void Frame(TimeSpan _)
+        {
+            foreach (var container in items.GetRealizedContainers().OfType<Control>())
+            {
+                if (!container.IsEffectivelyVisible) continue;
+                var opacity = 1d;
+                for (Visual? v = container; v is not null; v = v.GetVisualParent()) opacity *= v.Opacity;
+                foreach (var card in container.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("toolGroupCard")))
+                    minEntry = Math.Min(minEntry, opacity * card.Opacity);
+                minEntry = Math.Min(minEntry, opacity);
+            }
+            historyFrames++;
+        }
+        var fadesBefore = Motion.AnimateInCountForTesting;
+        vm.Timeline.LoadHistory(history);
+        started = System.Diagnostics.Stopwatch.GetTimestamp();
+        // 定时采样：画面静止时不会再有帧回调，淡入动画（160ms）一定落在采样窗口内。
+        var firstSample = -1d;
+        for (var sample = 0; sample < 40; sample++)
+        {
+            await Task.Delay(10);
+            if (firstSample < 0) firstSample = System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+            Frame(default);
+        }
+        Console.WriteLine($"history samples from {firstSample:0}ms to {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0}ms");
+        var faded = Motion.AnimateInCountForTesting - fadesBefore;
+        Check(faded == 0, $"history entries and cards are not animated in ({faded} faded)");
+        Check(historyFrames > 5 && minEntry > .99, $"loading a session's history shows it at once without fading ({historyFrames} samples, min {minEntry:0.00})");
 
         await File.WriteAllLinesAsync(Path.Combine(evidence, "failures.txt"), failures);
         Console.WriteLine($"Native skeleton checks failures: {failures.Count}; evidence: {evidence}");
