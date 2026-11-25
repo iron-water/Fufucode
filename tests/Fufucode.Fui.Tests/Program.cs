@@ -6,6 +6,8 @@ try
     Console.WriteLine("PASS controller: commands, streaming, drafts, approvals, stale requests and subagent activity");
     TerminalTests.Run();
     Console.WriteLine("PASS terminal: editor, layout and terminal rendering");
+    FuzzyPickerTests.Run();
+    Console.WriteLine("PASS fuzzy picker: stable word-aware ranking, Unicode and cached large-list search");
     WorkbenchWidgetTests.Run();
     Console.WriteLine("PASS workbench widgets: selection, markdown, folding, navigation and editing");
     await WorkbenchFlowTests.RunAsync();
