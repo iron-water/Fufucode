@@ -22,24 +22,33 @@ internal static class MarkdownTable
         if (!TryAlignment(delimiters, out var alignment)) return false;
 
         for (var i = 0; i < header.Length; i++) header[i] = FormatCell(header[i]);
-        var rowCells = new List<(string[] Cells, bool Complete)>();
+        var rowCells = new List<string[]>();
+        string? partial = null;
         var end = start + 2;
         while (end < lines.Count)
         {
             var line = lines[end];
             if (string.IsNullOrWhiteSpace(line.Text) || StartsBlock(line.Text)) break;
-            var complete = line.Complete || EndsWithUnescapedPipe(line.Text);
-            rowCells.Add((ParseRow(line.Text, header.Length), complete));
+            if (!line.Complete && !EndsWithUnescapedPipe(line.Text))
+            {
+                // A growing last row stays outside the fixed table geometry. Treating it as a
+                // cell would either clip the text or move every painted row on each chunk.
+                partial = TerminalText.Clean(line.Text);
+                end++;
+                break;
+            }
+            rowCells.Add(ParseRow(line.Text, header.Length));
             end++;
-            if (!complete) break;
         }
 
         var widths = ColumnWidths(header, rowCells, width, out var available);
         if (widths is null) return false;
         rows.Add(new(RenderRow(header, widths, alignment), Ink.Heading));
         rows.Add(new(string.Join("─┼─", widths.Select(value => new string('─', value))), Ink.Quiet));
-        foreach (var (cells, _) in rowCells)
+        foreach (var cells in rowCells)
             rows.Add(new(RenderRow(cells, widths, alignment), Ink.Plain));
+        if (partial is not null)
+            rows.Add(new("  " + TerminalText.Clip(partial, Math.Max(1, width - 2)), Ink.Quiet));
         next = end;
         return true;
     }
@@ -97,7 +106,7 @@ internal static class MarkdownTable
         return result is null ? source : result.Append(source, copied, source.Length - copied).ToString();
     }
 
-    private static int[]? ColumnWidths(string[] header, List<(string[] Cells, bool Complete)> data, int width, out int available)
+    private static int[]? ColumnWidths(string[] header, List<string[]> data, int width, out int available)
     {
         var columns = header.Length;
         available = width - Gap.Length * (columns - 1);
@@ -106,9 +115,8 @@ internal static class MarkdownTable
         for (var column = 0; column < columns; column++)
         {
             desired[column] = Math.Max(1, TerminalText.Width(header[column]));
-            foreach (var (cells, complete) in data)
+            foreach (var cells in data)
             {
-                if (!complete) continue;
                 desired[column] = Math.Max(desired[column], TerminalText.Width(cells[column]));
             }
         }
