@@ -449,7 +449,9 @@ public sealed class NativeCSharpChatSession : IChatSession, IQueuedChatSession, 
     {
         var isWindows = OperatingSystem.IsWindows();
         var osName = isWindows ? "Windows" : (OperatingSystem.IsMacOS() ? "macOS" : "Linux");
-        var shellName = isWindows ? "Windows cmd.exe" : "sh";
+        // 每轮按设置重新解析：设置页切换默认 shell 后，下一轮提示与实际执行保持一致。
+        var shell = Shell.FumoRuntimeSettings.ResolveDefaultShell(out var shellError);
+        var shellName = Shell.CommandShellPrompt.DescribeShell(shell, shellError);
 
         var sb = new StringBuilder();
         sb.AppendLine("你是运行在 Fufucode 原生内核（FUMO）中的自主编码 Agent。");
@@ -460,12 +462,7 @@ public sealed class NativeCSharpChatSession : IChatSession, IQueuedChatSession, 
         sb.AppendLine();
         sb.AppendLine("## 工具使用与工程原则");
         sb.AppendLine("1. 优先使用内置文件工具（read_file、write_file、edit_file、list_dir、grep_search、glob_files）进行文件查阅与编辑，比外部 shell 命令更高效稳定。");
-        if (isWindows)
-        {
-            sb.AppendLine("2. 在 Windows 环境下使用 run_command 时：");
-            sb.AppendLine("   - 串联命令必须使用 '&&' 或 '&'，不要使用 Unix shell 分隔符 ';'。");
-            sb.AppendLine("   - 使用 Windows 原生命令（如 dir、where.exe、findstr、echo 等），不要直接假设存在 Unix 工具（如 ls、cat、grep、head、tr 等）。");
-        }
+        sb.Append(Shell.CommandShellPrompt.BuildGuidance(shell));
         sb.AppendLine("3. 目标是实际完成代码开发与落地，不只给出空泛方案。");
         sb.AppendLine("4. 当遇到环境缺少某 SDK/工具链（如未安装对应语言编译器）时，不要陷入无限探测循环；应依据任务书规范自主完成核心架构设计、源代码编写、种子数据准备与必要单元测试，并在最终回复中如实说明环境限制与未验证项。");
         sb.AppendLine("5. 验证命令要克制：同一处改动后不要重复运行同一个耗时检查；先跑与改动直接相关的测试，最后再跑一次全量。");

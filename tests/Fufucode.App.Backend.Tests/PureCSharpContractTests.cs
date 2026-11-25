@@ -751,9 +751,11 @@ internal static class PureCSharpContractTests
             // ════════════════ CLI：cwd 与超时参数 ════════════════
             var cliSubDir = Path.Combine(tempDir, "sub");
             Directory.CreateDirectory(cliSubDir);
+            // 显式 cmd：pwsh 里无参 cd 会切到用户目录，不打印当前目录。
             var cwdCommand = OperatingSystem.IsWindows() ? "cd" : "pwd";
+            var cwdShell = OperatingSystem.IsWindows() ? ",\"shell\":\"cmd\"" : "";
             var cwdResult = await dispatcher.DispatchAsync(new PureToolCall("cli1", "run_command",
-                "{\"command\":\"" + cwdCommand + "\",\"cwd\":\"sub\",\"timeout_seconds\":5}"));
+                "{\"command\":\"" + cwdCommand + "\",\"cwd\":\"sub\",\"timeout_seconds\":5" + cwdShell + "}"));
             checks.Check(cwdResult.Success && cwdResult.Content.Contains("sub"),
                 "run_command 支持 cwd 并在指定目录执行");
             var badCwd = await dispatcher.DispatchAsync(new PureToolCall("cli2", "run_command",

@@ -83,6 +83,12 @@ internal static class Program
                 Console.WriteLine($"\n会话层通过：{checks.Passed} 项断言");
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--shell-only")
+            {
+                await CommandShellTests.RunAsync(checks);
+                Console.WriteLine($"\n命令解释器通过：{checks.Passed} 项断言");
+                return 0;
+            }
             if (args.Length == 1 && args[0] == "--long-horizon-only")
             {
                 await LongHorizonTests.RunAsync(checks);
@@ -95,6 +101,7 @@ internal static class Program
             SessionBadgeTests.Run(checks);
             SessionSwitchTests.Run(checks);
             await PureCSharpContractTests.RunAsync(checks);
+            await CommandShellTests.RunAsync(checks);
             PluginMarketplaceTests.Run(checks);
             await PluginCapabilityTests.RunAsync(checks);
             PluginDistributionInstallTests.Run(checks);

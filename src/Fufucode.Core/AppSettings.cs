@@ -51,6 +51,21 @@ public sealed record CompatibleEndpoint(string ProviderName, string BaseUrl, str
 /// </summary>
 public sealed record BackgroundSettings(bool CloseToTray = false);
 
+/// <summary>
+/// FUMO 内核的高级设置（设置 → 高级）。
+/// Shell 为空时按 PowerShell 7 → Windows PowerShell → cmd 取第一个存在的；显式设置时只用该解释器。
+/// </summary>
+public sealed record FumoSettings(
+    string? Shell = null,
+    // 是否加载解释器的用户配置（PowerShell $PROFILE、cmd AutoRun、bash --login）；默认关闭，命令可复现且启动快。
+    bool LoadShellProfile = false,
+    // run_command 未指定 timeout_seconds 时的超时（秒）。
+    int CommandTimeoutSeconds = FumoSettings.DefaultCommandTimeoutSeconds)
+{
+    public const int DefaultCommandTimeoutSeconds = 300;
+    public const int MaxCommandTimeoutSeconds = 3600;
+}
+
 public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     string? ThinkingLevel = null, string Theme = "system", string? ProxyUrl = null,
     CompatibleEndpoint? Endpoint = null,
@@ -69,7 +84,9 @@ public sealed record AppSettings(int Version = 1, string? SelectedModel = null,
     // 内存优化开关；null 视为全部关闭（高性能模式）。
     PerformanceSettings? Performance = null,
     // Graph / AutoDev is a built-in mode; disabling it leaves ordinary Chat intact.
-    bool GraphEnabled = true);
+    bool GraphEnabled = true,
+    // FUMO 内核高级设置；旧配置没有该字段时全部跟随默认。
+    FumoSettings? Fumo = null);
 
 [JsonSourceGenerationOptions(WriteIndented = true, PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase)]
 [JsonSerializable(typeof(AppSettings))]
@@ -288,6 +305,15 @@ public sealed class AppSettingsStore
                 !(char.IsAsciiLetter(endpoint.ApiKeyEnvironmentVariable[0]) || endpoint.ApiKeyEnvironmentVariable[0] == '_') ||
                 !endpoint.ApiKeyEnvironmentVariable.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
                 throw new ArgumentException("Invalid compatible endpoint.");
+        }
+        if (settings.Fumo is { } fumo)
+        {
+            // 只挡脏值；跨平台或未来新增的 shell id 由运行时如实报告不可用，不让整份设置读不出来。
+            if (fumo.Shell is { } shell &&
+                (shell.Length is 0 or > 32 || !shell.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_')))
+                throw new ArgumentException("Invalid FUMO shell.");
+            if (fumo.CommandTimeoutSeconds is < 1 or > FumoSettings.MaxCommandTimeoutSeconds)
+                throw new ArgumentException("Invalid FUMO command timeout.");
         }
         if (settings.UpdateFeedUrl is { Length: > 0 } feed &&
             (!Uri.TryCreate(feed, UriKind.Absolute, out var feedUri) ||

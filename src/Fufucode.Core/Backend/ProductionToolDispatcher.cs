@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Fufucode.Core.Diagnostics;
+using Fufucode.Core.Shell;
 namespace Fufucode.Core.Backend;
 
 /// <summary>
@@ -49,6 +50,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
     public Action<PureToolCall, string, int?>? HostExecutionAudit { get; set; }
     public Security.SecurityPolicyEvaluator? SecurityEvaluator { get; set; }
     public Security.SecurityBackupStore? SecurityBackups { get; set; }
+    /// <summary>覆盖进程级 FUMO 高级设置（测试或独立宿主使用）；null 时读 <see cref="FumoRuntimeSettings"/>。</summary>
+    public Func<FumoSettings?>? FumoSettingsProvider { get; set; }
     private bool SecurityReadable(string path) => SecurityEvaluator is null ||
         SecurityEvaluator.FileAction(path) == Security.SecurityAction.Allow;
 
@@ -1466,42 +1469,56 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
             workingDirectory = resolved;
         }
 
-        // 构建/测试命令经常超过 2 分钟；默认给 5 分钟，仍保留 600 秒硬上限。
-        var timeoutSeconds = 300;
+        var fumo = FumoSettingsProvider?.Invoke() ?? FumoRuntimeSettings.Current;
+        // 构建/测试命令经常超过 2 分钟；默认值来自 设置 → 高级（默认 300 秒）。
+        var timeoutSeconds = Math.Clamp(fumo.CommandTimeoutSeconds, 1, FumoSettings.MaxCommandTimeoutSeconds);
         if (doc.RootElement.TryGetProperty("timeout_seconds", out var timeoutElem) &&
             timeoutElem.TryGetInt32(out var requestedTimeout) && requestedTimeout > 0)
             // 上限 3600 秒：完整构建/测试套件可能远超 10 分钟，600 秒的硬顶会误杀正常任务。
-            timeoutSeconds = Math.Clamp(requestedTimeout, 1, 3600);
+            timeoutSeconds = Math.Clamp(requestedTimeout, 1, FumoSettings.MaxCommandTimeoutSeconds);
 
-        var isWindows = OperatingSystem.IsWindows();
-        var psi = new ProcessStartInfo
-        {
-            FileName = isWindows ? "cmd.exe" : "/bin/sh",
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8,
-            StandardErrorEncoding = Encoding.UTF8
-        };
-        if (isWindows)
-        {
-            // chcp 65001：让 cmd 及多数控制台程序输出 UTF-8，避免中文 Windows 下乱码。
-            psi.Arguments = $"/d /s /c \"chcp 65001>nul & {cmd}\"";
-        }
-        else
-        {
-            // ArgumentList 避免 .NET 按 Windows 规则重新解析并剥离命令中的内层引号。
-            psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add(cmd);
-        }
+        // 模型可按次指定 shell；否则用设置中的默认解释器（未设置时 pwsh 7 → Windows PowerShell → cmd）。
+        string? requestedShell = null;
+        if (doc.RootElement.TryGetProperty("shell", out var shellElem) && shellElem.ValueKind == JsonValueKind.String &&
+            shellElem.GetString() is { Length: > 0 } shellId)
+            requestedShell = shellId;
+        var shell = CommandShells.Resolve(requestedShell ?? fumo.Shell, out var shellError);
+        if (shell is null) return new PureToolResult(call.Id, false, $"无法启动命令解释器：{shellError}");
 
+        string? tempScript;
+        ProcessStartInfo psi;
+        try
+        {
+            (psi, tempScript) = CommandShells.CreateStartInfo(shell, cmd, workingDirectory,
+                new CommandShellLaunchOptions(fumo.LoadShellProfile));
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return new PureToolResult(call.Id, false, $"无法准备命令脚本：{ex.Message}");
+        }
+        try
+        {
+            return await RunShellProcessAsync(call, psi, cmd, shell, workingDirectory, timeoutSeconds, ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            if (tempScript is not null)
+            {
+                try { File.Delete(tempScript); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
+            }
+        }
+    }
+
+    private async Task<PureToolResult> RunShellProcessAsync(PureToolCall call, ProcessStartInfo psi, string cmd,
+        ResolvedCommandShell shell, string workingDirectory, int timeoutSeconds, CancellationToken ct)
+    {
         using var process = new Process { StartInfo = psi };
         using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
         using var span = PerfTracer.Step("tool.process", "tool", "run_command");
         span.Tag("command", cmd);
+        span.Tag("shell", shell.Kind.Id);
         span.Tag("cwd", workingDirectory);
         span.Tag("timeoutSeconds", timeoutSeconds);
 
@@ -1937,7 +1954,8 @@ public sealed class ProductionToolDispatcher : IPureToolDispatcher
                 "properties": {
                     "command": { "type": "string" },
                     "cwd": { "type": "string", "description": "相对工作区" },
-                    "timeout_seconds": { "type": "integer", "description": "1–3600，默认 300" }
+                    "shell": { "type": "string", "enum": ["pwsh", "powershell", "cmd", "git-bash", "sh", "bash"], "description": "省略时用系统提示中的默认 shell；只在需要其他语法时指定" },
+                    "timeout_seconds": { "type": "integer", "description": "1–3600，省略时用设置中的默认值" }
                 },
                 "required": ["command"]
             }

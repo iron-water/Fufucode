@@ -105,38 +105,13 @@ public static class ShellProfiles
         return profile.DisplayName;
     }
 
-    /// <summary>该配置的可执行文件绝对路径；不存在时返回 null。</summary>
+    /// <summary>该配置的可执行文件绝对路径；不存在时返回 null。
+    /// 与 FUMO run_command 共用 Core 的解释器目录，安装位置探测只有一份。</summary>
     public static string? Resolve(ShellProfile profile)
     {
-        if (profile.Id == "git-bash")
-        {
-            foreach (var candidate in new[]
-                     {
-                         Environment.ExpandEnvironmentVariables(@"%ProgramFiles%\Git\bin\bash.exe"),
-                         Environment.ExpandEnvironmentVariables(@"%ProgramFiles(x86)%\Git\bin\bash.exe"),
-                         Environment.ExpandEnvironmentVariables(@"%LOCALAPPDATA%\Programs\Git\bin\bash.exe"),
-                     })
-                if (File.Exists(candidate)) return candidate;
-            return null;
-        }
-        if (Path.IsPathRooted(profile.FileName))
-            return File.Exists(profile.FileName) ? profile.FileName : null;
-        if (profile.Id == "powershell")
-        {
-            // Windows PowerShell lives in its versioned System32 subdirectory, not in System32 itself.
-            var legacy = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),
-                "WindowsPowerShell", "v1.0", "powershell.exe");
-            if (File.Exists(legacy)) return legacy;
-        }
-        var system = Path.Combine(Environment.SystemDirectory, profile.FileName);
-        if (File.Exists(system)) return system;
-        foreach (var root in new[] { Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData) })
-        {
-            if (string.IsNullOrEmpty(root)) continue;
-            var candidate = Path.Combine(root, "PowerShell", "7", profile.FileName);
-            if (profile.Id == "pwsh" && File.Exists(candidate)) return candidate;
-        }
-        return null;
+        if (Fufucode.Core.Shell.CommandShells.FindExecutable(profile.Id) is { } known) return known;
+        if (Fufucode.Core.Shell.CommandShells.Find(profile.Id) is not null) return null;
+        return Path.IsPathRooted(profile.FileName) && File.Exists(profile.FileName) ? profile.FileName : null;
     }
 
     /// <summary>构造完整的命令行；引号由调用方按 CreateProcess 规则处理。</summary>
