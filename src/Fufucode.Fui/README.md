@@ -21,11 +21,15 @@ fui --project C:\work\demo --session <ID>
 | 在运行中补充输入 | `/steer 文本` 插话，`/queue 文本` 追加下一轮，`/queue` 查看队列。若正在写草稿，可从命令面板选插话或跟进，再按 Enter 提交。 |
 | 查看子代理活动 | 状态栏显示运行中的子代理数量；`/agents` 列出 FUMO 实际上报的作业、状态和工具计数，选择后查看只读事件记录。插件未启用或没有事件时显示空态，不伪造实时转录。 |
 | 浏览项目和带入上下文 | `/preview` 选择 UTF-8 文件，只在本机显示；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择 UTF-8 文本或 PNG/JPEG 图片附到下一条消息（允许纯图发送）；`/context` 查看，`/detach` 移除。每回合最多 4 个附件、合计 10 MiB，单个文本文件最多 64 KiB；发送前复核内容、安全规则和当前模型的图片输入能力，文件已改或模型不支持图片时会拒绝发送并保留草稿。 |
-| 阅读和找回输入 | `Ctrl+F` 或 `/find` 搜索并跳到对话里的消息；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`/tools` 展开/折叠工具，`/thoughts` 显示/隐藏思考。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
+| 阅读和找回输入 | `Ctrl+F` 或 `/find` 搜索并跳到对话里的消息；`/links` 搜索回复中的链接目标并明确复制；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`/tools` 展开/折叠工具，`/thoughts` 显示/隐藏思考。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
 
 ### Markdown 呈现
 
-FUI 把终端 Markdown 作为只读呈现层：GFM 风格表格按显示宽度对齐，支持左/中/右列，中文与 emoji 不按字符数计算；`[文字](URL)` 显示为 `文字 (URL)`，引用和列表有可读前缀。未闭合代码围栏内的管道和链接保持原文，表格在流式行未完成时使用已锁定列宽，避免已画内容抖动。不执行链接、不发射 OSC 8；嵌套表格、链接标题和其他完整 GFM 能力尚未实现。原始消息和历史文件不被改写。
+FUI 把终端 Markdown 作为只读呈现层：GFM 风格表格按显示宽度对齐，支持左/中/右列，中文与 emoji 不按字符数计算；`[文字](URL)` 显示为 `文字 (URL)`，引用和列表有可读前缀。代码围栏支持 C#、PowerShell、JSON、JavaScript/TypeScript、Python、Bash、Rust、Go、SQL 和 diff，并按真彩色、256 色、16 色和 `NO_COLOR` 降级。未闭合围栏保持已出现的代码行稳定，原始消息和历史文件不被改写。
+
+`/links` 索引回复中的 Markdown 链接、标题链接、`www.` 与裸 HTTP(S) URL；选择后显示完整目标，再选择“复制 URL”写入 Windows 文本剪贴板，不自动打开外部站点。支持 OSC 8 的终端默认把 URL 渲染为可点击链接；设置 `FUI_HYPERLINKS=on` 可强制开启，`off` 或 `NO_COLOR` 只显示可读文字。链接和显示文本会过滤控制字符，非 HTTP(S) 目标不会获得 OSC 8。
+
+Mermaid 围栏支持常见 `flowchart` / `graph` 的 `TD`、`TB`、`LR` 节点、`-->` 连线与条件标签；超出该子集时明确显示“此 Mermaid 子集不支持”并保留围栏源码。嵌套表格和其他完整 GFM/Mermaid 能力仍未实现。
 
 ### LaTeX 公式
 

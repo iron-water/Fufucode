@@ -97,7 +97,7 @@ internal static class ThemeTests
         Require(Regex.Matches(output, @"\x1b\[([0-9;]+)m", RegexOptions.CultureInvariant)
             .Select(match => match.Groups[1].Value.Split(';'))
             .SelectMany(parameters => parameters)
-            .All(parameter => parameter is "1" or "2" or "7" or "22" or "27"),
+            .All(parameter => parameter is "1" or "2" or "4" or "7" or "22" or "24" or "27"),
             "NO_COLOR output contains only non-color intensity/reverse SGR");
         Require(output.Contains("! F2 允许 · F3 拒绝", StringComparison.Ordinal),
             "NO_COLOR leaves approval text untouched");

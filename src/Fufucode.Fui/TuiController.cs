@@ -4,7 +4,8 @@ using Fufucode.App.Abstractions;
 namespace Fufucode.Fui;
 
 // Only the terminal loop mutates view state. Backend callbacks and commands never write to the screen.
-internal sealed partial class TuiController(ITuiSession session, CancellationToken token, string? dataRoot = null)
+internal sealed partial class TuiController(ITuiSession session, CancellationToken token, string? dataRoot = null,
+    ITextClipboard? clipboard = null)
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
@@ -13,6 +14,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
     private readonly Composer _composer = new();
+    private readonly ITextClipboard _clipboard = clipboard ?? WindowsTextClipboard.Instance;
     private readonly List<TuiLine> _lines = [.. session.History];
     private readonly Dictionary<string, int> _indices = new(StringComparer.Ordinal);
     private readonly Dictionary<int, StringBuilder> _deltas = [];

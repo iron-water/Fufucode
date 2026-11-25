@@ -236,6 +236,12 @@ internal sealed partial class TuiController
             case "review": Review(); break;
             case "history": OpenPicker(c.Id, c.Label, _composer.History.Reverse().Where(s => !s.StartsWith("/history", StringComparison.OrdinalIgnoreCase)).Select(s => new FuiChoice(s, s)).ToArray(), argument); break;
             case "find": OpenPicker(c.Id, c.Label, _lines.Select((l, i) => new FuiChoice(i.ToString(), l.Text, l.Kind)).Reverse().ToArray(), argument); break;
+            case "links":
+                var links = MarkdownLinks.Choices(_lines);
+                if (links.Count == 0) Info("当前会话没有链接目标。");
+                else OpenPicker(c.Id, c.Label, links, argument,
+                    new FuiPickerOptions(Detail: choice => choice.Detail ?? choice.Value, PreserveOrder: true));
+                break;
             case "stop": Stop(); break;
             case "quit": Exiting = true; break;
         }

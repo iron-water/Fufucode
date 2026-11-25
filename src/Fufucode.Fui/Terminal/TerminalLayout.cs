@@ -6,11 +6,15 @@ namespace Fufucode.Fui;
 internal enum Ink
 {
     Plain, Header, User, Assistant, Tool, Quiet, Error, Status, Approval, Composer, PanelTitle, Selection,
-    Heading, Code, CodeFence, Thinking, Info
+    Heading, Code, CodeFence, Thinking, Info,
+    SyntaxKeyword, SyntaxType, SyntaxString, SyntaxNumber, SyntaxComment, SyntaxFunction, SyntaxProperty,
+    SyntaxOperator, DiffAdded, DiffRemoved, DiffMeta, Link
 }
 
+internal readonly record struct StyledSpan(string Text, Ink Ink = Ink.Plain, string? Link = null);
 internal readonly record struct ImageStrip(int Column, string Sixel);
-internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain, IReadOnlyList<ImageStrip>? Images = null, int ImageIndent = 0);
+internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain, IReadOnlyList<ImageStrip>? Images = null,
+    int ImageIndent = 0, StyledSpanList? Spans = null);
 internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll,
     int PickerRows = 0, bool CanApprove = false, MouseRegions? Mouse = null);
 
@@ -559,7 +563,8 @@ internal sealed class TerminalLayout
                 for (var i = 0; i < _markdown.Count; i++)
                 {
                     var item = _markdown[i];
-                    markdownRows.Add(new(item.Text, item.Ink == Ink.Plain ? Ink.Assistant : item.Ink));
+                    markdownRows.Add(new(item.Text, item.Ink == Ink.Plain ? Ink.Assistant : item.Ink,
+                        Spans: item.Spans));
                 }
                 AddRows(markdownRows, card, rail, showCompactLabel, compactLabel);
                 return;
@@ -609,7 +614,8 @@ internal sealed class TerminalLayout
                     {
                         Text = "│ " + Pad(row.Text, inner) + " │",
                         Ink = ink,
-                        ImageIndent = row.ImageIndent + 2
+                        ImageIndent = row.ImageIndent + 2,
+                        Spans = FrameSpans(row, "│ ", " │", inner, ink)
                     });
                 }
                 _rows.Add(new(CardBottom(_columns), _roleInk));
@@ -618,7 +624,13 @@ internal sealed class TerminalLayout
             if (rail)
             {
                 foreach (var row in rows)
-                    _rows.Add(row with { Text = "┆ " + row.Text, Ink = Ink.Thinking, ImageIndent = row.ImageIndent + 2 });
+                    _rows.Add(row with
+                    {
+                        Text = "┆ " + row.Text,
+                        Ink = Ink.Thinking,
+                        ImageIndent = row.ImageIndent + 2,
+                        Spans = FrameSpans(row, "┆ ", "", -1, Ink.Thinking)
+                    });
                 return;
             }
             var prefix = compactLabel ? label : "";
@@ -629,9 +641,32 @@ internal sealed class TerminalLayout
                 {
                     Text = prefix + row.Text,
                     Ink = row.Ink == Ink.Plain ? _roleInk : row.Ink,
-                    ImageIndent = row.ImageIndent + TerminalText.Width(prefix)
+                    ImageIndent = row.ImageIndent + TerminalText.Width(prefix),
+                    Spans = FrameSpans(row, prefix, "", -1, row.Ink == Ink.Plain ? _roleInk : row.Ink)
                 });
                 prefix = indent;
+            }
+        }
+
+        private static StyledSpanList? FrameSpans(ScreenRow row, string prefix, string suffix,
+            int contentWidth, Ink frameInk)
+        {
+            if (row.Spans is null) return null;
+            if (!string.Equals(row.Spans.Text, row.Text, StringComparison.Ordinal)) return null;
+            var spans = new List<StyledSpan>(row.Spans.Count + 3);
+            Add(prefix, frameInk, null);
+            foreach (var span in row.Spans) Add(span.Text, span.Ink, span.Link);
+            if (contentWidth >= 0)
+                Add(new string(' ', Math.Max(0, contentWidth - TerminalText.Width(row.Text))), frameInk, null);
+            Add(suffix, frameInk, null);
+            return StyledSpanList.From(spans);
+
+            void Add(string text, Ink ink, string? link)
+            {
+                if (text.Length == 0) return;
+                if (spans.Count != 0 && spans[^1].Ink == ink && spans[^1].Link == link)
+                    spans[^1] = spans[^1] with { Text = spans[^1].Text + text };
+                else spans.Add(new(text, ink, link));
             }
         }
 

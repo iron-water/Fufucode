@@ -126,6 +126,19 @@ internal sealed partial class TuiController
             case "capabilities": Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail)); return;
             case "agents": ShowAgentDetail(choice); return;
             case "plan" or "todo": JumpToPlan(choice); return;
+            case "links":
+                if (!TuiHyperlinkPolicy.IsSafeUrl(choice.Value)) { Error("该链接目标不是可复制的 HTTP(S) URL。"); return; }
+                OpenPicker("links-copy", "链接目标", [new(choice.Value, "复制 URL", choice.Value)],
+                    options: new FuiPickerOptions(Detail: item => item.Detail ?? item.Value, PreserveOrder: true));
+                return;
+            case "links-copy":
+                try
+                {
+                    _clipboard.Copy(choice.Value);
+                    Info("已复制链接\n" + choice.Value);
+                }
+                catch (Exception error) { Error("复制链接失败：" + error.GetBaseException().Message); }
+                return;
             default:
                 if (FuiCommands.Get(action) is { } command && CanRun(command, choice.Value)) Run(command, choice.Value);
                 return;

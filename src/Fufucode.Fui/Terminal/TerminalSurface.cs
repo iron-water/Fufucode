@@ -9,6 +9,7 @@ internal sealed class TerminalSurface : IDisposable
     private readonly TerminalLayout _layout = new();
     private readonly SixelSupport _graphics = new(Environment.GetEnvironmentVariable("FUI_GRAPHICS"));
     private readonly PasteKeys _keys;
+    private readonly TuiHyperlinkPolicy _hyperlinks = TuiHyperlinkPolicy.FromEnvironment();
     private TuiTheme _theme = TuiTheme.FromEnvironment();
     private ImageCells? _paintedCell;
     private readonly object _gate = new();
@@ -84,7 +85,7 @@ internal sealed class TerminalSurface : IDisposable
             _paintedCell = _graphics.Cell;
             var frame = _layout.Arrange(view, width, height, _paintedCell);
             var repaint = !ReferenceEquals(_paintedTheme, _theme);
-            var paint = Diff(repaint ? null : _previous, frame, _theme);
+            var paint = Diff(repaint ? null : _previous, frame, _theme, _hyperlinks);
             if (paint.Length > 0) Write(paint);
             _previous = frame;
             _paintedTheme = _theme;
@@ -109,10 +110,13 @@ internal sealed class TerminalSurface : IDisposable
     }
 
     internal static string Diff(TerminalFrame? old, TerminalFrame next, bool styling) =>
-        Diff(old, next, styling ? TuiTheme.Resolve("dark", colorTerm: "truecolor") : TuiTheme.Unstyled);
+        Diff(old, next, styling ? TuiTheme.Resolve("dark", colorTerm: "truecolor") : TuiTheme.Unstyled,
+            TuiHyperlinkPolicy.Disabled);
 
-    internal static string Diff(TerminalFrame? old, TerminalFrame next, TuiTheme theme)
+    internal static string Diff(TerminalFrame? old, TerminalFrame next, TuiTheme theme,
+        TuiHyperlinkPolicy? hyperlinks = null)
     {
+        hyperlinks ??= TuiHyperlinkPolicy.Disabled;
         var reset = old is null || old.Width != next.Width || old.Rows.Length != next.Rows.Length;
         var paint = new StringBuilder();
         if (reset) paint.Append("\x1b[2J");
@@ -123,10 +127,7 @@ internal sealed class TerminalSurface : IDisposable
             if (reset && row.Text.Length == 0 && row.Images is null) continue;
             paint.Append("\x1b[").Append(i + 1).Append(";1H");
             if (!reset && old!.Rows[i].Images is { Count: > 0 }) paint.Append("\x1b[2K");
-            var style = theme.StylingEnabled && row.Ink != Ink.Plain ? theme.Style(row.Ink) : "";
-            if (style.Length > 0) paint.Append(style);
-            paint.Append(row.Text);
-            if (style.Length > 0) paint.Append(theme.Reset);
+            PaintText(paint, row, theme, hyperlinks);
             if (!reset) paint.Append("\x1b[K"); // remove remnants when a line contracts
             if (row.Images is not null)
                 foreach (var image in row.Images)
@@ -141,6 +142,26 @@ internal sealed class TerminalSurface : IDisposable
             paint.Append(next.CursorRow >= 0 ? "\x1b[?25h" : "\x1b[?25l");
         // One host write; terminals supporting synchronized output don't expose intermediate cursor moves.
         return paintedRows ? "\x1b[?2026h" + paint + "\x1b[?2026l" : paint.ToString();
+    }
+
+    private static void PaintText(StringBuilder paint, ScreenRow row, TuiTheme theme, TuiHyperlinkPolicy hyperlinks)
+    {
+        if (row.Spans is not { Count: > 0 } spans ||
+            !string.Equals(spans.Text, row.Text, StringComparison.Ordinal))
+        {
+            PaintSpan(paint, row.Text, row.Ink, null, theme, hyperlinks);
+            return;
+        }
+        foreach (var span in spans) PaintSpan(paint, span.Text, span.Ink, span.Link, theme, hyperlinks);
+    }
+
+    private static void PaintSpan(StringBuilder paint, string text, Ink ink, string? link, TuiTheme theme,
+        TuiHyperlinkPolicy hyperlinks)
+    {
+        var style = theme.StylingEnabled && ink != Ink.Plain ? theme.Style(ink) : "";
+        if (style.Length > 0) paint.Append(style);
+        paint.Append(hyperlinks.Wrap(text, link));
+        if (style.Length > 0) paint.Append(theme.Reset);
     }
 
     private ConsoleKeyInfo? ReadMouse()

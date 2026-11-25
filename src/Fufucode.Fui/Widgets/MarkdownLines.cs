@@ -4,9 +4,9 @@ namespace Fufucode.Fui;
 // prefixes while keeping the original transcript text untouched. It emits no OSC 8 or executable markup.
 internal sealed class MarkdownLines
 {
-    internal readonly record struct Fence(char Marker, int Count);
+    internal readonly record struct Fence(char Marker, int Count, string Language = "");
     internal readonly record struct SourceLine(string Text, bool Complete);
-    internal readonly record struct Row(string Text, Ink Ink);
+    internal readonly record struct Row(string Text, Ink Ink, StyledSpanList? Spans = null);
     private readonly List<Row> _rows = [];
     private string _source = "";
     private int _width = -1;
@@ -30,13 +30,22 @@ internal sealed class MarkdownLines
             var line = lines[i].Text;
             var before = fence;
             var ink = Classify(line, ref fence);
+            if (before.Count == 0 && ink == Ink.CodeFence &&
+                SyntaxHighlighter.NormalizeLanguage(fence.Language) == "mermaid" &&
+                TryClosingFence(lines, i + 1, fence, out var close))
+            {
+                RenderMermaid(lines, i, close, fence, width);
+                fence = default;
+                i = close + 1;
+                continue;
+            }
             if (before.Count == 0 && ink == Ink.Plain && MarkdownTable.TryFormat(lines, i, width, _rows, out var next))
             {
                 fence = before;
                 i = next;
                 continue;
             }
-            RenderLine(line, ink, width);
+            RenderLine(line, ink, before, width);
             i++;
         }
     }
@@ -62,11 +71,18 @@ internal sealed class MarkdownLines
         }
     }
 
-    private void RenderLine(string line, Ink ink, int width)
+    private void RenderLine(string line, Ink ink, Fence fence, int width)
     {
-        if (ink is Ink.Code or Ink.CodeFence)
+        if (ink == Ink.Code)
         {
-            AddWrapped(line, ink, width);
+            if (fence.Count != 0 && fence.Language.Length != 0)
+                AddStyledWrapped(SyntaxHighlighter.Highlight(line, fence.Language), Ink.Code, width);
+            else AddWrapped(line, Ink.Code, width);
+            return;
+        }
+        if (ink == Ink.CodeFence)
+        {
+            AddWrapped(line, Ink.CodeFence, width);
             return;
         }
         if (IsRule(line))
@@ -74,9 +90,9 @@ internal sealed class MarkdownLines
             _rows.Add(new(new string('─', width), Ink.Quiet));
             return;
         }
-        if (TryQuote(line, out var quote)) AddWrapped(MarkdownTable.FormatInline(quote), Ink.Quiet, width);
-        else if (TryList(line, out var list)) AddWrapped(MarkdownTable.FormatInline(list), Ink.Plain, width);
-        else AddWrapped(MarkdownTable.FormatInline(line), ink, width);
+        if (TryQuote(line, out var quote)) AddInline(MarkdownTable.FormatInline(quote), Ink.Quiet, width);
+        else if (TryList(line, out var list)) AddInline(MarkdownTable.FormatInline(list), Ink.Plain, width);
+        else AddInline(MarkdownTable.FormatInline(line), ink, width);
     }
 
     private void AddWrapped(string text, Ink ink, int width)
@@ -84,6 +100,19 @@ internal sealed class MarkdownLines
         var wrapped = new List<TerminalText.Slice>();
         TerminalText.Wrap(text, width, 0, wrapped);
         foreach (var piece in wrapped) _rows.Add(new(piece.Text, ink));
+    }
+
+    private void AddInline(string text, Ink ink, int width)
+    {
+        var spans = MarkdownLinks.Annotate(text, ink);
+        if (spans is null) AddWrapped(text, ink, width);
+        else AddStyledWrapped(spans, ink, width);
+    }
+
+    private void AddStyledWrapped(IReadOnlyList<StyledSpan> spans, Ink baseInk, int width)
+    {
+        foreach (var row in StyledText.Wrap(spans, width))
+            _rows.Add(new(row.Text, baseInk, row.Spans));
     }
 
     private static bool TryQuote(string line, out string quote)
@@ -158,7 +187,13 @@ internal sealed class MarkdownLines
             var size = 1;
             while (size < body.Length && body[size] == ch) size++;
             if (fence.Count == 0 && size >= 3 && (ch != '`' || !body[size..].Contains('`')))
-            { fence = new(ch, size); return Ink.CodeFence; }
+            {
+                var info = body[size..].Trim();
+                var split = info.IndexOfAny(' ', '\t');
+                var language = (split < 0 ? info : info[..split]).ToString().Trim('{', '}');
+                fence = new(ch, size, language);
+                return Ink.CodeFence;
+            }
             if (fence.Marker == ch && size >= fence.Count && body[size..].Trim().IsEmpty)
             { fence = default; return Ink.CodeFence; }
         }
@@ -170,5 +205,43 @@ internal sealed class MarkdownLines
             if (depth <= 6 && (depth == body.Length || body[depth] == ' ')) return Ink.Heading;
         }
         return Ink.Plain;
+    }
+
+    private static bool TryClosingFence(IReadOnlyList<SourceLine> lines, int start, Fence fence, out int close)
+    {
+        close = -1;
+        for (var i = start; i < lines.Count; i++)
+        {
+            var body = lines[i].Text.TrimStart();
+            var size = 0;
+            while (size < body.Length && body[size] == fence.Marker) size++;
+            if (size >= fence.Count && body[size..].Trim().Length == 0)
+            {
+                close = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void RenderMermaid(IReadOnlyList<SourceLine> lines, int open, int close, Fence fence, int width)
+    {
+        var source = string.Join('\n', lines.Skip(open + 1).Take(close - open - 1).Select(line => line.Text));
+        if (MermaidDiagram.TryRender(source, width, out var diagram, out var reason))
+        {
+            foreach (var line in diagram)
+            {
+                var trimmed = line.TrimStart();
+                var ink = trimmed.StartsWith("flowchart", StringComparison.Ordinal) ||
+                    trimmed.StartsWith("graph", StringComparison.Ordinal) ? Ink.Heading : Ink.Assistant;
+                _rows.Add(new(TerminalText.Clip(line, width), ink));
+            }
+            return;
+        }
+
+        _rows.Add(new(TerminalText.Clip("此 Mermaid 子集不支持 · " + reason, width), Ink.Error));
+        AddWrapped(lines[open].Text, Ink.CodeFence, width);
+        for (var i = open + 1; i < close; i++) AddWrapped(lines[i].Text, Ink.Code, width);
+        AddWrapped(lines[close].Text, Ink.CodeFence, width);
     }
 }

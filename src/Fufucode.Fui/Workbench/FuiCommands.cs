@@ -35,6 +35,7 @@ internal static class FuiCommands
         new("preview", "预览项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("diff", "查看文件 Git 差异", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("find", "搜索并跳转到消息", "阅读", Argument: "[关键词]", Picker: true),
+        new("links", "链接目标", "阅读", Argument: "[关键词]", Picker: true),
         new("history", "找回本次输入", "编辑", Argument: "[关键词]", Picker: true),
         new("tools", "展开或折叠工具输出", "阅读"), new("thoughts", "隐藏或显示思考", "阅读"),
         new("quit", "退出 FUI", "导航")
