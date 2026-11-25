@@ -13,18 +13,18 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
     private readonly SemaphoreSlim _operations = new(1, 1);
+    private readonly CancellationTokenSource _workbenchLifetime = new();
     private readonly IExtensionUiSession _ui;
     private readonly SharedApprovalGate _approvals;
     private readonly Channel<TuiEvent> _events = Channel.CreateUnbounded<TuiEvent>(
         new UnboundedChannelOptions { SingleReader = true, AllowSynchronousContinuations = false });
     private readonly FumoEventProjection _projection;
     private readonly object _lifecycle = new();
-    private readonly object _approvalLock = new();
     private readonly HashSet<string> _visibleApprovals = new(StringComparer.Ordinal);
     private Task? _shutdown;
+    private Task _settling = Task.CompletedTask;
     private bool _closing;
-    // Native code emits TurnSettled before releasing its worker's CTS/activity. Track a fresh submission
-    // separately so idle work can follow a settled event immediately but never races an unannounced run.
+    // Reserves an accepted prompt before the native worker announces ActivityChanged.
     private volatile bool _workerPending;
 
     private FumoTuiSession(PersistentSession session, FumoProjectRuntime project)
@@ -82,7 +82,7 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         return await AttachAsync(host, opened, selected is null, hadMessages, ct);
     }
 
-    private static async Task<FumoTuiSession> AttachAsync(FumoProjectRuntime host, PersistentSession opened, bool isNew, bool hadMessages, CancellationToken ct,
+    internal static async Task<FumoTuiSession> AttachAsync(FumoProjectRuntime host, PersistentSession opened, bool isNew, bool hadMessages, CancellationToken ct,
         Func<Task>? configure = null)
     {
         try
@@ -150,10 +150,11 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
             ObjectDisposedException.ThrowIf(_closing, this);
             if (_session.Coordinator.IsInIdleMaintenance) throw new InvalidOperationException("会话正在进行工作台操作。");
             ct.ThrowIfCancellationRequested();
-            var prior = _workerPending;
+            if (_workerPending || _session.Chat.Activity != SessionActivity.Idle || _session.Chat.QueuedCount != 0)
+                throw new InvalidOperationException("会话仍在运行；请使用 /queue 排队或 /steer 插话。");
             _workerPending = true;
             try { return _session.Chat.SendAsync(text, ct); }
-            catch { _workerPending = prior; throw; }
+            catch { _workerPending = false; throw; }
         }
     }
 
@@ -162,8 +163,26 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         lock (_lifecycle)
         {
             ObjectDisposedException.ThrowIf(_closing, this);
-            return _session.Chat.StopAsync(ct);
+            return (_settling.IsCompleted ? StopTurnAsync() : _settling).WaitAsync(ct);
         }
+    }
+
+    private async Task StopTurnAsync()
+    {
+        await _session.Coordinator.StopAsync(CancellationToken.None);
+        Task settled;
+        lock (_lifecycle)
+        {
+            settled = _settling;
+            // Stop can clear a follow-up after the previous TurnSettled and before native promotion.
+            // No new worker started in that case, so there is no second terminal event to wait for.
+            if (settled.IsCompleted && _workerPending && _session.Chat.Activity == SessionActivity.Idle)
+            {
+                _workerPending = false;
+                _events.Writer.TryWrite(new TuiEvent.Status("已取消排队", false));
+            }
+        }
+        await settled;
     }
 
     public async Task RespondAsync(string id, bool allow, CancellationToken ct)
@@ -173,8 +192,7 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         {
             ObjectDisposedException.ThrowIf(_closing, this);
             ct.ThrowIfCancellationRequested();
-            lock (_approvalLock)
-                if (!_visibleApprovals.Contains(id)) throw new InvalidOperationException("审批不存在或已失效。");
+            if (!_visibleApprovals.Contains(id)) throw new InvalidOperationException("审批不存在或已失效。");
             var request = _ui.PendingExtensionUiRequests.FirstOrDefault(r => r.Method == "confirm" &&
                 string.Equals($"{r.Generation:N}:{r.Id}", id, StringComparison.Ordinal));
             if (request is null || DateTimeOffset.UtcNow >= request.ReceivedAt + request.Timeout)
@@ -193,35 +211,59 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         var payload = data.RootElement;
         var text = payload.ValueKind == JsonValueKind.Object && payload.TryGetProperty("message", out var message) && message.ValueKind == JsonValueKind.String
             ? message.GetString() : null;
-        lock (_approvalLock)
-            if (_visibleApprovals.Add(request.ApprovalId))
+        lock (_lifecycle)
+            if (!_closing && _workerPending && _session.Chat.Activity != SessionActivity.Cancelling &&
+                _visibleApprovals.Add(request.ApprovalId))
                 _events.Writer.TryWrite(new TuiEvent.Approval(request.ApprovalId,
                     string.IsNullOrWhiteSpace(text) ? $"{request.ToolName}\n{request.ArgsJson}" : text));
     }
 
     private void OnDecision(SharedApprovalResolution decision)
     {
-        lock (_approvalLock)
+        lock (_lifecycle)
             if (_visibleApprovals.Remove(decision.ApprovalId))
                 _events.Writer.TryWrite(new TuiEvent.ApprovalClosed(decision.ApprovalId));
     }
 
     private void OnSessionEvent(object? sender, SessionEvent ev)
     {
-        if (ev is SessionEvent.ActivityChanged { Activity: not SessionActivity.Idle } or SessionEvent.QueueChanged { QueuedCount: > 0 })
-            _workerPending = true;
-        if (ev is SessionEvent.TurnSettled)
+        if (ev is SessionEvent.TurnSettled or SessionEvent.ActivityChanged or SessionEvent.QueueChanged)
         {
-            _workerPending = _session.Chat.QueuedCount != 0;
-            // Native tool cancellation and its approval waiter are independent tasks: Closed can race
-            // behind TurnSettled. Invalidate the UI token before publishing the turn's terminal status.
-            lock (_approvalLock)
+            lock (_lifecycle)
             {
-                foreach (var id in _visibleApprovals) _events.Writer.TryWrite(new TuiEvent.ApprovalClosed(id));
-                _visibleApprovals.Clear();
+                if (ev is SessionEvent.ActivityChanged { Activity: SessionActivity.Running } or SessionEvent.QueueChanged { QueuedCount: > 0 })
+                    _workerPending = true;
+                if (ev is SessionEvent.TurnSettled or SessionEvent.ActivityChanged { Activity: SessionActivity.Cancelling })
+                    CloseApprovals();
+                if (ev is SessionEvent.TurnSettled && _session.Chat.QueuedCount == 0)
+                {
+                    _settling = PublishIdleAsync(sender, ev);
+                    return;
+                }
+                _projection.OnEvent(sender, ev);
+                return;
             }
         }
         _projection.OnEvent(sender, ev);
+    }
+
+    private async Task PublishIdleAsync(object? sender, SessionEvent settled)
+    {
+        // TurnSettled runs inside the worker. Until it releases ownership a normal send would
+        // silently become a follow-up and lose its caller's cancellation token.
+        while (_session.Chat.Activity != SessionActivity.Idle) await Task.Delay(1);
+        lock (_lifecycle)
+        {
+            _settling = Task.CompletedTask;
+            _workerPending = false;
+            _projection.OnEvent(sender, settled);
+        }
+    }
+
+    private void CloseApprovals()
+    {
+        foreach (var id in _visibleApprovals) _events.Writer.TryWrite(new TuiEvent.ApprovalClosed(id));
+        _visibleApprovals.Clear();
     }
 
     private void OnNativeRequest(ExtensionUiRequest request)
@@ -249,11 +291,15 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     private async Task ShutdownAsync()
     {
         _closing = true;
-        await _operations.WaitAsync();
-        // Losing the terminal must not remove the native approval listener while tools can still run.
-        try { await _session.Chat.StopAsync(CancellationToken.None); }
+        CloseApprovals();
+        try
+        {
+            _workbenchLifetime.Cancel();
+            await StopTurnAsync();
+        }
         finally
         {
+            await _operations.WaitAsync();
             try { await _session.DisposeAsync(); }
             finally
             {
@@ -262,6 +308,7 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
                 _approvals.Requested -= OnApproval;
                 _approvals.Decided -= OnDecision;
                 _approvals.Dispose();
+                _workbenchLifetime.Dispose();
                 _events.Writer.TryComplete();
                 try { await _project.ReleaseAsync(); }
                 finally { _operations.Release(); }

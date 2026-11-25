@@ -9,10 +9,12 @@ internal sealed partial class FumoTuiSession
 {
     public async Task<IReadOnlyList<FuiChoice>> ChoicesAsync(string action, CancellationToken ct)
     {
+        using var operation = BeginOperation(ct);
+        ct = operation.Token;
         await _operations.WaitAsync(ct);
         try
         {
-            EnsureOpen();
+            ct.ThrowIfCancellationRequested();
             return action switch
             {
                 "resume" => SessionChoices(),
@@ -29,10 +31,12 @@ internal sealed partial class FumoTuiSession
 
     public async Task<FuiActionResult> ExecuteAsync(string action, string argument, CancellationToken ct)
     {
+        using var operation = BeginOperation(ct);
+        ct = operation.Token;
         await _operations.WaitAsync(ct);
         try
         {
-            EnsureOpen();
+            ct.ThrowIfCancellationRequested();
             if (action is "queue" or "steer") return await DeliverAsync(action, argument, ct);
             if (action == "usage")
             {
@@ -101,9 +105,13 @@ internal sealed partial class FumoTuiSession
         finally { _operations.Release(); }
     }
 
-    private void EnsureOpen()
+    private CancellationTokenSource BeginOperation(CancellationToken ct)
     {
-        lock (_lifecycle) ObjectDisposedException.ThrowIf(_closing, this);
+        lock (_lifecycle)
+        {
+            ObjectDisposedException.ThrowIf(_closing, this);
+            return CancellationTokenSource.CreateLinkedTokenSource(ct, _workbenchLifetime.Token);
+        }
     }
 
     private IDisposable ReserveIdle()
@@ -212,9 +220,20 @@ internal sealed partial class FumoTuiSession
             return new(lines.Length == 0 ? "队列为空" : string.Join('\n', lines));
         }
         ArgumentException.ThrowIfNullOrWhiteSpace(argument);
-        if (!_workerPending || _session.Chat.Activity is not (SessionActivity.Running or SessionActivity.Compacting or SessionActivity.Retrying))
-            throw new InvalidOperationException("仅能向运行中的会话排队或插话。");
-        await _session.Coordinator.SendPromptAsync(argument, action == "steer" ? PromptDelivery.Steer : PromptDelivery.FollowUp, cancellationToken: ct);
+        Task submitted;
+        lock (_lifecycle)
+        {
+            ObjectDisposedException.ThrowIf(_closing, this);
+            if (_session.Chat is not NativeCSharpChatSession native)
+                throw new InvalidOperationException("FUMO 未提供原生排队和插话入口。");
+            if (!_workerPending || !_settling.IsCompleted ||
+                native.Activity is not (SessionActivity.Running or SessionActivity.Compacting or SessionActivity.Retrying))
+                throw new InvalidOperationException("仅能向运行中的会话排队或插话。");
+            // The coordinator marks idle before the worker releases. Use the worker's actual delivery
+            // method so a requested steer cannot change into a follow-up during that handoff.
+            submitted = action == "steer" ? native.SteerAsync(argument, ct) : native.SendAsync(argument, ct);
+        }
+        await submitted;
         return new(action == "steer" ? "已提交插话" : "已提交后续消息");
     }
 

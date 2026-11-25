@@ -3,6 +3,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.Json;
 using System.Collections.Concurrent;
+using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Backend;
 using Fufucode.Core.Security;
@@ -124,14 +125,30 @@ internal static class RuntimeTests
                 endpoint.Tool("stop", "stopped.txt");
                 await session.SendAsync("stop", ct);
                 var awaiting = (TuiEvent.Approval)(await Until(session, e => e is TuiEvent.Approval, ct))[^1];
-                await session.StopAsync(ct);
+                await Reject<InvalidOperationException>(() => session.SendAsync("late ordinary submission", ct));
+                Check((await session.ExecuteAsync("queue", "", ct)).Notice == "队列为空", "ordinary send entered the native follow-up queue");
+                var stopping = session.StopAsync(ct);
+                await Reject<InvalidOperationException>(() => session.RespondAsync(awaiting.Id, true, ct));
+                await stopping;
                 var stopped = await Settled(session, ct);
                 Check(stopped[^1] is TuiEvent.Status { Text: "已中断" }, "stop did not publish Interrupted: " + stopped[^1]);
-                Check(stopped.OfType<TuiEvent.ApprovalClosed>().Any(a => a.Id == awaiting.Id), "approval still visible at interrupted terminal");
+                var closed = stopped.FindIndex(e => e is TuiEvent.ApprovalClosed a && a.Id == awaiting.Id);
+                Check(closed >= 0 && closed < stopped.FindIndex(e => e is TuiEvent.Status { Text: "正在停止" }),
+                    "stopping was announced with the cancelled approval still visible");
                 Check(!File.Exists(Path.Combine(project, "stopped.txt")), "stop approved a write");
                 await Reject<InvalidOperationException>(() => session.RespondAsync(awaiting.Id, true, ct));
+
+                endpoint.Tool("after stop", "next-turn.txt");
+                endpoint.When("after stop", true, Frame(new { content = "after new refusal" }, "stop"));
+                await session.SendAsync("after stop", ct);
+                var next = (TuiEvent.Approval)(await Until(session, e => e is TuiEvent.Approval, ct))[^1];
+                await Reject<InvalidOperationException>(() => session.RespondAsync(awaiting.Id, true, ct));
+                await session.RespondAsync(next.Id, false, ct);
+                await Settled(session, ct);
+                Check(!File.Exists(Path.Combine(project, "next-turn.txt")), "a stopped turn's decision affected the next approval");
             }
 
+            await CheckWorkerHandoffAsync(project, layout, endpoint, ct);
             await using (var resumed = await Open(streamedId))
             {
                 Check(resumed.History.Any(l => l is { Kind: "assistant", Text: "first second" }) &&
@@ -140,8 +157,29 @@ internal static class RuntimeTests
                     resumed.History.Any(l => l.Kind == "tool" && l.Text.Contains("allowed.txt")), "native persisted history not restored");
                 endpoint.Tool("close", "closed.txt");
                 await resumed.SendAsync("close", ct);
-                await Until(resumed, e => e is TuiEvent.Approval, ct);
-                // Deliberately leave the prompt unanswered: disposing is the EOF/terminal-loss boundary.
+                var pending = (TuiEvent.Approval)(await Until(resumed, e => e is TuiEvent.Approval, ct))[^1];
+                // A stalled picker may overlap an approval. Closing the terminal owns both lifetimes.
+                var catalogStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                var releaseCatalog = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                endpoint.HoldModelList = async token =>
+                {
+                    catalogStarted.TrySetResult();
+                    await releaseCatalog.Task.WaitAsync(token);
+                };
+                var choices = resumed.ChoicesAsync("model", ct);
+                try
+                {
+                    await catalogStarted.Task.WaitAsync(ct);
+                    var count = metadata.ListSessions(owner.Id).Count;
+                    var queuedAction = resumed.ExecuteAsync("new", "", ct);
+                    var close = resumed.DisposeAsync().AsTask();
+                    await Reject<ObjectDisposedException>(() => resumed.RespondAsync(pending.Id, true, ct));
+                    await close.WaitAsync(TimeSpan.FromSeconds(5), ct);
+                    await Reject<OperationCanceledException>(() => choices);
+                    await Reject<OperationCanceledException>(() => queuedAction);
+                    Check(metadata.ListSessions(owner.Id).Count == count, "a waiting workbench command created a session after exit");
+                }
+                finally { releaseCatalog.TrySetResult(); endpoint.HoldModelList = null; }
             }
             Check(!File.Exists(Path.Combine(project, "closed.txt")), "exit approved a pending write");
             await using (var released = await Open(streamedId)) Check(released.Id == streamedId, "exit didn't release lease");
@@ -170,6 +208,65 @@ internal static class RuntimeTests
             FileChangeJournal.Configure(Path.GetDirectoryName(previousJournal)!);
             root.Delete(recursive: true); // Owned, unique test fixture only.
         }
+    }
+
+    private static async Task CheckWorkerHandoffAsync(string project, AppDataLayout layout, Loopback endpoint, CancellationToken ct)
+    {
+        var host = new FumoProjectRuntime(layout);
+        try
+        {
+            var opened = await host.Manager.CreateAsync(project, backend: BackendId.NativeCSharp, cancellationToken: ct);
+            await using var session = await FumoTuiSession.AttachAsync(host, opened, true, false, ct);
+            using var release = new ManualResetEventSlim();
+            var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            void HoldWorker() { entered.TrySetResult(); release.Wait(ct); }
+            var worker = (IPromptHandledSession)opened.Chat;
+            worker.PromptHandled += HoldWorker;
+            try
+            {
+                // Core calls this after TurnSettled, before releasing the old CTS or promoting its queue.
+                endpoint.When("worker handoff", false, Frame(new { content = "finished" }, "stop"));
+                await session.SendAsync("worker handoff", ct);
+                await entered.Task.WaitAsync(ct);
+                while (session.Events.TryRead(out var e))
+                    Check(e is not TuiEvent.Status { Busy: false }, "FUI announced idle while an ordinary submission would still be queued");
+                await Reject<InvalidOperationException>(() => session.SendAsync("must not queue", ct));
+                await Reject<InvalidOperationException>(() => session.ExecuteAsync("queue", "missed turn", ct));
+                await Reject<InvalidOperationException>(() => session.ExecuteAsync("steer", "missed turn", ct));
+                Check((await session.ExecuteAsync("queue", "", ct)).Notice == "队列为空", "submission after turn settlement entered the queue");
+            }
+            finally { worker.PromptHandled -= HoldWorker; release.Set(); }
+            await Settled(session, ct);
+            endpoint.When("next ordinary turn", false, Frame(new { content = "next turn ran" }, "stop"));
+            await session.SendAsync("next ordinary turn", ct);
+            Check((await Settled(session, ct)).OfType<TuiEvent.Message>().Any(m => m.Text == "next turn ran"),
+                "ordinary submission failed after native ownership was released");
+
+            var releaseStream = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            endpoint.When("queued handoff", false, Frame(new { content = "streaming" }), releaseStream.Task, Frame(new { content = " done" }, "stop"));
+            entered = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            release.Reset();
+            worker.PromptHandled += HoldWorker;
+            Task stopping;
+            try
+            {
+                await session.SendAsync("queued handoff", ct);
+                await Until(session, e => e is TuiEvent.Message { Text: "streaming" }, ct);
+                await session.ExecuteAsync("queue", "cancelled before promotion", ct);
+                releaseStream.SetResult();
+                await entered.Task.WaitAsync(ct);
+                stopping = session.StopAsync(ct);
+            }
+            finally { worker.PromptHandled -= HoldWorker; release.Set(); releaseStream.TrySetResult(); }
+            await stopping.WaitAsync(ct);
+            var tail = new List<TuiEvent>();
+            while (session.Events.TryRead(out var e)) tail.Add(e);
+            Check(tail.LastOrDefault() is TuiEvent.Status { Busy: false }, "cancelling the last queued item during worker handoff left FUI busy");
+            Check((await session.ExecuteAsync("queue", "", ct)).Notice!.Contains("已取消：cancelled before promotion") &&
+                !endpoint.Choices.Any(r => r.Prompt == "cancelled before promotion"), "the cleared follow-up ran or was lost");
+            await session.ExecuteAsync("rename", "idle after queue cancellation", ct);
+        }
+        finally { await host.ReleaseAsync(); }
     }
 
     internal static async Task Reject<T>(Func<Task> operation) where T : Exception
@@ -224,6 +321,7 @@ internal static class RuntimeTests
         public ConcurrentQueue<string> Requests { get; } = new();
         public ConcurrentQueue<(string Prompt, string Model, string? Effort)> Choices { get; } = new();
         public string Models { get; init; } = "{\"data\":[{\"id\":\"fixture-model\"}]}";
+        public Func<CancellationToken, Task>? HoldModelList { get; set; }
 
         public Loopback()
         {
@@ -272,6 +370,7 @@ internal static class RuntimeTests
                 Task Write(string text) => stream.WriteAsync(Encoding.UTF8.GetBytes(text), ct).AsTask();
                 if (request.StartsWith("GET /v1/models ", StringComparison.Ordinal))
                 {
+                    if (HoldModelList is { } hold) { await hold(ct); return; }
                     await Write($"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(Models)}\r\n\r\n" + Models);
                     return;
                 }
