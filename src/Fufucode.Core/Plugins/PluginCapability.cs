@@ -8,37 +8,6 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Core.Plugins;
 
 /// <summary>
-/// 插件能力标识。能力与插件不是一一对应的实现细节：调用方按能力查询，
-/// 由 <see cref="PluginCapabilityRegistry"/> / <see cref="PluginCapabilityGateway"/>
-/// 解析到当前真正安装并启用的插件。
-/// </summary>
-public enum PluginCapability
-{
-    /// <summary>浏览器控制：CDP 接口与 Browser Use 动作契约（agent.browser-use）。</summary>
-    BrowserControl,
-
-    /// <summary>电脑操控：Win32 屏幕截图与输入模拟（agent.computer-use）。</summary>
-    ComputerControl,
-
-    /// <summary>
-    /// 逆向工程工作台：Seep Reverse Lab 的 23 个 Radare2 / JADX / Apktool / Frida
-    /// 工具与合规转译中继（tool.seep-reverse-lab）。
-    /// </summary>
-    ReverseLab,
-
-    /// <summary>
-    /// 保留旧工具契约的标识和枚举序号。内建 Graph 由应用组合根注册并校验项目权限。
-    /// </summary>
-    AutoDevelopment,
-
-    /// <summary>NVX 硬件隔离执行沙箱（sandbox.nvx）。</summary>
-    SandboxExecution,
-
-    /// <summary>用户级记忆：保存、删除记忆条目并注入会话（tool.memory）。</summary>
-    Memory,
-}
-
-/// <summary>
 /// 能力 → 插件映射（唯一真源）。未列入表中的能力视为没有任何插件提供。
 /// </summary>
 public static class PluginCapabilityRegistry

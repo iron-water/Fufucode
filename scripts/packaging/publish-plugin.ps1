@@ -2,7 +2,7 @@
 Build one optional plugin as a lean package that the host can install under
 %LOCALAPPDATA%\Fufucode\plugins\<id>.
 
-The host resolves Fufucode.Core/App/Avalonia/Microsoft.* and other shared
+The host resolves Fufucode.Core/Fumo/App/Avalonia/Microsoft.* and other shared
 assemblies from its own load context. Keeping second copies in the plugin
 package creates type-identity drift across upgrades, so those files and
 unneeded native runtime folders are physically removed here.
@@ -43,7 +43,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw "插件 publish 失败：$id" }
 
     $hostPatterns = @(
-        'Fufucode.Core.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*',
+        'Fufucode.Core.*', 'Fufucode.Fumo.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*',
         'Fufucode.Cli.*', 'Avalonia.*', 'CommunityToolkit.Mvvm.*',
         'Microsoft.*', 'SQLitePCLRaw.*'
     )

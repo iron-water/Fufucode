@@ -205,7 +205,7 @@ public sealed class PureCSharpAgentEngine : IObservablePureCSharpAgentEngine
         {
             ProductionToolDispatcher production => production,
             Security.SecurityToolDispatcher security => ResolveProductionDispatcher(security.Inner),
-            Plugins.PluginToolRegistry registry => ResolveProductionDispatcher(registry.InnerDispatcher),
+            Plugins.IDelegatingToolDispatcher wrapper => ResolveProductionDispatcher(wrapper.InnerDispatcher),
             SkillAwareDispatcher skill => ResolveProductionDispatcher(skill.Inner),
             McpGatewayDispatcher mcp => ResolveProductionDispatcher(mcp.Inner),
             INativeSubagentDispatcher { IsActive: true } subagent => ResolveProductionDispatcher(subagent.Inner),

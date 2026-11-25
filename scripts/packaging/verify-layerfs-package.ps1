@@ -7,7 +7,7 @@ try {
     foreach ($required in @('manifest.json','Fufucode.Plugins.LayerFs.dll','Bridge/layerfs-bridge.mjs')) {
         if ($required -notin $names) { throw "Missing package entry: $required" }
     }
-    if (@($names | Where-Object { $_ -match '(^|/)(Fufucode.App|Fufucode.Core|Avalonia).*\.dll$' }).Count) {
+    if (@($names | Where-Object { $_ -match '(^|/)(Fufucode.App|Fufucode.Core|Fufucode.Fumo|Avalonia).*\.dll$' }).Count) {
         throw 'Plugin package contains host assemblies.'
     }
     Write-Host 'PASS physical manifest, bridge, plugin DLL and no host/runtime payload'

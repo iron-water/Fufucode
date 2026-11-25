@@ -8,66 +8,11 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Core.Plugins;
 
 /// <summary>
-/// 插件工具在工具调度表里的注册项。动作契约（名称/说明/参数 JSON Schema）
-/// 由插件自身给出，核心调度器只按当前可用性决定是否暴露。
-/// </summary>
-public sealed record PluginToolRegistration(
-    string Name,
-    string Description,
-    string ParametersJsonSchema,
-    PluginCapability Capability);
-
-/// <summary>
-/// 插件工具处理器：只负责执行已经通过门禁的调用。
-/// 实现方不能自行绕过 <see cref="PluginToolRegistry"/> 的门禁。
-/// </summary>
-public interface IPluginToolHandler
-{
-    /// <summary>该处理器提供的全部工具动作契约。</summary>
-    IReadOnlyList<PluginToolRegistration> Registrations { get; }
-
-    /// <summary>执行一次已注册的工具调用。</summary>
-    Task<PureToolResult> ExecuteAsync(PureToolCall call, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// 该处理器是否认领某个工具名。默认按已注册契约精确匹配。
-    ///
-    /// 用于动态工具集（例如 MCP 子进程尚未启动、工具清单还没取到）：
-    /// 此时工具确实不该出现在调度表中，但调用被拒时调用方仍需看到真实原因
-    /// （未安装 / 已停用 / 子进程未运行），而不是泛化的“未注册”。
-    /// </summary>
-    bool OwnsToolName(string toolName) =>
-        Registrations.Any(r => string.Equals(r.Name, toolName, StringComparison.Ordinal));
-
-    /// <summary>
-    /// 认领该工具名但当前不可调度时，给出处理器自己的可读原因；返回 null 表示没有额外说明。
-    /// 仅在 <see cref="OwnsToolName"/> 为 true 时被调用。
-    /// </summary>
-    string? ExplainUnavailable(string toolName) => null;
-
-    /// <summary>该处理器服务的插件能力；未声明时无法给出能力级不可用原因。</summary>
-    PluginCapability? Capability => null;
-}
-
-/// <summary>原生会话声明插件工具所需的最小只读目录（实现方可聚合多个注册表）。</summary>
-public interface IPluginToolCatalog
-{
-    IReadOnlyList<string> ActiveToolNames { get; }
-    IReadOnlyList<PluginToolRegistration> ActiveRegistrations { get; }
-}
-
-/// <summary>Tools owned by the application composition root, with domain authority enforced by their service.</summary>
-public interface IApplicationToolCatalog
-{
-    IReadOnlyList<string> ApplicationToolNames { get; }
-}
-
-/// <summary>
 /// 插件工具调度表：以插件市场实时状态为准，动态注册/注销插件工具。
 /// 未安装或未启用的插件不暴露工具；已注册工具在卸载/停用后立即失效，
 /// 不会留下仍可调用的幽灵工具。对清单外工具仍委托给宿主基础调度器。
 /// </summary>
-public sealed class PluginToolRegistry : IPureToolDispatcher, IPluginToolCatalog
+public sealed class PluginToolRegistry : IPureToolDispatcher, IPluginToolCatalog, IDelegatingToolDispatcher
 {
     private readonly IPureToolDispatcher? _inner;
     public IPureToolDispatcher? InnerDispatcher => _inner;

@@ -11,7 +11,7 @@ public sealed class AppDataLayout
     /// （<c>%LOCALAPPDATA%\FufucodeTest</c>），从而与正式安装的会话/设置互不覆盖。
     /// 显式传入 <c>root</c> 时优先于环境变量。
     /// </summary>
-    public const string RootEnvironmentVariable = "FUFUCODE_DATA_ROOT";
+    public const string RootEnvironmentVariable = FumoDataRoot.EnvironmentVariable;
 
     public AppDataLayout(string? root = null)
     {
@@ -19,13 +19,7 @@ public sealed class AppDataLayout
     }
 
     /// <summary>未显式指定时的数据根：环境变量覆盖 → <c>%LOCALAPPDATA%\Fufucode</c>。</summary>
-    public static string DefaultRoot()
-    {
-        var overridden = Environment.GetEnvironmentVariable(RootEnvironmentVariable);
-        return string.IsNullOrWhiteSpace(overridden)
-            ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Fufucode")
-            : overridden;
-    }
+    public static string DefaultRoot() => FumoDataRoot.Default();
 
     public string Root { get; }
     public string RuntimeDirectory => Path.Combine(Root, "runtime");

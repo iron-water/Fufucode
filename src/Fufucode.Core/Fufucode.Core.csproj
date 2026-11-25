@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Fufucode.App/Abstractions/Fufucode.App.Abstractions.csproj" />
+    <ProjectReference Include="../Fufucode.Fumo/Fufucode.Fumo.csproj" />
   </ItemGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.12" />

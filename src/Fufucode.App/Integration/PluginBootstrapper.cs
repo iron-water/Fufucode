@@ -107,6 +107,7 @@ public static class PluginBootstrapper
 
     private static bool IsHostAssembly(string name) =>
         name.StartsWith("Fufucode.Core", StringComparison.OrdinalIgnoreCase) ||
+        name.StartsWith("Fufucode.Fumo", StringComparison.OrdinalIgnoreCase) ||
         name.StartsWith("Fufucode.App", StringComparison.OrdinalIgnoreCase) ||
         name.StartsWith("Fufucode.Cli", StringComparison.OrdinalIgnoreCase) ||
         name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase) ||

@@ -21,7 +21,7 @@ public static class FileChangeJournal
     /// <summary>备份保留时长：只服务最近几轮撤销，过期自动清理。</summary>
     private static readonly TimeSpan Retention = TimeSpan.FromDays(2);
 
-    private static string _root = System.IO.Path.Combine(AppDataLayout.DefaultRoot(), "turn-backups");
+    private static string _root = System.IO.Path.Combine(FumoDataRoot.Default(), "turn-backups");
 
     /// <summary>当前进程实际使用的备份根。--data-root 启动时由组合根覆盖。</summary>
     public static string Root => _root;

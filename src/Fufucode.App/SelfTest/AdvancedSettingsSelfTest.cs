@@ -96,7 +96,7 @@ public static class AdvancedSettingsSelfTest
 
     private static string? FumoRuntimeSettingsProbe(AppSettingsStore store)
     {
-        FumoRuntimeSettings.Use(store);
+        FumoRuntimeSettings.Use(() => store.Current.Fumo);
         return FumoRuntimeSettings.ResolveDefaultShell(out _)?.Kind.Id;
     }
 }

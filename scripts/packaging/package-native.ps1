@@ -392,6 +392,7 @@ $plugins = @(
 # 宿主已提供的共享核心与基础运行时程序集（严禁在插件包中重复打包第二份）
 $hostAssemblies = @(
     'Fufucode.Core.*',
+    'Fufucode.Fumo.*',
     # Fufucode.Pi.* 已迁出为后端插件载荷，宿主不再提供，无需剥离。
     'Fufucode.App.*',
     'Fufucode.App.Abstractions.*',

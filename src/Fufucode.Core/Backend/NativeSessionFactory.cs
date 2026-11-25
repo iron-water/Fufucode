@@ -27,7 +27,7 @@ public static class NativeSessionFactory
     {
         ArgumentNullException.ThrowIfNull(settings);
         // run_command 的默认 shell、超时等高级设置按存储实时读取（含子代理自建的调度器）。
-        Shell.FumoRuntimeSettings.Use(settings);
+        Shell.FumoRuntimeSettings.Use(() => settings.Current.Fumo);
         var current = settings.Current;
         IPureModelClient? client = null;
         string? modelId = null;

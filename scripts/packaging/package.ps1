@@ -193,7 +193,7 @@ foreach ($p in $backendPlugins) {
     Write-Host "Publishing backend plugin '$($p.Id)'..."
     dotnet publish $proj -c Release -o $targetDir
     if ($LASTEXITCODE -ne 0) { throw "Backend plugin $($p.Id) publish failed." }
-    foreach ($pattern in @('Fufucode.Core.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*', 'Avalonia.*',
+    foreach ($pattern in @('Fufucode.Core.*', 'Fufucode.Fumo.*', 'Fufucode.App.*', 'Fufucode.App.Abstractions.*', 'Avalonia.*',
             'Microsoft.Web.WebView2.*', 'Microsoft.Data.Sqlite.*', 'SQLitePCLRaw.*', 'CommunityToolkit.Mvvm.*')) {
         Get-ChildItem -Path $targetDir -Filter $pattern | Remove-Item -Force -Recurse
     }

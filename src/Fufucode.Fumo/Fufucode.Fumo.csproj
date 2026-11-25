@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    FUMO 原生内核：Agent 引擎与循环、模型协议客户端、内置工具调度、Shell、MCP、Skill、安全评估、性能埋点。
+    只依赖 BCL，不依赖 Core / App / 任何后端插件；桌面端、FUI、CLI 与未来的宿主进程都在其上组合。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Fufucode.Core</RootNamespace>
+  </PropertyGroup>
+</Project>
