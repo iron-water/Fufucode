@@ -132,6 +132,15 @@ internal static class TerminalTests
         Eq(true, prompt.CanApprove, "painted request details enable an explicit grant");
         Eq(false, layout.Arrange(approval, 80, 2).CanApprove, "keys alone cannot arm a grant");
         Eq(false, layout.Arrange(approval, 7, 20).CanApprove, "clipped action keys cannot arm a grant");
+        var write = view with { Approval = "是否允许执行工具 write_file？\n{\"path\":\"review.txt\"}" };
+        var titleOnly = layout.Arrange(write, 66, 6);
+        Eq(true, titleOnly.Rows.Any(r => r.Ink == Ink.Approval && r.Text.Contains("write_file")), "six rows show the tool name");
+        Eq(false, titleOnly.CanApprove, "a tool name alone cannot arm a grant");
+        Eq(false, titleOnly.Rows.Any(r => r.Text.Contains("F2")), "a title-only frame offers no allow shortcut");
+        Eq(true, layout.Arrange(write, 66, 7).CanApprove, "the grant is available when the argument row is painted");
+        var wrappedTitle = write with { Approval = new string('中', 60) + "\n{\"path\":\"review.txt\"}" };
+        Eq(false, layout.Arrange(wrappedTitle, 24, 11).CanApprove, "wrapping a title does not turn its continuation into arguments");
+        Eq(true, layout.Arrange(wrappedTitle, 24, 30).CanApprove, "a taller viewport can show arguments below a wrapped title");
         foreach (var (w, h) in new[] { (1, 1), (2, 2), (9, 4), (38, 11), (100, 25) })
         {
             var tiny = layout.Arrange(approval with { Draft = "中\n\t👩‍💻", Cursor = 100 }, w, h);

@@ -39,11 +39,15 @@ internal sealed class TerminalLayout
         var statusRows = height >= (overlay is null ? 5 : 7) ? 1 : 0;
         var keepTranscript = height >= 3 ? 1 : 0;
         var approval = new List<TerminalText.Slice>();
-        if (view.Approval is not null) TerminalText.Wrap(TerminalText.Clean(view.Approval).Trim(), Math.Max(1, columns - 2), 0, approval);
+        var request = view.Approval is null ? "" : TerminalText.Clean(view.Approval).Trim();
+        if (view.Approval is not null) TerminalText.Wrap(request, Math.Max(1, columns - 2), 0, approval);
         var approvalRoom = Math.Max(1, height - headerRows - statusRows - keepTranscript - 1);
-        var approvalRows = view.Approval is null ? 0 : Math.Min(1 + approval.Count, Math.Min(3, approvalRoom));
+        var approvalRows = view.Approval is null ? 0 : Math.Min(1 + approval.Count, Math.Min(Math.Max(3, height / 3), approvalRoom));
         const string allowKeys = "! F2 允许 · F3 拒绝";
-        var canApprove = approvalRows >= 2 && columns >= TerminalText.Width(allowKeys) && !string.IsNullOrWhiteSpace(approval[0].Text);
+        // Native confirms put the tool name on the first line and its arguments on the following lines.
+        var detailsStart = request.IndexOf('\n') + 1;
+        var canApprove = approvalRows >= 2 && columns >= TerminalText.Width(allowKeys) && approval.Take(approvalRows - 1)
+            .Any(line => line.Start >= detailsStart && !string.IsNullOrWhiteSpace(line.Text));
         var remaining = height - headerRows - statusRows - approvalRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
         var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), Math.Min(Math.Max(1, height / 2),
