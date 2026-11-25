@@ -9,13 +9,14 @@ internal sealed class TerminalSurface : IDisposable
     private readonly TerminalLayout _layout = new();
     private readonly SixelSupport _graphics = new(Environment.GetEnvironmentVariable("FUI_GRAPHICS"));
     private readonly PasteKeys _keys;
+    private TuiTheme _theme = TuiTheme.FromEnvironment();
     private ImageCells? _paintedCell;
-    private readonly bool _color = Environment.GetEnvironmentVariable("NO_COLOR") is null;
     private readonly object _gate = new();
     private TextWriter _output = Console.Out;
     private Encoding? _encoding;
     private WindowsModes? _modes;
     private TerminalFrame? _previous;
+    private TuiTheme? _paintedTheme;
     private bool _alt, _changedCtrlC, _disposed;
     private bool _oldCursorVisible = true;
 
@@ -25,7 +26,7 @@ internal sealed class TerminalSurface : IDisposable
 
     public TerminalSurface()
     {
-        _keys = new(_graphics.Reply, _graphics.ColorReply);
+        _keys = new(_graphics.Reply, ColorReply);
         if (!IsSupported) throw new InvalidOperationException("FUI 需要交互式终端。");
         try
         {
@@ -51,6 +52,7 @@ internal sealed class TerminalSurface : IDisposable
             _alt = true;
             Write("\x1b[?25s\x1b[?2004s\x1b[?1049h\x1b[?2004h\x1b[?25l");
             if (_graphics.Probe) Write(SixelSupport.Query);
+            else if (_theme.NeedsBackgroundProbe) Write(TuiTheme.BackgroundQuery);
         }
         catch { Dispose(); throw; }
     }
@@ -70,13 +72,18 @@ internal sealed class TerminalSurface : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             var width = Console.WindowWidth;
             var height = Console.WindowHeight;
-            if (_graphics.Probe && _previous is { } last && (last.Width != width || last.Rows.Length != height))
-                Write("\x1b[16t" + SixelSupport.Colors);
+            if (_previous is { } last && (last.Width != width || last.Rows.Length != height))
+            {
+                if (_graphics.Probe) Write("\x1b[16t" + SixelSupport.Colors);
+                else if (_theme.NeedsBackgroundProbe) Write(TuiTheme.BackgroundQuery);
+            }
             _paintedCell = _graphics.Cell;
             var frame = _layout.Arrange(view, width, height, _paintedCell);
-            var paint = Diff(_previous, frame, _color);
+            var repaint = !ReferenceEquals(_paintedTheme, _theme);
+            var paint = Diff(repaint ? null : _previous, frame, _theme);
             if (paint.Length > 0) Write(paint);
             _previous = frame;
+            _paintedTheme = _theme;
         }
     }
 
@@ -94,7 +101,10 @@ internal sealed class TerminalSurface : IDisposable
         return _keys.Read();
     }
 
-    internal static string Diff(TerminalFrame? old, TerminalFrame next, bool color)
+    internal static string Diff(TerminalFrame? old, TerminalFrame next, bool styling) =>
+        Diff(old, next, styling ? TuiTheme.Resolve("dark", colorTerm: "truecolor") : TuiTheme.Unstyled);
+
+    internal static string Diff(TerminalFrame? old, TerminalFrame next, TuiTheme theme)
     {
         var reset = old is null || old.Width != next.Width || old.Rows.Length != next.Rows.Length;
         var paint = new StringBuilder();
@@ -106,9 +116,10 @@ internal sealed class TerminalSurface : IDisposable
             if (reset && row.Text.Length == 0 && row.Images is null) continue;
             paint.Append("\x1b[").Append(i + 1).Append(";1H");
             if (!reset && old!.Rows[i].Images is { Count: > 0 }) paint.Append("\x1b[2K");
-            if (color && row.Ink != Ink.Plain) paint.Append(Color(row.Ink));
+            var style = theme.StylingEnabled && row.Ink != Ink.Plain ? theme.Style(row.Ink) : "";
+            if (style.Length > 0) paint.Append(style);
             paint.Append(row.Text);
-            if (color && row.Ink != Ink.Plain) paint.Append("\x1b[0m");
+            if (style.Length > 0) paint.Append(theme.Reset);
             if (!reset) paint.Append("\x1b[K"); // remove remnants when a line contracts
             if (row.Images is not null)
                 foreach (var image in row.Images)
@@ -125,14 +136,12 @@ internal sealed class TerminalSurface : IDisposable
         return paintedRows ? "\x1b[?2026h" + paint + "\x1b[?2026l" : paint.ToString();
     }
 
-    private static string Color(Ink ink) => ink switch
+    private void ColorReply(string payload)
     {
-        Ink.Header => "\x1b[1;36m", Ink.User => "\x1b[1;36m", Ink.Assistant => "\x1b[1;37m",
-        Ink.Tool => "\x1b[34m", Ink.Quiet or Ink.Status or Ink.Thinking => "\x1b[2m", Ink.Info => "\x1b[2;36m",
-        Ink.Error => "\x1b[1;31m", Ink.Approval => "\x1b[1;33m", Ink.Composer => "\x1b[1m",
-        Ink.PanelTitle => "\x1b[1;36m", Ink.Selection => "\x1b[7m", Ink.Heading => "\x1b[1;33m", Ink.Code => "\x1b[36m",
-        Ink.CodeFence => "\x1b[2;36m", _ => "\x1b[0m"
-    };
+        _graphics.ColorReply(payload);
+        if (TuiTheme.TryParseBackgroundReply(payload, out var rgb))
+            _theme = _theme.WithReportedBackground(rgb);
+    }
 
     private void Write(string value) { _output.Write(value); _output.Flush(); }
     private void Exit(object? sender, EventArgs args) => Dispose();
@@ -147,7 +156,7 @@ internal sealed class TerminalSurface : IDisposable
             AppDomain.CurrentDomain.ProcessExit -= Exit;
             AppDomain.CurrentDomain.UnhandledException -= Crash;
             // Each restoration is independent: a disconnected stdout must not leave input modes changed.
-            if (_alt) TryRestore(() => Write("\x1b[?2026l\x1b[0m\x1b[?2004l\x1b[?1049l" +
+            if (_alt) TryRestore(() => Write("\x1b[?2026l" + _theme.Reset + "\x1b[?2004l\x1b[?1049l" +
                 (_oldCursorVisible ? "\x1b[?25h" : "\x1b[?25l") + "\x1b[?25r\x1b[?2004r"));
             if (_changedCtrlC) TryRestore(() => Console.TreatControlCAsInput = false);
             if (_encoding is not null) TryRestore(() => Console.OutputEncoding = _encoding);
