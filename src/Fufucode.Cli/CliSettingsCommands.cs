@@ -128,12 +128,15 @@ public static class CliSettingsCommands
         {
             using var document = JsonDocument.Parse(value);
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != 4)
-                throw new ArgumentException("endpoint requires providerName, baseUrl, modelId and apiKeyEnvironmentVariable.");
+            // 可选 api：openai-completions / openai-responses / anthropic-messages（缺省为 Chat Completions）。
+            var hasApi = root.ValueKind == JsonValueKind.Object && root.TryGetProperty("api", out _);
+            if (root.ValueKind != JsonValueKind.Object || root.EnumerateObject().Count() != (hasApi ? 5 : 4))
+                throw new ArgumentException("endpoint requires providerName, baseUrl, modelId and apiKeyEnvironmentVariable (api optional).");
             string Field(string name) => root.TryGetProperty(name, out var field) && field.ValueKind == JsonValueKind.String
                 && !string.IsNullOrWhiteSpace(field.GetString()) ? field.GetString()! :
                 throw new ArgumentException("endpoint requires providerName, baseUrl, modelId and apiKeyEnvironmentVariable.");
-            return new CompatibleEndpoint(Field("providerName"), Field("baseUrl"), Field("modelId"), Field("apiKeyEnvironmentVariable"));
+            return new CompatibleEndpoint(Field("providerName"), Field("baseUrl"), Field("modelId"), Field("apiKeyEnvironmentVariable"),
+                Api: hasApi ? Field("api") : null);
         }
         catch (JsonException) { throw new ArgumentException("endpoint must be a valid JSON object or null."); }
     }

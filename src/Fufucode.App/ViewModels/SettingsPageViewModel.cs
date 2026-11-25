@@ -127,7 +127,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool _suppressDraftTracking;
     private int _attachmentGeneration;
 
-    private sealed record EndpointDraft(string? Provider, string? Url, string? Model, int KeyMode, string? EnvironmentName);
+    private sealed record EndpointDraft(string? Provider, string? Url, string? Model, int KeyMode, string? EnvironmentName, int Api = 0);
     public bool HasNotificationPreferences => NotificationPreferences is not null;
     public bool HasSearchResults => FilteredCategories.Count > 0;
     public string SearchSummary => SearchText.Trim().Length == 0 ? string.Empty : $"找到 {FilteredCategories.Count} 个分类";
@@ -436,7 +436,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
 }
     private static string? NormalizeDraft(string? text) => string.IsNullOrWhiteSpace(text) ? null : text.Trim();
     private EndpointDraft CaptureEndpointDraft() => new(NormalizeDraft(EndpointProviderName), NormalizeDraft(EndpointBaseUrl),
-        NormalizeDraft(EndpointModelId), EndpointKeyModeIndex, NormalizeDraft(EndpointEnvName));
+        NormalizeDraft(EndpointModelId), EndpointKeyModeIndex, NormalizeDraft(EndpointEnvName), EndpointApiIndex);
     private void NotifyDraftState()
     {
         if (_suppressDraftTracking) return;
@@ -492,7 +492,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         if (endpoint is not null)
         {
             var provider = new EndpointProviderItem(
-                endpoint.ProviderName, endpoint.BaseUrl, endpoint.ApiKeyEnvironmentVariable);
+                endpoint.ProviderName, endpoint.BaseUrl, endpoint.ApiKeyEnvironmentVariable) { Api = endpoint.Api };
             foreach (var id in endpoint.AvailableModels)
             {
                 var option = new EndpointModelOption(id, id,
@@ -519,6 +519,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         EndpointModelId = endpoint?.ModelId;
         EndpointKeyModeIndex = 1;
         EndpointEnvName = endpoint?.ApiKeyEnvironmentVariable ?? MagpieEnvName;
+        EndpointApiIndex = ApiIndex(endpoint?.Api);
         _hasEndpointKeyDraft = false;
         _endpointDraftBaseline = CaptureEndpointDraft();
     }
@@ -1176,6 +1177,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             EndpointEnvName = value.ApiKeyEnvironmentVariable;
             EndpointModelId = value.PrimaryModelId();
             EndpointKeyModeIndex = 1;
+            EndpointApiIndex = ApiIndex(value.Api);
         }
         NotifyProviderSelectionChanged();
     }
@@ -1247,7 +1249,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     {
         if (preset is null) return;
         var provider = new EndpointProviderItem(preset.Name, preset.BaseUrl,
-            preset.ApiKeyEnvironmentVariable);
+            preset.ApiKeyEnvironmentVariable) { Api = preset.Api };
         EndpointProviders.Add(provider);
         RebuildFilteredProviders();
         OnPropertyChanged(nameof(HasEndpointProviders));
@@ -1334,7 +1336,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
             var apiKey = string.IsNullOrWhiteSpace(provider.ApiKeyEnvironmentVariable)
                 ? null
                 : Environment.GetEnvironmentVariable(provider.ApiKeyEnvironmentVariable);
-            var models = await catalog.ListAsync(baseUrl, apiKey);
+            var models = await catalog.ListAsync(baseUrl, apiKey, default, SelectedEndpointApi);
 
             // 保留已有勾选；首次拉取默认全选。
             var previous = provider.Models.ToDictionary(o => o.Id, o => o.IsSelected, StringComparer.Ordinal);
@@ -1527,6 +1529,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         {
             current.Name = EndpointProviderName?.Trim() ?? current.Name;
             current.BaseUrl = EndpointBaseUrl?.Trim() ?? current.BaseUrl;
+            current.Api = SelectedEndpointApi;
             if (EndpointKeyModeIndex == 1 && !string.IsNullOrWhiteSpace(EndpointEnvName))
                 current.ApiKeyEnvironmentVariable = EndpointEnvName.Trim();
         }
@@ -1602,7 +1605,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         var selectedModels = SelectedEndpointProvider?.SelectedModelIds() ?? [];
         var endpoint = new CompatibleEndpoint(provider, baseUrl,
             selectedModels.FirstOrDefault() ?? modelId, envName,
-            selectedModels.Length > 0 ? selectedModels : null);
+            selectedModels.Length > 0 ? selectedModels : null, SelectedEndpointApi);
         if (!TryUpdateStore(s => s with
             {
                 Endpoint = endpoint,

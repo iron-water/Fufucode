@@ -595,7 +595,7 @@ public sealed class PersistentSessionManager
     {
         try
         {
-            var probed = await ModelCapabilityProbe.SupportsImageInputAsync(endpoint.BaseUrl, apiKey, modelId)
+            var probed = await ModelCapabilityProbe.SupportsImageInputAsync(endpoint.BaseUrl, apiKey, modelId, api: endpoint.Api)
                 .ConfigureAwait(false);
             if (probed is { } known) chat.SetSupportsImages(known);
         }

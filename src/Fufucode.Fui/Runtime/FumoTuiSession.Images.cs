@@ -80,6 +80,6 @@ internal sealed partial class FumoTuiSession
         ICredentialResolver credentials = OperatingSystem.IsWindows()
             ? new WindowsPasswordVaultCredentialResolver() : new EnvironmentCredentialResolver();
         var apiKey = await credentials.ResolveAsync(endpoint.ApiKeyEnvironmentVariable, ct);
-        return await ModelCapabilityProbe.SupportsImageInputAsync(endpoint.BaseUrl, apiKey, model, ct);
+        return await ModelCapabilityProbe.SupportsImageInputAsync(endpoint.BaseUrl, apiKey, model, ct, endpoint.Api);
     }
 }

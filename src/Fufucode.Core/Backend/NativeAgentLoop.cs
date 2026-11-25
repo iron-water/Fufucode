@@ -189,7 +189,7 @@ public sealed class NativeAgentLoop
             {
                 var finalText = response.Text ?? "";
                 var finalMsg = new PureAgentMessage(PureAgentRole.Assistant, finalText,
-                    Usage: response.Usage) { ReasoningContent = response.ReasoningContent };
+                    Usage: response.Usage) { ReasoningContent = response.ReasoningContent, ProviderState = response.ProviderState };
                 conversationHistory.Add(finalMsg);
                 onMessageAppended?.Invoke(finalMsg);
                 // 纯文本流期间也允许插话：模型本轮结束不代表在途用户输入已处理。
@@ -212,7 +212,7 @@ public sealed class NativeAgentLoop
                 PureAgentRole.Assistant,
                 response.Text ?? "",
                 ToolCalls: response.ToolCalls,
-                Usage: response.Usage) { ReasoningContent = response.ReasoningContent };
+                Usage: response.Usage) { ReasoningContent = response.ReasoningContent, ProviderState = response.ProviderState };
             conversationHistory.Add(assistantToolMsg);
             onMessageAppended?.Invoke(assistantToolMsg);
 

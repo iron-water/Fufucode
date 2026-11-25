@@ -34,7 +34,8 @@ public static class NativeSessionFactory
         if (current.Endpoint is { } endpoint)
         {
             var key = apiKey ?? Environment.GetEnvironmentVariable(endpoint.ApiKeyEnvironmentVariable);
-            client = new OpenAiCompatibleModelClient(endpoint.BaseUrl, key, endpoint.ModelId);
+            // 线协议由端点配置决定；未知协议直接报错，不悄悄退回 Chat Completions。
+            client = ModelApi.CreateClient(endpoint.Api, endpoint.BaseUrl, key, endpoint.ModelId);
             // 端点模型为空时使用设置页当前选择的模型；空字符串不能覆盖 SelectedModel。
             modelId = string.IsNullOrWhiteSpace(endpoint.ModelId) ? current.SelectedModel : endpoint.ModelId;
         }
@@ -120,6 +121,7 @@ public static class NativeSessionFactory
             !string.IsNullOrWhiteSpace(contextEndpoint.BaseUrl))
         {
             var baseUrl = contextEndpoint.BaseUrl;
+            var api = contextEndpoint.Api;
             var key = apiKey ?? Environment.GetEnvironmentVariable(contextEndpoint.ApiKeyEnvironmentVariable);
             var fallbackModel = modelId;
             engine.ContextLengthResolver = async (requestedModel, cancellationToken) =>
@@ -127,7 +129,7 @@ public static class NativeSessionFactory
                 var target = string.IsNullOrWhiteSpace(requestedModel) ? fallbackModel : requestedModel;
                 if (string.IsNullOrWhiteSpace(target)) return null;
                 using var catalog = new ModelCatalogClient();
-                var entries = await catalog.ListAsync(baseUrl, key, cancellationToken).ConfigureAwait(false);
+                var entries = await catalog.ListAsync(baseUrl, key, cancellationToken, api).ConfigureAwait(false);
                 return entries.FirstOrDefault(entry =>
                     string.Equals(entry.Id, target, StringComparison.OrdinalIgnoreCase))?.ContextLength;
             };

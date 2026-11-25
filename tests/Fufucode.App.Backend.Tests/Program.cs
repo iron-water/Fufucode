@@ -26,6 +26,10 @@ internal static class Program
             return await LiveSseProbe.RunAsync(args[1], model, apiKey);
         }
 
+        // 可选的真实端点协议探针：--live-protocol <api> <baseUrl> <model> [apiKey]（花真实额度）。
+        if (args.Length >= 4 && args[0] == "--live-protocol")
+            return await LiveProtocolProbe.RunAsync(args[1], args[2], args[3], args.Length >= 5 ? args[4] : null);
+
         // 可选的真实端点 Agent Loop 探针：验证 FUMO 在本机网关上完成多轮工具循环。
         if (args.Length >= 3 && args[0] == "--live-agent-loop")
         {
@@ -83,6 +87,12 @@ internal static class Program
                 Console.WriteLine($"\n会话层通过：{checks.Passed} 项断言");
                 return 0;
             }
+            if (args.Length == 1 && args[0] == "--protocols-only")
+            {
+                await NativeProtocolClientTests.RunAsync(checks);
+                Console.WriteLine($"\n原生协议通过：{checks.Passed} 项断言");
+                return 0;
+            }
             if (args.Length == 1 && args[0] == "--shell-only")
             {
                 await CommandShellTests.RunAsync(checks);
@@ -102,6 +112,7 @@ internal static class Program
             SessionSwitchTests.Run(checks);
             await PureCSharpContractTests.RunAsync(checks);
             await CommandShellTests.RunAsync(checks);
+            await NativeProtocolClientTests.RunAsync(checks);
             PluginMarketplaceTests.Run(checks);
             await PluginCapabilityTests.RunAsync(checks);
             PluginDistributionInstallTests.Run(checks);

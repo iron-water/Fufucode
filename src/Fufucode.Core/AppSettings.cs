@@ -37,8 +37,14 @@ public sealed record PerformanceSettings(
 public sealed record CompatibleEndpoint(string ProviderName, string BaseUrl, string ModelId,
     string ApiKeyEnvironmentVariable,
     // 端点下可用的全部模型 id；旧配置没有该字段时为空，回退到 ModelId。
-    IReadOnlyList<string>? Models = null)
+    IReadOnlyList<string>? Models = null,
+    // 线协议（与 Pi models.json 的 api 同名）：openai-completions / openai-responses / anthropic-messages；
+    // 旧配置没有该字段时按 Chat Completions。
+    string? Api = null)
 {
+    /// <summary>生效的线协议 id。</summary>
+    public string EffectiveApi => Backend.ModelApi.Normalize(Api);
+
     /// <summary>可用于选择的模型：保存的清单，缺失时回退到当前模型。</summary>
     public IReadOnlyList<string> AvailableModels =>
         Models is { Count: > 0 } models ? models :
@@ -303,7 +309,8 @@ public sealed class AppSettingsStore
                 endpointUri.Scheme is not ("http" or "https") || endpointUri.UserInfo.Length > 0 || endpointUri.Query.Length > 0 ||
                 string.IsNullOrWhiteSpace(endpoint.ApiKeyEnvironmentVariable) ||
                 !(char.IsAsciiLetter(endpoint.ApiKeyEnvironmentVariable[0]) || endpoint.ApiKeyEnvironmentVariable[0] == '_') ||
-                !endpoint.ApiKeyEnvironmentVariable.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+                !endpoint.ApiKeyEnvironmentVariable.All(c => char.IsAsciiLetterOrDigit(c) || c == '_') ||
+                (endpoint.Api is { } api && Backend.ModelApi.Find(api) is null))
                 throw new ArgumentException("Invalid compatible endpoint.");
         }
         if (settings.Fumo is { } fumo)
@@ -329,7 +336,7 @@ public sealed class AppSettingsStore
         if (endpoint is null) return null;
         var model = new { providers = new Dictionary<string, object>
         {
-            [endpoint.ProviderName] = new { baseUrl = endpoint.BaseUrl, api = "openai-completions",
+            [endpoint.ProviderName] = new { baseUrl = endpoint.BaseUrl, api = endpoint.EffectiveApi,
                 apiKey = "$" + endpoint.ApiKeyEnvironmentVariable,
                 models = endpoint.AvailableModels.Select(id => new { id }).ToArray() }
         } };

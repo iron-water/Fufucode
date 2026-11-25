@@ -65,15 +65,30 @@ public sealed class ModelCatalogClient : IDisposable
 
     /// <summary>查询模型目录。失败时抛出带可操作信息的异常，不静默返回空列表。</summary>
     public async Task<IReadOnlyList<ModelEntry>> ListAsync(string baseUrl, string? apiKey = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? api = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(baseUrl);
-        var url = BuildModelsUrl(baseUrl);
+        var anthropic = ModelApi.Normalize(api) == ModelApi.AnthropicMessages;
+        var url = BuildModelsUrl(baseUrl, anthropic);
 
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        // 许多本地网关不校验密钥，但要求存在 Authorization 头。
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
-            string.IsNullOrWhiteSpace(apiKey) ? "local" : apiKey);
+        if (anthropic)
+        {
+            // Anthropic /v1/models：x-api-key + anthropic-version；第三方兼容网关同时接受 Bearer。
+            request.Headers.TryAddWithoutValidation("anthropic-version", AnthropicMessagesModelClient.ApiVersion);
+            if (!string.IsNullOrWhiteSpace(apiKey))
+            {
+                request.Headers.TryAddWithoutValidation("x-api-key", apiKey);
+                if (!url.Contains("anthropic.com", StringComparison.OrdinalIgnoreCase))
+                    request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+            }
+        }
+        else
+        {
+            // 许多本地网关不校验密钥，但要求存在 Authorization 头。
+            request.Headers.Authorization = new AuthenticationHeaderValue("Bearer",
+                string.IsNullOrWhiteSpace(apiKey) ? "local" : apiKey);
+        }
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
         using var response = await _http.SendAsync(request, cancellationToken).ConfigureAwait(false);
@@ -165,12 +180,17 @@ public sealed class ModelCatalogClient : IDisposable
             .ToArray();
     }
 
-    private static string BuildModelsUrl(string baseUrl)
+    private static string BuildModelsUrl(string baseUrl, bool anthropic = false)
     {
         var trimmed = baseUrl.TrimEnd('/');
-        // 允许用户填写 .../v1 或 .../v1/chat/completions。
-        if (trimmed.EndsWith("/chat/completions", StringComparison.OrdinalIgnoreCase))
-            trimmed = trimmed[..^"/chat/completions".Length];
+        // 允许用户填写 .../v1、.../v1/chat/completions、.../v1/responses 或 .../v1/messages。
+        foreach (var suffix in new[] { "/chat/completions", "/responses", "/messages" })
+            if (trimmed.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
+                trimmed = trimmed[..^suffix.Length];
+        // Anthropic 的 Base URL 常写成不带 /v1 的根地址。
+        if (anthropic && !trimmed.EndsWith("/v1", StringComparison.OrdinalIgnoreCase) &&
+            !trimmed.EndsWith("/models", StringComparison.OrdinalIgnoreCase))
+            trimmed += "/v1";
         return trimmed.EndsWith("/models", StringComparison.OrdinalIgnoreCase)
             ? trimmed
             : trimmed + "/models";
@@ -220,7 +240,7 @@ public static class ModelCapabilityProbe
     }
 
     public static async Task<bool?> SupportsImageInputAsync(string baseUrl, string? apiKey, string modelId,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, string? api = null)
     {
         if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(modelId)) return null;
         var key = baseUrl + "|" + modelId;
@@ -231,7 +251,7 @@ public static class ModelCapabilityProbe
             using var client = new ModelCatalogClient();
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             timeout.CancelAfter(TimeSpan.FromSeconds(2));
-            var models = await client.ListAsync(baseUrl, apiKey, timeout.Token).ConfigureAwait(false);
+            var models = await client.ListAsync(baseUrl, apiKey, timeout.Token, api).ConfigureAwait(false);
             var value = models.FirstOrDefault(model => string.Equals(model.Id, modelId, StringComparison.Ordinal))
                 ?.SupportsImages;
             Remember(key, value);

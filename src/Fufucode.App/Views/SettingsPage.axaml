@@ -537,6 +537,13 @@
                     </StackPanel>
                   </Grid>
 
+                  <StackPanel Spacing="3">
+                    <TextBlock Classes="settingsRowDesc" Text="协议"/>
+                    <ComboBox ItemsSource="{Binding EndpointApiOptions}" SelectedIndex="{Binding EndpointApiIndex}"
+                              MaxWidth="320" HorizontalAlignment="Left"
+                              AutomationProperties.AutomationId="endpoint-api"/>
+                  </StackPanel>
+
                   <StackPanel Spacing="4">
                     <TextBlock Classes="settingsRowDesc" Text="密钥来源"/>
                     <TextBlock Classes="meta" IsVisible="{Binding IsApiKeyRequired}"

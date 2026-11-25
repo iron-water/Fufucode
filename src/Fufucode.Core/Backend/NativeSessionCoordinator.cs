@@ -203,7 +203,7 @@ public sealed class NativeSessionCoordinator : ISessionCoordinator
                 else if (string.IsNullOrWhiteSpace(apiKey))
                     apiKey = Environment.GetEnvironmentVariable(endpoint.ApiKeyEnvironmentVariable);
             }
-            var models = await _modelCatalog!.ListAsync(endpoint.BaseUrl, apiKey, cancellationToken)
+            var models = await _modelCatalog!.ListAsync(endpoint.BaseUrl, apiKey, cancellationToken, endpoint.Api)
                 .ConfigureAwait(false);
             // 只回 id/name：设置页会拼成 provider/id，Magpie 的 id 本身已含 "group/..." 前缀，
             // 再拼 provider 会变成 group/group/...，因此这里不带 provider 字段。

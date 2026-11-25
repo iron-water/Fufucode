@@ -20,6 +20,8 @@ public sealed partial class EndpointProviderItem : ObservableObject
     [ObservableProperty] private string _name;
     [ObservableProperty] private string _baseUrl;
     [ObservableProperty] private string _apiKeyEnvironmentVariable;
+    /// <summary>线协议 id（<see cref="Fufucode.Core.Backend.ModelApi"/>）；null 为 Chat Completions。</summary>
+    [ObservableProperty] private string? _api;
 
     /// <summary>该提供商下可选的全部模型。</summary>
     public ObservableCollection<EndpointModelOption> Models { get; } = new();

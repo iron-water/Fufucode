@@ -59,6 +59,13 @@ public sealed record PureAgentMessage(
     /// <summary>供应商返回的独立推理内容；工具续轮与历史恢复须原样保留。</summary>
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
     public string? ReasoningContent { get; init; }
+
+    /// <summary>
+    /// 协议私有的回传状态（JSON）：Anthropic 的签名思考块、OpenAI Responses 的加密推理项等。
+    /// 只有产生它的协议客户端读取；换协议或内容被改写后自动不再使用。
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? ProviderState { get; init; }
 }
 
 /// <summary>一次模型响应的用量（未知字段保持 null，不补零）。</summary>
@@ -75,6 +82,9 @@ public sealed record PureModelResponse(string? Text, IReadOnlyList<PureToolCall>
 {
     /// <summary>与正文分开的推理内容，供工具续轮回传。</summary>
     public string? ReasoningContent { get; init; }
+
+    /// <summary>协议私有的回传状态，写入助手消息的 <see cref="PureAgentMessage.ProviderState"/>。</summary>
+    public string? ProviderState { get; init; }
 
     public static PureModelResponse FromText(string text) => new(text, Array.Empty<PureToolCall>());
 

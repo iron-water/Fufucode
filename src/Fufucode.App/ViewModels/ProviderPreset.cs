@@ -7,7 +7,7 @@ namespace Fufucode.App.ViewModels;
 /// <summary>
 /// 内置提供商预设：名称、Base URL、密钥环境变量。
 /// 添加提供商时先选一个预设（或"自定义"），再拉取该端点的模型。
-/// 不做 OAuth：所有预设都走标准 OpenAI 兼容的 API Key 方式。
+/// 不做 OAuth，都用 API Key；协议默认 Chat Completions，官方 OpenAI / Anthropic 走各自的原生协议。
 /// </summary>
 public sealed record ProviderPreset(
     string Id,
@@ -19,6 +19,9 @@ public sealed record ProviderPreset(
 {
     /// <summary>分组标题。</summary>
     public string Category { get; init; } = "API";
+
+    /// <summary>线协议 id；null 为 Chat Completions。</summary>
+    public string? Api { get; init; }
 
     public static readonly IReadOnlyList<ProviderPreset> All =
     [
@@ -36,9 +39,9 @@ public sealed record ProviderPreset(
         new("deepseek", "DeepSeek", "https://api.deepseek.com/v1", "DEEPSEEK_API_KEY",
             "DeepSeek 官方接入", RequiresKey: true),
         new("openai", "OpenAI", "https://api.openai.com/v1", "OPENAI_API_KEY",
-            "OpenAI 官方接入", RequiresKey: true),
+            "OpenAI 官方接入", RequiresKey: true) { Api = Fufucode.Core.Backend.ModelApi.OpenAiResponses },
         new("anthropic", "Anthropic", "https://api.anthropic.com/v1", "ANTHROPIC_API_KEY",
-            "Anthropic 官方接入", RequiresKey: true),
+            "Anthropic 官方接入", RequiresKey: true) { Api = Fufucode.Core.Backend.ModelApi.AnthropicMessages },
         new("moonshot", "Moonshot", "https://api.moonshot.cn/v1", "MOONSHOT_API_KEY",
             "月之暗面官方接入", RequiresKey: true),
         new("zhipu", "智谱 GLM", "https://open.bigmodel.cn/api/paas/v4", "ZHIPU_API_KEY",
