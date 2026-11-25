@@ -141,6 +141,7 @@ internal sealed partial class TuiController
 
     private void ApplySettings(FuiSettings next, string? notice)
     {
+        var vimChanged = _settings.VimMode != next.VimMode;
         var result = _settingsStore.Update(_ => next);
         if (!result.Ok)
         {
@@ -150,6 +151,12 @@ internal sealed partial class TuiController
         _settings = _settingsStore.Current;
         _expandTools = _settings.ExpandTools;
         _showThinking = _settings.ShowThinking;
+        if (vimChanged)
+        {
+            _composer.SetVimEnabled(_settings.VimMode);
+            CloseCompletion();
+        }
+        if (_settings.EmojiAutocomplete != "auto") CloseCompletion();
         Dirty = true;
         if (notice is { Length: > 0 }) Info(notice);
     }

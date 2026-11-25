@@ -137,15 +137,29 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
         if (terminalReply?.Invoke(c, parameters) == true) return;
         // A terminal response or an unknown CSI is not a shortcut (especially not approval).
         var args = parameters.Split(';');
-        if (args.Length > 2 || (args[0].Length != 0 && !int.TryParse(args[0], out _))) return;
+        if (args.Length is 0 or > 3 || (args[0].Length != 0 && !int.TryParse(args[0], out _))) return;
+        // xterm modifyOtherKeys uses three parameters for Ctrl+Space.
+        if (c == '~' && args.Length == 3)
+        {
+            if (args[0] == "27" && args[1] == "5" && args[2] == "32")
+                _ready.Enqueue((new('\0', ConsoleKey.Spacebar, false, false, true), null));
+            return;
+        }
+        if (args.Length > 2) return;
         var modifier = 1;
         if (args.Length > 1 && (!int.TryParse(args[1], out modifier) || modifier is < 1 or > 8)) return;
         var number = args[0].Length == 0 ? 0 : int.Parse(args[0]);
+        // Kitty CSI-u encoding of Ctrl+Space.
+        if (c == 'u' && number == 32 && modifier == 5)
+        {
+            _ready.Enqueue((new('\0', ConsoleKey.Spacebar, false, false, true), null));
+            return;
+        }
         ConsoleKey? code = c switch
         {
             'A' => ConsoleKey.UpArrow, 'B' => ConsoleKey.DownArrow, 'C' => ConsoleKey.RightArrow, 'D' => ConsoleKey.LeftArrow,
             'H' => ConsoleKey.Home, 'F' => ConsoleKey.End, 'P' => ConsoleKey.F1, 'Q' => ConsoleKey.F2, 'R' => ConsoleKey.F3,
-            '~' => number switch { 1 or 7 => ConsoleKey.Home, 3 => ConsoleKey.Delete, 4 or 8 => ConsoleKey.End,
+            '~' => number switch { 1 or 7 => ConsoleKey.Home, 2 => ConsoleKey.Insert, 3 => ConsoleKey.Delete, 4 or 8 => ConsoleKey.End,
                 5 => ConsoleKey.PageUp, 6 => ConsoleKey.PageDown, 11 => ConsoleKey.F1, 12 => ConsoleKey.F2, 13 => ConsoleKey.F3, _ => null },
             _ => null
         };
@@ -155,6 +169,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
 
     private static ConsoleKeyInfo CharacterKey(char c, bool alt)
     {
+        if (c == '\0') return new(c, ConsoleKey.Spacebar, false, alt, true);
         var key = c switch { '\r' => ConsoleKey.Enter, '\t' => ConsoleKey.Tab, '\b' or '\x7f' => ConsoleKey.Backspace,
             >= '\u0001' and <= '\u001a' => ConsoleKey.A + (c - 1), >= 'a' and <= 'z' => ConsoleKey.A + (c - 'a'),
             >= 'A' and <= 'Z' => ConsoleKey.A + (c - 'A'), _ => (ConsoleKey)0 };

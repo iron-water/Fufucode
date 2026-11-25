@@ -16,7 +16,8 @@ internal enum MouseHitKind
     None,
     PickerItem,
     ApprovalAllow,
-    ApprovalReject
+    ApprovalReject,
+    Composer
 }
 
 internal readonly record struct MouseHit(MouseHitKind Kind, int Index = -1)
@@ -36,7 +37,12 @@ internal sealed record MouseRegions(
     int ApprovalAllowStart = -1,
     int ApprovalAllowEnd = -1,
     int ApprovalRejectStart = -1,
-    int ApprovalRejectEnd = -1);
+    int ApprovalRejectEnd = -1,
+    int ComposerTop = -1,
+    int ComposerRows = 0,
+    int ComposerPromptWidth = 0,
+    string[]? ComposerLines = null,
+    int[]? ComposerStarts = null);
 
 internal static class MouseInput
 {
@@ -90,10 +96,27 @@ internal static class MouseInput
         }
 
         if (regions.PickerTop < 0 || regions.PickerVisible <= 0 || regions.PickerColumns <= 0 ||
-            mouse.Row <= regions.PickerTop || mouse.Column >= regions.PickerColumns) return MouseHit.None;
-        var visibleRow = mouse.Row - regions.PickerTop - 1;
-        if (visibleRow >= regions.PickerVisible) return MouseHit.None;
-        return new(MouseHitKind.PickerItem, regions.PickerStart + visibleRow);
+            mouse.Row <= regions.PickerTop || mouse.Column >= regions.PickerColumns)
+        {
+            // A picker owns its visible rows; the composer below it remains clickable.
+        }
+        else
+        {
+            var visibleRow = mouse.Row - regions.PickerTop - 1;
+            if (visibleRow < regions.PickerVisible) return new(MouseHitKind.PickerItem, regions.PickerStart + visibleRow);
+        }
+
+        if (regions.ComposerTop < 0 || regions.ComposerRows <= 0 || regions.ComposerLines is null ||
+            regions.ComposerStarts is null || mouse.Row < regions.ComposerTop ||
+            mouse.Row >= regions.ComposerTop + regions.ComposerRows) return MouseHit.None;
+        var line = mouse.Row - regions.ComposerTop;
+        if (line >= regions.ComposerLines.Length || line >= regions.ComposerStarts.Length) return MouseHit.None;
+        var column = mouse.Column;
+        if (column < regions.ComposerPromptWidth) return new(MouseHitKind.Composer, regions.ComposerStarts[line]);
+        column -= regions.ComposerPromptWidth;
+        var source = regions.ComposerLines[line];
+        var offset = TerminalText.IndexAtColumn(source, Math.Max(0, column));
+        return new(MouseHitKind.Composer, regions.ComposerStarts[line] + offset);
     }
 
     internal static bool IsRoutedKey(ConsoleKey key) => key == RoutedKey;

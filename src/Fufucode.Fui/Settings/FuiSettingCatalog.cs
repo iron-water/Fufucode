@@ -54,11 +54,12 @@ internal static class FuiSettingCatalog
     internal static readonly string[] ThemeValues = ["auto", "dark", "light", "mono"];
     internal static readonly string[] HyperlinkValues = ["auto", "on", "off"];
     internal static readonly string[] NotificationValues = ["auto", "off", "on"];
+    internal static readonly string[] EmojiValues = ["auto", "off"];
 
     internal static readonly IReadOnlyList<FuiSettingDefinition> Definitions = Build();
 
     internal static readonly string[] Groups =
-        ["外观", "阅读", "终端", "状态栏", "按键"];
+        ["外观", "阅读", "编辑", "终端", "状态栏", "按键"];
 
     internal static FuiSettingDefinition? Find(string key) =>
         Definitions.FirstOrDefault(item => item.Key == key);
@@ -103,6 +104,8 @@ internal static class FuiSettingCatalog
         "status-segments" => "选择底部状态栏显示的分段；搜索时会显示全部候选。",
         "compact-cards" => "使用卡片角色边框；关闭后改用紧凑行。",
         "mouse-wheel" => "滚轮滚动 transcript；关闭后仍保留点击。",
+        "emoji-autocomplete" => "输入已知短码时显示本地 Emoji 候选；关闭后保留原始冒号文本。",
+        "vim-mode" => "启用 Insert/Normal 模式；Normal 只支持文档列出的基础动作。",
         "keys" => "命令面板、搜索 transcript、工具展开和思考显示的按键。",
         _ => key.StartsWith("key.", StringComparison.Ordinal)
             ? "安全动作按键；冲突和输入/审批保留键会被拒绝。"
@@ -158,6 +161,14 @@ internal static class FuiSettingCatalog
                 Options(["true", "false"], ("true", "开启"), ("false", "关闭")),
                 false, settings => settings.MouseWheel ? "true" : "false",
                 (settings, value) => settings with { MouseWheel = value == "true" }),
+            new("emoji-autocomplete", "编辑", "Emoji 短码", FuiSettingKind.Choice,
+                Options(EmojiValues, ("auto", "自动"), ("off", "关闭")),
+                false, settings => settings.EmojiAutocomplete,
+                (settings, value) => settings with { EmojiAutocomplete = value }),
+            new("vim-mode", "编辑", "Vim 模式", FuiSettingKind.Toggle,
+                Options(["false", "true"], ("false", "关闭"), ("true", "开启")),
+                false, settings => settings.VimMode ? "true" : "false",
+                (settings, value) => settings with { VimMode = value == "true" }),
             new("status-segments", "状态栏", "状态分段", FuiSettingKind.MultiSelect,
                 FuiStatusSegmentCatalog.All.Select(item => new FuiSettingOption(item.Id, item.Label)).ToArray(),
                 false, settings => string.Join(',', settings.StatusSegments),

@@ -10,12 +10,15 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
     Action<FuiSettings, string, string>? notification = null)
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
-        "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
+        "Esc 清选择 / 关闭候选 / 停止 · Ctrl+C 复制选区 / 停止 / 清空 / 退出 · Ctrl+D 退出\n" +
+        "Ctrl+A 全选 · Shift+方向/Home/End/PgUp/PgDn 扩选 · Ctrl+X 剪切 · Ctrl+V/Shift+Insert 粘贴\n" +
+        "Ctrl+Space 本地词补全 · :smile: Emoji 短码 · /vim 切换 Insert/Normal\n" +
+        "Vim Normal：h/j/k/l · 0/$ · w/b · x · dd · yy/p · u · i/a/o · Esc\n" +
         "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Alt+V 粘贴图片 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
         "Ctrl+Z 撤销 · Ctrl+Shift+Z / Alt+Z 重做 · Ctrl+Y / Alt+Y 粘贴 / 轮换删除\n" +
         "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
-    private readonly Composer _composer = new();
+    private readonly Composer _composer = ConfiguredComposer(settings?.Current ?? FuiSettings.Default);
     private readonly FuiSettingsStore _settingsStore = settings ?? FuiSettingsStore.CreateEphemeral();
     private FuiSettings _settings = settings?.Current ?? FuiSettings.Default;
     private readonly FuiTerminalDetection _terminal = terminal ?? FuiTerminalDetector.DetectCurrent();
@@ -53,7 +56,14 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         _busy, Overlay(), _expandTools, _showThinking,
         _attachments.Count == 0 ? null : [.. _attachments], _settings.CompactCards, _settings.MouseWheel,
         _settings.Theme, FuiTerminalDetector.HyperlinksEnabled(_settings, _terminal), StatusSegments(), CommandKeyHint,
-        ResolveProjectImage);
+        ResolveProjectImage, _composer.SelectionStart, _composer.SelectionEnd, _composer.ModeLabel);
+
+    private static Composer ConfiguredComposer(FuiSettings settings)
+    {
+        var composer = new Composer();
+        composer.SetVimEnabled(settings.VimMode);
+        return composer;
+    }
 
     private static List<TuiLine> InitialLines(ITuiSession session, FuiSettingsStore? store)
     {
@@ -126,6 +136,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         // There may still be an approval behind a large batch of streaming events.
         if (!_active.Events.TryPeek(out _)) UpdateWorkbench();
         RefreshOpenTranscriptPanels();
+        RefreshPendingCompletion();
     }
 
     private void Message(TuiEvent.Message m)
@@ -167,8 +178,12 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         }
         Dirty = true;
         var ctrl = key.Modifiers.HasFlag(ConsoleModifiers.Control);
+        var shift = key.Modifiers.HasFlag(ConsoleModifiers.Shift);
+        var alt = key.Modifiers.HasFlag(ConsoleModifiers.Alt);
+        if (key.Key != 0) _pendingCompletionRefresh = 0;
         if (ctrl && key.Key == ConsoleKey.D) { Exiting = true; return; }
-        if ((_approvals.Count != 0 || _picker is null) && key.Key is (ConsoleKey.PageUp or ConsoleKey.PageDown))
+        if ((_approvals.Count != 0 || (_picker is null && _completion is null && !shift)) &&
+            key.Key is (ConsoleKey.PageUp or ConsoleKey.PageDown))
         {
             var step = Math.Max(1, viewportRows - 1);
             _scroll = key.Key == ConsoleKey.PageUp ? (int)Math.Min((long)_scroll + step, maxScroll) : Math.Max(0, _scroll - step);
@@ -194,6 +209,43 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             CaptureKey(key);
             return;
         }
+        if (!ctrl && !alt && key.Key == ConsoleKey.Escape && _picker is null && _composer.HasSelection)
+        {
+            _composer.ClearSelection();
+            return;
+        }
+        if (CompletionKey(key)) return;
+        if (ctrl && key.Key == ConsoleKey.Spacebar)
+        {
+            OpenWordCompletion(announceIfEmpty: true);
+            return;
+        }
+        if (key.Key == ConsoleKey.Escape && _composer.VimEnabled && _picker is null)
+        {
+            CloseCompletion();
+            _composer.HandleVimKey(key, Math.Max(1, viewportRows - 1));
+            return;
+        }
+        if (ctrl && key.Key == ConsoleKey.C && _picker is null && _composer.HasSelection)
+        {
+            CopyComposerSelection();
+            return;
+        }
+        if (((ctrl && key.Key == ConsoleKey.V) || (shift && key.Key == ConsoleKey.Insert)) && _picker is null)
+        {
+            if (PasteClipboardText()) return;
+        }
+        if (ctrl && key.Key == ConsoleKey.X && _composer.HasSelection && _picker is null)
+        {
+            CutComposerSelection();
+            return;
+        }
+        if (!ctrl && !alt && _picker is null && _composer is { VimEnabled: true, VimMode: VimEditorMode.Normal } &&
+            HandleVimNormal(key, viewportRows))
+        {
+            CloseCompletion();
+            return;
+        }
         if (key is { Key: ConsoleKey.Enter, Modifiers: 0 } && _pickerAction == "commands" &&
             _picker?.Current is { Value: "paste-image" or "paste" } command &&
             CanRun(FuiCommands.Get(command.Value)!))
@@ -213,7 +265,58 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (key.Key == ConsoleKey.Escape) { Stop(); return; }
         if (key.Key == ConsoleKey.F1) { Info(FuiCommands.HelpFor(_settings)); return; }
         if (key.Key == ConsoleKey.Enter && key.Modifiers == 0) { Submit(); return; }
-        _composer.Edit(key);
+        var revision = _composer.Revision;
+        var cursor = _composer.Cursor;
+        _composer.Edit(key, Math.Max(1, viewportRows - 1));
+        if (_composer.Revision == revision && _composer.Cursor == cursor) return;
+        _pendingCompletionRefresh = 0;
+        if (key.Key != 0 || _completion is not null) RefreshCompletionAfterEdit();
+        else ScheduleCompletionRefresh();
+    }
+
+    private void CopyComposerSelection()
+    {
+        var selected = _composer.SelectedText;
+        var result = _clipboard.CopyText(selected);
+        if (result.Success) _status = $"已复制 {selected.EnumerateRunes().Count()} 字符";
+        else Error("复制选区失败：" + (result.Error ?? "未知原因"));
+        Dirty = true;
+    }
+
+    private void CutComposerSelection()
+    {
+        var selected = _composer.SelectedText;
+        var copied = _clipboard.CopyText(selected);
+        if (!copied.Success)
+        {
+            Error("剪切选区失败：" + (copied.Error ?? "未知原因"));
+            return;
+        }
+        PrepareComposerMutation();
+        _composer.CutSelection();
+        CloseCompletion();
+        _status = $"已剪切 {selected.EnumerateRunes().Count()} 字符";
+        Dirty = true;
+    }
+
+    private bool PasteClipboardText()
+    {
+        if (!_clipboard.TryReadText(out var text, out _)) return false;
+        var clean = TerminalText.Clean(text, 0, out _, expandTabs: false);
+        if (clean.Length == 0) return false;
+        PrepareComposerMutation();
+        _composer.InsertPastedText(clean);
+        CloseCompletion();
+        RefreshCompletionAfterEdit();
+        Dirty = true;
+        return true;
+    }
+
+    private bool HandleVimNormal(ConsoleKeyInfo key, int viewportRows)
+    {
+        if (key.KeyChar is 'x' or 'p' or 'u' or 'i' or 'a' or 'o' or 'd' or 'y')
+            PrepareComposerMutation();
+        return _composer.HandleVimKey(key, Math.Max(1, viewportRows - 1));
     }
 
     internal void Mouse(MouseEvent mouse, int viewportRows, int maxScroll, int pickerRows, MouseHit hit)
@@ -242,6 +345,12 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 
         if (hit.Kind == MouseHitKind.PickerItem && _picker is not null)
             SelectPicker(hit.Index);
+        else if (hit.Kind == MouseHitKind.Composer)
+        {
+            _composer.SetCursor(hit.Index);
+            CloseCompletion();
+            Dirty = true;
+        }
     }
 
     private void SelectPicker(int index)
@@ -288,6 +397,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             }
         }
         if (_busy || _send is not null || _stop is not null || _job is not null) return; // Keep the next draft editable.
+        if (_settings.EmojiAutocomplete == "auto") text = EmojiShortcodes.ExpandCompletedShortcodes(text);
         if (_attachments.Count != 0) { SendWithContext(text); return; }
         Send(new FuiPrompt(text, []));
     }

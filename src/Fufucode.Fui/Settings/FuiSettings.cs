@@ -15,6 +15,8 @@ internal sealed record FuiSettings
     public IReadOnlyList<string> StatusSegments { get; init; } = FuiStatusSegmentCatalog.DefaultEnabled;
     public bool CompactCards { get; init; } = true;
     public bool MouseWheel { get; init; } = true;
+    public string EmojiAutocomplete { get; init; } = "auto";
+    public bool VimMode { get; init; }
     public IReadOnlyDictionary<string, string> Keybindings { get; init; } = FuiKeyBindingCatalog.DefaultBindings;
 
     internal static FuiSettings Default { get; } = new();
@@ -142,6 +144,8 @@ internal sealed class FuiSettingsStore
         RequireOneOf(hyperlinks, "hyperlinks", FuiSettingCatalog.HyperlinkValues);
         var notifications = ReadString(root, "desktopNotifications", "auto");
         RequireOneOf(notifications, "desktopNotifications", FuiSettingCatalog.NotificationValues);
+        var emoji = ReadString(root, "emojiAutocomplete", "auto");
+        RequireOneOf(emoji, "emojiAutocomplete", FuiSettingCatalog.EmojiValues);
 
         var segments = new List<string>();
         if (root.TryGetProperty("statusSegments", out var segmentNode))
@@ -193,6 +197,8 @@ internal sealed class FuiSettingsStore
             StatusSegments = segments,
             CompactCards = ReadBool(root, "compactCards", true),
             MouseWheel = ReadBool(root, "mouseWheel", true),
+            EmojiAutocomplete = emoji,
+            VimMode = ReadBool(root, "vimMode", false),
             Keybindings = normalizedKeys
         });
     }
@@ -207,6 +213,8 @@ internal sealed class FuiSettingsStore
             throw new ArgumentException($"无效链接设置：{settings.Hyperlinks}。");
         if (!FuiSettingCatalog.NotificationValues.Contains(settings.DesktopNotifications, StringComparer.Ordinal))
             throw new ArgumentException($"无效通知设置：{settings.DesktopNotifications}。");
+        if (!FuiSettingCatalog.EmojiValues.Contains(settings.EmojiAutocomplete, StringComparer.Ordinal))
+            throw new ArgumentException($"无效 Emoji 补全设置：{settings.EmojiAutocomplete}。");
 
         var segments = new List<string>();
         foreach (var id in settings.StatusSegments)
@@ -241,6 +249,8 @@ internal sealed class FuiSettingsStore
             writer.WriteEndArray();
             writer.WriteBoolean("compactCards", settings.CompactCards);
             writer.WriteBoolean("mouseWheel", settings.MouseWheel);
+            writer.WriteString("emojiAutocomplete", settings.EmojiAutocomplete);
+            writer.WriteBoolean("vimMode", settings.VimMode);
             writer.WriteStartObject("keybindings");
             foreach (var action in FuiKeyBindingCatalog.All)
             {

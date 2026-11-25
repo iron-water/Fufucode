@@ -290,6 +290,7 @@ internal sealed partial class TuiController
             case "mcp": Mcp(); break;
             case "tools": ToggleSetting("expand-tools"); break;
             case "thoughts": ToggleSetting("show-thinking"); break;
+            case "vim": ToggleSetting("vim-mode"); break;
             case "agents": Agents(); break;
             case "jobs": Jobs(); break;
             case "plan": Plan(c.Id); break;

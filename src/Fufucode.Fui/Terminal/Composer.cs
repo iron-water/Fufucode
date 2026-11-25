@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Fufucode.Fui;
 
-internal sealed class Composer
+internal sealed partial class Composer
 {
     private const int MaxUndoDepth = 100;
     private const int MaxKillEntries = 60;
@@ -15,6 +15,7 @@ internal sealed class Composer
     private readonly List<string> _killRing = [];
     private string? _snapshot = "";
     private int[]? _boundaries;
+    private int _selectionAnchor;
     private int _historyIndex;
     private (string Text, int Cursor) _unfinished;
     private int? _preferredColumn;
@@ -26,58 +27,82 @@ internal sealed class Composer
     public string Text => _snapshot ??= _buffer.ToString();
     public int Cursor { get; private set; }
     public long Revision { get; private set; }
+    public bool HasSelection => _selectionAnchor != Cursor;
+    public int SelectionStart => HasSelection ? Math.Min(Cursor, _selectionAnchor) : -1;
+    public int SelectionEnd => HasSelection ? Math.Max(Cursor, _selectionAnchor) : -1;
+    public string SelectedText => HasSelection ? Text[SelectionStart..SelectionEnd] : "";
+    public string? ModeLabel => VimEnabled ? VimMode == VimEditorMode.Insert ? "INSERT" : "NORMAL" : null;
     private IReadOnlyList<string>? _historyView;
     public IReadOnlyList<string> History => _historyView ??= _history.AsReadOnly();
 
-    public void Edit(ConsoleKeyInfo key)
+    public void Edit(ConsoleKeyInfo key, int pageRows = 8)
     {
         var control = key.Modifiers.HasFlag(ConsoleModifiers.Control) && !key.Modifiers.HasFlag(ConsoleModifiers.Alt);
         var alt = key.Modifiers.HasFlag(ConsoleModifiers.Alt);
-        if (key.Key is not (ConsoleKey.UpArrow or ConsoleKey.DownArrow)) _preferredColumn = null;
+        var shift = key.Modifiers.HasFlag(ConsoleModifiers.Shift);
+        if (key.Key is not (ConsoleKey.UpArrow or ConsoleKey.DownArrow or ConsoleKey.PageUp or ConsoleKey.PageDown))
+            _preferredColumn = null;
         switch (key.Key)
         {
             case ConsoleKey.Z when alt && !control: Redo(); return;
-            case ConsoleKey.Z when control && key.Modifiers.HasFlag(ConsoleModifiers.Shift): Redo(); return;
+            case ConsoleKey.Z when control && shift: Redo(); return;
             case ConsoleKey.Z when control: Undo(); return;
             case ConsoleKey.Y when control: Yank(); return;
             case ConsoleKey.Y when alt && !control: YankPop(); return;
             case ConsoleKey.LeftArrow:
-                BreakEditGroup();
-                Cursor = control ? WordLeft() : Previous(Cursor);
+                MoveHorizontal(-1, control, shift);
                 return;
             case ConsoleKey.RightArrow:
-                BreakEditGroup();
-                Cursor = control ? WordRight() : Next(Cursor);
+                MoveHorizontal(1, control, shift);
                 return;
             case ConsoleKey.Home:
-                BreakEditGroup();
-                Cursor = control ? 0 : LineStart();
+                MoveTo(control ? 0 : LineStart(), shift);
                 return;
             case ConsoleKey.End:
-                BreakEditGroup();
-                Cursor = control ? _buffer.Length : LineEnd();
+                MoveTo(control ? _buffer.Length : LineEnd(), shift);
                 return;
-            case ConsoleKey.UpArrow: Vertical(-1); return;
-            case ConsoleKey.DownArrow: Vertical(1); return;
+            case ConsoleKey.UpArrow:
+                Vertical(-1, shift);
+                return;
+            case ConsoleKey.DownArrow:
+                Vertical(1, shift);
+                return;
+            case ConsoleKey.PageUp:
+                Page(-1, pageRows, shift);
+                return;
+            case ConsoleKey.PageDown:
+                Page(1, pageRows, shift);
+                return;
             case ConsoleKey.Backspace:
-                DeleteRange(control ? WordLeft() : Previous(Cursor), Cursor);
+                if (HasSelection) DeleteSelection(addToKillRing: false);
+                else DeleteRange(control ? WordLeft() : Previous(Cursor), Cursor);
                 return;
             case ConsoleKey.Delete:
-                DeleteRange(Cursor, control ? WordRight() : Next(Cursor));
+                if (HasSelection) DeleteSelection(addToKillRing: false);
+                else DeleteRange(Cursor, control ? WordRight() : Next(Cursor));
                 return;
             case ConsoleKey.J when control:
-            case ConsoleKey.Enter when key.Modifiers != 0: Insert("\n", literal: false); return;
+            case ConsoleKey.Enter when key.Modifiers != 0:
+                Insert("\n", literal: false);
+                return;
             case ConsoleKey.A when control:
-                BreakEditGroup();
-                Cursor = LineStart();
+                SelectAll();
                 return;
             case ConsoleKey.E when control:
-                BreakEditGroup();
-                Cursor = LineEnd();
+                MoveTo(LineEnd(), shift);
                 return;
-            case ConsoleKey.U when control: Kill(LineStart(), Cursor, KillDirection.Backward); return;
-            case ConsoleKey.K when control: Kill(Cursor, LineEnd(), KillDirection.Forward); return;
-            case ConsoleKey.W when control: Kill(WordLeft(), Cursor, KillDirection.Backward); return;
+            case ConsoleKey.U when control:
+                if (HasSelection) DeleteSelection(addToKillRing: true, KillDirection.Backward);
+                else Kill(LineStart(), Cursor, KillDirection.Backward);
+                return;
+            case ConsoleKey.K when control:
+                if (HasSelection) DeleteSelection(addToKillRing: true, KillDirection.Forward);
+                else Kill(Cursor, LineEnd(), KillDirection.Forward);
+                return;
+            case ConsoleKey.W when control:
+                if (HasSelection) DeleteSelection(addToKillRing: true, KillDirection.Backward);
+                else Kill(WordLeft(), Cursor, KillDirection.Backward);
+                return;
         }
 
         // Key 0 is literal paste/IME input, never a command. VT paste newlines do not submit.
@@ -119,13 +144,65 @@ internal sealed class Composer
         BreakEditGroup();
     }
 
+    public void InsertPastedText(string text)
+    {
+        if (text.Length == 0) return;
+        BeginTyped(literal: true);
+        InsertValue(text);
+    }
+
+    // Used by local completions. The replacement is one undo step even when it spans a selection.
+    public void ReplaceRange(int start, int end, string text)
+    {
+        start = Ceiling(Math.Clamp(start, 0, _buffer.Length));
+        end = Ceiling(Math.Clamp(end, start, _buffer.Length));
+        if (start == end && text.Length == 0) return;
+        BeginCommand();
+        RemoveCore(start, end);
+        InsertValue(text);
+    }
+
+    public void SetCursor(int position, bool extend = false)
+    {
+        position = Ceiling(Math.Clamp(position, 0, _buffer.Length));
+        BreakEditGroup();
+        if (extend)
+        {
+            if (!HasSelection) _selectionAnchor = Cursor;
+        }
+        else _selectionAnchor = position;
+        Cursor = position;
+    }
+
+    public void SelectAll()
+    {
+        BreakEditGroup();
+        _selectionAnchor = 0;
+        Cursor = _buffer.Length;
+    }
+
+    public void ClearSelection()
+    {
+        if (HasSelection) BreakEditGroup();
+        _selectionAnchor = Cursor;
+    }
+
+    public string? CutSelection()
+    {
+        if (!HasSelection) return null;
+        var selected = SelectedText;
+        DeleteSelection(addToKillRing: true, KillDirection.Forward);
+        return selected;
+    }
+
     private void Set(string text, int cursor)
     {
         Revision++;
         _buffer.Clear().Append(text);
         _snapshot = text;
         _boundaries = null;
-        Cursor = Math.Clamp(cursor, 0, text.Length);
+        Cursor = Ceiling(Math.Clamp(cursor, 0, text.Length));
+        _selectionAnchor = Cursor;
         _preferredColumn = null;
     }
 
@@ -138,11 +215,21 @@ internal sealed class Composer
 
     private void InsertValue(string value)
     {
+        if (value.Length == 0) return;
+        if (HasSelection)
+        {
+            var start = SelectionStart;
+            var end = SelectionEnd;
+            _buffer.Remove(start, end - start);
+            Cursor = start;
+            _selectionAnchor = start;
+        }
         _buffer.Insert(Cursor, value);
         Cursor += value.Length;
         Changed();
         // A split surrogate or a base inserted before combining marks may leave the caret inside a cluster.
         if (Cursor < _buffer.Length && !char.IsHighSurrogate(value[^1])) Cursor = Ceiling(Cursor);
+        _selectionAnchor = Cursor;
     }
 
     private void DeleteRange(int start, int end)
@@ -156,12 +243,33 @@ internal sealed class Composer
         Remove(start, end);
     }
 
+    private void DeleteSelection(bool addToKillRing, KillDirection direction = KillDirection.Forward)
+    {
+        if (!HasSelection) return;
+        var start = SelectionStart;
+        var end = SelectionEnd;
+        var text = Text[start..end];
+        BeginCommand();
+        Remove(start, end);
+        if (addToKillRing) AddKill(text, direction, accumulate: false);
+    }
+
     private void Remove(int start, int end)
     {
         if (end <= start) return;
-        _buffer.Remove(start, end - start);
+        RemoveCore(start, end);
         Changed();
         Cursor = Ceiling(start);
+        _selectionAnchor = Cursor;
+    }
+
+    private void RemoveCore(int start, int end)
+    {
+        if (end <= start) return;
+        _buffer.Remove(start, end - start);
+        Cursor = start;
+        _selectionAnchor = start;
+        _boundaries = null;
     }
 
     private void Kill(int start, int end, KillDirection direction)
@@ -175,6 +283,12 @@ internal sealed class Composer
         var accumulate = _killDirection == direction;
         BeginCommand();
         Remove(start, end);
+        AddKill(text, direction, accumulate);
+    }
+
+    private void AddKill(string text, KillDirection direction, bool accumulate)
+    {
+        if (text.Length == 0) return;
         if (accumulate && _killRing.Count != 0)
             _killRing[^1] = direction == KillDirection.Backward ? text + _killRing[^1] : _killRing[^1] + text;
         else
@@ -292,7 +406,7 @@ internal sealed class Composer
         _redo.Add(snapshot);
     }
 
-    private EditSnapshot CurrentSnapshot() => new(Text, Cursor);
+    private EditSnapshot CurrentSnapshot() => new(Text, Cursor, _selectionAnchor);
 
     private bool Matches(EditSnapshot snapshot) =>
         Cursor == snapshot.Cursor && string.Equals(Text, snapshot.Text, StringComparison.Ordinal);
@@ -301,6 +415,7 @@ internal sealed class Composer
     {
         Set(snapshot.Text, snapshot.Cursor);
         Cursor = Ceiling(Cursor);
+        _selectionAnchor = Ceiling(Math.Clamp(snapshot.SelectionAnchor, 0, _buffer.Length));
         _historyIndex = _history.Count;
     }
 
@@ -331,6 +446,35 @@ internal sealed class Composer
 
     private int Next(int position) => position >= _buffer.Length ? _buffer.Length : Ceiling(position + 1);
 
+    private void MoveHorizontal(int direction, bool word, bool extend)
+    {
+        if (!extend && HasSelection)
+        {
+            BreakEditGroup();
+            Cursor = direction < 0 ? SelectionStart : SelectionEnd;
+            _selectionAnchor = Cursor;
+            _preferredColumn = null;
+            return;
+        }
+        var next = word
+            ? direction < 0 ? WordLeft() : WordRight()
+            : direction < 0 ? Previous(Cursor) : Next(Cursor);
+        MoveTo(next, extend);
+    }
+
+    private void MoveTo(int position, bool extend)
+    {
+        BreakEditGroup();
+        position = Ceiling(Math.Clamp(position, 0, _buffer.Length));
+        if (extend)
+        {
+            if (!HasSelection) _selectionAnchor = Cursor;
+        }
+        else _selectionAnchor = position;
+        Cursor = position;
+        _preferredColumn = null;
+    }
+
     private int WordLeft()
     {
         var i = Cursor;
@@ -359,26 +503,31 @@ internal sealed class Composer
     }
 
     private int LineStart() => Cursor == 0 ? 0 : Text.LastIndexOf('\n', Cursor - 1) + 1;
+
     private int LineEnd()
     {
         var next = Text.IndexOf('\n', Cursor);
         return next < 0 ? _buffer.Length : next;
     }
 
-    private void Vertical(int direction)
+    private void Vertical(int direction, bool extend)
     {
         BreakEditGroup();
         var start = LineStart();
         var end = LineEnd();
         if ((direction < 0 && start > 0) || (direction > 0 && end < _buffer.Length))
         {
-            _preferredColumn ??= TerminalText.Width(Text.AsSpan(start, Cursor - start));
-            var lineStart = direction < 0 ? (start == 1 ? 0 : Text.LastIndexOf('\n', start - 2) + 1) : end + 1;
-            var lineEnd = direction < 0 ? start - 1 : Text.IndexOf('\n', lineStart);
-            if (lineEnd < 0) lineEnd = _buffer.Length;
-            Cursor = lineStart + TerminalText.IndexAtColumn(Text.AsSpan(lineStart, lineEnd - lineStart), _preferredColumn.Value);
+            var hadSelection = HasSelection;
+            var origin = Cursor;
+            MoveVerticalText(direction);
+            if (extend)
+            {
+                if (!hadSelection) _selectionAnchor = origin;
+            }
+            else _selectionAnchor = Cursor;
             return;
         }
+        if (extend) return;
 
         var index = Math.Clamp(_historyIndex + direction, 0, _history.Count);
         if (index == _historyIndex) return;
@@ -391,7 +540,38 @@ internal sealed class Composer
         Cursor = Ceiling(Cursor);
     }
 
-    private readonly record struct EditSnapshot(string Text, int Cursor);
+    // Called by the controller only after Shift is known to be active.
+    private void Page(int direction, int pageRows, bool extend)
+    {
+        if (!extend) return;
+        BreakEditGroup();
+        var hadSelection = HasSelection;
+        var origin = Cursor;
+        if (!hadSelection) _selectionAnchor = origin;
+        _preferredColumn ??= TerminalText.Width(Text.AsSpan(LineStart(), Cursor - LineStart()));
+        var remaining = Math.Clamp(pageRows, 1, 50);
+        while (remaining-- > 0)
+        {
+            var start = LineStart();
+            var end = LineEnd();
+            if (direction < 0 && start == 0 || direction > 0 && end == _buffer.Length) break;
+            MoveVerticalText(direction);
+        }
+    }
+
+    private void MoveVerticalText(int direction)
+    {
+        var start = LineStart();
+        var end = LineEnd();
+        _preferredColumn ??= TerminalText.Width(Text.AsSpan(start, Cursor - start));
+        var lineStart = direction < 0 ? (start == 1 ? 0 : Text.LastIndexOf('\n', start - 2) + 1) : end + 1;
+        var lineEnd = direction < 0 ? start - 1 : Text.IndexOf('\n', lineStart);
+        if (lineEnd < 0) lineEnd = _buffer.Length;
+        var target = lineStart + TerminalText.IndexAtColumn(Text.AsSpan(lineStart, lineEnd - lineStart), _preferredColumn.Value);
+        Cursor = Ceiling(target);
+    }
+
+    private readonly record struct EditSnapshot(string Text, int Cursor, int SelectionAnchor);
 
     private enum EditGroup
     {

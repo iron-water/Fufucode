@@ -46,6 +46,7 @@ internal static class FuiCommands
         new("links", "链接目标", "阅读", Argument: "[关键词]", Picker: true),
         new("outline", "会话大纲", "阅读"), new("copy", "复制正文", "阅读"),
         new("transcript", "对话浏览器", "阅读"),
+        new("vim", "Vim 模式", "编辑"),
         new("history", "找回本次输入", "编辑", Argument: "[关键词]", Picker: true),
         new("tools", "展开或折叠工具输出", "阅读"), new("thoughts", "隐藏或显示思考", "阅读"),
         new("quit", "退出 FUI", "导航")

@@ -106,9 +106,11 @@ internal static class MouseTests
         Eq(regions.PickerStart, hit.Index, "picker hit maps visible row to item index");
         Eq(true, narrow.Rows[first.Row].Text.Contains(choices[hit.Index].Label, StringComparison.Ordinal),
             "picker hit row matches the painted item");
-        Eq(MouseHitKind.None, MouseInput.HitTest(regions,
-            first with { Row = regions.PickerTop + regions.PickerVisible + 1 }).Kind, "outside picker rows is safe");
-        Eq(MouseHitKind.None, MouseInput.HitTest(regions, first with { Column = 10_000 }).Kind, "out-of-range column is safe");
+        Eq(false, MouseInput.HitTest(regions,
+            first with { Row = regions.PickerTop + regions.PickerVisible + 1 }).Kind == MouseHitKind.PickerItem,
+            "outside picker rows never selects an item");
+        Eq(false, MouseInput.HitTest(regions, first with { Column = 10_000 }).Kind == MouseHitKind.PickerItem,
+            "out-of-range picker column never selects an item");
 
         var wide = layout.Arrange(view, 100, 17);
         var wideRegions = wide.Mouse!;

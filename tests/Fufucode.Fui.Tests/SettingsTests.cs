@@ -37,6 +37,8 @@ internal static class SettingsTests
                 StatusSegments = ["model", "usage"],
                 CompactCards = false,
                 MouseWheel = false,
+                EmojiAutocomplete = "off",
+                VimMode = true,
                 Keybindings = new Dictionary<string, string>(settings.Keybindings, StringComparer.Ordinal)
                 {
                     [FuiKeyBindingCatalog.Commands] = "ctrl+g"
@@ -57,6 +59,8 @@ internal static class SettingsTests
             Eq("model,usage", string.Join(',', second.Current.StatusSegments), "status segments persisted");
             Eq(false, second.Current.CompactCards, "compact cards persisted");
             Eq(false, second.Current.MouseWheel, "mouse wheel persisted");
+            Eq("off", second.Current.EmojiAutocomplete, "emoji completion setting persisted");
+            Eq(true, second.Current.VimMode, "Vim mode persisted");
             Eq("ctrl+g", second.Current.Keybindings[FuiKeyBindingCatalog.Commands], "key binding persisted");
 
             using var document = JsonDocument.Parse(File.ReadAllText(path));
@@ -129,6 +133,18 @@ internal static class SettingsTests
             Key(ui, ConsoleKey.Enter);
             Require(!store.Current.StatusSegments.Contains("model"), "status segment toggles off through settings center");
             Eq("设置 · 状态分段", ui.View().Overlay?.Title, "status picker stays open for multiple toggles");
+
+            Key(ui, ConsoleKey.Escape);
+            Type(ui, "/settings");
+            Key(ui, ConsoleKey.Enter);
+            Type(ui, "Emoji");
+            Key(ui, ConsoleKey.Enter);
+            Eq("off", store.Current.EmojiAutocomplete, "emoji completion toggles through settings center");
+            Key(ui, ConsoleKey.U, ctrl: true);
+            Type(ui, "Vim");
+            Key(ui, ConsoleKey.Enter);
+            Eq(true, store.Current.VimMode, "Vim mode toggles through settings center");
+            Eq("INSERT", ui.View().EditorMode, "Vim mode reaches the composer immediately");
         }
         finally { root.Delete(true); }
     }

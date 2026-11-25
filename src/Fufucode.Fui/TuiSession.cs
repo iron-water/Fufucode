@@ -13,7 +13,8 @@ internal sealed record TuiView(string Project, string Session, string Model, str
     FuiOverlay? Overlay = null, bool ExpandTools = false, bool ShowThinking = true,
     IReadOnlyList<FileAttachment>? Attachments = null, bool CompactCards = true, bool MouseWheel = true,
     string Theme = "auto", bool Hyperlinks = false, IReadOnlyList<string>? StatusSegments = null,
-    string CommandKey = "Ctrl+P", Func<string, ResolvedImage?>? ResolveImage = null);
+    string CommandKey = "Ctrl+P", Func<string, ResolvedImage?>? ResolveImage = null,
+    int SelectionStart = -1, int SelectionEnd = -1, string? EditorMode = null);
 
 internal abstract record TuiEvent
 {

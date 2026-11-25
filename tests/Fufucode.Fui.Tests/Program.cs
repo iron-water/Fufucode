@@ -8,6 +8,8 @@ try
     Console.WriteLine("PASS terminal: editor, layout and terminal rendering");
     ToolCardTests.Run();
     Console.WriteLine("PASS tool cards: registry, bounded projection, sanitization and layout");
+    EditorFeatureTests.Run();
+    Console.WriteLine("PASS editor features: selection, clipboard, completion, emoji, Vim, mouse and redo");
     ThemeTests.Run();
     Console.WriteLine("PASS theme: dark/light/mono/auto, color depth and terminal style safety");
     await SettingsTests.RunAsync();

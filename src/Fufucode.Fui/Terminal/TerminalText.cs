@@ -10,16 +10,30 @@ internal static class TerminalText
 
     internal static string Clean(string text) => Clean(text, 0, out _);
 
-    internal static string Clean(string text, int cursor, out int cleanCursor, bool expandTabs = true)
+    internal static string Clean(string text, int cursor, out int cleanCursor, bool expandTabs = true) =>
+        CleanCore(text, cursor, out cleanCursor, expandTabs, null);
+
+    internal static string CleanMapped(string text, int cursor, out int cleanCursor, out int[] offsetMap,
+        bool expandTabs = true)
+    {
+        offsetMap = new int[text.Length + 1];
+        Array.Fill(offsetMap, -1);
+        return CleanCore(text, cursor, out cleanCursor, expandTabs, offsetMap);
+    }
+
+    private static string CleanCore(string text, int cursor, out int cleanCursor, bool expandTabs, int[]? offsetMap)
     {
         cursor = Math.Clamp(cursor, 0, text.Length);
         StringBuilder? result = null;
         var copied = 0;
+        var outputLength = 0;
         cleanCursor = cursor;
+        if (offsetMap is not null) offsetMap[0] = 0;
         for (var i = 0; i < text.Length;)
         {
             var start = i++;
             var c = text[start];
+            if (offsetMap is not null) offsetMap[start] = outputLength;
             var replacement = "";
             switch (c)
             {
@@ -42,13 +56,32 @@ internal static class TerminalText
                 case '\u009d': i = SkipString(text, i, osc: true); break;
                 case '\u0090' or '\u0098' or '\u009e' or '\u009f': i = SkipString(text, i, osc: false); break;
                 case '\r': if (i < text.Length && text[i] == '\n') i++; replacement = "\n"; break;
-                case '\t': if (!expandTabs) continue; replacement = "    "; break;
+                case '\t':
+                    if (!expandTabs)
+                    {
+                        outputLength++;
+                        continue;
+                    }
+                    replacement = "    ";
+                    break;
                 case '\u2028' or '\u2029': replacement = "\n"; break;
-                case '\n': continue;
+                case '\n':
+                    outputLength++;
+                    continue;
                 default:
-                    if (char.IsHighSurrogate(c) && i < text.Length && char.IsLowSurrogate(text[i])) { i++; continue; }
+                    if (char.IsHighSurrogate(c) && i < text.Length && char.IsLowSurrogate(text[i]))
+                    {
+                        if (offsetMap is not null) offsetMap[start + 1] = outputLength;
+                        outputLength += 2;
+                        i++;
+                        continue;
+                    }
                     if (char.IsSurrogate(c)) replacement = "\ufffd";
-                    else if (!ShouldStrip(c)) continue;
+                    else if (!ShouldStrip(c))
+                    {
+                        outputLength++;
+                        continue;
+                    }
                     break;
             }
 
@@ -57,8 +90,20 @@ internal static class TerminalText
             if (cursor > start) cleanCursor += (cursor >= i ? replacement.Length : 0) - (Math.Min(cursor, i) - start);
             result.Append(replacement);
             copied = i;
+            if (offsetMap is not null)
+            {
+                for (var position = start + 1; position < i; position++) offsetMap[position] = outputLength;
+                outputLength += replacement.Length;
+                offsetMap[i] = outputLength;
+            }
         }
 
+        if (offsetMap is not null)
+        {
+            offsetMap[text.Length] = outputLength;
+            for (var i = 1; i <= text.Length; i++)
+                if (offsetMap[i] < 0) offsetMap[i] = offsetMap[i - 1];
+        }
         return result is null ? text : result.Append(text, copied, text.Length - copied).ToString();
     }
 

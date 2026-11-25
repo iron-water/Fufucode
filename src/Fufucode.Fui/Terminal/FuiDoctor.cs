@@ -48,7 +48,8 @@ internal static class FuiDoctor
             ("data root", runtime.DataRoot),
             ("shell", shell),
             ("FUI build", $"{version} · {build.Commit ?? "无提交标记"} · {build.BuiltAtUtc.ToLocalTime():yyyy-MM-dd HH:mm:ss}"),
-            ("settings", settings.Theme + " · " + string.Join(',', settings.StatusSegments))
+            ("settings", settings.Theme + " · " + string.Join(',', settings.StatusSegments) +
+                " · emoji " + settings.EmojiAutocomplete + " · vim " + (settings.VimMode ? "on" : "off"))
         };
         if (detection.Multiplexers.Count != 0)
         {

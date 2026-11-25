@@ -64,6 +64,47 @@ internal sealed class ProjectFiles
         return new(here, choices);
     }
 
+    // Path-only completion. This walks directory entries and attributes, never opens file content.
+    internal IReadOnlyList<string> CompletionPaths(CancellationToken ct)
+    {
+        const int maximum = 4000;
+        var allowed = _policy.ReadablePathsForListing();
+        var paths = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(_root);
+        while (pending.Count != 0 && paths.Count < maximum)
+        {
+            ct.ThrowIfCancellationRequested();
+            var directory = pending.Pop();
+            try
+            {
+                foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint) || !allowed(entry.FullName)) continue;
+                        var isDirectory = entry.Attributes.HasFlag(FileAttributes.Directory);
+                        if (isDirectory && HiddenDirectories.Contains(entry.Name)) continue;
+                        var relative = Relative(entry.FullName);
+                        paths.Add(isDirectory ? relative + "/" : relative);
+                        if (isDirectory) pending.Push(entry.FullName);
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException or FileNotFoundException)
+                    {
+                        // A path disappearing or losing access mid-walk is omitted, not turned into a false candidate.
+                    }
+                    if (paths.Count == maximum) break;
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                continue;
+            }
+        }
+        return paths;
+    }
+
     public async Task<FileAttachment> ReadAsync(string path, CancellationToken ct) =>
         (await ReadFileAsync(path, allowImages: false, MaxAttachmentBytes, ct)).File;
 

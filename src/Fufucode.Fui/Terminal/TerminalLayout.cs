@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Fufucode.App.Abstractions;
 using SkiaSharp;
@@ -46,8 +47,17 @@ internal sealed class TerminalLayout
         var rows = new ScreenRow[height];
         Array.Fill(rows, new(""));
 
-        var prompt = ComposerPrompt(columns);
-        var draft = TerminalText.Clean(view.Draft, view.Cursor, out var cursor);
+        var prompt = ComposerPrompt(columns, view.EditorMode);
+        var draft = TerminalText.CleanMapped(view.Draft, view.Cursor, out var cursor, out var draftOffsetMap);
+        var selectionStart = -1;
+        var selectionEnd = -1;
+        if (view.SelectionStart >= 0 && view.SelectionEnd > view.SelectionStart)
+        {
+            selectionStart = CeilingGrapheme(draft,
+                draftOffsetMap[Math.Clamp(view.SelectionStart, 0, view.Draft.Length)]);
+            selectionEnd = CeilingGrapheme(draft,
+                draftOffsetMap[Math.Clamp(view.SelectionEnd, 0, view.Draft.Length)]);
+        }
         var promptWidth = TerminalText.Width(prompt);
         var draftWidth = Math.Max(1, columns - promptWidth);
         var draftLines = new List<TerminalText.Slice>();
@@ -180,16 +190,33 @@ internal sealed class TerminalLayout
 
         var start = Math.Clamp(caretLine - draftRows + 1, 0, Math.Max(0, draftLines.Count - draftRows));
         var cursorRow = draftRows == 0 ? -1 : row + caretLine - start;
+        var composerTop = draftRows == 0 ? -1 : row;
+        string[]? composerLines = draftRows == 0 ? null : new string[draftRows];
+        int[]? composerStarts = draftRows == 0 ? null : new int[draftRows];
+        var inverse = InverseMap(draftOffsetMap, view.Draft.Length);
         for (var i = 0; i < draftRows; i++)
         {
-            var prefix = start + i == 0 ? prompt : new string(' ', promptWidth);
-            rows[row++] = new(columns == 0 ? "" : prefix + draftLines[start + i].Text, Ink.Composer);
+            var lineIndex = start + i;
+            var line = draftLines[lineIndex];
+            var prefix = lineIndex == 0 ? prompt : new string(' ', promptWidth);
+            rows[row++] = columns == 0
+                ? new("", Ink.Composer)
+                : ComposerRow(prefix, line, lineIndex, draft, draftLines, selectionStart, selectionEnd);
+            if (composerLines is not null && composerStarts is not null)
+            {
+                var rawStart = inverse[Math.Clamp(line.Start, 0, inverse.Length - 1)];
+                composerStarts[i] = rawStart;
+                var rawEnd = view.Draft.IndexOf('\n', Math.Min(rawStart, view.Draft.Length));
+                if (rawEnd < 0) rawEnd = view.Draft.Length;
+                composerLines[i] = rawStart <= rawEnd ? view.Draft[rawStart..rawEnd] : "";
+            }
         }
         var (allowStart, allowEnd) = canApprove ? TextRange(approvalAction, "F2 允许") : (-1, -1);
         var (rejectStart, rejectEnd) = TextRange(approvalAction, "F3 拒绝");
         return new(width, rows, cursorRow, Math.Min(width - 1, promptWidth + caretCell), bodyRows, maxScroll, pickerRows, canApprove,
             new MouseRegions(pickerTop, pickerStart, pickerVisible, pickerColumns, approvalRow,
-                allowStart, allowEnd, rejectStart, rejectEnd));
+                allowStart, allowEnd, rejectStart, rejectEnd, composerTop, draftRows, promptWidth,
+                composerLines, composerStarts));
     }
 
     private static (int Start, int Visible) PickerWindow(FuiOverlay overlay, int panelRows, int columns)
@@ -449,8 +476,62 @@ internal sealed class TerminalLayout
         return TerminalText.Clip(rail + shown + right, columns);
     }
 
-    private static string ComposerPrompt(int columns)
+    private static ScreenRow ComposerRow(string prefix, TerminalText.Slice line, int lineIndex, string draft,
+        IReadOnlyList<TerminalText.Slice> lines, int selectionStart, int selectionEnd)
     {
+        var sourceEnd = lineIndex + 1 < lines.Count ? lines[lineIndex + 1].Start : draft.Length;
+        if (sourceEnd > line.Start && draft[sourceEnd - 1] == '\n') sourceEnd--;
+        var source = draft[line.Start..sourceEnd];
+        var overlaps = selectionStart >= 0 && selectionStart < sourceEnd && selectionEnd > line.Start;
+        if (!overlaps) return new(prefix + line.Text, Ink.Composer);
+
+        var spans = new List<StyledSpan>(4);
+        if (prefix.Length != 0) spans.Add(new(prefix, Ink.Composer));
+        if (!string.Equals(source, line.Text, StringComparison.Ordinal))
+        {
+            spans.Add(new(line.Text, Ink.Selection));
+            return new(prefix + line.Text, Ink.Composer, Spans: StyledSpanList.From(spans));
+        }
+
+        var selectedStart = Math.Clamp(selectionStart - line.Start, 0, line.Text.Length);
+        var selectedEnd = Math.Clamp(selectionEnd - line.Start, selectedStart, line.Text.Length);
+        if (selectedStart != 0) spans.Add(new(line.Text[..selectedStart], Ink.Composer));
+        if (selectedEnd > selectedStart) spans.Add(new(line.Text[selectedStart..selectedEnd], Ink.Selection));
+        if (selectedEnd < line.Text.Length) spans.Add(new(line.Text[selectedEnd..], Ink.Composer));
+        return new(prefix + line.Text, Ink.Composer, Spans: StyledSpanList.From(spans));
+    }
+
+    private static int CeilingGrapheme(string text, int position)
+    {
+        if (position <= 0) return 0;
+        if (position >= text.Length) return text.Length;
+        var starts = StringInfo.ParseCombiningCharacters(text);
+        var found = Array.BinarySearch(starts, position);
+        return found >= 0 ? position : ~found < starts.Length ? starts[~found] : text.Length;
+    }
+
+    private static int[] InverseMap(int[] rawToClean, int rawLength)
+    {
+        var cleanLength = rawLength == 0 ? 0 : rawToClean[rawLength];
+        var inverse = new int[cleanLength + 1];
+        Array.Fill(inverse, -1);
+        for (var raw = 0; raw <= rawLength; raw++)
+        {
+            var clean = Math.Clamp(rawToClean[raw], 0, cleanLength);
+            inverse[clean] = raw;
+        }
+        for (var clean = 1; clean < inverse.Length; clean++)
+            if (inverse[clean] < 0) inverse[clean] = inverse[clean - 1];
+        if (inverse.Length != 0 && inverse[^1] < 0) inverse[^1] = rawLength;
+        return inverse;
+    }
+
+    private static string ComposerPrompt(int columns, string? mode)
+    {
+        if (mode is "NORMAL")
+            return columns >= 18 ? "│ NORMAL › " : columns >= 8 ? "│ N › " : columns >= 4 ? "N› " : "";
+        if (mode is "INSERT")
+            return columns >= 18 ? "│ INSERT › " : columns >= 8 ? "│ I › " : columns >= 4 ? "I› " : "";
         if (columns >= 8) return "│ › ";
         return columns >= 4 ? "› " : "";
     }

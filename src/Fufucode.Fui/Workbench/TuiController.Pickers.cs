@@ -9,6 +9,7 @@ internal sealed partial class TuiController
         FuiPickerOptions? options = null)
     {
         if (id is "attach" or "preview" or "diff") { query = _browseFilter; _browseFilter = ""; }
+        CloseCompletion();
         _pickerAction = id;
         _picker = new(title, choices, query, currentTreeSession: id == "tree" ? _active.Id : null, options);
         Dirty = true;
@@ -18,12 +19,14 @@ internal sealed partial class TuiController
     {
         _picker = null; _pickerAction = null; _browseFilter = ""; _mentionStart = -1;
         _outlineGeneration = -1;
+        CloseCompletion();
     }
 
     private FuiOverlay? Overlay()
     {
         if (_approvals.Count != 0) return null;
         if (_picker is not null) return _picker.View;
+        if (CompletionOverlay() is { } completion) return completion;
         var text = _composer.Text;
         if (_job is not null || !text.StartsWith('/') || text.StartsWith("//", StringComparison.Ordinal) ||
             text.StartsWith("/skill:", StringComparison.Ordinal) || text.Any(char.IsWhiteSpace) || FuiCommands.Get(text[1..]) is not null)

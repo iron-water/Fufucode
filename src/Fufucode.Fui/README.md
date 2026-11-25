@@ -8,7 +8,11 @@ fui --continue            # 当前项目，最近一次 FUMO 会话
 fui --project C:\work\demo --session <ID>
 ```
 
-`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Alt+V` 粘贴剪贴板图片。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令；四个安全动作可在 `/keys` 中重绑。长审批参数可在对话区翻阅。
+`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 先清选择或关闭候选，再停止当前回合，`Ctrl+D` 退出。`Alt+V` 粘贴剪贴板图片。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令；四个安全动作可在 `/keys` 中重绑。长审批参数可在对话区翻阅。
+
+输入区支持 `Ctrl+A` 全选，`Shift+方向/Home/End/PgUp/PgDn` 按字素扩选；选中区域使用终端反色。输入或粘贴会替换选区，`Ctrl+C` / `Ctrl+X` / `Ctrl+V` 与 `Shift+Insert` 分别复制、剪切、粘贴。`Esc` 先清选择。鼠标点击草稿可定位字符。`Ctrl+Space` 只用当前 transcript、输入历史和项目相对路径生成词候选，不读取文件正文、不调用模型；输入 `:smile:` 等已知短码会显示 Emoji 候选，可在设置关闭并保留原始冒号文本。
+
+Vim 模式可通过 `/vim` 或 `/settings` 的 `vim-mode` 持久开关启用，提示符显示 `INSERT` / `NORMAL`。实现的是明确子集：Insert 模式保持普通编辑；Normal 模式支持 `h/j/k/l`、`0/$`、`w/b`、`x`、`dd`、`yy/p`、`u`、`i/a/o`、`Esc`。Normal 中未列出的普通键会被吞掉，不会误提交；`Ctrl+C` 仍用于停止/清空/退出。
 
 ## 在工作台里操作
 
@@ -37,7 +41,7 @@ Mermaid 围栏支持常见 `flowchart` / `graph` 的 `TD`、`TB`、`LR` 节点�
 
 FUI 使用独立设置文件 `<data root>/fui/settings.json`，不读写 GUI 与底层 CLI 的 `settings.json`。文件损坏时回退默认值，在对话区和 `/doctor` 显示真实原因；下一次成功修改会保留 `.before-repair-*.bak`。写入使用同目录临时文件后替换。
 
-`/settings` 提供分组、搜索、当前值与即时切换；`/theme`、`/terminal` 是快捷面板。可配置主题（auto/dark/light/mono）、思考与工具呈现、状态栏分段、紧凑卡片、滚轮、超链接、桌面通知，以及命令面板/搜索/工具/思考四个按键。冲突、输入编辑键和审批键会被拒绝，坏按键配置不会阻止启动。
+`/settings` 提供分组、搜索、当前值与即时切换；`/theme`、`/terminal` 是快捷面板。可配置主题（auto/dark/light/mono）、思考与工具呈现、状态栏分段、紧凑卡片、滚轮、超链接、桌面通知、Emoji 短码与 Vim 模式，以及命令面板/搜索/工具/思考四个按键。冲突、输入编辑键和审批键会被拒绝，坏按键配置不会阻止启动。
 
 `/keys` 展示并修改当前安全按键。`/doctor` 输出终端家族、尺寸、UTF-8/code page、bracketed paste、mouse、Sixel、颜色、hyperlinks、notifications、multiplexer、data root、FUMO shell 与 FUI build/version；未探测项明确写未知。tmux、Zellij、screen、Windows Terminal、kitty 等能力按实际宿主降级说明，不把 BEL 或复用器吞掉的 OSC 当成成功 toast。
 
