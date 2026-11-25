@@ -59,6 +59,16 @@ public sealed record PluginState(
     bool IsEnabled,
     DateTime LastUpdatedUtc);
 
+/// <summary>
+/// 已装载插件的只读运行快照。工具数来自当前处理器实际登记的动作契约，
+/// 页面与输入栏贡献来自当前活动贡献表；不推导未装载插件的能力。
+/// </summary>
+public sealed record PluginRuntimeSnapshot(
+    string Id,
+    int ToolCount,
+    bool HasPageContribution,
+    bool HasComposerContribution);
+
 /// <summary>插件持久化配置。</summary>
 public sealed record PluginConfiguration(
     int Version = 1,

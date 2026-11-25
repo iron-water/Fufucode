@@ -65,6 +65,20 @@ public sealed class PluginPackageManager : IAsyncDisposable
         lock (_gate) return _activePlugins.Keys.ToArray();
     }
 
+    /// <summary>当前已装载插件的真实工具/页面/输入栏贡献快照。</summary>
+    public IReadOnlyList<PluginRuntimeSnapshot> GetActivePluginSnapshots()
+    {
+        lock (_gate)
+            return _activePlugins
+                .OrderBy(entry => entry.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => new PluginRuntimeSnapshot(
+                    entry.Key,
+                    entry.Value.Handler?.Registrations.Count ?? 0,
+                    _pageContributions.ContainsKey(entry.Key),
+                    _composerContributions.ContainsKey(entry.Key)))
+                .ToArray();
+    }
+
     /// <summary>页面贡献被宿主就地替换后，让页面宿主重新同步（不触发插件激活/停用事件）。</summary>
     public void RequestPageResync() => PageContributionsChanged?.Invoke();
 

@@ -6,7 +6,10 @@ namespace Fufucode.Fui;
 internal sealed record FuiPickerOptions(
     Func<FuiChoice, string?>? Detail = null,
     Func<FuiChoice, bool>? GroupHeader = null,
-    bool PreserveOrder = false);
+    bool PreserveOrder = false,
+    string? Footer = null,
+    FuiOverlayKind Kind = FuiOverlayKind.Picker,
+    string? EmptyMessage = null);
 
 /// <summary>A navigation-only selection model. Acceptance and cancellation belong to the controller.</summary>
 internal sealed class FuiPicker
@@ -17,14 +20,18 @@ internal sealed class FuiPicker
     private const int DetailInitials = 9;
     private const int Subsequence = 10;
     private const int DetailSubsequence = 11;
-    private const int CategoryCount = DetailSubsequence + 1;
+    private const int BodyExact = 12;
+    private const int BodyInitials = 13;
+    private const int BodySubsequence = 14;
+    private const int CategoryCount = BodySubsequence + 1;
     private const int BreakBucketCount = 8;
     private const int SpreadBucketCount = 4;
     private const int LinearStartBuckets = 32;
     private const int StartBucketCount = 64;
     private const int BucketCount = CategoryCount * BreakBucketCount * SpreadBucketCount * StartBucketCount;
 
-    private readonly record struct SearchItem(FuiChoice Choice, SearchField Label, SearchField Value, SearchField Detail);
+    private readonly record struct SearchItem(FuiChoice Choice, SearchField Label, SearchField Value, SearchField Detail,
+        SearchField SearchText);
     private readonly record struct QueryTerm(string[] Graphemes, bool CanAbbreviate);
     private readonly record struct TokenMatch(int Category, int Start, int Breaks);
     private readonly string _title;
@@ -63,7 +70,8 @@ internal sealed class FuiPicker
                 ? null
                 : _options.Detail?.Invoke(_matches[_selected]);
             return new(_title, _query.Text, _matches, _selected,
-                _matches.Count != 0 ? detail : _choices.Length == 0 ? "暂无选项" : "没有匹配项");
+                _matches.Count != 0 ? detail : _choices.Length == 0 ? _options.EmptyMessage ?? "暂无选项" : "没有匹配项",
+                _options.Footer, _options.Kind);
         }
     }
 
@@ -261,7 +269,8 @@ internal sealed class FuiPicker
         {
             var choice = choices[i];
             index[i] = new(choice, new(TerminalText.SingleLine(choice.Label)),
-                new(TerminalText.SingleLine(choice.Value)), new(TerminalText.SingleLine(choice.Detail ?? "")));
+                new(TerminalText.SingleLine(choice.Value)), new(TerminalText.SingleLine(choice.Detail ?? "")),
+                new(TerminalText.SingleLine(choice.SearchText ?? "")));
         }
         return index;
     }
@@ -344,16 +353,19 @@ internal sealed class FuiPicker
         Consider(Direct(item.Label, term, Exact));
         Consider(Direct(item.Value, term, Exact));
         Consider(Direct(item.Detail, term, DetailExact));
+        Consider(Direct(item.SearchText, term, BodyExact));
         if (best is not null) return best;
 
         Consider(InitialsMatch(item.Label, term), Initials);
         Consider(InitialsMatch(item.Value, term), Initials);
         Consider(InitialsMatch(item.Detail, term), DetailInitials);
+        Consider(InitialsMatch(item.SearchText, term), BodyInitials);
         if (best is not null) return best;
 
         Consider(SubsequenceMatch(item.Label, term), Subsequence);
         Consider(SubsequenceMatch(item.Value, term), Subsequence);
         Consider(SubsequenceMatch(item.Detail, term), DetailSubsequence);
+        Consider(SubsequenceMatch(item.SearchText, term), BodySubsequence);
         return best;
 
         void Consider(TokenMatch? candidate, int? category = null)

@@ -276,6 +276,17 @@ internal static class ImageRenderTests
                 Here is $E=mc^2$ and local ![svg](diagram.svg)
                 <img alt="qoi" src="sprite.qoi">
                 Inline ![dot](data:image/png;base64,{pngB64})
+                Link [docs](https://example.com/docs) stays styled next to ![inline](diagram.svg)
+                | name | value |
+                | --- | --- |
+                | docs | https://example.com/table |
+                ```csharp
+                public int Rich = 1;
+                ```
+                ```mermaid
+                flowchart LR
+                  A --> B
+                ```
                 Remote ![web](https://example.com/pic.png)
                 Traversal ![no](../secret.png)
                 ```md
@@ -284,9 +295,11 @@ internal static class ImageRenderTests
                 """;
             var lines = new TuiLine[]
             {
-                new("user", "Inspect\n[图片 × 1]", [new TuiImage("photo.webp", "image/webp", webpAtt.ImageBytes, MaxRows: 8)]),
+                new("user", "Inspect\n[图片 × 1]",
+                    Images: [new TuiImage("photo.webp", "image/webp", webpAtt.ImageBytes, MaxRows: 8)]),
                 new("assistant", aiText),
-                new("tool", "capture [完成] {}\n![shot](photo.webp)")
+                new("tool", "capture [完成] {}\n![shot](photo.webp)",
+                    new ToolCallSnapshot("capture", "{}", ToolCallStatus.Completed, Output: "![shot](photo.webp)"))
             };
             var layout = new TerminalLayout();
             var view = new TuiView(project, "s1", "vision", "就绪", lines, "", 0, 0, null,
@@ -299,6 +312,14 @@ internal static class ImageRenderTests
             Check(withSixel.Rows.Any(r => r.Text.Contains("../secret.png", StringComparison.Ordinal)), "blocked traversal keeps text fallback");
             Check(withSixel.Rows.Any(r => r.Ink == Ink.Code && r.Text.Contains("![code](diagram.svg)", StringComparison.Ordinal)), "fenced code image stays literal");
             Check(withSixel.Rows.All(r => !r.Text.Contains(pngB64, StringComparison.Ordinal)), "base64 data URI never leaks into visible rows");
+            Check(withSixel.Rows.Any(r => r.Spans?.Any(s => s.Link == "https://example.com/docs") == true),
+                "rich image rows preserve link/OSC8 spans");
+            Check(withSixel.Rows.Any(r => r.Spans?.Any(s => s.Ink == Ink.SyntaxKeyword) == true),
+                "rich image rows preserve syntax-highlight spans");
+            Check(withSixel.Rows.Any(r => r.Text.Contains("flowchart LR", StringComparison.Ordinal)),
+                "rich image rows preserve Mermaid projection");
+            Check(withSixel.Rows.Any(r => r.Text.Contains("│ name", StringComparison.Ordinal)),
+                "rich image rows preserve Markdown table projection");
 
             // SIXEL-off terminal: collapses data URI without leaking base64, emits zero SIXEL strips
             var noSixel = layout.Arrange(view, 90, 48, cell: null);
@@ -357,6 +378,20 @@ internal static class ImageRenderTests
 
                 // /context displays attached image thumbnail
                 foreach (var ch in "/context") controller.Key(new(ch, 0, false, false, false), 20, 0);
+                controller.Key(new('\r', ConsoleKey.Enter, false, false, false), 20, 0);
+                await UntilAsync(controller, v => v.Overlay is { Kind: FuiOverlayKind.Context });
+                Check(controller.View().Overlay!.Items.Any(item => item.Value.StartsWith(FuiContextWorkbench.AttachmentPrefix, StringComparison.Ordinal)),
+                    "/context viewer lists the clipboard attachment");
+                for (var guard = 0; guard < controller.View().Overlay!.Items.Count; guard++)
+                {
+                    if (controller.View().Overlay!.Items[controller.View().Overlay!.Selected].Value
+                        .StartsWith(FuiContextWorkbench.AttachmentPrefix, StringComparison.Ordinal)) break;
+                    controller.Key(new('\0', ConsoleKey.DownArrow, false, false, false), 20, 0);
+                    controller.Update();
+                }
+                Check(controller.View().Overlay!.Items[controller.View().Overlay!.Selected].Value
+                    .StartsWith(FuiContextWorkbench.AttachmentPrefix, StringComparison.Ordinal),
+                    "/context viewer can focus the clipboard attachment");
                 controller.Key(new('\r', ConsoleKey.Enter, false, false, false), 20, 0);
                 controller.Update();
                 Check(controller.View().Lines.Last().Images is { Count: 1 }, "/context renders attached clipboard image thumbnail");

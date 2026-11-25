@@ -9,6 +9,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
     private const string Begin = "\x1b[200~", End = "\x1b[201~";
     private readonly List<ConsoleKeyInfo> _candidate = new(6);
     private readonly Queue<(ConsoleKeyInfo Key, string? Text)> _ready = new();
+    private readonly Queue<MouseEvent> _mouse = new();
     private readonly StringBuilder _vt = new();
     private readonly StringBuilder _osc = new();
     private bool _inOsc, _oscEscape, _oscTooLong;
@@ -63,6 +64,12 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
 
     private void FlushCandidate()
     {
+        // Some Unix hosts deliver the ESC [ introducer as one Alt+[ event.
+        // Reconstruct the ESC before the bracket so the following final byte
+        // can still be decoded as a CSI (including SGR mouse).
+        if (_paste is null && _candidate.Count == 1 && _candidate[0].KeyChar == '[' &&
+            _candidate[0].Modifiers == ConsoleModifiers.Alt)
+            Release(new('\x1b', ConsoleKey.Escape, false, false, false));
         foreach (var key in _candidate) Release(key);
         _candidate.Clear();
         _matched = 0;
@@ -98,13 +105,17 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
         {
             _vt.Clear(); _osc.Clear(); _oscEscape = false; _oscTooLong = false; _inOsc = true; return;
         }
-        if (key.Key != 0)
+        // Start a VT sequence before considering the key identity. ESC[ can
+        // arrive as key records for Escape and '[' on some console hosts.
+        if (c == '\x1b') { _vt.Clear().Append(c); return; }
+        // VT reports can arrive as ordinary key records (letters have a ConsoleKey);
+        // once a CSI introducer is buffered, append its payload instead of losing it.
+        if (key.Key != 0 && (_vt.Length == 0 || c == '\0'))
         {
             _vt.Clear();
             _ready.Enqueue((key, null));
             return;
         }
-        if (c == '\x1b') { _vt.Clear().Append(c); return; }
         if (_vt.Length == 0) { _ready.Enqueue((CharacterKey(c, alt: false), null)); return; }
         if (_vt.Length == 1)
         {
@@ -114,20 +125,41 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
             return;
         }
         if (c is >= ' ' and <= '?') { if (_vt.Length < 128) _vt.Append(c); return; }
-        var parameters = _vt.ToString(2, _vt.Length - 2);
+        var prefix = _vt.ToString();
+        var parameters = prefix[2..];
+        var sequence = prefix + c;
         _vt.Clear();
+        if (MouseInput.TryParse(sequence, out var mouse))
+        {
+            _mouse.Enqueue(mouse);
+            return;
+        }
         if (terminalReply?.Invoke(c, parameters) == true) return;
         // A terminal response or an unknown CSI is not a shortcut (especially not approval).
         var args = parameters.Split(';');
-        if (args.Length > 2 || (args[0].Length != 0 && !int.TryParse(args[0], out _))) return;
+        if (args.Length is 0 or > 3 || (args[0].Length != 0 && !int.TryParse(args[0], out _))) return;
+        // xterm modifyOtherKeys uses three parameters for Ctrl+Space.
+        if (c == '~' && args.Length == 3)
+        {
+            if (args[0] == "27" && args[1] == "5" && args[2] == "32")
+                _ready.Enqueue((new('\0', ConsoleKey.Spacebar, false, false, true), null));
+            return;
+        }
+        if (args.Length > 2) return;
         var modifier = 1;
         if (args.Length > 1 && (!int.TryParse(args[1], out modifier) || modifier is < 1 or > 8)) return;
         var number = args[0].Length == 0 ? 0 : int.Parse(args[0]);
+        // Kitty CSI-u encoding of Ctrl+Space.
+        if (c == 'u' && number == 32 && modifier == 5)
+        {
+            _ready.Enqueue((new('\0', ConsoleKey.Spacebar, false, false, true), null));
+            return;
+        }
         ConsoleKey? code = c switch
         {
             'A' => ConsoleKey.UpArrow, 'B' => ConsoleKey.DownArrow, 'C' => ConsoleKey.RightArrow, 'D' => ConsoleKey.LeftArrow,
             'H' => ConsoleKey.Home, 'F' => ConsoleKey.End, 'P' => ConsoleKey.F1, 'Q' => ConsoleKey.F2, 'R' => ConsoleKey.F3,
-            '~' => number switch { 1 or 7 => ConsoleKey.Home, 3 => ConsoleKey.Delete, 4 or 8 => ConsoleKey.End,
+            '~' => number switch { 1 or 7 => ConsoleKey.Home, 2 => ConsoleKey.Insert, 3 => ConsoleKey.Delete, 4 or 8 => ConsoleKey.End,
                 5 => ConsoleKey.PageUp, 6 => ConsoleKey.PageDown, 11 => ConsoleKey.F1, 12 => ConsoleKey.F2, 13 => ConsoleKey.F3, _ => null },
             _ => null
         };
@@ -137,6 +169,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
 
     private static ConsoleKeyInfo CharacterKey(char c, bool alt)
     {
+        if (c == '\0') return new(c, ConsoleKey.Spacebar, false, alt, true);
         var key = c switch { '\r' => ConsoleKey.Enter, '\t' => ConsoleKey.Tab, '\b' or '\x7f' => ConsoleKey.Backspace,
             >= '\u0001' and <= '\u001a' => ConsoleKey.A + (c - 1), >= 'a' and <= 'z' => ConsoleKey.A + (c - 'a'),
             >= 'A' and <= 'Z' => ConsoleKey.A + (c - 'A'), _ => (ConsoleKey)0 };
@@ -151,6 +184,13 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
         _literal = item.Text;
         _offset = 1;
         return Literal(_literal[0]);
+    }
+
+    internal bool TryReadMouse(out MouseEvent mouse)
+    {
+        if (_mouse.TryDequeue(out mouse)) return true;
+        mouse = default;
+        return false;
     }
 
     private static ConsoleKeyInfo Literal(char c) => new(c, (ConsoleKey)0, false, false, false);

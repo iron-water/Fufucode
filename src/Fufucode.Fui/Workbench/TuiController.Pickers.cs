@@ -9,6 +9,7 @@ internal sealed partial class TuiController
         FuiPickerOptions? options = null)
     {
         if (id is "attach" or "preview" or "diff") { query = _browseFilter; _browseFilter = ""; }
+        CloseCompletion();
         _pickerAction = id;
         _picker = new(title, choices, query, currentTreeSession: id == "tree" ? _active.Id : null, options);
         Dirty = true;
@@ -17,12 +18,15 @@ internal sealed partial class TuiController
     private void ClosePicker()
     {
         _picker = null; _pickerAction = null; _browseFilter = ""; _mentionStart = -1;
+        _outlineGeneration = -1;
+        CloseCompletion();
     }
 
     private FuiOverlay? Overlay()
     {
         if (_approvals.Count != 0) return null;
         if (_picker is not null) return _picker.View;
+        if (CompletionOverlay() is { } completion) return completion;
         var text = _composer.Text;
         if (_job is not null || !text.StartsWith('/') || text.StartsWith("//", StringComparison.Ordinal) ||
             text.StartsWith("/skill:", StringComparison.Ordinal) || text.Any(char.IsWhiteSpace) || FuiCommands.Get(text[1..]) is not null)
@@ -37,13 +41,29 @@ internal sealed partial class TuiController
         if (_picker is not null)
         {
             if (key.Key == ConsoleKey.Escape || ctrl && key.Key == ConsoleKey.C) { ClosePicker(); return true; }
+            if (_pickerAction == "transcript" && key.Key == ConsoleKey.Tab)
+            {
+                CycleTranscriptFilter(key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+                return true;
+            }
+            if (_pickerAction == "capabilities" && key.Key == ConsoleKey.Tab)
+            {
+                CycleCapabilityFilter(!key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+                return true;
+            }
+            if (_pickerAction == "outline" && key.Key == ConsoleKey.F5)
+            {
+                RefreshOutline(force: true);
+                return true;
+            }
             if (key.Key == ConsoleKey.Enter && key.Modifiers == 0)
             {
                 if (_picker.Current is not { } choice) return true;
                 var id = _pickerAction!; var mention = _mentionStart;
+                var query = id == "settings" ? _picker.View.Query : "";
                 ClosePicker();
                 if (id == "attach") _mentionStart = mention;
-                Accept(id, choice);
+                Accept(id, choice, query);
             }
             else _picker.Edit(key, Math.Max(1, pageSize));
             return true;
@@ -68,17 +88,40 @@ internal sealed partial class TuiController
                 return true;
             }
         }
-        if (ctrl && key.Key is (ConsoleKey.P or ConsoleKey.R or ConsoleKey.F))
+        if (ctrl && key.Key == ConsoleKey.R)
         {
             if (_job is not null) return true;
-            if (key.Key == ConsoleKey.P) Commands();
-            else Run(FuiCommands.Get(key.Key == ConsoleKey.R ? "history" : "find")!, "");
+            Run(FuiCommands.Get("history")!, "");
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.Commands))
+        {
+            if (_job is not null) return true;
+            Commands();
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.SearchTranscript))
+        {
+            if (_job is not null) return true;
+            Run(FuiCommands.Get("find")!, "");
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.ToggleTools))
+        {
+            if (_job is not null) return true;
+            ToggleSetting("expand-tools");
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.ToggleThinking))
+        {
+            if (_job is not null) return true;
+            ToggleSetting("show-thinking");
             return true;
         }
         if (!ctrl && key.Modifiers.HasFlag(ConsoleModifiers.Alt) && key.Key == ConsoleKey.V)
         {
             if (_job is not null) return true;
-            Run(FuiCommands.Get("paste")!, "");
+            Run(FuiCommands.Get("paste-image")!, "");
             return true;
         }
         if (key.Key != ConsoleKey.Tab || key.Modifiers != 0 || _job is not null) return false;
@@ -102,7 +145,7 @@ internal sealed partial class TuiController
 
     private void Complete(FuiCommand c) => _composer.Replace("/" + c.Id + (c.NeedsText ? " " : ""));
 
-    private void Accept(string action, FuiChoice choice)
+    private void Accept(string action, FuiChoice choice, string query = "")
     {
         switch (action)
         {
@@ -123,14 +166,48 @@ internal sealed partial class TuiController
                 if (int.TryParse(choice.Value, out var index) && (uint)index < (uint)_lines.Count)
                 {
                     _scrollTarget = index;
-                    if (_lines[index].Kind == "thinking") _showThinking = true;
-                    if (_lines[index].Kind == "tool") _expandTools = true;
+                    if (_lines[index].Kind == "thinking" && !_showThinking) SetSetting("show-thinking", "true", announce: false);
+                    if (_lines[index].Kind == "tool" && !_expandTools) SetSetting("expand-tools", "true", announce: false);
                 }
+                return;
+            case "settings": SettingSelected(choice.Value, query); return;
+            case "status-segments":
+                ApplySettings(FuiStatusSegmentCatalog.Toggle(_settings, choice.Value), null);
+                OpenStatusSegments();
+                return;
+            case "theme":
+                SetSetting("theme", choice.Value, announce: true);
+                return;
+            case "terminal":
+                Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail));
+                return;
+            case "keys" when FuiKeyBindingCatalog.Find(choice.Value) is not null:
+                BeginKeyCapture(choice.Value);
                 return;
             case "history": _composer.Replace(choice.Value); return;
             case "skills": _composer.Replace("/" + choice.Value.TrimStart('/') + " " + _composer.Text); return;
-            case "capabilities": Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail)); return;
+            case "capabilities":
+            case "extensions":
+            case "mcp":
+                Info(choice.Detail ?? choice.Label);
+                return;
             case "agents": ShowAgentDetail(choice); return;
+            case "jobs": ShowJobDetail(choice); return;
+            case "context": ContextChoice(choice); return;
+            case "plan" or "todo": JumpToPlan(choice); return;
+            case "links":
+                if (!TuiHyperlinkPolicy.IsSafeUrl(choice.Value)) { Error("该链接目标不是可复制的 HTTP(S) URL。"); return; }
+                OpenPicker("links-copy", "链接目标", [new(choice.Value, "复制 URL", choice.Value)],
+                    options: new FuiPickerOptions(Detail: item => item.Detail ?? item.Value, PreserveOrder: true));
+                return;
+            case "links-copy":
+                var copied = _clipboard.CopyText(choice.Value);
+                if (copied.Success) Info("已复制链接\n" + choice.Value);
+                else Error("复制链接失败：" + (copied.Error ?? "未知原因"));
+                return;
+            case "outline":
+            case "transcript": LocateTranscriptChoice(choice); return;
+            case "copy": CopyChoice(choice); return;
             default:
                 if (FuiCommands.Get(action) is { } command && CanRun(command, choice.Value)) Run(command, choice.Value);
                 return;
