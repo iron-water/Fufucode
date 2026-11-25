@@ -179,6 +179,14 @@ internal static class TranscriptWorkbenchTests
             "empty history refusal");
         Eq(0, noHistory.Sent.Count, "empty-history retry leaves session unchanged");
 
+        var noInspector = new InspectorlessSession();
+        var noInspectorUi = new TuiController(noInspector, CancellationToken.None, clipboard: new FakeClipboard());
+        Type(noInspectorUi, "/retry");
+        Key(noInspectorUi, ConsoleKey.Enter);
+        Eq(true, noInspectorUi.View().Lines.Any(line => line.Text.Contains("没有可证明的重试接口", StringComparison.Ordinal)),
+            "session without a retry contract refuses locally");
+        Eq(0, noInspector.Sent.Count, "missing retry interface leaves session unchanged");
+
         const int count = 40_000;
         var lines = Enumerable.Range(0, count)
             .Select(i => new TuiLine(i % 2 == 0 ? "user" : "assistant",
@@ -273,6 +281,21 @@ internal static class TranscriptWorkbenchTests
                 ? new(true, text.EnumerateRunes().Count(), Encoding.UTF8.GetByteCount(text), null)
                 : FuiClipboardResult.Failed(Fail, text);
         }
+    }
+
+    private sealed class InspectorlessSession : ITuiSession
+    {
+        public string Project => "project";
+        public string Id => "plain-session";
+        public string? Model => null;
+        public IReadOnlyList<TuiLine> History => [];
+        public ChannelReader<TuiEvent> Events => Channel.Reader;
+        public Channel<TuiEvent> Channel { get; } = System.Threading.Channels.Channel.CreateUnbounded<TuiEvent>();
+        public List<string> Sent { get; } = [];
+        public Task SendAsync(string text, CancellationToken ct) { Sent.Add(text); return Task.CompletedTask; }
+        public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+        public Task RespondAsync(string id, bool allow, CancellationToken ct) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
     private class TestSession : ITuiSession, IFuiSessionInspector
