@@ -17,6 +17,7 @@ internal static class TerminalTests
         HistoryAndTake();
         UndoLimit();
         LayoutAndDiff();
+        VisualHierarchy();
         FormulaTests.Run();
     }
 
@@ -316,7 +317,7 @@ internal static class TerminalTests
         Eq(true, frame.Rows[6].Text.EndsWith("message-13"), "last visible message");
         Eq(true, frame.Rows[0].Text.Contains("示例") && frame.Rows[0].Text.Contains("model-a") && frame.Rows[0].Text.Contains("session-abc"), "header metadata");
         Eq(true, frame.Rows[0].Text.StartsWith("FUI ", StringComparison.Ordinal), "terminal client brand");
-        Eq(5, frame.CursorColumn, "caret cell counts CJK, not UTF-16");
+        Eq(7, frame.CursorColumn, "caret cell counts CJK and composer rail, not UTF-16");
         Eq("", TerminalSurface.Diff(frame, layout.Arrange(view, 80, 9), true), "idle frame writes nothing");
         var older = layout.Arrange(view with { Scroll = int.MaxValue }, 80, 9);
         Eq(true, older.Rows[1].Text.EndsWith("message-00"), "scroll clamp at head");
@@ -357,6 +358,74 @@ internal static class TerminalTests
             var fresh = new TerminalLayout().Arrange(sample, 17, 14);
             Eq(true, fresh.Rows.SequenceEqual(working.Arrange(sample, 17, 14).Rows), "streaming equals fresh wrap, including split controls/graphemes");
         }
+    }
+
+    private static void VisualHierarchy()
+    {
+        var layout = new TerminalLayout();
+        var lines = new[]
+        {
+            new TuiLine("user", "用户中👩‍💻"),
+            new TuiLine("assistant", "## 回答\n正文 👩‍💻"),
+            new TuiLine("thinking", "内部推理"),
+            new TuiLine("tool", "read [完成] {\"path\":\"src/中文.cs\"}\nONLY-IN-TOOL"),
+            new TuiLine("error", "错误 \x1b[31mred"),
+            new TuiLine("info", "提示")
+        };
+        var view = new TuiView("C:/项目", "S1", "model", "运行中", lines, "草稿中e\u0301", 4, 0, null);
+        var frame = layout.Arrange(view, 80, 24);
+        Eq(true, frame.Rows.Any(r => r.Ink == Ink.User && r.Text.Contains("用户中")), "user card keeps Chinese/emoji text");
+        Eq(true, frame.Rows.Any(r => r.Ink == Ink.Assistant && r.Text.Contains("正文")), "assistant card keeps markdown body style");
+        Eq(true, frame.Rows.Any(r => r.Ink == Ink.Thinking && r.Text.StartsWith("┆", StringComparison.Ordinal)), "thinking uses a quiet rail");
+        Eq(true, frame.Rows.Any(r => r.Ink == Ink.Tool && r.Text.Contains("工具") && r.Text.Contains("read") && r.Text.Contains("完成")),
+            "tool card exposes name, status and argument summary");
+        Eq(true, frame.Rows.Any(r => r.Ink == Ink.Error && r.Text.Contains("错误")), "error card is visibly distinct");
+        Eq(true, frame.Rows.Any(r => r.Ink == Ink.Info && r.Text.Contains("提示")), "info uses its own quiet style");
+        Eq(false, frame.Rows.Any(r => r.Text.Contains("ONLY-IN-TOOL")), "collapsed tool keeps its body hidden");
+        var expanded = layout.Arrange(view with { ExpandTools = true }, 80, 30);
+        Eq(true, expanded.Rows.Any(r => r.Text.Contains("ONLY-IN-TOOL")), "expanded tool shows its body");
+        Eq(true, expanded.Rows.Any(r => r.Text.Contains("│") && r.Text.Contains("ONLY-IN-TOOL")), "expanded tool body stays inside the card rail");
+        var changed = view with { Lines = [.. lines.Take(5), new("error", "changed")] };
+        var cardDiff = TerminalSurface.Diff(frame, layout.Arrange(changed, 80, 24), true);
+        Eq(true, cardDiff.Contains("changed") && !cardDiff.Contains("\x1b[2J"), "card redraw only repaints changed rows");
+        Eq(true, TerminalSurface.Diff(frame, layout.Arrange(view, 40, 10), true).Contains("\x1b[2J"),
+            "card resize resets stale geometry");
+        var live = new TerminalLayout();
+        var userText = "";
+        foreach (var chunk in new[] { "用户", "中", "👩", "‍💻", "\n下一行", "\x1b[3", "1mred" })
+        {
+            userText += chunk;
+            var sample = view with { Lines = [new("user", userText)] };
+            Eq(true, new TerminalLayout().Arrange(sample, 80, 24).Rows.SequenceEqual(live.Arrange(sample, 80, 24).Rows),
+                "streaming user card equals a fresh card, including split controls");
+        }
+
+        foreach (var (w, h) in new[] { (1, 1), (20, 4), (80, 24), (120, 30) })
+        {
+            var small = layout.Arrange(view, w, h);
+            Eq(h, small.Rows.Length, "card layout keeps window height");
+            Eq(true, small.Rows.All(r => TerminalText.Width(r.Text) < w && !r.Text.Any(char.IsControl)),
+                "card layout never overflows or injects controls");
+            Eq(true, small.CursorRow >= -1 && small.CursorRow < h && small.CursorColumn >= 0 && small.CursorColumn < w,
+                "card layout keeps the caret in the viewport");
+            Eq(true, TerminalSurface.Diff(null, small, true) is not null, "first card frame paints safely");
+        }
+
+        var scrolled = layout.Arrange(view with { Scroll = int.MaxValue }, 80, 24);
+        Eq(frame.Rows[^1], scrolled.Rows[^1], "composer remains fixed while scrolling cards");
+        Eq(true, scrolled.Rows.Any(r => r.Ink == Ink.Status && r.Text.StartsWith("├", StringComparison.Ordinal)),
+            "status uses the shared chrome rail");
+        Eq(true, scrolled.Rows[^1].Text.Contains("│ › ", StringComparison.Ordinal), "composer uses the shared chrome rail");
+
+        var approval = view with { Approval = "是否允许执行工具 read？\n{\"path\":\"src/中文.cs\"}" };
+        var titleOnly = layout.Arrange(approval, 66, 6);
+        Eq(false, titleOnly.CanApprove, "approval requires a painted argument row");
+        Eq(true, titleOnly.Rows.Any(r => r.Ink == Ink.Approval && r.Text.Contains("read")), "approval shows the tool name");
+        var armed = layout.Arrange(approval, 66, 7);
+        Eq(true, armed.CanApprove, "approval arms only after the argument row is painted");
+        Eq(true, armed.Rows.Any(r => r.Ink == Ink.Approval && r.Text.StartsWith("! F2", StringComparison.Ordinal)),
+            "approval keeps the explicit allow key");
+        Eq(true, armed.Rows[^1].Ink == Ink.Composer, "approval leaves the composer anchored");
     }
 
     private static ConsoleKeyInfo Key(ConsoleKey key, bool control = false, bool shift = false, bool alt = false) =>

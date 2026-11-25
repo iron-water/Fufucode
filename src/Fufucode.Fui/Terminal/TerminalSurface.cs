@@ -116,17 +116,19 @@ internal sealed class TerminalSurface : IDisposable
                         .Append('H').Append(image.Sixel);
         }
         var paintedRows = paint.Length != 0;
-        if (!paintedRows && old!.CursorRow == next.CursorRow && old.CursorColumn == next.CursorColumn) return "";
+        if (!paintedRows && old is not null && old.CursorRow == next.CursorRow && old.CursorColumn == next.CursorColumn) return "";
         if (next.CursorRow >= 0)
             paint.Append("\x1b[").Append(next.CursorRow + 1).Append(';').Append(next.CursorColumn + 1).Append('H');
-        if (reset || (old!.CursorRow < 0) != (next.CursorRow < 0)) paint.Append(next.CursorRow >= 0 ? "\x1b[?25h" : "\x1b[?25l");
+        if (reset || old is null || (old.CursorRow < 0) != (next.CursorRow < 0))
+            paint.Append(next.CursorRow >= 0 ? "\x1b[?25h" : "\x1b[?25l");
         // One host write; terminals supporting synchronized output don't expose intermediate cursor moves.
         return paintedRows ? "\x1b[?2026h" + paint + "\x1b[?2026l" : paint.ToString();
     }
 
     private static string Color(Ink ink) => ink switch
     {
-        Ink.Header => "\x1b[1;36m", Ink.User => "\x1b[36m", Ink.Tool => "\x1b[34m", Ink.Quiet or Ink.Status => "\x1b[2m",
+        Ink.Header => "\x1b[1;36m", Ink.User => "\x1b[1;36m", Ink.Assistant => "\x1b[1;37m",
+        Ink.Tool => "\x1b[34m", Ink.Quiet or Ink.Status or Ink.Thinking => "\x1b[2m", Ink.Info => "\x1b[2;36m",
         Ink.Error => "\x1b[1;31m", Ink.Approval => "\x1b[1;33m", Ink.Composer => "\x1b[1m",
         Ink.PanelTitle => "\x1b[1;36m", Ink.Selection => "\x1b[7m", Ink.Heading => "\x1b[1;33m", Ink.Code => "\x1b[36m",
         Ink.CodeFence => "\x1b[2;36m", _ => "\x1b[0m"
