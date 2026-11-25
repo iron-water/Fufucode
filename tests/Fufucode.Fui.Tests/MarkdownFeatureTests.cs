@@ -261,10 +261,14 @@ internal static class MarkdownFeatureTests
             throw new InvalidOperationException($"{message}: expected [{expected}], got [{actual}]");
     }
 
-    private sealed class RecordingClipboard : ITextClipboard
+    private sealed class RecordingClipboard : IFuiClipboard
     {
         internal string? Text { get; private set; }
-        public void Copy(string text) => Text = text;
+        public FuiClipboardResult CopyText(string text)
+        {
+            Text = text;
+            return new(true, text.EnumerateRunes().Count(), System.Text.Encoding.UTF8.GetByteCount(text), null);
+        }
     }
 
     private sealed class LinkSession : ITuiSession

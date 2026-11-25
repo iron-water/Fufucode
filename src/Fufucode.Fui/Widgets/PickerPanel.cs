@@ -7,9 +7,12 @@ internal static class PickerPanel
         var count = overlay.Items.Count;
         if (FuiAgentActivityRoster.IsHubTitle(overlay.Title))
             return 1 + Math.Min(count, 7) + 5;
-        if (count == 0) return 2;
+        var footer = string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1;
+        if (count == 0) return 2 + footer;
         var selected = overlay.Items[Math.Clamp(overlay.Selected, 0, count - 1)];
-        return 1 + Math.Min(count, 9) + (string.IsNullOrWhiteSpace(overlay.Message ?? selected.Detail) ? 0 : 1);
+        var rowLimit = overlay.Kind == FuiOverlayKind.Picker ? 9 : 12;
+        return 1 + Math.Min(count, rowLimit) +
+            (string.IsNullOrWhiteSpace(overlay.Message ?? selected.Detail) ? 0 : 1) + footer;
     }
 
     internal static int Paint(FuiOverlay overlay, Span<ScreenRow> rows, int columns)
@@ -17,7 +20,12 @@ internal static class PickerPanel
         if (rows.Length == 0) return 0;
         var count = overlay.Items.Count;
         var selected = Math.Clamp(overlay.Selected, 0, Math.Max(0, count - 1));
-        if (columns >= 80 && rows.Length >= 6 && count > 0)
+        var footerRows = !string.IsNullOrWhiteSpace(overlay.Footer) && rows.Length >= 2 ? 1 : 0;
+        if (footerRows != 0)
+            rows[^1] = new(TerminalText.Clip("  " + TerminalText.SingleLine(overlay.Footer!), columns), Ink.Quiet);
+        var content = footerRows == 0 ? rows : rows[..^footerRows];
+        if (columns >= 80 && count > 0 &&
+            (content.Length >= 6 || overlay.Kind != FuiOverlayKind.Picker && content.Length >= 4))
             return PaintSplit(overlay, rows, columns, selected);
         string Fit(string s, bool tail = false) => TerminalText.Clip(s, columns, tail);
         var title = TerminalText.SingleLine(overlay.Title);
@@ -29,34 +37,34 @@ internal static class PickerPanel
         var titleWidth = query.Length == 0 ? available : Math.Max(0, available / 2 - 2);
         var left = TerminalText.Clip(title, titleWidth);
         if (query.Length > 0) left += "  /" + TerminalText.Clip(query, available - TerminalText.Width(left) - 3, tail: true);
-        if (rows.Length == 1)
+        if (content.Length == 1)
         {
-            rows[0] = new(Fit(count == 0 ? overlay.Message is null ? "没有匹配项" : TerminalText.SingleLine(overlay.Message) : "▸ " + Label(overlay.Items[selected], columns)), Ink.Selection);
+            content[0] = new(Fit(count == 0 ? overlay.Message is null ? "没有匹配项" : TerminalText.SingleLine(overlay.Message) : "▸ " + Label(overlay.Items[selected], columns)), Ink.Selection);
             return Math.Min(1, count);
         }
-        rows[0] = new(Fit(left + new string(' ', Math.Max(1, columns - TerminalText.Width(left) - progress.Length)) + progress), Ink.PanelTitle);
+        content[0] = new(Fit(left + new string(' ', Math.Max(1, columns - TerminalText.Width(left) - progress.Length)) + progress), Ink.PanelTitle);
         if (count == 0)
         {
-            rows[1] = new(Fit(TerminalText.SingleLine(overlay.Message ?? "没有匹配项")), Ink.Quiet);
+            content[1] = new(Fit(TerminalText.SingleLine(overlay.Message ?? "没有匹配项")), Ink.Quiet);
             return 0;
         }
 
         var detail = FuiAgentActivityRoster.IsHubTitle(overlay.Title)
             ? TerminalText.SingleLine(overlay.Items[selected].Detail ?? "")
             : TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
-        var hasDetail = detail.Length > 0 && rows.Length >= 3;
-        var visible = Math.Max(1, Math.Min(count, rows.Length - 1 - (hasDetail ? 1 : 0)));
+        var hasDetail = detail.Length > 0 && content.Length >= 3;
+        var visible = Math.Max(1, Math.Min(count, content.Length - 1 - (hasDetail ? 1 : 0)));
         var start = Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible));
         for (var i = 0; i < visible; i++)
         {
             var index = start + i;
             var active = index == selected;
-            rows[i + 1] = new(Fit((active ? "▸ " : "  ") + Label(overlay.Items[index], columns)),
+            content[i + 1] = new(Fit((active ? "▸ " : "  ") + Label(overlay.Items[index], columns)),
                 active ? Ink.Selection : FuiAgentActivityRoster.IsHubTitle(overlay.Title)
                     ? FuiAgentActivityRoster.InkFor(overlay.Items[index])
                     : Ink.Plain);
         }
-        if (hasDetail) rows[visible + 1] = new(Fit("  " + detail), Ink.Quiet);
+        if (hasDetail) content[visible + 1] = new(Fit("  " + detail), Ink.Quiet);
         return visible;
     }
 
@@ -72,8 +80,16 @@ internal static class PickerPanel
         var agentHub = FuiAgentActivityRoster.IsHubTitle(overlay.Title);
         var progress = agentHub ? AgentProgress(overlay, selected) : $"{selected + 1}/{count}";
         var leftTitle = title + (query.Length == 0 ? "" : " /" + query);
+        var footerRows = string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1;
+        var detailHead = overlay.Kind switch
+        {
+            FuiOverlayKind.Transcript => "对话 · 正文",
+            FuiOverlayKind.Outline => "大纲 · 正文",
+            FuiOverlayKind.Copy => "正文",
+            _ => "详情"
+        };
         rows[0] = new(Pad(TerminalText.Clip(leftTitle, leftWidth - progress.Length - 1), leftWidth) +
-            "│" + Pad(" " + progress + (agentHub ? "  作业 · 最近事件" : "  详情"), rightWidth), Ink.PanelTitle);
+            "│" + Pad(" " + progress + (agentHub ? "  作业 · 最近事件" : "  " + detailHead), rightWidth), Ink.PanelTitle);
 
         var detail = new List<TerminalText.Slice>();
         var selectedChoice = overlay.Items[selected];
@@ -88,7 +104,7 @@ internal static class PickerPanel
         }.Where(value => value.Length != 0)));
         TerminalText.Wrap(detailText, rightWidth, 0, detail);
 
-        var bodyRows = rows.Length - 1;
+        var bodyRows = rows.Length - 1 - footerRows;
         var visible = Math.Max(1, Math.Min(count, bodyRows));
         var start = Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible));
         for (var i = 0; i < bodyRows; i++)

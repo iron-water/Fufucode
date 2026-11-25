@@ -30,3 +30,26 @@ internal interface ITuiSession : IAsyncDisposable
     Task StopAsync(CancellationToken ct);
     Task RespondAsync(string id, bool allow, CancellationToken ct);
 }
+
+internal sealed record FuiUsageInfo(long? Input, long? Output, long? Total, long? CacheRead, long? CacheWrite);
+
+internal sealed record FuiSessionInfo(
+    string Project,
+    string Id,
+    string? Model,
+    string? ThinkingLevel,
+    int Messages,
+    int Tools,
+    int Errors,
+    int Attachments,
+    int QueueCount,
+    FuiUsageInfo? Usage,
+    bool HistoryPartial = false);
+
+// Optional facts are implemented only where the session can prove them. Commands must fail
+// explicitly rather than infer a retry target or synthesize usage in the controller.
+internal interface IFuiSessionInspector
+{
+    Task<FuiSessionInfo> InspectAsync(CancellationToken ct);
+    Task<string> RetryLastUserAsync(CancellationToken ct);
+}

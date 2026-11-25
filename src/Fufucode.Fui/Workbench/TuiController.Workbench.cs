@@ -18,7 +18,8 @@ internal sealed partial class TuiController
     private Task? _release;
     private (FuiCommand Command, string Argument)? _deferred;
     private sealed record Result(FuiActionResult? Action = null, IReadOnlyList<FuiChoice>? Choices = null,
-        string? Title = null, FileAttachment? File = null, FuiPrompt? Prompt = null);
+        string? Title = null, FileAttachment? File = null, FuiPrompt? Prompt = null,
+        FuiCopyCatalog? Copy = null, FuiTranscriptCatalog? Transcript = null);
     private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable)
     {
         public bool PreemptedByApproval { get; set; }
@@ -37,7 +38,7 @@ internal sealed partial class TuiController
 
     public int? TakeScrollTarget() { var target = _scrollTarget; _scrollTarget = null; return target; }
     public void ScrollTo(int scroll) => _scroll = scroll;
-    private void Error(string message) { _lines.Add(new("error", message)); _scroll = 0; Dirty = true; }
+    private void Error(string message) { AppendLine("error", message); _scroll = 0; Dirty = true; }
 
     private void Begin(string id, Func<CancellationToken, Task<Result>> work, bool cancellable = false)
     {
@@ -81,14 +82,20 @@ internal sealed partial class TuiController
                 if (done.PreemptedByApproval || done.Lifetime.IsCancellationRequested)
                 {
                     _release = Invoke(() => replacement.DisposeAsync().AsTask());
-                    _lines.Add(new("info", $"保留当前会话。可用 /resume {replacement.Id} 打开目标会话。"));
+                    AppendLine("info", $"保留当前会话。可用 /resume {replacement.Id} 打开目标会话。");
                     return;
                 }
                 SwitchTo(replacement);
             }
             if (done.Lifetime.IsCancellationRequested) return;
-            if (result.Choices is { } choices)
-                OpenPicker(done.Id, result.Title ?? FuiCommands.Get(done.Id)?.Label ?? done.Id, choices);
+            if (result.Copy is { } copy)
+                OpenCopyPicker(copy);
+            else if (result.Transcript is { } transcript)
+                OpenTranscriptPicker(transcript);
+            else if (result.Choices is { } outlineChoices && done.Id == "outline")
+                OpenOutlinePicker(outlineChoices);
+            else if (result.Choices is { } regularChoices)
+                OpenPicker(done.Id, result.Title ?? FuiCommands.Get(done.Id)?.Label ?? done.Id, regularChoices);
             if (result.Prompt is { } prompt) Send(prompt);
             if (result.File is { } file)
             {
@@ -106,7 +113,7 @@ internal sealed partial class TuiController
             }
             if (result.Action?.Notice is { Length: > 0 } notice)
             {
-                if (done.PreemptedByApproval) _lines.Add(new("info", notice));
+                if (done.PreemptedByApproval) AppendLine("info", notice);
                 else Info(notice);
             }
             else if (result.Action?.Replacement is not null) Info(done.Id switch { "fork" => "已打开分叉会话。", "new" => "已新建会话。", _ => "已恢复会话。" });
@@ -115,7 +122,7 @@ internal sealed partial class TuiController
         catch (Exception ex)
         {
             ClosePicker();
-            if (done.PreemptedByApproval) _lines.Add(new("error", ex.GetBaseException().Message));
+            if (done.PreemptedByApproval) AppendLine("error", ex.GetBaseException().Message);
             else Error(ex.GetBaseException().Message);
         }
         finally { done.Lifetime.Dispose(); }
@@ -128,9 +135,11 @@ internal sealed partial class TuiController
             _drafts[prior.Id] = (_composer.Text, _composer.Cursor, [.. _attachments]);
         _active = next;
         ClosePicker(); _composer.Clear(); _attachments.Clear(); _lines.Clear(); _indices.Clear(); _deltas.Clear();
+        _lineSources.Clear();
         ResetAgentActivity();
         if (_drafts.Remove(next.Id, out var saved)) { _composer.Replace(saved.Text, saved.Cursor); _attachments.AddRange(saved.Files); }
-        _files = null; _lines.AddRange(next.History); _scroll = 0; _scrollTarget = null; _busy = false; _status = "就绪";
+        _files = null; _lines.AddRange(next.History); _lineSources.AddRange(next.History.Select(_ => (string?)null));
+        _scroll = 0; _scrollTarget = null; _busy = false; _status = "就绪"; _transcriptGeneration++;
         _release = Invoke(() => prior.DisposeAsync().AsTask());
     }
 
@@ -242,6 +251,11 @@ internal sealed partial class TuiController
                 else OpenPicker(c.Id, c.Label, links, argument,
                     new FuiPickerOptions(Detail: choice => choice.Detail ?? choice.Value, PreserveOrder: true));
                 break;
+            case "outline": OpenOutline(); break;
+            case "copy": OpenCopy(); break;
+            case "transcript": OpenTranscript(); break;
+            case "retry": Retry(); break;
+            case "info": OpenInfo(); break;
             case "stop": Stop(); break;
             case "quit": Exiting = true; break;
         }

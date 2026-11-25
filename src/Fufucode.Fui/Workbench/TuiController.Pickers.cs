@@ -17,6 +17,7 @@ internal sealed partial class TuiController
     private void ClosePicker()
     {
         _picker = null; _pickerAction = null; _browseFilter = ""; _mentionStart = -1;
+        _outlineGeneration = -1;
     }
 
     private FuiOverlay? Overlay()
@@ -37,6 +38,16 @@ internal sealed partial class TuiController
         if (_picker is not null)
         {
             if (key.Key == ConsoleKey.Escape || ctrl && key.Key == ConsoleKey.C) { ClosePicker(); return true; }
+            if (_pickerAction == "transcript" && key.Key == ConsoleKey.Tab)
+            {
+                CycleTranscriptFilter(key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+                return true;
+            }
+            if (_pickerAction == "outline" && key.Key == ConsoleKey.F5)
+            {
+                RefreshOutline(force: true);
+                return true;
+            }
             if (key.Key == ConsoleKey.Enter && key.Modifiers == 0)
             {
                 if (_picker.Current is not { } choice) return true;
@@ -132,13 +143,13 @@ internal sealed partial class TuiController
                     options: new FuiPickerOptions(Detail: item => item.Detail ?? item.Value, PreserveOrder: true));
                 return;
             case "links-copy":
-                try
-                {
-                    _clipboard.Copy(choice.Value);
-                    Info("已复制链接\n" + choice.Value);
-                }
-                catch (Exception error) { Error("复制链接失败：" + error.GetBaseException().Message); }
+                var copied = _clipboard.CopyText(choice.Value);
+                if (copied.Success) Info("已复制链接\n" + choice.Value);
+                else Error("复制链接失败：" + (copied.Error ?? "未知原因"));
                 return;
+            case "outline":
+            case "transcript": LocateTranscriptChoice(choice); return;
+            case "copy": CopyChoice(choice); return;
             default:
                 if (FuiCommands.Get(action) is { } command && CanRun(command, choice.Value)) Run(command, choice.Value);
                 return;

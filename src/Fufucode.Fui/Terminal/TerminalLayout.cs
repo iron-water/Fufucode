@@ -102,8 +102,11 @@ internal sealed class TerminalLayout
 
         var remaining = height - headerRows - statusRows - approvalRows - attachmentHeaderRows - attachmentPreviewRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
-        var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), Math.Min(Math.Max(1, height / 2),
-            Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0))));
+        var panelRoom = Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0));
+        var panelLimit = overlay is { Kind: FuiOverlayKind.Outline or FuiOverlayKind.Transcript or FuiOverlayKind.Copy }
+            ? panelRoom
+            : Math.Min(Math.Max(1, height / 2), panelRoom);
+        var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), panelLimit);
         var bodyRows = remaining - draftRows - panelRows;
 
         // Cards need enough room for a header, content, and a closing rail. Narrow or tiny terminals
@@ -185,10 +188,12 @@ internal sealed class TerminalLayout
     private static (int Start, int Visible) PickerWindow(FuiOverlay overlay, int panelRows, int columns)
     {
         var count = overlay.Items.Count;
-        if (count == 0 || panelRows <= 1) return (0, 0);
+        var contentRows = panelRows - (string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1);
+        if (count == 0 || contentRows <= 1) return (0, 0);
         var selected = Math.Clamp(overlay.Selected, 0, count - 1);
-        var split = columns >= 80 && panelRows >= 6;
-        var visible = split ? Math.Max(1, Math.Min(count, panelRows - 1)) : VisibleItems(overlay, panelRows, selected);
+        var split = columns >= 80 && (contentRows >= 6 ||
+            overlay.Kind != FuiOverlayKind.Picker && contentRows >= 4);
+        var visible = split ? Math.Max(1, Math.Min(count, contentRows - 1)) : VisibleItems(overlay, contentRows, selected);
         return (Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible)), visible);
     }
 
@@ -203,7 +208,9 @@ internal sealed class TerminalLayout
 
     private static int PickerHitColumns(FuiOverlay overlay, int panelRows, int columns)
     {
-        if (columns >= 80 && panelRows >= 6 && overlay.Items.Count > 0)
+        var contentRows = panelRows - (string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1);
+        if (columns >= 80 && overlay.Items.Count > 0 &&
+            (contentRows >= 6 || overlay.Kind != FuiOverlayKind.Picker && contentRows >= 4))
         {
             var left = Math.Clamp(columns / 2, 30, 56);
             if (columns - left - 1 >= 18) return left;

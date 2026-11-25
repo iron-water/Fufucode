@@ -22,6 +22,8 @@ try
     Console.WriteLine("PASS runtime: FUMO session integration");
     await WorkbenchSessionTests.RunAsync();
     Console.WriteLine("PASS workbench sessions: native actions, model selection, branching and export");
+    await TranscriptWorkbenchTests.RunAsync();
+    Console.WriteLine("PASS transcript workbench: outline, search, jump, streaming, copy, filters, info, retry and large lists");
     return 0;
 }
 catch (Exception e) { Console.Error.WriteLine(e); return 1; }

@@ -5,7 +5,7 @@ namespace Fufucode.Fui;
 
 // Only the terminal loop mutates view state. Backend callbacks and commands never write to the screen.
 internal sealed partial class TuiController(ITuiSession session, CancellationToken token, string? dataRoot = null,
-    ITextClipboard? clipboard = null)
+    IFuiClipboard? clipboard = null)
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
@@ -14,8 +14,9 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
     private readonly Composer _composer = new();
-    private readonly ITextClipboard _clipboard = clipboard ?? WindowsTextClipboard.Instance;
     private readonly List<TuiLine> _lines = [.. session.History];
+    private readonly List<string?> _lineSources = [.. session.History.Select(_ => (string?)null)];
+    private readonly IFuiClipboard _clipboard = clipboard ?? WindowsTextClipboard.Instance;
     private readonly Dictionary<string, int> _indices = new(StringComparer.Ordinal);
     private readonly Dictionary<int, StringBuilder> _deltas = [];
     private readonly List<TuiEvent.Approval> _approvals = [];
@@ -66,7 +67,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
                     PreemptWorkbench();
                     if (_approvals.Count == 0) _approvalFocusChanged = true;
                     _approvals.Add(a);
-                    _lines.Add(new("info", a.Text)); // Full arguments stay available via scrollback.
+                    AppendLine("approval", a.Text, "approval:" + a.Id); // Full arguments stay available via scrollback.
                     _scroll = 0;
                     break;
                 case TuiEvent.ApprovalClosed a:
@@ -79,13 +80,18 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
                     break;
             }
         }
-        foreach (var (i, delta) in _deltas) _lines[i] = _lines[i] with { Text = _lines[i].Text + delta };
+        if (_deltas.Count != 0)
+        {
+            foreach (var (i, delta) in _deltas) _lines[i] = _lines[i] with { Text = _lines[i].Text + delta };
+            _transcriptGeneration++;
+        }
         _deltas.Clear();
         ObserveSend();
         Observe(ref _stop, () => { _stopping = false; _status = "停止失败"; });
         Observe(ref _reply, () => _answeredApproval = null);
         // There may still be an approval behind a large batch of streaming events.
         if (!_active.Events.TryPeek(out _)) UpdateWorkbench();
+        RefreshOpenTranscriptPanels();
     }
 
     private void Message(TuiEvent.Message m)
@@ -93,7 +99,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (!_indices.TryGetValue(m.Id, out var i))
         {
             _indices.Add(m.Id, _lines.Count);
-            _lines.Add(new(m.Kind, m.Text));
+            AppendLine(m.Kind, m.Text, m.Id);
         }
         else if (m.Append)
         {
@@ -104,6 +110,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         {
             _deltas.Remove(i);
             _lines[i] = new(m.Kind, m.Text); // A final snapshot supersedes all preceding deltas.
+            _transcriptGeneration++;
         }
     }
 
@@ -283,7 +290,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         _stop = Invoke(() => _active.StopAsync(token));
     }
 
-    private void Info(string text) { _lines.Add(new("info", text)); _scroll = 0; }
+    private void Info(string text) { AppendLine("info", text); _scroll = 0; }
 
     private static Task Invoke(Func<Task> command)
     {
@@ -298,7 +305,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         try { finished.GetAwaiter().GetResult(); }
         catch (Exception e)
         {
-            _lines.Add(new("error", e.GetBaseException().Message));
+            AppendLine("error", e.GetBaseException().Message);
             Dirty = true;
             onError();
         }

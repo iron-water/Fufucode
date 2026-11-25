@@ -7,7 +7,7 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Fui;
 
 /// <summary>Projects block deltas using stable row ids. History is read once, never on a token callback.</summary>
-internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
+internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int initialMessages = 0, int initialTools = 0)
 {
     private sealed class Draft(MessageRole role, int imageCount)
     {
@@ -22,6 +22,13 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
     private readonly object _gate = new();
     private string? _lastError;
     private int _nextUserImageCount;
+    private int _messageCount = initialMessages;
+    private int _toolCount = initialTools;
+    private int _errorCount;
+
+    public int MessageCount { get { lock (_gate) return _messageCount; } }
+    public int ToolCount { get { lock (_gate) return _toolCount; } }
+    public int ErrorCount { get { lock (_gate) return _errorCount; } }
 
     public void ExpectUserImages(int count)
     {
@@ -61,11 +68,13 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
             {
                 case SessionEvent.MessageStarted started:
                     _messages[started.MessageId] = new(started.Role, started.Role == MessageRole.User ? _nextUserImageCount : 0);
+                    _messageCount++;
                     if (started.Role == MessageRole.User) _nextUserImageCount = 0;
                     break;
                 case SessionEvent.BlockStarted { Kind: MessageBlockKind.ToolCall } start when _messages.TryGetValue(start.MessageId, out var message):
                     var name = string.IsNullOrEmpty(start.ToolName) ? start.ToolCallId ?? "工具" : start.ToolName;
                     message.Tools[start.ContentIndex] = new(name, new());
+                    _toolCount++;
                     Row(start.MessageId, start.ContentIndex, "tool", name + " ");
                     break;
                 case SessionEvent.TextAppended text when _messages.TryGetValue(text.MessageId, out var message):
@@ -107,6 +116,7 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
                     break;
                 case SessionEvent.SessionError error:
                     _lastError = error.Message;
+                    _errorCount++;
                     Notice("error", error.Message);
                     break;
                 case SessionEvent.TurnSettled settled:

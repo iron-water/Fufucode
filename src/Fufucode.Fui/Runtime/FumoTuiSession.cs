@@ -8,7 +8,8 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
-internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments, IFuiPlanSession
+internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments,
+    IFuiPlanSession, IFuiSessionInspector
 {
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
@@ -37,8 +38,10 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         _nativeProbeModel = string.IsNullOrWhiteSpace(_imageEndpoint?.ModelId) ? settings.SelectedModel : _imageEndpoint.ModelId;
         _ui = session.Chat as IExtensionUiSession
             ?? throw new InvalidOperationException("FUMO 会话没有原生审批入口。");
-        _projection = new(_events.Writer);
         History = FumoEventProjection.ReadHistory(session);
+        var historyMessages = session.History.CurrentBranchMessages;
+        _projection = new(_events.Writer, historyMessages.Count,
+            historyMessages.Sum(message => message.Content.OfType<PiToolCallBlock>().Count()));
         _approvals = SharedApprovalRegistry.For(_ui);
         _approvals.Requested += OnApproval;
         _approvals.Decided += OnDecision;
