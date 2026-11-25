@@ -192,7 +192,7 @@ internal sealed class TerminalLayout
         if (count == 0 || contentRows <= 1) return (0, 0);
         var selected = Math.Clamp(overlay.Selected, 0, count - 1);
         var split = columns >= 80 && (contentRows >= 6 ||
-            overlay.Kind != FuiOverlayKind.Picker && contentRows >= 4);
+            overlay.Kind != FuiOverlayKind.Picker && contentRows >= 3);
         var visible = split ? Math.Max(1, Math.Min(count, contentRows - 1)) : VisibleItems(overlay, contentRows, selected);
         return (Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible)), visible);
     }
@@ -210,7 +210,7 @@ internal sealed class TerminalLayout
     {
         var contentRows = panelRows - (string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1);
         if (columns >= 80 && overlay.Items.Count > 0 &&
-            (contentRows >= 6 || overlay.Kind != FuiOverlayKind.Picker && contentRows >= 4))
+            (contentRows >= 6 || overlay.Kind != FuiOverlayKind.Picker && contentRows >= 3))
         {
             var left = Math.Clamp(columns / 2, 30, 56);
             if (columns - left - 1 >= 18) return left;

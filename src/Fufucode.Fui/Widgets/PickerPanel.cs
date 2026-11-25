@@ -11,8 +11,9 @@ internal static class PickerPanel
         if (count == 0) return 2 + footer;
         var selected = overlay.Items[Math.Clamp(overlay.Selected, 0, count - 1)];
         var rowLimit = overlay.Kind == FuiOverlayKind.Picker ? 9 : 12;
-        return 1 + Math.Min(count, rowLimit) +
+        var desired = 1 + Math.Min(count, rowLimit) +
             (string.IsNullOrWhiteSpace(overlay.Message ?? selected.Detail) ? 0 : 1) + footer;
+        return overlay.Kind != FuiOverlayKind.Picker ? Math.Max(desired, 8) : desired;
     }
 
     internal static int Paint(FuiOverlay overlay, Span<ScreenRow> rows, int columns)
@@ -25,7 +26,7 @@ internal static class PickerPanel
             rows[^1] = new(TerminalText.Clip("  " + TerminalText.SingleLine(overlay.Footer!), columns), Ink.Quiet);
         var content = footerRows == 0 ? rows : rows[..^footerRows];
         if (columns >= 80 && count > 0 &&
-            (content.Length >= 6 || overlay.Kind != FuiOverlayKind.Picker && content.Length >= 4))
+            (content.Length >= 6 || overlay.Kind != FuiOverlayKind.Picker && content.Length >= 3))
             return PaintSplit(overlay, rows, columns, selected);
         string Fit(string s, bool tail = false) => TerminalText.Clip(s, columns, tail);
         var title = TerminalText.SingleLine(overlay.Title);
