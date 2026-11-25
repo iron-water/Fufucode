@@ -150,13 +150,8 @@ internal static class MarkdownTable
             total = desired.Sum();
         }
 
-        var extra = available - total;
-        if (extra > 0)
-        {
-            var each = extra / columns;
-            var remainder = extra % columns;
-            for (var i = 0; i < columns; i++) desired[i] += each + (i < remainder ? 1 : 0);
-        }
+        // Keep the table at its content width. Expanding every column to the viewport turns a
+        // two-column result into mostly whitespace and makes unrelated rows hard to scan.
         return desired;
     }
 

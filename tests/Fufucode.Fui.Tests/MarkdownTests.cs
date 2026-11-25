@@ -27,7 +27,8 @@ internal static class MarkdownTests
         var aligned = Render("| 名 | 值 | 备注 |\n| :--- | :---: | ---: |\n| 中文 | 🙂 | x |", 16);
         Eq("名   │ 值 │ 备注", aligned[0].Text, "CJK and emoji display widths");
         Eq("中文 │ 🙂 │    x", aligned[2].Text, "left, center and right alignment");
-        Eq(true, aligned.All(row => TerminalText.Width(row.Text) == 16), "equal display width");
+        Eq(true, aligned.All(row => TerminalText.Width(row.Text) == TerminalText.Width(aligned[0].Text)), "equal row width");
+        Eq(true, aligned.All(row => TerminalText.Width(row.Text) <= 16), "table stays within the viewport");
 
         var clipped = Render("| A | B | C |\n| --- | --- | --- |\n| " + new string('x', 80) +
             " | | x\u0001y |", 20);
