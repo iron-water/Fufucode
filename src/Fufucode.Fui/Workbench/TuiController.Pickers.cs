@@ -75,6 +75,12 @@ internal sealed partial class TuiController
             else Run(FuiCommands.Get(key.Key == ConsoleKey.R ? "history" : "find")!, "");
             return true;
         }
+        if (!ctrl && key.Modifiers.HasFlag(ConsoleModifiers.Alt) && key.Key == ConsoleKey.V)
+        {
+            if (_job is not null) return true;
+            Run(FuiCommands.Get("paste")!, "");
+            return true;
+        }
         if (key.Key != ConsoleKey.Tab || key.Modifiers != 0 || _job is not null) return false;
         var text = _composer.Text;
         if (text.StartsWith('/') && !text.StartsWith("//", StringComparison.Ordinal) && !text.Any(char.IsWhiteSpace))

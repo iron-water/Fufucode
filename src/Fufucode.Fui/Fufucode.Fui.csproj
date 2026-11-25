@@ -8,10 +8,12 @@
     <RootNamespace>Fufucode.Fui</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CSharpMath.SkiaSharp" Version="0.5.1" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
+    <PackageReference Include="Svg.Skia" Version="4.0.0" />
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
     <InternalsVisibleTo Include="Fufucode.Fui.Tests" />
   </ItemGroup>

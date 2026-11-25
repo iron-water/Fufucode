@@ -6,9 +6,12 @@ using Fufucode.Core.Security;
 
 namespace Fufucode.Fui;
 
-internal sealed record FileAttachment(string Path, string Text, byte[] Digest, string? MimeType = null);
+internal sealed record FileAttachment(string Path, string Text, byte[] Digest, string? MimeType = null,
+    byte[]? ImageBytes = null, int ImageWidth = 0, int ImageHeight = 0, string? FormatLabel = null,
+    bool IsClipboard = false);
 internal sealed record FuiPrompt(string Text, IReadOnlyList<ChatImage> Images);
 internal sealed record FilePage(string Folder, IReadOnlyList<FuiChoice> Items);
+internal sealed record ResolvedImage(string Label, string MimeType, byte[] Bytes, DecodedImage? Decoded = null);
 
 // Browse one directory on demand, not the whole project on each keystroke. File contents are not
 // sent merely by selecting/opening a file. Attachments are explicit, bounded and checked again at send.
@@ -58,7 +61,71 @@ internal sealed class ProjectFiles
     public async Task<FileAttachment> ReadAttachmentAsync(string path, CancellationToken ct) =>
         (await ReadFileAsync(path, allowImages: true, MaxAttachmentBytes, ct)).File;
 
-    private async Task<(FileAttachment File, byte[] Bytes)> ReadFileAsync(string path, bool allowImages, int remaining, CancellationToken ct)
+    public async Task<FileAttachment> ReadPreviewAsync(string path, CancellationToken ct) =>
+        (await ReadFileAsync(path, allowImages: true, MaxAttachmentBytes, ct)).File;
+
+    public ResolvedImage? TryReadAllowedImage(string reference)
+    {
+        if (string.IsNullOrWhiteSpace(reference) || MarkdownImages.IsRemoteUrl(reference) || MarkdownImages.IsDataUri(reference))
+            return null;
+        try
+        {
+            var rel = NormalizeImageReference(reference);
+            if (rel is null) return null;
+            var full = Resolve(rel);
+            var mime = ProjectImage.MimeType(full);
+            if (mime is null) return null;
+            using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read, 8192);
+            var length = stream.Length;
+            if (length is <= 0 or > MaxAttachmentBytes) return null;
+            var bytes = new byte[(int)length];
+            stream.ReadExactly(bytes);
+            if (stream.ReadByte() != -1) return null;
+            Resolve(rel); // Recheck links and current security policy while the handle is open.
+            if (mime == "image/svg+xml")
+            {
+                if (ImageDecoder.UnpackAndAuditSvg(bytes) is null) return null;
+                return new(Relative(full), mime, bytes);
+            }
+            if (!ProjectImage.TryInspect(bytes, mime, out _, out _, out _, out var decoded)) return null;
+            return new(Relative(full), mime, bytes, decoded);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException or InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    private string? NormalizeImageReference(string reference)
+    {
+        var value = reference.Trim();
+        if (value.StartsWith("file://", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!Uri.TryCreate(value, UriKind.Absolute, out var uri) || !uri.IsFile) return null;
+            var full = Path.GetFullPath(uri.LocalPath);
+            var rel = Path.GetRelativePath(_root, full);
+            if (Path.IsPathRooted(rel) || rel == ".." || rel.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal))
+                return null;
+            return rel;
+        }
+        // Strip optional query/fragment suffix on relative image links (e.g. chart.png?v=1#light).
+        var trim = value.IndexOfAny(['?', '#']);
+        if (trim >= 0) value = value[..trim];
+        if (value.Length == 0) return null;
+        if (!value.Contains('%')) return value;
+        try
+        {
+            var rawFull = Path.GetFullPath(value, _root);
+            if (File.Exists(rawFull)) return value;
+            return Uri.UnescapeDataString(value);
+        }
+        catch (Exception ex) when (ex is ArgumentException or UriFormatException)
+        {
+            return value;
+        }
+    }
+
+    private async Task<(FileAttachment File, byte[] Bytes, DecodedImage? Decoded)> ReadFileAsync(string path, bool allowImages, int remaining, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
         var full = Resolve(path);
@@ -74,18 +141,19 @@ internal sealed class ProjectFiles
         ct.ThrowIfCancellationRequested();
         if (mime is not null)
         {
-            if (!ProjectImage.Matches(bytes, mime)) throw new InvalidDataException($"{path} 不是与扩展名相符的 PNG 或 JPEG 图片。");
-            return (new(Relative(full), "", SHA256.HashData(bytes), mime), bytes);
+            if (!ProjectImage.TryInspect(bytes, mime, out var width, out var height, out var label, out var decoded))
+                throw new InvalidDataException($"{path} 不是有效或与扩展名相符的图片文件。");
+            return (new(Relative(full), "", SHA256.HashData(bytes), mime, bytes, width, height, label), bytes, decoded);
         }
         string text;
         try { text = Utf8.GetString(bytes).TrimStart('\uFEFF'); }
-        catch (DecoderFallbackException) { throw new InvalidDataException(allowImages ? "可附加 UTF-8 文本、PNG 或 JPEG 图片。" : "只能预览 UTF-8 文本文件。"); }
+        catch (DecoderFallbackException) { throw new InvalidDataException(allowImages ? "可附加或预览 UTF-8 文本与常见图片格式。" : "只能读取 UTF-8 文本文件。"); }
         if (text.Any(c => char.IsControl(c) && c is not ('\t' or '\r' or '\n')))
             throw new InvalidDataException("含二进制或控制数据；只能读取文本文件。");
         var settings = _policy.Store.Current;
         if (settings.SensitiveDataProtectionEnabled && SecurityContentScanner.ContainsSecret(text, settings))
             throw new UnauthorizedAccessException("安全中心检测到敏感内容；文件未加入上下文。");
-        return (new(Relative(full), text, SHA256.HashData(bytes)), bytes);
+        return (new(Relative(full), text, SHA256.HashData(bytes)), bytes, null);
     }
 
     public async Task<FuiPrompt> PrepareAsync(string prompt, IReadOnlyList<FileAttachment> attached, CancellationToken ct)
@@ -97,12 +165,42 @@ internal sealed class ProjectFiles
         var remaining = MaxAttachmentBytes;
         foreach (var file in attached)
         {
-            var (current, bytes) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
+            if (file.IsClipboard)
+            {
+                if (file.MimeType is not { } clipMime || file.ImageBytes is not { Length: > 0 } clipBytes ||
+                    !SHA256.HashData(clipBytes).AsSpan().SequenceEqual(file.Digest))
+                    throw new InvalidDataException($"{file.Path} 剪贴板图片数据无效；请重新粘贴。");
+                if (clipBytes.Length > remaining)
+                    throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
+                images.Add(new(Convert.ToBase64String(clipBytes), clipMime));
+                remaining -= clipBytes.Length;
+                continue;
+            }
+            var (current, bytes, decoded) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
             if (!current.Digest.AsSpan().SequenceEqual(file.Digest) || current.MimeType != file.MimeType)
                 throw new IOException($"{file.Path} 已更改；请先移除，再重新附加。");
-            if (current.MimeType is { } mime) images.Add(new(Convert.ToBase64String(bytes), mime));
-            else body.Append("\n\n[项目文件：").Append(current.Path).Append("]\n").Append(current.Text).Append("\n[文件结束]");
-            remaining -= bytes.Length;
+            if (current.MimeType is { } mime)
+            {
+                var wireBytes = bytes;
+                var wireMime = mime;
+                if (!ProjectImage.IsNativeModelMime(mime))
+                {
+                    decoded ??= ImageDecoder.TryDecode(bytes, mime)
+                        ?? throw new InvalidDataException($"{file.Path} 无法解码为模型图片。");
+                    wireBytes = ImageDecoder.EncodePng(decoded)
+                        ?? throw new InvalidDataException($"{file.Path} 无法转换为 PNG 图片。");
+                    if (wireBytes.Length > remaining)
+                        throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
+                    wireMime = "image/png";
+                }
+                images.Add(new(Convert.ToBase64String(wireBytes), wireMime));
+                remaining -= Math.Max(bytes.Length, wireBytes.Length);
+            }
+            else
+            {
+                body.Append("\n\n[项目文件：").Append(current.Path).Append("]\n").Append(current.Text).Append("\n[文件结束]");
+                remaining -= bytes.Length;
+            }
         }
         ct.ThrowIfCancellationRequested();
         return new(body.ToString(), images);

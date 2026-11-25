@@ -113,7 +113,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
             _ready.Enqueue((CharacterKey(c, alt: true), null));
             return;
         }
-        if (c is >= ' ' and <= '?') { if (_vt.Length < 32) _vt.Append(c); return; }
+        if (c is >= ' ' and <= '?') { if (_vt.Length < 128) _vt.Append(c); return; }
         var parameters = _vt.ToString(2, _vt.Length - 2);
         _vt.Clear();
         if (terminalReply?.Invoke(c, parameters) == true) return;

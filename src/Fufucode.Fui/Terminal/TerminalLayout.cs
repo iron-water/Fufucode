@@ -17,6 +17,7 @@ internal sealed class TerminalLayout
     private int _columns;
     private ImageCells? _cell;
     private bool _cards;
+    private string? _project;
     private int _total, _bodyRows;
 
     internal int ScrollToLine(int transcriptIndex)
@@ -70,7 +71,8 @@ internal sealed class TerminalLayout
         // Cards need enough room for a header, content, and a closing rail. Narrow or tiny terminals
         // keep the same wrapped text with a compact role rail so a resize never makes rows disappear.
         var cardLayout = columns >= 24 && bodyRows >= 4;
-        var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking, cell, cardLayout);
+        var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking, cell, cardLayout,
+            view.Project, view.ResolveImage);
         (_total, _bodyRows) = (total, bodyRows);
         var maxScroll = Math.Max(0, total - bodyRows);
         var scroll = Math.Clamp(view.Scroll, 0, maxScroll);
@@ -186,14 +188,15 @@ internal sealed class TerminalLayout
     }
 
     private int UpdateTranscript(IReadOnlyList<TuiLine> lines, int columns, bool expandTools, bool showThinking,
-        ImageCells? cell, bool cards)
+        ImageCells? cell, bool cards, string project, Func<string, ResolvedImage?>? resolveImage)
     {
-        if (columns != _columns || cell != _cell || cards != _cards)
+        if (columns != _columns || cell != _cell || cards != _cards || !string.Equals(project, _project, StringComparison.Ordinal))
         {
             _blocks.Clear();
             _columns = columns;
             _cell = cell;
             _cards = cards;
+            _project = project;
         }
         if (_blocks.Count > lines.Count) _blocks.RemoveRange(lines.Count, _blocks.Count - lines.Count);
         var row = 0;
@@ -201,7 +204,7 @@ internal sealed class TerminalLayout
         {
             if (_blocks.Count == i) _blocks.Add(new());
             var block = _blocks[i];
-            block.Update(lines[i], columns, expandTools, showThinking, cards, cell);
+            block.Update(lines[i], columns, expandTools, showThinking, cards, cell, resolveImage);
             block.First = row;
             row += block.RowCount;
         }
@@ -235,7 +238,7 @@ internal sealed class TerminalLayout
     {
         private readonly List<TerminalText.Slice> Pieces = [];
         private readonly List<ScreenRow> _rows = [];
-        private FormulaRows? _formulas;
+        private RichRows? _rich;
         private MarkdownLines? _markdown;
         private TuiLine? _line;
         private bool _plain, _hidden, _collapsed, _cards;
@@ -248,12 +251,14 @@ internal sealed class TerminalLayout
 
         internal ScreenRow Visible(int index, int columns) => columns == 0 ? new("") : _rows[index];
 
-        internal void Update(TuiLine line, int columns, bool expandTools, bool showThinking, bool cards, ImageCells? cell)
+        internal void Update(TuiLine line, int columns, bool expandTools, bool showThinking, bool cards, ImageCells? cell,
+            Func<string, ResolvedImage?>? resolveImage)
         {
             var hidden = line.Kind == "thinking" && !showThinking;
             var collapsed = line.Kind == "tool" && !expandTools;
             if (_line is not null && _cards == cards && _hidden == hidden && _collapsed == collapsed &&
-                (ReferenceEquals(line, _line) || (_line.Kind == line.Kind && ReferenceEquals(_line.Text, line.Text))))
+                (ReferenceEquals(line, _line) || (_line.Kind == line.Kind && ReferenceEquals(_line.Text, line.Text) &&
+                    ReferenceEquals(_line.Images, line.Images))))
                 return;
 
             var old = _line;
@@ -269,14 +274,14 @@ internal sealed class TerminalLayout
             {
                 Pieces.Clear();
                 _markdown = null;
-                _formulas = null;
+                _rich = null;
                 _plain = false;
                 return;
             }
             if (_kind == "tool")
             {
                 Pieces.Clear();
-                BuildTool(line.Text, columns, collapsed);
+                BuildTool(line.Text, line.Images, columns, collapsed, cell, resolveImage);
                 return;
             }
 
@@ -287,20 +292,23 @@ internal sealed class TerminalLayout
             var contentWidth = card ? Math.Max(1, columns - 4) :
                 rail ? Math.Max(1, columns - 2) : Math.Max(1, columns - (showCompactLabel ? TerminalText.Width(compactLabel) : 0));
 
-            if (_kind == "assistant" && cell is { } pixels && FormulaRows.MayContainMath(line.Text))
+            if (_kind == "assistant" &&
+                ((cell is not null && (RichRows.MayContainMath(line.Text) || MarkdownImages.MayContainImage(line.Text) || line.Images is { Count: > 0 })) ||
+                 MarkdownImages.MayContainDataUri(line.Text)))
             {
                 Pieces.Clear();
-                _formulas ??= new();
-                _formulas.Project(TerminalText.Clean(line.Text), contentWidth, pixels);
+                _markdown = null;
+                _rich ??= new();
+                _rich.Project(line.Text, contentWidth, cell, allowMarkdown: true, allowMath: true, resolveImage, line.Images, Ink.Assistant);
                 _plain = false;
-                AddRows(_formulas.Rows, card, rail, showCompactLabel, compactLabel);
+                AddRows(_rich.Rows, card, rail, showCompactLabel, compactLabel);
                 return;
             }
 
             if (_kind == "assistant")
             {
                 Pieces.Clear();
-                _formulas = null;
+                _rich = null;
                 _markdown ??= new();
                 _markdown.Project(line.Text, contentWidth);
                 _plain = false;
@@ -314,7 +322,19 @@ internal sealed class TerminalLayout
                 return;
             }
 
-            _formulas = null;
+            if ((cell is not null && (MarkdownImages.MayContainImage(line.Text) || line.Images is { Count: > 0 })) ||
+                MarkdownImages.MayContainDataUri(line.Text))
+            {
+                Pieces.Clear();
+                _markdown = null;
+                _rich ??= new();
+                _rich.Project(line.Text, contentWidth, cell, allowMarkdown: false, allowMath: false, resolveImage, line.Images, _roleInk);
+                _plain = false;
+                AddRows(_rich.Rows, card, rail, showCompactLabel, compactLabel);
+                return;
+            }
+
+            _rich = null;
             _markdown = null;
             // A token may complete the previous grapheme. Reflow the final two rows, not the whole answer.
             // A control sequence split across chunks instead needs the full sanitizer state; never emit its suffix raw.
@@ -384,18 +404,31 @@ internal sealed class TerminalLayout
             }
         }
 
-        private void BuildTool(string text, int columns, bool collapsed)
+        private void BuildTool(string text, IReadOnlyList<TuiImage>? images, int columns, bool collapsed,
+            ImageCells? cell, Func<string, ResolvedImage?>? resolveImage)
         {
             var tool = ToolPresentation.Parse(text);
             var title = tool.Title(collapsed);
             if (!_cards)
             {
                 _rows.Add(new(TerminalText.Clip(title, columns), Ink.Tool));
-                if (!collapsed && tool.Body.Length > 0)
+                if (!collapsed && (tool.Body.Length > 0 || images is { Count: > 0 }))
                 {
-                    var body = new List<TerminalText.Slice>();
-                    TerminalText.Wrap(tool.Body, Math.Max(1, columns - 2), 0, body);
-                    foreach (var piece in body) _rows.Add(new("  " + piece.Text, Ink.Tool));
+                    var inner = Math.Max(1, columns - 2);
+                    if ((cell is not null && (MarkdownImages.MayContainImage(tool.Body) || images is { Count: > 0 })) ||
+                        MarkdownImages.MayContainDataUri(tool.Body))
+                    {
+                        _rich ??= new();
+                        _rich.Project(tool.Body, inner, cell, allowMarkdown: false, allowMath: false, resolveImage, images, Ink.Tool);
+                        foreach (var row in _rich.Rows)
+                            _rows.Add(row with { Text = "  " + row.Text, Ink = row.Ink == Ink.Plain ? Ink.Tool : row.Ink, ImageIndent = row.ImageIndent + 2 });
+                    }
+                    else
+                    {
+                        var body = new List<TerminalText.Slice>();
+                        TerminalText.Wrap(tool.Body, inner, 0, body);
+                        foreach (var piece in body) _rows.Add(new("  " + piece.Text, Ink.Tool));
+                    }
                 }
                 return;
             }
@@ -407,11 +440,28 @@ internal sealed class TerminalLayout
             }
 
             _rows.Add(new(CardTop(title, columns), Ink.Tool));
-            if (tool.Body.Length > 0)
+            if (tool.Body.Length > 0 || images is { Count: > 0 })
             {
-                var body = new List<TerminalText.Slice>();
-                TerminalText.Wrap(tool.Body, Math.Max(1, columns - 4), 0, body);
-                foreach (var piece in body) _rows.Add(new("│ " + Pad(piece.Text, Math.Max(1, columns - 4)) + " │", Ink.Tool));
+                var inner = Math.Max(1, columns - 4);
+                if ((cell is not null && (MarkdownImages.MayContainImage(tool.Body) || images is { Count: > 0 })) ||
+                    MarkdownImages.MayContainDataUri(tool.Body))
+                {
+                    _rich ??= new();
+                    _rich.Project(tool.Body, inner, cell, allowMarkdown: false, allowMath: false, resolveImage, images, Ink.Tool);
+                    foreach (var row in _rich.Rows)
+                        _rows.Add(row with
+                        {
+                            Text = "│ " + Pad(row.Text, inner) + " │",
+                            Ink = row.Ink == Ink.Plain ? Ink.Tool : row.Ink,
+                            ImageIndent = row.ImageIndent + 2
+                        });
+                }
+                else
+                {
+                    var body = new List<TerminalText.Slice>();
+                    TerminalText.Wrap(tool.Body, inner, 0, body);
+                    foreach (var piece in body) _rows.Add(new("│ " + Pad(piece.Text, inner) + " │", Ink.Tool));
+                }
             }
             _rows.Add(new(CardBottom(columns), Ink.Tool));
         }

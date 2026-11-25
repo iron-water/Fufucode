@@ -8,7 +8,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
-        "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
+        "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Alt+V 粘贴图片 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
         "Ctrl+Z 撤销 · Ctrl+Shift+Z / Alt+Z 重做 · Ctrl+Y / Alt+Y 粘贴 / 轮换删除\n" +
         "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
@@ -32,7 +32,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 
     public TuiView View() => new(_active.Project, _active.Id, _active.Model ?? "未配置模型", StatusText, _lines,
         _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault()?.Text,
-        _busy, Overlay(), _expandTools, _showThinking);
+        _busy, Overlay(), _expandTools, _showThinking, ResolveProjectImage);
 
     public void Painted(int maxScroll, bool canApprove)
     {
@@ -90,7 +90,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (!_indices.TryGetValue(m.Id, out var i))
         {
             _indices.Add(m.Id, _lines.Count);
-            _lines.Add(new(m.Kind, m.Text));
+            _lines.Add(new(m.Kind, m.Text, m.Images));
         }
         else if (m.Append)
         {
@@ -100,7 +100,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         else
         {
             _deltas.Remove(i);
-            _lines[i] = new(m.Kind, m.Text); // A final snapshot supersedes all preceding deltas.
+            _lines[i] = new(m.Kind, m.Text, m.Images ?? _lines[i].Images); // A final snapshot supersedes all preceding deltas.
         }
     }
 
@@ -198,7 +198,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         _stop = Invoke(() => _active.StopAsync(token));
     }
 
-    private void Info(string text) { _lines.Add(new("info", text)); _scroll = 0; }
+    private void Info(string text, IReadOnlyList<TuiImage>? images = null) { _lines.Add(new("info", text, images)); _scroll = 0; }
 
     private static Task Invoke(Func<Task> command)
     {

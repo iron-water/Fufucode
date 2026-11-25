@@ -41,7 +41,7 @@ internal sealed class MarkdownLines
         }
     }
 
-    private static List<SourceLine> SplitLines(string source)
+    internal static List<SourceLine> SplitLines(string source)
     {
         var lines = new List<SourceLine>();
         for (var start = 0;;)
@@ -86,7 +86,7 @@ internal sealed class MarkdownLines
         foreach (var piece in wrapped) _rows.Add(new(piece.Text, ink));
     }
 
-    private static bool TryQuote(string line, out string quote)
+    internal static bool TryQuote(string line, out string quote)
     {
         quote = "";
         var indent = 0;
@@ -112,7 +112,7 @@ internal sealed class MarkdownLines
         return true;
     }
 
-    private static bool TryList(string line, out string list)
+    internal static bool TryList(string line, out string list)
     {
         list = "";
         var indent = 0;
@@ -133,7 +133,7 @@ internal sealed class MarkdownLines
         return true;
     }
 
-    private static bool IsRule(string line)
+    internal static bool IsRule(string line)
     {
         var value = line.Trim();
         if (value.Length < 3 || value[0] is not ('-' or '_' or '*')) return false;

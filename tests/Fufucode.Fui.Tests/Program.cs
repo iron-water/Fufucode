@@ -12,6 +12,8 @@ try
     Console.WriteLine("PASS fuzzy picker: stable word-aware ranking, Unicode and cached large-list search");
     WorkbenchWidgetTests.Run();
     Console.WriteLine("PASS workbench widgets: selection, markdown, folding, navigation and editing");
+    await ImageRenderTests.RunAsync();
+    Console.WriteLine("PASS image render: multi-format decoders, SVG audit, SIXEL color, streaming data-URI, clipboard paste and legacy paste");
     await WorkbenchFlowTests.RunAsync();
     Console.WriteLine("PASS workbench flows: command dispatch, drafts, project context and file protections");
     await RuntimeTests.RunAsync();

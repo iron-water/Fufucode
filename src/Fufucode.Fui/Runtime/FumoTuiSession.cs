@@ -166,13 +166,13 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
             throw new InvalidOperationException("会话仍在运行；请使用 /queue 排队或 /steer 插话。");
     }
 
-    private Task SubmitPrompt(Func<Task> submit, int imageCount = 0)
+    private Task SubmitPrompt(Func<Task> submit, IReadOnlyList<TuiImage>? images = null)
     {
         _workerPending = true;
         _turnRevision++;
-        _projection.ExpectUserImages(imageCount);
+        _projection.ExpectUserImages(images);
         try { return submit(); }
-        catch { _workerPending = false; _projection.ExpectUserImages(0); throw; }
+        catch { _workerPending = false; _projection.ExpectUserImages(null); throw; }
     }
 
     public Task StopAsync(CancellationToken ct)

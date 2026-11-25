@@ -8,7 +8,7 @@ fui --continue            # 当前项目，最近一次 FUMO 会话
 fui --project C:\work\demo --session <ID>
 ```
 
-`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令。长审批参数可在对话区翻阅。
+`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Alt+V` 粘贴剪贴板图片。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令。长审批参数可在对话区翻阅。
 
 ## 在工作台里操作
 
@@ -20,12 +20,23 @@ fui --project C:\work\demo --session <ID>
 | 切模型、查看用量 | `/model` 从实际端点目录选择；`/thinking` 选当前模型可请求的等级；`/usage` 显示历史中报告的数量，未知不按字数估算。`/skills` 填入技能调用；`/capabilities` 浏览已注册能力，不执行工具。 |
 | 在运行中补充输入 | `/steer 文本` 插话，`/queue 文本` 追加下一轮，`/queue` 查看队列。若正在写草稿，可从命令面板选插话或跟进，再按 Enter 提交。 |
 | 查看子代理活动 | 状态栏显示运行中的子代理数量；`/agents` 列出 FUMO 实际上报的作业、状态和工具计数，选择后查看只读事件记录。插件未启用或没有事件时显示空态，不伪造实时转录。 |
-| 浏览项目和带入上下文 | `/preview` 选择 UTF-8 文件，只在本机显示；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择 UTF-8 文本或 PNG/JPEG 图片附到下一条消息（允许纯图发送）；`/context` 查看，`/detach` 移除。每回合最多 4 个附件、合计 10 MiB，单个文本文件最多 64 KiB；发送前复核内容、安全规则和当前模型的图片输入能力，文件已改或模型不支持图片时会拒绝发送并保留草稿。 |
+| 浏览项目和带入上下文 | `/preview` 在本机直接预览 UTF-8 文本或图片（支持 SIXEL 直接渲染）；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择 UTF-8 文本或项目图片附到下一条消息（允许纯图发送）；`/paste` 或 `Alt+V` 直接粘贴 Windows 剪贴板图片；`/context` 查看并预览待发图片缩略图，`/detach` 移除。每回合最多 4 个附件、合计 10 MiB，单个文本文件最多 64 KiB；发送前复核内容、安全规则和当前模型的图片输入能力，文件已改或模型不支持图片时会拒绝发送并保留草稿。 |
 | 阅读和找回输入 | `Ctrl+F` 或 `/find` 搜索并跳到对话里的消息；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`/tools` 展开/折叠工具，`/thoughts` 显示/隐藏思考。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
 
 ### Markdown 呈现
 
 FUI 把终端 Markdown 作为只读呈现层：GFM 风格表格按显示宽度对齐，支持左/中/右列，中文与 emoji 不按字符数计算；`[文字](URL)` 显示为 `文字 (URL)`，引用和列表有可读前缀。未闭合代码围栏内的管道和链接保持原文，表格在流式行未完成时使用已锁定列宽，避免已画内容抖动。不执行链接、不发射 OSC 8；嵌套表格、链接标题和其他完整 GFM 能力尚未实现。原始消息和历史文件不被改写。
+
+### 图片直接渲染（输入与 AI 回复）
+
+在支持 SIXEL 的终端（含 Windows Terminal 1.22+、xterm.js SIXEL 等）中，FUI 直接以透明背景、240 色中位切分 + Floyd-Steinberg 抖动的方式渲染位图与矢量图，无需离开终端：
+
+- **输入与历史**：`/attach`、`@`、`/paste`（`Alt+V`）、`/preview` 与 `/context` 会立即显示缩略图或大图；已发送的用户消息及 `--continue` / `/resume` 恢复的会话历史（含原生 `.assets`）都会直接渲染对应图片。模型原生支持 `PNG` / `JPEG` / `WebP` / `GIF` 时按原样发送，其余已解码格式会在发送前自动无损转码为 `PNG`。
+- **AI 回复与工具输出**：自动识别并渲染 Markdown `![alt](路径)`、HTML `<img src="...">` 以及内联 `data:image/...`（Base64 与 URL 编码 SVG）；流式输出未闭合的 `data:image/...` 会折叠为 `[图片加载中：…]`，不刷屏泄露原始 Base64。仅读取项目内且安全中心放行的路径；绝不发起远程 HTTP 拉取（`http://`/`https://` 显示 `[外链图片：…]`），越界路径、`.git`、符号链接和代码块内的图片语法保持原文。
+- **支持格式**：
+  - **内置光栅 / 矢量**：`PNG` / `APNG`、`JPEG`（含 EXIF 方向校正）、`WebP`、`GIF`、`BMP` / 无头 `DIB`、`ICO`、`CUR`、`WBMP`、`SVG` / `SVGZ`（加载前做 XML 安全审计：拒绝 `<!ENTITY`、`<script>`、`<foreignObject>`、`on*` 及外部 `href`/`src`/`url(...)`）。
+  - **内置纯 C# 解码**：`QOI`、`TGA`（未压缩 / RLE、8/15/16/24/32 位）、`Netpbm`（`PBM`/`PGM`/`PPM`/`PNM`/`PAM`，P1–P7，8/16 位）、`Farbfeld`（`.ff`）、`Radiance HDR`（`.hdr`，未压缩 / RLE，Reinhard 色调映射）。
+  - **Windows WIC 自动扩展**：内置 `TIFF`、`JPEG XR`（`.jxr/.wdp/.hdp`）、`DDS`，并自动接入系统已安装的 `HEIC`/`HEIF`、`AVIF`、`JPEG XL`（`.jxl`）、`DNG` 与相机 `RAW` 解码器。终端层固定走 SIXEL 静态帧输出（动画格式渲染首帧；高色深/HDR 自动色调映射为 8-bit sRGB 后量化）。
 
 ### LaTeX 公式
 
