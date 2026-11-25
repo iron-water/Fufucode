@@ -20,9 +20,9 @@ internal static partial class WorkbenchFlowTests
             Check(files.List(".", default).Items.Single().Value == "src/", "root browser is scoped to this project");
             Check(files.List("src/", default).Items.Any(c => c.Value == "src/hello world.cs"), "paths with spaces selectable");
             var first = await files.ReadAsync("src/hello world.cs", default);
-            Check((await files.ComposeAsync("review", [first], default)).Contains("[项目文件：src/hello world.cs]\nfirst fixture"), "actual selected content submitted");
+            Check((await files.PrepareAsync("review", [first], default)).Text.Contains("[项目文件：src/hello world.cs]\nfirst fixture"), "actual selected content submitted");
             await File.WriteAllTextAsync(path, "other fixture");
-            await Reject<IOException>(() => files.ComposeAsync("review", [first], default));
+            await Reject<IOException>(() => files.PrepareAsync("review", [first], default));
             await Reject<UnauthorizedAccessException>(() => files.ReadAsync("../outside", default));
             await Reject<ArgumentException>(() => files.ReadAsync(path, default));
             await File.WriteAllTextAsync(Path.Combine(project, ".env"), "fixture=1");
@@ -36,7 +36,7 @@ internal static partial class WorkbenchFlowTests
             var snapshot = await files.ReadAsync("src/hello world.cs", default);
             permissions.Update(s => s with { FileRules = [new("**/*.cs", SecurityAction.Deny), .. s.FileRules] });
             Check(files.List("src/", default).Items.All(c => !c.Value.EndsWith(".cs")), "denied entry not offered");
-            await Reject<UnauthorizedAccessException>(() => files.ComposeAsync("review", [snapshot], default));
+            await Reject<UnauthorizedAccessException>(() => files.PrepareAsync("review", [snapshot], default));
             permissions.Update(_ => original);
             await CheckGitPreviewAsync(project, files);
 

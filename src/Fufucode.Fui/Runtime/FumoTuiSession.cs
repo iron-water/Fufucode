@@ -8,7 +8,7 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
-internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
+internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments
 {
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
@@ -24,6 +24,7 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     private Task? _shutdown;
     private Task _settling = Task.CompletedTask;
     private bool _closing;
+    private long _turnRevision;
     // Reserves an accepted prompt before the native worker announces ActivityChanged.
     private volatile bool _workerPending;
 
@@ -31,10 +32,13 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     {
         _session = session;
         _project = project;
+        var settings = project.Manager.Settings.Current;
+        _imageEndpoint = settings.Endpoint;
+        _nativeProbeModel = string.IsNullOrWhiteSpace(_imageEndpoint?.ModelId) ? settings.SelectedModel : _imageEndpoint.ModelId;
         _ui = session.Chat as IExtensionUiSession
             ?? throw new InvalidOperationException("FUMO 会话没有原生审批入口。");
         _projection = new(_events.Writer);
-        History = FumoEventProjection.ReadHistory(session.History);
+        History = FumoEventProjection.ReadHistory(session);
         _approvals = SharedApprovalRegistry.For(_ui);
         _approvals.Requested += OnApproval;
         _approvals.Decided += OnDecision;
@@ -147,15 +151,28 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         ArgumentException.ThrowIfNullOrWhiteSpace(text);
         lock (_lifecycle)
         {
-            ObjectDisposedException.ThrowIf(_closing, this);
-            if (_session.Coordinator.IsInIdleMaintenance) throw new InvalidOperationException("会话正在进行工作台操作。");
-            ct.ThrowIfCancellationRequested();
-            if (_workerPending || _session.Chat.Activity != SessionActivity.Idle || _session.Chat.QueuedCount != 0)
-                throw new InvalidOperationException("会话仍在运行；请使用 /queue 排队或 /steer 插话。");
-            _workerPending = true;
-            try { return _session.Chat.SendAsync(text, ct); }
-            catch { _workerPending = false; throw; }
+            EnsureIdleForPrompt(ct);
+            return SubmitPrompt(() => _session.Chat.SendAsync(text, ct));
         }
+    }
+
+    // Both checks and native submission run under _lifecycle; the worker otherwise treats a late prompt as a follow-up.
+    private void EnsureIdleForPrompt(CancellationToken ct)
+    {
+        ObjectDisposedException.ThrowIf(_closing, this);
+        if (_session.Coordinator.IsInIdleMaintenance) throw new InvalidOperationException("会话正在进行工作台操作。");
+        ct.ThrowIfCancellationRequested();
+        if (_workerPending || _session.Chat.Activity != SessionActivity.Idle || _session.Chat.QueuedCount != 0)
+            throw new InvalidOperationException("会话仍在运行；请使用 /queue 排队或 /steer 插话。");
+    }
+
+    private Task SubmitPrompt(Func<Task> submit, int imageCount = 0)
+    {
+        _workerPending = true;
+        _turnRevision++;
+        _projection.ExpectUserImages(imageCount);
+        try { return submit(); }
+        catch { _workerPending = false; _projection.ExpectUserImages(0); throw; }
     }
 
     public Task StopAsync(CancellationToken ct)
@@ -163,6 +180,7 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         lock (_lifecycle)
         {
             ObjectDisposedException.ThrowIf(_closing, this);
+            _turnRevision++;
             return (_settling.IsCompleted ? StopTurnAsync() : _settling).WaitAsync(ct);
         }
     }

@@ -17,7 +17,7 @@ internal sealed partial class TuiController
     private int? _scrollTarget;
     private Task? _release;
     private sealed record Result(FuiActionResult? Action = null, IReadOnlyList<FuiChoice>? Choices = null,
-        string? Title = null, FileAttachment? File = null, string? Prompt = null);
+        string? Title = null, FileAttachment? File = null, FuiPrompt? Prompt = null);
     private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable)
     {
         public bool PreemptedByApproval { get; set; }
@@ -122,7 +122,7 @@ internal sealed partial class TuiController
     private void SendWithContext(string prompt)
     {
         var attached = _attachments.ToArray();
-        Begin("send-files", async ct => new(Prompt: await Files().ComposeAsync(prompt, attached, ct)), cancellable: true);
+        Begin("send-files", async ct => new(Prompt: await Files().PrepareAsync(prompt, attached, ct)), cancellable: true);
     }
 
     private void SubmitCommand(string text)
@@ -147,7 +147,7 @@ internal sealed partial class TuiController
         if (c.Kind == CommandKind.Session && _active is not IFuiWorkbenchSession) { Error("当前会话未提供此操作。"); return false; }
         if (c.Id == "steer" && !_busy) { Error("仅能向运行中的回合插话。"); return false; }
         var browsing = c.Picker && argument.Length == 0 && c.Id != "fork";
-        if (!browsing && c.Id is ("new" or "resume" or "fork" or "rename" or "export" or "model" or "thinking"))
+        if (!browsing && c.Id is ("new" or "resume" or "tree" or "fork" or "rename" or "export" or "model" or "thinking"))
         {
             Observe(ref _release, () => { });
             if (_busy || _send is not null || _stop is not null || _reply is not null || _release is not null)
@@ -182,7 +182,7 @@ internal sealed partial class TuiController
             {
                 if (_attachments.Count >= ProjectFiles.MaxAttachments && !_attachments.Any(a => SamePath(a.Path, path)))
                 { Error($"每条消息最多附加 {ProjectFiles.MaxAttachments} 个文件。"); return; }
-                Begin(c.Id, async ct => new(File: await Files().ReadAsync(path, ct)), cancellable: true);
+                Begin(c.Id, async ct => new(File: await Files().ReadAttachmentAsync(path, ct)), cancellable: true);
             }
             else if (c.Id == "diff") Begin(c.Id, async ct => new(Action: new(await Files().DiffAsync(path, ct))), cancellable: true);
             else Begin(c.Id, async ct => { var file = await Files().ReadAsync(path, ct); return new(Action: new($"{file.Path}\n{file.Text}")); }, cancellable: true);

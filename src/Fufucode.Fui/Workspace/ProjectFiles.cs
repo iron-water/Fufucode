@@ -1,11 +1,13 @@
 using System.Security.Cryptography;
 using System.Text;
+using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Security;
 
 namespace Fufucode.Fui;
 
-internal sealed record FileAttachment(string Path, string Text, byte[] Digest);
+internal sealed record FileAttachment(string Path, string Text, byte[] Digest, string? MimeType = null);
+internal sealed record FuiPrompt(string Text, IReadOnlyList<ChatImage> Images);
 internal sealed record FilePage(string Folder, IReadOnlyList<FuiChoice> Items);
 
 // Browse one directory on demand, not the whole project on each keystroke. File contents are not
@@ -13,6 +15,7 @@ internal sealed record FilePage(string Folder, IReadOnlyList<FuiChoice> Items);
 internal sealed class ProjectFiles
 {
     internal const int MaxFileBytes = 65536, MaxAttachments = 4;
+    internal const int MaxAttachmentBytes = 10 * 1024 * 1024;
     private const int MaxEntries = 1000;
     private static readonly HashSet<string> HiddenDirectories = new(StringComparer.OrdinalIgnoreCase)
         { ".git", ".svn", ".hg", "bin", "obj", "node_modules", ".venv", "__pycache__" };
@@ -49,36 +52,60 @@ internal sealed class ProjectFiles
         return new(here, choices);
     }
 
-    public async Task<FileAttachment> ReadAsync(string path, CancellationToken ct)
+    public async Task<FileAttachment> ReadAsync(string path, CancellationToken ct) =>
+        (await ReadFileAsync(path, allowImages: false, MaxAttachmentBytes, ct)).File;
+
+    public async Task<FileAttachment> ReadAttachmentAsync(string path, CancellationToken ct) =>
+        (await ReadFileAsync(path, allowImages: true, MaxAttachmentBytes, ct)).File;
+
+    private async Task<(FileAttachment File, byte[] Bytes)> ReadFileAsync(string path, bool allowImages, int remaining, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         var full = Resolve(path);
+        var mime = allowImages ? ProjectImage.MimeType(full) : null;
         using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.Asynchronous);
-        if (stream.Length > MaxFileBytes) throw new IOException($"文件超过 {MaxFileBytes / 1024} KiB；未读取或发送。");
-        var bytes = new byte[(int)stream.Length];
+        var length = stream.Length;
+        if (mime is null && length > MaxFileBytes) throw new IOException($"文本文件超过 {MaxFileBytes / 1024} KiB。");
+        if (length > remaining) throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
+        var bytes = new byte[(int)length];
         await stream.ReadExactlyAsync(bytes, ct);
         if (stream.ReadByte() != -1) throw new IOException("文件在读取时增长；请重新选择。");
+        Resolve(path); // Recheck links and the current read policy after I/O, while this handle is still open.
+        ct.ThrowIfCancellationRequested();
+        if (mime is not null)
+        {
+            if (!ProjectImage.Matches(bytes, mime)) throw new InvalidDataException($"{path} 不是与扩展名相符的 PNG 或 JPEG 图片。");
+            return (new(Relative(full), "", SHA256.HashData(bytes), mime), bytes);
+        }
         string text;
         try { text = Utf8.GetString(bytes).TrimStart('\uFEFF'); }
-        catch (DecoderFallbackException) { throw new InvalidDataException("只能附加或预览 UTF-8 文本文件。"); }
+        catch (DecoderFallbackException) { throw new InvalidDataException(allowImages ? "可附加 UTF-8 文本、PNG 或 JPEG 图片。" : "只能预览 UTF-8 文本文件。"); }
         if (text.Any(c => char.IsControl(c) && c is not ('\t' or '\r' or '\n')))
             throw new InvalidDataException("含二进制或控制数据；只能读取文本文件。");
         var settings = _policy.Store.Current;
         if (settings.SensitiveDataProtectionEnabled && SecurityContentScanner.ContainsSecret(text, settings))
             throw new UnauthorizedAccessException("安全中心检测到敏感内容；文件未加入上下文。");
-        return new(Relative(full), text, SHA256.HashData(bytes));
+        return (new(Relative(full), text, SHA256.HashData(bytes)), bytes);
     }
 
-    public async Task<string> ComposeAsync(string prompt, IReadOnlyList<FileAttachment> attached, CancellationToken ct)
+    public async Task<FuiPrompt> PrepareAsync(string prompt, IReadOnlyList<FileAttachment> attached, CancellationToken ct)
     {
+        ct.ThrowIfCancellationRequested();
         if (attached.Count > MaxAttachments) throw new InvalidOperationException("上下文中的文件过多。");
         var body = new StringBuilder(prompt);
+        var images = new List<ChatImage>();
+        var remaining = MaxAttachmentBytes;
         foreach (var file in attached)
         {
-            var current = await ReadAsync(file.Path, ct);
-            if (!current.Digest.AsSpan().SequenceEqual(file.Digest)) throw new IOException($"{file.Path} 已更改；请先移除，再重新附加。");
-            body.Append("\n\n[项目文件：").Append(current.Path).Append("]\n").Append(current.Text).Append("\n[文件结束]");
+            var (current, bytes) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
+            if (!current.Digest.AsSpan().SequenceEqual(file.Digest) || current.MimeType != file.MimeType)
+                throw new IOException($"{file.Path} 已更改；请先移除，再重新附加。");
+            if (current.MimeType is { } mime) images.Add(new(Convert.ToBase64String(bytes), mime));
+            else body.Append("\n\n[项目文件：").Append(current.Path).Append("]\n").Append(current.Text).Append("\n[文件结束]");
+            remaining -= bytes.Length;
         }
-        return body.ToString();
+        ct.ThrowIfCancellationRequested();
+        return new(body.ToString(), images);
     }
 
     public async Task<string> DiffAsync(string path, CancellationToken ct)

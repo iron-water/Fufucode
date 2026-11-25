@@ -1,4 +1,5 @@
 using System.Text;
+using Fufucode.App.Abstractions;
 
 namespace Fufucode.Fui;
 
@@ -142,7 +143,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
     private void Submit()
     {
         var text = _composer.Text;
-        if (string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text) && !_attachments.Any(file => file.MimeType is not null)) return;
         if (text.StartsWith('/'))
         {
             if (text.StartsWith("//", StringComparison.Ordinal)) text = text[1..];
@@ -150,15 +151,19 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         }
         if (_busy || _send is not null || _stop is not null || _job is not null) return; // Keep the next draft editable.
         if (_attachments.Count != 0) { SendWithContext(text); return; }
-        Send(text);
+        Send(new FuiPrompt(text, []));
     }
 
-    private void Send(string text)
+    private void Send(FuiPrompt prompt)
     {
         _scroll = 0;
         _busy = true;
         _status = "发送中";
-        _send = new(Invoke(() => _active.SendAsync(text, token)), _composer.Revision, [.. _attachments]);
+        var acknowledged = Invoke(() => prompt.Images.Count == 0
+            ? _active.SendAsync(prompt.Text, token)
+            : _active is IChatAttachments images ? images.SendWithImagesAsync(prompt.Text, prompt.Images, token)
+            : throw new InvalidOperationException("当前会话没有图片发送入口。"));
+        _send = new(acknowledged, _composer.Revision, [.. _attachments]);
         ObserveSend();
     }
 

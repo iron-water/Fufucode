@@ -165,6 +165,7 @@ internal static class RuntimeTests
                 {
                     catalogStarted.TrySetResult();
                     await releaseCatalog.Task.WaitAsync(token);
+                    return false;
                 };
                 var choices = resumed.ChoicesAsync("model", ct);
                 try
@@ -183,6 +184,8 @@ internal static class RuntimeTests
             }
             Check(!File.Exists(Path.Combine(project, "closed.txt")), "exit approved a pending write");
             await using (var released = await Open(streamedId)) Check(released.Id == streamedId, "exit didn't release lease");
+
+            await ImageAttachmentTests.RunAsync(project, layout, credential, ct);
 
             var damaged = metadata.CreateSession(owner);
             var file = NativeSessionFactory.SessionFilePath(layout, owner.Id, damaged.Id);
@@ -231,6 +234,7 @@ internal static class RuntimeTests
                 while (session.Events.TryRead(out var e))
                     Check(e is not TuiEvent.Status { Busy: false }, "FUI announced idle while an ordinary submission would still be queued");
                 await Reject<InvalidOperationException>(() => session.SendAsync("must not queue", ct));
+                await Reject<InvalidOperationException>(() => session.SendWithImagesAsync("", [ImageAttachmentTests.Png], ct));
                 await Reject<InvalidOperationException>(() => session.ExecuteAsync("queue", "missed turn", ct));
                 await Reject<InvalidOperationException>(() => session.ExecuteAsync("steer", "missed turn", ct));
                 Check((await session.ExecuteAsync("queue", "", ct)).Notice == "队列为空", "submission after turn settlement entered the queue");
@@ -320,8 +324,9 @@ internal static class RuntimeTests
         public string Url { get; }
         public ConcurrentQueue<string> Requests { get; } = new();
         public ConcurrentQueue<(string Prompt, string Model, string? Effort)> Choices { get; } = new();
+        public ConcurrentQueue<JsonElement> MessageArrays { get; } = new();
         public string Models { get; init; } = "{\"data\":[{\"id\":\"fixture-model\"}]}";
-        public Func<CancellationToken, Task>? HoldModelList { get; set; }
+        public Func<CancellationToken, Task<bool>>? HoldModelList { get; set; }
 
         public Loopback()
         {
@@ -370,16 +375,21 @@ internal static class RuntimeTests
                 Task Write(string text) => stream.WriteAsync(Encoding.UTF8.GetBytes(text), ct).AsTask();
                 if (request.StartsWith("GET /v1/models ", StringComparison.Ordinal))
                 {
-                    if (HoldModelList is { } hold) { await hold(ct); return; }
+                    if (HoldModelList is { } hold && !await hold(ct)) return;
                     await Write($"HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Type: application/json\r\nContent-Length: {Encoding.UTF8.GetByteCount(Models)}\r\n\r\n" + Models);
                     return;
                 }
                 Check(request.StartsWith("POST /v1/chat/completions ", StringComparison.Ordinal), "unexpected fixture route");
                 Check(authorized, "Core credential resolver was not used");
                 using var packet = JsonDocument.Parse(Encoding.Latin1.GetBytes(body));
-                var messages = packet.RootElement.GetProperty("messages").EnumerateArray().ToArray();
+                var array = packet.RootElement.GetProperty("messages");
+                MessageArrays.Enqueue(array.Clone());
+                var messages = array.EnumerateArray().ToArray();
                 var latest = messages.LastOrDefault(m => m.GetProperty("role").GetString() == "user");
-                var prompt = latest.ValueKind == JsonValueKind.Object ? latest.GetProperty("content").ToString() : "";
+                var content = latest.GetProperty("content");
+                var prompt = content.ValueKind == JsonValueKind.Array
+                    ? string.Concat(content.EnumerateArray().Where(b => b.GetProperty("type").GetString() == "text").Select(b => b.GetProperty("text").GetString()))
+                    : content.GetString()!;
                 var afterTool = messages[^1].GetProperty("role").GetString() == "tool";
                 Choices.Enqueue((prompt, packet.RootElement.GetProperty("model").GetString()!,
                     packet.RootElement.TryGetProperty("reasoning_effort", out var effort) ? effort.GetString() : null));

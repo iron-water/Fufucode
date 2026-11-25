@@ -34,7 +34,7 @@ internal static class FuiTranscript
                 created = true;
                 await using var output = new StreamWriter(file, new UTF8Encoding(false));
                 await output.WriteLineAsync($"# {session.Session.Name ?? "FUMO 会话"}\n\n会话：`{session.Session.Id}`\n");
-                foreach (var line in FumoEventProjection.ReadHistory(history))
+                foreach (var line in FumoEventProjection.ReadHistory(session, history))
                 {
                     ct.ThrowIfCancellationRequested();
                     var role = line.Kind switch { "user" => "用户", "assistant" => "助手", "thinking" => "思考", "tool" => "工具", _ => "消息" };

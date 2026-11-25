@@ -2,15 +2,17 @@ using System.Text;
 using System.Threading.Channels;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
+using Fufucode.Core.Backend;
 
 namespace Fufucode.Fui;
 
 /// <summary>Projects block deltas using stable row ids. History is read once, never on a token callback.</summary>
 internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
 {
-    private sealed class Draft(MessageRole role)
+    private sealed class Draft(MessageRole role, int imageCount)
     {
         public readonly string TextKind = role == MessageRole.User ? "user" : "assistant";
+        public readonly int ImageCount = imageCount;
         public readonly Dictionary<int, ToolDraft> Tools = [];
     }
 
@@ -18,21 +20,34 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
     private readonly Dictionary<string, Draft> _messages = new(StringComparer.Ordinal);
     private readonly object _gate = new();
     private string? _lastError;
+    private int _nextUserImageCount;
 
-    public static IReadOnlyList<TuiLine> ReadHistory(SessionHistory history)
+    public void ExpectUserImages(int count)
+    {
+        lock (_gate) _nextUserImageCount = count;
+    }
+
+    public static IReadOnlyList<TuiLine> ReadHistory(PersistentSession session, SessionHistory? history = null)
     {
         var lines = new List<TuiLine>();
-        foreach (var entry in history.Entries)
+        // The Pi-shaped entries omit native image references. Join by the persisted native entry identity,
+        // without reading the asset, following a path from a transcript, or copying its base64 into display text.
+        var imageCounts = (session.Chat as NativeCSharpChatSession)?.GetHistoryMessages()
+            .Where(m => m.Role == PureAgentRole.User && m.Images is { Count: > 0 })
+            .ToLookup(m => "native_" + m.EntryId, m => m.Images!.Count);
+        foreach (var entry in (history ?? session.History).Entries)
         {
             if (!entry.OnCurrentBranch || entry.Message is not { } message) continue;
             var kind = message.Role switch { "user" => "user", "assistant" => "assistant", "toolResult" => "tool", _ => "info" };
+            var imageCount = imageCounts?[entry.Id].FirstOrDefault() ?? 0;
             foreach (var block in message.Content)
                 switch (block)
                 {
-                    case PiTextBlock text: lines.Add(new(kind, text.Text)); break;
+                    case PiTextBlock text: lines.Add(new(kind, WithImages(text.Text, imageCount))); imageCount = 0; break;
                     case PiThinkingBlock thinking: lines.Add(new("thinking", thinking.Thinking)); break;
                     case PiToolCallBlock tool: lines.Add(new("tool", $"{tool.Name} {tool.Arguments?.GetRawText()}".TrimEnd())); break;
                 }
+            if (imageCount > 0) lines.Add(new(kind, WithImages("", imageCount)));
         }
         return lines;
     }
@@ -44,7 +59,8 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
             switch (e)
             {
                 case SessionEvent.MessageStarted started:
-                    _messages[started.MessageId] = new(started.Role);
+                    _messages[started.MessageId] = new(started.Role, started.Role == MessageRole.User ? _nextUserImageCount : 0);
+                    if (started.Role == MessageRole.User) _nextUserImageCount = 0;
                     break;
                 case SessionEvent.BlockStarted { Kind: MessageBlockKind.ToolCall } start when _messages.TryGetValue(start.MessageId, out var message):
                     var name = string.IsNullOrEmpty(start.ToolName) ? start.ToolCallId ?? "工具" : start.ToolName;
@@ -69,10 +85,11 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
                 case SessionEvent.MessageFinished final:
                     // Native BlockFinished immediately precedes this authoritative snapshot. Replace, don't append.
                     var role = final.FinalMessage.Role == MessageRole.User ? "user" : "assistant";
+                    var count = _messages.GetValueOrDefault(final.MessageId)?.ImageCount ?? 0;
                     for (var i = 0; i < final.FinalMessage.Blocks.Count; i++)
                         switch (final.FinalMessage.Blocks[i])
                         {
-                            case TextBlock t: Row(final.MessageId, i, role, t.Text); break;
+                            case TextBlock t: Row(final.MessageId, i, role, WithImages(t.Text, count)); count = 0; break;
                             case ThinkingBlock t: Row(final.MessageId, i, "thinking", t.Text); break;
                             case ToolCallBlock t:
                                 Row(final.MessageId, i, "tool", ToolText(t.ToolName, t.InputJson, t.Status, t.Output ?? t.StatusText)); break;
@@ -115,6 +132,9 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
         writer.TryWrite(new TuiEvent.Message($"{message}:{index}", kind, text, append));
 
     private void Notice(string kind, string text) => writer.TryWrite(new TuiEvent.Message(Guid.NewGuid().ToString("N"), kind, text));
+
+    private static string WithImages(string text, int count) =>
+        count == 0 ? text : (text.Length == 0 ? "" : text + "\n") + $"[图片 × {count}]";
 
     private static string ToolText(string name, string args, ToolCallStatus state, string? output) =>
         $"{name} [{state switch { ToolCallStatus.Running => "执行中", ToolCallStatus.Completed => "完成", ToolCallStatus.Failed => "失败", ToolCallStatus.Cancelled => "已取消", _ => "待执行" }}] {args}".TrimEnd() +
