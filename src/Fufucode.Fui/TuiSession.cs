@@ -6,7 +6,8 @@ internal sealed record TuiLine(string Kind, string Text);
 
 internal sealed record TuiView(string Project, string Session, string Model, string Status,
     IReadOnlyList<TuiLine> Lines, string Draft, int Cursor, int Scroll, string? Approval, bool Busy = false,
-    FuiOverlay? Overlay = null, bool ExpandTools = false, bool ShowThinking = true);
+    FuiOverlay? Overlay = null, bool ExpandTools = false, bool ShowThinking = true,
+    IReadOnlyList<FileAttachment>? Attachments = null);
 
 internal abstract record TuiEvent
 {

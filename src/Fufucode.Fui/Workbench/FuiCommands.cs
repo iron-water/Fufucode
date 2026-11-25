@@ -25,6 +25,7 @@ internal static class FuiCommands
         new("queue", "查看或追加跟进消息", "回合", CommandKind.Session, "[文本]"), new("stop", "停止回合", "回合"),
         new("agents", "子代理活动", "回合", Picker: true),
         new("attach", "附加项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),
+        new("paste-image", "粘贴剪贴板图片", "项目", CommandKind.Files),
         new("detach", "移除草稿附件", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("context", "查看待发送文件", "项目"),
         new("preview", "预览项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),

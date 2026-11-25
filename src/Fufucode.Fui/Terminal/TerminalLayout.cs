@@ -1,3 +1,6 @@
+using System.Text;
+using SkiaSharp;
+
 namespace Fufucode.Fui;
 
 internal enum Ink
@@ -18,6 +21,9 @@ internal sealed class TerminalLayout
     private ImageCells? _cell;
     private bool _cards;
     private int _total, _bodyRows;
+    private AttachmentPreviewCache? _attachmentPreview;
+    private readonly record struct AttachmentPreviewPlan(ProjectImagePreview Preview, int Column);
+    private sealed record AttachmentPreviewCache(string Key, ScreenRow[] Rows);
 
     internal int ScrollToLine(int transcriptIndex)
     {
@@ -61,7 +67,36 @@ internal sealed class TerminalLayout
         var canApprove = approvalRows >= 2 && columns >= TerminalText.Width(allowKeys) && approval.Take(approvalRows - 1)
             .Any(line => line.Start >= detailsStart && !string.IsNullOrWhiteSpace(line.Text));
 
-        var remaining = height - headerRows - statusRows - approvalRows;
+        var attachments = view.Attachments ?? [];
+        var attachmentHeaderRows = attachments.Count != 0 && columns >= 8 && height >= 4 ? 1 : 0;
+        var previewPlans = new List<AttachmentPreviewPlan>();
+        var attachmentPreviewRows = 0;
+        string? previewReason = null;
+        var imageCount = attachments.Count(file => file.MimeType is not null);
+        if (imageCount != 0)
+        {
+            if (cell is null) previewReason = "无 Sixel 预览";
+            else if (overlay is not null || view.Approval is not null) previewReason = "预览暂不可用";
+            else if (height < 12) previewReason = "预览：窗口过矮";
+            else
+            {
+                PlanAttachmentPreviews(attachments, columns - promptWidth, cell.Value, previewPlans, out attachmentPreviewRows);
+                if (previewPlans.Count == 0)
+                {
+                    attachmentPreviewRows = 0;
+                    previewReason = "预览：窗口过窄";
+                }
+                else if (attachmentPreviewRows > height - headerRows - statusRows - approvalRows -
+                    attachmentHeaderRows - keepTranscript - 1)
+                {
+                    previewPlans.Clear();
+                    attachmentPreviewRows = 0;
+                    previewReason = "预览：窗口过矮";
+                }
+            }
+        }
+
+        var remaining = height - headerRows - statusRows - approvalRows - attachmentHeaderRows - attachmentPreviewRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
         var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), Math.Min(Math.Max(1, height / 2),
             Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0))));
@@ -119,6 +154,14 @@ internal sealed class TerminalLayout
             (pickerStart, pickerVisible) = PickerWindow(overlay, panelRows, columns);
             pickerColumns = PickerHitColumns(overlay, panelRows, columns);
             row += panelRows;
+        }
+
+        if (attachmentHeaderRows != 0)
+            rows[row++] = new(AttachmentHeader(attachments, columns, previewReason), Ink.Composer);
+        if (attachmentPreviewRows != 0)
+        {
+            var previews = AttachmentPreviewRows(attachments, previewPlans, promptWidth, columns, cell!.Value, attachmentPreviewRows);
+            foreach (var preview in previews) rows[row++] = preview;
         }
 
         var start = Math.Clamp(caretLine - draftRows + 1, 0, Math.Max(0, draftLines.Count - draftRows));
@@ -209,6 +252,160 @@ internal sealed class TerminalLayout
         line += right;
         return TerminalText.Clip(line, columns);
     }
+
+    private static string AttachmentHeader(IReadOnlyList<FileAttachment> attachments, int columns, string? reason)
+    {
+        if (columns <= 0) return "";
+        var images = attachments.Count(file => file.MimeType is not null);
+        var text = attachments.Count - images;
+        var builder = new StringBuilder("│ 附件 ").Append(attachments.Count);
+        if (images != 0) builder.Append(" · 图片 ").Append(images);
+        if (text != 0) builder.Append(" · 文本 ").Append(text);
+        if (reason is not null) builder.Append(" · ").Append(reason);
+        var available = Math.Max(0, columns - TerminalText.Width(builder.ToString()));
+        var nameLimit = Math.Max(1, (available - attachments.Count * 5) / Math.Max(1, attachments.Count));
+        foreach (var file in attachments)
+        {
+            var icon = file.MimeType is null ? "▤" : "▣";
+            var name = TerminalText.SingleLine(Path.GetFileName(file.Path));
+            if (name.Length == 0) name = TerminalText.SingleLine(file.Path);
+            builder.Append(" · ").Append(icon).Append(' ').Append(TerminalText.Clip(name, Math.Min(24, nameLimit), tail: true));
+        }
+        return TerminalText.Clip(builder.ToString(), columns);
+    }
+
+    private static void PlanAttachmentPreviews(IReadOnlyList<FileAttachment> attachments, int available,
+        ImageCells cell, List<AttachmentPreviewPlan> plans, out int rows)
+    {
+        rows = 0;
+        var x = 0;
+        foreach (var file in attachments)
+        {
+            if (file.Preview is not { } preview || preview.Width <= 0 || preview.Height <= 0 ||
+                preview.Pixels.Length != preview.Width * preview.Height) continue;
+            var width = Math.Max(1, (preview.Width + cell.Width - 1) / cell.Width);
+            rows = Math.Max(rows, Math.Max(1, (preview.Height + cell.Height - 1) / cell.Height));
+            if (x != 0) x++;
+            if (x + width > available) continue;
+            plans.Add(new(preview, x));
+            x += width;
+        }
+    }
+
+    private ScreenRow[] AttachmentPreviewRows(IReadOnlyList<FileAttachment> attachments,
+        IReadOnlyList<AttachmentPreviewPlan> plans, int promptIndent, int columns, ImageCells cell, int rowCount)
+    {
+        var key = string.Join('|', attachments.Select(file => $"{file.Path}:{Convert.ToHexString(file.Digest)}")) +
+            $"\n{plans.Count}:{promptIndent}:{columns}:{cell.Width}:{cell.Height}:{cell.Foreground}:{cell.Background}";
+        if (_attachmentPreview is { } cached && cached.Key == key && cached.Rows.Length == rowCount) return cached.Rows;
+
+        var rows = new ScreenRow[rowCount];
+        Array.Fill(rows, new(""));
+        var strips = new List<ImageStrip>[rowCount];
+        for (var i = 0; i < strips.Length; i++) strips[i] = [];
+        foreach (var plan in plans)
+        {
+            var preview = plan.Preview;
+            for (var row = 0; row < rowCount; row++)
+            {
+                var top = row * cell.Height;
+                if (top >= preview.Height) break;
+                var height = Math.Min(cell.Height, preview.Height - top);
+                strips[row].Add(new(plan.Column, EncodePreview(preview.Pixels, preview.Width, top, height, cell)));
+            }
+        }
+        for (var row = 0; row < rowCount; row++)
+            if (strips[row].Count != 0) rows[row] = new("", Ink.Composer, strips[row], promptIndent);
+        _attachmentPreview = new(key, rows);
+        return rows;
+    }
+
+    // Real-color previews use a compact 6x6x6 palette. Transparent pixels stay unset so the
+    // terminal background remains visible; partially transparent pixels blend into that background.
+    private static string EncodePreview(SKColor[] pixels, int width, int top, int height, ImageCells cell)
+    {
+        var palette = new bool[216];
+        var indexes = new byte[width * height];
+        indexes.AsSpan().Fill(255);
+        var start = top * width;
+        for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var pixel = pixels[start + y * width + x];
+                if (pixel.Alpha == 0) continue;
+                var red = Blend(pixel.Red, cell.Background >> 16 & 255, pixel.Alpha);
+                var green = Blend(pixel.Green, cell.Background >> 8 & 255, pixel.Alpha);
+                var blue = Blend(pixel.Blue, cell.Background & 255, pixel.Alpha);
+                var r = (red * 5 + 127) / 255;
+                var g = (green * 5 + 127) / 255;
+                var b = (blue * 5 + 127) / 255;
+                var index = (byte)(r * 36 + g * 6 + b);
+                indexes[y * width + x] = index;
+                palette[index] = true;
+            }
+
+        var bytes = new StringBuilder();
+        bytes.Append("\x1bP0;1;0q\"1;1;").Append(width).Append(';').Append(height);
+        for (var i = 0; i < palette.Length; i++)
+        {
+            if (!palette[i]) continue;
+            var r = i / 36;
+            var g = i / 6 % 6;
+            var b = i % 6;
+            bytes.Append('#').Append(i).Append(";2;").Append((r * 100 + 2) / 5).Append(';')
+                .Append((g * 100 + 2) / 5).Append(';').Append((b * 100 + 2) / 5);
+        }
+
+        for (var y = 0; y < height; y += 6)
+        {
+            if (y != 0) bytes.Append('-');
+            var band = Math.Min(6, height - y);
+            var used = new bool[216];
+            for (var dy = 0; dy < band; dy++)
+                for (var x = 0; x < width; x++)
+                {
+                    var index = indexes[(y + dy) * width + x];
+                    if (index != 255) used[index] = true;
+                }
+            for (var index = 0; index < used.Length; index++)
+            {
+                if (!used[index]) continue;
+                var last = -1;
+                for (var x = 0; x < width; x++)
+                {
+                    var bits = 0;
+                    for (var dy = 0; dy < band; dy++)
+                        if (indexes[(y + dy) * width + x] == index) bits |= 1 << dy;
+                    if (bits != 0) last = x;
+                }
+                if (last < 0) continue;
+                bytes.Append('$').Append('#').Append(index);
+                for (var x = 0; x <= last;)
+                {
+                    var bits = 0;
+                    for (var dy = 0; dy < band; dy++)
+                        if (indexes[(y + dy) * width + x] == index) bits |= 1 << dy;
+                    var count = 1;
+                    while (x + count <= last)
+                    {
+                        var nextBits = 0;
+                        for (var dy = 0; dy < band; dy++)
+                            if (indexes[(y + dy) * width + x + count] == index) nextBits |= 1 << dy;
+                        if (nextBits != bits) break;
+                        count++;
+                    }
+                    var ch = (char)(63 + bits);
+                    if (count > 3) bytes.Append('!').Append(count).Append(ch);
+                    else bytes.Append(ch, count);
+                    x += count;
+                }
+            }
+        }
+        return bytes.Append("\x1b\\").ToString();
+    }
+
+    private static int Blend(int foreground, int background, int alpha) =>
+        (foreground * alpha + background * (255 - alpha) + 127) / 255;
 
     private static string ApprovalAction(bool canApprove, int columns)
     {

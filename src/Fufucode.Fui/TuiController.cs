@@ -32,7 +32,8 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 
     public TuiView View() => new(_active.Project, _active.Id, _active.Model ?? "未配置模型", StatusText, _lines,
         _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault()?.Text,
-        _busy, Overlay(), _expandTools, _showThinking);
+        _busy, Overlay(), _expandTools, _showThinking,
+        _attachments.Count == 0 ? null : [.. _attachments]);
 
     public void Painted(int maxScroll, bool canApprove)
     {
@@ -138,6 +139,13 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         }
         // The terminal still shows the old approval until the next frame. Its Enter/Esc cannot operate the draft.
         if (_approvalFocusChanged) return;
+        if (key is { Key: ConsoleKey.Enter, Modifiers: 0 } && _pickerAction == "commands" &&
+            _picker?.Current is { Value: "paste-image" } && CanRun(FuiCommands.Get("paste-image")!))
+        {
+            ClosePicker();
+            PasteClipboardImage();
+            return;
+        }
         if (WorkbenchKey(key, pickerRows)) return;
         if (ctrl && key.Key == ConsoleKey.C)
         {
@@ -206,11 +214,31 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (text.StartsWith('/'))
         {
             if (text.StartsWith("//", StringComparison.Ordinal)) text = text[1..];
-            else if (!text.StartsWith("/skill:", StringComparison.Ordinal)) { SubmitCommand(text); return; }
+            else if (!text.StartsWith("/skill:", StringComparison.Ordinal))
+            {
+                if (text.TrimEnd().Equals("/paste-image", StringComparison.OrdinalIgnoreCase) &&
+                    CanRun(FuiCommands.Get("paste-image")!))
+                {
+                    _composer.Take();
+                    PasteClipboardImage();
+                }
+                else SubmitCommand(text);
+                return;
+            }
         }
         if (_busy || _send is not null || _stop is not null || _job is not null) return; // Keep the next draft editable.
         if (_attachments.Count != 0) { SendWithContext(text); return; }
         Send(new FuiPrompt(text, []));
+    }
+
+    private void PasteClipboardImage()
+    {
+        if (_attachments.Count >= ProjectFiles.MaxAttachments)
+        {
+            Error($"每条消息最多附加 {ProjectFiles.MaxAttachments} 个文件。");
+            return;
+        }
+        Begin("paste-image", async ct => new(File: await Files().ReadClipboardImageAsync(ct)), cancellable: true);
     }
 
     private void Send(FuiPrompt prompt)

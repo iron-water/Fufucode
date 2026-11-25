@@ -3,10 +3,14 @@ using System.Text;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Security;
+using SkiaSharp;
 
 namespace Fufucode.Fui;
 
-internal sealed record FileAttachment(string Path, string Text, byte[] Digest, string? MimeType = null);
+internal enum FileAttachmentSource { Project, Clipboard }
+internal sealed record ProjectImagePreview(int Width, int Height, SKColor[] Pixels, int SourceWidth, int SourceHeight);
+internal sealed record FileAttachment(string Path, string Text, byte[] Digest, string? MimeType = null,
+    ProjectImagePreview? Preview = null, byte[]? Payload = null, FileAttachmentSource Source = FileAttachmentSource.Project);
 internal sealed record FuiPrompt(string Text, IReadOnlyList<ChatImage> Images);
 internal sealed record FilePage(string Folder, IReadOnlyList<FuiChoice> Items);
 
@@ -58,6 +62,31 @@ internal sealed class ProjectFiles
     public async Task<FileAttachment> ReadAttachmentAsync(string path, CancellationToken ct) =>
         (await ReadFileAsync(path, allowImages: true, MaxAttachmentBytes, ct)).File;
 
+    public Task<FileAttachment> ReadClipboardImageAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(ReadClipboardImage());
+    }
+
+    private FileAttachment ReadClipboardImage()
+    {
+        var bytes = ProjectImage.ReadWindowsClipboardPng(MaxAttachmentBytes) ??
+            throw new InvalidOperationException("剪贴板没有 PNG 或 DIB 图片。");
+        return ClipboardAttachment(bytes);
+    }
+
+    internal FileAttachment ClipboardAttachment(byte[] bytes)
+    {
+        if (bytes.Length > MaxAttachmentBytes)
+            throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
+        if (!ProjectImage.Matches(bytes, "image/png"))
+            throw new InvalidDataException("剪贴板图片不是有效的 PNG。");
+        var digest = SHA256.HashData(bytes);
+        var name = $"剪贴板-{DateTime.Now:yyyyMMdd-HHmmss}-{Convert.ToHexString(digest.AsSpan(0, 2)).ToLowerInvariant()}.png";
+        return new(name, "", digest, "image/png", ProjectImage.CreatePreview(bytes, "image/png"), bytes,
+            FileAttachmentSource.Clipboard);
+    }
+
     private async Task<(FileAttachment File, byte[] Bytes)> ReadFileAsync(string path, bool allowImages, int remaining, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -75,7 +104,8 @@ internal sealed class ProjectFiles
         if (mime is not null)
         {
             if (!ProjectImage.Matches(bytes, mime)) throw new InvalidDataException($"{path} 不是与扩展名相符的 PNG 或 JPEG 图片。");
-            return (new(Relative(full), "", SHA256.HashData(bytes), mime), bytes);
+            var preview = ProjectImage.CreatePreview(bytes, mime);
+            return (new(Relative(full), "", SHA256.HashData(bytes), mime, preview), bytes);
         }
         string text;
         try { text = Utf8.GetString(bytes).TrimStart('\uFEFF'); }
@@ -97,7 +127,28 @@ internal sealed class ProjectFiles
         var remaining = MaxAttachmentBytes;
         foreach (var file in attached)
         {
-            var (current, bytes) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
+            FileAttachment current;
+            byte[] bytes;
+            if (file.Source == FileAttachmentSource.Clipboard)
+            {
+                if (file.Payload is not { Length: > 0 } payload || file.MimeType != "image/png")
+                    throw new InvalidDataException("剪贴板附件数据无效；请重新粘贴。");
+                if (payload.Length > remaining)
+                    throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
+                if (!ProjectImage.Matches(payload, file.MimeType))
+                    throw new InvalidDataException("剪贴板附件不是有效的 PNG；请重新粘贴。");
+                bytes = payload.ToArray();
+                current = file with
+                {
+                    Digest = SHA256.HashData(bytes),
+                    Payload = bytes,
+                    Preview = ProjectImage.CreatePreview(bytes, file.MimeType)
+                };
+            }
+            else
+            {
+                (current, bytes) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
+            }
             if (!current.Digest.AsSpan().SequenceEqual(file.Digest) || current.MimeType != file.MimeType)
                 throw new IOException($"{file.Path} 已更改；请先移除，再重新附加。");
             if (current.MimeType is { } mime) images.Add(new(Convert.ToBase64String(bytes), mime));
