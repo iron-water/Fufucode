@@ -627,6 +627,7 @@ public static class Program
             foreach (var (k, v) in pluginManager.LoadErrors)
                 Console.Error.WriteLine($"[Plugin load error: {k}] {v}");
             manager.NativePluginToolProviders = () => [toolRegistry];
+            manager.NativeSystemPromptProvider = new PluginStateSystemPromptProvider(stateStore);
         }
         catch (Exception ex)
         {
