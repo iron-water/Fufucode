@@ -6,7 +6,7 @@ internal static class WorkbenchWidgetTests
 {
     internal static void Run()
     {
-        Picker(); SessionTree(); ComposerActions(); Panel(); Reading();
+        Picker(); SessionTree(); ComposerActions(); Panel(); Reading(); MarkdownTests.Run();
     }
 
     private static void Picker()

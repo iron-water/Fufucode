@@ -147,7 +147,7 @@ internal sealed class TerminalLayout
     {
         private readonly List<TerminalText.Slice> Pieces = [];
         private FormulaRows? _formulas;
-        internal int RowCount => _hidden ? 0 : _formulas?.Rows.Count ?? Pieces.Count;
+        internal int RowCount => _hidden ? 0 : _formulas?.Rows.Count ?? (_markdown?.Count ?? Pieces.Count);
         internal int First;
         private TuiLine? _line;
         private bool _plain;
@@ -160,7 +160,12 @@ internal sealed class TerminalLayout
         {
             if (columns == 0) return new("");
             var prefix = index == 0 ? _label : _indent;
-            if (_formulas is null) return new(prefix + Pieces[index].Text, _markdown?[index] ?? _ink);
+            if (_formulas is null && _markdown is { } markdown)
+            {
+                var markdownRow = markdown[index];
+                return new(prefix + markdownRow.Text, markdownRow.Ink);
+            }
+            if (_formulas is null) return new(prefix + Pieces[index].Text, _ink);
             var row = _formulas.Rows[index];
             return row with { Text = prefix + row.Text, ImageIndent = _indent.Length };
         }
@@ -194,7 +199,14 @@ internal sealed class TerminalLayout
                 return;
             }
             _formulas = null;
-            if (line.Kind == "assistant") _markdown ??= new(); else _markdown = null;
+            if (line.Kind == "assistant")
+            {
+                _markdown ??= new();
+                _markdown.Project(line.Text, contentWidth);
+                _plain = false;
+                return;
+            }
+            _markdown = null;
             if (collapsed)
             {
                 var preview = TerminalText.Clean(line.Text);
@@ -220,7 +232,6 @@ internal sealed class TerminalLayout
                     var start = Pieces[keep].Start;
                     Pieces.RemoveRange(keep, Pieces.Count - keep);
                     TerminalText.Wrap(line.Text, contentWidth, start, Pieces);
-                    _markdown?.Project(line.Text, Pieces, keep, rebuild: false);
                     return;
                 }
             }
@@ -228,7 +239,6 @@ internal sealed class TerminalLayout
             _plain = ReferenceEquals(clean, line.Text);
             Pieces.Clear();
             TerminalText.Wrap(clean, contentWidth, 0, Pieces);
-            _markdown?.Project(clean, Pieces, 0, rebuild: true);
         }
     }
 }
