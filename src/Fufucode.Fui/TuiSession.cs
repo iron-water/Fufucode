@@ -14,6 +14,7 @@ internal abstract record TuiEvent
     public sealed record Status(string Text, bool Busy) : TuiEvent;
     public sealed record Approval(string Id, string Text) : TuiEvent;
     public sealed record ApprovalClosed(string Id) : TuiEvent;
+    public sealed record AgentsChanged(FuiAgentActivitySnapshot Snapshot) : TuiEvent;
 }
 
 // The terminal consumes session events, not rendered CLI output or desktop view models.

@@ -18,6 +18,7 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
 
     private sealed record ToolDraft(string Name, StringBuilder Arguments);
     private readonly Dictionary<string, Draft> _messages = new(StringComparer.Ordinal);
+    private readonly FuiAgentActivityTracker _agents = new();
     private readonly object _gate = new();
     private string? _lastError;
     private int _nextUserImageCount;
@@ -123,6 +124,9 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer)
                     break;
                 case SessionEvent.QueueCleared queue:
                     foreach (var text in queue.ClearedTexts) Notice("info", "已取消排队：" + text);
+                    break;
+                case SessionEvent.SubagentUpdated subagent:
+                    writer.TryWrite(new TuiEvent.AgentsChanged(_agents.Apply(subagent)));
                     break;
             }
         }

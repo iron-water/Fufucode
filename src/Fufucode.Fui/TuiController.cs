@@ -70,6 +70,9 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
                     _approvals.RemoveAll(x => x.Id == a.Id);
                     if (_answeredApproval == a.Id) _answeredApproval = null;
                     break;
+                case TuiEvent.AgentsChanged a:
+                    UpdateAgentActivity(a.Snapshot);
+                    break;
             }
         }
         foreach (var (i, delta) in _deltas) _lines[i] = _lines[i] with { Text = _lines[i].Text + delta };

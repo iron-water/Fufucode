@@ -23,8 +23,16 @@ internal sealed partial class TuiController
         public bool PreemptedByApproval { get; set; }
     }
     private Job? _job;
-    private string StatusText => (_job is null || _approvals.Count != 0 ? _status : FuiCommands.Get(_job.Id)?.Label ?? "读取上下文") +
-        (_attachments.Count == 0 ? "" : $" · 附件 {_attachments.Count}");
+    private string StatusText
+    {
+        get
+        {
+            var status = (_job is null || _approvals.Count != 0 ? _status : FuiCommands.Get(_job.Id)?.Label ?? "读取上下文") +
+                (_attachments.Count == 0 ? "" : $" · 附件 {_attachments.Count}");
+            var agents = AgentStatusSummary;
+            return agents.Length == 0 ? status : agents + " · " + status;
+        }
+    }
 
     public int? TakeScrollTarget() { var target = _scrollTarget; _scrollTarget = null; return target; }
     public void ScrollTo(int scroll) => _scroll = scroll;
@@ -112,6 +120,7 @@ internal sealed partial class TuiController
             _drafts[prior.Id] = (_composer.Text, _composer.Cursor, [.. _attachments]);
         _active = next;
         ClosePicker(); _composer.Clear(); _attachments.Clear(); _lines.Clear(); _indices.Clear(); _deltas.Clear();
+        ResetAgentActivity();
         if (_drafts.Remove(next.Id, out var saved)) { _composer.Replace(saved.Text, saved.Cursor); _attachments.AddRange(saved.Files); }
         _files = null; _lines.AddRange(next.History); _scroll = 0; _scrollTarget = null; _busy = false; _status = "就绪";
         _release = Invoke(() => prior.DisposeAsync().AsTask());
@@ -196,6 +205,7 @@ internal sealed partial class TuiController
             case "context": Info(_attachments.Count == 0 ? "草稿没有附加文件。" : string.Join('\n', _attachments.Select(a => a.Path))); break;
             case "tools": _expandTools = !_expandTools; break;
             case "thoughts": _showThinking = !_showThinking; break;
+            case "agents": Agents(); break;
             case "history": OpenPicker(c.Id, c.Label, _composer.History.Reverse().Where(s => !s.StartsWith("/history", StringComparison.OrdinalIgnoreCase)).Select(s => new FuiChoice(s, s)).ToArray(), argument); break;
             case "find": OpenPicker(c.Id, c.Label, _lines.Select((l, i) => new FuiChoice(i.ToString(), l.Text, l.Kind)).Reverse().ToArray(), argument); break;
             case "stop": Stop(); break;

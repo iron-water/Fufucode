@@ -70,6 +70,7 @@ internal static class ControllerTests
         Key(ConsoleKey.Y, true); Expect(ui.View().Draft == "undo draft", "Ctrl+Y is routed to the composer");
         Key(ConsoleKey.C, true); Expect(!ui.Exiting && ui.View().Draft == "", "Ctrl+C clears idle draft");
         Key(ConsoleKey.C, true); Expect(ui.Exiting, "Ctrl+C exits after the draft is empty");
+        AgentActivityTests.Run();
     }
 
     private static void Expect(bool ok, string what) { if (!ok) throw new InvalidDataException(what); }
