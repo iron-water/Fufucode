@@ -2,7 +2,7 @@ using System.Threading.Channels;
 
 namespace Fufucode.Fui;
 
-internal sealed record TuiLine(string Kind, string Text);
+internal sealed record TuiLine(string Kind, string Text, ToolCallSnapshot? Tool = null);
 
 internal sealed record TuiView(string Project, string Session, string Model, string Status,
     IReadOnlyList<TuiLine> Lines, string Draft, int Cursor, int Scroll, string? Approval, bool Busy = false,
@@ -13,7 +13,8 @@ internal sealed record TuiView(string Project, string Session, string Model, str
 
 internal abstract record TuiEvent
 {
-    public sealed record Message(string Id, string Kind, string Text, bool Append = false) : TuiEvent;
+    public sealed record Message(string Id, string Kind, string Text, bool Append = false,
+        ToolCallSnapshot? Tool = null) : TuiEvent;
     public sealed record Status(string Text, bool Busy) : TuiEvent;
     public sealed record Approval(string Id, string Text) : TuiEvent;
     public sealed record ApprovalClosed(string Id) : TuiEvent;

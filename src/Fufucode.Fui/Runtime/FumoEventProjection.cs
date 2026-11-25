@@ -16,7 +16,14 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
         public readonly Dictionary<int, ToolDraft> Tools = [];
     }
 
-    private sealed record ToolDraft(string Name, StringBuilder Arguments);
+    private sealed class ToolDraft(string name)
+    {
+        public string Name { get; set; } = name;
+        public StringBuilder Arguments { get; } = new();
+        public ToolCallStatus Status { get; set; } = ToolCallStatus.Pending;
+        public string? StatusText { get; set; }
+        public long? DurationMs { get; set; }
+    }
     private readonly Dictionary<string, Draft> _messages = new(StringComparer.Ordinal);
     private readonly FuiAgentActivityTracker _agents = new();
     private readonly object _gate = new();
@@ -53,7 +60,13 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
                 {
                     case PiTextBlock text: lines.Add(new(kind, WithImages(text.Text, imageCount))); imageCount = 0; break;
                     case PiThinkingBlock thinking: lines.Add(new("thinking", thinking.Thinking)); break;
-                    case PiToolCallBlock tool: lines.Add(new("tool", $"{tool.Name} {tool.Arguments?.GetRawText()}".TrimEnd())); break;
+                    case PiToolCallBlock tool:
+                    {
+                        var arguments = tool.Arguments?.GetRawText() ?? "";
+                        lines.Add(new("tool", $"{tool.Name} {arguments}".TrimEnd(),
+                            new ToolCallSnapshot(tool.Name, arguments)));
+                        break;
+                    }
                 }
             if (imageCount > 0) lines.Add(new(kind, WithImages("", imageCount)));
         }
@@ -73,9 +86,10 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
                     break;
                 case SessionEvent.BlockStarted { Kind: MessageBlockKind.ToolCall } start when _messages.TryGetValue(start.MessageId, out var message):
                     var name = string.IsNullOrEmpty(start.ToolName) ? start.ToolCallId ?? "工具" : start.ToolName;
-                    message.Tools[start.ContentIndex] = new(name, new());
+                    message.Tools[start.ContentIndex] = new(name);
                     _toolCount++;
-                    Row(start.MessageId, start.ContentIndex, "tool", name + " ");
+                    Row(start.MessageId, start.ContentIndex, "tool", name + " ",
+                        snapshot: Snapshot(message.Tools[start.ContentIndex]));
                     break;
                 case SessionEvent.TextAppended text when _messages.TryGetValue(text.MessageId, out var message):
                     Row(text.MessageId, text.ContentIndex, message.TextKind, text.Delta, append: true);
@@ -86,11 +100,28 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
                 case SessionEvent.ToolCallAppended args when _messages.TryGetValue(args.MessageId, out var message) &&
                     message.Tools.TryGetValue(args.ContentIndex, out var tool):
                     tool.Arguments.Append(args.JsonFragment);
-                    Row(args.MessageId, args.ContentIndex, "tool", args.JsonFragment, append: true);
+                    Row(args.MessageId, args.ContentIndex, "tool", args.JsonFragment, append: true,
+                        snapshot: Snapshot(tool));
                     break;
                 case SessionEvent.ToolCallStatusChanged status when _messages.TryGetValue(status.MessageId, out var message) &&
                     message.Tools.TryGetValue(status.ContentIndex, out var tool):
-                    Row(status.MessageId, status.ContentIndex, "tool", ToolText(tool.Name, tool.Arguments.ToString(), status.Status, status.StatusText));
+                    tool.Status = status.Status;
+                    tool.StatusText = status.StatusText;
+                    tool.DurationMs = status.DurationMs;
+                    Row(status.MessageId, status.ContentIndex, "tool",
+                        ToolText(tool.Name, tool.Arguments.ToString(), status.Status, status.StatusText),
+                        snapshot: Snapshot(tool));
+                    break;
+                case SessionEvent.BlockFinished { FinalBlock: ToolCallBlock tool } finished when
+                    _messages.TryGetValue(finished.MessageId, out var message) &&
+                    message.Tools.TryGetValue(finished.ContentIndex, out var draft):
+                    draft.Name = tool.ToolName;
+                    draft.Status = tool.Status;
+                    draft.StatusText = tool.StatusText;
+                    draft.DurationMs = tool.DurationMs;
+                    Row(finished.MessageId, finished.ContentIndex, "tool",
+                        ToolText(tool.ToolName, tool.InputJson, tool.Status, tool.Output ?? tool.StatusText),
+                        snapshot: Snapshot(tool));
                     break;
                 case SessionEvent.MessageFinished final:
                     // Native BlockFinished immediately precedes this authoritative snapshot. Replace, don't append.
@@ -102,7 +133,9 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
                             case TextBlock t: Row(final.MessageId, i, role, WithImages(t.Text, count)); count = 0; break;
                             case ThinkingBlock t: Row(final.MessageId, i, "thinking", t.Text); break;
                             case ToolCallBlock t:
-                                Row(final.MessageId, i, "tool", ToolText(t.ToolName, t.InputJson, t.Status, t.Output ?? t.StatusText)); break;
+                                Row(final.MessageId, i, "tool",
+                                    ToolText(t.ToolName, t.InputJson, t.Status, t.Output ?? t.StatusText),
+                                    snapshot: Snapshot(t)); break;
                         }
                     _messages.Remove(final.MessageId);
                     break;
@@ -150,8 +183,9 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
         }
     }
 
-    private void Row(string message, int index, string kind, string text, bool append = false) =>
-        writer.TryWrite(new TuiEvent.Message($"{message}:{index}", kind, text, append));
+    private void Row(string message, int index, string kind, string text, bool append = false,
+        ToolCallSnapshot? snapshot = null) =>
+        writer.TryWrite(new TuiEvent.Message($"{message}:{index}", kind, text, append, snapshot));
 
     private void Notice(string kind, string text) => writer.TryWrite(new TuiEvent.Message(Guid.NewGuid().ToString("N"), kind, text));
 
@@ -161,4 +195,11 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
     private static string ToolText(string name, string args, ToolCallStatus state, string? output) =>
         $"{name} [{state switch { ToolCallStatus.Running => "执行中", ToolCallStatus.Completed => "完成", ToolCallStatus.Failed => "失败", ToolCallStatus.Cancelled => "已取消", _ => "待执行" }}] {args}".TrimEnd() +
         (string.IsNullOrEmpty(output) ? "" : "\n" + output);
+
+    private static ToolCallSnapshot Snapshot(ToolDraft tool) =>
+        new(tool.Name, tool.Arguments.ToString(), tool.Status, tool.StatusText, null, false, tool.DurationMs);
+
+    private static ToolCallSnapshot Snapshot(ToolCallBlock tool) =>
+        new(tool.ToolName, tool.InputJson, tool.Status, tool.StatusText, tool.Output,
+            tool.IsErrorOutput, tool.DurationMs);
 }

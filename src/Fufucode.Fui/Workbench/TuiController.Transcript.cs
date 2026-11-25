@@ -12,9 +12,9 @@ internal sealed partial class TuiController
     private long _outlineGeneration = -1;
     private long _outlineRefreshedAt;
 
-    private void AppendLine(string kind, string text, string? source = null)
+    private void AppendLine(string kind, string text, string? source = null, ToolCallSnapshot? tool = null)
     {
-        _lines.Add(new(kind, text));
+        _lines.Add(new(kind, text, tool));
         _lineSources.Add(source);
         _transcriptGeneration++;
         Dirty = true;

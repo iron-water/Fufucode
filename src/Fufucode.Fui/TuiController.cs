@@ -124,17 +124,18 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (!_indices.TryGetValue(m.Id, out var i))
         {
             _indices.Add(m.Id, _lines.Count);
-            AppendLine(m.Kind, m.Text, m.Id);
+            AppendLine(m.Kind, m.Text, m.Id, m.Tool);
         }
         else if (m.Append)
         {
             if (!_deltas.TryGetValue(i, out var buffer)) _deltas.Add(i, buffer = new());
             buffer.Append(m.Text);
+            if (m.Tool is not null) _lines[i] = _lines[i] with { Tool = m.Tool };
         }
         else
         {
             _deltas.Remove(i);
-            _lines[i] = new(m.Kind, m.Text); // A final snapshot supersedes all preceding deltas.
+            _lines[i] = new(m.Kind, m.Text, m.Tool); // A final snapshot supersedes all preceding deltas.
             _transcriptGeneration++;
         }
     }

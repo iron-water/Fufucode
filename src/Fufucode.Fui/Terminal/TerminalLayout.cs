@@ -1,4 +1,5 @@
 using System.Text;
+using Fufucode.App.Abstractions;
 using SkiaSharp;
 
 namespace Fufucode.Fui;
@@ -518,7 +519,8 @@ internal sealed class TerminalLayout
             var hidden = line.Kind == "thinking" && !showThinking;
             var collapsed = line.Kind == "tool" && !expandTools;
             if (_line is not null && _cards == cards && _hidden == hidden && _collapsed == collapsed &&
-                (ReferenceEquals(line, _line) || (_line.Kind == line.Kind && ReferenceEquals(_line.Text, line.Text))))
+                (ReferenceEquals(line, _line) || (_line.Kind == line.Kind &&
+                    ReferenceEquals(_line.Text, line.Text) && ReferenceEquals(_line.Tool, line.Tool))))
                 return;
 
             var old = _line;
@@ -541,7 +543,7 @@ internal sealed class TerminalLayout
             if (_kind == "tool")
             {
                 Pieces.Clear();
-                BuildTool(line.Text, columns, collapsed);
+                BuildTool(line, columns, collapsed);
                 return;
             }
 
@@ -680,36 +682,138 @@ internal sealed class TerminalLayout
             }
         }
 
-        private void BuildTool(string text, int columns, bool collapsed)
+        private void BuildTool(TuiLine line, int columns, bool collapsed)
         {
-            var tool = ToolPresentation.Parse(text);
-            var title = tool.Title(collapsed);
+            var tool = line.Tool is { } snapshot
+                ? ToolCallProjection.Project(snapshot)
+                : ToolCallProjection.ProjectLegacy(line.Text);
+            var title = ToolTitle(tool, collapsed, columns);
+            var tone = tool.IsError ? Ink.Error :
+                tool.Status == ToolCallStatus.Cancelled ? Ink.Quiet : Ink.Tool;
             if (!_cards)
             {
-                _rows.Add(new(TerminalText.Clip(title, columns), Ink.Tool));
-                if (!collapsed && tool.Body.Length > 0)
+                _rows.Add(new(TerminalText.Clip(title, columns), tone));
+                if (!collapsed) AddToolSections(tool, columns, tone, framed: false);
+                return;
+            }
+
+            _rows.Add(new(CardTop(title, columns), tone));
+            if (!collapsed) AddToolSections(tool, columns, tone, framed: true);
+            _rows.Add(new(CardBottom(columns), tone));
+        }
+
+        private void AddToolSections(ToolCardView tool, int columns, Ink tone, bool framed)
+        {
+            const int maxRows = 320;
+            foreach (var section in tool.Sections)
+            {
+                if (_rows.Count >= maxRows)
                 {
-                    var body = new List<TerminalText.Slice>();
-                    TerminalText.Wrap(tool.Body, Math.Max(1, columns - 2), 0, body);
-                    foreach (var piece in body) _rows.Add(new("  " + piece.Text, Ink.Tool));
+                    AddToolDisplayLimit(columns, tone, framed);
+                    return;
                 }
-                return;
+                if (framed) AddFramedToolRow(new(section.Title, Ink.CodeFence), columns, tone);
+                else _rows.Add(new("  " + TerminalText.Clip(section.Title, Math.Max(1, columns - 2)), Ink.CodeFence));
+
+                var width = framed ? Math.Max(1, columns - 4) : Math.Max(1, columns - 2);
+                foreach (var row in ToolBodyRows(section, width))
+                {
+                    if (_rows.Count >= maxRows)
+                    {
+                        AddToolDisplayLimit(columns, tone, framed);
+                        return;
+                    }
+                    if (framed) AddFramedToolRow(row, columns, tone);
+                    else
+                        _rows.Add(ToolIndented(row with { Ink = row.Ink == Ink.Plain ? tone : row.Ink },
+                            "  ", Ink.CodeFence));
+                }
+            }
+        }
+
+        private void AddToolDisplayLimit(int columns, Ink tone, bool framed)
+        {
+            var marker = new ScreenRow("… [显示内容已截断]", Ink.DiffMeta);
+            if (framed) AddFramedToolRow(marker, columns, tone);
+            else _rows.Add(ToolIndented(marker, "  ", Ink.CodeFence));
+        }
+
+        private void AddFramedToolRow(ScreenRow row, int columns, Ink fallback)
+        {
+            var inner = Math.Max(1, columns - 4);
+            var ink = row.Ink == Ink.Plain ? fallback : row.Ink;
+            _rows.Add(row with
+            {
+                Text = "│ " + Pad(row.Text, inner) + " │",
+                Ink = ink,
+                Spans = FrameSpans(row, "│ ", " │", inner, ink)
+            });
+        }
+
+        private static IReadOnlyList<ScreenRow> ToolBodyRows(ToolCardSection section, int width)
+        {
+            if (section.Markdown)
+            {
+                var markdown = new MarkdownLines();
+                markdown.Project(string.Join('\n', section.Lines.Select(line => line.Text)), width);
+                var rows = new List<ScreenRow>(markdown.Count);
+                for (var i = 0; i < markdown.Count; i++)
+                {
+                    var item = markdown[i];
+                    rows.Add(new(item.Text, item.Ink == Ink.Plain ? Ink.Tool : item.Ink, Spans: item.Spans));
+                }
+                return rows;
             }
 
-            if (collapsed)
+            var output = new List<ScreenRow>();
+            foreach (var line in section.Lines)
             {
-                _rows.Add(new(CardTop(title, columns), Ink.Tool));
-                return;
+                var clean = TerminalText.Clean(line.Text);
+                if (line.Language is { Length: > 0 } language)
+                {
+                    var spans = SyntaxHighlighter.Highlight(clean, language);
+                    foreach (var wrapped in StyledText.Wrap(spans, width))
+                        output.Add(new(wrapped.Text, line.Ink == Ink.Tool ? Ink.Code : line.Ink,
+                            Spans: wrapped.Spans));
+                    continue;
+                }
+
+                var pieces = new List<TerminalText.Slice>();
+                TerminalText.Wrap(clean, width, 0, pieces);
+                output.AddRange(pieces.Select(piece => new ScreenRow(piece.Text, line.Ink)));
+            }
+            return output;
+        }
+
+        private static ScreenRow ToolIndented(ScreenRow row, string prefix, Ink prefixInk) =>
+            row with
+            {
+                Text = prefix + row.Text,
+                Spans = FrameSpans(row, prefix, "", -1, prefixInk)
+            };
+
+        private static string ToolTitle(ToolCardView tool, bool collapsed, int columns)
+        {
+            var available = Math.Max(1, columns - 4);
+            var title = $"工具 {(collapsed ? "▸" : "▾")} {tool.Verb}";
+
+            void Add(string value, bool clip = false)
+            {
+                if (string.IsNullOrWhiteSpace(value)) return;
+                var separator = " · ";
+                var remaining = available - TerminalText.Width(title) - TerminalText.Width(separator);
+                if (remaining <= 0) return;
+                var shown = clip ? TerminalText.Clip(value, remaining) : value;
+                if (TerminalText.Width(shown) > remaining) return;
+                title += separator + shown;
             }
 
-            _rows.Add(new(CardTop(title, columns), Ink.Tool));
-            if (tool.Body.Length > 0)
-            {
-                var body = new List<TerminalText.Slice>();
-                TerminalText.Wrap(tool.Body, Math.Max(1, columns - 4), 0, body);
-                foreach (var piece in body) _rows.Add(new("│ " + Pad(piece.Text, Math.Max(1, columns - 4)) + " │", Ink.Tool));
-            }
-            _rows.Add(new(CardBottom(columns), Ink.Tool));
+            Add(tool.StatusLabel);
+            if (!string.Equals(tool.ToolName, tool.Verb, StringComparison.Ordinal))
+                Add(TerminalText.Clip(tool.ToolName, 24));
+            if (tool.Target is { } target) Add(target, clip: true);
+            foreach (var stat in tool.Stats) Add(stat);
+            return TerminalText.Clip(title, available);
         }
 
         private static Ink RoleInk(string kind) => kind switch
@@ -740,41 +844,4 @@ internal sealed class TerminalLayout
         };
     }
 
-    private readonly record struct ToolPresentation(string Name, string Status, string Args, string Body)
-    {
-        internal string Title(bool collapsed)
-        {
-            var marker = collapsed ? "▸" : "▾";
-            var title = $"工具 {marker} {(Name.Length == 0 ? "工具" : Name)}";
-            if (Status.Length > 0) title += " · " + Status;
-            if (Args.Length > 0) title += " · " + Args;
-            return title;
-        }
-
-        internal static ToolPresentation Parse(string text)
-        {
-            var clean = TerminalText.Clean(text);
-            var newline = clean.IndexOf('\n');
-            var first = newline < 0 ? clean : clean[..newline];
-            var body = newline < 0 ? "" : clean[(newline + 1)..];
-            first = first.Trim();
-            if (first.Length == 0) return new("", "", "", body);
-
-            var split = first.IndexOf(' ');
-            var name = split < 0 ? first : first[..split];
-            var rest = split < 0 ? "" : first[(split + 1)..].Trim();
-            var status = "";
-            var args = rest;
-            if (rest.StartsWith('['))
-            {
-                var close = rest.IndexOf(']');
-                if (close > 1)
-                {
-                    status = rest[1..close].Trim();
-                    args = rest[(close + 1)..].Trim();
-                }
-            }
-            return new(name, status, args, body);
-        }
-    }
 }

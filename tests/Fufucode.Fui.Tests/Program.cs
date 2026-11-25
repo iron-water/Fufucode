@@ -6,6 +6,8 @@ try
     Console.WriteLine("PASS controller: commands, streaming, drafts, approvals, stale requests and subagent activity");
     TerminalTests.Run();
     Console.WriteLine("PASS terminal: editor, layout and terminal rendering");
+    ToolCardTests.Run();
+    Console.WriteLine("PASS tool cards: registry, bounded projection, sanitization and layout");
     ThemeTests.Run();
     Console.WriteLine("PASS theme: dark/light/mono/auto, color depth and terminal style safety");
     await SettingsTests.RunAsync();
