@@ -61,6 +61,12 @@ internal static class WorkbenchSessionTests
             Check(metadata.GetSession(parent.Id).Name == "我的本地讨论", "rename not persisted");
             var list = await parent.ChoicesAsync("resume", ct);
             Check(list.Count == 1 && list[0] is { Label: "我的本地讨论" } && list[0].Value == parent.Id && list[0].Detail!.Contains("当前"), "list leaked foreign/external session or lost name");
+            var rootChoice = (await parent.ChoicesAsync("tree", ct)).Single();
+            Check(rootChoice.Value == parent.Id && rootChoice.ParentSessionId is null, "tree leaked foreign/other-backend sessions or invented a parent");
+            await Reject<InvalidOperationException>(() => parent.ExecuteAsync("tree", foreign.Id, ct));
+            await Reject<InvalidOperationException>(() => parent.ExecuteAsync("tree", external.Id, ct));
+            await Reject<KeyNotFoundException>(() => parent.ExecuteAsync("tree", "absent-id", ct));
+            Check((await parent.ExecuteAsync("tree", parent.Id, ct)).Replacement is null, "tree reacquired the current lease");
             await Reject<InvalidOperationException>(() => parent.ExecuteAsync("resume", foreign.Id, ct));
             await Reject<InvalidOperationException>(() => parent.ExecuteAsync("resume", external.Id, ct));
             Check((await parent.ExecuteAsync("resume", parent.Id, ct)).Replacement == null, "self-switch tried to get a second lease");
@@ -86,6 +92,8 @@ internal static class WorkbenchSessionTests
             await parent.SendAsync("first", ct);
             await Until(parent, e => e is TuiEvent.Message { Kind: "assistant", Text: "live", Append: true }, ct);
             Check((await parent.ChoicesAsync("resume", ct)).Single().Detail!.Contains("运行中"), "live session not shown active");
+            Check((await parent.ChoicesAsync("tree", ct)).Single().Detail!.Contains("运行中"), "tree cannot be browsed during a real turn");
+            await Reject<InvalidOperationException>(() => parent.ExecuteAsync("tree", parent.Id, ct));
             var midTurn = (await parent.ExecuteAsync("usage", "", ct)).Notice!;
             Check(midTurn.Contains("运行中") && midTurn.Contains("输入 未提供"), "in-flight tokens fabricated or not labelled");
             await Reject<InvalidOperationException>(() => parent.ExecuteAsync("new", "", ct));
@@ -121,6 +129,8 @@ internal static class WorkbenchSessionTests
             Check(branch.Model == "vendor/fui-model" && (await branch.ChoicesAsync("thinking", ct)).Single(c => c.Detail == "当前").Value == "high", "fork lost session settings");
             Check(original.SequenceEqual(SHA256.HashData(File.ReadAllBytes(originalFile))), "fork changed parent file");
             await Reject<InvalidOperationException>(() => branch.ExecuteAsync("resume", parent.Id, ct));
+            var sibling = await Replace(parent, "fork", entry.Value);
+            await sibling.DisposeAsync();
             await parent.DisposeAsync();
             Check(plugin.Starts == 1 && plugin.Stops == 0, "old session shut down or replaced shared project plugins");
             api.When("child only", false, Frame(new { content = "inside child" }, "stop"));
@@ -130,6 +140,17 @@ internal static class WorkbenchSessionTests
             await Until(branch, e => e is TuiEvent.Status { Busy: true }, ct);
             await Settled(branch, ct);
             Check(original.SequenceEqual(SHA256.HashData(File.ReadAllBytes(originalFile))), "child mutated parent during its turn");
+            var childEntry = (await branch.ChoicesAsync("fork", ct)).Single(c => c.Label == "child only");
+            var grandchild = await Replace(branch, "fork", childEntry.Value);
+            var family = (await grandchild.ChoicesAsync("tree", ct)).ToDictionary(c => c.Value);
+            Check(family.Count == 4 && family[parent.Id].ParentSessionId is null &&
+                family[branch.Id].ParentSessionId == parent.Id && family[sibling.Id].ParentSessionId == parent.Id &&
+                family[grandchild.Id].ParentSessionId == branch.Id, "persisted native fork relationships or project scope lost");
+            await NavigateNativeTreeAsync(grandchild, branch.Id, parent.Id, sibling.Id, layout.Root, ct);
+            var reopened = await Replace(branch, "tree", grandchild.Id);
+            Check(reopened.Id == grandchild.Id && reopened.History.Any(l => l == new TuiLine("user", "child only")),
+                "switch did not release the prior lease or reopened the wrong transcript");
+            await reopened.DisposeAsync();
             var again = await Replace(branch, "resume", parent.Id);
             await branch.DisposeAsync();
             Check(again.History.Any(l => l.Text == "follow received") && again.History.All(l => l.Text != "inside child"), "resume returned unrelated history");
@@ -165,6 +186,51 @@ internal static class WorkbenchSessionTests
             FileChangeJournal.Configure(Path.GetDirectoryName(journal)!);
             root.Delete(recursive: true);
         }
+    }
+
+    private static async Task NavigateNativeTreeAsync(FumoTuiSession grandchild, string branch, string root,
+        string sibling, string dataRoot, CancellationToken ct)
+    {
+        var ui = new TuiController(grandchild, ct, dataRoot);
+        void Type(string text) { foreach (var c in text) ui.Key(new(c, (ConsoleKey)0, false, false, false), 12, 20); }
+        void Press(ConsoleKey key) => ui.Key(new('\0', key, false, false, false), 12, 20);
+        async Task WaitFor(Func<TuiView, bool> predicate)
+        {
+            while (true)
+            {
+                ui.Update();
+                if (predicate(ui.View())) return;
+                await Task.Delay(5, ct);
+            }
+        }
+        async Task OpenTree()
+        {
+            Type("/tree"); Press(ConsoleKey.Enter);
+            await WaitFor(v => v.Overlay?.Title == "会话分支树");
+        }
+        string Selected() { var panel = ui.View().Overlay!; return panel.Items[panel.Selected].Value; }
+        try
+        {
+            await OpenTree();
+            Check(Selected() == grandchild.Id && ui.View().Overlay!.Items.Count == 4, "native tree did not reveal its current grandchild and siblings");
+            Press(ConsoleKey.LeftArrow);
+            Check(Selected() == branch, "native tree left did not target the correct parent");
+            Press(ConsoleKey.Enter);
+            await WaitFor(v => v.Lines.Any(l => l.Kind == "error"));
+            Check(ui.View().Session == grandchild.Id, "selecting a leased session abandoned the starting session");
+
+            await OpenTree();
+            Press(ConsoleKey.LeftArrow); Press(ConsoleKey.LeftArrow);
+            Press(ConsoleKey.LeftArrow); Press(ConsoleKey.LeftArrow);
+            Check(ui.View().Overlay!.Items.Single().Value == root, "collapsing the root left hidden descendants selectable");
+            Type(sibling);
+            Check(Selected() == sibling && ui.View().Overlay!.Items.Count == 1, "full ID did not find a folded sibling");
+            Press(ConsoleKey.Enter);
+            await WaitFor(v => v.Session == sibling);
+            Check(ui.View().Lines.Contains(new TuiLine("user", "first")) && ui.View().Lines.All(l => l.Text != "child only"),
+                "Enter resumed the wrong same-name branch or transcript");
+        }
+        finally { await ui.FinishAsync(); }
     }
 
     private sealed class CountingPlugin : IPluginPackage

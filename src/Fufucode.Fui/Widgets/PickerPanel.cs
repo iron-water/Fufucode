@@ -15,7 +15,16 @@ internal static class PickerPanel
         if (rows.Length == 0) return 0;
         var count = overlay.Items.Count;
         var selected = Math.Clamp(overlay.Selected, 0, Math.Max(0, count - 1));
-        string Label(FuiChoice c) => TerminalText.SingleLine(string.IsNullOrWhiteSpace(c.Label) ? c.Value : c.Label);
+        string Label(FuiChoice c)
+        {
+            var name = TerminalText.SingleLine(string.IsNullOrWhiteSpace(c.Label) ? c.Value : c.Label);
+            if (c.TreePosition is not { } position || columns < 6) return name;
+            var indentBudget = Math.Min(16, (columns - 2) / 3);
+            var indent = position.Depth <= indentBudget / 2 ? new string(' ', position.Depth * 2) :
+                TerminalText.Clip($"…{position.Depth} ", indentBudget);
+            var marker = position.Expanded switch { true => "▾ ", false => "▸ ", null => "· " };
+            return indent + marker + name;
+        }
         string Fit(string s, bool tail = false) => TerminalText.Clip(s, columns, tail);
         var title = TerminalText.SingleLine(overlay.Title);
         var query = TerminalText.SingleLine(overlay.Query);

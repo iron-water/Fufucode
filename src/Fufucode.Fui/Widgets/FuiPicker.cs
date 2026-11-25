@@ -8,11 +8,12 @@ internal sealed class FuiPicker
     private readonly FuiChoice[] _choices;
     private readonly SearchItem[] _index;
     private readonly Composer _query = new();
+    private readonly FuiSessionTree? _tree;
     private IReadOnlyList<FuiChoice> _matches = [];
     private string? _filteredQuery;
     private int _selected;
 
-    internal FuiPicker(string title, IReadOnlyList<FuiChoice> choices, string initialQuery = "")
+    internal FuiPicker(string title, IReadOnlyList<FuiChoice> choices, string initialQuery = "", string? currentTreeSession = null)
     {
         _title = title;
         _choices = [.. choices];
@@ -23,19 +24,31 @@ internal sealed class FuiPicker
             _index[i] = new(c, TerminalText.SingleLine(c.Label), TerminalText.SingleLine(c.Value), TerminalText.SingleLine(c.Detail ?? ""));
         }
         _query.Replace(TerminalText.SingleLine(initialQuery));
+        if (currentTreeSession is not null) _tree = new(_choices, currentTreeSession);
     }
 
     public FuiOverlay View
     {
         get
         {
+            if (BrowsingTree)
+                return new(_title, _query.Text, _tree!.Rows, _tree.Selected, _tree.Rows.Count == 0 ? "暂无选项" : null);
             Filter();
             return new(_title, _query.Text, _matches, _selected, _matches.Count != 0 ? null :
                 _choices.Length == 0 ? "暂无选项" : "没有匹配项");
         }
     }
 
-    public FuiChoice? Current { get { Filter(); return _matches.Count == 0 ? null : _matches[_selected]; } }
+    public FuiChoice? Current
+    {
+        get
+        {
+            var view = View;
+            return view.Items.Count == 0 ? null : view.Items[view.Selected];
+        }
+    }
+
+    private bool BrowsingTree => _tree is not null && string.IsNullOrWhiteSpace(_query.Text);
 
     public void Edit(ConsoleKeyInfo key, int pageSize)
     {
@@ -45,6 +58,15 @@ internal sealed class FuiPicker
             ConsoleKey.PageUp => -Math.Max(1, pageSize), ConsoleKey.PageDown => Math.Max(1, pageSize),
             ConsoleKey.Home => -int.MaxValue, ConsoleKey.End => int.MaxValue, _ => 0
         };
+        if (BrowsingTree)
+        {
+            if (step != 0) { _tree!.Move(step); return; }
+            if (key.Modifiers == 0 && key.Key is ConsoleKey.LeftArrow or ConsoleKey.RightArrow)
+            {
+                _tree!.Traverse(key.Key == ConsoleKey.RightArrow);
+                return;
+            }
+        }
         if (step != 0)
         {
             Filter();

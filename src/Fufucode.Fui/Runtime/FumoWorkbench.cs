@@ -17,7 +17,7 @@ internal sealed partial class FumoTuiSession
             ct.ThrowIfCancellationRequested();
             return action switch
             {
-                "resume" => SessionChoices(),
+                "resume" or "tree" => SessionChoices(),
                 "fork" => await ForkChoicesAsync(ct),
                 "skills" or "capabilities" => await CommandChoicesAsync(action == "skills", ct),
                 "model" => (await ModelsAsync(ct)).Select(m => new FuiChoice(m.Id, m.Name,
@@ -56,6 +56,7 @@ internal sealed partial class FumoTuiSession
                     Empty(argument, action);
                     return new(Replacement: await OpenSelectedAsync(_project, Project, null, ct));
                 case "resume":
+                case "tree":
                     var id = Required(argument, "会话 ID");
                     if (id == Id) return new("已在当前会话。");
                     var target = SelectSession(_project.Manager, Project, id, false);
@@ -129,7 +130,8 @@ internal sealed partial class FumoTuiSession
         .Where(record => record.Backend == BackendId.NativeCSharp)
         .Select(record => new FuiChoice(record.Id, string.IsNullOrWhiteSpace(record.Name) ? record.Id : record.Name,
             string.Join(" · ", new[] { record.Id == Id ? (_workerPending ? "当前 · 运行中" : "当前")
-                : record.WasActive ? "记录为活动" : null, record.LastOpened.ToLocalTime().ToString("g"), record.Id }.Where(v => v != null)))).ToArray();
+                : record.WasActive ? "记录为活动" : null, record.LastOpened.ToLocalTime().ToString("g"), record.Id }.Where(v => v != null)),
+            record.ParentSessionId)).ToArray();
 
     private async Task<IReadOnlyList<FuiChoice>> ForkChoicesAsync(CancellationToken ct)
     {

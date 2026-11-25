@@ -8,7 +8,9 @@ internal sealed partial class TuiController
     private void OpenPicker(string id, string title, IReadOnlyList<FuiChoice> choices, string query = "")
     {
         if (id is "attach" or "preview" or "diff") { query = _browseFilter; _browseFilter = ""; }
-        _pickerAction = id; _picker = new(title, choices, query); Dirty = true;
+        _pickerAction = id;
+        _picker = new(title, choices, query, currentTreeSession: id == "tree" ? _active.Id : null);
+        Dirty = true;
     }
 
     private void ClosePicker()

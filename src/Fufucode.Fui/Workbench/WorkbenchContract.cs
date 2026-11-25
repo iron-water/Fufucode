@@ -1,6 +1,10 @@
 namespace Fufucode.Fui;
 
-internal sealed record FuiChoice(string Value, string Label, string? Detail = null);
+internal sealed record FuiChoice(string Value, string Label, string? Detail = null, string? ParentSessionId = null)
+{
+    public FuiTreePosition? TreePosition { get; init; }
+}
+internal readonly record struct FuiTreePosition(int Depth, bool? Expanded);
 internal sealed record FuiOverlay(string Title, string Query, IReadOnlyList<FuiChoice> Items, int Selected, string? Message = null);
 internal sealed record FuiActionResult(string? Notice = null, ITuiSession? Replacement = null);
 
