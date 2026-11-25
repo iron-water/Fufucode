@@ -5,11 +5,12 @@ internal sealed partial class TuiController
     private string _browseFilter = "";
     private void Commands() => OpenPicker("commands", "命令", FuiCommands.All.Select(FuiCommands.Choice).ToArray());
 
-    private void OpenPicker(string id, string title, IReadOnlyList<FuiChoice> choices, string query = "")
+    private void OpenPicker(string id, string title, IReadOnlyList<FuiChoice> choices, string query = "",
+        FuiPickerOptions? options = null)
     {
         if (id is "attach" or "preview" or "diff") { query = _browseFilter; _browseFilter = ""; }
         _pickerAction = id;
-        _picker = new(title, choices, query, currentTreeSession: id == "tree" ? _active.Id : null);
+        _picker = new(title, choices, query, currentTreeSession: id == "tree" ? _active.Id : null, options);
         Dirty = true;
     }
 

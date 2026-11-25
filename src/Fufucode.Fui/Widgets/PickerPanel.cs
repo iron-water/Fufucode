@@ -5,6 +5,8 @@ internal static class PickerPanel
     internal static int DesiredRows(FuiOverlay overlay)
     {
         var count = overlay.Items.Count;
+        if (FuiAgentActivityRoster.IsHubTitle(overlay.Title))
+            return 1 + Math.Min(count, 7) + 5;
         if (count == 0) return 2;
         var selected = overlay.Items[Math.Clamp(overlay.Selected, 0, count - 1)];
         return 1 + Math.Min(count, 9) + (string.IsNullOrWhiteSpace(overlay.Message ?? selected.Detail) ? 0 : 1);
@@ -20,7 +22,9 @@ internal static class PickerPanel
         string Fit(string s, bool tail = false) => TerminalText.Clip(s, columns, tail);
         var title = TerminalText.SingleLine(overlay.Title);
         var query = TerminalText.SingleLine(overlay.Query);
-        var progress = $"{(count == 0 ? 0 : selected + 1)}/{count}";
+        var progress = FuiAgentActivityRoster.IsHubTitle(overlay.Title) && count != 0
+            ? AgentProgress(overlay, selected)
+            : $"{(count == 0 ? 0 : selected + 1)}/{count}";
         var available = Math.Max(0, columns - progress.Length - 2);
         var titleWidth = query.Length == 0 ? available : Math.Max(0, available / 2 - 2);
         var left = TerminalText.Clip(title, titleWidth);
@@ -37,7 +41,9 @@ internal static class PickerPanel
             return 0;
         }
 
-        var detail = TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
+        var detail = FuiAgentActivityRoster.IsHubTitle(overlay.Title)
+            ? TerminalText.SingleLine(overlay.Items[selected].Detail ?? "")
+            : TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
         var hasDetail = detail.Length > 0 && rows.Length >= 3;
         var visible = Math.Max(1, Math.Min(count, rows.Length - 1 - (hasDetail ? 1 : 0)));
         var start = Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible));
@@ -45,7 +51,10 @@ internal static class PickerPanel
         {
             var index = start + i;
             var active = index == selected;
-            rows[i + 1] = new(Fit((active ? "▸ " : "  ") + Label(overlay.Items[index], columns)), active ? Ink.Selection : Ink.Plain);
+            rows[i + 1] = new(Fit((active ? "▸ " : "  ") + Label(overlay.Items[index], columns)),
+                active ? Ink.Selection : FuiAgentActivityRoster.IsHubTitle(overlay.Title)
+                    ? FuiAgentActivityRoster.InkFor(overlay.Items[index])
+                    : Ink.Plain);
         }
         if (hasDetail) rows[visible + 1] = new(Fit("  " + detail), Ink.Quiet);
         return visible;
@@ -60,14 +69,17 @@ internal static class PickerPanel
 
         var title = TerminalText.SingleLine(overlay.Title);
         var query = TerminalText.SingleLine(overlay.Query);
-        var progress = $"{selected + 1}/{count}";
+        var agentHub = FuiAgentActivityRoster.IsHubTitle(overlay.Title);
+        var progress = agentHub ? AgentProgress(overlay, selected) : $"{selected + 1}/{count}";
         var leftTitle = title + (query.Length == 0 ? "" : " /" + query);
         rows[0] = new(Pad(TerminalText.Clip(leftTitle, leftWidth - progress.Length - 1), leftWidth) +
-            "│" + Pad(" " + progress + "  详情", rightWidth), Ink.PanelTitle);
+            "│" + Pad(" " + progress + (agentHub ? "  作业 · 最近事件" : "  详情"), rightWidth), Ink.PanelTitle);
 
         var detail = new List<TerminalText.Slice>();
         var selectedChoice = overlay.Items[selected];
-        var detailText = TerminalText.Clean(string.Join('\n', new[]
+        var detailText = agentHub
+            ? TerminalText.Clean(overlay.Message ?? selectedChoice.Detail ?? "尚无事件")
+            : TerminalText.Clean(string.Join('\n', new[]
         {
             Label(selectedChoice, leftWidth),
             selectedChoice.Value == Label(selectedChoice, leftWidth) ? "" : selectedChoice.Value,
@@ -76,18 +88,37 @@ internal static class PickerPanel
         }.Where(value => value.Length != 0)));
         TerminalText.Wrap(detailText, rightWidth, 0, detail);
 
-        var visible = Math.Max(1, Math.Min(count, rows.Length - 1));
+        var bodyRows = rows.Length - 1;
+        var visible = Math.Max(1, Math.Min(count, bodyRows));
         var start = Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible));
-        for (var i = 0; i < visible; i++)
+        for (var i = 0; i < bodyRows; i++)
         {
+            var hasItem = i < visible;
             var index = start + i;
-            var active = index == selected;
-            var left = (active ? "▸ " : "  ") + Label(overlay.Items[index], leftWidth);
+            var active = hasItem && index == selected;
+            var choice = hasItem ? overlay.Items[index] : null;
+            var left = choice is null ? "" : (active ? "▸ " : "  ") + Label(choice, leftWidth);
             var right = i < detail.Count ? detail[i].Text : "";
             rows[i + 1] = new(Pad(TerminalText.Clip(left, leftWidth), leftWidth) + "│" +
-                Pad(TerminalText.Clip(right, rightWidth), rightWidth), active ? Ink.Selection : Ink.Plain);
+                Pad(TerminalText.Clip(right, rightWidth), rightWidth),
+                active ? Ink.Selection : choice is not null && agentHub
+                    ? FuiAgentActivityRoster.InkFor(choice)
+                    : Ink.Plain);
         }
         return visible;
+    }
+
+    private static string AgentProgress(FuiOverlay overlay, int selected)
+    {
+        var total = 0;
+        var current = 0;
+        for (var i = 0; i < overlay.Items.Count; i++)
+        {
+            if (FuiAgentActivityRoster.IsGroupChoice(overlay.Items[i])) continue;
+            total++;
+            if (i <= selected) current = total;
+        }
+        return $"{Math.Max(1, current)}/{total}";
     }
 
     private static string Label(FuiChoice choice, int columns)

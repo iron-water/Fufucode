@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text;
 using Fufucode.App.Abstractions;
 
@@ -28,9 +29,9 @@ internal sealed record FuiAgentJob(
     int EventCount,
     IReadOnlyList<FuiAgentActivityEvent> Events);
 
-internal sealed record FuiAgentActivitySnapshot(IReadOnlyList<FuiAgentJob> Jobs)
+internal sealed record FuiAgentActivitySnapshot(IReadOnlyList<FuiAgentJob> Jobs, DateTimeOffset At)
 {
-    internal static FuiAgentActivitySnapshot Empty { get; } = new(Array.Empty<FuiAgentJob>());
+    internal static FuiAgentActivitySnapshot Empty { get; } = new(Array.Empty<FuiAgentJob>(), DateTimeOffset.MinValue);
 
     internal int RunningCount => Jobs.Count(job => job.State == FuiAgentState.Running);
 
@@ -53,7 +54,7 @@ internal sealed class FuiAgentActivityTracker
     {
         get
         {
-            lock (_gate) return Snapshot();
+            lock (_gate) return Snapshot(_clock.GetUtcNow());
         }
     }
 
@@ -112,11 +113,11 @@ internal sealed class FuiAgentActivityTracker
             job.EventCount++;
             job.Events.Add(new(at, kind, detail));
             if (job.Events.Count > MaxEventsPerJob) job.Events.RemoveAt(0);
-            return Snapshot();
+            return Snapshot(at);
         }
     }
 
-    private FuiAgentActivitySnapshot Snapshot()
+    private FuiAgentActivitySnapshot Snapshot(DateTimeOffset at)
     {
         var jobs = _jobs.Values
             .OrderBy(job => StateOrder(job.State))
@@ -125,14 +126,17 @@ internal sealed class FuiAgentActivityTracker
             .ThenBy(job => job.JobId, StringComparer.Ordinal)
             .Select(job => job.ToImmutable())
             .ToArray();
-        return new(Array.AsReadOnly(jobs));
+        return new(Array.AsReadOnly(jobs), at);
     }
 
     private static int StateOrder(FuiAgentState state) => state switch
     {
         FuiAgentState.Running => 0,
         FuiAgentState.Unknown => 1,
-        _ => 2
+        FuiAgentState.Failed => 2,
+        FuiAgentState.Truncated => 3,
+        FuiAgentState.Cancelled => 4,
+        _ => 5
     };
 
     private sealed class MutableJob(string jobId, string agent, DateTimeOffset firstAt)
@@ -159,39 +163,82 @@ internal sealed class FuiAgentActivityTracker
 internal static class FuiAgentActivityRoster
 {
     internal static IReadOnlyList<FuiChoice> Choices(FuiAgentActivitySnapshot snapshot) =>
-        snapshot.Jobs.Select(job =>
-        {
-            var latest = job.Events.Count == 0 ? "" : job.Events[^1].Kind;
-            var activity = string.Join(" · ", new[] { latest, job.LastDetail }.Where(value => value.Length != 0));
-            var summary = string.Join(" · ", new[]
+        Groups(snapshot)
+            .SelectMany((group, groupIndex) => new[]
             {
-                activity,
-                $"工具 {job.ToolStarted}/{job.ToolCompleted}",
-                Duration(job),
-                JobIdLabel(job.JobId)
-            }.Where(value => value.Length != 0));
-            return new FuiChoice(job.JobId, $"{StateLabel(job.State)} · {AgentLabel(job.Agent)}", summary);
-        }).ToArray();
+                new FuiChoice(
+                    GroupValuePrefix + groupIndex.ToString(CultureInfo.InvariantCulture),
+                    $"AGENT · {group.Agent} · 运行 {group.Jobs.Count(job => job.State == FuiAgentState.Running)}/{group.Jobs.Count}",
+                    GroupDetail(group.Jobs))
+            }.Concat(group.Jobs.Select(job => JobChoice(snapshot, job))))
+            .ToArray();
 
-    internal static string Detail(FuiAgentJob job)
+    internal const string GroupValuePrefix = "agent-group:";
+    internal const string HubTitle = "子代理活动 · 只读";
+
+    internal static bool IsHubTitle(string title) =>
+        string.Equals(title, HubTitle, StringComparison.Ordinal);
+
+    internal static bool IsGroupChoice(FuiChoice choice) =>
+        choice.Value.StartsWith(GroupValuePrefix, StringComparison.Ordinal);
+
+    internal static Ink InkFor(FuiChoice choice)
+    {
+        if (IsGroupChoice(choice)) return Ink.PanelTitle;
+        var label = TerminalText.SingleLine(choice.Label);
+        if (label.StartsWith(StateGlyph(FuiAgentState.Running), StringComparison.Ordinal)) return Ink.Header;
+        if (label.StartsWith(StateGlyph(FuiAgentState.Failed), StringComparison.Ordinal)) return Ink.Error;
+        if (label.StartsWith(StateGlyph(FuiAgentState.Truncated), StringComparison.Ordinal)) return Ink.Heading;
+        if (label.StartsWith(StateGlyph(FuiAgentState.Unknown), StringComparison.Ordinal) ||
+            label.StartsWith(StateGlyph(FuiAgentState.Cancelled), StringComparison.Ordinal))
+            return Ink.Quiet;
+        return Ink.Plain;
+    }
+
+    private static FuiChoice JobChoice(FuiAgentActivitySnapshot snapshot, FuiAgentJob job)
+    {
+        var activity = RecentActivity(job);
+        var summary = Join(" · ",
+            $"工具 开始 {job.ToolStarted} / 完成 {job.ToolCompleted}",
+            $"{DurationLabel(job)} {Duration(snapshot, job)}",
+            activity,
+            AgentLabel(job.Agent));
+        return new FuiChoice(
+            job.JobId,
+            $"{StateGlyph(job.State)} {StateLabel(job.State)} · {JobIdLabel(job.JobId)}",
+            summary);
+    }
+
+    internal static string Detail(FuiAgentActivitySnapshot snapshot, FuiAgentJob job)
     {
         var text = new StringBuilder();
-        text.AppendLine($"{StateLabel(job.State)} · {AgentLabel(job.Agent)}");
-        text.AppendLine($"作业 {JobIdLabel(job.JobId)} · 工具开始 {job.ToolStarted} · 工具结束 {job.ToolCompleted}");
-        text.AppendLine($"时间 {Time(job.FirstAt)} → {Time(job.LastAt)} · {Duration(job)}");
-        text.AppendLine("最近事件");
-        var firstIndex = Math.Max(0, job.EventCount - job.Events.Count);
-        for (var i = 0; i < job.Events.Count; i++)
+        text.AppendLine($"{StateGlyph(job.State)} {StateLabel(job.State)} · {AgentLabel(job.Agent)}");
+        text.AppendLine($"作业 {JobIdLabel(job.JobId)} · 工具 开始 {job.ToolStarted} / 完成 {job.ToolCompleted} · 事件 {job.EventCount}");
+        text.AppendLine($"开始 {Time(job.FirstAt)} · 最近 {Time(job.LastAt)} · {DurationLabel(job)} {Duration(snapshot, job)}");
+        text.AppendLine("最近事件 · 新 → 旧");
+        if (job.Events.Count == 0)
         {
-            var item = job.Events[i];
-            var kind = item.Kind.Length == 0 ? "未提供类型" : item.Kind;
-            var detail = item.Detail.Length == 0 ? "" : " · " + item.Detail;
-            text.AppendLine($"{firstIndex + i + 1}. {Time(item.At)} {kind}{detail}");
+            text.AppendLine("尚无事件");
         }
-        if (job.EventCount > job.Events.Count)
-            text.AppendLine($"仅保留最近 {job.Events.Count} 条，共 {job.EventCount} 条");
+        else
+        {
+            var firstIndex = Math.Max(0, job.EventCount - job.Events.Count);
+            for (var i = job.Events.Count - 1; i >= 0; i--)
+            {
+                var item = job.Events[i];
+                var kind = TerminalText.SingleLine(item.Kind) is { Length: > 0 } value ? value : "未提供类型";
+                var detail = TerminalText.SingleLine(item.Detail);
+                text.AppendLine($"{firstIndex + i + 1:00}  {Time(item.At)}  {kind}" +
+                    (detail.Length == 0 ? "" : " · " + detail));
+            }
+            if (job.EventCount > job.Events.Count)
+                text.AppendLine($"仅保留最近 {job.Events.Count} 条，共 {job.EventCount} 条");
+        }
         return TerminalText.Clean(text.ToString()).TrimEnd();
     }
+
+    internal static string Detail(FuiAgentJob job) => Detail(
+        new FuiAgentActivitySnapshot([job], job.EndedAt ?? job.LastAt), job);
 
     internal static string RunningSummary(FuiAgentActivitySnapshot snapshot) => snapshot.RunningCount switch
     {
@@ -206,20 +253,109 @@ internal static class FuiAgentActivityRoster
         FuiAgentState.Completed => "已完成",
         FuiAgentState.Failed => "失败",
         FuiAgentState.Cancelled => "已取消",
-        FuiAgentState.Truncated => "结果不完整",
+        FuiAgentState.Truncated => "已截断",
         _ => "状态未知"
     };
 
-    private static string AgentLabel(string agent) => agent.Length == 0 ? "未提供代理" : agent;
-    private static string JobIdLabel(string jobId) => jobId.Length == 0 ? "未提供 ID" : jobId;
-    private static string Time(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm:ss");
+    private static IReadOnlyList<AgentGroup> Groups(FuiAgentActivitySnapshot snapshot) =>
+        snapshot.Jobs
+            .GroupBy(job => AgentLabel(job.Agent), StringComparer.Ordinal)
+            .Select(group =>
+            {
+                var jobs = group
+                    .OrderBy(job => StateOrder(job.State))
+                    .ThenByDescending(job => job.LastAt)
+                    .ThenByDescending(job => job.FirstAt)
+                    .ThenBy(job => job.JobId, StringComparer.Ordinal)
+                    .ToArray();
+                return new AgentGroup(
+                    group.Key,
+                    jobs,
+                    StateOrder(jobs[0].State),
+                    jobs.Max(job => job.LastAt));
+            })
+            .OrderBy(group => group.StateOrder)
+            .ThenByDescending(group => group.LastAt)
+            .ThenBy(group => group.Agent, StringComparer.Ordinal)
+            .ToArray();
 
-    private static string Duration(FuiAgentJob job)
+    private static string GroupDetail(IReadOnlyList<FuiAgentJob> jobs)
     {
-        var elapsed = (job.EndedAt ?? job.LastAt) - job.FirstAt;
+        var running = jobs.Count(job => job.State == FuiAgentState.Running);
+        return Join(" · ",
+            $"{jobs.Count} 个作业",
+            running == 0 ? "无运行中" : $"{running} 个运行中",
+            $"{jobs.Sum(job => job.ToolStarted)} 次工具开始",
+            $"{jobs.Sum(job => job.ToolCompleted)} 次工具完成");
+    }
+
+    private static string RecentActivity(FuiAgentJob job)
+    {
+        if (job.Events.Count == 0) return "尚无事件";
+        var latest = job.Events[^1];
+        var kind = TerminalText.SingleLine(latest.Kind);
+        var detail = TerminalText.SingleLine(latest.Detail);
+        var text = kind.Length == 0
+            ? detail.Length == 0 ? "最近活动未提供" : detail
+            : detail.Length == 0 ? kind : kind + " · " + detail;
+        return text == "最近活动未提供" ? text : "最近 " + text;
+    }
+
+    private static int StateOrder(FuiAgentState state) => state switch
+    {
+        FuiAgentState.Running => 0,
+        FuiAgentState.Unknown => 1,
+        FuiAgentState.Failed => 2,
+        FuiAgentState.Truncated => 3,
+        FuiAgentState.Cancelled => 4,
+        _ => 5
+    };
+
+    private static string StateGlyph(FuiAgentState state) => state switch
+    {
+        FuiAgentState.Running => "●",
+        FuiAgentState.Completed => "✓",
+        FuiAgentState.Failed => "×",
+        FuiAgentState.Cancelled => "⊘",
+        FuiAgentState.Truncated => "…",
+        _ => "?"
+    };
+
+    private static string AgentLabel(string agent)
+    {
+        var clean = TerminalText.SingleLine(agent);
+        return clean.Length == 0 ? "未提供代理" : clean;
+    }
+
+    private static string JobIdLabel(string jobId)
+    {
+        var clean = TerminalText.SingleLine(jobId);
+        return clean.Length == 0 ? "未提供 ID" : clean;
+    }
+
+    private static string Time(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+
+    private static string Duration(FuiAgentActivitySnapshot snapshot, FuiAgentJob job)
+    {
+        var end = job.State is FuiAgentState.Running or FuiAgentState.Unknown
+            ? snapshot.At
+            : job.EndedAt ?? job.LastAt;
+        var elapsed = end - job.FirstAt;
         if (elapsed < TimeSpan.Zero) elapsed = TimeSpan.Zero;
         if (elapsed.TotalHours >= 1) return $"{(int)elapsed.TotalHours}时{elapsed.Minutes:00}分";
         if (elapsed.TotalMinutes >= 1) return $"{(int)elapsed.TotalMinutes}分{elapsed.Seconds:00}秒";
-        return $"{elapsed.TotalSeconds:0.0}秒";
+        return elapsed.TotalSeconds.ToString("0.0", CultureInfo.InvariantCulture) + "秒";
     }
+
+    private static string DurationLabel(FuiAgentJob job) => job.State switch
+    {
+        FuiAgentState.Running => "已运行",
+        FuiAgentState.Unknown => "已观察",
+        _ => "耗时"
+    };
+
+    private static string Join(string separator, params string[] values) =>
+        string.Join(separator, values.Where(value => value.Length != 0));
+
+    private sealed record AgentGroup(string Agent, IReadOnlyList<FuiAgentJob> Jobs, int StateOrder, DateTimeOffset LastAt);
 }

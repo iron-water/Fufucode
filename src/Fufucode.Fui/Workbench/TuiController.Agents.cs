@@ -7,6 +7,7 @@ internal sealed partial class TuiController
     private void UpdateAgentActivity(FuiAgentActivitySnapshot snapshot)
     {
         _agentActivity = snapshot;
+        if (_pickerAction == "agents") _picker?.ReplaceChoices(FuiAgentActivityRoster.Choices(snapshot));
         Dirty = true;
     }
 
@@ -21,7 +22,13 @@ internal sealed partial class TuiController
             Info("尚无子代理活动");
             return;
         }
-        OpenPicker("agents", "子代理活动 · 只读", FuiAgentActivityRoster.Choices(_agentActivity));
+        OpenPicker("agents", FuiAgentActivityRoster.HubTitle, FuiAgentActivityRoster.Choices(_agentActivity),
+            options: new(
+                Detail: choice => _agentActivity.Find(choice.Value) is { } job
+                    ? FuiAgentActivityRoster.Detail(_agentActivity, job)
+                    : null,
+                GroupHeader: FuiAgentActivityRoster.IsGroupChoice,
+                PreserveOrder: true));
     }
 
     private void ShowAgentDetail(FuiChoice choice)
@@ -31,6 +38,6 @@ internal sealed partial class TuiController
             Error("该子代理活动已不存在。");
             return;
         }
-        Info(FuiAgentActivityRoster.Detail(job));
+        Info(FuiAgentActivityRoster.Detail(_agentActivity, job));
     }
 }

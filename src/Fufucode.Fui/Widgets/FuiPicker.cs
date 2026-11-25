@@ -1,28 +1,31 @@
 namespace Fufucode.Fui;
 
+internal sealed record FuiPickerOptions(
+    Func<FuiChoice, string?>? Detail = null,
+    Func<FuiChoice, bool>? GroupHeader = null,
+    bool PreserveOrder = false);
+
 /// <summary>A navigation-only selection model. Acceptance and cancellation belong to the controller.</summary>
 internal sealed class FuiPicker
 {
     private readonly record struct SearchItem(FuiChoice Choice, string Label, string Value, string Detail);
     private readonly string _title;
-    private readonly FuiChoice[] _choices;
-    private readonly SearchItem[] _index;
+    private readonly FuiPickerOptions _options;
     private readonly Composer _query = new();
     private readonly FuiSessionTree? _tree;
+    private FuiChoice[] _choices;
+    private SearchItem[] _index;
     private IReadOnlyList<FuiChoice> _matches = [];
     private string? _filteredQuery;
     private int _selected;
 
-    internal FuiPicker(string title, IReadOnlyList<FuiChoice> choices, string initialQuery = "", string? currentTreeSession = null)
+    internal FuiPicker(string title, IReadOnlyList<FuiChoice> choices, string initialQuery = "",
+        string? currentTreeSession = null, FuiPickerOptions? options = null)
     {
         _title = title;
+        _options = options ?? new();
         _choices = [.. choices];
-        _index = new SearchItem[_choices.Length];
-        for (var i = 0; i < _choices.Length; i++)
-        {
-            var c = _choices[i];
-            _index[i] = new(c, TerminalText.SingleLine(c.Label), TerminalText.SingleLine(c.Value), TerminalText.SingleLine(c.Detail ?? ""));
-        }
+        _index = Index(_choices);
         _query.Replace(TerminalText.SingleLine(initialQuery));
         if (currentTreeSession is not null) _tree = new(_choices, currentTreeSession);
     }
@@ -34,8 +37,12 @@ internal sealed class FuiPicker
             if (BrowsingTree)
                 return new(_title, _query.Text, _tree!.Rows, _tree.Selected, _tree.Rows.Count == 0 ? "暂无选项" : null);
             Filter();
-            return new(_title, _query.Text, _matches, _selected, _matches.Count != 0 ? null :
-                _choices.Length == 0 ? "暂无选项" : "没有匹配项");
+            NormalizeSelection(_selected);
+            var detail = _matches.Count == 0 || IsGroupHeader(_matches[_selected])
+                ? null
+                : _options.Detail?.Invoke(_matches[_selected]);
+            return new(_title, _query.Text, _matches, _selected,
+                _matches.Count != 0 ? detail : _choices.Length == 0 ? "暂无选项" : "没有匹配项");
         }
     }
 
@@ -44,11 +51,22 @@ internal sealed class FuiPicker
         get
         {
             var view = View;
-            return view.Items.Count == 0 ? null : view.Items[view.Selected];
+            return view.Items.Count == 0 || IsGroupHeader(view.Items[view.Selected])
+                ? null
+                : view.Items[view.Selected];
         }
     }
 
     private bool BrowsingTree => _tree is not null && string.IsNullOrWhiteSpace(_query.Text);
+
+    internal void ReplaceChoices(IReadOnlyList<FuiChoice> choices)
+    {
+        var selected = Current?.Value;
+        _choices = [.. choices];
+        _index = Index(_choices);
+        _filteredQuery = null;
+        Filter(selected);
+    }
 
     public void Edit(ConsoleKeyInfo key, int pageSize)
     {
@@ -70,7 +88,7 @@ internal sealed class FuiPicker
         if (step != 0)
         {
             Filter();
-            _selected = (int)Math.Clamp(_selected + step, 0, Math.Max(0, _matches.Count - 1));
+            MoveSelection(step);
             return;
         }
         if (key.Key is ConsoleKey.Enter or ConsoleKey.Escape || (key.Key == ConsoleKey.J && key.Modifiers.HasFlag(ConsoleModifiers.Control))) return;
@@ -79,31 +97,134 @@ internal sealed class FuiPicker
         _query.Edit(key);
     }
 
-    private void Filter()
+    private void Filter(string? preferredValue = null)
     {
         var query = _query.Text;
         if (query == _filteredQuery) return;
         _filteredQuery = query;
-        _selected = 0;
         var terms = query.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-        if (terms.Length == 0) { _matches = _choices; return; }
+        if (terms.Length == 0)
+        {
+            _matches = _choices;
+            NormalizeSelection(0, preferredValue);
+            return;
+        }
 
-        // Constant number of stable buckets, no N log N sort. Batch-filter a pasted query once on the next View/Current.
-        var buckets = new List<FuiChoice>?[5];
+        // Generic pickers keep their five stable relevance buckets. Grouped rosters preserve
+        // their source order so running jobs and their agent groups do not jump while filtering.
+        var buckets = _options.PreserveOrder ? null : new List<FuiChoice>?[5];
+        var ordered = _options.PreserveOrder ? new List<FuiChoice>() : null;
         foreach (var item in _index)
         {
+            if (IsGroupHeader(item.Choice)) continue;
             var rank = 0;
             foreach (var term in terms)
             {
                 rank = Math.Max(rank, Rank(item, term));
-                if (rank < buckets.Length) continue;
+                if (rank < 5) continue;
                 break;
             }
-            if (rank < buckets.Length) (buckets[rank] ??= []).Add(item.Choice);
+            if (rank >= 5) continue;
+            if (ordered is not null) ordered.Add(item.Choice);
+            else (buckets![rank] ??= []).Add(item.Choice);
         }
-        var result = new List<FuiChoice>();
-        foreach (var bucket in buckets) if (bucket is not null) result.AddRange(bucket);
-        _matches = result;
+
+        if (ordered is not null)
+        {
+            _matches = ordered;
+        }
+        else
+        {
+            var result = new List<FuiChoice>();
+            foreach (var bucket in buckets!) if (bucket is not null) result.AddRange(bucket);
+            _matches = result;
+        }
+        NormalizeSelection(0, preferredValue);
+    }
+
+    private void MoveSelection(long step)
+    {
+        if (_matches.Count == 0) return;
+        if (step == int.MaxValue)
+        {
+            var last = LastSelectable();
+            if (last >= 0) _selected = last;
+            return;
+        }
+        if (step == -int.MaxValue)
+        {
+            var first = FirstSelectable();
+            if (first >= 0) _selected = first;
+            return;
+        }
+
+        var direction = step < 0 ? -1 : 1;
+        for (var remaining = Math.Abs(step); remaining > 0; remaining--)
+        {
+            var next = FindSelectable(_selected, direction);
+            if (next < 0) break;
+            _selected = next;
+        }
+    }
+
+    private void NormalizeSelection(int preferred, string? preferredValue = null)
+    {
+        if (_matches.Count == 0)
+        {
+            _selected = 0;
+            return;
+        }
+        if (preferredValue is not null)
+        {
+            for (var i = 0; i < _matches.Count; i++)
+            {
+                if (!IsSelectable(_matches[i]) || !string.Equals(_matches[i].Value, preferredValue, StringComparison.Ordinal))
+                    continue;
+                _selected = i;
+                return;
+            }
+        }
+        var index = Math.Clamp(preferred, 0, _matches.Count - 1);
+        if (IsSelectable(_matches[index]))
+        {
+            _selected = index;
+            return;
+        }
+        var forward = FindSelectable(index, 1);
+        if (forward >= 0)
+        {
+            _selected = forward;
+            return;
+        }
+        var backward = FindSelectable(index, -1);
+        _selected = backward >= 0 ? backward : index;
+    }
+
+    private int FirstSelectable() => FindSelectable(-1, 1);
+
+    private int LastSelectable() => FindSelectable(_matches.Count, -1);
+
+    private int FindSelectable(int from, int direction)
+    {
+        for (var i = from + direction; i >= 0 && i < _matches.Count; i += direction)
+            if (IsSelectable(_matches[i])) return i;
+        return -1;
+    }
+
+    private bool IsSelectable(FuiChoice choice) => !IsGroupHeader(choice);
+
+    private bool IsGroupHeader(FuiChoice choice) => _options.GroupHeader?.Invoke(choice) == true;
+
+    private static SearchItem[] Index(IReadOnlyList<FuiChoice> choices)
+    {
+        var index = new SearchItem[choices.Count];
+        for (var i = 0; i < choices.Count; i++)
+        {
+            var choice = choices[i];
+            index[i] = new(choice, TerminalText.SingleLine(choice.Label),
+                TerminalText.SingleLine(choice.Value), TerminalText.SingleLine(choice.Detail ?? ""));
+        }
+        return index;
     }
 
     private static int Rank(SearchItem item, string term)

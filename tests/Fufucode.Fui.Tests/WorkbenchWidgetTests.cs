@@ -6,7 +6,7 @@ internal static class WorkbenchWidgetTests
 {
     internal static void Run()
     {
-        Picker(); SessionTree(); ComposerActions(); Panel(); Reading(); MarkdownTests.Run();
+        Picker(); SessionTree(); AgentHub(); ComposerActions(); Panel(); Reading(); MarkdownTests.Run();
     }
 
     private static void Picker()
@@ -85,6 +85,69 @@ internal static class WorkbenchWidgetTests
         Eq(new FuiTreePosition(count - 1, null), deep.Current!.TreePosition, "deepest real depth retained");
         frame = new TerminalLayout().Arrange(Model([]) with { Overlay = deep.View }, 50, 9);
         Eq(true, frame.Rows.Any(r => r.Ink == Ink.Selection && r.Text.Contains("节点15999")), "bounded indentation keeps deeply nested labels visible");
+    }
+
+    private static void AgentHub()
+    {
+        var start = new DateTimeOffset(2026, 11, 26, 3, 0, 0, TimeSpan.Zero);
+        var running = new FuiAgentJob("job-running", "researcher", FuiAgentState.Running,
+            "grep finished", start, start.AddSeconds(7), null, 2, 1, 4,
+            [
+                new(start, "started", "inspect repository"),
+                new(start.AddSeconds(2), "tool_start", "grep_search"),
+                new(start.AddSeconds(5), "tool_end", "grep_search"),
+                new(start.AddSeconds(7), "assistant", "ranking candidates")
+            ]);
+        var failed = new FuiAgentJob("job-failed", "reviewer", FuiAgentState.Failed,
+            "compile error", start.AddSeconds(1), start.AddSeconds(6), start.AddSeconds(6), 1, 1, 3,
+            [
+                new(start.AddSeconds(1), "started", "review patch"),
+                new(start.AddSeconds(3), "tool_start", "dotnet build"),
+                new(start.AddSeconds(6), "failed", "compile error")
+            ]);
+        var snapshot = new FuiAgentActivitySnapshot([running, failed], start.AddSeconds(8));
+        var choices = FuiAgentActivityRoster.Choices(snapshot);
+        FuiPickerOptions Options() => new(
+            Detail: choice => snapshot.Find(choice.Value) is { } job
+                ? FuiAgentActivityRoster.Detail(snapshot, job)
+                : null,
+            GroupHeader: FuiAgentActivityRoster.IsGroupChoice,
+            PreserveOrder: true);
+
+        var search = new FuiPicker(FuiAgentActivityRoster.HubTitle, choices, options: Options());
+        Type(search, "researcher");
+        Eq("job-running", string.Join(',', search.View.Items.Select(choice => choice.Value)),
+            "grouped search excludes headers and preserves running-first order");
+
+        var picker = new FuiPicker(FuiAgentActivityRoster.HubTitle, choices, options: Options());
+        var overlay = picker.View;
+        Eq(1, overlay.Selected, "initial selection skips the first agent group header");
+        Eq(true, overlay.Message!.Contains("最近事件 · 新 → 旧", StringComparison.Ordinal), "picker carries the selected timeline");
+        var model = Model([new("info", "对话内容")]) with { Overlay = overlay };
+        var layout = new TerminalLayout();
+        var wide = layout.Arrange(model, 100, 35);
+        Eq(true, wide.Rows.Any(row => row.Ink == Ink.PanelTitle && row.Text.Contains('│') &&
+            row.Text.Contains("作业 · 最近事件", StringComparison.Ordinal)), "wide agent hub exposes roster and detail headers");
+        Eq(true, wide.Rows.Any(row => row.Text.Contains("AGENT · researcher", StringComparison.Ordinal) &&
+            row.Text.Contains("运行 1/1", StringComparison.Ordinal)), "agent group and running count are visible");
+        Eq(true, wide.Rows.Any(row => row.Ink == Ink.Selection && row.Text.Contains("● 运行中", StringComparison.Ordinal)),
+            "running job owns the initial roster focus");
+        Eq(true, wide.Rows.Any(row => row.Ink == Ink.Error && row.Text.Contains("× 失败", StringComparison.Ordinal)),
+            "failed job uses the semantic error ink");
+        Eq(true, wide.Rows.Any(row => row.Text.Contains("最近事件 · 新 → 旧", StringComparison.Ordinal)) &&
+            wide.Rows.Any(row => row.Text.Contains("assistant", StringComparison.Ordinal)), "timeline is visible beside the roster");
+        Eq(true, wide.Rows.All(row => TerminalText.Width(row.Text) < 100 && !row.Text.Any(char.IsControl)),
+            "wide hub never overflows and carries no terminal controls");
+
+        var narrow = layout.Arrange(model, 60, 20);
+        Eq(false, narrow.Rows.Any(row => row.Text.Contains('│') && row.Text.Contains("作业 · 最近事件", StringComparison.Ordinal)),
+            "narrow agent hub falls back to one column");
+        Eq(true, narrow.Rows.Any(row => row.Ink == Ink.Selection && row.Text.Contains("● 运行中", StringComparison.Ordinal)),
+            "narrow hub keeps the running job selected");
+        Eq(true, narrow.Rows.Any(row => row.Text.Contains("工具 开始 2 / 完成 1", StringComparison.Ordinal)),
+            "narrow hub keeps a compact selected-job summary");
+        Eq(false, narrow.Rows.Any(row => row.Text.Contains("最近事件 · 新 → 旧", StringComparison.Ordinal)),
+            "full timeline stays in the selected wide detail or scrollback");
     }
 
     private static void ComposerActions()
