@@ -2,19 +2,23 @@ using System.Threading.Channels;
 
 namespace Fufucode.Fui;
 
-internal sealed record TuiLine(string Kind, string Text, ToolCallSnapshot? Tool = null);
+internal sealed record TuiImage(string Label, string MimeType, byte[]? Bytes = null, Func<byte[]?>? LoadBytes = null,
+    int MaxRows = 16);
+
+internal sealed record TuiLine(string Kind, string Text, ToolCallSnapshot? Tool = null,
+    IReadOnlyList<TuiImage>? Images = null);
 
 internal sealed record TuiView(string Project, string Session, string Model, string Status,
     IReadOnlyList<TuiLine> Lines, string Draft, int Cursor, int Scroll, string? Approval, bool Busy = false,
     FuiOverlay? Overlay = null, bool ExpandTools = false, bool ShowThinking = true,
     IReadOnlyList<FileAttachment>? Attachments = null, bool CompactCards = true, bool MouseWheel = true,
     string Theme = "auto", bool Hyperlinks = false, IReadOnlyList<string>? StatusSegments = null,
-    string CommandKey = "Ctrl+P");
+    string CommandKey = "Ctrl+P", Func<string, ResolvedImage?>? ResolveImage = null);
 
 internal abstract record TuiEvent
 {
     public sealed record Message(string Id, string Kind, string Text, bool Append = false,
-        ToolCallSnapshot? Tool = null) : TuiEvent;
+        ToolCallSnapshot? Tool = null, IReadOnlyList<TuiImage>? Images = null) : TuiEvent;
     public sealed record Status(string Text, bool Busy) : TuiEvent;
     public sealed record Approval(string Id, string Text) : TuiEvent;
     public sealed record ApprovalClosed(string Id) : TuiEvent;
@@ -37,6 +41,7 @@ internal interface ITuiSession : IAsyncDisposable
     string Id { get; }
     string? Model { get; }
     IReadOnlyList<TuiLine> History { get; }
+    IReadOnlyList<string?> HistorySources => [];
     ChannelReader<TuiEvent> Events { get; }
     Task SendAsync(string text, CancellationToken ct);
     Task StopAsync(CancellationToken ct);

@@ -8,7 +8,7 @@ fui --continue            # 当前项目，最近一次 FUMO 会话
 fui --project C:\work\demo --session <ID>
 ```
 
-`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令；四个安全动作可在 `/keys` 中重绑。长审批参数可在对话区翻阅。
+`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Alt+V` 粘贴剪贴板图片。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令；四个安全动作可在 `/keys` 中重绑。长审批参数可在对话区翻阅。
 
 ## 在工作台里操作
 
@@ -20,8 +20,8 @@ fui --project C:\work\demo --session <ID>
 | 切模型、查看用量 | `/model` 从实际端点目录选择；`/thinking` 选当前模型可请求的等级；`/usage` 显示历史中报告的数量，未知不按字数估算。`/skills` 填入技能调用；`/capabilities` 浏览已注册能力，不执行工具。 |
 | 在运行中补充输入 | `/steer 文本` 插话，`/queue 文本` 追加下一轮，`/queue` 查看队列。若正在写草稿，可从命令面板选插话或跟进，再按 Enter 提交。 |
 | 查看子代理活动 | 状态栏显示运行中的子代理数量；`/agents` 列出 FUMO 实际上报的作业、状态和工具计数，选择后查看只读事件记录。插件未启用或没有事件时显示空态，不伪造实时转录。 |
-| 浏览项目和带入上下文 | `/preview` 选择 UTF-8 文件，只在本机显示；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择 UTF-8 文本或 PNG/JPEG 图片附到下一条消息（允许纯图发送）；`/context` 查看，`/detach` 移除。每回合最多 4 个附件、合计 10 MiB，单个文本文件最多 64 KiB；发送前复核内容、安全规则和当前模型的图片输入能力，文件已改或模型不支持图片时会拒绝发送并保留草稿。 |
-| 阅读和找回输入 | `/outline` 生成大纲，`/transcript` 用 `Tab` 过滤并定位，`/copy` 通过统一 `IFuiClipboard.CopyText` 写入 Windows 文本剪贴板，`/links` 搜索并复制 HTTP(S) 链接。`/info` 显示可证明的会话与用量事实，`/retry` 通过 FUMO 发送上一条用户文本并创建真实新回合。`Ctrl+F`（可改键）或 `/find` 搜索；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`Ctrl+O` / `Ctrl+T` 或 `/tools`、`/thoughts` 切换工具与思考呈现。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
+| 浏览项目和带入上下文 | `/preview` 在本机直接预览 UTF-8 文本或图片（支持 SIXEL 直接渲染）；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择 UTF-8 文本或图片附到下一条消息（允许纯图发送）；`/paste-image`（`/paste` 为别名）或 `Alt+V` 直接粘贴 Windows 剪贴板图片；`/context` 查看并预览待发图片缩略图，`/detach` 移除。每回合最多 4 个附件、合计 10 MiB，单个文本文件最多 64 KiB；发送前复核内容、安全规则和当前模型的图片输入能力，文件已改或模型不支持图片时会拒绝发送并保留草稿。 |
+| 阅读和找回输入 | `/outline` 按用户、助手标题或摘要、工具、错误和审批生成大纲，搜索后跳到原文；`/transcript` 用 `Tab` 切换全部/用户/助手/工具/错误/审批，宽屏双栏、窄屏单栏，`Enter` 定位；`/copy` 选择最近或任意助手回复、任意用户消息、当前或指定代码块、工具结果、URL 和会话 ID，并写入 Windows 文本剪贴板。`/links` 搜索回复中的链接目标并明确复制。`/info` 显示可证明的会话与用量事实，`/retry` 通过 FUMO 发送上一条用户文本并创建真实新回合。`Ctrl+F`（可改键）或 `/find` 快速搜索；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`Ctrl+O` / `Ctrl+T` 或 `/tools`、`/thoughts` 切换工具与思考呈现。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
 
 大纲在流式输出期间按节流刷新，选项身份使用稳定行位置，追加内容不会把当前选择指向另一条消息。复制成功显示 Unicode 字符数和 UTF-8 字节数，失败显示系统剪贴板原因；复制是本地操作，不发送消息、不改会话。FUI 不发射 OSC 52：终端协议没有可靠完成回执，无法证明远端剪贴板真的写入，因此不在失败时伪装成功。
 
@@ -42,6 +42,17 @@ FUI 使用独立设置文件 `<data root>/fui/settings.json`，不读写 GUI 与
 `/keys` 展示并修改当前安全按键。`/doctor` 输出终端家族、尺寸、UTF-8/code page、bracketed paste、mouse、Sixel、颜色、hyperlinks、notifications、multiplexer、data root、FUMO shell 与 FUI build/version；未探测项明确写未知。tmux、Zellij、screen、Windows Terminal、kitty 等能力按实际宿主降级说明，不把 BEL 或复用器吞掉的 OSC 当成成功 toast。
 
 回合完成或失败时，FUI 优先使用 Windows Terminal 的 OSC 777，或其他终端的 OSC 9（tmux 走 passthrough）；不支持文本通知时只发 BEL。可用 `FUI_NOTIFICATIONS=off`、`FUI_NO_NOTIFY=1` 或设置 `desktop-notifications=off` 关闭。通知失败不会改变回合结果。
+
+### 图片直接渲染（输入与 AI 回复）
+
+在支持 SIXEL 的终端（含 Windows Terminal 1.22+、xterm.js SIXEL 等）中，FUI 直接以透明背景、240 色中位切分 + Floyd-Steinberg 抖动的方式渲染位图与矢量图，无需离开终端：
+
+- **输入与历史**：`/attach`、`@`、`/paste-image`（`/paste` 为别名）、`Alt+V`、`/preview` 与 `/context` 会立即显示缩略图或大图；已发送的用户消息及 `--continue` / `/resume` 恢复的会话历史（含原生 `.assets`）都会直接渲染对应图片。模型原生支持 `PNG` / `JPEG` / `WebP` / `GIF` 时按原样发送，其余已解码格式会在发送前自动无损转码为 `PNG`。
+- **AI 回复与工具输出**：自动识别并渲染 Markdown `![alt](路径)`、HTML `<img src="...">` 以及内联 `data:image/...`（Base64 与 URL 编码 SVG）；流式输出未闭合的 `data:image/...` 会折叠为 `[图片加载中：…]`，不刷屏泄露原始 Base64。仅读取项目内且安全中心放行的路径；绝不发起远程 HTTP 拉取（`http://`/`https://` 显示 `[外链图片：…]`），越界路径、`.git`、符号链接和代码块内的图片语法保持原文。
+- **支持格式**：
+  - **内置光栅 / 矢量**：`PNG` / `APNG`、`JPEG`（含 EXIF 方向校正）、`WebP`、`GIF`、`BMP` / 无头 `DIB`、`ICO`、`CUR`、`WBMP`、`SVG` / `SVGZ`（加载前做 XML 安全审计：拒绝 `<!ENTITY`、`<script>`、`<foreignObject>`、`on*` 及外部 `href`/`src`/`url(...)`）。
+  - **内置纯 C# 解码**：`QOI`、`TGA`（未压缩 / RLE、8/15/16/24/32 位）、`Netpbm`（`PBM`/`PGM`/`PPM`/`PNM`/`PAM`，P1–P7，8/16 位）、`Farbfeld`（`.ff`）、`Radiance HDR`（`.hdr`，未压缩 / RLE，Reinhard 色调映射）。
+  - **Windows WIC 自动扩展**：内置 `TIFF`、`JPEG XR`（`.jxr/.wdp/.hdp`）、`DDS`，并自动接入系统已安装的 `HEIC`/`HEIF`、`AVIF`、`JPEG XL`（`.jxl`）、`DNG` 与相机 `RAW` 解码器。终端层固定走 SIXEL 静态帧输出（动画格式渲染首帧；高色深/HDR 自动色调映射为 8-bit sRGB 后量化）。
 
 ### LaTeX 公式
 

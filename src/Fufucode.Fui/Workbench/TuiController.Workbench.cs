@@ -20,7 +20,8 @@ internal sealed partial class TuiController
     private (FuiCommand Command, string Argument)? _deferred;
     private sealed record Result(FuiActionResult? Action = null, IReadOnlyList<FuiChoice>? Choices = null,
         string? Title = null, FileAttachment? File = null, FuiPrompt? Prompt = null,
-        FuiCopyCatalog? Copy = null, FuiTranscriptCatalog? Transcript = null);
+        FuiCopyCatalog? Copy = null, FuiTranscriptCatalog? Transcript = null,
+        IReadOnlyList<TuiImage>? Images = null);
     private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable)
     {
         public bool PreemptedByApproval { get; set; }
@@ -35,6 +36,13 @@ internal sealed partial class TuiController
             var agents = AgentStatusSummary;
             return agents.Length == 0 ? status : agents + " · " + status;
         }
+    }
+
+    private ResolvedImage? ResolveProjectImage(string reference)
+    {
+        if (string.IsNullOrWhiteSpace(_active.Project)) return null;
+        try { return Files().TryReadAllowedImage(reference); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException) { return null; }
     }
 
     public int? TakeScrollTarget() { var target = _scrollTarget; _scrollTarget = null; return target; }
@@ -110,12 +118,17 @@ internal sealed partial class TuiController
                     _composer.Replace(s.Remove(_mentionStart, _composer.Cursor - _mentionStart), _mentionStart);
                 }
                 _mentionStart = -1;
-                Info($"已附加 {file.Path}");
+                if (file.MimeType is not null && file.ImageBytes is not null)
+                {
+                    var desc = file.ImageWidth > 0 ? $" ({file.ImageWidth}×{file.ImageHeight} · {file.FormatLabel ?? file.MimeType})" : "";
+                    Info($"已附加 {file.Path}{desc}", [new TuiImage(file.Path, file.MimeType, file.ImageBytes, MaxRows: 8)]);
+                }
+                else Info($"已附加 {file.Path}");
             }
             if (result.Action?.Notice is { Length: > 0 } notice)
             {
-                if (done.PreemptedByApproval) AppendLine("info", notice);
-                else Info(notice);
+                if (done.PreemptedByApproval) AppendLine("info", notice, images: result.Images);
+                else Info(notice, result.Images);
             }
             else if (result.Action?.Replacement is not null) Info(done.Id switch { "fork" => "已打开分叉会话。", "new" => "已新建会话。", _ => "已恢复会话。" });
         }
@@ -139,7 +152,8 @@ internal sealed partial class TuiController
         _lineSources.Clear();
         ResetAgentActivity();
         if (_drafts.Remove(next.Id, out var saved)) { _composer.Replace(saved.Text, saved.Cursor); _attachments.AddRange(saved.Files); }
-        _files = null; _lines.AddRange(next.History); _lineSources.AddRange(next.History.Select(_ => (string?)null));
+        _files = null; _lines.AddRange(next.History);
+        _lineSources.AddRange(HistorySources(next));
         _scroll = 0; _scrollTarget = null; _busy = false; _status = "就绪"; _transcriptGeneration++;
         _release = Invoke(() => prior.DisposeAsync().AsTask());
     }
@@ -211,6 +225,13 @@ internal sealed partial class TuiController
         }
         if (c.Kind == CommandKind.Files)
         {
+            if (c.Id is "paste" or "paste-image")
+            {
+                if (_attachments.Count >= ProjectFiles.MaxAttachments)
+                { Error($"每条消息最多附加 {ProjectFiles.MaxAttachments} 个文件。"); return; }
+                Begin(c.Id, async ct => new Result(File: await Files().ReadClipboardImageAsync(ct)), cancellable: true);
+                return;
+            }
             if (c.Id == "detach")
             {
                 if (argument.Length == 0) OpenPicker("detach", c.Label, _attachments.Select(a => new FuiChoice(a.Path, a.Path)).ToArray());
@@ -227,7 +248,16 @@ internal sealed partial class TuiController
                 Begin(c.Id, async ct => new(File: await Files().ReadAttachmentAsync(path, ct)), cancellable: true);
             }
             else if (c.Id == "diff") Begin(c.Id, async ct => new(Action: new(await Files().DiffAsync(path, ct))), cancellable: true);
-            else Begin(c.Id, async ct => { var file = await Files().ReadAsync(path, ct); return new(Action: new($"{file.Path}\n{file.Text}")); }, cancellable: true);
+            else Begin(c.Id, async ct =>
+            {
+                var file = await Files().ReadPreviewAsync(path, ct);
+                if (file.MimeType is not null && file.ImageBytes is not null)
+                {
+                    var header = $"{file.Path} · {file.ImageWidth}×{file.ImageHeight} · {file.FormatLabel ?? file.MimeType}";
+                    return new(Action: new(header), Images: [new TuiImage(file.Path, file.MimeType, file.ImageBytes, MaxRows: 18)]);
+                }
+                return new(Action: new($"{file.Path}\n{file.Text}"));
+            }, cancellable: true);
             return;
         }
         switch (c.Id)
@@ -240,9 +270,22 @@ internal sealed partial class TuiController
             case "doctor": Doctor(); break;
             case "keys": OpenKeys(); break;
             case "session": Info($"FUMO · {_active.Id}\n{_active.Project}\n{_active.Model ?? "未配置模型"}"); break;
-            case "context": Info(_attachments.Count == 0 ? "草稿没有附加文件。" : string.Join('\n', _attachments.Select(a => a.Path))); break;
-            case "tools": ToggleSetting("expand-tools"); break;
-            case "thoughts": ToggleSetting("show-thinking"); break;
+            case "context":
+                if (_attachments.Count == 0) Info("草稿没有附加文件。");
+                else
+                {
+                    var summary = string.Join('\n', _attachments.Select(a => a.MimeType is not null && a.ImageWidth > 0
+                        ? $"{a.Path} ({a.ImageWidth}×{a.ImageHeight} · {a.FormatLabel ?? a.MimeType})"
+                        : a.Path));
+                    var imgs = _attachments
+                        .Where(a => a.MimeType is not null && a.ImageBytes is not null)
+                        .Select(a => new TuiImage(a.Path, a.MimeType!, a.ImageBytes, MaxRows: 8))
+                        .ToArray();
+                    Info(summary, imgs.Length > 0 ? imgs : null);
+                }
+                break;
+             case "tools": ToggleSetting("expand-tools"); break;
+             case "thoughts": ToggleSetting("show-thinking"); break;
             case "agents": Agents(); break;
             case "plan": Plan(c.Id); break;
             case "todo": Plan(c.Id); break;

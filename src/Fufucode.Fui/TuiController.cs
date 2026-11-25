@@ -11,7 +11,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
-        "Tab 补全 /命令 或 @文件 · Ctrl+R 输入历史\n" +
+        "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Alt+V 粘贴图片 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
         "Ctrl+Z 撤销 · Ctrl+Shift+Z / Alt+Z 重做 · Ctrl+Y / Alt+Y 粘贴 / 轮换删除\n" +
         "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
@@ -40,11 +40,20 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
     public bool Dirty { get; private set; } = true;
     public bool Exiting { get; private set; }
 
+    private static string?[] HistorySources(ITuiSession session)
+    {
+        var stored = session.HistorySources;
+        return Enumerable.Range(0, session.History.Count)
+            .Select(i => i < stored.Count ? stored[i] : null)
+            .ToArray();
+    }
+
     public TuiView View() => new(_active.Project, _active.Id, _active.Model ?? "未配置模型", StatusText, _lines,
         _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault()?.Text,
         _busy, Overlay(), _expandTools, _showThinking,
         _attachments.Count == 0 ? null : [.. _attachments], _settings.CompactCards, _settings.MouseWheel,
-        _settings.Theme, FuiTerminalDetector.HyperlinksEnabled(_settings, _terminal), StatusSegments(), CommandKeyHint);
+        _settings.Theme, FuiTerminalDetector.HyperlinksEnabled(_settings, _terminal), StatusSegments(), CommandKeyHint,
+        ResolveProjectImage);
 
     private static List<TuiLine> InitialLines(ITuiSession session, FuiSettingsStore? store)
     {
@@ -55,7 +64,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 
     private static List<string?> InitialSources(ITuiSession session, FuiSettingsStore? store)
     {
-        var sources = session.History.Select(_ => (string?)null).ToList();
+        var sources = HistorySources(session).ToList();
         if (store?.LoadIssue is { Length: > 0 }) sources.Add(null);
         return sources;
     }
@@ -124,7 +133,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (!_indices.TryGetValue(m.Id, out var i))
         {
             _indices.Add(m.Id, _lines.Count);
-            AppendLine(m.Kind, m.Text, m.Id, m.Tool);
+            AppendLine(m.Kind, m.Text, m.Id, tool: m.Tool, images: m.Images);
         }
         else if (m.Append)
         {
@@ -135,7 +144,13 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         else
         {
             _deltas.Remove(i);
-            _lines[i] = new(m.Kind, m.Text, m.Tool); // A final snapshot supersedes all preceding deltas.
+            _lines[i] = _lines[i] with
+            {
+                Kind = m.Kind,
+                Text = m.Text,
+                Tool = m.Tool,
+                Images = m.Images ?? _lines[i].Images
+            }; // A final snapshot supersedes all preceding deltas.
             _transcriptGeneration++;
         }
     }
@@ -180,7 +195,8 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             return;
         }
         if (key is { Key: ConsoleKey.Enter, Modifiers: 0 } && _pickerAction == "commands" &&
-            _picker?.Current is { Value: "paste-image" } && CanRun(FuiCommands.Get("paste-image")!))
+            _picker?.Current is { Value: "paste-image" or "paste" } command &&
+            CanRun(FuiCommands.Get(command.Value)!))
         {
             ClosePicker();
             PasteClipboardImage();
@@ -256,11 +272,16 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             if (text.StartsWith("//", StringComparison.Ordinal)) text = text[1..];
             else if (!text.StartsWith("/skill:", StringComparison.Ordinal))
             {
-                if (text.TrimEnd().Equals("/paste-image", StringComparison.OrdinalIgnoreCase) &&
-                    CanRun(FuiCommands.Get("paste-image")!))
+                var command = text.TrimEnd();
+                if (command is "/paste-image" or "/paste" ||
+                    command.Equals("/paste-image", StringComparison.OrdinalIgnoreCase) ||
+                    command.Equals("/paste", StringComparison.OrdinalIgnoreCase))
                 {
-                    _composer.Take();
-                    PasteClipboardImage();
+                    if (CanRun(FuiCommands.Get(command[1..])!))
+                    {
+                        _composer.Take();
+                        PasteClipboardImage();
+                    }
                 }
                 else SubmitCommand(text);
                 return;
@@ -321,7 +342,11 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         _stop = Invoke(() => _active.StopAsync(token));
     }
 
-    private void Info(string text) { AppendLine("info", text); _scroll = 0; }
+    private void Info(string text, IReadOnlyList<TuiImage>? images = null)
+    {
+        AppendLine("info", text, images: images);
+        _scroll = 0;
+    }
 
     private static Task Invoke(Func<Task> command)
     {

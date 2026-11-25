@@ -57,9 +57,25 @@ internal sealed partial class FumoTuiSession
                 throw new InvalidOperationException(declared == false
                     ? $"模型 {model} 不支持图片输入。"
                     : $"无法确认模型 {model} 的图片输入能力。");
-            submitted = SubmitPrompt(() => media.SendWithImagesAsync(text, images, cancellationToken), images.Count);
+            var displayImages = ToDisplayImages(images);
+            submitted = SubmitPrompt(() => media.SendWithImagesAsync(text, images, cancellationToken), displayImages);
         }
         await submitted;
+    }
+
+    private static TuiImage[] ToDisplayImages(IReadOnlyList<ChatImage> images)
+    {
+        var list = new TuiImage[images.Count];
+        for (var i = 0; i < images.Count; i++)
+        {
+            var img = images[i];
+            list[i] = new TuiImage($"图片 {i + 1}", img.MimeType, LoadBytes: () =>
+            {
+                try { return Convert.FromBase64String(img.Data); }
+                catch (FormatException) { return null; }
+            }, MaxRows: 12);
+        }
+        return list;
     }
 
     private bool AllowsImages(string model, IChatAttachments media, bool? declared) =>

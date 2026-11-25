@@ -20,6 +20,8 @@ try
     Console.WriteLine("PASS workbench widgets: selection, markdown, folding, navigation and editing");
     await MarkdownFeatureTests.RunAsync();
     Console.WriteLine("PASS markdown features: syntax, wide glyphs, streaming, links, OSC 8, Mermaid and copy");
+    await ImageRenderTests.RunAsync();
+    Console.WriteLine("PASS image render: multi-format decoders, SVG audit, SIXEL color, streaming data-URI, clipboard paste and legacy paste");
     await WorkbenchFlowTests.RunAsync();
     Console.WriteLine("PASS workbench flows: command dispatch, drafts, project context and file protections");
     await RuntimeTests.RunAsync();

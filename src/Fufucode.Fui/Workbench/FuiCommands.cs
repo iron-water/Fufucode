@@ -35,6 +35,7 @@ internal static class FuiCommands
         new("review", "审查工作区变更", "工作流"),
         new("attach", "附加项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("paste-image", "粘贴剪贴板图片", "项目", CommandKind.Files),
+        new("paste", "粘贴剪贴板图片（/paste-image 别名）", "项目", CommandKind.Files),
         new("detach", "移除草稿附件", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("context", "查看待发送文件", "项目"),
         new("preview", "预览项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),

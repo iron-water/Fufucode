@@ -39,7 +39,9 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         _nativeProbeModel = string.IsNullOrWhiteSpace(_imageEndpoint?.ModelId) ? settings.SelectedModel : _imageEndpoint.ModelId;
         _ui = session.Chat as IExtensionUiSession
             ?? throw new InvalidOperationException("FUMO 会话没有原生审批入口。");
-        History = FumoEventProjection.ReadHistory(session);
+        var historyProjection = FumoEventProjection.ReadHistoryWithSources(session);
+        History = historyProjection.Lines;
+        HistorySources = historyProjection.Sources;
         var historyMessages = session.History.CurrentBranchMessages;
         _projection = new(_events.Writer, historyMessages.Count,
             historyMessages.Sum(message => message.Content.OfType<PiToolCallBlock>().Count()));
@@ -77,6 +79,7 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         }
     }
     public IReadOnlyList<TuiLine> History { get; }
+    public IReadOnlyList<string?> HistorySources { get; }
     public ChannelReader<TuiEvent> Events => _events.Reader;
 
     public static async Task<FumoTuiSession> OpenAsync(string project, string? dataRoot, string? sessionId,
@@ -188,13 +191,13 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
             throw new InvalidOperationException("会话仍在运行；请使用 /queue 排队或 /steer 插话。");
     }
 
-    private Task SubmitPrompt(Func<Task> submit, int imageCount = 0)
+    private Task SubmitPrompt(Func<Task> submit, IReadOnlyList<TuiImage>? images = null)
     {
         _workerPending = true;
         _turnRevision++;
-        _projection.ExpectUserImages(imageCount);
+        _projection.ExpectUserImages(images);
         try { return submit(); }
-        catch { _workerPending = false; _projection.ExpectUserImages(0); throw; }
+        catch { _workerPending = false; _projection.ExpectUserImages(null); throw; }
     }
 
     public Task StopAsync(CancellationToken ct)

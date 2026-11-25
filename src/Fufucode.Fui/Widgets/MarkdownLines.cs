@@ -51,7 +51,7 @@ internal sealed class MarkdownLines
         }
     }
 
-    private static List<SourceLine> SplitLines(string source)
+    internal static List<SourceLine> SplitLines(string source)
     {
         var lines = new List<SourceLine>();
         for (var start = 0;;)
@@ -116,7 +116,7 @@ internal sealed class MarkdownLines
             _rows.Add(new(row.Text, baseInk, row.Spans));
     }
 
-    private static bool TryQuote(string line, out string quote)
+    internal static bool TryQuote(string line, out string quote)
     {
         quote = "";
         var indent = 0;
@@ -142,7 +142,7 @@ internal sealed class MarkdownLines
         return true;
     }
 
-    private static bool TryList(string line, out string list)
+    internal static bool TryList(string line, out string list)
     {
         list = "";
         var indent = 0;
@@ -163,7 +163,7 @@ internal sealed class MarkdownLines
         return true;
     }
 
-    private static bool IsRule(string line)
+    internal static bool IsRule(string line)
     {
         var value = line.Trim();
         if (value.Length < 3 || value[0] is not ('-' or '_' or '*')) return false;
@@ -208,7 +208,7 @@ internal sealed class MarkdownLines
         return Ink.Plain;
     }
 
-    private static bool TryClosingFence(IReadOnlyList<SourceLine> lines, int start, Fence fence, out int close)
+    internal static bool TryClosingFence(IReadOnlyList<SourceLine> lines, int start, Fence fence, out int close)
     {
         close = -1;
         for (var i = start; i < lines.Count; i++)

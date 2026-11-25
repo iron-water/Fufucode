@@ -124,7 +124,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
             _ready.Enqueue((CharacterKey(c, alt: true), null));
             return;
         }
-        if (c is >= ' ' and <= '?') { if (_vt.Length < 32) _vt.Append(c); return; }
+        if (c is >= ' ' and <= '?') { if (_vt.Length < 128) _vt.Append(c); return; }
         var prefix = _vt.ToString();
         var parameters = prefix[2..];
         var sequence = prefix + c;
