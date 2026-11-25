@@ -71,8 +71,18 @@ internal static class FuiTerminalDetector
     internal static FuiTerminalDetection DetectCurrent() =>
         Detect(EnvironmentDictionary(), OperatingSystem.IsWindows(), WindowsConsoleAttached());
 
-    internal static string HyperlinkDecision(FuiSettings settings, FuiTerminalDetection detection)
+    internal static string HyperlinkDecision(FuiSettings settings, FuiTerminalDetection detection,
+        IReadOnlyDictionary<string, string?>? environment = null)
     {
+        environment ??= EnvironmentDictionary();
+        var overrideMode = Get(environment, "FUI_HYPERLINKS").Trim().ToLowerInvariant();
+        if (Has(environment, "NO_COLOR")) return "关闭（NO_COLOR）";
+        if (overrideMode is "off" or "0" or "false") return "关闭（环境变量）";
+        if (overrideMode is "on" or "always" or "1" or "true")
+        {
+            var blocked = detection.Multiplexers.FirstOrDefault(item => item.Id == "screen");
+            return blocked is null ? "开启（FUI_HYPERLINKS 强制）" : "开启（FUI_HYPERLINKS 强制；screen 会丢弃 OSC 8）";
+        }
         if (settings.Hyperlinks == "off") return "关闭（设置）";
         if (settings.Hyperlinks == "on")
         {
@@ -96,13 +106,22 @@ internal static class FuiTerminalDetector
         };
     }
 
-    internal static bool HyperlinksEnabled(FuiSettings settings, FuiTerminalDetection detection) =>
-        settings.Hyperlinks switch
+    internal static bool HyperlinksEnabled(FuiSettings settings, FuiTerminalDetection detection,
+        IReadOnlyDictionary<string, string?>? environment = null)
+    {
+        environment ??= EnvironmentDictionary();
+        var overrideMode = Get(environment, "FUI_HYPERLINKS").Trim().ToLowerInvariant();
+        if (Has(environment, "NO_COLOR")) return false;
+        if (overrideMode is "off" or "0" or "false") return false;
+        if (overrideMode is "on" or "always" or "1" or "true")
+            return detection.Multiplexers.All(item => item.Id != "screen");
+        return settings.Hyperlinks switch
         {
             "off" => false,
             "on" => detection.Multiplexers.All(item => item.Id != "screen"),
             _ => detection.Multiplexers.Count == 0 && detection.Profile.Hyperlinks == true
         };
+    }
 
     internal static string NotificationDecision(FuiSettings settings, FuiTerminalDetection detection,
         IReadOnlyDictionary<string, string?> environment)

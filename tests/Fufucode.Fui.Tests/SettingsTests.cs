@@ -379,15 +379,15 @@ internal static class SettingsTests
 
         var wtEnv = cases[0].Env;
         var wt = FuiTerminalDetector.Detect(wtEnv, true, true);
-        Eq("开启（终端配置已知）", FuiTerminalDetector.HyperlinkDecision(FuiSettings.Default, wt),
+        Eq("开启（终端配置已知）", FuiTerminalDetector.HyperlinkDecision(FuiSettings.Default, wt, wtEnv),
             "Windows Terminal hyperlinks are known");
         Eq("未知（tmux 需 ≥3.4 且外层启用 hyperlinks）",
             FuiTerminalDetector.HyperlinkDecision(FuiSettings.Default,
-                FuiTerminalDetector.Detect(cases[2].Env, false, false)),
+                FuiTerminalDetector.Detect(cases[2].Env, false, false), cases[2].Env),
             "tmux hyperlinks remain conservative");
         Eq("关闭（screen 不转发 OSC 8）",
             FuiTerminalDetector.HyperlinkDecision(FuiSettings.Default,
-                FuiTerminalDetector.Detect(cases[4].Env, false, false)),
+                FuiTerminalDetector.Detect(cases[4].Env, false, false), cases[4].Env),
             "screen disables hyperlinks");
 
         var runtime = new FuiTerminalRuntimeState(120, 30, 936, 65001, "utf-8", true, true,
@@ -446,10 +446,24 @@ internal static class SettingsTests
             "enabled hyperlinks emit a balanced OSC 8 sequence");
 
         var settings = FuiSettings.Default;
-        var wt = FuiTerminalDetector.Detect(Env(("WT_SESSION", "1")), true, true);
-        Require(FuiTerminalDetector.HyperlinksEnabled(settings, wt), "auto enables known terminal links");
-        Require(!FuiTerminalDetector.HyperlinksEnabled(settings with { Hyperlinks = "off" }, wt),
+        var wtEnv = Env(("WT_SESSION", "1"));
+        var wt = FuiTerminalDetector.Detect(wtEnv, true, true);
+        Require(FuiTerminalDetector.HyperlinksEnabled(settings, wt, wtEnv), "auto enables known terminal links");
+        Require(!FuiTerminalDetector.HyperlinksEnabled(settings with { Hyperlinks = "off" }, wt, wtEnv),
             "off disables known terminal links");
+        var unknown = FuiTerminalDetector.Detect(new Dictionary<string, string?>
+        {
+            ["TERM"] = "xterm-256color"
+        }, windows: false, windowsConsole: false);
+        var forced = new Dictionary<string, string?> { ["FUI_HYPERLINKS"] = "on" };
+        Require(FuiTerminalDetector.HyperlinksEnabled(FuiSettings.Default, unknown, forced),
+            "FUI_HYPERLINKS=on overrides an unknown terminal");
+        Require(FuiTerminalDetector.HyperlinkDecision(FuiSettings.Default, unknown, forced)
+                .Contains("FUI_HYPERLINKS", StringComparison.Ordinal),
+            "forced hyperlink decision names the environment override");
+        Require(!FuiTerminalDetector.HyperlinksEnabled(FuiSettings.Default with { Hyperlinks = "on" }, wt,
+                new Dictionary<string, string?> { ["FUI_HYPERLINKS"] = "off" }),
+            "FUI_HYPERLINKS=off overrides the persisted setting");
     }
 
     private static async Task NotificationControllerAsync()
