@@ -56,8 +56,15 @@ internal static partial class WorkbenchFlowTests
                 Type("second"); Key(ConsoleKey.Enter); await Until(v => v.Lines.Any(l => l.Text == "model=second"));
                 Check(s.Sent.Count == 0, "navigation does not send a prompt");
                 Type("/attach src/hello world.cs"); Key(ConsoleKey.Enter); await Until(v => v.Status.Contains("附件 1"));
+                var releaseGate = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+                s.DisposeGate = releaseGate;
                 Type("saved draft"); Key(ConsoleKey.P, true); Type("new"); Key(ConsoleKey.Enter);
                 await Until(v => v.Session == "child"); Check(ui.View().Draft == "" && !ui.View().Status.Contains("附件"), "new session has its own context");
+                Type("/rename deferred"); Key(ConsoleKey.Enter);
+                Check(ui.View().Status == "等待切换完成", "a session command waits for the prior lease to release");
+                releaseGate.SetResult();
+                await Until(v => v.Lines.Any(l => l.Text == "rename=deferred"));
+                s.DisposeGate = null;
                 Type("/resume first"); Key(ConsoleKey.Enter); await Until(v => v.Session == "first");
                 Check(ui.View().Draft == "saved draft" && ui.View().Status.Contains("附件 1"), "switch restores unsent draft plus files");
                 Key(ConsoleKey.Enter); await Until(v => v.Draft == "" && !v.Busy);
@@ -131,6 +138,7 @@ internal static partial class WorkbenchFlowTests
         public Func<CancellationToken, Task<IReadOnlyList<FuiChoice>>>? ReadChoices { get; set; }
         public Func<Task<FuiActionResult>>? Action { get; set; }
         public bool RejectSend { get; set; }
+        public TaskCompletionSource? DisposeGate { get; set; }
         public Task SendAsync(string text, CancellationToken ct)
         {
             if (RejectSend) return Task.FromException(new InvalidOperationException("测试发送拒绝"));
@@ -143,6 +151,10 @@ internal static partial class WorkbenchFlowTests
         public Task<IReadOnlyList<FuiChoice>> ChoicesAsync(string action, CancellationToken ct) => ReadChoices?.Invoke(ct) ?? Task.FromResult<IReadOnlyList<FuiChoice>>([new("one", "one"), new("second", "second")]);
         public Task<FuiActionResult> ExecuteAsync(string action, string argument, CancellationToken ct) => Action?.Invoke() ?? Task.FromResult(action switch
         { "new" => new(Replacement: new Session(Project, "child", Created)), "resume" => new(Replacement: new Session(Project, argument, Created)), _ => new FuiActionResult(action + "=" + argument) });
-        public ValueTask DisposeAsync() { Disposals++; return ValueTask.CompletedTask; }
+        public ValueTask DisposeAsync()
+        {
+            Disposals++;
+            return DisposeGate is { } gate ? new ValueTask(gate.Task) : ValueTask.CompletedTask;
+        }
     }
 }

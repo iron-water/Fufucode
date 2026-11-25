@@ -16,6 +16,7 @@ internal sealed partial class TuiController
     private bool _expandTools, _showThinking = true;
     private int? _scrollTarget;
     private Task? _release;
+    private (FuiCommand Command, string Argument)? _deferred;
     private sealed record Result(FuiActionResult? Action = null, IReadOnlyList<FuiChoice>? Choices = null,
         string? Title = null, FileAttachment? File = null, FuiPrompt? Prompt = null);
     private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable)
@@ -50,6 +51,7 @@ internal sealed partial class TuiController
 
     private void PreemptWorkbench()
     {
+        _deferred = null;
         ClosePicker();
         _scrollTarget = null;
         if (_job is not { } job) return;
@@ -59,7 +61,13 @@ internal sealed partial class TuiController
 
     private void UpdateWorkbench()
     {
-        Observe(ref _release, () => { });
+        var releasing = _release is not null;
+        Observe(ref _release, () => { _deferred = null; });
+        if (releasing && _release is null && _deferred is { } deferred && _job is null)
+        {
+            _deferred = null;
+            Run(deferred.Command, deferred.Argument);
+        }
         if (_job is not { Task.IsCompleted: true } done) return;
         _job = null;
         Dirty = true;
@@ -144,9 +152,24 @@ internal sealed partial class TuiController
         var argument = sep < 0 ? "" : words[(sep + 1)..].Trim().ToString();
         if (command.NeedsText && argument.Length == 0) { Error($"用法：/{command.Id} {command.Argument}"); return; }
         if (argument.Length != 0 && command.Argument.Length == 0) { Error($"/{command.Id} 不接受参数。"); return; }
+        if (DeferSessionCommand(command, argument)) return;
         if (!CanRun(command, argument)) return;
         _composer.Take();
         Run(command, argument);
+    }
+
+    private bool DeferSessionCommand(FuiCommand command, string argument)
+    {
+        var browsing = command.Picker && argument.Length == 0 && command.Id != "fork";
+        if (browsing || _release is null || _job is not null || _busy || _send is not null || _stop is not null || _reply is not null)
+            return false;
+        if (command.Id is not ("new" or "resume" or "tree" or "fork" or "rename" or "export" or "model" or "thinking"))
+            return false;
+        _deferred = (command, argument);
+        _status = "等待切换完成";
+        _composer.Take();
+        Dirty = true;
+        return true;
     }
 
     private bool CanRun(FuiCommand c, string argument = "")
