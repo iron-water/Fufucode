@@ -229,6 +229,11 @@ internal sealed partial class TuiController
             case "tools": _expandTools = !_expandTools; break;
             case "thoughts": _showThinking = !_showThinking; break;
             case "agents": Agents(); break;
+            case "plan": Plan(c.Id); break;
+            case "todo": Plan(c.Id); break;
+            case "stats": Stats(); break;
+            case "changes": Changes(argument); break;
+            case "review": Review(); break;
             case "history": OpenPicker(c.Id, c.Label, _composer.History.Reverse().Where(s => !s.StartsWith("/history", StringComparison.OrdinalIgnoreCase)).Select(s => new FuiChoice(s, s)).ToArray(), argument); break;
             case "find": OpenPicker(c.Id, c.Label, _lines.Select((l, i) => new FuiChoice(i.ToString(), l.Text, l.Kind)).Reverse().ToArray(), argument); break;
             case "stop": Stop(); break;

@@ -63,6 +63,15 @@ internal static class WorkbenchSessionTests
             Check(list.Count == 1 && list[0] is { Label: "我的本地讨论" } && list[0].Value == parent.Id && list[0].Detail!.Contains("当前"), "list leaked foreign/external session or lost name");
             var rootChoice = (await parent.ChoicesAsync("tree", ct)).Single();
             Check(rootChoice.Value == parent.Id && rootChoice.ParentSessionId is null, "tree leaked foreign/other-backend sessions or invented a parent");
+            var modes = await parent.ChoicesAsync("mode", ct);
+            Check(modes.Select(choice => choice.Value).ToHashSet().SetEquals(["manual", "auto", "full", "plan"]),
+                "execution mode catalogue is incomplete");
+            await parent.ExecuteAsync("mode", "plan", ct);
+            Check(parent.ExecutionMode == "plan", "plan mode was not applied to the native session");
+            Check((await parent.ChoicesAsync("capabilities", ct)).All(choice => choice.Value != "write_file"),
+                "plan mode picker still advertised mutating capabilities");
+            await parent.ExecuteAsync("mode", "manual", ct);
+            Check(parent.ExecutionMode == "manual", "manual mode was not restored");
             await Reject<InvalidOperationException>(() => parent.ExecuteAsync("tree", foreign.Id, ct));
             await Reject<InvalidOperationException>(() => parent.ExecuteAsync("tree", external.Id, ct));
             await Reject<KeyNotFoundException>(() => parent.ExecuteAsync("tree", "absent-id", ct));

@@ -125,6 +125,7 @@ internal sealed partial class TuiController
             case "skills": _composer.Replace("/" + choice.Value.TrimStart('/') + " " + _composer.Text); return;
             case "capabilities": Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail)); return;
             case "agents": ShowAgentDetail(choice); return;
+            case "plan" or "todo": JumpToPlan(choice); return;
             default:
                 if (FuiCommands.Get(action) is { } command && CanRun(command, choice.Value)) Run(command, choice.Value);
                 return;

@@ -8,7 +8,7 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
-internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments
+internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments, IFuiPlanSession
 {
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
@@ -54,6 +54,8 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     public string Project => _session.Project.Path;
     public string Id => _session.Session.Id;
     public string? Model => _session.Chat.CurrentModel;
+    public string? CurrentPlanSnippet => (_session.Chat as NativeCSharpChatSession)?.CurrentPlanSnippet;
+    public string ExecutionMode => (_session.Chat as IExecutionModeSession)?.ExecutionMode ?? "unknown";
     public IReadOnlyList<TuiLine> History { get; }
     public ChannelReader<TuiEvent> Events => _events.Reader;
 

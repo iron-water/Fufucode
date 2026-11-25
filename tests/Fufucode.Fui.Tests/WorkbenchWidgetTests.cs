@@ -1,12 +1,14 @@
 using Fufucode.Fui;
 
+using Fufucode.Core;
+
 namespace Fufucode.Fui.Tests;
 
 internal static class WorkbenchWidgetTests
 {
     internal static void Run()
     {
-        Picker(); SessionTree(); AgentHub(); ComposerActions(); Panel(); Reading(); MarkdownTests.Run();
+        Picker(); SessionTree(); AgentHub(); ComposerActions(); Panel(); Reading(); Workflows(); MarkdownTests.Run();
     }
 
     private static void Picker()
@@ -231,6 +233,36 @@ internal static class WorkbenchWidgetTests
         jumped=live.Arrange(transcript with{Scroll=live.ScrollToLine(12)},50,8);
         Eq(true,jumped.Rows[1].Text.Contains("row-13"),"hidden message maps to the next visible row");
         Eq(0,live.ScrollToLine(int.MaxValue),"jump to bottom clamped");
+    }
+
+    private static void Workflows()
+    {
+        var plan = FuiPlanProjection.FromSnippet("[计划已更新]\n[x] 1. 完成解析 (completed)\n[>] 2. 接入界面 (in_progress)\n[ ] 3. 补测试 (pending)\n备注: 保持只读");
+        Eq(3, plan.Items.Count, "plan item count");
+        Eq(1, plan.Completed, "plan completion count");
+        Eq("接入界面", plan.Active!.Title, "active plan item");
+        Eq("保持只读", plan.Notes, "plan notes");
+        var projected = FuiPlanProjection.FromLines(
+            [new("tool", "update_plan [完成] {}\n[计划已更新]\n[x] 1. 完成解析 (completed)\n[>] 2. 接入界面 (in_progress)\n[ ] 3. 补测试 (pending)\n备注: 保持只读")]);
+        Eq(plan.Detail, projected.Detail, "latest update_plan result becomes the todo snapshot");
+
+        var report = new ChangeRangeReport("workspace", "/repo", true,
+        [
+            new("src/a.cs", null, "modified", " ", "M", true, false, [], 3, 1),
+            new("new file.txt", null, "untracked", "?", "?", true, false, [], 2, 0)
+        ], null);
+        var changes = FuiChangeProjection.Entries(report);
+        Eq(2, changes.Count, "change rows");
+        Eq("+", changes[1].Glyph, "untracked change glyph");
+        Eq(true, FuiChangeProjection.Overview(report).Contains("+5 / -1"), "aggregate line counts");
+        Eq("当前项目不是 Git 工作树。", FuiChangeProjection.Overview(report with { Available = false, Error = "not-a-git-worktree", Files = [] }),
+            "unavailable workspace reason");
+
+        var stats = FuiStats.From(
+            [new("user", "u"), new("assistant", "a"), new("thinking", "t"), new("tool", "x"), new("error", "e")],
+            [], new FuiAgentActivitySnapshot([], DateTimeOffset.UnixEpoch), "plan");
+        Eq(true, stats.Detail("Token：输入 3").Contains("工具 1 · 错误 1") && stats.Detail(null).Contains("执行模式 · plan"),
+            "stats preserve zero/unknown boundaries");
     }
 
     private static ConsoleKeyInfo Key(ConsoleKey key,bool ctrl=false)=>new('\0',key,false,false,ctrl);

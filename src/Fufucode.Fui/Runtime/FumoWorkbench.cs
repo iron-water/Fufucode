@@ -23,6 +23,7 @@ internal sealed partial class FumoTuiSession
                 "model" => (await ModelsAsync(ct)).Select(m => new FuiChoice(m.Id, m.Name,
                     m.Id == Model ? $"当前 · {m.Id}" : m.Id)).ToArray(),
                 "thinking" => await ThinkingChoicesAsync(ct),
+                "mode" => ModeChoices(),
                 _ => throw new ArgumentException($"没有选择器：{action}")
             };
         }
@@ -100,6 +101,17 @@ internal sealed partial class FumoTuiSession
                         throw new InvalidOperationException("FUMO 未确认思考等级变更。");
                     await SaveSettingsAsync(ct);
                     return new($"思考等级：{thinking}");
+                case "mode":
+                    var mode = Required(argument, "执行模式").ToLowerInvariant();
+                    if (ModeChoices().All(choice => choice.Value != mode))
+                        throw new ArgumentException($"未知执行模式：{mode}");
+                    if (_session.Chat is not IExecutionModeSession modes)
+                        throw new InvalidOperationException("当前 FUMO 会话不支持执行模式。");
+                    await modes.SetExecutionModeAsync(mode, ct);
+                    if (!string.Equals(modes.ExecutionMode, mode, StringComparison.Ordinal))
+                        throw new InvalidOperationException("FUMO 未确认执行模式变更。");
+                    await SaveSettingsAsync(ct);
+                    return new($"执行模式：{ModeChoices().First(choice => choice.Value == mode).Label}");
                 default: throw new ArgumentException($"未知工作台操作：{action}");
             }
         }
@@ -197,6 +209,18 @@ internal sealed partial class FumoTuiSession
         if (selected is null) throw new InvalidOperationException("当前模型不在端点目录中，无法核对思考等级。");
         return native.Levels.Where(l => l == "off" || selected.Reasoning.Count == 0 || selected.Reasoning.Contains(l, StringComparer.OrdinalIgnoreCase))
             .Select(l => new FuiChoice(l, l, l == native.CurrentLevel ? "当前" : selected.Reasoning.Count == 0 && l != "off" ? "端点未声明；FUMO 可请求" : null)).ToArray();
+    }
+
+    private IReadOnlyList<FuiChoice> ModeChoices()
+    {
+        var current = (_session.Chat as IExecutionModeSession)?.ExecutionMode ?? "manual";
+        return
+        [
+            new("plan", "Plan · 只读规划", current == "plan" ? "当前 · 只允许只读工具和 update_plan" : "只读探索与计划；禁止写入和执行命令"),
+            new("manual", "Manual · 逐项确认", current == "manual" ? "当前 · 变更工具逐项确认" : "所有变更工具执行前确认"),
+            new("auto", "Auto · 仅确认 Shell", current == "auto" ? "当前 · 变更工具自动，Shell 确认" : "文件变更自动执行；命令仍需确认"),
+            new("full", "Full · 不弹确认", current == "full" ? "当前 · 不受工具确认阻挡" : "不弹工具确认；安全中心显式拒绝仍生效")
+        ];
     }
 
     private async Task SaveSettingsAsync(CancellationToken ct)
