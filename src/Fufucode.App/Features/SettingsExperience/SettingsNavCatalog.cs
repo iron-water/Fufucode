@@ -62,6 +62,9 @@ public static class SettingsNavCatalog
         new("memory", "性能与内存", SettingsNavTier.Basic,
             "内存 优化 软件渲染 GPU 动画 玻璃 终端 回滚 performance memory render gpu software",
             "Speedometer", "#FF9E4C"),
+        new("advanced", "高级", SettingsNavTier.Basic,
+            "高级 FUMO 内核 shell 命令解释器 PowerShell pwsh cmd Git Bash 超时 配置文件 run_command advanced kernel",
+            "Wrench", "#8A8A8E"),
 
         // ── 大功能 ──
         new("marketplace", "插件市场", SettingsNavTier.Features,

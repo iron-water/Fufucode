@@ -409,7 +409,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private bool MatchesOption(string terms) => SearchText.Trim().Length == 0 || terms.Contains(SearchText.Trim(), StringComparison.OrdinalIgnoreCase);
     private void NotifyCategoryVisibility()
     {
-        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(ShowGraphSettings), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowSecurity), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
+        foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(ShowGraphSettings), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowSecurity), nameof(ShowAdvanced), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
                      nameof(ShowStorage), nameof(ShowMemory), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
@@ -1928,6 +1928,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
         // 侧栏三级架构的升降级偏好随数据根目录持久化（mock 无 dataRoot 时仅内存态）。
         RebuildSearchKeywords();
         AttachNavPreference(context.DataRoot);
+        Advanced.Attach(context.Store);
         SyncBackendPreference(context.DataRoot);
         SyncPlugins(context.DataRoot);
         _suppressDraftTracking = true;

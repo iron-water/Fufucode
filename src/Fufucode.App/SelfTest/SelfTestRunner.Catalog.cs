@@ -40,6 +40,7 @@ public static partial class SelfTestRunner
             }),
             ["--timeline-history-only"] = () => Suite(TimelineHistorySelfTest.RunAsync),
             ["--security-only"] = () => Suite(SecurityCenterSelfTest.RunAsync),
+            ["--advanced-settings-only"] = () => Suite(AdvancedSettingsSelfTest.RunAsync),
             ["--settings-only"] = () => Suite(SettingsDestinationSelfTest.RunAsync),
             ["--archive-only"] = () => Suite(ArchiveSelfTest.RunAsync),
             ["--speech-only"] = () => Suite(SpeechPluginSelfTest.RunAsync),

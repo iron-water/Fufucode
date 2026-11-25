@@ -209,7 +209,8 @@ try
         .Where(item => SettingsNavLayout.Matches(item, term)).Select(item => item.Id).ToArray();
     Check(Matches("代理").SequenceEqual(new[] { "network" }),
         "搜索命中基础类条目");
-    Check(Matches("shell").SequenceEqual(new[] { "terminal" }), "搜索命中大功能条目");
+    // 高级页的 FUMO 命令解释器设置同样以 shell 为关键词，跨层级同时命中。
+    Check(Matches("shell").SequenceEqual(new[] { "advanced", "terminal" }), "搜索命中大功能条目");
     Check(Matches("trace").SequenceEqual(new[] { "performance" }), "搜索命中其他类小功能");
     Check(Matches("不存在的关键词").Length == 0, "无命中时不输出任何条目");
 

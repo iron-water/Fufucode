@@ -144,6 +144,10 @@
                                       DataContext="{Binding Security}"
                                       Page="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ActivePageId}"/>
 
+            <views:AdvancedSettingsView x:Name="AdvancedSettings"
+                                        IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowAdvanced}"
+                                        DataContext="{Binding Advanced}"/>
+
             <!-- ═══ 模型与思考 ═══ -->
                         <!-- ═══ 插件市场（Plugin Marketplace） ═══ -->
             <StackPanel IsVisible="{Binding ShowMarketplace}" Spacing="0">
