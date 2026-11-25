@@ -9,7 +9,8 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
         "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
-        "Ctrl+U / Ctrl+K 删除至行首 / 行尾 · Ctrl+W 删除前一词\n审批：F2 允许 · F3 / Esc 拒绝";
+        "Ctrl+Z 撤销 · Ctrl+Shift+Z 重做 · Ctrl+Y / Alt+Y 粘贴 / 轮换删除\n" +
+        "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
     private readonly Composer _composer = new();
     private readonly List<TuiLine> _lines = [.. session.History];
