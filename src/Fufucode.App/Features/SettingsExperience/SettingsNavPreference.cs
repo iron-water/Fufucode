@@ -47,6 +47,11 @@ public sealed record SettingsNavPreference
         return new SettingsNavPreference { Promoted = promoted, Demoted = demoted };
     }
 
+    /// <summary>改名前的条目 id：2026-11-26 「性能」由 performance 改为 perf-monitor，
+    /// performance 让给「性能与内存」（基础类，不可升降级），旧偏好按原条目继续生效。</summary>
+    private static readonly IReadOnlyDictionary<string, string> LegacyIds =
+        new Dictionary<string, string>(StringComparer.Ordinal) { ["performance"] = "perf-monitor" };
+
     private static IReadOnlyList<string> Clean(IReadOnlyList<string> source, SettingsNavTier requiredOrigin)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -54,6 +59,8 @@ public sealed record SettingsNavPreference
         foreach (var raw in source)
         {
             var id = raw?.Trim();
+            if (id is not null && SettingsNavCatalog.TierOf(id) != requiredOrigin && LegacyIds.TryGetValue(id, out var renamed))
+                id = renamed;
             if (string.IsNullOrEmpty(id) || !seen.Add(id)) continue;
             if (SettingsNavCatalog.TierOf(id) != requiredOrigin) continue;
             result.Add(id);

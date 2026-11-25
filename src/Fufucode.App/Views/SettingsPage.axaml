@@ -273,7 +273,7 @@
             <StackPanel IsVisible="{Binding ShowArchiveEmpty}" Spacing="8" Margin="12,20">
               <TextBlock Classes="subtitle" Text="归档管理尚未就绪"/>
             </StackPanel>
-            <StackPanel IsVisible="{Binding ShowMemory}" Spacing="0">
+            <StackPanel IsVisible="{Binding ShowPerformanceMemory}" Spacing="0">
               <TextBlock Classes="settingsGroupHeader first" Text="内存优化"/>
               <Border Classes="settingsGroup">
                 <StackPanel>

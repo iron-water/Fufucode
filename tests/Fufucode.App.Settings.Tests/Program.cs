@@ -58,22 +58,26 @@ try
     }.Normalize();
     Check(illegal.Promoted.SequenceEqual(new[] { "notifications" }) && illegal.Demoted.SequenceEqual(new[] { "browser" }),
         "规范化丢弃跨层级与重复/未知条目");
+    var legacy = new SettingsNavPreference { Promoted = ["performance"] }.Normalize();
+    Check(legacy.Promoted.SequenceEqual(new[] { "perf-monitor" }) &&
+          SettingsNavCatalog.TierOf("performance") == SettingsNavTier.Basic,
+        "「性能」旧 id performance 的升级偏好迁到 perf-monitor；performance 归「性能与内存」");
 
     var storeRoot = Path.Combine(root, "store");
     var store = new SettingsNavPreferenceStore(storeRoot);
     Check(store.IsPersistent && store.Current == SettingsNavPreference.Empty, "首次加载为空偏好");
-    store.Save(new SettingsNavPreference { Promoted = ["notifications", "performance"], Demoted = ["browser"] });
+    store.Save(new SettingsNavPreference { Promoted = ["notifications", "perf-monitor"], Demoted = ["browser"] });
     var preferenceFile = Path.Combine(storeRoot, SettingsNavPreferenceStore.FileName);
     Check(File.Exists(preferenceFile), "偏好写入 settings-nav.json");
     Check(File.ReadAllText(preferenceFile).Contains("notifications", StringComparison.Ordinal),
         "落盘内容包含升级条目");
     var reloaded = new SettingsNavPreferenceStore(storeRoot);
-    Check(reloaded.Current.Promoted.SequenceEqual(new[] { "notifications", "performance" }) &&
+    Check(reloaded.Current.Promoted.SequenceEqual(new[] { "notifications", "perf-monitor" }) &&
           reloaded.Current.Demoted.SequenceEqual(new[] { "browser" }),
         "重新加载恢复升降级偏好");
 
     Check(SettingsNavCatalog.All.Where(d => reloaded.Current.EffectiveTier(d.Id) == SettingsNavTier.Features).Select(i => i.Id)
-              .SequenceEqual(new[] { "marketplace", "terminal", "files", "automation", "notifications", "performance" }),
+              .SequenceEqual(new[] { "marketplace", "terminal", "files", "automation", "notifications", "perf-monitor" }),
         "升级的小功能并入大功能组");
     Check(SettingsNavCatalog.All.Where(d => reloaded.Current.EffectiveTier(d.Id) == SettingsNavTier.Other).Select(i => i.Id)
               .SequenceEqual(new[] { "browser", "background", "config", "modules", "functions" }),
@@ -211,7 +215,7 @@ try
         "搜索命中基础类条目");
     // 高级页的 FUMO 命令解释器设置同样以 shell 为关键词，跨层级同时命中。
     Check(Matches("shell").SequenceEqual(new[] { "advanced", "terminal" }), "搜索命中大功能条目");
-    Check(Matches("trace").SequenceEqual(new[] { "performance" }), "搜索命中其他类小功能");
+    Check(Matches("trace").SequenceEqual(new[] { "perf-monitor" }), "搜索命中其他类小功能");
     Check(Matches("不存在的关键词").Length == 0, "无命中时不输出任何条目");
 
     var searchVm = new SettingsPageViewModel();

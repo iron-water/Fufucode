@@ -285,10 +285,10 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     /// <summary>储存首页：只在没有进入二级页时显示。</summary>
     public bool ShowStorage => SelectedCategory?.Id == "storage" && CurrentPageId.Length == 0;
     /// <summary>性能与内存：独立于插件提供的性能中心页面，避免同一 id 冲突。</summary>
-    public bool ShowMemory => SelectedCategory?.Id == "memory";
+    public bool ShowPerformanceMemory => SelectedCategory?.Id == "performance";
     [ObservableProperty] private Avalonia.Controls.Control? _storageContent;
     /// <summary>性能监控设置页：内容由性能监控插件提供，未安装时显示安装提示。</summary>
-    public bool ShowPerformance => SelectedCategory?.Id == "performance";
+    public bool ShowPerformance => SelectedCategory?.Id == "perf-monitor";
     /// <summary>性能插件未启用时，设置页显示真实原因而不是空白。</summary>
     public bool ShowPerformanceHint => ShowPerformance && (!PerformancePluginAvailable || PerformanceContent is null);
     public string PerformanceHintText => PerformanceDiagnostic ?? "性能监控插件未安装或未启用。";
@@ -410,7 +410,7 @@ public sealed partial class SettingsPageViewModel : ViewModelBase
     private void NotifyCategoryVisibility()
     {
         foreach (var name in new[] { nameof(CategoryTitle), nameof(ShowAppearance), nameof(ShowFunctions), nameof(ShowConfigSection), nameof(ShowWorkbenchSection), nameof(ShowGraphSettings), nameof(WorkbenchSectionId), nameof(ShowModels), nameof(ShowProviderList), nameof(ShowProviderEditor), nameof(ShowPresetPicker), nameof(IsProviderPageOpen), nameof(ProviderSummary), nameof(ShowSecurity), nameof(ShowAdvanced), nameof(ShowNetwork), nameof(ShowNotifications), nameof(ShowBackground), nameof(ShowAbout), nameof(ShowModules),
-                     nameof(ShowStorage), nameof(ShowMemory), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
+                     nameof(ShowStorage), nameof(ShowPerformanceMemory), nameof(ShowPerformance), nameof(ShowPerformanceHint), nameof(ShowArchive), nameof(ShowArchiveEmpty), nameof(ShowShortcuts), nameof(ShowOtherHub), nameof(OtherHubItems), nameof(ShowModelRow), nameof(ShowThinkingRow), nameof(ShowProxyRow), nameof(ShowEndpointRow), nameof(ShowEndpointForm), nameof(ShowModelsConfig), nameof(ShowBackendCard), nameof(ShowMarketplace), nameof(ShowMarketplaceGroup), nameof(MarketplaceGroupId), nameof(MarketplaceGroupPlugins) })
             OnPropertyChanged(name);
     }
 

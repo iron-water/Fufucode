@@ -59,7 +59,7 @@ public static class SettingsNavCatalog
             "安全 规则 文件 命令 网络 敏感 密钥 注入 审批 备份 审计 security permissions sandbox secrets audit backup", "ShieldCheckmark", "#6CCB5F"),
         new("storage", "储存", SettingsNavTier.Basic,
             "空间 占用 缓存 日志 保留 清理 归档 已归档 storage cache logs archive", "Folder", "#8A8A8E"),
-        new("memory", "性能与内存", SettingsNavTier.Basic,
+        new("performance", "性能与内存", SettingsNavTier.Basic,
             "内存 优化 软件渲染 GPU 动画 玻璃 终端 回滚 performance memory render gpu software",
             "Speedometer", "#FF9E4C"),
         new("advanced", "高级", SettingsNavTier.Basic,
@@ -88,7 +88,7 @@ public static class SettingsNavCatalog
         new("config", "配置文件", SettingsNavTier.Other,
             "JSON 导入 导出 项目覆盖 全局 ui.json config", "Code", "#B48CFF"),
         // usage 已并入性能中心，不再提供独立设置/页面。
-        new("performance", "性能", SettingsNavTier.Other,
+        new("perf-monitor", "性能", SettingsNavTier.Other,
             "性能 监控 耗时 延迟 卡顿 慢 追踪 trace 诊断 perf performance trace latency", "History", "#6CCB5F"),
         new("modules", "工作台模块", SettingsNavTier.Other,
             "浏览器 启用 停用 内建 模块 辅助工具 browser module", "PuzzlePiece", "#FF99A4"),
