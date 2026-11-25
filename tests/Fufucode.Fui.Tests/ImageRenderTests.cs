@@ -379,6 +379,20 @@ internal static class ImageRenderTests
                 // /context displays attached image thumbnail
                 foreach (var ch in "/context") controller.Key(new(ch, 0, false, false, false), 20, 0);
                 controller.Key(new('\r', ConsoleKey.Enter, false, false, false), 20, 0);
+                await UntilAsync(controller, v => v.Overlay is { Kind: FuiOverlayKind.Context });
+                Check(controller.View().Overlay!.Items.Any(item => item.Value.StartsWith(FuiContextWorkbench.AttachmentPrefix, StringComparison.Ordinal)),
+                    "/context viewer lists the clipboard attachment");
+                for (var guard = 0; guard < controller.View().Overlay!.Items.Count; guard++)
+                {
+                    if (controller.View().Overlay!.Items[controller.View().Overlay!.Selected].Value
+                        .StartsWith(FuiContextWorkbench.AttachmentPrefix, StringComparison.Ordinal)) break;
+                    controller.Key(new('\0', ConsoleKey.DownArrow, false, false, false), 20, 0);
+                    controller.Update();
+                }
+                Check(controller.View().Overlay!.Items[controller.View().Overlay!.Selected].Value
+                    .StartsWith(FuiContextWorkbench.AttachmentPrefix, StringComparison.Ordinal),
+                    "/context viewer can focus the clipboard attachment");
+                controller.Key(new('\r', ConsoleKey.Enter, false, false, false), 20, 0);
                 controller.Update();
                 Check(controller.View().Lines.Last().Images is { Count: 1 }, "/context renders attached clipboard image thumbnail");
 

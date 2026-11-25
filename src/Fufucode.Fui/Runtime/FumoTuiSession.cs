@@ -10,7 +10,7 @@ namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
 internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments,
-    IFuiPlanSession, IFuiSessionInspector, IFuiStatusProvider
+    IFuiPlanSession, IFuiSessionInspector, IFuiStatusProvider, IFuiRuntimeCatalogSource
 {
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
@@ -44,7 +44,8 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         HistorySources = historyProjection.Sources;
         var historyMessages = session.History.CurrentBranchMessages;
         _projection = new(_events.Writer, historyMessages.Count,
-            historyMessages.Sum(message => message.Content.OfType<PiToolCallBlock>().Count()));
+            historyMessages.Sum(message => message.Content.OfType<PiToolCallBlock>().Count()),
+            historyMessages.Sum(message => message.Content.OfType<PiThinkingBlock>().Count()));
         _approvals = SharedApprovalRegistry.For(_ui);
         _approvals.Requested += OnApproval;
         _approvals.Decided += OnDecision;

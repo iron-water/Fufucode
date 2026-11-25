@@ -8,7 +8,8 @@ internal sealed record FuiPickerOptions(
     Func<FuiChoice, bool>? GroupHeader = null,
     bool PreserveOrder = false,
     string? Footer = null,
-    FuiOverlayKind Kind = FuiOverlayKind.Picker);
+    FuiOverlayKind Kind = FuiOverlayKind.Picker,
+    string? EmptyMessage = null);
 
 /// <summary>A navigation-only selection model. Acceptance and cancellation belong to the controller.</summary>
 internal sealed class FuiPicker
@@ -69,7 +70,7 @@ internal sealed class FuiPicker
                 ? null
                 : _options.Detail?.Invoke(_matches[_selected]);
             return new(_title, _query.Text, _matches, _selected,
-                _matches.Count != 0 ? detail : _choices.Length == 0 ? "暂无选项" : "没有匹配项",
+                _matches.Count != 0 ? detail : _choices.Length == 0 ? _options.EmptyMessage ?? "暂无选项" : "没有匹配项",
                 _options.Footer, _options.Kind);
         }
     }

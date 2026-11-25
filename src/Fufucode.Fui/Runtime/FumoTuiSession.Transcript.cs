@@ -42,6 +42,41 @@ internal sealed partial class FumoTuiSession
             partial = true;
         }
 
+        long? contextWindow = null;
+        string? contextWindowSource = null;
+        string? contextWindowUnknown = null;
+        if (Model is { Length: > 0 } currentModel)
+        {
+            try
+            {
+                var model = (await ModelsAsync(ct))
+                    .FirstOrDefault(item => string.Equals(item.Id, currentModel, StringComparison.OrdinalIgnoreCase));
+                if (model?.ContextLength is > 0)
+                {
+                    contextWindow = model.ContextLength;
+                    contextWindowSource = "端点模型目录";
+                }
+                else
+                {
+                    contextWindowUnknown = model is null
+                        ? "端点模型目录未包含当前模型"
+                        : "端点模型目录未报告上下文窗口";
+                }
+            }
+            catch (Exception error) when (error is not OperationCanceledException)
+            {
+                contextWindowUnknown = "端点模型目录不可用：" + error.GetBaseException().Message;
+            }
+        }
+        else
+        {
+            contextWindowUnknown = "未选择模型";
+        }
+
+        var pending = (_session.Chat as IQueuedChatSession)?.PendingQueue;
+        var queued = pending?.QueuedTexts.Select((text, index) => new FuiQueueEntry(
+            text, pending.Steering is { } steering && index < steering.Count && steering[index])).ToArray() ?? [];
+        var recoverable = _session.Coordinator.Snapshot.RecoverableQueue.ToArray();
         return new(
             Project,
             Id,
@@ -53,7 +88,14 @@ internal sealed partial class FumoTuiSession
             attachments,
             _session.Chat.QueuedCount,
             usage,
-            partial);
+            partial,
+            Thinking: _projection.ThinkingCount,
+            ContextWindow: contextWindow,
+            ContextWindowSource: contextWindowSource,
+            ContextWindowUnknownReason: contextWindowUnknown,
+            ExecutionMode: ExecutionMode,
+            QueueEntries: queued,
+            RecoverableQueue: recoverable);
     }
 
     public Task<string> RetryLastUserAsync(CancellationToken ct)

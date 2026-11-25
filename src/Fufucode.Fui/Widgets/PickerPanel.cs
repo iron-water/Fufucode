@@ -5,7 +5,7 @@ internal static class PickerPanel
     internal static int DesiredRows(FuiOverlay overlay)
     {
         var count = overlay.Items.Count;
-        if (FuiAgentActivityRoster.IsHubTitle(overlay.Title))
+        if (FuiAgentActivityRoster.IsJobViewTitle(overlay.Title))
             return 1 + Math.Min(count, 7) + 5;
         var footer = string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1;
         if (count == 0) return 2 + footer;
@@ -31,7 +31,8 @@ internal static class PickerPanel
         string Fit(string s, bool tail = false) => TerminalText.Clip(s, columns, tail);
         var title = TerminalText.SingleLine(overlay.Title);
         var query = TerminalText.SingleLine(overlay.Query);
-        var progress = FuiAgentActivityRoster.IsHubTitle(overlay.Title) && count != 0
+        var jobView = FuiAgentActivityRoster.IsJobViewTitle(overlay.Title);
+        var progress = jobView && count != 0
             ? AgentProgress(overlay, selected)
             : $"{(count == 0 ? 0 : selected + 1)}/{count}";
         var available = Math.Max(0, columns - progress.Length - 2);
@@ -50,7 +51,7 @@ internal static class PickerPanel
             return 0;
         }
 
-        var detail = FuiAgentActivityRoster.IsHubTitle(overlay.Title)
+        var detail = jobView
             ? TerminalText.SingleLine(overlay.Items[selected].Detail ?? "")
             : TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
         var hasDetail = detail.Length > 0 && content.Length >= 3;
@@ -61,7 +62,7 @@ internal static class PickerPanel
             var index = start + i;
             var active = index == selected;
             content[i + 1] = new(Fit((active ? "▸ " : "  ") + Label(overlay.Items[index], columns)),
-                active ? Ink.Selection : FuiAgentActivityRoster.IsHubTitle(overlay.Title)
+                active ? Ink.Selection : jobView
                     ? FuiAgentActivityRoster.InkFor(overlay.Items[index])
                     : Ink.Plain);
         }
@@ -78,7 +79,8 @@ internal static class PickerPanel
 
         var title = TerminalText.SingleLine(overlay.Title);
         var query = TerminalText.SingleLine(overlay.Query);
-        var agentHub = FuiAgentActivityRoster.IsHubTitle(overlay.Title);
+        var agentHub = FuiAgentActivityRoster.IsJobViewTitle(overlay.Title);
+        var jobsView = FuiJobsWorkbench.IsTitle(overlay.Title);
         var progress = agentHub ? AgentProgress(overlay, selected) : $"{selected + 1}/{count}";
         var leftTitle = title + (query.Length == 0 ? "" : " /" + query);
         var footerRows = string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1;
@@ -87,10 +89,16 @@ internal static class PickerPanel
             FuiOverlayKind.Transcript => "对话 · 正文",
             FuiOverlayKind.Outline => "大纲 · 正文",
             FuiOverlayKind.Copy => "正文",
+            FuiOverlayKind.Context => "上下文 · 详情",
+            FuiOverlayKind.Capabilities => "能力 · 详情",
+            FuiOverlayKind.Extensions => "扩展 · 详情",
+            FuiOverlayKind.Mcp => "MCP · 详情",
+            FuiOverlayKind.Jobs => "作业 · 详情",
             _ => "详情"
         };
         rows[0] = new(Pad(TerminalText.Clip(leftTitle, leftWidth - progress.Length - 1), leftWidth) +
-            "│" + Pad(" " + progress + (agentHub ? "  作业 · 最近事件" : "  " + detailHead), rightWidth), Ink.PanelTitle);
+            "│" + Pad(" " + progress +
+                (jobsView ? "  作业 · 详情" : agentHub ? "  作业 · 最近事件" : "  " + detailHead), rightWidth), Ink.PanelTitle);
 
         var detail = new List<TerminalText.Slice>();
         var selectedChoice = overlay.Items[selected];

@@ -30,6 +30,8 @@ try
     Console.WriteLine("PASS workbench sessions: native actions, model selection, branching and export");
     await TranscriptWorkbenchTests.RunAsync();
     Console.WriteLine("PASS transcript workbench: outline, search, jump, streaming, copy, filters, info, retry and large lists");
+    await CatalogWorkbenchTests.RunAsync();
+    Console.WriteLine("PASS catalog workbench: context facts, runtime sources, filters, MCP empty state and read-only jobs");
     return 0;
 }
 catch (Exception e) { Console.Error.WriteLine(e); return 1; }

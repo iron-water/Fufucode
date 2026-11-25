@@ -21,7 +21,9 @@ internal sealed partial class TuiController
     private sealed record Result(FuiActionResult? Action = null, IReadOnlyList<FuiChoice>? Choices = null,
         string? Title = null, FileAttachment? File = null, FuiPrompt? Prompt = null,
         FuiCopyCatalog? Copy = null, FuiTranscriptCatalog? Transcript = null,
-        IReadOnlyList<TuiImage>? Images = null);
+        IReadOnlyList<TuiImage>? Images = null,
+        string? Message = null, string? Footer = null, FuiOverlayKind PanelKind = FuiOverlayKind.Picker,
+        FuiRuntimeCatalog? Runtime = null);
     private sealed record Job(string Id, Task<Result> Task, CancellationTokenSource Lifetime, bool Cancellable)
     {
         public bool PreemptedByApproval { get; set; }
@@ -97,6 +99,12 @@ internal sealed partial class TuiController
                 SwitchTo(replacement);
             }
             if (done.Lifetime.IsCancellationRequested) return;
+            if (result.Runtime is { } runtime)
+            {
+                _runtimeCatalog = runtime;
+                _capabilitySourceFilter = null;
+                _capabilityKindFilter = null;
+            }
             if (result.Copy is { } copy)
                 OpenCopyPicker(copy);
             else if (result.Transcript is { } transcript)
@@ -104,7 +112,13 @@ internal sealed partial class TuiController
             else if (result.Choices is { } outlineChoices && done.Id == "outline")
                 OpenOutlinePicker(outlineChoices);
             else if (result.Choices is { } regularChoices)
-                OpenPicker(done.Id, result.Title ?? FuiCommands.Get(done.Id)?.Label ?? done.Id, regularChoices);
+                OpenPicker(done.Id, result.Title ?? FuiCommands.Get(done.Id)?.Label ?? done.Id, regularChoices,
+                    options: new(
+                        GroupHeader: FuiChoiceGroups.IsGroup,
+                        PreserveOrder: true,
+                        Footer: result.Footer,
+                        Kind: result.PanelKind,
+                        EmptyMessage: result.Message));
             if (result.Prompt is { } prompt) Send(prompt);
             if (result.File is { } file)
             {
@@ -270,23 +284,14 @@ internal sealed partial class TuiController
             case "doctor": Doctor(); break;
             case "keys": OpenKeys(); break;
             case "session": Info($"FUMO · {_active.Id}\n{_active.Project}\n{_active.Model ?? "未配置模型"}"); break;
-            case "context":
-                if (_attachments.Count == 0) Info("草稿没有附加文件。");
-                else
-                {
-                    var summary = string.Join('\n', _attachments.Select(a => a.MimeType is not null && a.ImageWidth > 0
-                        ? $"{a.Path} ({a.ImageWidth}×{a.ImageHeight} · {a.FormatLabel ?? a.MimeType})"
-                        : a.Path));
-                    var imgs = _attachments
-                        .Where(a => a.MimeType is not null && a.ImageBytes is not null)
-                        .Select(a => new TuiImage(a.Path, a.MimeType!, a.ImageBytes, MaxRows: 8))
-                        .ToArray();
-                    Info(summary, imgs.Length > 0 ? imgs : null);
-                }
-                break;
-             case "tools": ToggleSetting("expand-tools"); break;
-             case "thoughts": ToggleSetting("show-thinking"); break;
+            case "context": Context(); break;
+            case "capabilities": Capabilities(); break;
+            case "extensions": Extensions(); break;
+            case "mcp": Mcp(); break;
+            case "tools": ToggleSetting("expand-tools"); break;
+            case "thoughts": ToggleSetting("show-thinking"); break;
             case "agents": Agents(); break;
+            case "jobs": Jobs(); break;
             case "plan": Plan(c.Id); break;
             case "todo": Plan(c.Id); break;
             case "stats": Stats(); break;

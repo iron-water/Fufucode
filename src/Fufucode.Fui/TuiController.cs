@@ -249,7 +249,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (_picker is not { } picker) return;
         var view = picker.View;
         if (index < 0 || index >= view.Items.Count ||
-            FuiAgentActivityRoster.IsGroupChoice(view.Items[index])) return;
+            FuiChoiceGroups.IsGroup(view.Items[index])) return;
         var current = view.Selected;
         if (current == index) return;
         var key = index > current ? ConsoleKey.DownArrow : ConsoleKey.UpArrow;

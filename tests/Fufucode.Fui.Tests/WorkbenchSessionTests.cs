@@ -33,6 +33,7 @@ internal static class WorkbenchSessionTests
             File.WriteAllText(Path.Combine(skillRoot.FullName, "SKILL.md"), "---\nname: fui-fixture\ndescription: local demonstration skill\n---\nReturn the fixture label.");
             var payload = Directory.CreateDirectory(layout.PluginDirectory(plugin.Id));
             File.WriteAllText(Path.Combine(payload.FullName, "manifest.json"), $$"""{"id":"{{plugin.Id}}"}""");
+            new PluginStateStore(layout).Install(plugin.Id);
             await using var api = new Loopback
             {
                 Models = """{"data":[{"id":"fixture-model","context_length":128000},{"id":"vendor/fui-model","display_name":"Fixture Pro","context_length":128000,"supported_reasoning_levels":[{"effort":"high"}]}]}"""
@@ -57,6 +58,23 @@ internal static class WorkbenchSessionTests
             }
 
             var parent = await Open();
+            var runtime = await parent.ReadRuntimeCatalogAsync(ct);
+            Check(runtime.LoadedPlugins.Any(pluginInfo =>
+                    pluginInfo.Id == plugin.Id && pluginInfo.ToolCount == 1),
+                "runtime catalogue did not expose the loaded plugin identity and tool count");
+            Check(runtime.Capabilities.Any(capability =>
+                    capability.ChoiceValue == "read_file" && capability.Source == FuiCapabilitySource.Native) &&
+                runtime.Capabilities.Any(capability =>
+                    capability.ChoiceValue == "skill:fui-fixture" && capability.Source == FuiCapabilitySource.Skill) &&
+                runtime.Capabilities.Any(capability =>
+                    capability.ChoiceValue == "fixture_plugin_tool" && capability.Source == FuiCapabilitySource.Plugin),
+                "runtime catalogue lost native, skill or plugin provenance");
+            Check(runtime.HasMcpFactSource && runtime.McpServers.Count == 0,
+                "runtime catalogue invented an MCP server or hid its empty fact source");
+            var initialContext = await parent.InspectAsync(ct);
+            Check(initialContext.ContextWindow == 128000 && initialContext.ContextWindowSource == "端点模型目录" &&
+                initialContext.Usage is null or { Input: null, Output: null, Total: null },
+                "context inspection invented usage or lost the endpoint-proved window");
             await parent.ExecuteAsync("rename", "我的本地讨论", ct);
             Check(metadata.GetSession(parent.Id).Name == "我的本地讨论", "rename not persisted");
             var list = await parent.ChoicesAsync("resume", ct);
@@ -68,6 +86,10 @@ internal static class WorkbenchSessionTests
                 "execution mode catalogue is incomplete");
             await parent.ExecuteAsync("mode", "plan", ct);
             Check(parent.ExecutionMode == "plan", "plan mode was not applied to the native session");
+            var planRuntime = await parent.ReadRuntimeCatalogAsync(ct);
+            Check(planRuntime.Capabilities.All(capability => capability.Source == FuiCapabilitySource.Native) &&
+                planRuntime.Capabilities.All(capability => capability.ChoiceValue != "write_file"),
+                "plan runtime catalogue exposed a non-read-only or third-party capability");
             Check((await parent.ChoicesAsync("capabilities", ct)).All(choice => choice.Value != "write_file"),
                 "plan mode picker still advertised mutating capabilities");
             await parent.ExecuteAsync("mode", "manual", ct);
@@ -111,6 +133,11 @@ internal static class WorkbenchSessionTests
             await parent.ExecuteAsync("steer", "steered", ct);
             var pending = (await parent.ExecuteAsync("queue", "", ct)).Notice!;
             Check(pending.Contains("插话：steered") && pending.Contains("排队：follow"), "native pending queue not reflected");
+            var liveContext = await parent.InspectAsync(ct);
+            Check(liveContext.QueueEntries is { } queuedEntries &&
+                queuedEntries.Any(entry => entry.Text == "steered" && entry.Steering) &&
+                queuedEntries.Any(entry => entry.Text == "follow" && !entry.Steering),
+                "context inspection lost the steering/queue distinction");
             release.SetResult();
             var ended = await Settled(parent, ct);
             Check(ended.OfType<TuiEvent.Message>().Any(m => m.Kind == "assistant" && m.Text == "follow received"), "turn reported idle before queued execution");
@@ -244,11 +271,22 @@ internal static class WorkbenchSessionTests
 
     private sealed class CountingPlugin : IPluginPackage
     {
-        public string Id => "chat.interactive-ui";
+        public string Id => "tool.memory";
         public string Version => "1.0.0";
         public int Starts, Stops;
-        public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => null;
+        public IPluginToolHandler? CreateToolHandler(PluginPackageContext context) => new FixtureToolHandler();
         public Task InitializeAsync(PluginPackageContext context, CancellationToken ct = default) { Starts++; return Task.CompletedTask; }
         public Task ShutdownAsync(CancellationToken ct = default) { Stops++; return Task.CompletedTask; }
+    }
+
+    private sealed class FixtureToolHandler : IPluginToolHandler
+    {
+        public IReadOnlyList<PluginToolRegistration> Registrations { get; } =
+        [
+            new("fixture_plugin_tool", "runtime fixture", "{}", PluginCapability.Memory)
+        ];
+
+        public Task<PureToolResult> ExecuteAsync(PureToolCall call, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new PureToolResult(call.Id, true, "fixture"));
     }
 }

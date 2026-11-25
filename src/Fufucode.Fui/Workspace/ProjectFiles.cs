@@ -13,7 +13,7 @@ internal sealed record FileAttachment(string Path, string Text, byte[] Digest, s
     byte[]? ImageBytes = null, int ImageWidth = 0, int ImageHeight = 0, string? FormatLabel = null,
     bool IsClipboard = false,
     ProjectImagePreview? Preview = null, byte[]? Payload = null,
-    FileAttachmentSource Source = FileAttachmentSource.Project)
+    FileAttachmentSource Source = FileAttachmentSource.Project, long? ByteCount = null)
 {
     public bool IsClipboardAttachment => IsClipboard || Source == FileAttachmentSource.Clipboard;
     public byte[]? EncodedBytes => ImageBytes ?? Payload;
@@ -158,7 +158,8 @@ internal sealed class ProjectFiles
             FormatLabel = label,
             IsClipboard = true,
             Source = FileAttachmentSource.Clipboard,
-            Preview = ProjectImage.CreatePreview(bytes, "image/png")
+            Preview = ProjectImage.CreatePreview(bytes, "image/png"),
+            ByteCount = bytes.Length
         };
     }
 
@@ -173,7 +174,7 @@ internal sealed class ProjectFiles
         var name = $"剪贴板-{DateTime.Now:yyyyMMdd-HHmmss}-{Convert.ToHexString(digest.AsSpan(0, 2)).ToLowerInvariant()}.png";
         return new(name, "", digest, "image/png", bytes, width, height, label,
             IsClipboard: true, Preview: ProjectImage.CreatePreview(bytes, "image/png"),
-            Payload: bytes, Source: FileAttachmentSource.Clipboard);
+            Payload: bytes, Source: FileAttachmentSource.Clipboard, ByteCount: bytes.Length);
     }
 
     private async Task<(FileAttachment File, byte[] Bytes, DecodedImage? Decoded)> ReadFileAsync(string path, bool allowImages, int remaining, CancellationToken ct)
@@ -198,7 +199,7 @@ internal sealed class ProjectFiles
                 ? ProjectImage.CreatePreview(decoded)
                 : ProjectImage.CreatePreview(bytes, mime);
             return (new(Relative(full), "", SHA256.HashData(bytes), mime, bytes, width, height, label,
-                Preview: preview, Payload: bytes), bytes, decoded);
+                Preview: preview, Payload: bytes, ByteCount: bytes.Length), bytes, decoded);
         }
         string text;
         try { text = Utf8.GetString(bytes).TrimStart('\uFEFF'); }
@@ -208,7 +209,7 @@ internal sealed class ProjectFiles
         var settings = _policy.Store.Current;
         if (settings.SensitiveDataProtectionEnabled && SecurityContentScanner.ContainsSecret(text, settings))
             throw new UnauthorizedAccessException("安全中心检测到敏感内容；文件未加入上下文。");
-        return (new(Relative(full), text, SHA256.HashData(bytes)), bytes, null);
+        return (new(Relative(full), text, SHA256.HashData(bytes), ByteCount: bytes.Length), bytes, null);
     }
 
     public async Task<FuiPrompt> PrepareAsync(string prompt, IReadOnlyList<FileAttachment> attached, CancellationToken ct)
@@ -245,7 +246,8 @@ internal sealed class ProjectFiles
                     FormatLabel = label,
                     Preview = ProjectImage.CreatePreview(bytes, "image/png"),
                     Source = FileAttachmentSource.Clipboard,
-                    IsClipboard = true
+                    IsClipboard = true,
+                    ByteCount = bytes.Length
                 };
             }
             else

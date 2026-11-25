@@ -19,7 +19,8 @@ internal sealed partial class FumoTuiSession
             {
                 "resume" or "tree" => SessionChoices(),
                 "fork" => await ForkChoicesAsync(ct),
-                "skills" or "capabilities" => await CommandChoicesAsync(action == "skills", ct),
+                "skills" => BuildRuntimeCatalog().SkillChoices(),
+                "capabilities" => BuildRuntimeCatalog().CapabilityChoices(),
                 "model" => (await ModelsAsync(ct)).Select(m => new FuiChoice(m.Id, m.Name,
                     m.Id == Model ? $"当前 · {m.Id}" : m.Id)).ToArray(),
                 "thinking" => await ThinkingChoicesAsync(ct),
@@ -164,26 +165,7 @@ internal sealed partial class FumoTuiSession
         return history;
     }
 
-    private sealed record CatalogModel(string Id, string Name, IReadOnlyList<string> Reasoning);
-
-    private async Task<IReadOnlyList<FuiChoice>> CommandChoicesAsync(bool skills, CancellationToken ct)
-    {
-        var response = await _session.Coordinator.QueryCommandsAsync(ct);
-        RequireSuccess(response);
-        if (response.Data is not { ValueKind: JsonValueKind.Object } data || !data.TryGetProperty("commands", out var commands) || commands.ValueKind != JsonValueKind.Array)
-            throw new InvalidDataException("FUMO 未返回命令目录。");
-        var plan = (_session.Chat as IExecutionModeSession)?.ExecutionMode == "plan";
-        var choices = new List<FuiChoice>();
-        foreach (var row in commands.EnumerateArray())
-        {
-            var source = row.GetProperty("source").GetString();
-            if (skills != (source == "skill") || row.GetProperty("name").GetString() is not { Length: > 0 } name) continue;
-            if (!skills && plan && (source != "native" || !ProductionToolDispatcher.IsPlanSafeTool(name))) continue;
-            var description = row.TryGetProperty("description", out var text) ? text.GetString() : null;
-            choices.Add(new(name, name, $"{source} · {description}"));
-        }
-        return choices;
-    }
+    private sealed record CatalogModel(string Id, string Name, IReadOnlyList<string> Reasoning, long? ContextLength);
 
     private async Task<IReadOnlyList<CatalogModel>> ModelsAsync(CancellationToken ct)
     {
@@ -198,7 +180,11 @@ internal sealed partial class FumoTuiSession
             var name = row.TryGetProperty("name", out var label) && label.ValueKind == JsonValueKind.String ? label.GetString() : null;
             var levels = row.TryGetProperty("reasoningLevels", out var values) && values.ValueKind == JsonValueKind.Array
                 ? values.EnumerateArray().Where(v => v.ValueKind == JsonValueKind.String).Select(v => v.GetString()!).ToArray() : [];
-            return new CatalogModel(id, name ?? id, levels);
+            long? contextLength = row.TryGetProperty("contextLength", out var context) &&
+                context.ValueKind == JsonValueKind.Number && context.TryGetInt64(out var length) && length > 0
+                    ? length
+                    : null;
+            return new CatalogModel(id, name ?? id, levels, contextLength);
         }).ToArray();
     }
 

@@ -7,7 +7,8 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Fui;
 
 /// <summary>Projects block deltas using stable row ids. History is read once, never on a token callback.</summary>
-internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int initialMessages = 0, int initialTools = 0)
+internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int initialMessages = 0, int initialTools = 0,
+    int initialThinking = 0)
 {
     private sealed class Draft(MessageRole role, IReadOnlyList<TuiImage>? images)
     {
@@ -31,10 +32,12 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
     private IReadOnlyList<TuiImage>? _nextUserImages;
     private int _messageCount = initialMessages;
     private int _toolCount = initialTools;
+    private int _thinkingCount = initialThinking;
     private int _errorCount;
 
     public int MessageCount { get { lock (_gate) return _messageCount; } }
     public int ToolCount { get { lock (_gate) return _toolCount; } }
+    public int ThinkingCount { get { lock (_gate) return _thinkingCount; } }
     public int ErrorCount { get { lock (_gate) return _errorCount; } }
 
     public void ExpectUserImages(IReadOnlyList<TuiImage>? images)
@@ -104,6 +107,9 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
                     _toolCount++;
                     Row(start.MessageId, start.ContentIndex, "tool", name + " ",
                         snapshot: Snapshot(message.Tools[start.ContentIndex]));
+                    break;
+                case SessionEvent.BlockStarted { Kind: MessageBlockKind.Thinking }:
+                    _thinkingCount++;
                     break;
                 case SessionEvent.TextAppended text when _messages.TryGetValue(text.MessageId, out var message):
                     Row(text.MessageId, text.ContentIndex, message.TextKind, text.Delta, append: true);

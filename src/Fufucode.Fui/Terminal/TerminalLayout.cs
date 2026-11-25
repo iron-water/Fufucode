@@ -105,7 +105,9 @@ internal sealed class TerminalLayout
         var remaining = height - headerRows - statusRows - approvalRows - attachmentHeaderRows - attachmentPreviewRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
         var panelRoom = Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0));
-        var panelLimit = overlay is { Kind: FuiOverlayKind.Outline or FuiOverlayKind.Transcript or FuiOverlayKind.Copy }
+        var panelLimit = overlay is { Kind: FuiOverlayKind.Outline or FuiOverlayKind.Transcript or FuiOverlayKind.Copy
+            or FuiOverlayKind.Context or FuiOverlayKind.Capabilities or FuiOverlayKind.Extensions
+            or FuiOverlayKind.Mcp or FuiOverlayKind.Jobs }
             ? panelRoom
             : Math.Min(Math.Max(1, height / 2), panelRoom);
         var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), panelLimit);
@@ -204,7 +206,7 @@ internal sealed class TerminalLayout
 
     private static int VisibleItems(FuiOverlay overlay, int panelRows, int selected)
     {
-        var detail = FuiAgentActivityRoster.IsHubTitle(overlay.Title)
+        var detail = FuiAgentActivityRoster.IsJobViewTitle(overlay.Title)
             ? TerminalText.SingleLine(overlay.Items[selected].Detail ?? "")
             : TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
         var hasDetail = detail.Length > 0 && panelRows >= 3;

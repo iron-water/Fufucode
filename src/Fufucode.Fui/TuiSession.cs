@@ -49,6 +49,7 @@ internal interface ITuiSession : IAsyncDisposable
 }
 
 internal sealed record FuiUsageInfo(long? Input, long? Output, long? Total, long? CacheRead, long? CacheWrite);
+internal sealed record FuiQueueEntry(string Text, bool Steering);
 
 internal sealed record FuiSessionInfo(
     string Project,
@@ -61,7 +62,14 @@ internal sealed record FuiSessionInfo(
     int Attachments,
     int QueueCount,
     FuiUsageInfo? Usage,
-    bool HistoryPartial = false);
+    bool HistoryPartial = false,
+    int Thinking = 0,
+    long? ContextWindow = null,
+    string? ContextWindowSource = null,
+    string? ContextWindowUnknownReason = null,
+    string? ExecutionMode = null,
+    IReadOnlyList<FuiQueueEntry>? QueueEntries = null,
+    IReadOnlyList<string>? RecoverableQueue = null);
 
 // Optional facts are implemented only where the session can prove them. Commands must fail
 // explicitly rather than infer a retry target or synthesize usage in the controller.
@@ -69,6 +77,13 @@ internal interface IFuiSessionInspector
 {
     Task<FuiSessionInfo> InspectAsync(CancellationToken ct);
     Task<string> RetryLastUserAsync(CancellationToken ct);
+}
+
+// One live read produces the capability catalogue and the extension/MCP projections that
+// consume it. Callers must not append a second hardcoded tool list.
+internal interface IFuiRuntimeCatalogSource
+{
+    Task<FuiRuntimeCatalog> ReadRuntimeCatalogAsync(CancellationToken ct);
 }
 
 internal interface IFuiStatusProvider

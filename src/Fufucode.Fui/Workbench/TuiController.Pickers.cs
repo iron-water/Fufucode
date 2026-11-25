@@ -43,6 +43,11 @@ internal sealed partial class TuiController
                 CycleTranscriptFilter(key.Modifiers.HasFlag(ConsoleModifiers.Shift));
                 return true;
             }
+            if (_pickerAction == "capabilities" && key.Key == ConsoleKey.Tab)
+            {
+                CycleCapabilityFilter(!key.Modifiers.HasFlag(ConsoleModifiers.Shift));
+                return true;
+            }
             if (_pickerAction == "outline" && key.Key == ConsoleKey.F5)
             {
                 RefreshOutline(force: true);
@@ -178,8 +183,14 @@ internal sealed partial class TuiController
                 return;
             case "history": _composer.Replace(choice.Value); return;
             case "skills": _composer.Replace("/" + choice.Value.TrimStart('/') + " " + _composer.Text); return;
-            case "capabilities": Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail)); return;
+            case "capabilities":
+            case "extensions":
+            case "mcp":
+                Info(choice.Detail ?? choice.Label);
+                return;
             case "agents": ShowAgentDetail(choice); return;
+            case "jobs": ShowJobDetail(choice); return;
+            case "context": ContextChoice(choice); return;
             case "plan" or "todo": JumpToPlan(choice); return;
             case "links":
                 if (!TuiHyperlinkPolicy.IsSafeUrl(choice.Value)) { Error("该链接目标不是可复制的 HTTP(S) URL。"); return; }
