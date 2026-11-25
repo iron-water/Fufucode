@@ -113,6 +113,11 @@ internal static class WorkbenchWidgetTests
         Eq(true, wide.Rows.Any(r => r.Ink == Ink.Quiet && r.Text.Contains("详情 138")), "detail for selected item");
         Eq(true, wide.PickerRows > 1 && wide.PickerRows < options.Length, "bounded item viewport");
         Eq(true, wide.Rows.Any(r => r.Text.Contains("对话内容")) && wide.Rows[^1].Text.EndsWith("/ses"), "transcript and input retained");
+        var split = layout.Arrange(model, 100, 17);
+        Eq(true, split.Rows.Any(r => r.Ink == Ink.PanelTitle && r.Text.Contains("│") && r.Text.Contains("详情")), "wide picker exposes a detail pane");
+        Eq(true, split.Rows.Any(r => r.Text.Contains("│") && r.Text.Contains("会话 138")), "selected row is visible in the split list");
+        Eq(true, split.Rows.Any(r => r.Text.Contains("详情 138")), "selected detail is visible in the split pane");
+        Eq(true, split.Rows.All(r => TerminalText.Width(r.Text) < 100), "split picker never overflows the viewport");
         Eq(false, wide.Rows.Any(r => r.Text.Contains("unsafe") || r.Text.Contains('\x1b')), "metadata cleaned before style");
         var focus2 = layout.Arrange(model with { Overlay = model.Overlay! with { Selected = 139 } }, 60, 17);
         var paint = TerminalSurface.Diff(wide, focus2, true);
@@ -120,7 +125,8 @@ internal static class WorkbenchWidgetTests
         foreach (var (w,h) in new[]{(1,1),(8,2),(20,4),(34,6),(100,35)})
         {
             var small = layout.Arrange(model, w, h);
-            Eq(h, small.Rows.Length, "resize height"); Eq(true, small.Rows.All(r => TerminalText.Width(r.Text)<w && !r.Text.Any(char.IsControl)), "safe viewport width");
+            Eq(h, small.Rows.Length, "resize height");
+            Eq(true, small.Rows.All(r => TerminalText.Width(r.Text)<w && !r.Text.Any(char.IsControl)), "safe viewport width");
             Eq(Ink.Composer, small.Rows[^1].Ink, "composer stays anchored even at one row");
             if (h >= 2) Eq(true, small.Rows.Any(r => r.Ink == Ink.Selection), "selected candidate remains visible on tiny screens");
         }
