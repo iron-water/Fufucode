@@ -45,8 +45,15 @@ internal static class ClipboardImage
         }
     }
 
-    private static FileAttachment? BuildFromPng(byte[] bytes) =>
-        TryBuildFromPng(bytes) is { } file ? file with { Path = NextName() } : null;
+    private static FileAttachment? BuildFromPng(byte[] bytes)
+    {
+        if (bytes.Length == 0 || bytes.Length > ProjectFiles.MaxAttachmentBytes) return null;
+        if (!ProjectImage.TryInspect(bytes, "image/png", out var width, out var height, out var label, out _))
+            return null;
+        return new(NextName(), "", SHA256.HashData(bytes), "image/png", bytes, width, height, label,
+            IsClipboard: true, Preview: ProjectImage.CreatePreview(bytes, "image/png"),
+            Payload: bytes, Source: FileAttachmentSource.Clipboard);
+    }
 
     private static string NextName() =>
         $"clipboard-{DateTime.Now:yyyyMMdd-HHmmss}-{Interlocked.Increment(ref _sequence)}.png";

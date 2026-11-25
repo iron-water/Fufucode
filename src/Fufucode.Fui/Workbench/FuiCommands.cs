@@ -35,7 +35,6 @@ internal static class FuiCommands
         new("review", "审查工作区变更", "工作流"),
         new("attach", "附加项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("paste-image", "粘贴剪贴板图片", "项目", CommandKind.Files),
-        new("paste", "粘贴剪贴板图片（/paste-image 别名）", "项目", CommandKind.Files),
         new("detach", "移除草稿附件", "项目", CommandKind.Files, "[路径]", Picker: true),
         new("context", "查看待发送文件", "项目"),
         new("preview", "预览项目文件", "项目", CommandKind.Files, "[路径]", Picker: true),
@@ -49,7 +48,8 @@ internal static class FuiCommands
         new("quit", "退出 FUI", "导航")
     ];
     private static readonly Dictionary<string, FuiCommand> Index = All.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
-    public static FuiCommand? Get(string id) => Index.GetValueOrDefault(id);
+    public static FuiCommand? Get(string id) =>
+        Index.GetValueOrDefault(id.Equals("paste", StringComparison.OrdinalIgnoreCase) ? "paste-image" : id);
     public static FuiChoice Choice(FuiCommand c) => new(c.Id, "/" + c.Id, c.Label + " · " + c.Group);
     public static string Help => HelpFor(FuiSettings.Default);
     public static string HelpFor(FuiSettings settings) =>
