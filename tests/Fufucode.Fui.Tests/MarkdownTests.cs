@@ -73,6 +73,9 @@ internal static class MarkdownTests
             Eq(true, current.Take(3).SequenceEqual(stable), "an unfinished table row does not move painted rows");
             Eq(true, current.Any(row => row.Text.Contains("partial")), "the unfinished row remains visible");
         }
+
+        var tiny = Render("| A |\n| --- |\n| unfinished", 1);
+        Eq(true, tiny.All(row => TerminalText.Width(row.Text) <= 1), "a one-column streaming table cannot overflow");
     }
 
     private static void Resize()

@@ -48,7 +48,10 @@ internal static class MarkdownTable
         foreach (var cells in rowCells)
             rows.Add(new(RenderRow(cells, widths, alignment), Ink.Plain));
         if (partial is not null)
-            rows.Add(new("  " + TerminalText.Clip(partial, Math.Max(1, width - 2)), Ink.Quiet));
+        {
+            var prefix = width >= 3 ? "  " : "";
+            rows.Add(new(prefix + TerminalText.Clip(partial, Math.Max(1, width - prefix.Length)), Ink.Quiet));
+        }
         next = end;
         return true;
     }
