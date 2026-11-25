@@ -45,7 +45,7 @@ internal sealed class TuiTheme
 
         ColorDepth = DetectColorDepth(colorTerm, term, termProgram, windowsTerminal);
         Palette = ResolvePalette(_requestedTheme, noColor, colorFgBg, reportedBackground);
-        Reset = !stylingEnabled ? "" : Palette == TuiPalette.Mono ? "\x1b[22m\x1b[27m" : "\x1b[0m";
+        Reset = !stylingEnabled ? "" : Palette == TuiPalette.Mono ? "\x1b[22m\x1b[24m\x1b[27m" : "\x1b[0m";
 
         var styles = new string[Enum.GetValues<Ink>().Length];
         foreach (var ink in Enum.GetValues<Ink>()) styles[(int)ink] = BuildStyle(ink);
@@ -57,17 +57,19 @@ internal sealed class TuiTheme
     internal bool ColorsEnabled => _stylingEnabled && Palette != TuiPalette.Mono;
     internal bool StylingEnabled => _stylingEnabled;
     internal bool NeedsBackgroundProbe => _stylingEnabled && Palette != TuiPalette.Mono && _requestedTheme == "auto";
+    internal string RequestedTheme => _requestedTheme;
     internal string Reset { get; }
     internal const string BackgroundQuery = "\x1b]11;?\x1b\\";
 
-    internal static TuiTheme FromEnvironment() => Resolve(
-        Environment.GetEnvironmentVariable("FUI_THEME"),
+    internal static TuiTheme FromEnvironment(string? requestedTheme = null, int? reportedBackground = null) => Resolve(
+        requestedTheme ?? Environment.GetEnvironmentVariable("FUI_THEME"),
         Environment.GetEnvironmentVariable("NO_COLOR") is not null,
         Environment.GetEnvironmentVariable("TERM"),
         Environment.GetEnvironmentVariable("COLORTERM"),
         Environment.GetEnvironmentVariable("TERM_PROGRAM"),
         Environment.GetEnvironmentVariable("WT_SESSION") is not null,
-        Environment.GetEnvironmentVariable("COLORFGBG"));
+        Environment.GetEnvironmentVariable("COLORFGBG"),
+        reportedBackground);
 
     internal static TuiTheme Resolve(string? requestedTheme = null, bool noColor = false, string? term = null,
         string? colorTerm = null, string? termProgram = null, bool windowsTerminal = false, string? colorFgBg = null,
@@ -120,6 +122,7 @@ internal sealed class TuiTheme
         var parameters = new StringBuilder(24);
         if (IsBold(ink)) AppendParameter(parameters, "1");
         if (IsDim(ink)) AppendParameter(parameters, "2");
+        if (ink == Ink.Link) AppendParameter(parameters, "4");
         if (ink == Ink.Selection) AppendParameter(parameters, "7");
 
         if (ColorsEnabled)
@@ -144,7 +147,8 @@ internal sealed class TuiTheme
     }
 
     private static bool IsBold(Ink ink) => ink is Ink.Header or Ink.User or Ink.Error or Ink.Approval or
-        Ink.Composer or Ink.PanelTitle or Ink.Heading;
+        Ink.Composer or Ink.PanelTitle or Ink.Heading or Ink.SyntaxKeyword or Ink.SyntaxType or Ink.DiffAdded or
+        Ink.DiffRemoved;
 
     private static bool IsDim(Ink ink) => ink is Ink.Quiet or Ink.Status or Ink.CodeFence or Ink.Thinking or Ink.Info;
 
@@ -166,6 +170,18 @@ internal sealed class TuiTheme
         Ink.CodeFence => SemanticColor.CodeFence,
         Ink.Thinking => SemanticColor.Thinking,
         Ink.Info => SemanticColor.Info,
+        Ink.SyntaxKeyword => SemanticColor.SyntaxKeyword,
+        Ink.SyntaxType => SemanticColor.SyntaxType,
+        Ink.SyntaxString => SemanticColor.SyntaxString,
+        Ink.SyntaxNumber => SemanticColor.SyntaxNumber,
+        Ink.SyntaxComment => SemanticColor.SyntaxComment,
+        Ink.SyntaxFunction => SemanticColor.SyntaxFunction,
+        Ink.SyntaxProperty => SemanticColor.SyntaxProperty,
+        Ink.SyntaxOperator => SemanticColor.SyntaxOperator,
+        Ink.DiffAdded => SemanticColor.DiffAdded,
+        Ink.DiffRemoved => SemanticColor.DiffRemoved,
+        Ink.DiffMeta => SemanticColor.DiffMeta,
+        Ink.Link => SemanticColor.Link,
         _ => SemanticColor.Assistant
     };
 
@@ -189,6 +205,18 @@ internal sealed class TuiTheme
             SemanticColor.CodeFence => new(90, 66, 106, 143, 150),
             SemanticColor.Thinking => new(95, 139, 180, 142, 173),
             SemanticColor.Info => new(94, 110, 127, 156, 179),
+            SemanticColor.SyntaxKeyword => new(95, 177, 199, 121, 255),
+            SemanticColor.SyntaxType => new(96, 80, 121, 192, 255),
+            SemanticColor.SyntaxString => new(92, 114, 185, 115, 120),
+            SemanticColor.SyntaxNumber => new(93, 209, 154, 102, 64),
+            SemanticColor.SyntaxComment => new(90, 98, 112, 128, 138),
+            SemanticColor.SyntaxFunction => new(94, 86, 156, 214, 255),
+            SemanticColor.SyntaxProperty => new(96, 97, 175, 239, 255),
+            SemanticColor.SyntaxOperator => new(90, 180, 181, 188, 198),
+            SemanticColor.DiffAdded => new(92, 126, 198, 153, 116),
+            SemanticColor.DiffRemoved => new(91, 224, 108, 117, 130),
+            SemanticColor.DiffMeta => new(90, 140, 170, 190, 210),
+            SemanticColor.Link => new(94, 110, 166, 255, 246),
             _ => new(97, 255, 216, 222, 233)
         },
         TuiPalette.Light => semantic switch
@@ -209,6 +237,18 @@ internal sealed class TuiTheme
             SemanticColor.CodeFence => new(90, 66, 87, 96, 106),
             SemanticColor.Thinking => new(35, 90, 130, 80, 223),
             SemanticColor.Info => new(34, 67, 49, 91, 125),
+            SemanticColor.SyntaxKeyword => new(35, 128, 44, 112, 180),
+            SemanticColor.SyntaxType => new(36, 74, 9, 105, 218),
+            SemanticColor.SyntaxString => new(32, 107, 31, 122, 79),
+            SemanticColor.SyntaxNumber => new(33, 166, 148, 86, 0),
+            SemanticColor.SyntaxComment => new(90, 112, 120, 128, 140),
+            SemanticColor.SyntaxFunction => new(34, 68, 25, 90, 180),
+            SemanticColor.SyntaxProperty => new(36, 67, 8, 105, 150),
+            SemanticColor.SyntaxOperator => new(90, 72, 85, 99, 112),
+            SemanticColor.DiffAdded => new(32, 29, 20, 115, 60),
+            SemanticColor.DiffRemoved => new(31, 160, 175, 40, 40),
+            SemanticColor.DiffMeta => new(90, 90, 100, 110, 124),
+            SemanticColor.Link => new(34, 25, 90, 180, 242),
             _ => new(30, 235, 36, 41, 47)
         },
         _ => new(39, 255, 255, 255, 255)
@@ -327,7 +367,19 @@ internal sealed class TuiTheme
         Code,
         CodeFence,
         Thinking,
-        Info
+        Info,
+        SyntaxKeyword,
+        SyntaxType,
+        SyntaxString,
+        SyntaxNumber,
+        SyntaxComment,
+        SyntaxFunction,
+        SyntaxProperty,
+        SyntaxOperator,
+        DiffAdded,
+        DiffRemoved,
+        DiffMeta,
+        Link
     }
 
     private readonly record struct ColorChoice(byte Ansi16, byte Ansi256, byte Red, byte Green, byte Blue);

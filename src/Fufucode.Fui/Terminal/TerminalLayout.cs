@@ -1,15 +1,24 @@
+using System.Globalization;
+using System.Text;
+using Fufucode.App.Abstractions;
+using SkiaSharp;
+
 namespace Fufucode.Fui;
 
 internal enum Ink
 {
     Plain, Header, User, Assistant, Tool, Quiet, Error, Status, Approval, Composer, PanelTitle, Selection,
-    Heading, Code, CodeFence, Thinking, Info
+    Heading, Code, CodeFence, Thinking, Info,
+    SyntaxKeyword, SyntaxType, SyntaxString, SyntaxNumber, SyntaxComment, SyntaxFunction, SyntaxProperty,
+    SyntaxOperator, DiffAdded, DiffRemoved, DiffMeta, Link
 }
 
+internal readonly record struct StyledSpan(string Text, Ink Ink = Ink.Plain, string? Link = null);
 internal readonly record struct ImageStrip(int Column, string Sixel);
-internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain, IReadOnlyList<ImageStrip>? Images = null, int ImageIndent = 0);
+internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain, IReadOnlyList<ImageStrip>? Images = null,
+    int ImageIndent = 0, StyledSpanList? Spans = null);
 internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll,
-    int PickerRows = 0, bool CanApprove = false);
+    int PickerRows = 0, bool CanApprove = false, MouseRegions? Mouse = null);
 
 internal sealed class TerminalLayout
 {
@@ -19,6 +28,9 @@ internal sealed class TerminalLayout
     private bool _cards;
     private string? _project;
     private int _total, _bodyRows;
+    private AttachmentPreviewCache? _attachmentPreview;
+    private readonly record struct AttachmentPreviewPlan(ProjectImagePreview Preview, int Column);
+    private sealed record AttachmentPreviewCache(string Key, ScreenRow[] Rows);
 
     internal int ScrollToLine(int transcriptIndex)
     {
@@ -35,8 +47,17 @@ internal sealed class TerminalLayout
         var rows = new ScreenRow[height];
         Array.Fill(rows, new(""));
 
-        var prompt = ComposerPrompt(columns);
-        var draft = TerminalText.Clean(view.Draft, view.Cursor, out var cursor);
+        var prompt = ComposerPrompt(columns, view.EditorMode);
+        var draft = TerminalText.CleanMapped(view.Draft, view.Cursor, out var cursor, out var draftOffsetMap);
+        var selectionStart = -1;
+        var selectionEnd = -1;
+        if (view.SelectionStart >= 0 && view.SelectionEnd > view.SelectionStart)
+        {
+            selectionStart = CeilingGrapheme(draft,
+                draftOffsetMap[Math.Clamp(view.SelectionStart, 0, view.Draft.Length)]);
+            selectionEnd = CeilingGrapheme(draft,
+                draftOffsetMap[Math.Clamp(view.SelectionEnd, 0, view.Draft.Length)]);
+        }
         var promptWidth = TerminalText.Width(prompt);
         var draftWidth = Math.Max(1, columns - promptWidth);
         var draftLines = new List<TerminalText.Slice>();
@@ -62,15 +83,49 @@ internal sealed class TerminalLayout
         var canApprove = approvalRows >= 2 && columns >= TerminalText.Width(allowKeys) && approval.Take(approvalRows - 1)
             .Any(line => line.Start >= detailsStart && !string.IsNullOrWhiteSpace(line.Text));
 
-        var remaining = height - headerRows - statusRows - approvalRows;
+        var attachments = view.Attachments ?? [];
+        var attachmentHeaderRows = attachments.Count != 0 && columns >= 8 && height >= 4 ? 1 : 0;
+        var previewPlans = new List<AttachmentPreviewPlan>();
+        var attachmentPreviewRows = 0;
+        string? previewReason = null;
+        var imageCount = attachments.Count(file => file.MimeType is not null);
+        if (imageCount != 0)
+        {
+            if (cell is null) previewReason = "无 Sixel 预览";
+            else if (overlay is not null || view.Approval is not null) previewReason = "预览暂不可用";
+            else if (height < 12) previewReason = "预览：窗口过矮";
+            else
+            {
+                PlanAttachmentPreviews(attachments, columns - promptWidth, cell.Value, previewPlans, out attachmentPreviewRows);
+                if (previewPlans.Count == 0)
+                {
+                    attachmentPreviewRows = 0;
+                    previewReason = "预览：窗口过窄";
+                }
+                else if (attachmentPreviewRows > height - headerRows - statusRows - approvalRows -
+                    attachmentHeaderRows - keepTranscript - 1)
+                {
+                    previewPlans.Clear();
+                    attachmentPreviewRows = 0;
+                    previewReason = "预览：窗口过矮";
+                }
+            }
+        }
+
+        var remaining = height - headerRows - statusRows - approvalRows - attachmentHeaderRows - attachmentPreviewRows;
         var draftRows = Math.Min(draftLines.Count, Math.Min(Math.Clamp(height / 3, 1, 6), Math.Max(0, remaining - keepTranscript)));
-        var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), Math.Min(Math.Max(1, height / 2),
-            Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0))));
+        var panelRoom = Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0));
+        var panelLimit = overlay is { Kind: FuiOverlayKind.Outline or FuiOverlayKind.Transcript or FuiOverlayKind.Copy
+            or FuiOverlayKind.Context or FuiOverlayKind.Capabilities or FuiOverlayKind.Extensions
+            or FuiOverlayKind.Mcp or FuiOverlayKind.Jobs }
+            ? panelRoom
+            : Math.Min(Math.Max(1, height / 2), panelRoom);
+        var panelRows = overlay is null ? 0 : Math.Min(PickerPanel.DesiredRows(overlay), panelLimit);
         var bodyRows = remaining - draftRows - panelRows;
 
         // Cards need enough room for a header, content, and a closing rail. Narrow or tiny terminals
         // keep the same wrapped text with a compact role rail so a resize never makes rows disappear.
-        var cardLayout = columns >= 24 && bodyRows >= 4;
+        var cardLayout = view.CompactCards && columns >= 24 && bodyRows >= 4;
         var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking, cell, cardLayout,
             view.Project, view.ResolveImage);
         (_total, _bodyRows) = (total, bodyRows);
@@ -93,31 +148,116 @@ internal sealed class TerminalLayout
         row = headerRows + bodyRows;
         if (statusRows > 0)
         {
+            var commandKey = TerminalText.SingleLine(view.CommandKey);
             var shortcuts = view.Approval is not null || overlay is not null ? "" : view.Busy
-                ? "Ctrl+P 命令 · F1 帮助 · Esc 停止"
-                : "Ctrl+P 命令 · F1 帮助 · Enter 发送";
-            rows[row++] = new(StatusLine(view.Status, scroll, columns, shortcuts), Ink.Status);
+                ? commandKey + " 命令 · F1 帮助 · Esc 停止"
+                : commandKey + " 命令 · F1 帮助 · Enter 发送";
+            var segments = view.StatusSegments is { Count: > 0 } ? string.Join(" · ", view.StatusSegments) : "";
+            rows[row++] = new(StatusLine(view.Status, segments, scroll, columns, shortcuts), Ink.Status);
         }
+        var approvalRow = -1;
+        var approvalAction = "";
         if (approvalRows > 0)
-            rows[row++] = new(ApprovalAction(canApprove, columns), Ink.Approval);
+        {
+            approvalRow = row;
+            approvalAction = ApprovalAction(canApprove, columns);
+            rows[row++] = new(approvalAction, Ink.Approval);
+        }
         for (var i = 0; i < approvalRows - 1; i++)
             rows[row++] = new(ApprovalContent(approval[i].Text, columns), Ink.Approval);
 
         var pickerRows = 0;
+        var pickerTop = -1;
+        var pickerStart = 0;
+        var pickerVisible = 0;
+        var pickerColumns = 0;
         if (overlay is not null)
         {
+            pickerTop = row;
             pickerRows = PickerPanel.Paint(overlay, rows.AsSpan(row, panelRows), columns);
+            (pickerStart, pickerVisible) = PickerWindow(overlay, panelRows, columns);
+            pickerColumns = PickerHitColumns(overlay, panelRows, columns);
             row += panelRows;
+        }
+
+        if (attachmentHeaderRows != 0)
+            rows[row++] = new(AttachmentHeader(attachments, columns, previewReason), Ink.Composer);
+        if (attachmentPreviewRows != 0)
+        {
+            var previews = AttachmentPreviewRows(attachments, previewPlans, promptWidth, columns, cell!.Value, attachmentPreviewRows);
+            foreach (var preview in previews) rows[row++] = preview;
         }
 
         var start = Math.Clamp(caretLine - draftRows + 1, 0, Math.Max(0, draftLines.Count - draftRows));
         var cursorRow = draftRows == 0 ? -1 : row + caretLine - start;
+        var composerTop = draftRows == 0 ? -1 : row;
+        string[]? composerLines = draftRows == 0 ? null : new string[draftRows];
+        int[]? composerStarts = draftRows == 0 ? null : new int[draftRows];
+        var inverse = InverseMap(draftOffsetMap, view.Draft.Length);
         for (var i = 0; i < draftRows; i++)
         {
-            var prefix = start + i == 0 ? prompt : new string(' ', promptWidth);
-            rows[row++] = new(columns == 0 ? "" : prefix + draftLines[start + i].Text, Ink.Composer);
+            var lineIndex = start + i;
+            var line = draftLines[lineIndex];
+            var prefix = lineIndex == 0 ? prompt : new string(' ', promptWidth);
+            rows[row++] = columns == 0
+                ? new("", Ink.Composer)
+                : ComposerRow(prefix, line, lineIndex, draft, draftLines, selectionStart, selectionEnd);
+            if (composerLines is not null && composerStarts is not null)
+            {
+                var rawStart = inverse[Math.Clamp(line.Start, 0, inverse.Length - 1)];
+                composerStarts[i] = rawStart;
+                var rawEnd = view.Draft.IndexOf('\n', Math.Min(rawStart, view.Draft.Length));
+                if (rawEnd < 0) rawEnd = view.Draft.Length;
+                composerLines[i] = rawStart <= rawEnd ? view.Draft[rawStart..rawEnd] : "";
+            }
         }
-        return new(width, rows, cursorRow, Math.Min(width - 1, promptWidth + caretCell), bodyRows, maxScroll, pickerRows, canApprove);
+        var (allowStart, allowEnd) = canApprove ? TextRange(approvalAction, "F2 允许") : (-1, -1);
+        var (rejectStart, rejectEnd) = TextRange(approvalAction, "F3 拒绝");
+        return new(width, rows, cursorRow, Math.Min(width - 1, promptWidth + caretCell), bodyRows, maxScroll, pickerRows, canApprove,
+            new MouseRegions(pickerTop, pickerStart, pickerVisible, pickerColumns, approvalRow,
+                allowStart, allowEnd, rejectStart, rejectEnd, composerTop, draftRows, promptWidth,
+                composerLines, composerStarts));
+    }
+
+    private static (int Start, int Visible) PickerWindow(FuiOverlay overlay, int panelRows, int columns)
+    {
+        var count = overlay.Items.Count;
+        var contentRows = panelRows - (string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1);
+        if (count == 0 || contentRows <= 1) return (0, 0);
+        var selected = Math.Clamp(overlay.Selected, 0, count - 1);
+        var split = columns >= 80 && (contentRows >= 6 ||
+            overlay.Kind != FuiOverlayKind.Picker && contentRows >= 3);
+        var visible = split ? Math.Max(1, Math.Min(count, contentRows - 1)) : VisibleItems(overlay, contentRows, selected);
+        return (Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible)), visible);
+    }
+
+    private static int VisibleItems(FuiOverlay overlay, int panelRows, int selected)
+    {
+        var detail = FuiAgentActivityRoster.IsJobViewTitle(overlay.Title)
+            ? TerminalText.SingleLine(overlay.Items[selected].Detail ?? "")
+            : TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
+        var hasDetail = detail.Length > 0 && panelRows >= 3;
+        return Math.Max(1, Math.Min(overlay.Items.Count, panelRows - 1 - (hasDetail ? 1 : 0)));
+    }
+
+    private static int PickerHitColumns(FuiOverlay overlay, int panelRows, int columns)
+    {
+        var contentRows = panelRows - (string.IsNullOrWhiteSpace(overlay.Footer) ? 0 : 1);
+        if (columns >= 80 && overlay.Items.Count > 0 &&
+            (contentRows >= 6 || overlay.Kind != FuiOverlayKind.Picker && contentRows >= 3))
+        {
+            var left = Math.Clamp(columns / 2, 30, 56);
+            if (columns - left - 1 >= 18) return left;
+        }
+        return columns;
+    }
+
+    private static (int Start, int End) TextRange(string text, string value)
+    {
+        var index = text.IndexOf(value, StringComparison.Ordinal);
+        if (index < 0) return (-1, -1);
+        var start = TerminalText.Width(text.AsSpan(0, index));
+        return (start, start + TerminalText.Width(value));
     }
 
     private static string Header(TuiView view, int columns)
@@ -137,10 +277,11 @@ internal sealed class TerminalLayout
         return TerminalText.Clip(title, columns);
     }
 
-    private static string StatusLine(string status, int scroll, int columns, string shortcuts)
+    private static string StatusLine(string status, string segments, int scroll, int columns, string shortcuts)
     {
         if (columns <= 0) return "";
         var label = TerminalText.SingleLine(status);
+        if (segments.Length != 0) label = TerminalText.SingleLine(segments) + " · " + label;
         if (scroll > 0) label = $"↑ {scroll}  {label}";
         if (columns < 8) return TerminalText.Clip(label, columns);
 
@@ -157,6 +298,160 @@ internal sealed class TerminalLayout
         line += right;
         return TerminalText.Clip(line, columns);
     }
+
+    private static string AttachmentHeader(IReadOnlyList<FileAttachment> attachments, int columns, string? reason)
+    {
+        if (columns <= 0) return "";
+        var images = attachments.Count(file => file.MimeType is not null);
+        var text = attachments.Count - images;
+        var builder = new StringBuilder("│ 附件 ").Append(attachments.Count);
+        if (images != 0) builder.Append(" · 图片 ").Append(images);
+        if (text != 0) builder.Append(" · 文本 ").Append(text);
+        if (reason is not null) builder.Append(" · ").Append(reason);
+        var available = Math.Max(0, columns - TerminalText.Width(builder.ToString()));
+        var nameLimit = Math.Max(1, (available - attachments.Count * 5) / Math.Max(1, attachments.Count));
+        foreach (var file in attachments)
+        {
+            var icon = file.MimeType is null ? "▤" : "▣";
+            var name = TerminalText.SingleLine(Path.GetFileName(file.Path));
+            if (name.Length == 0) name = TerminalText.SingleLine(file.Path);
+            builder.Append(" · ").Append(icon).Append(' ').Append(TerminalText.Clip(name, Math.Min(24, nameLimit), tail: true));
+        }
+        return TerminalText.Clip(builder.ToString(), columns);
+    }
+
+    private static void PlanAttachmentPreviews(IReadOnlyList<FileAttachment> attachments, int available,
+        ImageCells cell, List<AttachmentPreviewPlan> plans, out int rows)
+    {
+        rows = 0;
+        var x = 0;
+        foreach (var file in attachments)
+        {
+            if (file.Preview is not { } preview || preview.Width <= 0 || preview.Height <= 0 ||
+                preview.Pixels.Length != preview.Width * preview.Height) continue;
+            var width = Math.Max(1, (preview.Width + cell.Width - 1) / cell.Width);
+            rows = Math.Max(rows, Math.Max(1, (preview.Height + cell.Height - 1) / cell.Height));
+            if (x != 0) x++;
+            if (x + width > available) continue;
+            plans.Add(new(preview, x));
+            x += width;
+        }
+    }
+
+    private ScreenRow[] AttachmentPreviewRows(IReadOnlyList<FileAttachment> attachments,
+        IReadOnlyList<AttachmentPreviewPlan> plans, int promptIndent, int columns, ImageCells cell, int rowCount)
+    {
+        var key = string.Join('|', attachments.Select(file => $"{file.Path}:{Convert.ToHexString(file.Digest)}")) +
+            $"\n{plans.Count}:{promptIndent}:{columns}:{cell.Width}:{cell.Height}:{cell.Foreground}:{cell.Background}";
+        if (_attachmentPreview is { } cached && cached.Key == key && cached.Rows.Length == rowCount) return cached.Rows;
+
+        var rows = new ScreenRow[rowCount];
+        Array.Fill(rows, new(""));
+        var strips = new List<ImageStrip>[rowCount];
+        for (var i = 0; i < strips.Length; i++) strips[i] = [];
+        foreach (var plan in plans)
+        {
+            var preview = plan.Preview;
+            for (var row = 0; row < rowCount; row++)
+            {
+                var top = row * cell.Height;
+                if (top >= preview.Height) break;
+                var height = Math.Min(cell.Height, preview.Height - top);
+                strips[row].Add(new(plan.Column, EncodePreview(preview.Pixels, preview.Width, top, height, cell)));
+            }
+        }
+        for (var row = 0; row < rowCount; row++)
+            if (strips[row].Count != 0) rows[row] = new("", Ink.Composer, strips[row], promptIndent);
+        _attachmentPreview = new(key, rows);
+        return rows;
+    }
+
+    // Real-color previews use a compact 6x6x6 palette. Transparent pixels stay unset so the
+    // terminal background remains visible; partially transparent pixels blend into that background.
+    private static string EncodePreview(SKColor[] pixels, int width, int top, int height, ImageCells cell)
+    {
+        var palette = new bool[216];
+        var indexes = new byte[width * height];
+        indexes.AsSpan().Fill(255);
+        var start = top * width;
+        for (var y = 0; y < height; y++)
+            for (var x = 0; x < width; x++)
+            {
+                var pixel = pixels[start + y * width + x];
+                if (pixel.Alpha == 0) continue;
+                var red = Blend(pixel.Red, cell.Background >> 16 & 255, pixel.Alpha);
+                var green = Blend(pixel.Green, cell.Background >> 8 & 255, pixel.Alpha);
+                var blue = Blend(pixel.Blue, cell.Background & 255, pixel.Alpha);
+                var r = (red * 5 + 127) / 255;
+                var g = (green * 5 + 127) / 255;
+                var b = (blue * 5 + 127) / 255;
+                var index = (byte)(r * 36 + g * 6 + b);
+                indexes[y * width + x] = index;
+                palette[index] = true;
+            }
+
+        var bytes = new StringBuilder();
+        bytes.Append("\x1bP0;1;0q\"1;1;").Append(width).Append(';').Append(height);
+        for (var i = 0; i < palette.Length; i++)
+        {
+            if (!palette[i]) continue;
+            var r = i / 36;
+            var g = i / 6 % 6;
+            var b = i % 6;
+            bytes.Append('#').Append(i).Append(";2;").Append((r * 100 + 2) / 5).Append(';')
+                .Append((g * 100 + 2) / 5).Append(';').Append((b * 100 + 2) / 5);
+        }
+
+        for (var y = 0; y < height; y += 6)
+        {
+            if (y != 0) bytes.Append('-');
+            var band = Math.Min(6, height - y);
+            var used = new bool[216];
+            for (var dy = 0; dy < band; dy++)
+                for (var x = 0; x < width; x++)
+                {
+                    var index = indexes[(y + dy) * width + x];
+                    if (index != 255) used[index] = true;
+                }
+            for (var index = 0; index < used.Length; index++)
+            {
+                if (!used[index]) continue;
+                var last = -1;
+                for (var x = 0; x < width; x++)
+                {
+                    var bits = 0;
+                    for (var dy = 0; dy < band; dy++)
+                        if (indexes[(y + dy) * width + x] == index) bits |= 1 << dy;
+                    if (bits != 0) last = x;
+                }
+                if (last < 0) continue;
+                bytes.Append('$').Append('#').Append(index);
+                for (var x = 0; x <= last;)
+                {
+                    var bits = 0;
+                    for (var dy = 0; dy < band; dy++)
+                        if (indexes[(y + dy) * width + x] == index) bits |= 1 << dy;
+                    var count = 1;
+                    while (x + count <= last)
+                    {
+                        var nextBits = 0;
+                        for (var dy = 0; dy < band; dy++)
+                            if (indexes[(y + dy) * width + x + count] == index) nextBits |= 1 << dy;
+                        if (nextBits != bits) break;
+                        count++;
+                    }
+                    var ch = (char)(63 + bits);
+                    if (count > 3) bytes.Append('!').Append(count).Append(ch);
+                    else bytes.Append(ch, count);
+                    x += count;
+                }
+            }
+        }
+        return bytes.Append("\x1b\\").ToString();
+    }
+
+    private static int Blend(int foreground, int background, int alpha) =>
+        (foreground * alpha + background * (255 - alpha) + 127) / 255;
 
     private static string ApprovalAction(bool canApprove, int columns)
     {
@@ -181,8 +476,62 @@ internal sealed class TerminalLayout
         return TerminalText.Clip(rail + shown + right, columns);
     }
 
-    private static string ComposerPrompt(int columns)
+    private static ScreenRow ComposerRow(string prefix, TerminalText.Slice line, int lineIndex, string draft,
+        IReadOnlyList<TerminalText.Slice> lines, int selectionStart, int selectionEnd)
     {
+        var sourceEnd = lineIndex + 1 < lines.Count ? lines[lineIndex + 1].Start : draft.Length;
+        if (sourceEnd > line.Start && draft[sourceEnd - 1] == '\n') sourceEnd--;
+        var source = draft[line.Start..sourceEnd];
+        var overlaps = selectionStart >= 0 && selectionStart < sourceEnd && selectionEnd > line.Start;
+        if (!overlaps) return new(prefix + line.Text, Ink.Composer);
+
+        var spans = new List<StyledSpan>(4);
+        if (prefix.Length != 0) spans.Add(new(prefix, Ink.Composer));
+        if (!string.Equals(source, line.Text, StringComparison.Ordinal))
+        {
+            spans.Add(new(line.Text, Ink.Selection));
+            return new(prefix + line.Text, Ink.Composer, Spans: StyledSpanList.From(spans));
+        }
+
+        var selectedStart = Math.Clamp(selectionStart - line.Start, 0, line.Text.Length);
+        var selectedEnd = Math.Clamp(selectionEnd - line.Start, selectedStart, line.Text.Length);
+        if (selectedStart != 0) spans.Add(new(line.Text[..selectedStart], Ink.Composer));
+        if (selectedEnd > selectedStart) spans.Add(new(line.Text[selectedStart..selectedEnd], Ink.Selection));
+        if (selectedEnd < line.Text.Length) spans.Add(new(line.Text[selectedEnd..], Ink.Composer));
+        return new(prefix + line.Text, Ink.Composer, Spans: StyledSpanList.From(spans));
+    }
+
+    private static int CeilingGrapheme(string text, int position)
+    {
+        if (position <= 0) return 0;
+        if (position >= text.Length) return text.Length;
+        var starts = StringInfo.ParseCombiningCharacters(text);
+        var found = Array.BinarySearch(starts, position);
+        return found >= 0 ? position : ~found < starts.Length ? starts[~found] : text.Length;
+    }
+
+    private static int[] InverseMap(int[] rawToClean, int rawLength)
+    {
+        var cleanLength = rawLength == 0 ? 0 : rawToClean[rawLength];
+        var inverse = new int[cleanLength + 1];
+        Array.Fill(inverse, -1);
+        for (var raw = 0; raw <= rawLength; raw++)
+        {
+            var clean = Math.Clamp(rawToClean[raw], 0, cleanLength);
+            inverse[clean] = raw;
+        }
+        for (var clean = 1; clean < inverse.Length; clean++)
+            if (inverse[clean] < 0) inverse[clean] = inverse[clean - 1];
+        if (inverse.Length != 0 && inverse[^1] < 0) inverse[^1] = rawLength;
+        return inverse;
+    }
+
+    private static string ComposerPrompt(int columns, string? mode)
+    {
+        if (mode is "NORMAL")
+            return columns >= 18 ? "│ NORMAL › " : columns >= 8 ? "│ N › " : columns >= 4 ? "N› " : "";
+        if (mode is "INSERT")
+            return columns >= 18 ? "│ INSERT › " : columns >= 8 ? "│ I › " : columns >= 4 ? "I› " : "";
         if (columns >= 8) return "│ › ";
         return columns >= 4 ? "› " : "";
     }
@@ -258,7 +607,7 @@ internal sealed class TerminalLayout
             var collapsed = line.Kind == "tool" && !expandTools;
             if (_line is not null && _cards == cards && _hidden == hidden && _collapsed == collapsed &&
                 (ReferenceEquals(line, _line) || (_line.Kind == line.Kind && ReferenceEquals(_line.Text, line.Text) &&
-                    ReferenceEquals(_line.Images, line.Images))))
+                    ReferenceEquals(_line.Tool, line.Tool) && ReferenceEquals(_line.Images, line.Images))))
                 return;
 
             var old = _line;
@@ -281,7 +630,7 @@ internal sealed class TerminalLayout
             if (_kind == "tool")
             {
                 Pieces.Clear();
-                BuildTool(line.Text, line.Images, columns, collapsed, cell, resolveImage);
+                BuildTool(line, columns, collapsed, cell, resolveImage);
                 return;
             }
 
@@ -316,7 +665,8 @@ internal sealed class TerminalLayout
                 for (var i = 0; i < _markdown.Count; i++)
                 {
                     var item = _markdown[i];
-                    markdownRows.Add(new(item.Text, item.Ink == Ink.Plain ? Ink.Assistant : item.Ink));
+                    markdownRows.Add(new(item.Text, item.Ink == Ink.Plain ? Ink.Assistant : item.Ink,
+                        Spans: item.Spans));
                 }
                 AddRows(markdownRows, card, rail, showCompactLabel, compactLabel);
                 return;
@@ -378,7 +728,8 @@ internal sealed class TerminalLayout
                     {
                         Text = "│ " + Pad(row.Text, inner) + " │",
                         Ink = ink,
-                        ImageIndent = row.ImageIndent + 2
+                        ImageIndent = row.ImageIndent + 2,
+                        Spans = FrameSpans(row, "│ ", " │", inner, ink)
                     });
                 }
                 _rows.Add(new(CardBottom(_columns), _roleInk));
@@ -387,7 +738,13 @@ internal sealed class TerminalLayout
             if (rail)
             {
                 foreach (var row in rows)
-                    _rows.Add(row with { Text = "┆ " + row.Text, Ink = Ink.Thinking, ImageIndent = row.ImageIndent + 2 });
+                    _rows.Add(row with
+                    {
+                        Text = "┆ " + row.Text,
+                        Ink = Ink.Thinking,
+                        ImageIndent = row.ImageIndent + 2,
+                        Spans = FrameSpans(row, "┆ ", "", -1, Ink.Thinking)
+                    });
                 return;
             }
             var prefix = compactLabel ? label : "";
@@ -398,72 +755,188 @@ internal sealed class TerminalLayout
                 {
                     Text = prefix + row.Text,
                     Ink = row.Ink == Ink.Plain ? _roleInk : row.Ink,
-                    ImageIndent = row.ImageIndent + TerminalText.Width(prefix)
+                    ImageIndent = row.ImageIndent + TerminalText.Width(prefix),
+                    Spans = FrameSpans(row, prefix, "", -1, row.Ink == Ink.Plain ? _roleInk : row.Ink)
                 });
                 prefix = indent;
             }
         }
 
-        private void BuildTool(string text, IReadOnlyList<TuiImage>? images, int columns, bool collapsed,
+        private static StyledSpanList? FrameSpans(ScreenRow row, string prefix, string suffix,
+            int contentWidth, Ink frameInk)
+        {
+            if (row.Spans is null) return null;
+            if (!string.Equals(row.Spans.Text, row.Text, StringComparison.Ordinal)) return null;
+            var spans = new List<StyledSpan>(row.Spans.Count + 3);
+            Add(prefix, frameInk, null);
+            foreach (var span in row.Spans) Add(span.Text, span.Ink, span.Link);
+            if (contentWidth >= 0)
+                Add(new string(' ', Math.Max(0, contentWidth - TerminalText.Width(row.Text))), frameInk, null);
+            Add(suffix, frameInk, null);
+            return StyledSpanList.From(spans);
+
+            void Add(string text, Ink ink, string? link)
+            {
+                if (text.Length == 0) return;
+                if (spans.Count != 0 && spans[^1].Ink == ink && spans[^1].Link == link)
+                    spans[^1] = spans[^1] with { Text = spans[^1].Text + text };
+                else spans.Add(new(text, ink, link));
+            }
+        }
+
+        private void BuildTool(TuiLine line, int columns, bool collapsed,
             ImageCells? cell, Func<string, ResolvedImage?>? resolveImage)
         {
-            var tool = ToolPresentation.Parse(text);
-            var title = tool.Title(collapsed);
+            var tool = line.Tool is { } snapshot
+                ? ToolCallProjection.Project(snapshot)
+                : ToolCallProjection.ProjectLegacy(line.Text);
+            var title = ToolTitle(tool, collapsed, columns);
+            var tone = tool.IsError ? Ink.Error :
+                tool.Status == ToolCallStatus.Cancelled ? Ink.Quiet : Ink.Tool;
             if (!_cards)
             {
-                _rows.Add(new(TerminalText.Clip(title, columns), Ink.Tool));
-                if (!collapsed && (tool.Body.Length > 0 || images is { Count: > 0 }))
+                _rows.Add(new(TerminalText.Clip(title, columns), tone));
+                if (!collapsed) AddToolSections(tool, columns, tone, framed: false, cell, resolveImage);
+                if (!collapsed) AddToolAttachments(line.Images, Math.Max(1, columns - 2), cell, framed: false);
+                return;
+            }
+
+            _rows.Add(new(CardTop(title, columns), tone));
+            if (!collapsed) AddToolSections(tool, columns, tone, framed: true, cell, resolveImage);
+            if (!collapsed) AddToolAttachments(line.Images, Math.Max(1, columns - 4), cell, framed: true);
+            _rows.Add(new(CardBottom(columns), tone));
+        }
+
+        private void AddToolSections(ToolCardView tool, int columns, Ink tone, bool framed,
+            ImageCells? cell, Func<string, ResolvedImage?>? resolveImage)
+        {
+            const int maxRows = 320;
+            foreach (var section in tool.Sections)
+            {
+                if (_rows.Count >= maxRows)
                 {
-                    var inner = Math.Max(1, columns - 2);
-                    if ((cell is not null && (MarkdownImages.MayContainImage(tool.Body) || images is { Count: > 0 })) ||
-                        MarkdownImages.MayContainDataUri(tool.Body))
+                    AddToolDisplayLimit(columns, tone, framed);
+                    return;
+                }
+                if (framed) AddFramedToolRow(new(section.Title, Ink.CodeFence), columns, tone);
+                else _rows.Add(new("  " + TerminalText.Clip(section.Title, Math.Max(1, columns - 2)), Ink.CodeFence));
+
+                var width = framed ? Math.Max(1, columns - 4) : Math.Max(1, columns - 2);
+                foreach (var row in ToolBodyRows(section, width, cell, resolveImage))
+                {
+                    if (_rows.Count >= maxRows)
                     {
-                        _rich ??= new();
-                        _rich.Project(tool.Body, inner, cell, allowMarkdown: false, allowMath: false, resolveImage, images, Ink.Tool);
-                        foreach (var row in _rich.Rows)
-                            _rows.Add(row with { Text = "  " + row.Text, Ink = row.Ink == Ink.Plain ? Ink.Tool : row.Ink, ImageIndent = row.ImageIndent + 2 });
+                        AddToolDisplayLimit(columns, tone, framed);
+                        return;
                     }
+                    if (framed) AddFramedToolRow(row, columns, tone);
                     else
-                    {
-                        var body = new List<TerminalText.Slice>();
-                        TerminalText.Wrap(tool.Body, inner, 0, body);
-                        foreach (var piece in body) _rows.Add(new("  " + piece.Text, Ink.Tool));
-                    }
+                        _rows.Add(ToolIndented(row with { Ink = row.Ink == Ink.Plain ? tone : row.Ink },
+                            "  ", Ink.CodeFence));
                 }
-                return;
             }
+        }
 
-            if (collapsed)
+        private void AddToolAttachments(IReadOnlyList<TuiImage>? images, int width, ImageCells? cell, bool framed)
+        {
+            if (cell is null || images is not { Count: > 0 }) return;
+            _rich ??= new();
+            _rich.Project("", width, cell, allowMarkdown: false, allowMath: false, resolveImage: null,
+                images, Ink.Tool);
+            foreach (var row in _rich.Rows)
             {
-                _rows.Add(new(CardTop(title, columns), Ink.Tool));
-                return;
-            }
-
-            _rows.Add(new(CardTop(title, columns), Ink.Tool));
-            if (tool.Body.Length > 0 || images is { Count: > 0 })
-            {
-                var inner = Math.Max(1, columns - 4);
-                if ((cell is not null && (MarkdownImages.MayContainImage(tool.Body) || images is { Count: > 0 })) ||
-                    MarkdownImages.MayContainDataUri(tool.Body))
-                {
-                    _rich ??= new();
-                    _rich.Project(tool.Body, inner, cell, allowMarkdown: false, allowMath: false, resolveImage, images, Ink.Tool);
-                    foreach (var row in _rich.Rows)
-                        _rows.Add(row with
-                        {
-                            Text = "│ " + Pad(row.Text, inner) + " │",
-                            Ink = row.Ink == Ink.Plain ? Ink.Tool : row.Ink,
-                            ImageIndent = row.ImageIndent + 2
-                        });
-                }
+                var ink = row.Ink == Ink.Plain ? Ink.Tool : row.Ink;
+                if (framed) AddFramedToolRow(row, width + 4, Ink.Tool);
                 else
-                {
-                    var body = new List<TerminalText.Slice>();
-                    TerminalText.Wrap(tool.Body, inner, 0, body);
-                    foreach (var piece in body) _rows.Add(new("│ " + Pad(piece.Text, inner) + " │", Ink.Tool));
-                }
+                    _rows.Add(ToolIndented(row with { Ink = ink }, "  ", Ink.CodeFence));
             }
-            _rows.Add(new(CardBottom(columns), Ink.Tool));
+        }
+
+        private void AddToolDisplayLimit(int columns, Ink tone, bool framed)
+        {
+            var marker = new ScreenRow("… [显示内容已截断]", Ink.DiffMeta);
+            if (framed) AddFramedToolRow(marker, columns, tone);
+            else _rows.Add(ToolIndented(marker, "  ", Ink.CodeFence));
+        }
+
+        private void AddFramedToolRow(ScreenRow row, int columns, Ink fallback)
+        {
+            var inner = Math.Max(1, columns - 4);
+            var ink = row.Ink == Ink.Plain ? fallback : row.Ink;
+            _rows.Add(row with
+            {
+                Text = "│ " + Pad(row.Text, inner) + " │",
+                Ink = ink,
+                Spans = FrameSpans(row, "│ ", " │", inner, ink)
+            });
+        }
+
+        private IReadOnlyList<ScreenRow> ToolBodyRows(ToolCardSection section, int width,
+            ImageCells? cell, Func<string, ResolvedImage?>? resolveImage)
+        {
+            var imageSyntax = section.Lines.Any(line => line.Language is null &&
+                (MarkdownImages.MayContainImage(line.Text) || MarkdownImages.MayContainDataUri(line.Text)));
+            if (section.Markdown || imageSyntax)
+            {
+                _rich ??= new();
+                _rich.Project(string.Join('\n', section.Lines.Select(line => line.Text)), width, cell,
+                    allowMarkdown: section.Markdown, allowMath: section.Markdown, resolveImage,
+                    attached: null, Ink.Tool);
+                var rows = new List<ScreenRow>(_rich.Rows.Count);
+                foreach (var item in _rich.Rows)
+                    rows.Add(item with { Ink = item.Ink == Ink.Plain ? Ink.Tool : item.Ink });
+                return rows;
+            }
+
+            var output = new List<ScreenRow>();
+            foreach (var line in section.Lines)
+            {
+                var clean = TerminalText.Clean(line.Text);
+                if (line.Language is { Length: > 0 } language)
+                {
+                    var spans = SyntaxHighlighter.Highlight(clean, language);
+                    foreach (var wrapped in StyledText.Wrap(spans, width))
+                        output.Add(new(wrapped.Text, line.Ink == Ink.Tool ? Ink.Code : line.Ink,
+                            Spans: wrapped.Spans));
+                    continue;
+                }
+
+                var pieces = new List<TerminalText.Slice>();
+                TerminalText.Wrap(clean, width, 0, pieces);
+                output.AddRange(pieces.Select(piece => new ScreenRow(piece.Text, line.Ink)));
+            }
+            return output;
+        }
+
+        private static ScreenRow ToolIndented(ScreenRow row, string prefix, Ink prefixInk) =>
+            row with
+            {
+                Text = prefix + row.Text,
+                Spans = FrameSpans(row, prefix, "", -1, prefixInk)
+            };
+
+        private static string ToolTitle(ToolCardView tool, bool collapsed, int columns)
+        {
+            var available = Math.Max(1, columns - 4);
+            var title = $"工具 {(collapsed ? "▸" : "▾")} {tool.Verb}";
+
+            void Add(string value, bool clip = false)
+            {
+                if (string.IsNullOrWhiteSpace(value)) return;
+                var separator = " · ";
+                var remaining = available - TerminalText.Width(title) - TerminalText.Width(separator);
+                if (remaining <= 0) return;
+                var shown = clip ? TerminalText.Clip(value, remaining) : value;
+                if (TerminalText.Width(shown) > remaining) return;
+                title += separator + shown;
+            }
+
+            Add(tool.StatusLabel);
+            if (!string.Equals(tool.ToolName, tool.Verb, StringComparison.Ordinal))
+                Add(TerminalText.Clip(tool.ToolName, 24));
+            if (tool.Target is { } target) Add(target, clip: true);
+            foreach (var stat in tool.Stats) Add(stat);
+            return TerminalText.Clip(title, available);
         }
 
         private static Ink RoleInk(string kind) => kind switch
@@ -494,41 +967,4 @@ internal sealed class TerminalLayout
         };
     }
 
-    private readonly record struct ToolPresentation(string Name, string Status, string Args, string Body)
-    {
-        internal string Title(bool collapsed)
-        {
-            var marker = collapsed ? "▸" : "▾";
-            var title = $"工具 {marker} {(Name.Length == 0 ? "工具" : Name)}";
-            if (Status.Length > 0) title += " · " + Status;
-            if (Args.Length > 0) title += " · " + Args;
-            return title;
-        }
-
-        internal static ToolPresentation Parse(string text)
-        {
-            var clean = TerminalText.Clean(text);
-            var newline = clean.IndexOf('\n');
-            var first = newline < 0 ? clean : clean[..newline];
-            var body = newline < 0 ? "" : clean[(newline + 1)..];
-            first = first.Trim();
-            if (first.Length == 0) return new("", "", "", body);
-
-            var split = first.IndexOf(' ');
-            var name = split < 0 ? first : first[..split];
-            var rest = split < 0 ? "" : first[(split + 1)..].Trim();
-            var status = "";
-            var args = rest;
-            if (rest.StartsWith('['))
-            {
-                var close = rest.IndexOf(']');
-                if (close > 1)
-                {
-                    status = rest[1..close].Trim();
-                    args = rest[(close + 1)..].Trim();
-                }
-            }
-            return new(name, status, args, body);
-        }
-    }
 }

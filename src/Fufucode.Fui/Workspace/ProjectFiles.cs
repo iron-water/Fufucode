@@ -3,12 +3,21 @@ using System.Text;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Security;
+using SkiaSharp;
 
 namespace Fufucode.Fui;
 
+internal enum FileAttachmentSource { Project, Clipboard }
+internal sealed record ProjectImagePreview(int Width, int Height, SKColor[] Pixels, int SourceWidth, int SourceHeight);
 internal sealed record FileAttachment(string Path, string Text, byte[] Digest, string? MimeType = null,
     byte[]? ImageBytes = null, int ImageWidth = 0, int ImageHeight = 0, string? FormatLabel = null,
-    bool IsClipboard = false);
+    bool IsClipboard = false,
+    ProjectImagePreview? Preview = null, byte[]? Payload = null,
+    FileAttachmentSource Source = FileAttachmentSource.Project, long? ByteCount = null)
+{
+    public bool IsClipboardAttachment => IsClipboard || Source == FileAttachmentSource.Clipboard;
+    public byte[]? EncodedBytes => ImageBytes ?? Payload;
+}
 internal sealed record FuiPrompt(string Text, IReadOnlyList<ChatImage> Images);
 internal sealed record FilePage(string Folder, IReadOnlyList<FuiChoice> Items);
 internal sealed record ResolvedImage(string Label, string MimeType, byte[] Bytes, DecodedImage? Decoded = null);
@@ -53,6 +62,47 @@ internal sealed class ProjectFiles
         var here = Relative(dir);
         if (here != ".") choices.Insert(0, new(Relative(Directory.GetParent(dir)!.FullName) + "/", "../", "上一级"));
         return new(here, choices);
+    }
+
+    // Path-only completion. This walks directory entries and attributes, never opens file content.
+    internal IReadOnlyList<string> CompletionPaths(CancellationToken ct)
+    {
+        const int maximum = 4000;
+        var allowed = _policy.ReadablePathsForListing();
+        var paths = new List<string>();
+        var pending = new Stack<string>();
+        pending.Push(_root);
+        while (pending.Count != 0 && paths.Count < maximum)
+        {
+            ct.ThrowIfCancellationRequested();
+            var directory = pending.Pop();
+            try
+            {
+                foreach (var entry in new DirectoryInfo(directory).EnumerateFileSystemInfos())
+                {
+                    ct.ThrowIfCancellationRequested();
+                    try
+                    {
+                        if (entry.Attributes.HasFlag(FileAttributes.ReparsePoint) || !allowed(entry.FullName)) continue;
+                        var isDirectory = entry.Attributes.HasFlag(FileAttributes.Directory);
+                        if (isDirectory && HiddenDirectories.Contains(entry.Name)) continue;
+                        var relative = Relative(entry.FullName);
+                        paths.Add(isDirectory ? relative + "/" : relative);
+                        if (isDirectory) pending.Push(entry.FullName);
+                    }
+                    catch (Exception error) when (error is IOException or UnauthorizedAccessException or FileNotFoundException)
+                    {
+                        // A path disappearing or losing access mid-walk is omitted, not turned into a false candidate.
+                    }
+                    if (paths.Count == maximum) break;
+                }
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException or DirectoryNotFoundException)
+            {
+                continue;
+            }
+        }
+        return paths;
     }
 
     public async Task<FileAttachment> ReadAsync(string path, CancellationToken ct) =>
@@ -125,6 +175,49 @@ internal sealed class ProjectFiles
         }
     }
 
+    public Task<FileAttachment> ReadClipboardImageAsync(CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(NormalizeClipboard(ClipboardImage.ReadAttachment()));
+    }
+
+    private FileAttachment NormalizeClipboard(FileAttachment file)
+    {
+        var bytes = file.EncodedBytes;
+        if (bytes is not { Length: > 0 } || bytes.Length > MaxAttachmentBytes ||
+            file.MimeType != "image/png" ||
+            !ProjectImage.TryInspect(bytes, "image/png", out var width, out var height, out var label, out _))
+            throw new InvalidDataException("剪贴板图片不是有效的 PNG。");
+        var digest = SHA256.HashData(bytes);
+        return file with
+        {
+            ImageBytes = bytes,
+            Payload = bytes,
+            Digest = digest,
+            ImageWidth = width,
+            ImageHeight = height,
+            FormatLabel = label,
+            IsClipboard = true,
+            Source = FileAttachmentSource.Clipboard,
+            Preview = ProjectImage.CreatePreview(bytes, "image/png"),
+            ByteCount = bytes.Length
+        };
+    }
+
+    internal FileAttachment ClipboardAttachment(byte[] bytes)
+    {
+        bytes = bytes.ToArray();
+        if (bytes.Length > MaxAttachmentBytes)
+            throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
+        if (!ProjectImage.TryInspect(bytes, "image/png", out var width, out var height, out var label, out _))
+            throw new InvalidDataException("剪贴板图片不是有效的 PNG。");
+        var digest = SHA256.HashData(bytes);
+        var name = $"剪贴板-{DateTime.Now:yyyyMMdd-HHmmss}-{Convert.ToHexString(digest.AsSpan(0, 2)).ToLowerInvariant()}.png";
+        return new(name, "", digest, "image/png", bytes, width, height, label,
+            IsClipboard: true, Preview: ProjectImage.CreatePreview(bytes, "image/png"),
+            Payload: bytes, Source: FileAttachmentSource.Clipboard, ByteCount: bytes.Length);
+    }
+
     private async Task<(FileAttachment File, byte[] Bytes, DecodedImage? Decoded)> ReadFileAsync(string path, bool allowImages, int remaining, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
@@ -143,7 +236,11 @@ internal sealed class ProjectFiles
         {
             if (!ProjectImage.TryInspect(bytes, mime, out var width, out var height, out var label, out var decoded))
                 throw new InvalidDataException($"{path} 不是有效或与扩展名相符的图片文件。");
-            return (new(Relative(full), "", SHA256.HashData(bytes), mime, bytes, width, height, label), bytes, decoded);
+            var preview = decoded is not null
+                ? ProjectImage.CreatePreview(decoded)
+                : ProjectImage.CreatePreview(bytes, mime);
+            return (new(Relative(full), "", SHA256.HashData(bytes), mime, bytes, width, height, label,
+                Preview: preview, Payload: bytes, ByteCount: bytes.Length), bytes, decoded);
         }
         string text;
         try { text = Utf8.GetString(bytes).TrimStart('\uFEFF'); }
@@ -153,7 +250,7 @@ internal sealed class ProjectFiles
         var settings = _policy.Store.Current;
         if (settings.SensitiveDataProtectionEnabled && SecurityContentScanner.ContainsSecret(text, settings))
             throw new UnauthorizedAccessException("安全中心检测到敏感内容；文件未加入上下文。");
-        return (new(Relative(full), text, SHA256.HashData(bytes)), bytes, null);
+        return (new(Relative(full), text, SHA256.HashData(bytes), ByteCount: bytes.Length), bytes, null);
     }
 
     public async Task<FuiPrompt> PrepareAsync(string prompt, IReadOnlyList<FileAttachment> attached, CancellationToken ct)
@@ -165,27 +262,49 @@ internal sealed class ProjectFiles
         var remaining = MaxAttachmentBytes;
         foreach (var file in attached)
         {
-            if (file.IsClipboard)
+            FileAttachment current;
+            byte[] bytes;
+            DecodedImage? decoded = null;
+            if (file.IsClipboardAttachment)
             {
-                if (file.MimeType is not { } clipMime || file.ImageBytes is not { Length: > 0 } clipBytes ||
-                    !SHA256.HashData(clipBytes).AsSpan().SequenceEqual(file.Digest))
-                    throw new InvalidDataException($"{file.Path} 剪贴板图片数据无效；请重新粘贴。");
-                if (clipBytes.Length > remaining)
+                if (file.MimeType is not "image/png" || file.EncodedBytes is not { Length: > 0 } payload)
+                    throw new InvalidDataException("剪贴板附件数据无效；请重新粘贴。");
+                if (payload.Length > remaining)
                     throw new IOException($"每条消息的附件总量最多 {MaxAttachmentBytes / 1024 / 1024} MiB。");
-                images.Add(new(Convert.ToBase64String(clipBytes), clipMime));
-                remaining -= clipBytes.Length;
-                continue;
+                if (!SHA256.HashData(payload).AsSpan().SequenceEqual(file.Digest))
+                    throw new IOException($"{file.Path} 已更改；请先移除，再重新附加。");
+                if (!ProjectImage.TryInspect(payload, "image/png", out var width, out var height, out var label,
+                        out decoded))
+                    throw new InvalidDataException("剪贴板附件不是有效的 PNG；请重新粘贴。");
+                bytes = payload.ToArray();
+                current = file with
+                {
+                    Digest = SHA256.HashData(bytes),
+                    ImageBytes = bytes,
+                    Payload = bytes,
+                    ImageWidth = width,
+                    ImageHeight = height,
+                    FormatLabel = label,
+                    Preview = ProjectImage.CreatePreview(bytes, "image/png"),
+                    Source = FileAttachmentSource.Clipboard,
+                    IsClipboard = true,
+                    ByteCount = bytes.Length
+                };
             }
-            var (current, bytes, decoded) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
+            else
+            {
+                (current, bytes, decoded) = await ReadFileAsync(file.Path, allowImages: true, remaining, ct);
+            }
             if (!current.Digest.AsSpan().SequenceEqual(file.Digest) || current.MimeType != file.MimeType)
                 throw new IOException($"{file.Path} 已更改；请先移除，再重新附加。");
             if (current.MimeType is { } mime)
             {
-                var wireBytes = bytes;
+                var sourceBytes = current.ImageBytes ?? bytes;
+                var wireBytes = sourceBytes;
                 var wireMime = mime;
                 if (!ProjectImage.IsNativeModelMime(mime))
                 {
-                    decoded ??= ImageDecoder.TryDecode(bytes, mime)
+                    decoded ??= ImageDecoder.TryDecode(wireBytes, mime)
                         ?? throw new InvalidDataException($"{file.Path} 无法解码为模型图片。");
                     wireBytes = ImageDecoder.EncodePng(decoded)
                         ?? throw new InvalidDataException($"{file.Path} 无法转换为 PNG 图片。");
@@ -194,7 +313,7 @@ internal sealed class ProjectFiles
                     wireMime = "image/png";
                 }
                 images.Add(new(Convert.ToBase64String(wireBytes), wireMime));
-                remaining -= Math.Max(bytes.Length, wireBytes.Length);
+                remaining -= Math.Max(sourceBytes.Length, wireBytes.Length);
             }
             else
             {

@@ -227,6 +227,13 @@ public sealed class NativeCSharpChatSession : IChatSession, IQueuedChatSession, 
     public string ThinkingLevel => _thinkingLevel;
     public string? WorkspaceRoot => _workspaceRoot;
 
+    /// <summary>
+    /// Last structured plan produced by the native <c>update_plan</c> tool. The
+    /// TUI uses this as a read-only projection; execution still belongs to the
+    /// native engine and is never synthesized by a host.
+    /// </summary>
+    public string? CurrentPlanSnippet => GetCurrentPlanSnippet();
+
     /// <summary>可选的外部轮次预算；默认 null，由模型终态或取消结束。</summary>
     public int? MaxIterations
     {

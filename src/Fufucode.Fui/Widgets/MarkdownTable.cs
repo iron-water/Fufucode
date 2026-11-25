@@ -43,10 +43,10 @@ internal static class MarkdownTable
 
         var widths = ColumnWidths(header, rowCells, width, out var available);
         if (widths is null) return false;
-        rows.Add(new(RenderRow(header, widths, alignment), Ink.Heading));
+        rows.Add(Styled(RenderRow(header, widths, alignment), Ink.Heading));
         rows.Add(new(string.Join("─┼─", widths.Select(value => new string('─', value))), Ink.Quiet));
         foreach (var cells in rowCells)
-            rows.Add(new(RenderRow(cells, widths, alignment), Ink.Plain));
+            rows.Add(Styled(RenderRow(cells, widths, alignment), Ink.Plain));
         if (partial is not null)
         {
             var prefix = width >= 3 ? "  " : "";
@@ -55,6 +55,9 @@ internal static class MarkdownTable
         next = end;
         return true;
     }
+
+    private static MarkdownLines.Row Styled(string text, Ink ink) =>
+        new(text, ink, MarkdownLinks.Annotate(text, ink) is { } spans ? StyledSpanList.From(spans) : null);
 
     internal static string FormatInline(string text)
     {

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Threading.Channels;
 using Fufucode.App.Abstractions;
@@ -8,7 +9,8 @@ using Fufucode.Core.Backend;
 namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
-internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments
+internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments,
+    IFuiPlanSession, IFuiSessionInspector, IFuiStatusProvider, IFuiRuntimeCatalogSource
 {
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
@@ -37,8 +39,13 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
         _nativeProbeModel = string.IsNullOrWhiteSpace(_imageEndpoint?.ModelId) ? settings.SelectedModel : _imageEndpoint.ModelId;
         _ui = session.Chat as IExtensionUiSession
             ?? throw new InvalidOperationException("FUMO 会话没有原生审批入口。");
-        _projection = new(_events.Writer);
-        History = FumoEventProjection.ReadHistory(session);
+        var historyProjection = FumoEventProjection.ReadHistoryWithSources(session);
+        History = historyProjection.Lines;
+        HistorySources = historyProjection.Sources;
+        var historyMessages = session.History.CurrentBranchMessages;
+        _projection = new(_events.Writer, historyMessages.Count,
+            historyMessages.Sum(message => message.Content.OfType<PiToolCallBlock>().Count()),
+            historyMessages.Sum(message => message.Content.OfType<PiThinkingBlock>().Count()));
         _approvals = SharedApprovalRegistry.For(_ui);
         _approvals.Requested += OnApproval;
         _approvals.Decided += OnDecision;
@@ -54,7 +61,26 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     public string Project => _session.Project.Path;
     public string Id => _session.Session.Id;
     public string? Model => _session.Chat.CurrentModel;
+    public string? CurrentPlanSnippet => (_session.Chat as NativeCSharpChatSession)?.CurrentPlanSnippet;
+    public string ExecutionMode => (_session.Chat as IExecutionModeSession)?.ExecutionMode ?? "unknown";
+    public string RuntimeLabel => "FUMO";
+    public int QueuedCount => _session.Chat.QueuedCount;
+    public string? UsageSummary
+    {
+        get
+        {
+            var usage = _session.Coordinator.GetUsage().Session;
+            if (usage.AssistantMessageCount == 0) return null;
+            static string Number(long? value) => value is { } known
+                ? known >= 1_000_000 ? (known / 1_000_000d).ToString("0.0", CultureInfo.InvariantCulture) + "M"
+                : known >= 1_000 ? (known / 1_000d).ToString("0.0", CultureInfo.InvariantCulture) + "k"
+                : known.ToString(CultureInfo.InvariantCulture)
+                : "?";
+            return Number(usage.Input.Value) + "/" + Number(usage.Output.Value);
+        }
+    }
     public IReadOnlyList<TuiLine> History { get; }
+    public IReadOnlyList<string?> HistorySources { get; }
     public ChannelReader<TuiEvent> Events => _events.Reader;
 
     public static async Task<FumoTuiSession> OpenAsync(string project, string? dataRoot, string? sessionId,

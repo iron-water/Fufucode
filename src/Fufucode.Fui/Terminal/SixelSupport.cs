@@ -3,12 +3,31 @@ using System.Globalization;
 namespace Fufucode.Fui;
 
 // DEC primary device attribute 4 advertises SIXEL; xterm CSI 16 t returns the pixel size of a cell.
-internal sealed class SixelSupport(string? mode)
+internal sealed class SixelSupport
 {
-    private bool _enabled = string.Equals(mode, "sixel", StringComparison.OrdinalIgnoreCase);
+    private readonly bool _forced;
+    private bool _enabled;
+    private bool _replySeen;
+    private bool _supportedByReply;
     private ImageCells _cell = ImageCells.Default;
-    internal bool Probe { get; } = !string.Equals(mode, "off", StringComparison.OrdinalIgnoreCase);
+    internal SixelSupport(string? mode)
+    {
+        _forced = string.Equals(mode, "sixel", StringComparison.OrdinalIgnoreCase);
+        _enabled = _forced;
+        Probe = !string.Equals(mode, "off", StringComparison.OrdinalIgnoreCase);
+    }
+    internal bool Probe { get; }
     internal ImageCells? Cell => _enabled ? _cell : null;
+    internal string State
+    {
+        get
+        {
+            if (Cell is null) return !Probe ? "关闭（FUI_GRAPHICS=off）"
+                : _replySeen ? "不支持（DA1 未声明 4）" : "未知（尚未收到 DA1 应答）";
+            if (!_forced || _supportedByReply) return "已确认（DA1 声明 4）";
+            return _replySeen ? "已强制启用（DA1 未声明 4）" : "已强制启用（DA1 未确认）";
+        }
+    }
     internal const string Colors = "\x1b]10;?\x1b\\\x1b]11;?\x1b\\";
     internal const string Query = "\x1b[c\x1b[16t" + Colors;
 
@@ -16,7 +35,12 @@ internal sealed class SixelSupport(string? mode)
     {
         if (command == 'c' && parameters.StartsWith('?'))
         {
-            if (Probe && parameters[1..].Split(';').Contains("4")) _enabled = true;
+            _replySeen = true;
+            if (Probe && parameters[1..].Split(';').Contains("4"))
+            {
+                _supportedByReply = true;
+                _enabled = true;
+            }
             return true;
         }
         if (command != 't') return false;

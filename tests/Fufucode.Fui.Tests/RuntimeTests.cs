@@ -42,6 +42,10 @@ internal static class RuntimeTests
             {
                 id = empty.Id;
                 Check(metadata.GetSession(id).Backend == BackendId.NativeCSharp && empty.History.Count == 0, "not a new FUMO session");
+                await Reject<InvalidOperationException>(() => empty.RetryLastUserAsync(ct));
+                var emptyInfo = await empty.InspectAsync(ct);
+                Check(emptyInfo is { Messages: 0, Tools: 0, Errors: 0, Attachments: 0, QueueCount: 0 } &&
+                    emptyInfo.Id == id && emptyInfo.Project == project, "empty session info invents facts");
                 while (empty.Events.TryRead(out var initial))
                     Check(initial is not TuiEvent.Message { Id: var key } || !key.StartsWith("plugin:"), "standalone TUI attempted to seed missing optional payloads");
                 Check(FileChangeJournal.Root == Path.Combine(layout.Root, "turn-backups"), "journal outside isolated data root");
@@ -82,12 +86,22 @@ internal static class RuntimeTests
                 var first = await Until(session, e => e is TuiEvent.Message { Kind: "assistant", Text: "first", Append: true }, ct);
                 Check(first.OfType<TuiEvent.Message>().Any(m => m.Kind == "thinking" && m.Text == "think"), "missing reasoning delta");
                 Check(first.OfType<TuiEvent.Status>().Any(s => s.Busy) && first.OfType<TuiEvent.Status>().All(s => s.Busy), "settled before SSE finished");
+                await Reject<InvalidOperationException>(() => session.RetryLastUserAsync(ct));
                 release.SetResult();
                 var run = first.Concat(await Settled(session, ct)).ToArray();
                 var rows = Rows(run);
                 Check(rows.Count(l => l.Kind == "user" && l.Text == "stream") == 1 && rows.Count(l => l.Kind == "assistant" && l.Text == "first second") == 1,
                     "user echoed twice or final text did not replace deltas");
                 Check(session.Model == "fixture-model", "session didn't use configured model");
+                var streamedInfo = await session.InspectAsync(ct);
+                Check(streamedInfo.Messages >= 2 && streamedInfo.Tools == 0 && streamedInfo.Errors == 0 &&
+                    streamedInfo.Usage is { Input: null, Output: null, Total: null }, "streamed session info is not provider-backed");
+
+                Check(await session.RetryLastUserAsync(ct) == "stream", "retry did not resolve the last user text");
+                var retryRun = await Settled(session, ct);
+                Check(retryRun.OfType<TuiEvent.Message>().Any(m => m.Kind == "assistant" && m.Text == "first second"),
+                    "retry did not create a real new FUMO turn");
+                Check(endpoint.Choices.Count(choice => choice.Prompt == "stream") >= 2, "retry target never reached the model endpoint");
 
                 foreach (var allow in new[] { false, true })
                 {
@@ -109,6 +123,7 @@ internal static class RuntimeTests
                     Check(tool.Text.Contains(name) && tool.Text.Contains(allow ? "[完成]" : "[失败]"), "missing authoritative tool result");
                     Check(allow ? File.ReadAllText(Path.Combine(project, name)) == "fixture" : !File.Exists(Path.Combine(project, name)), "wrong approval side effect");
                 }
+                Check((await session.InspectAsync(ct)).Tools >= 2, "tool counts did not come from real calls");
 
                 const string blocked = "policy-forbidden.txt";
                 new SecurityPolicyStore(layout.Root).Update(policy => policy with

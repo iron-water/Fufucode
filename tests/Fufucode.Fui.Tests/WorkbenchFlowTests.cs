@@ -50,7 +50,8 @@ internal static partial class WorkbenchFlowTests
             }
             try
             {
-                Type("/mod"); Check(ui.View().Overlay!.Items.Any(c => c.Value == "model"), "command discovery");
+                Type("/mod"); Check(ui.View().Overlay!.Items.Select(c => c.Value).ToHashSet().IsSupersetOf(["model", "mode"]), "command discovery");
+                Key(ConsoleKey.C, true); Type("/model");
                 Key(ConsoleKey.Tab); Check(ui.View().Draft == "/model", "Tab completes but does not execute");
                 Key(ConsoleKey.Enter); await Until(v => v.Overlay?.Title == "切换模型");
                 Type("second"); Key(ConsoleKey.Enter); await Until(v => v.Lines.Any(l => l.Text == "model=second"));

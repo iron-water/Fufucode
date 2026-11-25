@@ -106,6 +106,19 @@ internal static class TerminalTests
             var key = parser.Read();
             Eq(code, key?.Key, "VT key"); Eq(mods, key?.Modifiers, "VT modifier");
         }
+        Vt("\x00\x1b[32;5u\x1b[27;5;32~\x1b[2;2~");
+        var completionKey = parser.Read();
+        Eq(ConsoleKey.Spacebar, completionKey?.Key, "Ctrl+Space VT key");
+        Eq(ConsoleModifiers.Control, completionKey?.Modifiers, "Ctrl+Space VT modifier");
+        completionKey = parser.Read();
+        Eq(ConsoleKey.Spacebar, completionKey?.Key, "Ctrl+Space CSI-u key");
+        Eq(ConsoleModifiers.Control, completionKey?.Modifiers, "Ctrl+Space CSI-u modifier");
+        completionKey = parser.Read();
+        Eq(ConsoleKey.Spacebar, completionKey?.Key, "Ctrl+Space modifyOtherKeys key");
+        Eq(ConsoleModifiers.Control, completionKey?.Modifiers, "Ctrl+Space modifyOtherKeys modifier");
+        var insertKey = parser.Read();
+        Eq(ConsoleKey.Insert, insertKey?.Key, "Shift+Insert VT key");
+        Eq(ConsoleModifiers.Shift, insertKey?.Modifiers, "Shift+Insert VT modifier");
         Vt("\x1b[200~\x1bOQ\r/quit\x1b[201~");
         while (parser.Read() is { } key) Eq((ConsoleKey)0, key.Key, "pasted VT function keys never become commands");
         Vt("\x1b"); parser.FlushExpired(now + 100);
@@ -405,7 +418,7 @@ internal static class TerminalTests
             var small = layout.Arrange(view, w, h);
             Eq(h, small.Rows.Length, "card layout keeps window height");
             Eq(true, small.Rows.All(r => TerminalText.Width(r.Text) < w && !r.Text.Any(char.IsControl)),
-                "card layout never overflows or injects controls");
+                $"card layout never overflows or injects controls ({w}x{h})");
             Eq(true, small.CursorRow >= -1 && small.CursorRow < h && small.CursorColumn >= 0 && small.CursorColumn < w,
                 "card layout keeps the caret in the viewport");
             Eq(true, TerminalSurface.Diff(null, small, true) is not null, "first card frame paints safely");

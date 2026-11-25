@@ -179,8 +179,12 @@ internal static class FuiAgentActivityRoster
     internal static bool IsHubTitle(string title) =>
         string.Equals(title, HubTitle, StringComparison.Ordinal);
 
+    internal static bool IsJobViewTitle(string title) =>
+        IsHubTitle(title) || FuiJobsWorkbench.IsTitle(title);
+
     internal static bool IsGroupChoice(FuiChoice choice) =>
-        choice.Value.StartsWith(GroupValuePrefix, StringComparison.Ordinal);
+        choice.Value.StartsWith(GroupValuePrefix, StringComparison.Ordinal) ||
+        choice.Value.StartsWith(FuiJobsWorkbench.GroupPrefix, StringComparison.Ordinal);
 
     internal static Ink InkFor(FuiChoice choice)
     {
@@ -197,17 +201,18 @@ internal static class FuiAgentActivityRoster
 
     private static FuiChoice JobChoice(FuiAgentActivitySnapshot snapshot, FuiAgentJob job)
     {
-        var activity = RecentActivity(job);
-        var summary = Join(" · ",
-            $"工具 开始 {job.ToolStarted} / 完成 {job.ToolCompleted}",
-            $"{DurationLabel(job)} {Duration(snapshot, job)}",
-            activity,
-            AgentLabel(job.Agent));
         return new FuiChoice(
             job.JobId,
             $"{StateGlyph(job.State)} {StateLabel(job.State)} · {JobIdLabel(job.JobId)}",
-            summary);
+            JobSummary(snapshot, job));
     }
+
+    internal static string JobSummary(FuiAgentActivitySnapshot snapshot, FuiAgentJob job) =>
+        Join(" · ",
+            $"工具 开始 {job.ToolStarted} / 完成 {job.ToolCompleted}",
+            $"{DurationLabel(job)} {Duration(snapshot, job)}",
+            RecentActivity(job),
+            AgentLabel(job.Agent));
 
     internal static string Detail(FuiAgentActivitySnapshot snapshot, FuiAgentJob job)
     {
@@ -301,7 +306,7 @@ internal static class FuiAgentActivityRoster
         return text == "最近活动未提供" ? text : "最近 " + text;
     }
 
-    private static int StateOrder(FuiAgentState state) => state switch
+    internal static int StateOrder(FuiAgentState state) => state switch
     {
         FuiAgentState.Running => 0,
         FuiAgentState.Unknown => 1,
@@ -311,7 +316,7 @@ internal static class FuiAgentActivityRoster
         _ => 5
     };
 
-    private static string StateGlyph(FuiAgentState state) => state switch
+    internal static string StateGlyph(FuiAgentState state) => state switch
     {
         FuiAgentState.Running => "●",
         FuiAgentState.Completed => "✓",

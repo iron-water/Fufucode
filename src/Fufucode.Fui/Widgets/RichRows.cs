@@ -46,13 +46,24 @@ internal sealed class RichRows
                 continue;
             }
 
+            if (prior.Count == 0 && allowMarkdown && ink == Ink.CodeFence &&
+                SyntaxHighlighter.NormalizeLanguage(fence.Language) == "mermaid" &&
+                MarkdownLines.TryClosingFence(lines, i + 1, fence, out var mermaidClose))
+            {
+                RenderMermaid(lines, i, mermaidClose, width);
+                fence = default;
+                i = mermaidClose + 1;
+                continue;
+            }
+
             if (prior.Count == 0 && allowMarkdown && ink == Ink.Plain)
             {
                 var tableRows = new List<MarkdownLines.Row>();
                 if (MarkdownTable.TryFormat(lines, i, width, tableRows, out var next))
                 {
                     fence = prior;
-                    foreach (var row in tableRows) _rows.Add(new(row.Text, row.Ink == Ink.Plain ? baseInk : row.Ink));
+                    foreach (var row in tableRows)
+                        _rows.Add(new(row.Text, row.Ink == Ink.Plain ? baseInk : row.Ink, Spans: row.Spans));
                     i = next;
                     continue;
                 }
@@ -60,7 +71,10 @@ internal sealed class RichRows
 
             if (ink is Ink.Code or Ink.CodeFence)
             {
-                Plain(line, ink, width);
+                if (ink == Ink.Code && prior.Count != 0 && prior.Language.Length != 0)
+                    AddStyledWrapped(SyntaxHighlighter.Highlight(line, prior.Language), ink, width);
+                else
+                    Plain(line, ink, width);
                 i++;
                 continue;
             }
@@ -113,7 +127,7 @@ internal sealed class RichRows
         if (allowMath && cell is { } pixels && MayContainInlineMath(formatted))
             InlineMath(formatted, ink, width, pixels);
         else
-            Plain(formatted, ink, width);
+            AddInline(formatted, ink, width);
     }
 
     private void RenderLineWithImages(string line, List<MarkdownImageRef> refs, Ink ink, int width, ImageCells? cell,
@@ -149,7 +163,7 @@ internal sealed class RichRows
             if (allowMath && cell is { } pixels && MayContainInlineMath(formatted))
                 InlineMath(formatted, ink, width, pixels);
             else
-                Plain(formatted, ink, width);
+                AddInline(formatted, ink, width);
         }
         foreach (var raster in blocks) AddImageRows(raster);
     }
@@ -196,6 +210,27 @@ internal sealed class RichRows
             : null;
         _attachedImages[item] = raster;
         return raster;
+    }
+
+    private void RenderMermaid(IReadOnlyList<MarkdownLines.SourceLine> lines, int open, int close, int width)
+    {
+        var source = string.Join('\n', lines.Skip(open + 1).Take(close - open - 1).Select(line => line.Text));
+        if (MermaidDiagram.TryRender(source, width, out var diagram, out var reason))
+        {
+            foreach (var line in diagram)
+            {
+                var trimmed = line.TrimStart();
+                var ink = trimmed.StartsWith("flowchart", StringComparison.Ordinal) ||
+                    trimmed.StartsWith("graph", StringComparison.Ordinal) ? Ink.Heading : Ink.Assistant;
+                _rows.Add(new(TerminalText.Clip(line, width), ink));
+            }
+            return;
+        }
+
+        _rows.Add(new(TerminalText.Clip("此 Mermaid 子集不支持 · " + reason, width), Ink.Error));
+        Plain(lines[open].Text, Ink.CodeFence, width);
+        for (var i = open + 1; i < close; i++) Plain(lines[i].Text, Ink.Code, width);
+        Plain(lines[close].Text, Ink.CodeFence, width);
     }
 
     private static Ink ClassifyFenceOnly(string line, ref MarkdownLines.Fence fence, Ink baseInk)
@@ -291,6 +326,19 @@ internal sealed class RichRows
         image = FormulaRaster.Create(latex, display, width, cell);
         _formulas.Add(key, image);
         return image;
+    }
+
+    private void AddInline(string text, Ink ink, int width)
+    {
+        var spans = MarkdownLinks.Annotate(text, ink);
+        if (spans is null) Plain(text, ink, width);
+        else AddStyledWrapped(spans, ink, width);
+    }
+
+    private void AddStyledWrapped(IReadOnlyList<StyledSpan> spans, Ink baseInk, int width)
+    {
+        foreach (var row in StyledText.Wrap(spans, width))
+            _rows.Add(new(row.Text, baseInk, Spans: row.Spans));
     }
 
     private void Plain(string text, Ink ink, int width)

@@ -42,6 +42,8 @@ internal static class ControllerTests
         Expect(ui.View().Lines.Count(x => x.Kind == "assistant") == 1 && ui.View().Lines.Last().Text == "final!", "authoritative snapshot");
 
         Emit(new TuiEvent.Approval("1", "tool request A")); ui.Update();
+        Key(ConsoleKey.PageUp); Expect(ui.View().Scroll == 9, "approval still allows transcript paging");
+        Key(ConsoleKey.PageDown); Expect(ui.View().Scroll == 0, "approval paging returns to the live tail");
         Key(ConsoleKey.F2);
         Expect(s.Answers.Count == 0, "unpainted approval");
         ui.Painted(30, canApprove: false); Key(ConsoleKey.F2);

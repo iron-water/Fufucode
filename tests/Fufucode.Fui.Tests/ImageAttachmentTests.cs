@@ -1,5 +1,7 @@
+using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Threading.Channels;
 using Fufucode.App.Abstractions;
 using Fufucode.Core;
 using Fufucode.Core.Backend;
@@ -28,6 +30,13 @@ internal static class ImageAttachmentTests
         var notes = await files.ReadAttachmentAsync("images/notes.txt", ct);
         Check(screen is { MimeType: "image/png", Text: "" } && screen.Digest.SequenceEqual(SHA256.HashData(png)) &&
             photo is { MimeType: "image/jpeg", Text: "" } && notes.MimeType is null, "incorrect image or text descriptor");
+        Check(screen.Preview is { SourceWidth: 1, SourceHeight: 1, Width: ProjectImage.PreviewWidth,
+                Height: ProjectImage.PreviewHeight } && screen.Preview.Pixels.Any(color => color.Alpha != 0) &&
+            photo.Preview is not null && notes.Preview is null,
+            "image thumbnails were not decoded for the composer");
+        CheckAttachmentChips(screen, notes);
+        CheckClipboardImage(files, png, ct);
+        await CheckControllerAttachmentRetentionAsync(project, layout.Root, Path.Combine(dir, "screen.PNG"), png, ct);
         await Reject<InvalidDataException>(() => files.ReadAsync(screen.Path, ct));
         var only = await files.PrepareAsync("", [screen], ct);
         var mixed = await files.PrepareAsync("看图", [photo, notes, screen], ct);
@@ -106,6 +115,172 @@ internal static class ImageAttachmentTests
             Check(endpoint.MessageArrays.Count == 4, "closed session submitted image");
         }
         Console.WriteLine("PASS project images: format, byte limits, permissions, native worker gates, model switching, HTTP parts, persisted assets and replay");
+    }
+
+    private static void CheckAttachmentChips(FileAttachment image, FileAttachment text)
+    {
+        var longImage = image with { Path = "images/" + new string('图', 80) + ".PNG" };
+        var view = new TuiView("C:/project", "S", "vision", "就绪", [], "", 0, 0, null,
+            Attachments: [longImage, text]);
+        var plain = new TerminalLayout().Arrange(view, 64, 24);
+        var header = plain.Rows.Single(row => row.Text.Contains("附件 2", StringComparison.Ordinal));
+        Check(header.Text.Contains("图片 1") && header.Text.Contains("文本 1") &&
+            header.Text.Contains("▣", StringComparison.Ordinal) && header.Text.Contains("▤", StringComparison.Ordinal),
+            "attachment chips did not distinguish image and text files");
+        Check(header.Text.Contains("无 Sixel 预览") && plain.Rows.All(row => row.Images is null),
+            "unsupported image protocol did not degrade to a truthful label");
+
+        var narrow = new TerminalLayout().Arrange(view, 30, 24);
+        var clipped = narrow.Rows.Single(row => row.Text.Contains("附件 2", StringComparison.Ordinal));
+        Check(TerminalText.Width(clipped.Text) < 30 && clipped.Text.Contains('…'),
+            "long attachment names were not clipped to the terminal width");
+
+        var pixels = new ImageCells(8, 16);
+        var preview = new TerminalLayout().Arrange(view, 80, 24, pixels);
+        var strips = preview.Rows.SelectMany(row => row.Images ?? []).ToArray();
+        Check(strips.Length >= 4 && strips.All(strip => strip.Sixel.StartsWith("\x1bP", StringComparison.Ordinal)),
+            "Sixel-capable terminal did not receive real image strips");
+        Check(TerminalSurface.Diff(null, preview, true).Contains("\x1bP", StringComparison.Ordinal),
+            "Sixel strips were not painted into the terminal diff");
+        Check(preview.Rows.Any(row => row.Text.Contains("▣", StringComparison.Ordinal)) &&
+            preview.Rows.All(row => TerminalText.Width(row.Text) < 80), "image chip overflowed its terminal row");
+    }
+
+    private static void CheckClipboardImage(ProjectFiles files, byte[] png, CancellationToken ct)
+    {
+        Check(FuiCommands.Get("paste-image") is { Kind: CommandKind.Files },
+            "Windows clipboard image command is not registered");
+        Check(ProjectImage.DecodeClipboardFormats(png, null, null, ProjectFiles.MaxAttachmentBytes)!.SequenceEqual(png),
+            "PNG clipboard format changed bytes");
+
+        var dib = ClipboardDib();
+        var converted = ProjectImage.DecodeClipboardFormats([1, 2, 3], null, dib, ProjectFiles.MaxAttachmentBytes)!;
+        Check(ProjectImage.Matches(converted, "image/png"), "DIB clipboard format was not converted to PNG");
+        var preview = ProjectImage.CreatePreview(converted, "image/png");
+        Check(preview is { SourceWidth: 2, SourceHeight: 2 } &&
+            preview.Pixels.Where(color => color.Alpha != 0).Select(color => (color.Red, color.Green, color.Blue)).Distinct().Count() > 1,
+            "converted DIB preview lost its real pixels");
+        var large = ProjectImage.DibToPng(ClipboardDib(200, 100), ProjectFiles.MaxAttachmentBytes);
+        var largePreview = ProjectImage.CreatePreview(large, "image/png");
+        Check(largePreview is { SourceWidth: 200, SourceHeight: 100, Width: ProjectImage.PreviewWidth,
+                Height: ProjectImage.PreviewHeight } &&
+            largePreview.Pixels.Where(color => color.Alpha != 0).Select(color => (color.Red, color.Green, color.Blue)).Distinct().Count() > 8,
+            "scaled clipboard preview did not preserve the real image");
+        CheckThrows<IOException>(() => ProjectImage.DecodeClipboardFormats(new byte[9], null, null, 8));
+        CheckThrows<InvalidDataException>(() => ProjectImage.DibToPng([0, 1, 2], ProjectFiles.MaxAttachmentBytes));
+
+        var clipboard = files.ClipboardAttachment(png);
+        Check(clipboard is { Source: FileAttachmentSource.Clipboard, MimeType: "image/png", Preview: not null } &&
+            clipboard.Payload!.SequenceEqual(png), "clipboard image did not retain its validated bytes");
+        var prompt = files.PrepareAsync("剪贴板", [clipboard], ct).GetAwaiter().GetResult();
+        Check(prompt.Images.SequenceEqual([Png]), "clipboard image did not enter the model image request");
+        CheckThrows<IOException>(() => files.PrepareAsync("", [clipboard with { Digest = SHA256.HashData([0]) }], ct)
+            .GetAwaiter().GetResult());
+    }
+
+    private static byte[] ClipboardDib(int width = 2, int height = 2)
+    {
+        var bytes = new byte[40 + width * height * 4];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, 40);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), width);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), -height);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(12), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(14), 32);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(20), (uint)(width * height * 4));
+        for (var i = 0; i < width * height; i++)
+        {
+            var offset = 40 + i * 4;
+            bytes[offset] = (byte)(i * 17);
+            bytes[offset + 1] = (byte)(i * 47);
+            bytes[offset + 2] = (byte)(i * 89);
+            bytes[offset + 3] = 0; // Windows commonly publishes opaque CF_DIB pixels with zero alpha.
+        }
+        return bytes;
+    }
+
+    private static async Task CheckControllerAttachmentRetentionAsync(string project, string dataRoot, string imagePath,
+        byte[] png, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(TimeSpan.FromSeconds(10));
+        var session = new FailingImageSession(project);
+        var ui = new TuiController(session, timeout.Token, dataRoot);
+        var folder = Path.GetDirectoryName(imagePath)!;
+        var textFiles = new[] { "a.txt", "b.txt", "c.txt", "d.txt" };
+        foreach (var name in textFiles) await File.WriteAllTextAsync(Path.Combine(folder, name), name, ct);
+        void Type(string value)
+        {
+            foreach (var ch in value) ui.Key(new(ch, (ConsoleKey)0, false, false, false), 12, 25);
+        }
+        async Task Until(Func<TuiView, bool> done)
+        {
+            while (true)
+            {
+                ui.Update();
+                if (done(ui.View())) return;
+                await Task.Delay(5, timeout.Token);
+            }
+        }
+
+        try
+        {
+            Type("/attach images/screen.PNG"); ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+            await Until(view => view.Attachments is { Count: 1 });
+            Check(ui.View().Attachments![0].MimeType == "image/png", "controller dropped the real image attachment");
+
+            var alternate = ProjectImage.DibToPng(ClipboardDib(), ProjectFiles.MaxAttachmentBytes);
+            await File.WriteAllBytesAsync(imagePath, alternate, ct);
+            Type("changed image"); ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+            await Until(view => view.Lines.Any(line => line.Kind == "error" && line.Text.Contains("已更改")));
+            Check(ui.View() is { Draft: "changed image", Attachments.Count: 1 },
+                "fingerprint failure consumed the draft or attachment");
+
+            await File.WriteAllBytesAsync(imagePath, png, ct);
+            session.Reject = true;
+            ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+            await Until(view => view.Lines.Any(line => line.Kind == "error" && line.Text.Contains("测试图片请求失败")));
+            Check(ui.View() is { Draft: "changed image", Attachments.Count: 1 },
+                "image request failure consumed the draft or attachment");
+
+            session.Reject = false;
+            ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+            await Until(view => view.Draft == "" && view.Attachments is null);
+            Check(session.Images.SequenceEqual([Png]), "controller submitted different image bytes");
+
+            for (var i = 0; i < textFiles.Length; i++)
+            {
+                Type("/attach images/" + textFiles[i]);
+                ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+                var expected = i + 1;
+                await Until(view => view.Attachments is { Count: var count } && count == expected);
+            }
+            var maximumErrors = ui.View().Lines.Count(line => line.Kind == "error" && line.Text.Contains("最多附加 4"));
+            Type("/paste-image");
+            ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+            await Until(view => view.Lines.Count(line => line.Kind == "error" && line.Text.Contains("最多附加 4")) > maximumErrors);
+            Check(ui.View() is { Attachments.Count: 4 }, "typed /paste-image bypassed the attachment limit");
+
+            maximumErrors++;
+            ui.Key(new('\0', ConsoleKey.P, false, false, true), 12, 25);
+            await Until(view => view.Overlay?.Title == "命令");
+            Type("paste-image");
+            ui.Key(new('\0', ConsoleKey.Enter, false, false, false), 12, 25);
+            await Until(view => view.Lines.Count(line => line.Kind == "error" && line.Text.Contains("最多附加 4")) > maximumErrors);
+            Check(ui.View() is { Attachments.Count: 4 }, "command-palette /paste-image bypassed the attachment limit");
+        }
+        finally
+        {
+            await File.WriteAllBytesAsync(imagePath, png, CancellationToken.None);
+            timeout.Cancel();
+            await ui.FinishAsync();
+        }
+    }
+
+    private static void CheckThrows<T>(Action action) where T : Exception
+    {
+        try { action(); }
+        catch (T) { return; }
+        throw new InvalidOperationException("Expected " + typeof(T).Name);
     }
 
     private static async Task CheckTurnChangedDuringProbeAsync(FumoTuiSession session, Loopback endpoint, FuiPrompt image, CancellationToken ct)
@@ -236,5 +411,29 @@ internal static class ImageAttachmentTests
                 part.GetProperty("image_url").GetProperty("url").GetString() == $"data:{expected[i].MimeType};base64,{expected[i].Data}",
                 "HTTP image MIME or base64 differs from the selected bytes");
         }
+    }
+
+    private sealed class FailingImageSession(string project) : ITuiSession, IChatAttachments
+    {
+        private readonly Channel<TuiEvent> _events = Channel.CreateUnbounded<TuiEvent>();
+        public string Project => project;
+        public string Id => "failing-image";
+        public string? Model => "vision";
+        public IReadOnlyList<TuiLine> History => [];
+        public ChannelReader<TuiEvent> Events => _events.Reader;
+        public bool CanSendImages => true;
+        public bool Reject { get; set; }
+        public List<ChatImage> Images { get; } = [];
+        public Task SendAsync(string text, CancellationToken ct) => throw new InvalidOperationException("unexpected text send");
+        public Task SendWithImagesAsync(string text, IReadOnlyList<ChatImage> images, CancellationToken ct = default)
+        {
+            if (Reject) return Task.FromException(new InvalidOperationException("测试图片请求失败"));
+            Images.AddRange(images);
+            _events.Writer.TryWrite(new TuiEvent.Status("已完成", false));
+            return Task.CompletedTask;
+        }
+        public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+        public Task RespondAsync(string id, bool allow, CancellationToken ct) => Task.CompletedTask;
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }
