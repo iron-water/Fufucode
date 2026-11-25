@@ -66,6 +66,8 @@ internal static class ControllerTests
         Type("undo draft");
         Key(ConsoleKey.Z, true); Expect(ui.View().Draft == "", "Ctrl+Z is routed to the composer");
         Key(ConsoleKey.Z, true, shift: true); Expect(ui.View().Draft == "undo draft", "Ctrl+Shift+Z is routed to the composer");
+        Key(ConsoleKey.Z, true); Key(ConsoleKey.Z, alt: true);
+        Expect(ui.View().Draft == "undo draft", "Alt+Z is routed to the composer");
         Key(ConsoleKey.W, true); Expect(ui.View().Draft == "undo ", "Ctrl+W is routed as a word kill");
         Key(ConsoleKey.Y, true); Expect(ui.View().Draft == "undo draft", "Ctrl+Y is routed to the composer");
         Key(ConsoleKey.C, true); Expect(!ui.Exiting && ui.View().Draft == "", "Ctrl+C clears idle draft");

@@ -8,7 +8,7 @@ fui --continue            # 当前项目，最近一次 FUMO 会话
 fui --project C:\work\demo --session <ID>
 ```
 
-`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令。长审批参数可在对话区翻阅。
+`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令。长审批参数可在对话区翻阅。
 
 ## 在工作台里操作
 

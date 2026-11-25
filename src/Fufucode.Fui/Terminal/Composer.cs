@@ -36,6 +36,7 @@ internal sealed class Composer
         if (key.Key is not (ConsoleKey.UpArrow or ConsoleKey.DownArrow)) _preferredColumn = null;
         switch (key.Key)
         {
+            case ConsoleKey.Z when alt && !control: Redo(); return;
             case ConsoleKey.Z when control && key.Modifiers.HasFlag(ConsoleModifiers.Shift): Redo(); return;
             case ConsoleKey.Z when control: Undo(); return;
             case ConsoleKey.Y when control: Yank(); return;

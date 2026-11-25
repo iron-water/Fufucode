@@ -122,6 +122,9 @@ internal static class TerminalTests
         c.Edit(Key(ConsoleKey.Z, control: true, shift: true));
         Eq("abc", c.Text, "redo restores the typed run");
         Eq(3, c.Cursor, "redo restores its caret");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        c.Edit(Key(ConsoleKey.Z, alt: true));
+        Eq("abc", c.Text, "Alt+Z is a VT-encodable redo fallback");
 
         c.Edit(Key(ConsoleKey.LeftArrow));
         c.Edit(Key(ConsoleKey.Z, control: true));
