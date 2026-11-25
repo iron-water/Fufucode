@@ -57,17 +57,19 @@ internal sealed class TuiTheme
     internal bool ColorsEnabled => _stylingEnabled && Palette != TuiPalette.Mono;
     internal bool StylingEnabled => _stylingEnabled;
     internal bool NeedsBackgroundProbe => _stylingEnabled && Palette != TuiPalette.Mono && _requestedTheme == "auto";
+    internal string RequestedTheme => _requestedTheme;
     internal string Reset { get; }
     internal const string BackgroundQuery = "\x1b]11;?\x1b\\";
 
-    internal static TuiTheme FromEnvironment() => Resolve(
-        Environment.GetEnvironmentVariable("FUI_THEME"),
+    internal static TuiTheme FromEnvironment(string? requestedTheme = null, int? reportedBackground = null) => Resolve(
+        requestedTheme ?? Environment.GetEnvironmentVariable("FUI_THEME"),
         Environment.GetEnvironmentVariable("NO_COLOR") is not null,
         Environment.GetEnvironmentVariable("TERM"),
         Environment.GetEnvironmentVariable("COLORTERM"),
         Environment.GetEnvironmentVariable("TERM_PROGRAM"),
         Environment.GetEnvironmentVariable("WT_SESSION") is not null,
-        Environment.GetEnvironmentVariable("COLORFGBG"));
+        Environment.GetEnvironmentVariable("COLORFGBG"),
+        reportedBackground);
 
     internal static TuiTheme Resolve(string? requestedTheme = null, bool noColor = false, string? term = null,
         string? colorTerm = null, string? termProgram = null, bool windowsTerminal = false, string? colorFgBg = null,

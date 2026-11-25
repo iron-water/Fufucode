@@ -10,6 +10,9 @@ internal static class FuiCommands
     public static readonly FuiCommand[] All =
     [
         new("commands", "命令面板", "导航"), new("help", "按键与命令", "导航"),
+        new("settings", "设置中心", "设置", Argument: "[关键词]"),
+        new("theme", "主题", "设置"), new("terminal", "终端能力", "设置"),
+        new("doctor", "诊断", "设置"), new("keys", "按键绑定", "设置"),
         new("new", "新建会话", "会话", CommandKind.Session),
         new("resume", "恢复项目会话", "会话", CommandKind.Session, "[ID]", Picker: true),
         new("tree", "会话分支树", "会话", CommandKind.Session, "[ID]", Picker: true),
@@ -47,6 +50,11 @@ internal static class FuiCommands
     private static readonly Dictionary<string, FuiCommand> Index = All.ToDictionary(c => c.Id, StringComparer.OrdinalIgnoreCase);
     public static FuiCommand? Get(string id) => Index.GetValueOrDefault(id);
     public static FuiChoice Choice(FuiCommand c) => new(c.Id, "/" + c.Id, c.Label + " · " + c.Group);
-    public static string Help => TuiController.KeyHelp + "\n" + string.Join("\n", All.GroupBy(c => c.Group)
-        .Select(g => g.Key + "  " + string.Join("  ", g.Select(c => "/" + c.Id + (c.Argument == "" ? "" : " " + c.Argument)))));
+    public static string Help => HelpFor(FuiSettings.Default);
+    public static string HelpFor(FuiSettings settings) =>
+        TuiController.KeyHelp + "\n\n快捷键\n" + FuiKeyBindingCatalog.Help(settings) +
+        "\n\n设置\n" + FuiSettingCatalog.Help(settings) + "\n\n命令\n" +
+        string.Join("\n", All.GroupBy(c => c.Group)
+            .Select(g => g.Key + "  " + string.Join("  ", g.Select(c =>
+                "/" + c.Id + (c.Argument == "" ? "" : " " + c.Argument)))));
 }

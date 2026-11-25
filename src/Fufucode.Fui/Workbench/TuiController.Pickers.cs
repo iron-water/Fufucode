@@ -52,9 +52,10 @@ internal sealed partial class TuiController
             {
                 if (_picker.Current is not { } choice) return true;
                 var id = _pickerAction!; var mention = _mentionStart;
+                var query = id == "settings" ? _picker.View.Query : "";
                 ClosePicker();
                 if (id == "attach") _mentionStart = mention;
-                Accept(id, choice);
+                Accept(id, choice, query);
             }
             else _picker.Edit(key, Math.Max(1, pageSize));
             return true;
@@ -79,11 +80,34 @@ internal sealed partial class TuiController
                 return true;
             }
         }
-        if (ctrl && key.Key is (ConsoleKey.P or ConsoleKey.R or ConsoleKey.F))
+        if (ctrl && key.Key == ConsoleKey.R)
         {
             if (_job is not null) return true;
-            if (key.Key == ConsoleKey.P) Commands();
-            else Run(FuiCommands.Get(key.Key == ConsoleKey.R ? "history" : "find")!, "");
+            Run(FuiCommands.Get("history")!, "");
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.Commands))
+        {
+            if (_job is not null) return true;
+            Commands();
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.SearchTranscript))
+        {
+            if (_job is not null) return true;
+            Run(FuiCommands.Get("find")!, "");
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.ToggleTools))
+        {
+            if (_job is not null) return true;
+            ToggleSetting("expand-tools");
+            return true;
+        }
+        if (FuiKeyBindingCatalog.Matches(_settings, key, FuiKeyBindingCatalog.ToggleThinking))
+        {
+            if (_job is not null) return true;
+            ToggleSetting("show-thinking");
             return true;
         }
         if (key.Key != ConsoleKey.Tab || key.Modifiers != 0 || _job is not null) return false;
@@ -107,7 +131,7 @@ internal sealed partial class TuiController
 
     private void Complete(FuiCommand c) => _composer.Replace("/" + c.Id + (c.NeedsText ? " " : ""));
 
-    private void Accept(string action, FuiChoice choice)
+    private void Accept(string action, FuiChoice choice, string query = "")
     {
         switch (action)
         {
@@ -128,9 +152,23 @@ internal sealed partial class TuiController
                 if (int.TryParse(choice.Value, out var index) && (uint)index < (uint)_lines.Count)
                 {
                     _scrollTarget = index;
-                    if (_lines[index].Kind == "thinking") _showThinking = true;
-                    if (_lines[index].Kind == "tool") _expandTools = true;
+                    if (_lines[index].Kind == "thinking" && !_showThinking) SetSetting("show-thinking", "true", announce: false);
+                    if (_lines[index].Kind == "tool" && !_expandTools) SetSetting("expand-tools", "true", announce: false);
                 }
+                return;
+            case "settings": SettingSelected(choice.Value, query); return;
+            case "status-segments":
+                ApplySettings(FuiStatusSegmentCatalog.Toggle(_settings, choice.Value), null);
+                OpenStatusSegments();
+                return;
+            case "theme":
+                SetSetting("theme", choice.Value, announce: true);
+                return;
+            case "terminal":
+                Info(choice.Label + (choice.Detail is null ? "" : "\n" + choice.Detail));
+                return;
+            case "keys" when FuiKeyBindingCatalog.Find(choice.Value) is not null:
+                BeginKeyCapture(choice.Value);
                 return;
             case "history": _composer.Replace(choice.Value); return;
             case "skills": _composer.Replace("/" + choice.Value.TrimStart('/') + " " + _composer.Text); return;

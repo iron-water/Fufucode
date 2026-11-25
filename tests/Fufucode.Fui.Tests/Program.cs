@@ -8,6 +8,8 @@ try
     Console.WriteLine("PASS terminal: editor, layout and terminal rendering");
     ThemeTests.Run();
     Console.WriteLine("PASS theme: dark/light/mono/auto, color depth and terminal style safety");
+    await SettingsTests.RunAsync();
+    Console.WriteLine("PASS settings: persistence, corruption repair, theme, status, keys, notifications and terminal matrix");
     MouseTests.Run();
     Console.WriteLine("PASS mouse: SGR input, wheel, hit testing and approval safety");
     FuzzyPickerTests.Run();

@@ -5,17 +5,24 @@ namespace Fufucode.Fui;
 
 // Only the terminal loop mutates view state. Backend callbacks and commands never write to the screen.
 internal sealed partial class TuiController(ITuiSession session, CancellationToken token, string? dataRoot = null,
-    IFuiClipboard? clipboard = null)
+    FuiSettingsStore? settings = null, IFuiClipboard? clipboard = null, FuiTerminalDetection? terminal = null,
+    FuiTerminalRuntimeState? terminalState = null,
+    Action<FuiSettings, string, string>? notification = null)
 {
     internal const string KeyHelp = "Enter 发送 · Alt+Enter / Ctrl+J 换行 · ↑↓ 历史 · PgUp/PgDn 滚动\n" +
         "Esc 停止 · Ctrl+C 停止 / 清空输入 / 退出 · Ctrl+D 退出\n" +
-        "Ctrl+P 命令 · Tab 补全 /命令 或 @文件 · Ctrl+R 输入历史 · Ctrl+F 搜索\n" +
+        "Tab 补全 /命令 或 @文件 · Ctrl+R 输入历史\n" +
         "Ctrl+Z 撤销 · Ctrl+Shift+Z / Alt+Z 重做 · Ctrl+Y / Alt+Y 粘贴 / 轮换删除\n" +
         "Ctrl+U / Ctrl+K / Ctrl+W 删除至行首 / 行尾 / 前一词\n审批：F2 允许 · F3 / Esc 拒绝";
 
     private readonly Composer _composer = new();
-    private readonly List<TuiLine> _lines = [.. session.History];
-    private readonly List<string?> _lineSources = [.. session.History.Select(_ => (string?)null)];
+    private readonly FuiSettingsStore _settingsStore = settings ?? FuiSettingsStore.CreateEphemeral();
+    private FuiSettings _settings = settings?.Current ?? FuiSettings.Default;
+    private readonly FuiTerminalDetection _terminal = terminal ?? FuiTerminalDetector.DetectCurrent();
+    private readonly FuiTerminalRuntimeState? _terminalState = terminalState;
+    private readonly Action<FuiSettings, string, string>? _notification = notification;
+    private readonly List<TuiLine> _lines = InitialLines(session, settings);
+    private readonly List<string?> _lineSources = InitialSources(session, settings);
     private readonly IFuiClipboard _clipboard = clipboard ?? WindowsTextClipboard.Instance;
     private readonly Dictionary<string, int> _indices = new(StringComparer.Ordinal);
     private readonly Dictionary<int, StringBuilder> _deltas = [];
@@ -36,7 +43,22 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
     public TuiView View() => new(_active.Project, _active.Id, _active.Model ?? "未配置模型", StatusText, _lines,
         _composer.Text, _composer.Cursor, _scroll, _approvals.FirstOrDefault()?.Text,
         _busy, Overlay(), _expandTools, _showThinking,
-        _attachments.Count == 0 ? null : [.. _attachments]);
+        _attachments.Count == 0 ? null : [.. _attachments], _settings.CompactCards, _settings.MouseWheel,
+        _settings.Theme, FuiTerminalDetector.HyperlinksEnabled(_settings, _terminal), StatusSegments(), CommandKeyHint);
+
+    private static List<TuiLine> InitialLines(ITuiSession session, FuiSettingsStore? store)
+    {
+        var lines = new List<TuiLine>(session.History);
+        if (store?.LoadIssue is { Length: > 0 } issue) lines.Add(new("error", issue));
+        return lines;
+    }
+
+    private static List<string?> InitialSources(ITuiSession session, FuiSettingsStore? store)
+    {
+        var sources = session.History.Select(_ => (string?)null).ToList();
+        if (store?.LoadIssue is { Length: > 0 }) sources.Add(null);
+        return sources;
+    }
 
     public void Painted(int maxScroll, bool canApprove)
     {
@@ -77,6 +99,9 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
                     break;
                 case TuiEvent.AgentsChanged a:
                     UpdateAgentActivity(a.Snapshot);
+                    break;
+                case TuiEvent.TurnFinished turn:
+                    NotifyTurn(turn);
                     break;
             }
         }
@@ -148,6 +173,11 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         }
         // The terminal still shows the old approval until the next frame. Its Enter/Esc cannot operate the draft.
         if (_approvalFocusChanged) return;
+        if (_keyCaptureAction is not null)
+        {
+            CaptureKey(key);
+            return;
+        }
         if (key is { Key: ConsoleKey.Enter, Modifiers: 0 } && _pickerAction == "commands" &&
             _picker?.Current is { Value: "paste-image" } && CanRun(FuiCommands.Get("paste-image")!))
         {
@@ -164,7 +194,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
             return;
         }
         if (key.Key == ConsoleKey.Escape) { Stop(); return; }
-        if (key.Key == ConsoleKey.F1) { Info(FuiCommands.Help); return; }
+        if (key.Key == ConsoleKey.F1) { Info(FuiCommands.HelpFor(_settings)); return; }
         if (key.Key == ConsoleKey.Enter && key.Modifiers == 0) { Submit(); return; }
         _composer.Edit(key);
     }
@@ -174,7 +204,7 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         Dirty = true;
         if (MouseInput.WheelKey(mouse) is { } wheel)
         {
-            Key(wheel, viewportRows, maxScroll, pickerRows);
+            if (_settings.MouseWheel) Key(wheel, viewportRows, maxScroll, pickerRows);
             return;
         }
         if (!mouse.LeftClick || mouse.Release || mouse.Motion || hit.Kind == MouseHitKind.None) return;

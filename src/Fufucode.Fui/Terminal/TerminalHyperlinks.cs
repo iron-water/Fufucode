@@ -11,6 +11,8 @@ internal sealed class TuiHyperlinkPolicy
 
     internal bool Enabled { get; }
     internal static TuiHyperlinkPolicy Disabled { get; } = new(false);
+    internal static TuiHyperlinkPolicy FromEnabled(bool enabled) =>
+        enabled ? new(true) : Disabled;
 
     internal static TuiHyperlinkPolicy FromEnvironment() => Resolve(
         Environment.GetEnvironmentVariable("FUI_HYPERLINKS"),

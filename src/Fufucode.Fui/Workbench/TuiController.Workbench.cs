@@ -13,7 +13,8 @@ internal sealed partial class TuiController
     private FuiPicker? _picker;
     private string? _pickerAction;
     private int _mentionStart = -1;
-    private bool _expandTools, _showThinking = true;
+    private bool _expandTools = settings?.Current.ExpandTools ?? false;
+    private bool _showThinking = settings?.Current.ShowThinking ?? true;
     private int? _scrollTarget;
     private Task? _release;
     private (FuiCommand Command, string Argument)? _deferred;
@@ -232,11 +233,16 @@ internal sealed partial class TuiController
         switch (c.Id)
         {
             case "commands": Commands(); break;
-            case "help": Info(FuiCommands.Help); break;
+            case "help": Info(FuiCommands.HelpFor(_settings)); break;
+            case "settings": OpenSettings(argument); break;
+            case "theme": OpenTheme(); break;
+            case "terminal": OpenTerminalPanel(); break;
+            case "doctor": Doctor(); break;
+            case "keys": OpenKeys(); break;
             case "session": Info($"FUMO · {_active.Id}\n{_active.Project}\n{_active.Model ?? "未配置模型"}"); break;
             case "context": Info(_attachments.Count == 0 ? "草稿没有附加文件。" : string.Join('\n', _attachments.Select(a => a.Path))); break;
-            case "tools": _expandTools = !_expandTools; break;
-            case "thoughts": _showThinking = !_showThinking; break;
+            case "tools": ToggleSetting("expand-tools"); break;
+            case "thoughts": ToggleSetting("show-thinking"); break;
             case "agents": Agents(); break;
             case "plan": Plan(c.Id); break;
             case "todo": Plan(c.Id); break;

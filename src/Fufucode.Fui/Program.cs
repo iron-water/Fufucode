@@ -21,9 +21,13 @@ internal static class Program
             var layout = new AppDataLayout(options.AppData);
             // Also isolate tools which consult the process environment rather than the session's layout.
             Environment.SetEnvironmentVariable(AppDataLayout.RootEnvironmentVariable, layout.Root);
-            using var surface = new TerminalSurface();
+            var settings = FuiSettingsStore.Load(layout.Root);
+            var terminal = FuiTerminalDetector.DetectCurrent();
+            using var surface = new TerminalSurface(settings.Current.Theme, terminal);
             var session = await FumoTuiSession.OpenAsync(options.Project, layout.Root, options.SessionId, options.Continue, lifetime.Token);
-            var controller = new TuiController(session, lifetime.Token, layout.Root);
+            var controller = new TuiController(session, lifetime.Token, layout.Root, settings: settings,
+                terminal: terminal, terminalState: surface.DiagnosticsState(layout.Root),
+                notification: (current, title, body) => surface.Notify(current, title, body));
             try
             {
                 while (!controller.Exiting)

@@ -8,11 +8,11 @@ fui --continue            # 当前项目，最近一次 FUMO 会话
 fui --project C:\work\demo --session <ID>
 ```
 
-`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令。长审批参数可在对话区翻阅。
+`Enter` 发送，`Alt+Enter` 或 `Ctrl+J` 换行；`PgUp` / `PgDn` 翻看记录，`Esc` 停止当前回合，`Ctrl+D` 退出。`Ctrl+Z` 撤销，`Ctrl+Shift+Z` 或 `Alt+Z` 重做，`Ctrl+Y` 粘贴最近删除的文本，`Alt+Y` 轮换删除历史。工具确认使用 `F2` 允许、`F3` 或 `Esc` 拒绝。按 `F1` 看完整按键与本地命令；四个安全动作可在 `/keys` 中重绑。长审批参数可在对话区翻阅。
 
 ## 在工作台里操作
 
-`Ctrl+P` 打开可搜索的命令面板；方向键选项、`Enter` 确认、`Esc` 返回草稿。输入 `/` 可看到命令，`Tab` 补全。`//` 发送字面斜杠；`/skill:name` 仍由 FUMO 处理。宽度至少 80 列时，选择器显示左右双栏：左侧搜索和选择，右侧查看当前项的详情；窄窗口自动回到单栏。
+`Ctrl+P` 打开可搜索的命令面板（可在 `/keys` 改键）；方向键选项、`Enter` 确认、`Esc` 返回草稿。输入 `/` 可看到命令，`Tab` 补全。`//` 发送字面斜杠；`/skill:name` 仍由 FUMO 处理。宽度至少 80 列时，选择器显示左右双栏：左侧搜索和选择，右侧查看当前项的详情；窄窗口自动回到单栏。
 
 | 要做什么 | 操作 |
 |---|---|
@@ -21,7 +21,7 @@ fui --project C:\work\demo --session <ID>
 | 在运行中补充输入 | `/steer 文本` 插话，`/queue 文本` 追加下一轮，`/queue` 查看队列。若正在写草稿，可从命令面板选插话或跟进，再按 Enter 提交。 |
 | 查看子代理活动 | 状态栏显示运行中的子代理数量；`/agents` 列出 FUMO 实际上报的作业、状态和工具计数，选择后查看只读事件记录。插件未启用或没有事件时显示空态，不伪造实时转录。 |
 | 浏览项目和带入上下文 | `/preview` 选择 UTF-8 文件，只在本机显示；`/diff` 查看 Git 文本差异。`/attach [相对路径]` 或在草稿内输入 `@路径前缀` 再按 `Tab`，选择 UTF-8 文本或 PNG/JPEG 图片附到下一条消息（允许纯图发送）；`/context` 查看，`/detach` 移除。每回合最多 4 个附件、合计 10 MiB，单个文本文件最多 64 KiB；发送前复核内容、安全规则和当前模型的图片输入能力，文件已改或模型不支持图片时会拒绝发送并保留草稿。 |
-| 阅读和找回输入 | `/outline` 按用户、助手标题或摘要、工具、错误和审批生成大纲，搜索后跳到原文；`/transcript` 用 `Tab` 切换全部/用户/助手/工具/错误/审批，宽屏双栏、窄屏单栏，`Enter` 定位；`/copy` 选择最近或任意助手回复、任意用户消息、当前或指定代码块、工具结果、URL 和会话 ID，并写入 Windows 文本剪贴板。`/links` 搜索回复中的链接目标并明确复制。`/info` 显示可证明的会话与用量事实，`/retry` 通过 FUMO 发送上一条用户文本并创建真实新回合。`Ctrl+F` 或 `/find` 仍可快速搜索，`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`/tools` 展开/折叠工具，`/thoughts` 显示/隐藏思考。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
+| 阅读和找回输入 | `/outline` 生成大纲，`/transcript` 用 `Tab` 过滤并定位，`/copy` 通过统一 `IFuiClipboard.CopyText` 写入 Windows 文本剪贴板，`/links` 搜索并复制 HTTP(S) 链接。`/info` 显示可证明的会话与用量事实，`/retry` 通过 FUMO 发送上一条用户文本并创建真实新回合。`Ctrl+F`（可改键）或 `/find` 搜索；`Ctrl+R` 或 `/history` 找回输入但不会自动发送。`Ctrl+O` / `Ctrl+T` 或 `/tools`、`/thoughts` 切换工具与思考呈现。`Ctrl+U` / `Ctrl+K` / `Ctrl+W` 删除至行首/尾/前一词并写入 kill ring。 |
 
 大纲在流式输出期间按节流刷新，选项身份使用稳定行位置，追加内容不会把当前选择指向另一条消息。复制成功显示 Unicode 字符数和 UTF-8 字节数，失败显示系统剪贴板原因；复制是本地操作，不发送消息、不改会话。FUI 不发射 OSC 52：终端协议没有可靠完成回执，无法证明远端剪贴板真的写入，因此不在失败时伪装成功。
 
@@ -29,9 +29,19 @@ fui --project C:\work\demo --session <ID>
 
 FUI 把终端 Markdown 作为只读呈现层：GFM 风格表格按显示宽度对齐，支持左/中/右列，中文与 emoji 不按字符数计算；`[文字](URL)` 显示为 `文字 (URL)`，引用和列表有可读前缀。代码围栏支持 C#、PowerShell、JSON、JavaScript/TypeScript、Python、Bash、Rust、Go、SQL 和 diff，并按真彩色、256 色、16 色和 `NO_COLOR` 降级。未闭合围栏保持已出现的代码行稳定，原始消息和历史文件不被改写。
 
-`/links` 索引回复中的 Markdown 链接、标题链接、`www.` 与裸 HTTP(S) URL；选择后显示完整目标，再选择“复制 URL”写入 Windows 文本剪贴板，不自动打开外部站点。支持 OSC 8 的终端默认把 URL 渲染为可点击链接；设置 `FUI_HYPERLINKS=on` 可强制开启，`off` 或 `NO_COLOR` 只显示可读文字。链接和显示文本会过滤控制字符，非 HTTP(S) 目标不会获得 OSC 8。
+`/links` 索引回复中的 Markdown 链接、标题链接、`www.` 与裸 HTTP(S) URL；选择后显示完整目标，再选择“复制 URL”写入 Windows 文本剪贴板，不自动打开外部站点。`/settings` 的 hyperlinks 策略为 `auto/on/off`；`auto` 只在终端能力已知时发射 OSC 8，`on` 强制尝试，`off` 或 `NO_COLOR` 只显示可读文字。链接和显示文本会过滤控制字符，非 HTTP(S) 目标不会获得 OSC 8。
 
 Mermaid 围栏支持常见 `flowchart` / `graph` 的 `TD`、`TB`、`LR` 节点、`-->` 连线与条件标签；超出该子集时明确显示“此 Mermaid 子集不支持”并保留围栏源码。嵌套表格和其他完整 GFM/Mermaid 能力仍未实现。
+
+## 设置与诊断
+
+FUI 使用独立设置文件 `<data root>/fui/settings.json`，不读写 GUI 与底层 CLI 的 `settings.json`。文件损坏时回退默认值，在对话区和 `/doctor` 显示真实原因；下一次成功修改会保留 `.before-repair-*.bak`。写入使用同目录临时文件后替换。
+
+`/settings` 提供分组、搜索、当前值与即时切换；`/theme`、`/terminal` 是快捷面板。可配置主题（auto/dark/light/mono）、思考与工具呈现、状态栏分段、紧凑卡片、滚轮、超链接、桌面通知，以及命令面板/搜索/工具/思考四个按键。冲突、输入编辑键和审批键会被拒绝，坏按键配置不会阻止启动。
+
+`/keys` 展示并修改当前安全按键。`/doctor` 输出终端家族、尺寸、UTF-8/code page、bracketed paste、mouse、Sixel、颜色、hyperlinks、notifications、multiplexer、data root、FUMO shell 与 FUI build/version；未探测项明确写未知。tmux、Zellij、screen、Windows Terminal、kitty 等能力按实际宿主降级说明，不把 BEL 或复用器吞掉的 OSC 当成成功 toast。
+
+回合完成或失败时，FUI 优先使用 Windows Terminal 的 OSC 777，或其他终端的 OSC 9（tmux 走 passthrough）；不支持文本通知时只发 BEL。可用 `FUI_NOTIFICATIONS=off`、`FUI_NO_NOTIFY=1` 或设置 `desktop-notifications=off` 关闭。通知失败不会改变回合结果。
 
 ### LaTeX 公式
 
@@ -55,7 +65,7 @@ x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}
 
 带附件按 `Enter` 后先在本机复核文件。复核期间按 `Esc`、编辑草稿或遇到工具审批，都会取消这次发送。再次按 `Enter` 才会重新提交。
 
-`--app-data <目录>` 可隔离设置和会话，也可设 `FUFUCODE_DATA_ROOT`。会话 ID 可在 `/session` 查看，或用同一项目、同一数据根的 `fufucode sessions list --json` 查询。管道、批处理、设置管理和 JSON 输出仍使用底层 CLI `fufucode`。
+`--app-data <目录>` 可隔离 FUI 设置和会话，也可设 `FUFUCODE_DATA_ROOT`。会话 ID 可在 `/session` 查看，或用同一项目、同一数据根的 `fufucode sessions list --json` 查询。管道、批处理和 JSON 输出仍使用底层 CLI `fufucode`。
 
 从仓库根开发运行：
 

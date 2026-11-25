@@ -7,7 +7,9 @@ internal sealed record TuiLine(string Kind, string Text);
 internal sealed record TuiView(string Project, string Session, string Model, string Status,
     IReadOnlyList<TuiLine> Lines, string Draft, int Cursor, int Scroll, string? Approval, bool Busy = false,
     FuiOverlay? Overlay = null, bool ExpandTools = false, bool ShowThinking = true,
-    IReadOnlyList<FileAttachment>? Attachments = null);
+    IReadOnlyList<FileAttachment>? Attachments = null, bool CompactCards = true, bool MouseWheel = true,
+    string Theme = "auto", bool Hyperlinks = false, IReadOnlyList<string>? StatusSegments = null,
+    string CommandKey = "Ctrl+P");
 
 internal abstract record TuiEvent
 {
@@ -16,6 +18,15 @@ internal abstract record TuiEvent
     public sealed record Approval(string Id, string Text) : TuiEvent;
     public sealed record ApprovalClosed(string Id) : TuiEvent;
     public sealed record AgentsChanged(FuiAgentActivitySnapshot Snapshot) : TuiEvent;
+    public sealed record TurnFinished(FuiTurnOutcome Outcome, string? Summary) : TuiEvent;
+}
+
+internal enum FuiTurnOutcome
+{
+    Completed,
+    Failed,
+    Interrupted,
+    Other
 }
 
 // The terminal consumes session events, not rendered CLI output or desktop view models.
@@ -52,4 +63,11 @@ internal interface IFuiSessionInspector
 {
     Task<FuiSessionInfo> InspectAsync(CancellationToken ct);
     Task<string> RetryLastUserAsync(CancellationToken ct);
+}
+
+internal interface IFuiStatusProvider
+{
+    string RuntimeLabel => "FUMO";
+    int QueuedCount => 0;
+    string? UsageSummary => null;
 }

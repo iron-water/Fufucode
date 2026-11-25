@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using System.Threading.Channels;
 using Fufucode.App.Abstractions;
@@ -9,7 +10,7 @@ namespace Fufucode.Fui;
 
 /// <summary>Owns one actual FUMO lease. No subprocess or external-backend selection path.</summary>
 internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession, IChatAttachments,
-    IFuiPlanSession, IFuiSessionInspector
+    IFuiPlanSession, IFuiSessionInspector, IFuiStatusProvider
 {
     private readonly PersistentSession _session;
     private readonly FumoProjectRuntime _project;
@@ -59,6 +60,22 @@ internal sealed partial class FumoTuiSession : ITuiSession, IFuiWorkbenchSession
     public string? Model => _session.Chat.CurrentModel;
     public string? CurrentPlanSnippet => (_session.Chat as NativeCSharpChatSession)?.CurrentPlanSnippet;
     public string ExecutionMode => (_session.Chat as IExecutionModeSession)?.ExecutionMode ?? "unknown";
+    public string RuntimeLabel => "FUMO";
+    public int QueuedCount => _session.Chat.QueuedCount;
+    public string? UsageSummary
+    {
+        get
+        {
+            var usage = _session.Coordinator.GetUsage().Session;
+            if (usage.AssistantMessageCount == 0) return null;
+            static string Number(long? value) => value is { } known
+                ? known >= 1_000_000 ? (known / 1_000_000d).ToString("0.0", CultureInfo.InvariantCulture) + "M"
+                : known >= 1_000 ? (known / 1_000d).ToString("0.0", CultureInfo.InvariantCulture) + "k"
+                : known.ToString(CultureInfo.InvariantCulture)
+                : "?";
+            return Number(usage.Input.Value) + "/" + Number(usage.Output.Value);
+        }
+    }
     public IReadOnlyList<TuiLine> History { get; }
     public ChannelReader<TuiEvent> Events => _events.Reader;
 

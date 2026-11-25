@@ -128,6 +128,14 @@ internal sealed class FumoEventProjection(ChannelWriter<TuiEvent> writer, int in
                         SessionOutcome.Completed => "已完成", SessionOutcome.Failed => "失败", SessionOutcome.Interrupted => "已中断",
                         SessionOutcome.Truncated => settled.Summary ?? "结果不完整", _ => settled.Summary ?? "结果未知"
                     }, queued > 0));
+                    if (queued == 0)
+                        writer.TryWrite(new TuiEvent.TurnFinished(settled.Outcome switch
+                        {
+                            SessionOutcome.Completed => FuiTurnOutcome.Completed,
+                            SessionOutcome.Failed => FuiTurnOutcome.Failed,
+                            SessionOutcome.Interrupted => FuiTurnOutcome.Interrupted,
+                            _ => FuiTurnOutcome.Other
+                        }, settled.Summary));
                     break;
                 case SessionEvent.QueueChanged { QueuedCount: > 0 } queue:
                     writer.TryWrite(new TuiEvent.Status($"运行中 · 排队 {queue.QueuedCount}", true));

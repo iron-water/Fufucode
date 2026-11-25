@@ -1,7 +1,8 @@
 namespace Fufucode.Fui;
 
 // Terminal Markdown is a bounded presentation layer: it formats tables, link hints and simple block
-// prefixes while keeping the original transcript text untouched. It emits no OSC 8 or executable markup.
+// prefixes while keeping the original transcript text untouched. Link metadata is separate from text;
+// only TerminalSurface may turn validated HTTP(S) spans into OSC 8.
 internal sealed class MarkdownLines
 {
     internal readonly record struct Fence(char Marker, int Count, string Language = "");

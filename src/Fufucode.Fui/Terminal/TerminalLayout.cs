@@ -111,7 +111,7 @@ internal sealed class TerminalLayout
 
         // Cards need enough room for a header, content, and a closing rail. Narrow or tiny terminals
         // keep the same wrapped text with a compact role rail so a resize never makes rows disappear.
-        var cardLayout = columns >= 24 && bodyRows >= 4;
+        var cardLayout = view.CompactCards && columns >= 24 && bodyRows >= 4;
         var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking, cell, cardLayout);
         (_total, _bodyRows) = (total, bodyRows);
         var maxScroll = Math.Max(0, total - bodyRows);
@@ -133,10 +133,12 @@ internal sealed class TerminalLayout
         row = headerRows + bodyRows;
         if (statusRows > 0)
         {
+            var commandKey = TerminalText.SingleLine(view.CommandKey);
             var shortcuts = view.Approval is not null || overlay is not null ? "" : view.Busy
-                ? "Ctrl+P 命令 · F1 帮助 · Esc 停止"
-                : "Ctrl+P 命令 · F1 帮助 · Enter 发送";
-            rows[row++] = new(StatusLine(view.Status, scroll, columns, shortcuts), Ink.Status);
+                ? commandKey + " 命令 · F1 帮助 · Esc 停止"
+                : commandKey + " 命令 · F1 帮助 · Enter 发送";
+            var segments = view.StatusSegments is { Count: > 0 } ? string.Join(" · ", view.StatusSegments) : "";
+            rows[row++] = new(StatusLine(view.Status, segments, scroll, columns, shortcuts), Ink.Status);
         }
         var approvalRow = -1;
         var approvalAction = "";
@@ -243,10 +245,11 @@ internal sealed class TerminalLayout
         return TerminalText.Clip(title, columns);
     }
 
-    private static string StatusLine(string status, int scroll, int columns, string shortcuts)
+    private static string StatusLine(string status, string segments, int scroll, int columns, string shortcuts)
     {
         if (columns <= 0) return "";
         var label = TerminalText.SingleLine(status);
+        if (segments.Length != 0) label = TerminalText.SingleLine(segments) + " · " + label;
         if (scroll > 0) label = $"↑ {scroll}  {label}";
         if (columns < 8) return TerminalText.Clip(label, columns);
 

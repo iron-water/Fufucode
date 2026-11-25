@@ -9,8 +9,9 @@ internal sealed class TerminalSurface : IDisposable
     private readonly TerminalLayout _layout = new();
     private readonly SixelSupport _graphics = new(Environment.GetEnvironmentVariable("FUI_GRAPHICS"));
     private readonly PasteKeys _keys;
-    private readonly TuiHyperlinkPolicy _hyperlinks = TuiHyperlinkPolicy.FromEnvironment();
-    private TuiTheme _theme = TuiTheme.FromEnvironment();
+    private TuiHyperlinkPolicy _hyperlinks = TuiHyperlinkPolicy.Disabled;
+    private readonly FuiTerminalDetection _terminal;
+    private TuiTheme _theme;
     private ImageCells? _paintedCell;
     private readonly object _gate = new();
     private TextWriter _output = Console.Out;
@@ -18,8 +19,12 @@ internal sealed class TerminalSurface : IDisposable
     private WindowsModes? _modes;
     private TerminalFrame? _previous;
     private TuiTheme? _paintedTheme;
+    private bool? _paintedHyperlinks;
     private bool _alt, _changedCtrlC, _disposed;
     private bool _oldCursorVisible = true;
+    private bool _mouseWheel = true;
+    private int _originalCodePage = Console.OutputEncoding.CodePage;
+    private int? _reportedBackground;
 
     internal const string MouseOnSequence = "\x1b[?1000h\x1b[?1006h";
     internal const string MouseOffSequence = "\x1b[?1006l\x1b[?1000l";
@@ -29,8 +34,10 @@ internal sealed class TerminalSurface : IDisposable
         OperatingSystem.IsWindows() && WindowsModes.Attached, OperatingSystem.IsWindows(),
         Environment.GetEnvironmentVariable("TERM"));
 
-    public TerminalSurface()
+    public TerminalSurface(string theme = "auto", FuiTerminalDetection? terminal = null)
     {
+        _terminal = terminal ?? FuiTerminalDetector.DetectCurrent();
+        _theme = TuiTheme.FromEnvironment(theme);
         _keys = new(_graphics.Reply, ColorReply);
         if (!IsSupported) throw new InvalidOperationException("FUI 需要交互式终端。");
         try
@@ -43,6 +50,7 @@ internal sealed class TerminalSurface : IDisposable
             }
             if (Console.OutputEncoding.CodePage != Encoding.UTF8.CodePage)
             {
+                _originalCodePage = Console.OutputEncoding.CodePage;
                 _encoding = Console.OutputEncoding;
                 Console.OutputEncoding = new UTF8Encoding(false);
                 _output = Console.Out;
@@ -69,14 +77,21 @@ internal sealed class TerminalSurface : IDisposable
     public int ScrollToLine(int transcriptIndex) => _layout.ScrollToLine(transcriptIndex);
     public bool SizeChanged => _previous is null || _paintedCell != _graphics.Cell || (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight)) !=
         (_previous.Width, _previous.Rows.Length);
+    internal FuiTerminalDetection Terminal => _terminal;
 
     public void Draw(TuiView view)
     {
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            var themeChanged = !string.Equals(_theme.RequestedTheme, view.Theme, StringComparison.Ordinal);
+            if (themeChanged)
+                _theme = TuiTheme.FromEnvironment(view.Theme, _reportedBackground);
+            _hyperlinks = TuiHyperlinkPolicy.FromEnabled(view.Hyperlinks);
+            _mouseWheel = view.MouseWheel;
             var width = Console.WindowWidth;
             var height = Console.WindowHeight;
+            if (themeChanged && _theme.NeedsBackgroundProbe) Write(TuiTheme.BackgroundQuery);
             if (_previous is { } last && (last.Width != width || last.Rows.Length != height))
             {
                 if (_graphics.Probe) Write("\x1b[16t" + SixelSupport.Colors);
@@ -84,11 +99,12 @@ internal sealed class TerminalSurface : IDisposable
             }
             _paintedCell = _graphics.Cell;
             var frame = _layout.Arrange(view, width, height, _paintedCell);
-            var repaint = !ReferenceEquals(_paintedTheme, _theme);
+            var repaint = !ReferenceEquals(_paintedTheme, _theme) || _paintedHyperlinks != _hyperlinks.Enabled;
             var paint = Diff(repaint ? null : _previous, frame, _theme, _hyperlinks);
             if (paint.Length > 0) Write(paint);
             _previous = frame;
             _paintedTheme = _theme;
+            _paintedHyperlinks = _hyperlinks.Enabled;
         }
     }
 
@@ -167,7 +183,7 @@ internal sealed class TerminalSurface : IDisposable
     private ConsoleKeyInfo? ReadMouse()
     {
         if (!_keys.TryReadMouse(out var mouse)) return null;
-        if (MouseInput.WheelKey(mouse) is { } wheel) return wheel;
+        if (MouseInput.WheelKey(mouse) is { } wheel) return _mouseWheel ? wheel : null;
         if (!mouse.LeftClick || mouse.Release || mouse.Motion) return null;
         var hit = MouseInput.HitTest(_previous?.Mouse, mouse);
         if (hit.Kind == MouseHitKind.None) return null;
@@ -176,7 +192,7 @@ internal sealed class TerminalSurface : IDisposable
     }
 
     internal static string RestoreSequence(bool cursorVisible, TuiTheme theme) =>
-        "\x1b[?2026l" + theme.Reset + "\x1b[?2004l" + MouseOffSequence + "\x1b[?1049l" +
+        "\x1b]8;;\x1b\\" + "\x1b[?2026l" + theme.Reset + "\x1b[?2004l" + MouseOffSequence + "\x1b[?1049l" +
         (cursorVisible ? "\x1b[?25h" : "\x1b[?25l") + "\x1b[?25r\x1b[?2004r";
 
     internal static string RestoreSequence(bool cursorVisible) => RestoreSequence(cursorVisible, TuiTheme.Unstyled);
@@ -185,8 +201,33 @@ internal sealed class TerminalSurface : IDisposable
     {
         _graphics.ColorReply(payload);
         if (TuiTheme.TryParseBackgroundReply(payload, out var rgb))
+        {
+            _reportedBackground = rgb;
             _theme = _theme.WithReportedBackground(rgb);
+        }
     }
+
+    internal void Notify(FuiSettings settings, string title, string body)
+    {
+        try
+        {
+            var plan = FuiNotificationFormatter.Build(title, body, settings, _terminal,
+                FuiTerminalDetector.EnvironmentDictionary());
+            if (plan.Enabled && plan.Sequence.Length != 0) Write(plan.Sequence);
+        }
+        catch (Exception)
+        {
+            // Background notification is best-effort and must not interrupt the turn or rendering loop.
+        }
+    }
+
+    internal FuiTerminalRuntimeState DiagnosticsState(string dataRoot) => new(
+        Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight),
+        _originalCodePage, Console.OutputEncoding.CodePage, Console.OutputEncoding.WebName,
+        true, MouseInput.CanEnableMouse(Console.IsInputRedirected, Console.IsOutputRedirected,
+            OperatingSystem.IsWindows() && WindowsModes.Attached, OperatingSystem.IsWindows(),
+            Environment.GetEnvironmentVariable("TERM")),
+        _graphics.State, _theme, dataRoot);
 
     private void Write(string value) { _output.Write(value); _output.Flush(); }
     private void Exit(object? sender, EventArgs args) => Dispose();
