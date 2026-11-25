@@ -5,13 +5,23 @@ namespace Fufucode.Fui;
 
 internal sealed class Composer
 {
+    private const int MaxUndoDepth = 100;
+    private const int MaxKillEntries = 60;
     private readonly StringBuilder _buffer = new();
     private readonly List<string> _history = [];
+    // Snapshots are taken before a group's first edit, so one typed or pasted run undoes together.
+    private readonly List<EditSnapshot> _undo = [];
+    private readonly List<EditSnapshot> _redo = [];
+    private readonly List<string> _killRing = [];
     private string? _snapshot = "";
     private int[]? _boundaries;
     private int _historyIndex;
     private (string Text, int Cursor) _unfinished;
     private int? _preferredColumn;
+    private EditGroup _editGroup;
+    private KillDirection? _killDirection;
+    private EditSnapshot? _yankBase, _yankAfter;
+    private int _yankIndex;
 
     public string Text => _snapshot ??= _buffer.ToString();
     public int Cursor { get; private set; }
@@ -22,29 +32,56 @@ internal sealed class Composer
     public void Edit(ConsoleKeyInfo key)
     {
         var control = key.Modifiers.HasFlag(ConsoleModifiers.Control) && !key.Modifiers.HasFlag(ConsoleModifiers.Alt);
+        var alt = key.Modifiers.HasFlag(ConsoleModifiers.Alt);
         if (key.Key is not (ConsoleKey.UpArrow or ConsoleKey.DownArrow)) _preferredColumn = null;
         switch (key.Key)
         {
-            case ConsoleKey.LeftArrow: Cursor = control ? WordLeft() : Previous(Cursor); return;
-            case ConsoleKey.RightArrow: Cursor = control ? WordRight() : Next(Cursor); return;
-            case ConsoleKey.Home: Cursor = control ? 0 : LineStart(); return;
-            case ConsoleKey.End: Cursor = control ? _buffer.Length : LineEnd(); return;
+            case ConsoleKey.Z when control && key.Modifiers.HasFlag(ConsoleModifiers.Shift): Redo(); return;
+            case ConsoleKey.Z when control: Undo(); return;
+            case ConsoleKey.Y when control: Yank(); return;
+            case ConsoleKey.Y when alt && !control: YankPop(); return;
+            case ConsoleKey.LeftArrow:
+                BreakEditGroup();
+                Cursor = control ? WordLeft() : Previous(Cursor);
+                return;
+            case ConsoleKey.RightArrow:
+                BreakEditGroup();
+                Cursor = control ? WordRight() : Next(Cursor);
+                return;
+            case ConsoleKey.Home:
+                BreakEditGroup();
+                Cursor = control ? 0 : LineStart();
+                return;
+            case ConsoleKey.End:
+                BreakEditGroup();
+                Cursor = control ? _buffer.Length : LineEnd();
+                return;
             case ConsoleKey.UpArrow: Vertical(-1); return;
             case ConsoleKey.DownArrow: Vertical(1); return;
-            case ConsoleKey.Backspace: Remove(control ? WordLeft() : Previous(Cursor), Cursor); return;
-            case ConsoleKey.Delete: Remove(Cursor, control ? WordRight() : Next(Cursor)); return;
+            case ConsoleKey.Backspace:
+                DeleteRange(control ? WordLeft() : Previous(Cursor), Cursor);
+                return;
+            case ConsoleKey.Delete:
+                DeleteRange(Cursor, control ? WordRight() : Next(Cursor));
+                return;
             case ConsoleKey.J when control:
-            case ConsoleKey.Enter when key.Modifiers != 0: Insert('\n'); return;
-            case ConsoleKey.A when control: Cursor = LineStart(); return;
-            case ConsoleKey.E when control: Cursor = LineEnd(); return;
-            case ConsoleKey.U when control: Remove(LineStart(), Cursor); return;
-            case ConsoleKey.K when control: Remove(Cursor, LineEnd()); return;
-            case ConsoleKey.W when control: Remove(WordLeft(), Cursor); return;
+            case ConsoleKey.Enter when key.Modifiers != 0: Insert("\n", literal: false); return;
+            case ConsoleKey.A when control:
+                BreakEditGroup();
+                Cursor = LineStart();
+                return;
+            case ConsoleKey.E when control:
+                BreakEditGroup();
+                Cursor = LineEnd();
+                return;
+            case ConsoleKey.U when control: Kill(LineStart(), Cursor, KillDirection.Backward); return;
+            case ConsoleKey.K when control: Kill(Cursor, LineEnd(), KillDirection.Forward); return;
+            case ConsoleKey.W when control: Kill(WordLeft(), Cursor, KillDirection.Backward); return;
         }
 
         // Key 0 is literal paste/IME input, never a command. VT paste newlines do not submit.
-        if (key.Key == 0 && key.KeyChar is '\n' or '\t') Insert(key.KeyChar);
-        else if (!control && !char.IsControl(key.KeyChar)) Insert(key.KeyChar);
+        if (key.Key == 0 && key.KeyChar is '\n' or '\t') Insert(key.KeyChar.ToString(), literal: true);
+        else if (!control && !char.IsControl(key.KeyChar)) Insert(key.KeyChar.ToString(), literal: key.Key == 0);
     }
 
     public string Take()
@@ -64,15 +101,21 @@ internal sealed class Composer
         Set("", 0);
         _historyIndex = _history.Count;
         _unfinished = ("", 0);
+        _undo.Clear();
+        _redo.Clear();
+        BreakEditGroup();
     }
 
     // Replacing a draft is not a submission. Never leave a caret inside a surrogate pair or combining cluster.
     public void Replace(string text, int? cursor = null)
     {
-        Set(text, Math.Clamp(cursor ?? text.Length, 0, text.Length));
+        Set(text, cursor ?? text.Length);
         Cursor = Ceiling(Cursor);
         _historyIndex = _history.Count;
         _unfinished = ("", 0);
+        _undo.Clear();
+        _redo.Clear();
+        BreakEditGroup();
     }
 
     private void Set(string text, int cursor)
@@ -81,16 +124,35 @@ internal sealed class Composer
         _buffer.Clear().Append(text);
         _snapshot = text;
         _boundaries = null;
-        Cursor = cursor;
+        Cursor = Math.Clamp(cursor, 0, text.Length);
         _preferredColumn = null;
     }
 
-    private void Insert(char value)
+    private void Insert(string value, bool literal)
     {
-        _buffer.Insert(Cursor++, value);
+        if (value.Length == 0) return;
+        BeginTyped(literal);
+        InsertValue(value);
+    }
+
+    private void InsertValue(string value)
+    {
+        _buffer.Insert(Cursor, value);
+        Cursor += value.Length;
         Changed();
-        // Inserting a base before existing combining marks can create a new cluster across the caret.
-        if (Cursor < _buffer.Length && !char.IsHighSurrogate(value)) Cursor = Ceiling(Cursor);
+        // A split surrogate or a base inserted before combining marks may leave the caret inside a cluster.
+        if (Cursor < _buffer.Length && !char.IsHighSurrogate(value[^1])) Cursor = Ceiling(Cursor);
+    }
+
+    private void DeleteRange(int start, int end)
+    {
+        if (end <= start)
+        {
+            BreakEditGroup();
+            return;
+        }
+        BeginCommand();
+        Remove(start, end);
     }
 
     private void Remove(int start, int end)
@@ -99,6 +161,146 @@ internal sealed class Composer
         _buffer.Remove(start, end - start);
         Changed();
         Cursor = Ceiling(start);
+    }
+
+    private void Kill(int start, int end, KillDirection direction)
+    {
+        if (end <= start)
+        {
+            BreakEditGroup();
+            return;
+        }
+        var text = Text[start..end];
+        var accumulate = _killDirection == direction;
+        BeginCommand();
+        Remove(start, end);
+        if (accumulate && _killRing.Count != 0)
+            _killRing[^1] = direction == KillDirection.Backward ? text + _killRing[^1] : _killRing[^1] + text;
+        else
+        {
+            if (_killRing.Count == MaxKillEntries) _killRing.RemoveAt(0);
+            _killRing.Add(text);
+        }
+        _killDirection = direction;
+    }
+
+    private void Yank()
+    {
+        if (_killRing.Count == 0)
+        {
+            BreakEditGroup();
+            return;
+        }
+        _yankIndex = _killRing.Count - 1;
+        _yankBase = CurrentSnapshot();
+        PushUndo();
+        _editGroup = EditGroup.Yank;
+        _killDirection = null;
+        InsertValue(_killRing[_yankIndex]);
+        _yankAfter = CurrentSnapshot();
+    }
+
+    private void YankPop()
+    {
+        if (_editGroup != EditGroup.Yank || _yankBase is not { } baseState ||
+            _yankAfter is not { } afterState || _killRing.Count <= 1 || !Matches(afterState))
+        {
+            BreakEditGroup();
+            return;
+        }
+
+        PushUndo();
+        ApplySnapshot(baseState);
+        _yankIndex = _yankIndex == 0 ? _killRing.Count - 1 : _yankIndex - 1;
+        InsertValue(_killRing[_yankIndex]);
+        _editGroup = EditGroup.Yank;
+        _killDirection = null;
+        _yankAfter = CurrentSnapshot();
+    }
+
+    private void Undo()
+    {
+        BreakEditGroup();
+        if (_undo.Count == 0) return;
+        var snapshot = _undo[^1];
+        _undo.RemoveAt(_undo.Count - 1);
+        PushRedo(CurrentSnapshot());
+        ApplySnapshot(snapshot);
+    }
+
+    private void Redo()
+    {
+        BreakEditGroup();
+        if (_redo.Count == 0) return;
+        var snapshot = _redo[^1];
+        _redo.RemoveAt(_redo.Count - 1);
+        PushUndo(CurrentSnapshot(), clearRedo: false);
+        ApplySnapshot(snapshot);
+    }
+
+    private void BeginTyped(bool literal)
+    {
+        // PasteKeys emits a bracketed paste as a contiguous key-0 run.
+        var group = literal ? EditGroup.Literal : EditGroup.Typing;
+        if (_editGroup != group)
+        {
+            PushUndo();
+            _editGroup = group;
+        }
+        _killDirection = null;
+        ClearYank();
+    }
+
+    private void BeginCommand()
+    {
+        PushUndo();
+        _editGroup = EditGroup.Command;
+        _killDirection = null;
+        ClearYank();
+    }
+
+    private void BreakEditGroup()
+    {
+        _editGroup = EditGroup.None;
+        _killDirection = null;
+        ClearYank();
+    }
+
+    private void ClearYank()
+    {
+        _yankBase = null;
+        _yankAfter = null;
+        _yankIndex = 0;
+    }
+
+    private void PushUndo()
+    {
+        PushUndo(CurrentSnapshot());
+    }
+
+    private void PushUndo(EditSnapshot snapshot, bool clearRedo = true)
+    {
+        if (_undo.Count == MaxUndoDepth) _undo.RemoveAt(0);
+        _undo.Add(snapshot);
+        if (clearRedo) _redo.Clear();
+    }
+
+    private void PushRedo(EditSnapshot snapshot)
+    {
+        if (_redo.Count == MaxUndoDepth) _redo.RemoveAt(0);
+        _redo.Add(snapshot);
+    }
+
+    private EditSnapshot CurrentSnapshot() => new(Text, Cursor);
+
+    private bool Matches(EditSnapshot snapshot) =>
+        Cursor == snapshot.Cursor && string.Equals(Text, snapshot.Text, StringComparison.Ordinal);
+
+    private void ApplySnapshot(EditSnapshot snapshot)
+    {
+        Set(snapshot.Text, snapshot.Cursor);
+        Cursor = Ceiling(Cursor);
+        _historyIndex = _history.Count;
     }
 
     private void Changed()
@@ -164,6 +366,7 @@ internal sealed class Composer
 
     private void Vertical(int direction)
     {
+        BreakEditGroup();
         var start = LineStart();
         var end = LineEnd();
         if ((direction < 0 && start > 0) || (direction > 0 && end < _buffer.Length))
@@ -179,8 +382,28 @@ internal sealed class Composer
         var index = Math.Clamp(_historyIndex + direction, 0, _history.Count);
         if (index == _historyIndex) return;
         if (_historyIndex == _history.Count) _unfinished = (Text, Cursor);
+        _undo.Clear();
+        _redo.Clear();
         _historyIndex = index;
         if (index == _history.Count) Set(_unfinished.Text, _unfinished.Cursor);
         else Set(_history[index], _history[index].Length);
+        Cursor = Ceiling(Cursor);
+    }
+
+    private readonly record struct EditSnapshot(string Text, int Cursor);
+
+    private enum EditGroup
+    {
+        None,
+        Typing,
+        Literal,
+        Command,
+        Yank
+    }
+
+    private enum KillDirection
+    {
+        Backward,
+        Forward
     }
 }

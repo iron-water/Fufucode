@@ -18,7 +18,8 @@ internal static class ControllerTests
         var s = new TestSession();
         var ui = new TuiController(s, CancellationToken.None);
         void Type(string text) { foreach (var c in text) ui.Key(new(c, (ConsoleKey)0, false, false, false), 10, 30); }
-        void Key(ConsoleKey key, bool ctrl = false) => ui.Key(new('\0', key, false, false, ctrl), 10, 30);
+        void Key(ConsoleKey key, bool ctrl = false, bool shift = false, bool alt = false) =>
+            ui.Key(new('\0', key, shift, alt, ctrl), 10, 30);
         void Emit(TuiEvent ev) => s.Channel.Writer.TryWrite(ev);
 
         Type("/session"); Key(ConsoleKey.Enter);
@@ -61,6 +62,12 @@ internal static class ControllerTests
         Expect(s.Stops == 1 && !ui.Exiting, "nonblocking single stop");
         Key(ConsoleKey.PageUp); Expect(ui.View().Scroll == 9, "can scroll while stop is in flight");
         s.StopAck.SetResult(); Emit(new TuiEvent.Status("已中断", false)); ui.Update();
+        Key(ConsoleKey.C, true); Expect(!ui.Exiting && ui.View().Draft == "", "clear the prior draft before undo routing");
+        Type("undo draft");
+        Key(ConsoleKey.Z, true); Expect(ui.View().Draft == "", "Ctrl+Z is routed to the composer");
+        Key(ConsoleKey.Z, true, shift: true); Expect(ui.View().Draft == "undo draft", "Ctrl+Shift+Z is routed to the composer");
+        Key(ConsoleKey.W, true); Expect(ui.View().Draft == "undo ", "Ctrl+W is routed as a word kill");
+        Key(ConsoleKey.Y, true); Expect(ui.View().Draft == "undo draft", "Ctrl+Y is routed to the composer");
         Key(ConsoleKey.C, true); Expect(!ui.Exiting && ui.View().Draft == "", "Ctrl+C clears idle draft");
         Key(ConsoleKey.C, true); Expect(ui.Exiting, "Ctrl+C exits after the draft is empty");
     }

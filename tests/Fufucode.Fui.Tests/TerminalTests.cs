@@ -10,6 +10,12 @@ internal static class TerminalTests
         CleanAndMeasure();
         EditAndRecall();
         LiteralPaste();
+        UndoAndRedo();
+        PasteUndo();
+        KillAndYank();
+        UnicodeKillAndYank();
+        HistoryAndTake();
+        UndoLimit();
         LayoutAndDiff();
         FormulaTests.Run();
     }
@@ -105,6 +111,196 @@ internal static class TerminalTests
         Eq(ConsoleKey.Escape, parser.Read()?.Key, "raw Escape");
     }
 
+    private static void UndoAndRedo()
+    {
+        var c = new Composer();
+        Type(c, "abc");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", c.Text, "a continuous typed run is one undo unit");
+        Eq(0, c.Cursor, "undo restores its caret");
+
+        c.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq("abc", c.Text, "redo restores the typed run");
+        Eq(3, c.Cursor, "redo restores its caret");
+
+        c.Edit(Key(ConsoleKey.LeftArrow));
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", c.Text, "moving the caret does not add an undo unit");
+
+        c.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Type(c, "d");
+        c.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq("d", c.Text, "new input clears redo");
+
+        var multiple = new Composer();
+        Type(multiple, "a");
+        multiple.Edit(Key(ConsoleKey.LeftArrow));
+        multiple.Edit(Key(ConsoleKey.RightArrow));
+        Type(multiple, "b");
+        multiple.Edit(Key(ConsoleKey.Z, control: true));
+        multiple.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", multiple.Text, "multiple edit units undo in order");
+        multiple.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        multiple.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq("ab", multiple.Text, "multiple edit units redo in order");
+    }
+
+    private static void PasteUndo()
+    {
+        var c = new Composer();
+        Paste(c, "first\nsecond");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", c.Text, "a literal paste is one undo unit");
+        c.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq("first\nsecond", c.Text, "redo restores the paste");
+
+        Type(c, "!");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("first\nsecond", c.Text, "typed input after a paste is its own unit");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", c.Text, "paste remains independently undoable");
+
+        var unicode = new Composer();
+        Paste(unicode, "👩‍💻");
+        unicode.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", unicode.Text, "pasted surrogate cluster undoes whole");
+        unicode.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq("👩‍💻", unicode.Text, "pasted surrogate cluster redoes whole");
+
+        var parser = new PasteKeys();
+        var now = 0L;
+        foreach (var ch in "\x1b[200~中\r\nsecond\x1b[201~")
+            parser.Feed(new(ch, ch == '\x1b' ? ConsoleKey.Escape : (ConsoleKey)0, false, false, false), ++now);
+        var bracketed = new Composer();
+        while (parser.Read() is { } key) bracketed.Edit(key);
+        Eq("中\nsecond", bracketed.Text, "bracketed paste reaches the composer as literal text");
+        bracketed.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", bracketed.Text, "bracketed paste is one undo unit");
+    }
+
+    private static void KillAndYank()
+    {
+        var lineStart = new Composer();
+        Type(lineStart, "alpha beta");
+        lineStart.Edit(Key(ConsoleKey.U, control: true));
+        Eq("", lineStart.Text, "Ctrl+U kills to line start");
+        lineStart.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("alpha beta", lineStart.Text, "Ctrl+Y yanks Ctrl+U text");
+
+        var lineEnd = new Composer();
+        Type(lineEnd, "gamma delta");
+        lineEnd.Edit(Key(ConsoleKey.Home));
+        lineEnd.Edit(Key(ConsoleKey.K, control: true));
+        Eq("", lineEnd.Text, "Ctrl+K kills to line end");
+        lineEnd.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("gamma delta", lineEnd.Text, "Ctrl+Y yanks Ctrl+K text");
+
+        var word = new Composer();
+        Type(word, "one two");
+        word.Edit(Key(ConsoleKey.W, control: true));
+        Eq("one ", word.Text, "Ctrl+W kills the previous word");
+        word.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("one two", word.Text, "Ctrl+Y yanks Ctrl+W text");
+
+        var merged = new Composer();
+        Type(merged, "one two three");
+        merged.Edit(Key(ConsoleKey.W, control: true));
+        merged.Edit(Key(ConsoleKey.W, control: true));
+        Eq("one ", merged.Text, "consecutive Ctrl+W kills both words");
+        merged.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("one two three", merged.Text, "same-direction kills merge in the ring");
+
+        var pop = new Composer();
+        Type(pop, "new");
+        pop.Edit(Key(ConsoleKey.U, control: true));
+        Type(pop, "old");
+        pop.Edit(Key(ConsoleKey.U, control: true));
+        pop.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("old", pop.Text, "yank starts with the newest kill");
+        pop.Edit(Key(ConsoleKey.Y, alt: true));
+        Eq("new", pop.Text, "Alt+Y replaces it with the older kill");
+        pop.Edit(Key(ConsoleKey.Y, alt: true));
+        Eq("old", pop.Text, "Alt+Y wraps through the ring");
+        pop.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("new", pop.Text, "yank-pop is undoable");
+        pop.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq("old", pop.Text, "yank-pop is redoable");
+    }
+
+    private static void UnicodeKillAndYank()
+    {
+        const string text = "中e\u0301👩‍💻";
+        var line = new Composer();
+        Type(line, text);
+        line.Edit(Key(ConsoleKey.Home));
+        line.Edit(Key(ConsoleKey.K, control: true));
+        Eq("", line.Text, "Ctrl+K removes complete Unicode clusters");
+        line.Edit(Key(ConsoleKey.Y, control: true));
+        Eq(text, line.Text, "yank restores complete Unicode clusters");
+        Eq(text.Length, line.Cursor, "yank caret stays after the complete cluster");
+        line.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", line.Text, "Unicode yank is undoable");
+        line.Edit(Key(ConsoleKey.Z, control: true, shift: true));
+        Eq(text, line.Text, "Unicode yank is redoable");
+
+        var word = new Composer();
+        Type(word, "前 e\u0301 👩‍💻");
+        word.Edit(Key(ConsoleKey.W, control: true));
+        Eq("前 e\u0301 ", word.Text, "Ctrl+W removes the whole emoji cluster");
+        word.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("前 e\u0301 👩‍💻", word.Text, "yank restores the whole emoji cluster");
+
+        var composing = new Composer();
+        Type(composing, "前 e\u0301");
+        composing.Edit(Key(ConsoleKey.W, control: true));
+        Eq("前 ", composing.Text, "Ctrl+W removes the whole combining cluster");
+        composing.Edit(Key(ConsoleKey.Y, control: true));
+        Eq("前 e\u0301", composing.Text, "yank restores the combining cluster");
+    }
+
+    private static void HistoryAndTake()
+    {
+        var c = new Composer();
+        Type(c, "submitted");
+        Eq("submitted", c.Take(), "take records the submitted draft");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", c.Text, "undo cannot revive a taken draft");
+
+        Type(c, "working");
+        c.Edit(Key(ConsoleKey.UpArrow));
+        Eq("submitted", c.Text, "up recalls submitted history");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("submitted", c.Text, "history recall is not an undo unit");
+        c.Edit(Key(ConsoleKey.DownArrow));
+        Eq("working", c.Text, "down restores the unfinished draft");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("working", c.Text, "history navigation clears the prior draft edit stack");
+
+        Eq("working", c.Take(), "take the second draft");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("", c.Text, "a second take also clears undo");
+    }
+
+    private static void UndoLimit()
+    {
+        var c = new Composer();
+        for (var i = 0; i < 101; i++)
+        {
+            Type(c, "a");
+            if (i < 100)
+            {
+                c.Edit(Key(ConsoleKey.LeftArrow));
+                c.Edit(Key(ConsoleKey.RightArrow));
+            }
+        }
+        Eq(101, c.Text.Length, "one edit unit per character");
+        for (var i = 0; i < 100; i++) c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("a", c.Text, "undo stack keeps its newest hundred snapshots");
+        c.Edit(Key(ConsoleKey.Z, control: true));
+        Eq("a", c.Text, "undo beyond the retained depth is a no-op");
+    }
+
     private static void LayoutAndDiff()
     {
         var layout = new TerminalLayout();
@@ -160,8 +356,29 @@ internal static class TerminalTests
         }
     }
 
-    private static ConsoleKeyInfo Key(ConsoleKey key, bool control = false) => new('\0', key, false, false, control);
-    private static void Type(Composer c, string text) { foreach (var ch in text) c.Edit(new(ch, (ConsoleKey)0, false, false, false)); }
+    private static ConsoleKeyInfo Key(ConsoleKey key, bool control = false, bool shift = false, bool alt = false) =>
+        new('\0', key, shift, alt, control);
+
+    private static void Type(Composer c, string text)
+    {
+        foreach (var ch in text) c.Edit(new(ch, TypedKey(ch), false, false, false));
+    }
+
+    private static void Paste(Composer c, string text)
+    {
+        foreach (var ch in text) c.Edit(new(ch, (ConsoleKey)0, false, false, false));
+    }
+
+    private static ConsoleKey TypedKey(char c) => c switch
+    {
+        >= 'a' and <= 'z' => ConsoleKey.A + (c - 'a'),
+        >= 'A' and <= 'Z' => ConsoleKey.A + (c - 'A'),
+        ' ' => ConsoleKey.Spacebar,
+        '\t' => ConsoleKey.Tab,
+        '\n' or '\r' => ConsoleKey.Enter,
+        _ => ConsoleKey.Oem1
+    };
+
     private static void Eq<T>(T expected, T actual, string context)
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception($"{context}: expected [{expected}], got [{actual}]");
