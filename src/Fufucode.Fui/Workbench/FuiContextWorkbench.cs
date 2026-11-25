@@ -88,10 +88,13 @@ internal static class FuiContextWorkbench
                 var name = Path.GetFileName(file.Path);
                 if (name.Length == 0) name = file.Path;
                 var image = file.MimeType is not null;
+                var dimensions = image && file.ImageWidth > 0 && file.ImageHeight > 0
+                    ? $" · {file.ImageWidth}×{file.ImageHeight}"
+                    : "";
                 var detail = AttachmentDetail(file);
                 choices.Add(new FuiChoice(
                     AttachmentPrefix + index,
-                    $"{(image ? "▣" : "▤")} {name} · {(image ? "图片" : "文本")} · {Size(file)}",
+                    $"{(image ? "▣" : "▤")} {name} · {(image ? "图片" + dimensions : "文本")} · {Size(file)}",
                     detail,
                     SearchText: file.Path + "\n" + detail));
             }
