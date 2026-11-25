@@ -94,6 +94,8 @@ public static class SettingsNavCatalog
             "浏览器 启用 停用 内建 模块 辅助工具 browser module", "PuzzlePiece", "#FF99A4"),
         new("functions", "会话与消息", SettingsNavTier.Other,
             "消息 摘要 头像 名称 输入区 显示 选项 功能 function detail", "AppsList", "#4CC2FF"),
+        new("memory", "记忆", SettingsNavTier.Other,
+            "记忆 记住 偏好 更正 MEMORY.md memory remember", "Brain", "#B48CFF"),
     ];
 
     /// <summary>默认选中的分类（第一个基础类条目）。</summary>

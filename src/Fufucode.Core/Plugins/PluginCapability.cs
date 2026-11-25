@@ -33,6 +33,9 @@ public enum PluginCapability
 
     /// <summary>NVX 硬件隔离执行沙箱（sandbox.nvx）。</summary>
     SandboxExecution,
+
+    /// <summary>用户级记忆：保存、删除记忆条目并注入会话（tool.memory）。</summary>
+    Memory,
 }
 
 /// <summary>
@@ -52,6 +55,7 @@ public static class PluginCapabilityRegistry
             [PluginCapability.ReverseLab] = "Seep 逆向工程工作台",
             [PluginCapability.AutoDevelopment] = "自动开发工作台",
             [PluginCapability.SandboxExecution] = "NVX 执行沙箱",
+            [PluginCapability.Memory] = "记忆",
         };
 
     /// <summary>能力在提示语中的短名称；未登记时回退插件 ID。</summary>
@@ -65,6 +69,7 @@ public static class PluginCapabilityRegistry
             [PluginCapability.ComputerControl] = "agent.computer-use",
             [PluginCapability.ReverseLab] = "tool.seep-reverse-lab",
             [PluginCapability.SandboxExecution] = "sandbox.nvx",
+            [PluginCapability.Memory] = "tool.memory",
         };
 
     /// <summary>提供该能力的插件 ID；没有对应插件时返回 null（不抛异常）。</summary>

@@ -133,6 +133,11 @@ public static class PluginMarketplaceCatalog
             "1.0.0", "Fufucode Team", ["图片输入能力", "临时 PNG 导出"],
             DefaultInstalled: false, DefaultEnabled: false),
 
+        new("tool.memory", "记忆", PluginCategory.ToolExtension,
+            "跨会话记住用户要求、偏好与更正：一份可直接编辑的 Markdown 文件，每轮注入 FUMO 会话，并提供 memory_save / memory_forget 工具。",
+            "1.0.0", "Fufucode Team", ["读写数据目录下的 memory/MEMORY.md", "向会话注入记忆内容"],
+            DefaultInstalled: false, DefaultEnabled: false),
+
         new("tool.seep-reverse-lab", "Seep 逆向工程工作台", PluginCategory.ToolExtension,
             "接入 Seep Reverse Lab 工作台：23 个 Radare2 / JADX / Apktool / Frida 逆向工具、"
             + "ReverseLab 知识库检索，以及 127.0.0.1:17890 合规转译中继。"

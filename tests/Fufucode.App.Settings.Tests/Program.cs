@@ -80,7 +80,7 @@ try
               .SequenceEqual(new[] { "marketplace", "terminal", "files", "automation", "notifications", "perf-monitor" }),
         "升级的小功能并入大功能组");
     Check(SettingsNavCatalog.All.Where(d => reloaded.Current.EffectiveTier(d.Id) == SettingsNavTier.Other).Select(i => i.Id)
-              .SequenceEqual(new[] { "browser", "background", "config", "modules", "functions" }),
+              .SequenceEqual(new[] { "browser", "background", "config", "modules", "functions", "memory" }),
         "降级的大功能收纳进其他组");
 
     // VM 层：命令写盘后新实例恢复同一层级。
@@ -216,6 +216,7 @@ try
     // 高级页的 FUMO 命令解释器设置同样以 shell 为关键词，跨层级同时命中。
     Check(Matches("shell").SequenceEqual(new[] { "advanced", "terminal" }), "搜索命中大功能条目");
     Check(Matches("trace").SequenceEqual(new[] { "perf-monitor" }), "搜索命中其他类小功能");
+    Check(Matches("MEMORY.md").SequenceEqual(new[] { "memory" }), "搜索命中记忆设置");
     Check(Matches("不存在的关键词").Length == 0, "无命中时不输出任何条目");
 
     var searchVm = new SettingsPageViewModel();

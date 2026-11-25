@@ -148,6 +148,10 @@
                                         IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowAdvanced}"
                                         DataContext="{Binding Advanced}"/>
 
+            <views:MemorySettingsView x:Name="MemorySettings"
+                                      IsVisible="{Binding $parent[UserControl].((vm:SettingsPageViewModel)DataContext).ShowAgentMemory}"
+                                      DataContext="{Binding Memory}"/>
+
             <!-- ═══ 模型与思考 ═══ -->
                         <!-- ═══ 插件市场（Plugin Marketplace） ═══ -->
             <StackPanel IsVisible="{Binding ShowMarketplace}" Spacing="0">

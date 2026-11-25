@@ -29,6 +29,8 @@ public sealed class PluginStateSystemPromptProvider : IPluginSystemPromptProvide
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _catalog = catalog ?? PluginMarketplaceCatalog.All;
+        // 设置页等其他实例写入 plugins.json 后刷新本地快照，启停在下一轮请求即生效。
+        PluginStateNotifier.Changed += () => _store.Reload();
     }
 
     public string? Current => PluginSystemPromptComposer.Compose(_store, _catalog);
@@ -74,6 +76,12 @@ public static class PluginSystemPromptComposer
             // 只有“已安装且已启用”才注入：安装 ≠ 启用。
             if (!store.IsActive(definition.Id)) continue;
             fragments.Add((definition.Name, definition.SystemPromptFragment!));
+        }
+        // 插件包运行时贡献的动态段（例如记忆）：同样只在“已安装且已启用”时采用。
+        foreach (var (pluginId, text) in PluginPromptRegistry.Build(store.IsActive))
+        {
+            var name = catalog.FirstOrDefault(d => string.Equals(d.Id, pluginId, StringComparison.OrdinalIgnoreCase))?.Name ?? pluginId;
+            fragments.Add((name, text));
         }
 
         if (fragments.Count == 0) return null;

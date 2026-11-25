@@ -1,0 +1,9 @@
+{
+  "id": "tool.memory",
+  "name": "记忆",
+  "version": "1.0.0",
+  "entryAssembly": "Fufucode.Plugins.Memory.dll",
+  "packageType": "Fufucode.Plugins.Memory.MemoryPluginPackage",
+  "category": "ToolExtension",
+  "capabilities": ["Memory"]
+}
