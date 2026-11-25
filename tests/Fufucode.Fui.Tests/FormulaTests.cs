@@ -5,10 +5,13 @@ internal static class FormulaTests
     internal static void Run()
     {
         var support = new SixelSupport(null);
-        var keys = new PasteKeys(support.Reply);
+        var keys = new PasteKeys(support.Reply, support.ColorReply);
         foreach (var ch in "\x1b[?62;4;22c\x1b[6;20;10t") keys.Feed(new(ch, 0, false, false, false), 0);
         keys.FlushExpired(100);
         Require(support.Cell == new ImageCells(10, 20) && keys.Read() is null, "terminal graphics replies are not draft input");
+        foreach (var ch in "\x1b]10;rgb:fafa/ecec/dddd\x1b\\\x1b]11;rgb:18/20/32\a") keys.Feed(new(ch, 0, false, false, false), 200);
+        keys.FlushExpired(300);
+        Require(support.Cell == new ImageCells(10, 20, 0xFAECDD, 0x182032) && keys.Read() is null, "theme reports set both colors without injecting text");
 
         var layout = new TerminalLayout();
         var source = """

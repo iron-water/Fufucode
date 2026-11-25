@@ -4,12 +4,14 @@ namespace Fufucode.Fui;
 
 // Decode bracketed paste before converting VT function keys; native ConsoleKey events retain host modifiers.
 // A pasted CR, LF, escape sequence or function key is never handed to the command dispatcher as a key press.
-internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null)
+internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, Action<string>? colorReply = null)
 {
     private const string Begin = "\x1b[200~", End = "\x1b[201~";
     private readonly List<ConsoleKeyInfo> _candidate = new(6);
     private readonly Queue<(ConsoleKeyInfo Key, string? Text)> _ready = new();
     private readonly StringBuilder _vt = new();
+    private readonly StringBuilder _osc = new();
+    private bool _inOsc, _oscEscape, _oscTooLong;
     private long _vtSince;
     private int _matched;
     private long _since;
@@ -51,6 +53,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null)
     internal void FlushExpired(long now)
     {
         if (_matched > 0 && _paste is null && now - _since >= 50) FlushCandidate();
+        if (_inOsc && now - _vtSince >= 500) _inOsc = false;
         if (_vt.Length > 0 && now - _vtSince >= 50)
         {
             if (_vt.Length == 1) _ready.Enqueue((new('\x1b', ConsoleKey.Escape, false, false, false), null));
@@ -75,13 +78,32 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null)
 
     private void DecodeKey(ConsoleKeyInfo key)
     {
+        var c = key.KeyChar;
+        if (_inOsc)
+        {
+            if (c is '\a' or '\u009c' || (_oscEscape && c == '\\'))
+            {
+                _inOsc = false;
+                if (!_oscTooLong) colorReply?.Invoke(_osc.ToString());
+            }
+            else if (c == '\x1b') _oscEscape = true;
+            else
+            {
+                _oscEscape = false;
+                if (_osc.Length < 72) _osc.Append(c); else _oscTooLong = true;
+            }
+            return;
+        }
+        if (c == ']' && (_vt.Length == 1 || key.Modifiers == ConsoleModifiers.Alt))
+        {
+            _vt.Clear(); _osc.Clear(); _oscEscape = false; _oscTooLong = false; _inOsc = true; return;
+        }
         if (key.Key != 0)
         {
             _vt.Clear();
             _ready.Enqueue((key, null));
             return;
         }
-        var c = key.KeyChar;
         if (c == '\x1b') { _vt.Clear().Append(c); return; }
         if (_vt.Length == 0) { _ready.Enqueue((CharacterKey(c, alt: false), null)); return; }
         if (_vt.Length == 1)

@@ -3,19 +3,25 @@ using SkiaSharp;
 
 namespace Fufucode.Fui;
 
-// SIXEL transmits six vertical pixels per printable byte. Define our own small monochrome palette
-// on every strip; neither model text nor filenames can become terminal control sequences.
+// SIXEL has a transparent background and opaque palette entries. Leave empty pixels unset and
+// approximate partial glyph coverage with shades between the terminal's background and foreground.
 internal static class SixelImage
 {
-    internal static string Encode(SKColor[] pixels, int width, int top, int height)
+    internal static string Encode(SKColor[] pixels, int width, int top, int height, ImageCells cell)
     {
         var bytes = new StringBuilder();
         bytes.Append("\x1bP0;1;0q\"1;1;").Append(width).Append(';').Append(height);
-        const int tones = 8;
-        for (var tone = 0; tone < tones; tone++)
+        const int tones = 16;
+        int Channel(int shift, int tone)
         {
-            var grey = 100 * tone / (tones - 1);
-            bytes.Append('#').Append(tone).Append(";2;").Append(grey).Append(';').Append(grey).Append(';').Append(grey);
+            var fg = (cell.Foreground >> shift) & 255;
+            var bg = (cell.Background >> shift) & 255;
+            return ((fg * tone + bg * (tones - 1 - tone)) * 100 + 255 * (tones - 1) / 2) / (255 * (tones - 1));
+        }
+        for (var tone = 1; tone < tones; tone++)
+        {
+            bytes.Append('#').Append(tone).Append(";2;").Append(Channel(16, tone)).Append(';')
+                .Append(Channel(8, tone)).Append(';').Append(Channel(0, tone));
         }
         var band = new byte[width * tones];
         for (var y = 0; y < height; y += 6)
@@ -26,10 +32,10 @@ internal static class SixelImage
                 for (var x = 0; x < width; x++)
                 {
                     var pixel = pixels[(top + y + dy) * width + x];
-                    var luminance = (299 * pixel.Red + 587 * pixel.Green + 114 * pixel.Blue) / 1000;
-                    band[((luminance * (tones - 1) + 127) / 255) * width + x] |= (byte)(1 << dy);
+                    var coverage = (pixel.Alpha * (tones - 1) + 127) / 255;
+                    if (coverage > 0) band[coverage * width + x] |= (byte)(1 << dy);
                 }
-            for (var tone = 0; tone < tones; tone++)
+            for (var tone = 1; tone < tones; tone++)
             {
                 var row = band.AsSpan(tone * width, width);
                 var length = row.LastIndexOfAnyExcept((byte)0) + 1;

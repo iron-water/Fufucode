@@ -4,7 +4,7 @@ using SkiaSharp;
 
 namespace Fufucode.Fui;
 
-internal readonly record struct ImageCells(int Width, int Height)
+internal readonly record struct ImageCells(int Width, int Height, int Foreground = 0xFFFFFF, int Background = 0x181818)
 {
     internal static readonly ImageCells Default = new(8, 16);
 }
@@ -26,7 +26,7 @@ internal sealed class FormulaRaster(string[] strips, int columns)
             {
                 FontSize = cell.Height * (display ? 1.25f : .92f),
                 LineStyle = display ? LineStyle.Display : LineStyle.Text,
-                TextColor = SKColors.Black, DisplayErrorInline = false, LaTeX = latex
+                TextColor = new SKColor(0xFF000000u | (uint)cell.Foreground), DisplayErrorInline = false, LaTeX = latex
             };
             if (painter.ErrorMessage is not null) return null;
             var bounds = painter.Measure();
@@ -35,13 +35,14 @@ internal sealed class FormulaRaster(string[] strips, int columns)
             var maxWidth = Math.Min(2048, availableColumns * (long)cell.Width);
             var scale = Math.Min(1f, (maxWidth - margin * 2) / bounds.Width);
             if (scale < .65f || bounds.Height * scale > 512) return null;
+            var paddingY = display ? margin : 1;
             var width = (int)MathF.Ceiling(bounds.Width * scale) + margin * 2;
-            var height = (int)MathF.Ceiling(bounds.Height * scale) + margin * 2;
-            using var bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque);
+            var height = (int)MathF.Ceiling(bounds.Height * scale) + paddingY * 2;
+            using var bitmap = new SKBitmap(width, height, SKColorType.Bgra8888, SKAlphaType.Premul);
             using (var canvas = new SKCanvas(bitmap))
             {
-                canvas.Clear(SKColors.White);
-                canvas.Translate(margin, margin);
+                canvas.Clear(SKColors.Transparent);
+                canvas.Translate(margin, paddingY);
                 canvas.Scale(scale);
                 painter.Draw(canvas, -bounds.Left, -bounds.Top);
                 canvas.Flush();
@@ -49,7 +50,7 @@ internal sealed class FormulaRaster(string[] strips, int columns)
             var pixels = bitmap.Pixels;
             var strips = new string[(height + cell.Height - 1) / cell.Height];
             for (var i = 0; i < strips.Length; i++)
-                strips[i] = SixelImage.Encode(pixels, width, i * cell.Height, Math.Min(cell.Height, height - i * cell.Height));
+                strips[i] = SixelImage.Encode(pixels, width, i * cell.Height, Math.Min(cell.Height, height - i * cell.Height), cell);
             return new(strips, (width + cell.Width - 1) / cell.Width);
         }
         catch (Exception error) when (error is not (OutOfMemoryException or OperationCanceledException))

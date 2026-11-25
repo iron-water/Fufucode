@@ -25,7 +25,7 @@ internal sealed class TerminalSurface : IDisposable
 
     public TerminalSurface()
     {
-        _keys = new(_graphics.Reply);
+        _keys = new(_graphics.Reply, _graphics.ColorReply);
         if (!IsSupported) throw new InvalidOperationException("FUI 需要交互式终端。");
         try
         {
@@ -71,7 +71,7 @@ internal sealed class TerminalSurface : IDisposable
             var width = Console.WindowWidth;
             var height = Console.WindowHeight;
             if (_graphics.Probe && _previous is { } last && (last.Width != width || last.Rows.Length != height))
-                Write("\x1b[16t");
+                Write("\x1b[16t" + SixelSupport.Colors);
             _paintedCell = _graphics.Cell;
             var frame = _layout.Arrange(view, width, height, _paintedCell);
             var paint = Diff(_previous, frame, _color);
