@@ -9,7 +9,7 @@ internal enum Ink
 internal readonly record struct ImageStrip(int Column, string Sixel);
 internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain, IReadOnlyList<ImageStrip>? Images = null, int ImageIndent = 0);
 internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll,
-    int PickerRows = 0, bool CanApprove = false);
+    int PickerRows = 0, bool CanApprove = false, MouseRegions? Mouse = null);
 
 internal sealed class TerminalLayout
 {
@@ -96,15 +96,28 @@ internal sealed class TerminalLayout
                 : "Ctrl+P 命令 · F1 帮助 · Enter 发送";
             rows[row++] = new(StatusLine(view.Status, scroll, columns, shortcuts), Ink.Status);
         }
+        var approvalRow = -1;
+        var approvalAction = "";
         if (approvalRows > 0)
-            rows[row++] = new(ApprovalAction(canApprove, columns), Ink.Approval);
+        {
+            approvalRow = row;
+            approvalAction = ApprovalAction(canApprove, columns);
+            rows[row++] = new(approvalAction, Ink.Approval);
+        }
         for (var i = 0; i < approvalRows - 1; i++)
             rows[row++] = new(ApprovalContent(approval[i].Text, columns), Ink.Approval);
 
         var pickerRows = 0;
+        var pickerTop = -1;
+        var pickerStart = 0;
+        var pickerVisible = 0;
+        var pickerColumns = 0;
         if (overlay is not null)
         {
+            pickerTop = row;
             pickerRows = PickerPanel.Paint(overlay, rows.AsSpan(row, panelRows), columns);
+            (pickerStart, pickerVisible) = PickerWindow(overlay, panelRows, columns);
+            pickerColumns = PickerHitColumns(overlay, panelRows, columns);
             row += panelRows;
         }
 
@@ -115,7 +128,48 @@ internal sealed class TerminalLayout
             var prefix = start + i == 0 ? prompt : new string(' ', promptWidth);
             rows[row++] = new(columns == 0 ? "" : prefix + draftLines[start + i].Text, Ink.Composer);
         }
-        return new(width, rows, cursorRow, Math.Min(width - 1, promptWidth + caretCell), bodyRows, maxScroll, pickerRows, canApprove);
+        var (allowStart, allowEnd) = canApprove ? TextRange(approvalAction, "F2 允许") : (-1, -1);
+        var (rejectStart, rejectEnd) = TextRange(approvalAction, "F3 拒绝");
+        return new(width, rows, cursorRow, Math.Min(width - 1, promptWidth + caretCell), bodyRows, maxScroll, pickerRows, canApprove,
+            new MouseRegions(pickerTop, pickerStart, pickerVisible, pickerColumns, approvalRow,
+                allowStart, allowEnd, rejectStart, rejectEnd));
+    }
+
+    private static (int Start, int Visible) PickerWindow(FuiOverlay overlay, int panelRows, int columns)
+    {
+        var count = overlay.Items.Count;
+        if (count == 0 || panelRows <= 1) return (0, 0);
+        var selected = Math.Clamp(overlay.Selected, 0, count - 1);
+        var split = columns >= 80 && panelRows >= 6;
+        var visible = split ? Math.Max(1, Math.Min(count, panelRows - 1)) : VisibleItems(overlay, panelRows, selected);
+        return (Math.Clamp(selected - visible / 2, 0, Math.Max(0, count - visible)), visible);
+    }
+
+    private static int VisibleItems(FuiOverlay overlay, int panelRows, int selected)
+    {
+        var detail = FuiAgentActivityRoster.IsHubTitle(overlay.Title)
+            ? TerminalText.SingleLine(overlay.Items[selected].Detail ?? "")
+            : TerminalText.SingleLine(overlay.Message ?? overlay.Items[selected].Detail ?? "");
+        var hasDetail = detail.Length > 0 && panelRows >= 3;
+        return Math.Max(1, Math.Min(overlay.Items.Count, panelRows - 1 - (hasDetail ? 1 : 0)));
+    }
+
+    private static int PickerHitColumns(FuiOverlay overlay, int panelRows, int columns)
+    {
+        if (columns >= 80 && panelRows >= 6 && overlay.Items.Count > 0)
+        {
+            var left = Math.Clamp(columns / 2, 30, 56);
+            if (columns - left - 1 >= 18) return left;
+        }
+        return columns;
+    }
+
+    private static (int Start, int End) TextRange(string text, string value)
+    {
+        var index = text.IndexOf(value, StringComparison.Ordinal);
+        if (index < 0) return (-1, -1);
+        var start = TerminalText.Width(text.AsSpan(0, index));
+        return (start, start + TerminalText.Width(value));
     }
 
     private static string Header(TuiView view, int columns)

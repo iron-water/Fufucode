@@ -20,9 +20,13 @@ internal sealed class TerminalSurface : IDisposable
     private bool _alt, _changedCtrlC, _disposed;
     private bool _oldCursorVisible = true;
 
-    public static bool IsSupported => !Console.IsInputRedirected && !Console.IsOutputRedirected &&
-        (OperatingSystem.IsWindows() ? WindowsModes.Attached :
-            !string.Equals(Environment.GetEnvironmentVariable("TERM"), "dumb", StringComparison.OrdinalIgnoreCase));
+    internal const string MouseOnSequence = "\x1b[?1000h\x1b[?1006h";
+    internal const string MouseOffSequence = "\x1b[?1006l\x1b[?1000l";
+
+    public static bool IsSupported => MouseInput.CanEnableMouse(
+        Console.IsInputRedirected, Console.IsOutputRedirected,
+        OperatingSystem.IsWindows() && WindowsModes.Attached, OperatingSystem.IsWindows(),
+        Environment.GetEnvironmentVariable("TERM"));
 
     public TerminalSurface()
     {
@@ -50,7 +54,7 @@ internal sealed class TerminalSurface : IDisposable
             AppDomain.CurrentDomain.ProcessExit += Exit;
             AppDomain.CurrentDomain.UnhandledException += Crash;
             _alt = true;
-            Write("\x1b[?25s\x1b[?2004s\x1b[?1049h\x1b[?2004h\x1b[?25l");
+            Write("\x1b[?25s\x1b[?2004s\x1b[?1049h\x1b[?2004h\x1b[?25l" + MouseOnSequence);
             if (_graphics.Probe) Write(SixelSupport.Query);
             else if (_theme.NeedsBackgroundProbe) Write(TuiTheme.BackgroundQuery);
         }
@@ -90,14 +94,17 @@ internal sealed class TerminalSurface : IDisposable
     public ConsoleKeyInfo? PollKey()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
+        if (ReadMouse() is { } mouseKey) return mouseKey;
         if (_keys.Read() is { } queued) return queued;
         // No blocking ReadKey on idle. Bound a marker-only or large paste read so the controller can drain model events.
         for (var i = 0; i < 512 && Console.KeyAvailable; i++)
         {
             _keys.Feed(Console.ReadKey(intercept: true), Environment.TickCount64);
+            if (ReadMouse() is { } fedMouseKey) return fedMouseKey;
             if (_keys.Read() is { } key) return key;
         }
         _keys.FlushExpired(Environment.TickCount64);
+        if (ReadMouse() is { } delayedMouseKey) return delayedMouseKey;
         return _keys.Read();
     }
 
@@ -136,6 +143,23 @@ internal sealed class TerminalSurface : IDisposable
         return paintedRows ? "\x1b[?2026h" + paint + "\x1b[?2026l" : paint.ToString();
     }
 
+    private ConsoleKeyInfo? ReadMouse()
+    {
+        if (!_keys.TryReadMouse(out var mouse)) return null;
+        if (MouseInput.WheelKey(mouse) is { } wheel) return wheel;
+        if (!mouse.LeftClick || mouse.Release || mouse.Motion) return null;
+        var hit = MouseInput.HitTest(_previous?.Mouse, mouse);
+        if (hit.Kind == MouseHitKind.None) return null;
+        MouseInput.Stage(mouse, hit);
+        return MouseInput.RoutedKeyInfo;
+    }
+
+    internal static string RestoreSequence(bool cursorVisible, TuiTheme theme) =>
+        "\x1b[?2026l" + theme.Reset + "\x1b[?2004l" + MouseOffSequence + "\x1b[?1049l" +
+        (cursorVisible ? "\x1b[?25h" : "\x1b[?25l") + "\x1b[?25r\x1b[?2004r";
+
+    internal static string RestoreSequence(bool cursorVisible) => RestoreSequence(cursorVisible, TuiTheme.Unstyled);
+
     private void ColorReply(string payload)
     {
         _graphics.ColorReply(payload);
@@ -156,8 +180,7 @@ internal sealed class TerminalSurface : IDisposable
             AppDomain.CurrentDomain.ProcessExit -= Exit;
             AppDomain.CurrentDomain.UnhandledException -= Crash;
             // Each restoration is independent: a disconnected stdout must not leave input modes changed.
-            if (_alt) TryRestore(() => Write("\x1b[?2026l" + _theme.Reset + "\x1b[?2004l\x1b[?1049l" +
-                (_oldCursorVisible ? "\x1b[?25h" : "\x1b[?25l") + "\x1b[?25r\x1b[?2004r"));
+            if (_alt) TryRestore(() => Write(RestoreSequence(_oldCursorVisible, _theme)));
             if (_changedCtrlC) TryRestore(() => Console.TreatControlCAsInput = false);
             if (_encoding is not null) TryRestore(() => Console.OutputEncoding = _encoding);
             _modes?.Restore();

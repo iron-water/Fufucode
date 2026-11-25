@@ -9,6 +9,7 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
     private const string Begin = "\x1b[200~", End = "\x1b[201~";
     private readonly List<ConsoleKeyInfo> _candidate = new(6);
     private readonly Queue<(ConsoleKeyInfo Key, string? Text)> _ready = new();
+    private readonly Queue<MouseEvent> _mouse = new();
     private readonly StringBuilder _vt = new();
     private readonly StringBuilder _osc = new();
     private bool _inOsc, _oscEscape, _oscTooLong;
@@ -63,6 +64,12 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
 
     private void FlushCandidate()
     {
+        // Some Unix hosts deliver the ESC [ introducer as one Alt+[ event.
+        // Reconstruct the ESC before the bracket so the following final byte
+        // can still be decoded as a CSI (including SGR mouse).
+        if (_paste is null && _candidate.Count == 1 && _candidate[0].KeyChar == '[' &&
+            _candidate[0].Modifiers == ConsoleModifiers.Alt)
+            Release(new('\x1b', ConsoleKey.Escape, false, false, false));
         foreach (var key in _candidate) Release(key);
         _candidate.Clear();
         _matched = 0;
@@ -98,13 +105,17 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
         {
             _vt.Clear(); _osc.Clear(); _oscEscape = false; _oscTooLong = false; _inOsc = true; return;
         }
-        if (key.Key != 0)
+        // Start a VT sequence before considering the key identity. ESC[ can
+        // arrive as key records for Escape and '[' on some console hosts.
+        if (c == '\x1b') { _vt.Clear().Append(c); return; }
+        // VT reports can arrive as ordinary key records (letters have a ConsoleKey);
+        // once a CSI introducer is buffered, append its payload instead of losing it.
+        if (key.Key != 0 && (_vt.Length == 0 || c == '\0'))
         {
             _vt.Clear();
             _ready.Enqueue((key, null));
             return;
         }
-        if (c == '\x1b') { _vt.Clear().Append(c); return; }
         if (_vt.Length == 0) { _ready.Enqueue((CharacterKey(c, alt: false), null)); return; }
         if (_vt.Length == 1)
         {
@@ -114,8 +125,15 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
             return;
         }
         if (c is >= ' ' and <= '?') { if (_vt.Length < 32) _vt.Append(c); return; }
-        var parameters = _vt.ToString(2, _vt.Length - 2);
+        var prefix = _vt.ToString();
+        var parameters = prefix[2..];
+        var sequence = prefix + c;
         _vt.Clear();
+        if (MouseInput.TryParse(sequence, out var mouse))
+        {
+            _mouse.Enqueue(mouse);
+            return;
+        }
         if (terminalReply?.Invoke(c, parameters) == true) return;
         // A terminal response or an unknown CSI is not a shortcut (especially not approval).
         var args = parameters.Split(';');
@@ -151,6 +169,13 @@ internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null, 
         _literal = item.Text;
         _offset = 1;
         return Literal(_literal[0]);
+    }
+
+    internal bool TryReadMouse(out MouseEvent mouse)
+    {
+        if (_mouse.TryDequeue(out mouse)) return true;
+        mouse = default;
+        return false;
     }
 
     private static ConsoleKeyInfo Literal(char c) => new(c, (ConsoleKey)0, false, false, false);

@@ -106,6 +106,14 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
 
     public void Key(ConsoleKeyInfo key, int viewportRows, int maxScroll, int pickerRows = 5)
     {
+        // MouseInput is the only producer of this key. The pending event carries
+        // a layout hit; a bare F24 is ignored rather than becoming a shortcut.
+        if (MouseInput.IsRoutedKey(key.Key))
+        {
+            if (MouseInput.TryTake(out var mouse, out var hit))
+                Mouse(mouse, viewportRows, maxScroll, pickerRows, hit);
+            return;
+        }
         Dirty = true;
         var ctrl = key.Modifiers.HasFlag(ConsoleModifiers.Control);
         if (ctrl && key.Key == ConsoleKey.D) { Exiting = true; return; }
@@ -142,6 +150,53 @@ internal sealed partial class TuiController(ITuiSession session, CancellationTok
         if (key.Key == ConsoleKey.F1) { Info(FuiCommands.Help); return; }
         if (key.Key == ConsoleKey.Enter && key.Modifiers == 0) { Submit(); return; }
         _composer.Edit(key);
+    }
+
+    internal void Mouse(MouseEvent mouse, int viewportRows, int maxScroll, int pickerRows, MouseHit hit)
+    {
+        Dirty = true;
+        if (MouseInput.WheelKey(mouse) is { } wheel)
+        {
+            Key(wheel, viewportRows, maxScroll, pickerRows);
+            return;
+        }
+        if (!mouse.LeftClick || mouse.Release || mouse.Motion || hit.Kind == MouseHitKind.None) return;
+
+        if (_approvals.FirstOrDefault() is { } approval)
+        {
+            // A click is not a keyboard shortcut. It may only use the exact
+            // painted action hit and the same painted-approval gate as F2/F3.
+            if (!hit.IsApproval || _approvalFocusChanged || _stopping ||
+                _paintedApproval != approval.Id || _answeredApproval == approval.Id || _reply is not null)
+                return;
+            var allow = hit.Kind == MouseHitKind.ApprovalAllow;
+            if (allow && !_canApprove) return;
+            _answeredApproval = approval.Id;
+            _reply = Invoke(() => _active.RespondAsync(approval.Id, allow, token));
+            return;
+        }
+
+        if (hit.Kind == MouseHitKind.PickerItem && _picker is not null)
+            SelectPicker(hit.Index);
+    }
+
+    private void SelectPicker(int index)
+    {
+        if (_picker is not { } picker) return;
+        var view = picker.View;
+        if (index < 0 || index >= view.Items.Count ||
+            FuiAgentActivityRoster.IsGroupChoice(view.Items[index])) return;
+        var current = view.Selected;
+        if (current == index) return;
+        var key = index > current ? ConsoleKey.DownArrow : ConsoleKey.UpArrow;
+        for (var guard = 0; guard <= view.Items.Count; guard++)
+        {
+            picker.Edit(new('\0', key, false, false, false), 1);
+            var next = picker.View.Selected;
+            if (next == index) return;
+            if (next == current) return;
+            current = next;
+        }
     }
 
     private void Submit()
