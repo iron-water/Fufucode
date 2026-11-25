@@ -7,7 +7,9 @@ namespace Fufucode.Fui;
 internal sealed class TerminalSurface : IDisposable
 {
     private readonly TerminalLayout _layout = new();
-    private readonly PasteKeys _keys = new();
+    private readonly SixelSupport _graphics = new(Environment.GetEnvironmentVariable("FUI_GRAPHICS"));
+    private readonly PasteKeys _keys;
+    private ImageCells? _paintedCell;
     private readonly bool _color = Environment.GetEnvironmentVariable("NO_COLOR") is null;
     private readonly object _gate = new();
     private TextWriter _output = Console.Out;
@@ -23,6 +25,7 @@ internal sealed class TerminalSurface : IDisposable
 
     public TerminalSurface()
     {
+        _keys = new(_graphics.Reply);
         if (!IsSupported) throw new InvalidOperationException("FUI 需要交互式终端。");
         try
         {
@@ -47,6 +50,7 @@ internal sealed class TerminalSurface : IDisposable
             AppDomain.CurrentDomain.UnhandledException += Crash;
             _alt = true;
             Write("\x1b[?25s\x1b[?2004s\x1b[?1049h\x1b[?2004h\x1b[?25l");
+            if (_graphics.Probe) Write(SixelSupport.Query);
         }
         catch { Dispose(); throw; }
     }
@@ -56,7 +60,7 @@ internal sealed class TerminalSurface : IDisposable
     public int PickerRows => _previous?.PickerRows ?? 0;
     public bool CanApprove => _previous?.CanApprove == true;
     public int ScrollToLine(int transcriptIndex) => _layout.ScrollToLine(transcriptIndex);
-    public bool SizeChanged => _previous is null || (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight)) !=
+    public bool SizeChanged => _previous is null || _paintedCell != _graphics.Cell || (Math.Max(1, Console.WindowWidth), Math.Max(1, Console.WindowHeight)) !=
         (_previous.Width, _previous.Rows.Length);
 
     public void Draw(TuiView view)
@@ -64,7 +68,12 @@ internal sealed class TerminalSurface : IDisposable
         lock (_gate)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            var frame = _layout.Arrange(view, Console.WindowWidth, Console.WindowHeight);
+            var width = Console.WindowWidth;
+            var height = Console.WindowHeight;
+            if (_graphics.Probe && _previous is { } last && (last.Width != width || last.Rows.Length != height))
+                Write("\x1b[16t");
+            _paintedCell = _graphics.Cell;
+            var frame = _layout.Arrange(view, width, height, _paintedCell);
             var paint = Diff(_previous, frame, _color);
             if (paint.Length > 0) Write(paint);
             _previous = frame;
@@ -94,12 +103,17 @@ internal sealed class TerminalSurface : IDisposable
         {
             var row = next.Rows[i];
             if (!reset && row == old!.Rows[i]) continue;
-            if (reset && row.Text.Length == 0) continue;
+            if (reset && row.Text.Length == 0 && row.Images is null) continue;
             paint.Append("\x1b[").Append(i + 1).Append(";1H");
+            if (!reset && old!.Rows[i].Images is { Count: > 0 }) paint.Append("\x1b[2K");
             if (color && row.Ink != Ink.Plain) paint.Append(Color(row.Ink));
             paint.Append(row.Text);
             if (color && row.Ink != Ink.Plain) paint.Append("\x1b[0m");
             if (!reset) paint.Append("\x1b[K"); // remove remnants when a line contracts
+            if (row.Images is not null)
+                foreach (var image in row.Images)
+                    paint.Append("\x1b[").Append(i + 1).Append(';').Append(row.ImageIndent + image.Column + 1)
+                        .Append('H').Append(image.Sixel);
         }
         var paintedRows = paint.Length != 0;
         if (!paintedRows && old!.CursorRow == next.CursorRow && old.CursorColumn == next.CursorColumn) return "";

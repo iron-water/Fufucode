@@ -4,7 +4,7 @@ namespace Fufucode.Fui;
 // remains selectable/searchable as text. No links, embedded escape codes or executable markup.
 internal sealed class MarkdownLines
 {
-    private readonly record struct Fence(char Marker, int Count);
+    internal readonly record struct Fence(char Marker, int Count);
     private readonly record struct LogicalLine(int Start, Ink Ink, Fence Before);
     private readonly List<LogicalLine> _lines = [];
     private readonly List<Ink> _rows = [];
@@ -69,7 +69,7 @@ internal sealed class MarkdownLines
         return lo;
     }
 
-    private static Ink Classify(ReadOnlySpan<char> line, ref Fence fence)
+    internal static Ink Classify(ReadOnlySpan<char> line, ref Fence fence)
     {
         var indent = 0;
         while (indent < line.Length && indent < 4 && line[indent] == ' ') indent++;

@@ -10,6 +10,8 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="CSharpMath.SkiaSharp" Version="0.5.1" />
+    <PackageReference Include="SkiaSharp" Version="2.88.9" />
     <ProjectReference Include="../Fufucode.Core/Fufucode.Core.csproj" />
     <InternalsVisibleTo Include="Fufucode.Fui.Tests" />
   </ItemGroup>

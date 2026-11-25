@@ -1,7 +1,8 @@
 namespace Fufucode.Fui;
 
 internal enum Ink { Plain, Header, User, Tool, Quiet, Error, Status, Approval, Composer, PanelTitle, Selection, Heading, Code, CodeFence }
-internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain);
+internal readonly record struct ImageStrip(int Column, string Sixel);
+internal readonly record struct ScreenRow(string Text, Ink Ink = Ink.Plain, IReadOnlyList<ImageStrip>? Images = null, int ImageIndent = 0);
 internal sealed record TerminalFrame(int Width, ScreenRow[] Rows, int CursorRow, int CursorColumn, int ViewportRows, int MaxScroll,
     int PickerRows = 0, bool CanApprove = false);
 
@@ -9,6 +10,7 @@ internal sealed class TerminalLayout
 {
     private readonly List<MessageBlock> _blocks = [];
     private int _columns;
+    private ImageCells? _cell;
     private int _total, _bodyRows;
 
     internal int ScrollToLine(int transcriptIndex)
@@ -18,7 +20,7 @@ internal sealed class TerminalLayout
         return Math.Clamp(_total - _bodyRows - _blocks[index].First, 0, Math.Max(0, _total - _bodyRows));
     }
 
-    internal TerminalFrame Arrange(TuiView view, int width, int height)
+    internal TerminalFrame Arrange(TuiView view, int width, int height, ImageCells? cell = null)
     {
         width = Math.Max(1, width);
         height = Math.Max(1, height);
@@ -54,7 +56,7 @@ internal sealed class TerminalLayout
             Math.Max(0, remaining - draftRows - (height >= 4 ? 1 : 0))));
         var bodyRows = remaining - draftRows - panelRows;
 
-        var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking);
+        var total = UpdateTranscript(view.Lines, columns, view.ExpandTools, view.ShowThinking, cell);
         (_total, _bodyRows) = (total, bodyRows);
         var maxScroll = Math.Max(0, total - bodyRows);
         var scroll = Math.Clamp(view.Scroll, 0, maxScroll);
@@ -67,7 +69,7 @@ internal sealed class TerminalLayout
         {
             if (block.First >= end) break;
             var from = Math.Max(0, first - block.First);
-            var to = Math.Min(block.Pieces.Count, end - block.First);
+            var to = Math.Min(block.RowCount, end - block.First);
             for (var i = from; i < to; i++) rows[row++] = block.Visible(i, columns);
         }
 
@@ -125,25 +127,27 @@ internal sealed class TerminalLayout
         return TerminalText.Clip(title, columns);
     }
 
-    private int UpdateTranscript(IReadOnlyList<TuiLine> lines, int columns, bool expandTools, bool showThinking)
+    private int UpdateTranscript(IReadOnlyList<TuiLine> lines, int columns, bool expandTools, bool showThinking, ImageCells? cell)
     {
-        if (columns != _columns) { _blocks.Clear(); _columns = columns; }
+        if (columns != _columns || cell != _cell) { _blocks.Clear(); _columns = columns; _cell = cell; }
         if (_blocks.Count > lines.Count) _blocks.RemoveRange(lines.Count, _blocks.Count - lines.Count);
         var row = 0;
         for (var i = 0; i < lines.Count; i++)
         {
             if (_blocks.Count == i) _blocks.Add(new());
             var block = _blocks[i];
-            block.Update(lines[i], columns, expandTools, showThinking);
+            block.Update(lines[i], columns, expandTools, showThinking, cell);
             block.First = row;
-            row += block.Pieces.Count;
+            row += block.RowCount;
         }
         return row;
     }
 
     private sealed class MessageBlock
     {
-        internal readonly List<TerminalText.Slice> Pieces = [];
+        private readonly List<TerminalText.Slice> Pieces = [];
+        private FormulaRows? _formulas;
+        internal int RowCount => _hidden ? 0 : _formulas?.Rows.Count ?? Pieces.Count;
         internal int First;
         private TuiLine? _line;
         private bool _plain;
@@ -152,9 +156,16 @@ internal sealed class TerminalLayout
         private string _label = "", _indent = "";
         private Ink _ink;
 
-        internal ScreenRow Visible(int index, int columns) => new(columns == 0 ? "" : (index == 0 ? _label : _indent) + Pieces[index].Text, _markdown?[index] ?? _ink);
+        internal ScreenRow Visible(int index, int columns)
+        {
+            if (columns == 0) return new("");
+            var prefix = index == 0 ? _label : _indent;
+            if (_formulas is null) return new(prefix + Pieces[index].Text, _markdown?[index] ?? _ink);
+            var row = _formulas.Rows[index];
+            return row with { Text = prefix + row.Text, ImageIndent = _indent.Length };
+        }
 
-        internal void Update(TuiLine line, int columns, bool expandTools, bool showThinking)
+        internal void Update(TuiLine line, int columns, bool expandTools, bool showThinking, ImageCells? cell)
         {
             var hidden = line.Kind == "thinking" && !showThinking;
             var collapsed = line.Kind == "tool" && !expandTools;
@@ -175,6 +186,14 @@ internal sealed class TerminalLayout
             _label = TerminalText.Width(label) + 2 <= columns ? label : "";
             _indent = new(' ', TerminalText.Width(_label));
             var contentWidth = Math.Max(1, columns - _indent.Length);
+            if (cell is { } pixels && line.Kind == "assistant" && FormulaRows.MayContainMath(line.Text))
+            {
+                _formulas ??= new();
+                _formulas.Project(TerminalText.Clean(line.Text), contentWidth, pixels);
+                _plain = false;
+                return;
+            }
+            _formulas = null;
             if (line.Kind == "assistant") _markdown ??= new(); else _markdown = null;
             if (collapsed)
             {

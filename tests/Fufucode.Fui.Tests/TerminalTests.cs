@@ -11,6 +11,7 @@ internal static class TerminalTests
         EditAndRecall();
         LiteralPaste();
         LayoutAndDiff();
+        FormulaTests.Run();
     }
 
     private static void CleanAndMeasure()

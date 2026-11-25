@@ -4,7 +4,7 @@ namespace Fufucode.Fui;
 
 // Decode bracketed paste before converting VT function keys; native ConsoleKey events retain host modifiers.
 // A pasted CR, LF, escape sequence or function key is never handed to the command dispatcher as a key press.
-internal sealed class PasteKeys
+internal sealed class PasteKeys(Func<char, string, bool>? terminalReply = null)
 {
     private const string Begin = "\x1b[200~", End = "\x1b[201~";
     private readonly List<ConsoleKeyInfo> _candidate = new(6);
@@ -94,6 +94,7 @@ internal sealed class PasteKeys
         if (c is >= ' ' and <= '?') { if (_vt.Length < 32) _vt.Append(c); return; }
         var parameters = _vt.ToString(2, _vt.Length - 2);
         _vt.Clear();
+        if (terminalReply?.Invoke(c, parameters) == true) return;
         // A terminal response or an unknown CSI is not a shortcut (especially not approval).
         var args = parameters.Split(';');
         if (args.Length > 2 || (args[0].Length != 0 && !int.TryParse(args[0], out _))) return;
